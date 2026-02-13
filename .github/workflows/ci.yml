@@ -1,0 +1,120 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test-relay:
+    name: Test Relay
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-action@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packages/umbra-relay
+
+      - name: Check formatting
+        working-directory: packages/umbra-relay
+        run: cargo fmt --check
+
+      - name: Clippy
+        working-directory: packages/umbra-relay
+        run: cargo clippy -- -D warnings
+
+      - name: Test
+        working-directory: packages/umbra-relay
+        run: cargo test
+
+      - name: Build
+        working-directory: packages/umbra-relay
+        run: cargo build --release
+
+  test-core:
+    name: Test Core (WASM)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-action@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Install wasm-pack
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: packages/umbra-core
+
+      - name: Check formatting
+        working-directory: packages/umbra-core
+        run: cargo fmt --check
+
+      - name: Test
+        working-directory: packages/umbra-core
+        run: cargo test
+
+      - name: Build WASM
+        working-directory: packages/umbra-core
+        run: wasm-pack build --target web --out-dir pkg
+
+  test-app:
+    name: Test App
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: TypeScript check
+        run: npx tsc --noEmit
+
+      - name: Run tests
+        run: npm test -- --passWithNoTests
+
+  build-check:
+    name: Build Check
+    runs-on: ubuntu-latest
+    needs: [test-relay, test-core, test-app]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build web
+        run: npx expo export --platform web

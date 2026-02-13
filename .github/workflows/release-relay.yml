@@ -1,0 +1,164 @@
+name: Release Relay
+
+on:
+  push:
+    tags:
+      - 'relay-v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release (e.g., 0.1.0)'
+        required: true
+        type: string
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  build:
+    name: Build ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Linux x86_64
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+            artifact: umbra-relay-linux-x86_64
+          # Linux ARM64
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-latest
+            artifact: umbra-relay-linux-aarch64
+            cross: true
+          # macOS x86_64
+          - target: x86_64-apple-darwin
+            os: macos-latest
+            artifact: umbra-relay-darwin-x86_64
+          # macOS ARM64
+          - target: aarch64-apple-darwin
+            os: macos-latest
+            artifact: umbra-relay-darwin-aarch64
+          # Windows x86_64
+          - target: x86_64-pc-windows-msvc
+            os: windows-latest
+            artifact: umbra-relay-windows-x86_64.exe
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-action@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install cross (Linux ARM)
+        if: matrix.cross
+        run: cargo install cross --git https://github.com/cross-rs/cross
+
+      - name: Build (cross)
+        if: matrix.cross
+        working-directory: packages/umbra-relay
+        run: cross build --release --target ${{ matrix.target }}
+
+      - name: Build (native)
+        if: ${{ !matrix.cross }}
+        working-directory: packages/umbra-relay
+        run: cargo build --release --target ${{ matrix.target }}
+
+      - name: Rename binary (Unix)
+        if: runner.os != 'Windows'
+        run: |
+          cp target/${{ matrix.target }}/release/umbra-relay ${{ matrix.artifact }}
+          chmod +x ${{ matrix.artifact }}
+
+      - name: Rename binary (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          cp target/${{ matrix.target }}/release/umbra-relay.exe ${{ matrix.artifact }}
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}
+
+  release:
+    name: Create Release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release files
+        run: |
+          mkdir -p release
+          for dir in artifacts/*/; do
+            cp "$dir"* release/ || true
+          done
+          ls -la release/
+
+      - name: Get version from tag
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "version=${{ inputs.version }}" >> $GITHUB_OUTPUT
+            echo "tag=relay-v${{ inputs.version }}" >> $GITHUB_OUTPUT
+          else
+            VERSION=${GITHUB_REF#refs/tags/relay-v}
+            echo "version=$VERSION" >> $GITHUB_OUTPUT
+            echo "tag=relay-v$VERSION" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: Umbra Relay v${{ steps.version.outputs.version }}
+          draft: false
+          prerelease: false
+          files: release/*
+          body: |
+            ## Umbra Relay Server v${{ steps.version.outputs.version }}
+
+            A lightweight WebSocket relay server for Umbra P2P messaging.
+
+            ### Features
+            - **Signaling relay** - Forwards WebRTC SDP offers/answers
+            - **Offline message queue** - Stores encrypted messages (7-day TTL)
+            - **Single-scan friend adding** - QR code/link-based connections
+            - **Federation support** - Connect multiple relays together
+
+            ### Downloads
+            | Platform | Binary |
+            |----------|--------|
+            | Linux x86_64 | `umbra-relay-linux-x86_64` |
+            | Linux ARM64 | `umbra-relay-linux-aarch64` |
+            | macOS Intel | `umbra-relay-darwin-x86_64` |
+            | macOS Apple Silicon | `umbra-relay-darwin-aarch64` |
+            | Windows x86_64 | `umbra-relay-windows-x86_64.exe` |
+
+            ### Quick Start
+            ```bash
+            chmod +x umbra-relay-linux-x86_64
+            ./umbra-relay-linux-x86_64 --port 8080 --region "Your Region" --location "Your City"
+            ```
+
+            ### Docker
+            ```bash
+            docker compose up -d
+            ```
+
+            See [README](https://github.com/${{ github.repository }}/blob/main/packages/umbra-relay/README.md) for full documentation.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
