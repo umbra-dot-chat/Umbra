@@ -1144,7 +1144,7 @@ function NetworkSection() {
         <Pressable
           onPress={() => {
             if (typeof window !== 'undefined') {
-              window.open('https://github.com/umbra-chat/relay/releases', '_blank');
+              window.open('https://github.com/InfamousVague/Umbra/releases/tag/relay-v0.1.0', '_blank');
             }
           }}
           style={({ pressed }) => ({

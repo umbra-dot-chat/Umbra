@@ -12,7 +12,7 @@ All message payloads are end-to-end encrypted on the client side. The relay neve
 
 ### Option 1: Download Pre-built Binary
 
-Download the latest release for your platform from the [Releases page](https://github.com/umbra-chat/relay/releases):
+Download the latest release for your platform from the [Releases page](https://github.com/InfamousVague/Umbra/releases?q=relay):
 
 - `umbra-relay-linux-x86_64` - Linux (64-bit)
 - `umbra-relay-linux-aarch64` - Linux (ARM64)
@@ -33,8 +33,8 @@ Requires [Rust](https://rustup.rs/) 1.75 or later.
 
 ```bash
 # Clone and build
-git clone https://github.com/umbra-chat/relay.git
-cd relay
+git clone https://github.com/InfamousVague/Umbra.git
+cd Umbra/packages/umbra-relay
 cargo build --release
 
 # Run
