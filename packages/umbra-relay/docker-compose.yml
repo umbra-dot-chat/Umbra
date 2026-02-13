@@ -1,0 +1,50 @@
+# ============================================================================
+# Umbra Relay Server — Docker Compose
+#
+# Single-relay deployment with optional federation.
+# Federation peers are configured via RELAY_PEERS env var.
+#
+# Usage:
+#   docker-compose up -d          # Start the relay server
+#   docker-compose logs -f        # View logs
+#   docker-compose down           # Stop the server
+#
+# Configuration:
+#   Set environment variables in .env file, inline below, or pass at deploy time.
+# ============================================================================
+
+version: '3.8'
+
+services:
+  relay:
+    build: .
+    ports:
+      - "${RELAY_PORT:-8080}:8080"
+    environment:
+      - RUST_LOG=${RUST_LOG:-info}
+      - RELAY_PORT=8080
+      - RELAY_REGION=${RELAY_REGION:-US East}
+      - RELAY_LOCATION=${RELAY_LOCATION:-New York}
+      - RELAY_ID=${RELAY_ID:-}
+      - RELAY_PUBLIC_URL=${RELAY_PUBLIC_URL:-}
+      - RELAY_PEERS=${RELAY_PEERS:-}
+      - PRESENCE_HEARTBEAT_SECS=${PRESENCE_HEARTBEAT_SECS:-30}
+      - MAX_OFFLINE_MESSAGES=${MAX_OFFLINE_MESSAGES:-1000}
+      - OFFLINE_TTL_DAYS=${OFFLINE_TTL_DAYS:-7}
+      - SESSION_TTL_SECS=${SESSION_TTL_SECS:-3600}
+      - CLEANUP_INTERVAL_SECS=${CLEANUP_INTERVAL_SECS:-300}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 10s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+        reservations:
+          memory: 64M
+          cpus: '0.1'

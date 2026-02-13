@@ -1,0 +1,18 @@
+{
+  "name": "@umbra/wasm",
+  "version": "0.1.0",
+  "description": "Umbra Core compiled to WebAssembly — P2P messaging backend for web",
+  "private": true,
+  "main": "index.ts",
+  "types": "index.ts",
+  "files": [
+    "pkg",
+    "*.ts"
+  ],
+  "scripts": {
+    "build": "../../scripts/build-wasm.sh"
+  },
+  "dependencies": {
+    "sql.js": "^1.10.0"
+  }
+}

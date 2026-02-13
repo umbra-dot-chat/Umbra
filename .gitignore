@@ -33,9 +33,39 @@ yarn-error.*
 # local env files
 .env*.local
 
+# Deployment credentials (NEVER COMMIT)
+.deploy-credentials
+
 # typescript
 *.tsbuildinfo
 
 # generated native folders
 /ios
 /android
+
+# Rust build artifacts
+target/
+**/target/
+Cargo.lock
+!packages/umbra-relay/Cargo.lock
+
+# WASM build output (generated)
+packages/umbra-wasm/pkg/
+packages/umbra-core/pkg/
+public/umbra_core*
+
+# Coverage
+coverage/
+
+# Testing artifacts
+__tests__/**/test-results/
+playwright-report/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Tauri
+src-tauri/target/

@@ -5,6 +5,12 @@
     "paths": {
       "@/*": [
         "./*"
+      ],
+      "@umbra/service": [
+        "./packages/umbra-service/src/index"
+      ],
+      "@umbra/wasm": [
+        "./packages/umbra-wasm/index"
       ]
     }
   },

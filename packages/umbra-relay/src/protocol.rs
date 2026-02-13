@@ -1,0 +1,523 @@
+//! Relay protocol message definitions.
+//!
+//! The relay speaks a simple JSON-over-WebSocket protocol.
+//! All payloads are opaque to the relay — E2E encryption happens client-side.
+
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
+
+// ── Client → Relay ────────────────────────────────────────────────────────────
+
+/// Messages sent from a client to the relay server.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ClientMessage {
+    /// Register this WebSocket connection with a DID.
+    /// Must be sent first after connecting.
+    Register {
+        did: String,
+    },
+
+    /// Forward a signaling payload (SDP offer/answer) to another peer.
+    Signal {
+        to_did: String,
+        payload: String,
+    },
+
+    /// Send an encrypted message to another peer.
+    /// If the peer is offline, the relay queues it for later delivery.
+    Send {
+        to_did: String,
+        payload: String,
+    },
+
+    /// Create a signaling session for single-scan friend adding.
+    /// Returns a session_id that can be shared via QR code/link.
+    CreateSession {
+        /// The SDP offer to store in the session
+        offer_payload: String,
+    },
+
+    /// Join an existing signaling session (the "scanner" side).
+    /// The relay forwards the stored offer to the joiner and relays the answer back.
+    JoinSession {
+        session_id: String,
+        /// The SDP answer to send back to the session creator
+        answer_payload: String,
+    },
+
+    /// Fetch all queued offline messages.
+    FetchOffline,
+
+    /// Ping to keep connection alive.
+    Ping,
+}
+
+// ── Relay → Client ────────────────────────────────────────────────────────────
+
+/// Messages sent from the relay server to a client.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum ServerMessage {
+    /// Acknowledgement of successful registration.
+    Registered {
+        did: String,
+    },
+
+    /// A signaling payload forwarded from another peer.
+    Signal {
+        from_did: String,
+        payload: String,
+    },
+
+    /// An encrypted message forwarded from another peer (or delivered from offline queue).
+    Message {
+        from_did: String,
+        payload: String,
+        timestamp: i64,
+    },
+
+    /// Response to CreateSession — contains the session ID to share.
+    SessionCreated {
+        session_id: String,
+    },
+
+    /// Notification that someone joined your session and sent an answer.
+    SessionJoined {
+        session_id: String,
+        from_did: String,
+        answer_payload: String,
+    },
+
+    /// The offer payload for a session the client is joining.
+    SessionOffer {
+        session_id: String,
+        from_did: String,
+        offer_payload: String,
+    },
+
+    /// All queued offline messages, delivered in response to FetchOffline.
+    OfflineMessages {
+        messages: Vec<OfflineMessage>,
+    },
+
+    /// Pong response to keep connection alive.
+    Pong,
+
+    /// Error response.
+    Error {
+        message: String,
+    },
+
+    /// Generic acknowledgement.
+    Ack {
+        id: String,
+    },
+}
+
+// ── Relay ↔ Relay (Federation) ────────────────────────────────────────────────
+
+/// Messages exchanged between federated relay peers.
+///
+/// Relays form a mesh network: each relay connects to its configured peers
+/// and they gossip presence information and forward messages for DIDs that
+/// aren't locally connected.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum PeerMessage {
+    /// Announce this relay's identity to a peer on first connect.
+    Hello {
+        /// Unique relay ID (stable across restarts)
+        relay_id: String,
+        /// Public WebSocket URL for this relay
+        relay_url: String,
+        /// Human-readable region
+        region: String,
+        /// Human-readable location
+        location: String,
+    },
+
+    /// Broadcast the full set of DIDs currently online at the sending relay.
+    /// Sent periodically (heartbeat) and on every connect/disconnect.
+    PresenceSync {
+        relay_id: String,
+        /// All DIDs currently online at the sending relay
+        online_dids: Vec<String>,
+    },
+
+    /// A single DID just came online at the sending relay.
+    PresenceOnline {
+        relay_id: String,
+        did: String,
+    },
+
+    /// A single DID just went offline at the sending relay.
+    PresenceOffline {
+        relay_id: String,
+        did: String,
+    },
+
+    /// Forward a signaling payload through the mesh to a DID on another relay.
+    ForwardSignal {
+        from_did: String,
+        to_did: String,
+        payload: String,
+    },
+
+    /// Forward an encrypted message through the mesh.
+    ForwardMessage {
+        from_did: String,
+        to_did: String,
+        payload: String,
+        timestamp: i64,
+    },
+
+    /// Forward a session-join through the mesh (single-scan friend adding).
+    ForwardSessionJoin {
+        session_id: String,
+        joiner_did: String,
+        answer_payload: String,
+    },
+
+    /// Replicate a signaling session so it can be joined from any relay.
+    SessionSync {
+        session_id: String,
+        creator_did: String,
+        offer_payload: String,
+        created_at: i64,
+    },
+
+    /// Queue an offline message on the relay that owns the recipient DID.
+    ForwardOffline {
+        to_did: String,
+        from_did: String,
+        payload: String,
+        timestamp: i64,
+    },
+
+    /// Ping to keep inter-relay connection alive.
+    PeerPing,
+
+    /// Pong response.
+    PeerPong,
+}
+
+// ── Supporting Types ──────────────────────────────────────────────────────────
+
+/// A message that was queued while the recipient was offline.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OfflineMessage {
+    pub id: String,
+    pub from_did: String,
+    pub payload: String,
+    pub timestamp: i64,
+    pub queued_at: DateTime<Utc>,
+}
+
+/// A signaling session for single-scan friend adding.
+#[derive(Debug, Clone)]
+pub struct SignalingSession {
+    /// Unique session identifier
+    pub id: String,
+    /// DID of the session creator (the one showing the QR code)
+    pub creator_did: String,
+    /// The SDP offer stored for the joiner
+    pub offer_payload: String,
+    /// When the session was created
+    pub created_at: DateTime<Utc>,
+    /// Whether this session has been consumed (joined)
+    pub consumed: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_client_message_register_serialization() {
+        let msg = ClientMessage::Register {
+            did: "did:key:z6MkTest".to_string(),
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        assert!(json.contains("\"type\":\"register\""));
+        assert!(json.contains("did:key:z6MkTest"));
+
+        let parsed: ClientMessage = serde_json::from_str(&json).unwrap();
+        match parsed {
+            ClientMessage::Register { did } => assert_eq!(did, "did:key:z6MkTest"),
+            _ => panic!("Wrong variant"),
+        }
+    }
+
+    #[test]
+    fn test_client_message_signal_serialization() {
+        let msg = ClientMessage::Signal {
+            to_did: "did:key:z6MkBob".to_string(),
+            payload: "{\"sdp\":\"...\"}".to_string(),
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        assert!(json.contains("\"type\":\"signal\""));
+
+        let parsed: ClientMessage = serde_json::from_str(&json).unwrap();
+        match parsed {
+            ClientMessage::Signal { to_did, payload } => {
+                assert_eq!(to_did, "did:key:z6MkBob");
+                assert!(payload.contains("sdp"));
+            }
+            _ => panic!("Wrong variant"),
+        }
+    }
+
+    #[test]
+    fn test_client_message_send_serialization() {
+        let msg = ClientMessage::Send {
+            to_did: "did:key:z6MkBob".to_string(),
+            payload: "encrypted_blob_base64".to_string(),
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        assert!(json.contains("\"type\":\"send\""));
+
+        let parsed: ClientMessage = serde_json::from_str(&json).unwrap();
+        match parsed {
+            ClientMessage::Send { to_did, payload } => {
+                assert_eq!(to_did, "did:key:z6MkBob");
+                assert_eq!(payload, "encrypted_blob_base64");
+            }
+            _ => panic!("Wrong variant"),
+        }
+    }
+
+    #[test]
+    fn test_client_message_create_session_serialization() {
+        let msg = ClientMessage::CreateSession {
+            offer_payload: "{\"sdp_type\":\"offer\"}".to_string(),
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        assert!(json.contains("\"type\":\"create_session\""));
+    }
+
+    #[test]
+    fn test_client_message_join_session_serialization() {
+        let msg = ClientMessage::JoinSession {
+            session_id: "sess-123".to_string(),
+            answer_payload: "{\"sdp_type\":\"answer\"}".to_string(),
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        assert!(json.contains("\"type\":\"join_session\""));
+    }
+
+    #[test]
+    fn test_client_message_fetch_offline_serialization() {
+        let msg = ClientMessage::FetchOffline;
+        let json = serde_json::to_string(&msg).unwrap();
+        assert!(json.contains("\"type\":\"fetch_offline\""));
+    }
+
+    #[test]
+    fn test_client_message_ping_serialization() {
+        let msg = ClientMessage::Ping;
+        let json = serde_json::to_string(&msg).unwrap();
+        assert!(json.contains("\"type\":\"ping\""));
+    }
+
+    #[test]
+    fn test_server_message_registered_serialization() {
+        let msg = ServerMessage::Registered {
+            did: "did:key:z6MkAlice".to_string(),
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        assert!(json.contains("\"type\":\"registered\""));
+    }
+
+    #[test]
+    fn test_server_message_signal_serialization() {
+        let msg = ServerMessage::Signal {
+            from_did: "did:key:z6MkAlice".to_string(),
+            payload: "sdp_data".to_string(),
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        assert!(json.contains("\"type\":\"signal\""));
+        assert!(json.contains("from_did"));
+    }
+
+    #[test]
+    fn test_server_message_offline_messages_serialization() {
+        let msg = ServerMessage::OfflineMessages {
+            messages: vec![OfflineMessage {
+                id: "msg-1".to_string(),
+                from_did: "did:key:z6MkAlice".to_string(),
+                payload: "encrypted".to_string(),
+                timestamp: 1234567890,
+                queued_at: Utc::now(),
+            }],
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        assert!(json.contains("\"type\":\"offline_messages\""));
+        assert!(json.contains("msg-1"));
+    }
+
+    #[test]
+    fn test_server_message_session_created_serialization() {
+        let msg = ServerMessage::SessionCreated {
+            session_id: "sess-abc".to_string(),
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        assert!(json.contains("\"type\":\"session_created\""));
+        assert!(json.contains("sess-abc"));
+    }
+
+    #[test]
+    fn test_server_message_error_serialization() {
+        let msg = ServerMessage::Error {
+            message: "Something went wrong".to_string(),
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        assert!(json.contains("\"type\":\"error\""));
+    }
+
+    #[test]
+    fn test_server_message_pong_serialization() {
+        let msg = ServerMessage::Pong;
+        let json = serde_json::to_string(&msg).unwrap();
+        assert!(json.contains("\"type\":\"pong\""));
+    }
+
+    #[test]
+    fn test_all_client_message_variants_round_trip() {
+        let messages = vec![
+            ClientMessage::Register { did: "did:key:z6MkTest".to_string() },
+            ClientMessage::Signal { to_did: "did:key:z6MkBob".to_string(), payload: "offer".to_string() },
+            ClientMessage::Send { to_did: "did:key:z6MkBob".to_string(), payload: "msg".to_string() },
+            ClientMessage::CreateSession { offer_payload: "offer".to_string() },
+            ClientMessage::JoinSession { session_id: "s1".to_string(), answer_payload: "answer".to_string() },
+            ClientMessage::FetchOffline,
+            ClientMessage::Ping,
+        ];
+
+        for msg in messages {
+            let json = serde_json::to_string(&msg).unwrap();
+            let parsed: ClientMessage = serde_json::from_str(&json).unwrap();
+            let json2 = serde_json::to_string(&parsed).unwrap();
+            assert_eq!(json, json2);
+        }
+    }
+
+    // ── Peer (Federation) Message Tests ──────────────────────────────────
+
+    #[test]
+    fn test_peer_message_hello_serialization() {
+        let msg = PeerMessage::Hello {
+            relay_id: "relay-us-east-1".to_string(),
+            relay_url: "wss://relay.example.com/ws".to_string(),
+            region: "US East".to_string(),
+            location: "New York".to_string(),
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        assert!(json.contains("\"type\":\"hello\""));
+        assert!(json.contains("relay-us-east-1"));
+
+        let parsed: PeerMessage = serde_json::from_str(&json).unwrap();
+        match parsed {
+            PeerMessage::Hello { relay_id, .. } => assert_eq!(relay_id, "relay-us-east-1"),
+            _ => panic!("Wrong variant"),
+        }
+    }
+
+    #[test]
+    fn test_peer_message_presence_sync_serialization() {
+        let msg = PeerMessage::PresenceSync {
+            relay_id: "relay-1".to_string(),
+            online_dids: vec!["did:key:z6MkAlice".to_string(), "did:key:z6MkBob".to_string()],
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        assert!(json.contains("\"type\":\"presence_sync\""));
+
+        let parsed: PeerMessage = serde_json::from_str(&json).unwrap();
+        match parsed {
+            PeerMessage::PresenceSync { online_dids, .. } => assert_eq!(online_dids.len(), 2),
+            _ => panic!("Wrong variant"),
+        }
+    }
+
+    #[test]
+    fn test_peer_message_forward_message_serialization() {
+        let msg = PeerMessage::ForwardMessage {
+            from_did: "did:key:z6MkAlice".to_string(),
+            to_did: "did:key:z6MkBob".to_string(),
+            payload: "encrypted_blob".to_string(),
+            timestamp: 1234567890,
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        assert!(json.contains("\"type\":\"forward_message\""));
+
+        let parsed: PeerMessage = serde_json::from_str(&json).unwrap();
+        match parsed {
+            PeerMessage::ForwardMessage { from_did, to_did, .. } => {
+                assert_eq!(from_did, "did:key:z6MkAlice");
+                assert_eq!(to_did, "did:key:z6MkBob");
+            }
+            _ => panic!("Wrong variant"),
+        }
+    }
+
+    #[test]
+    fn test_all_peer_message_variants_round_trip() {
+        let messages: Vec<PeerMessage> = vec![
+            PeerMessage::Hello {
+                relay_id: "r1".to_string(),
+                relay_url: "wss://r1.example.com/ws".to_string(),
+                region: "US".to_string(),
+                location: "NYC".to_string(),
+            },
+            PeerMessage::PresenceSync {
+                relay_id: "r1".to_string(),
+                online_dids: vec!["did:key:z6Mk1".to_string()],
+            },
+            PeerMessage::PresenceOnline {
+                relay_id: "r1".to_string(),
+                did: "did:key:z6Mk1".to_string(),
+            },
+            PeerMessage::PresenceOffline {
+                relay_id: "r1".to_string(),
+                did: "did:key:z6Mk1".to_string(),
+            },
+            PeerMessage::ForwardSignal {
+                from_did: "did:key:z6MkA".to_string(),
+                to_did: "did:key:z6MkB".to_string(),
+                payload: "sdp".to_string(),
+            },
+            PeerMessage::ForwardMessage {
+                from_did: "did:key:z6MkA".to_string(),
+                to_did: "did:key:z6MkB".to_string(),
+                payload: "msg".to_string(),
+                timestamp: 100,
+            },
+            PeerMessage::ForwardSessionJoin {
+                session_id: "s1".to_string(),
+                joiner_did: "did:key:z6MkB".to_string(),
+                answer_payload: "answer".to_string(),
+            },
+            PeerMessage::SessionSync {
+                session_id: "s1".to_string(),
+                creator_did: "did:key:z6MkA".to_string(),
+                offer_payload: "offer".to_string(),
+                created_at: 100,
+            },
+            PeerMessage::ForwardOffline {
+                to_did: "did:key:z6MkB".to_string(),
+                from_did: "did:key:z6MkA".to_string(),
+                payload: "queued".to_string(),
+                timestamp: 100,
+            },
+            PeerMessage::PeerPing,
+            PeerMessage::PeerPong,
+        ];
+
+        for msg in messages {
+            let json = serde_json::to_string(&msg).unwrap();
+            let parsed: PeerMessage = serde_json::from_str(&json).unwrap();
+            let json2 = serde_json::to_string(&parsed).unwrap();
+            assert_eq!(json, json2, "Round-trip failed for: {}", json);
+        }
+    }
+}

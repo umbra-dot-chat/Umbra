@@ -1,0 +1,285 @@
+[package]
+name = "umbra-core"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Cross-platform P2P messaging core library for Umbra"
+repository = "https://github.com/user/umbra"
+rust-version = "1.75"
+
+# Build multiple library types for different platforms
+# - cdylib: Dynamic library for FFI (iOS/Android)
+# - rlib: Rust library for testing and development
+# - staticlib: Static library for iOS
+[lib]
+crate-type = ["cdylib", "rlib", "staticlib"]
+
+# ============================================================================
+# DEPENDENCIES - Organized by category for clarity
+# ============================================================================
+
+[dependencies]
+
+# ----------------------------------------------------------------------------
+# Cryptography
+#
+# We use well-audited, pure-Rust implementations:
+# - ed25519-dalek: Digital signatures (identity verification)
+# - x25519-dalek: Key exchange (E2E encryption)
+# - aes-gcm: Authenticated encryption (message confidentiality + integrity)
+# - sha2: Hash functions (key derivation, message digests)
+# - hkdf: Key derivation function (deriving multiple keys from shared secret)
+# ----------------------------------------------------------------------------
+ed25519-dalek = { version = "2.1", features = ["rand_core", "serde"] }
+x25519-dalek = { version = "2.0", features = ["static_secrets", "serde"] }
+aes-gcm = { version = "0.10", features = ["aes", "std"] }
+sha2 = "0.10"
+hkdf = "0.12"
+rand = "0.8"
+rand_core = "0.6"
+zeroize = { version = "1.7", features = ["derive"] }
+
+# ----------------------------------------------------------------------------
+# Identity & Key Management
+#
+# BIP39: Industry-standard mnemonic phrase generation for key recovery
+# This allows users to backup their identity with 24 words
+# ----------------------------------------------------------------------------
+bip39 = "2.0"
+bs58 = "0.5"  # Base58 encoding for DIDs
+
+# ----------------------------------------------------------------------------
+# Networking (libp2p)
+#
+# libp2p provides the P2P networking stack:
+# - noise: Encrypted transport
+# - yamux: Stream multiplexing
+# - kad: Kademlia DHT for peer discovery
+# - identify: Peer identification protocol
+# - request-response: Request/response messaging pattern
+# ----------------------------------------------------------------------------
+# NOTE: libp2p is configured per-platform below (native vs WASM need
+# different transport features). The common features are shared.
+
+# ----------------------------------------------------------------------------
+# Async Runtime
+#
+# Tokio for async operations, with platform-specific features.
+# Common features only here; platform overrides add rt-multi-thread etc.
+# ----------------------------------------------------------------------------
+tokio = { version = "1", default-features = false, features = [
+    "sync",
+    "macros",
+] }
+futures = "0.3"
+async-trait = "0.1"
+async-stream = "0.3"
+
+# NOTE: rusqlite is native-only (added in the native dependencies section).
+# WASM uses sql.js via JavaScript interop — see storage/wasm_database.rs.
+
+# ----------------------------------------------------------------------------
+# Serialization
+#
+# - serde: Core serialization framework
+# - serde_json: JSON for debugging and some wire formats
+# - bincode: Compact binary format for storage and wire protocol
+# - postcard: No-std friendly binary format (for future embedded use)
+# ----------------------------------------------------------------------------
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+bincode = "1.3"
+
+# ----------------------------------------------------------------------------
+# Error Handling
+# ----------------------------------------------------------------------------
+thiserror = "1.0"
+
+# ----------------------------------------------------------------------------
+# Utilities
+# ----------------------------------------------------------------------------
+uuid = { version = "1", features = ["v4", "serde"] }
+# Note: chrono clock feature is platform-specific (see below)
+tracing = "0.1"
+parking_lot = "0.12"
+once_cell = "1.19"
+bytes = "1.5"
+hex = "0.4"
+base64 = "0.22"
+
+# ============================================================================
+# PLATFORM-SPECIFIC DEPENDENCIES
+# ============================================================================
+
+# Native platforms (iOS, Android, Desktop)
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "macros", "time", "fs"] }
+rusqlite = { version = "0.31", features = ["bundled"] }
+chrono = { version = "0.4", default-features = false, features = ["serde", "clock", "std"] }
+libp2p = { version = "0.54", default-features = false, features = [
+    "tokio",
+    "noise",
+    "yamux",
+    "kad",
+    "identify",
+    "ping",
+    "request-response",
+    "macros",
+    "tcp",
+    "dns",
+    "serde",
+] }
+
+# iOS-specific dependencies
+[target.'cfg(target_os = "ios")'.dependencies]
+security-framework = "2.9"
+
+# macOS-specific dependencies (uses same keychain API as iOS)
+[target.'cfg(target_os = "macos")'.dependencies]
+security-framework = "2.9"
+
+# Android-specific dependencies
+[target.'cfg(target_os = "android")'.dependencies]
+jni = "0.21"
+
+# WebAssembly (Browser)
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+chrono = { version = "0.4", default-features = false, features = ["serde", "wasmbind", "std"] }
+wasm-bindgen = "0.2"
+wasm-bindgen-futures = "0.4"
+js-sys = "0.3"
+web-sys = { version = "0.3", features = [
+    "console",
+    "Window",
+    "Worker",
+    "WorkerGlobalScope",
+    # WebRTC features for browser-to-browser P2P transport
+    "RtcPeerConnection",
+    "RtcPeerConnectionIceEvent",
+    "RtcSessionDescription",
+    "RtcSessionDescriptionInit",
+    "RtcSdpType",
+    "RtcDataChannel",
+    "RtcDataChannelInit",
+    "RtcDataChannelEvent",
+    "RtcDataChannelState",
+    "RtcDataChannelType",
+    "RtcIceCandidate",
+    "RtcIceCandidateInit",
+    "RtcConfiguration",
+    "RtcIceServer",
+    "RtcIceConnectionState",
+    "RtcIceGatheringState",
+    "RtcSignalingState",
+    "MessageEvent",
+    # Events
+    "Event",
+    "EventTarget",
+] }
+getrandom = { version = "0.2", features = ["js"] }
+# getrandom v0.3 is pulled transitively by libp2p's yamux → rand 0.9 chain
+# Needs wasm_js feature + rustflag (see .cargo/config.toml)
+getrandom_03 = { package = "getrandom", version = "0.3", features = ["wasm_js"] }
+# uuid needs JS random source on WASM
+uuid = { version = "1", features = ["v4", "serde", "js"] }
+console_error_panic_hook = "0.1"
+tracing-wasm = "0.2"
+# SendWrapper makes !Send web-sys types usable in Send contexts (safe on single-threaded WASM)
+send_wrapper = { version = "0.6", features = ["futures"] }
+
+# WASM-compatible tokio (single-threaded)
+tokio = { version = "1", default-features = false, features = ["sync", "macros"] }
+
+# libp2p for WASM uses WebSocket transport instead of TCP
+libp2p = { version = "0.54", default-features = false, features = [
+    "wasm-bindgen",
+    "noise",
+    "yamux",
+    "kad",
+    "identify",
+    "ping",
+    "request-response",
+    "macros",
+    "serde",
+] }
+
+# ============================================================================
+# DEVELOPMENT DEPENDENCIES
+# ============================================================================
+
+[dev-dependencies]
+tokio-test = "0.4"
+tempfile = "3.10"
+criterion = "0.5"
+
+# ============================================================================
+# FEATURES
+# ============================================================================
+
+[features]
+default = []
+
+# Enable verbose logging for development
+verbose-logging = []
+
+# Enable FFI exports (for native bindings)
+ffi = []
+
+# Enable WASM exports
+wasm = []
+
+# ============================================================================
+# BUILD CONFIGURATION
+# ============================================================================
+
+[profile.release]
+# Optimize for size on mobile platforms
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+
+[profile.dev]
+# Faster builds during development
+opt-level = 0
+debug = true
+
+# ============================================================================
+# PACKAGE METADATA
+# ============================================================================
+
+[package.metadata.docs.rs]
+all-features = true
+rustdoc-args = ["--cfg", "docsrs"]
+
+# ============================================================================
+# EXAMPLES (Sanity Check)
+# ============================================================================
+
+[[example]]
+name = "identity_creation"
+path = "examples/identity_creation.rs"
+
+[[example]]
+name = "encryption_demo"
+path = "examples/encryption_demo.rs"
+
+[[example]]
+name = "signing_demo"
+path = "examples/signing_demo.rs"
+
+[[example]]
+name = "recovery_phrase_demo"
+path = "examples/recovery_phrase_demo.rs"
+
+[[example]]
+name = "friends_demo"
+path = "examples/friends_demo.rs"
+
+[[example]]
+name = "discovery_demo"
+path = "examples/discovery_demo.rs"
+
+[[example]]
+name = "messaging_demo"
+path = "examples/messaging_demo.rs"
