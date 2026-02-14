@@ -52,6 +52,14 @@ interface CallContextValue {
   switchCamera: (deviceId?: string) => void;
   /** Current call stats */
   callStats: CallStats | null;
+  /** Whether screen sharing is active */
+  isScreenSharing: boolean;
+  /** Start screen sharing */
+  startScreenShare: () => Promise<void>;
+  /** Stop screen sharing */
+  stopScreenShare: () => void;
+  /** The screen share stream */
+  screenShareStream: MediaStream | null;
 }
 
 const CallContext = createContext<CallContextValue | null>(null);
@@ -72,6 +80,8 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
   const [videoQuality, setVideoQualityState] = useState<VideoQuality>('auto');
   const [audioQuality, setAudioQualityState] = useState<AudioQuality>('opus');
   const [callStats, setCallStats] = useState<CallStats | null>(null);
+  const [isScreenSharing, setIsScreenSharing] = useState(false);
+  const [screenShareStream, setScreenShareStream] = useState<MediaStream | null>(null);
   const callManagerRef = useRef<CallManager | null>(null);
   const ringTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -91,6 +101,8 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       callManagerRef.current = null;
     }
     setActiveCall(null);
+    setIsScreenSharing(false);
+    setScreenShareStream(null);
     try {
       sessionStorage.removeItem('umbra_active_call');
     } catch { /* not available */ }
@@ -362,6 +374,30 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  // ── Screen Sharing ────────────────────────────────────────────────────────
+
+  const startScreenShare = useCallback(async () => {
+    const manager = callManagerRef.current;
+    if (!manager) return;
+
+    try {
+      const stream = await manager.startScreenShare();
+      setScreenShareStream(stream);
+      setIsScreenSharing(true);
+    } catch (err) {
+      console.warn('[CallContext] Failed to start screen share:', err);
+    }
+  }, []);
+
+  const stopScreenShare = useCallback(() => {
+    const manager = callManagerRef.current;
+    if (!manager) return;
+
+    manager.stopScreenShare();
+    setScreenShareStream(null);
+    setIsScreenSharing(false);
+  }, []);
+
   // ── Stats Collection ──────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -551,6 +587,10 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     setAudioQuality,
     switchCamera,
     callStats,
+    isScreenSharing,
+    startScreenShare,
+    stopScreenShare,
+    screenShareStream,
   };
 
   return (

@@ -26,6 +26,8 @@ export class CallManager {
   private _videoQuality: VideoQuality = 'auto';
   private _audioQuality: AudioQuality = 'opus';
   private _currentVideoDeviceId: string | null = null;
+  private screenShareStream: MediaStream | null = null;
+  private _isScreenSharing = false;
 
   // Callbacks
   onRemoteStream: ((stream: MediaStream) => void) | null = null;
@@ -323,6 +325,67 @@ export class CallManager {
   }
 
   /**
+   * Start sharing the screen. Adds the screen video track to the peer connection.
+   */
+  async startScreenShare(): Promise<MediaStream> {
+    const screenShareStream = await navigator.mediaDevices.getDisplayMedia({
+      video: true,
+      audio: true,
+    });
+
+    this.screenShareStream = screenShareStream;
+    this._isScreenSharing = true;
+
+    if (this.pc) {
+      const videoTrack = screenShareStream.getVideoTracks()[0];
+      if (videoTrack) {
+        this.pc.addTrack(videoTrack, screenShareStream);
+        videoTrack.onended = () => this.stopScreenShare();
+      }
+    }
+
+    return screenShareStream;
+  }
+
+  /**
+   * Stop sharing the screen and remove the track from the peer connection.
+   */
+  stopScreenShare(): void {
+    if (!this.screenShareStream) return;
+
+    for (const track of this.screenShareStream.getTracks()) {
+      track.stop();
+    }
+
+    if (this.pc) {
+      const screenVideoTrack = this.screenShareStream.getVideoTracks()[0];
+      if (screenVideoTrack) {
+        const sender = this.pc.getSenders().find((s) => s.track === screenVideoTrack);
+        if (sender) {
+          this.pc.removeTrack(sender);
+        }
+      }
+    }
+
+    this.screenShareStream = null;
+    this._isScreenSharing = false;
+  }
+
+  /**
+   * Whether the user is currently sharing their screen.
+   */
+  get isScreenSharing(): boolean {
+    return this._isScreenSharing;
+  }
+
+  /**
+   * Get the current screen share stream, if any.
+   */
+  getScreenShareStream(): MediaStream | null {
+    return this.screenShareStream;
+  }
+
+  /**
    * Get the current local stream.
    */
   getLocalStream(): MediaStream | null {
@@ -435,6 +498,14 @@ export class CallManager {
    */
   close(): void {
     this.stopStats();
+
+    if (this.screenShareStream) {
+      for (const track of this.screenShareStream.getTracks()) {
+        track.stop();
+      }
+      this.screenShareStream = null;
+    }
+    this._isScreenSharing = false;
 
     if (this.localStream) {
       for (const track of this.localStream.getTracks()) {

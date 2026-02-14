@@ -51,6 +51,30 @@ pub enum ClientMessage {
 
     /// Ping to keep connection alive.
     Ping,
+
+    /// Create a call room for group calling.
+    /// Returns a room_id that participants can join.
+    CreateCallRoom {
+        group_id: String,
+    },
+
+    /// Join an existing call room.
+    JoinCallRoom {
+        room_id: String,
+    },
+
+    /// Leave a call room.
+    LeaveCallRoom {
+        room_id: String,
+    },
+
+    /// Forward a call signaling payload (SDP offer/answer/ICE) to a specific
+    /// participant within a call room.
+    CallSignal {
+        room_id: String,
+        to_did: String,
+        payload: String,
+    },
 }
 
 // ── Relay → Client ────────────────────────────────────────────────────────────
@@ -112,6 +136,31 @@ pub enum ServerMessage {
     /// Generic acknowledgement.
     Ack {
         id: String,
+    },
+
+    /// A call room was successfully created.
+    CallRoomCreated {
+        room_id: String,
+        group_id: String,
+    },
+
+    /// A participant joined the call room.
+    CallParticipantJoined {
+        room_id: String,
+        did: String,
+    },
+
+    /// A participant left the call room.
+    CallParticipantLeft {
+        room_id: String,
+        did: String,
+    },
+
+    /// A call signaling payload forwarded from another participant.
+    CallSignalForward {
+        room_id: String,
+        from_did: String,
+        payload: String,
     },
 }
 
@@ -212,6 +261,23 @@ pub struct OfflineMessage {
     pub payload: String,
     pub timestamp: i64,
     pub queued_at: DateTime<Utc>,
+}
+
+/// A call room for group calling.
+#[derive(Debug, Clone)]
+pub struct CallRoom {
+    /// Unique room identifier
+    pub room_id: String,
+    /// The group ID this room belongs to
+    pub group_id: String,
+    /// DID of the room creator
+    pub creator_did: String,
+    /// DIDs of all currently joined participants
+    pub participants: Vec<String>,
+    /// Maximum number of participants allowed
+    pub max_participants: usize,
+    /// When the room was created
+    pub created_at: DateTime<Utc>,
 }
 
 /// A signaling session for single-scan friend adding.
@@ -392,6 +458,10 @@ mod tests {
             ClientMessage::JoinSession { session_id: "s1".to_string(), answer_payload: "answer".to_string() },
             ClientMessage::FetchOffline,
             ClientMessage::Ping,
+            ClientMessage::CreateCallRoom { group_id: "group-1".to_string() },
+            ClientMessage::JoinCallRoom { room_id: "room-1".to_string() },
+            ClientMessage::LeaveCallRoom { room_id: "room-1".to_string() },
+            ClientMessage::CallSignal { room_id: "room-1".to_string(), to_did: "did:key:z6MkBob".to_string(), payload: "sdp".to_string() },
         ];
 
         for msg in messages {
@@ -400,6 +470,77 @@ mod tests {
             let json2 = serde_json::to_string(&parsed).unwrap();
             assert_eq!(json, json2);
         }
+    }
+
+    #[test]
+    fn test_client_message_create_call_room_serialization() {
+        let msg = ClientMessage::CreateCallRoom {
+            group_id: "group-abc".to_string(),
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        assert!(json.contains("\"type\":\"create_call_room\""));
+        assert!(json.contains("group-abc"));
+
+        let parsed: ClientMessage = serde_json::from_str(&json).unwrap();
+        match parsed {
+            ClientMessage::CreateCallRoom { group_id } => assert_eq!(group_id, "group-abc"),
+            _ => panic!("Wrong variant"),
+        }
+    }
+
+    #[test]
+    fn test_client_message_call_signal_serialization() {
+        let msg = ClientMessage::CallSignal {
+            room_id: "room-1".to_string(),
+            to_did: "did:key:z6MkBob".to_string(),
+            payload: "{\"sdp\":\"offer\"}".to_string(),
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        assert!(json.contains("\"type\":\"call_signal\""));
+
+        let parsed: ClientMessage = serde_json::from_str(&json).unwrap();
+        match parsed {
+            ClientMessage::CallSignal { room_id, to_did, payload } => {
+                assert_eq!(room_id, "room-1");
+                assert_eq!(to_did, "did:key:z6MkBob");
+                assert!(payload.contains("sdp"));
+            }
+            _ => panic!("Wrong variant"),
+        }
+    }
+
+    #[test]
+    fn test_server_message_call_room_created_serialization() {
+        let msg = ServerMessage::CallRoomCreated {
+            room_id: "room-123".to_string(),
+            group_id: "group-abc".to_string(),
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        assert!(json.contains("\"type\":\"call_room_created\""));
+        assert!(json.contains("room-123"));
+        assert!(json.contains("group-abc"));
+    }
+
+    #[test]
+    fn test_server_message_call_participant_joined_serialization() {
+        let msg = ServerMessage::CallParticipantJoined {
+            room_id: "room-1".to_string(),
+            did: "did:key:z6MkAlice".to_string(),
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        assert!(json.contains("\"type\":\"call_participant_joined\""));
+    }
+
+    #[test]
+    fn test_server_message_call_signal_forward_serialization() {
+        let msg = ServerMessage::CallSignalForward {
+            room_id: "room-1".to_string(),
+            from_did: "did:key:z6MkAlice".to_string(),
+            payload: "sdp_data".to_string(),
+        };
+        let json = serde_json::to_string(&msg).unwrap();
+        assert!(json.contains("\"type\":\"call_signal_forward\""));
+        assert!(json.contains("from_did"));
     }
 
     // ── Peer (Federation) Message Tests ──────────────────────────────────

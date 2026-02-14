@@ -42,6 +42,20 @@ pub enum RelayClientMessage {
     },
     FetchOffline,
     Ping,
+    CreateCallRoom {
+        group_id: String,
+    },
+    JoinCallRoom {
+        room_id: String,
+    },
+    LeaveCallRoom {
+        room_id: String,
+    },
+    CallSignal {
+        room_id: String,
+        to_did: String,
+        payload: String,
+    },
 }
 
 /// Messages received from the relay server.
@@ -83,6 +97,23 @@ pub enum RelayServerMessage {
     },
     Ack {
         id: String,
+    },
+    CallRoomCreated {
+        room_id: String,
+        group_id: String,
+    },
+    CallParticipantJoined {
+        room_id: String,
+        did: String,
+    },
+    CallParticipantLeft {
+        room_id: String,
+        did: String,
+    },
+    CallSignalForward {
+        room_id: String,
+        from_did: String,
+        payload: String,
     },
 }
 
@@ -303,6 +334,10 @@ mod tests {
             RelayClientMessage::JoinSession { session_id: "s1".to_string(), answer_payload: "answer".to_string() },
             RelayClientMessage::FetchOffline,
             RelayClientMessage::Ping,
+            RelayClientMessage::CreateCallRoom { group_id: "group-1".to_string() },
+            RelayClientMessage::JoinCallRoom { room_id: "room-1".to_string() },
+            RelayClientMessage::LeaveCallRoom { room_id: "room-1".to_string() },
+            RelayClientMessage::CallSignal { room_id: "room-1".to_string(), to_did: "did:key:z6MkBob".to_string(), payload: "sdp".to_string() },
         ];
 
         for msg in messages {
@@ -310,6 +345,59 @@ mod tests {
             let parsed: RelayClientMessage = serde_json::from_str(&json).unwrap();
             let json2 = serde_json::to_string(&parsed).unwrap();
             assert_eq!(json, json2, "Round-trip failed for message: {:?}", msg);
+        }
+    }
+
+    #[test]
+    fn test_relay_server_message_call_room_created() {
+        let json = r#"{"type":"call_room_created","room_id":"room-123","group_id":"group-abc"}"#;
+        let msg: RelayServerMessage = serde_json::from_str(json).unwrap();
+        match msg {
+            RelayServerMessage::CallRoomCreated { room_id, group_id } => {
+                assert_eq!(room_id, "room-123");
+                assert_eq!(group_id, "group-abc");
+            }
+            _ => panic!("Wrong variant"),
+        }
+    }
+
+    #[test]
+    fn test_relay_server_message_call_participant_joined() {
+        let json = r#"{"type":"call_participant_joined","room_id":"room-1","did":"did:key:z6MkAlice"}"#;
+        let msg: RelayServerMessage = serde_json::from_str(json).unwrap();
+        match msg {
+            RelayServerMessage::CallParticipantJoined { room_id, did } => {
+                assert_eq!(room_id, "room-1");
+                assert_eq!(did, "did:key:z6MkAlice");
+            }
+            _ => panic!("Wrong variant"),
+        }
+    }
+
+    #[test]
+    fn test_relay_server_message_call_participant_left() {
+        let json = r#"{"type":"call_participant_left","room_id":"room-1","did":"did:key:z6MkBob"}"#;
+        let msg: RelayServerMessage = serde_json::from_str(json).unwrap();
+        match msg {
+            RelayServerMessage::CallParticipantLeft { room_id, did } => {
+                assert_eq!(room_id, "room-1");
+                assert_eq!(did, "did:key:z6MkBob");
+            }
+            _ => panic!("Wrong variant"),
+        }
+    }
+
+    #[test]
+    fn test_relay_server_message_call_signal_forward() {
+        let json = r#"{"type":"call_signal_forward","room_id":"room-1","from_did":"did:key:z6MkAlice","payload":"sdp_offer"}"#;
+        let msg: RelayServerMessage = serde_json::from_str(json).unwrap();
+        match msg {
+            RelayServerMessage::CallSignalForward { room_id, from_did, payload } => {
+                assert_eq!(room_id, "room-1");
+                assert_eq!(from_did, "did:key:z6MkAlice");
+                assert_eq!(payload, "sdp_offer");
+            }
+            _ => panic!("Wrong variant"),
         }
     }
 }

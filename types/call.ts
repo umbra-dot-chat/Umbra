@@ -156,6 +156,29 @@ export interface CallStatePayload {
   isCameraOff?: boolean;
 }
 
+// ─── Group Call Signaling ────────────────────────────────────────────────────
+
+export interface CallRoomCreatedPayload {
+  roomId: string;
+  groupId: string;
+}
+
+export interface CallParticipantJoinedPayload {
+  roomId: string;
+  did: string;
+}
+
+export interface CallParticipantLeftPayload {
+  roomId: string;
+  did: string;
+}
+
+export interface CallSignalForwardPayload {
+  roomId: string;
+  fromDid: string;
+  payload: string;
+}
+
 // ─── Call Event (dispatched through service) ─────────────────────────────────
 
 export type CallEvent =
@@ -163,7 +186,11 @@ export type CallEvent =
   | { type: 'callAnswer'; payload: CallAnswerPayload }
   | { type: 'callIceCandidate'; payload: CallIceCandidatePayload }
   | { type: 'callEnd'; payload: CallEndPayload }
-  | { type: 'callState'; payload: CallStatePayload };
+  | { type: 'callState'; payload: CallStatePayload }
+  | { type: 'callRoomCreated'; payload: CallRoomCreatedPayload }
+  | { type: 'callParticipantJoined'; payload: CallParticipantJoinedPayload }
+  | { type: 'callParticipantLeft'; payload: CallParticipantLeftPayload }
+  | { type: 'callSignalForward'; payload: CallSignalForwardPayload };
 
 // ─── ICE Server Configuration ────────────────────────────────────────────────
 

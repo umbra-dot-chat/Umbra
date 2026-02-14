@@ -276,6 +276,10 @@ const mockInstance = {
   dispatchCallEvent: jest.fn(),
   setRelayWs: jest.fn(),
   sendCallSignal: jest.fn(),
+  createCallRoom: jest.fn(),
+  joinCallRoom: jest.fn(),
+  leaveCallRoom: jest.fn(),
+  sendCallRoomSignal: jest.fn(),
 };
 
 class UmbraService {

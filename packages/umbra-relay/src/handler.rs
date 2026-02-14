@@ -156,6 +156,20 @@ pub async fn handle_websocket(socket: WebSocket, state: RelayState) {
 
     // ── Step 5: Cleanup ───────────────────────────────────────────────────
 
+    // Remove from any call rooms and notify remaining participants
+    let affected_rooms = state.remove_from_all_call_rooms(&client_did);
+    for (room_id, remaining) in &affected_rooms {
+        for participant_did in remaining {
+            state.send_to_client(
+                participant_did,
+                ServerMessage::CallParticipantLeft {
+                    room_id: room_id.clone(),
+                    did: client_did.clone(),
+                },
+            );
+        }
+    }
+
     state.unregister_client(&client_did);
     sender_task.abort();
     tracing::info!(did = client_did.as_str(), "WebSocket disconnected");
@@ -199,6 +213,26 @@ async fn handle_client_message(state: &RelayState, from_did: &str, msg: ClientMe
 
         ClientMessage::Ping => {
             state.send_to_client(from_did, ServerMessage::Pong);
+        }
+
+        ClientMessage::CreateCallRoom { group_id } => {
+            handle_create_call_room(state, from_did, &group_id);
+        }
+
+        ClientMessage::JoinCallRoom { room_id } => {
+            handle_join_call_room(state, from_did, &room_id);
+        }
+
+        ClientMessage::LeaveCallRoom { room_id } => {
+            handle_leave_call_room(state, from_did, &room_id);
+        }
+
+        ClientMessage::CallSignal {
+            room_id,
+            to_did,
+            payload,
+        } => {
+            handle_call_signal(state, from_did, &room_id, &to_did, &payload);
         }
     }
 }
@@ -357,6 +391,110 @@ fn handle_fetch_offline(state: &RelayState, did: &str) {
     state.send_to_client(
         did,
         ServerMessage::OfflineMessages { messages },
+    );
+}
+
+// ── Call Room Handlers ────────────────────────────────────────────────────────
+
+/// Create a new call room for group calling.
+fn handle_create_call_room(state: &RelayState, creator_did: &str, group_id: &str) {
+    let room_id = state.create_call_room(group_id, creator_did);
+
+    state.send_to_client(
+        creator_did,
+        ServerMessage::CallRoomCreated {
+            room_id,
+            group_id: group_id.to_string(),
+        },
+    );
+}
+
+/// Join an existing call room and notify all participants.
+fn handle_join_call_room(state: &RelayState, joiner_did: &str, room_id: &str) {
+    match state.join_call_room(room_id, joiner_did) {
+        Some(existing_participants) => {
+            // Notify all existing participants that someone joined
+            for participant_did in &existing_participants {
+                state.send_to_client(
+                    participant_did,
+                    ServerMessage::CallParticipantJoined {
+                        room_id: room_id.to_string(),
+                        did: joiner_did.to_string(),
+                    },
+                );
+            }
+
+            // Send ack to the joiner
+            state.send_to_client(
+                joiner_did,
+                ServerMessage::Ack {
+                    id: format!("call_room_joined_{}", room_id),
+                },
+            );
+        }
+        None => {
+            state.send_to_client(
+                joiner_did,
+                ServerMessage::Error {
+                    message: format!("Call room '{}' not found or full", room_id),
+                },
+            );
+        }
+    }
+}
+
+/// Leave a call room and notify remaining participants.
+fn handle_leave_call_room(state: &RelayState, leaver_did: &str, room_id: &str) {
+    let remaining = state.leave_call_room(room_id, leaver_did);
+
+    // Notify remaining participants
+    for participant_did in &remaining {
+        state.send_to_client(
+            participant_did,
+            ServerMessage::CallParticipantLeft {
+                room_id: room_id.to_string(),
+                did: leaver_did.to_string(),
+            },
+        );
+    }
+}
+
+/// Forward a call signaling payload to a specific participant within a room.
+fn handle_call_signal(
+    state: &RelayState,
+    from_did: &str,
+    room_id: &str,
+    to_did: &str,
+    payload: &str,
+) {
+    // Verify both sender and target are in the room
+    if !state.is_in_call_room(room_id, from_did) {
+        state.send_to_client(
+            from_did,
+            ServerMessage::Error {
+                message: "You are not in this call room".to_string(),
+            },
+        );
+        return;
+    }
+
+    if !state.is_in_call_room(room_id, to_did) {
+        state.send_to_client(
+            from_did,
+            ServerMessage::Error {
+                message: format!("Target '{}' is not in this call room", to_did),
+            },
+        );
+        return;
+    }
+
+    state.send_to_client(
+        to_did,
+        ServerMessage::CallSignalForward {
+            room_id: room_id.to_string(),
+            from_did: from_did.to_string(),
+            payload: payload.to_string(),
+        },
     );
 }
 

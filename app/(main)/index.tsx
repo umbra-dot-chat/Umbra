@@ -298,7 +298,7 @@ export default function ChatPage() {
     })),
   [pinnedMessages, friendNames, myDid]);
 
-  // Call handlers (DM only for Phase 1)
+  // Call handlers
   const isDm = activeConversation?.type !== 'group';
   const friendDid = activeConversation?.friendDid ?? null;
   const friendDisplayName = friendDid ? (friendNames[friendDid] || friendDid.slice(0, 16)) : null;
@@ -332,7 +332,7 @@ export default function ChatPage() {
           rightPanel={rightPanel}
           togglePanel={togglePanel}
           onShowProfile={showProfile}
-          showCallButtons={isDm && !!friendDid}
+          showCallButtons={!!resolvedConversationId && (isDm ? !!friendDid : true)}
           onVoiceCall={handleVoiceCall}
           onVideoCall={handleVideoCall}
         />

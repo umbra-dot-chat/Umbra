@@ -2246,6 +2246,50 @@ export class UmbraService {
     }
   }
 
+  /**
+   * Create a call room on the relay for group calling.
+   */
+  createCallRoom(groupId: string): void {
+    if (this._relayWsRef && this._relayWsRef.readyState === WebSocket.OPEN) {
+      this._relayWsRef.send(JSON.stringify({ type: 'create_call_room', group_id: groupId }));
+    } else {
+      console.warn('[UmbraService] Cannot create call room: relay not connected');
+    }
+  }
+
+  /**
+   * Join an existing call room on the relay.
+   */
+  joinCallRoom(roomId: string): void {
+    if (this._relayWsRef && this._relayWsRef.readyState === WebSocket.OPEN) {
+      this._relayWsRef.send(JSON.stringify({ type: 'join_call_room', room_id: roomId }));
+    } else {
+      console.warn('[UmbraService] Cannot join call room: relay not connected');
+    }
+  }
+
+  /**
+   * Leave a call room on the relay.
+   */
+  leaveCallRoom(roomId: string): void {
+    if (this._relayWsRef && this._relayWsRef.readyState === WebSocket.OPEN) {
+      this._relayWsRef.send(JSON.stringify({ type: 'leave_call_room', room_id: roomId }));
+    } else {
+      console.warn('[UmbraService] Cannot leave call room: relay not connected');
+    }
+  }
+
+  /**
+   * Send a call signaling payload to a specific peer in a call room.
+   */
+  sendCallRoomSignal(roomId: string, toDid: string, payload: string): void {
+    if (this._relayWsRef && this._relayWsRef.readyState === WebSocket.OPEN) {
+      this._relayWsRef.send(JSON.stringify({ type: 'call_signal', room_id: roomId, to_did: toDid, payload }));
+    } else {
+      console.warn('[UmbraService] Cannot send call room signal: relay not connected');
+    }
+  }
+
   // ===========================================================================
   // GROUPS
   // ===========================================================================

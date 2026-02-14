@@ -979,6 +979,39 @@ export function useNetwork(): UseNetworkResult {
                 break;
               }
 
+              // ── Group Call Room Messages ──────────────────────────────────
+              case 'call_room_created': {
+                service.dispatchCallEvent({
+                  type: 'callRoomCreated',
+                  payload: { roomId: msg.room_id, groupId: msg.group_id },
+                });
+                break;
+              }
+
+              case 'call_participant_joined': {
+                service.dispatchCallEvent({
+                  type: 'callParticipantJoined',
+                  payload: { roomId: msg.room_id, did: msg.did },
+                });
+                break;
+              }
+
+              case 'call_participant_left': {
+                service.dispatchCallEvent({
+                  type: 'callParticipantLeft',
+                  payload: { roomId: msg.room_id, did: msg.did },
+                });
+                break;
+              }
+
+              case 'call_signal_forward': {
+                service.dispatchCallEvent({
+                  type: 'callSignalForward',
+                  payload: { roomId: msg.room_id, fromDid: msg.from_did, payload: msg.payload },
+                });
+                break;
+              }
+
               case 'pong':
                 // Keepalive response — nothing to do
                 break;

@@ -11,7 +11,7 @@ use tokio::sync::mpsc;
 use uuid::Uuid;
 
 use crate::federation::Federation;
-use crate::protocol::{OfflineMessage, ServerMessage, SignalingSession};
+use crate::protocol::{CallRoom, OfflineMessage, ServerMessage, SignalingSession};
 
 /// Maximum number of offline messages to store per DID.
 const DEFAULT_MAX_OFFLINE_PER_DID: usize = 1000;
@@ -21,6 +21,12 @@ const DEFAULT_SESSION_TTL_SECS: i64 = 3600;
 
 /// Default offline message TTL in seconds (7 days).
 const DEFAULT_OFFLINE_TTL_SECS: i64 = 7 * 24 * 3600;
+
+/// Default maximum participants per call room.
+const DEFAULT_MAX_CALL_PARTICIPANTS: usize = 50;
+
+/// Default call room TTL in seconds (4 hours).
+const DEFAULT_CALL_ROOM_TTL_SECS: i64 = 4 * 3600;
 
 /// Server configuration.
 #[derive(Debug, Clone)]
@@ -68,6 +74,10 @@ pub struct RelayState {
     /// Used for single-scan friend adding flow.
     pub sessions: Arc<DashMap<String, SignalingSession>>,
 
+    /// Room ID → call room.
+    /// Tracks active group call rooms and their participants.
+    pub call_rooms: Arc<DashMap<String, CallRoom>>,
+
     /// Server configuration.
     pub config: RelayConfig,
 
@@ -83,6 +93,7 @@ impl RelayState {
             online_clients: Arc::new(DashMap::new()),
             offline_queue: Arc::new(DashMap::new()),
             sessions: Arc::new(DashMap::new()),
+            call_rooms: Arc::new(DashMap::new()),
             config,
             federation: None,
         }
@@ -94,6 +105,7 @@ impl RelayState {
             online_clients: Arc::new(DashMap::new()),
             offline_queue: Arc::new(DashMap::new()),
             sessions: Arc::new(DashMap::new()),
+            call_rooms: Arc::new(DashMap::new()),
             config,
             federation: Some(federation),
         }
@@ -392,6 +404,121 @@ impl RelayState {
         }
     }
 
+    // ── Call Room Management ──────────────────────────────────────────────
+
+    /// Create a new call room for group calling.
+    /// Returns the room ID.
+    pub fn create_call_room(&self, group_id: &str, creator_did: &str) -> String {
+        let room_id = Uuid::new_v4().to_string();
+
+        let room = CallRoom {
+            room_id: room_id.clone(),
+            group_id: group_id.to_string(),
+            creator_did: creator_did.to_string(),
+            participants: vec![creator_did.to_string()],
+            max_participants: DEFAULT_MAX_CALL_PARTICIPANTS,
+            created_at: Utc::now(),
+        };
+
+        tracing::info!(
+            room_id = room_id.as_str(),
+            group_id = group_id,
+            creator = creator_did,
+            "Created call room"
+        );
+        self.call_rooms.insert(room_id.clone(), room);
+        room_id
+    }
+
+    /// Join an existing call room. Returns the list of existing participants
+    /// (before joining) so the joiner can establish connections with them.
+    /// Returns None if the room doesn't exist or is full.
+    pub fn join_call_room(&self, room_id: &str, did: &str) -> Option<Vec<String>> {
+        let mut room = self.call_rooms.get_mut(room_id)?;
+
+        if room.participants.len() >= room.max_participants {
+            tracing::warn!(room_id = room_id, "Call room full");
+            return None;
+        }
+
+        // Don't add duplicate participants
+        if room.participants.contains(&did.to_string()) {
+            return Some(room.participants.clone());
+        }
+
+        let existing = room.participants.clone();
+        room.participants.push(did.to_string());
+
+        tracing::info!(
+            room_id = room_id,
+            did = did,
+            participant_count = room.participants.len(),
+            "Participant joined call room"
+        );
+
+        Some(existing)
+    }
+
+    /// Leave a call room. Returns the remaining participants.
+    /// Removes the room if it becomes empty.
+    pub fn leave_call_room(&self, room_id: &str, did: &str) -> Vec<String> {
+        let remaining = if let Some(mut room) = self.call_rooms.get_mut(room_id) {
+            room.participants.retain(|p| p != did);
+            let remaining = room.participants.clone();
+            drop(room);
+            remaining
+        } else {
+            return Vec::new();
+        };
+
+        tracing::info!(
+            room_id = room_id,
+            did = did,
+            remaining = remaining.len(),
+            "Participant left call room"
+        );
+
+        // Remove empty rooms
+        if remaining.is_empty() {
+            self.call_rooms.remove(room_id);
+            tracing::debug!(room_id = room_id, "Removed empty call room");
+        }
+
+        remaining
+    }
+
+    /// Get the participants in a call room.
+    pub fn get_call_room_participants(&self, room_id: &str) -> Option<Vec<String>> {
+        self.call_rooms.get(room_id).map(|r| r.participants.clone())
+    }
+
+    /// Check if a DID is in a call room.
+    pub fn is_in_call_room(&self, room_id: &str, did: &str) -> bool {
+        self.call_rooms
+            .get(room_id)
+            .map(|r| r.participants.contains(&did.to_string()))
+            .unwrap_or(false)
+    }
+
+    /// Remove a disconnected client from all call rooms they're in.
+    /// Returns room_id → remaining participants for rooms they were in.
+    pub fn remove_from_all_call_rooms(&self, did: &str) -> Vec<(String, Vec<String>)> {
+        let mut affected = Vec::new();
+        let room_ids: Vec<String> = self
+            .call_rooms
+            .iter()
+            .filter(|r| r.participants.contains(&did.to_string()))
+            .map(|r| r.room_id.clone())
+            .collect();
+
+        for room_id in room_ids {
+            let remaining = self.leave_call_room(&room_id, did);
+            affected.push((room_id, remaining));
+        }
+
+        affected
+    }
+
     /// Remove expired sessions and offline messages.
     /// Called periodically by the cleanup task.
     pub fn cleanup_expired(&self) {
@@ -440,6 +567,25 @@ impl RelayState {
             tracing::debug!(
                 count = cleaned_messages,
                 "Cleaned up expired offline messages"
+            );
+        }
+
+        // Clean expired call rooms
+        let expired_rooms: Vec<String> = self
+            .call_rooms
+            .iter()
+            .filter(|entry| now - entry.created_at.timestamp() > DEFAULT_CALL_ROOM_TTL_SECS)
+            .map(|entry| entry.room_id.clone())
+            .collect();
+
+        for room_id in &expired_rooms {
+            self.call_rooms.remove(room_id);
+        }
+
+        if !expired_rooms.is_empty() {
+            tracing::debug!(
+                count = expired_rooms.len(),
+                "Cleaned up expired call rooms"
             );
         }
     }
@@ -592,5 +738,95 @@ mod tests {
         let state = RelayState::new(test_config());
         let messages = state.drain_offline_messages("did:key:z6MkNobody");
         assert!(messages.is_empty());
+    }
+
+    // ── Call Room Tests ──────────────────────────────────────────────
+
+    #[test]
+    fn test_create_call_room() {
+        let state = RelayState::new(test_config());
+        let room_id = state.create_call_room("group-1", "did:key:z6MkAlice");
+        assert!(!room_id.is_empty());
+
+        let participants = state.get_call_room_participants(&room_id).unwrap();
+        assert_eq!(participants.len(), 1);
+        assert_eq!(participants[0], "did:key:z6MkAlice");
+    }
+
+    #[test]
+    fn test_join_call_room() {
+        let state = RelayState::new(test_config());
+        let room_id = state.create_call_room("group-1", "did:key:z6MkAlice");
+
+        let existing = state.join_call_room(&room_id, "did:key:z6MkBob").unwrap();
+        assert_eq!(existing.len(), 1);
+        assert_eq!(existing[0], "did:key:z6MkAlice");
+
+        let participants = state.get_call_room_participants(&room_id).unwrap();
+        assert_eq!(participants.len(), 2);
+    }
+
+    #[test]
+    fn test_join_call_room_no_duplicates() {
+        let state = RelayState::new(test_config());
+        let room_id = state.create_call_room("group-1", "did:key:z6MkAlice");
+
+        state.join_call_room(&room_id, "did:key:z6MkAlice");
+        let participants = state.get_call_room_participants(&room_id).unwrap();
+        assert_eq!(participants.len(), 1);
+    }
+
+    #[test]
+    fn test_leave_call_room() {
+        let state = RelayState::new(test_config());
+        let room_id = state.create_call_room("group-1", "did:key:z6MkAlice");
+        state.join_call_room(&room_id, "did:key:z6MkBob");
+
+        let remaining = state.leave_call_room(&room_id, "did:key:z6MkAlice");
+        assert_eq!(remaining.len(), 1);
+        assert_eq!(remaining[0], "did:key:z6MkBob");
+    }
+
+    #[test]
+    fn test_leave_call_room_removes_empty() {
+        let state = RelayState::new(test_config());
+        let room_id = state.create_call_room("group-1", "did:key:z6MkAlice");
+
+        state.leave_call_room(&room_id, "did:key:z6MkAlice");
+        assert!(state.get_call_room_participants(&room_id).is_none());
+    }
+
+    #[test]
+    fn test_is_in_call_room() {
+        let state = RelayState::new(test_config());
+        let room_id = state.create_call_room("group-1", "did:key:z6MkAlice");
+
+        assert!(state.is_in_call_room(&room_id, "did:key:z6MkAlice"));
+        assert!(!state.is_in_call_room(&room_id, "did:key:z6MkBob"));
+    }
+
+    #[test]
+    fn test_remove_from_all_call_rooms() {
+        let state = RelayState::new(test_config());
+        let room1 = state.create_call_room("group-1", "did:key:z6MkAlice");
+        let room2 = state.create_call_room("group-2", "did:key:z6MkAlice");
+        state.join_call_room(&room1, "did:key:z6MkBob");
+
+        let affected = state.remove_from_all_call_rooms("did:key:z6MkAlice");
+        assert_eq!(affected.len(), 2);
+
+        // Room 1 should still have Bob
+        let p1 = state.get_call_room_participants(&room1).unwrap();
+        assert_eq!(p1.len(), 1);
+        assert_eq!(p1[0], "did:key:z6MkBob");
+
+        // Room 2 should be removed (was empty after Alice left)
+        assert!(state.get_call_room_participants(&room2).is_none());
+    }
+
+    #[test]
+    fn test_join_nonexistent_room() {
+        let state = RelayState::new(test_config());
+        assert!(state.join_call_room("nonexistent", "did:key:z6MkAlice").is_none());
     }
 }

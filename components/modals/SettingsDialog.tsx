@@ -49,8 +49,13 @@ import {
   NetworkIcon,
   UsersIcon,
   ChevronDownIcon,
+  VideoIcon,
 } from '@/components/icons';
 import { useNetwork } from '@/hooks/useNetwork';
+import { useCall } from '@/hooks/useCall';
+import { useMediaDevices } from '@/hooks/useMediaDevices';
+import type { VideoQuality, AudioQuality } from '@/types/call';
+import { VIDEO_QUALITY_PRESETS } from '@/types/call';
 import { useUmbra } from '@/contexts/UmbraContext';
 import { usePlugins } from '@/contexts/PluginContext';
 import { useFonts, FONT_REGISTRY } from '@/contexts/FontContext';
@@ -77,7 +82,7 @@ export interface SettingsDialogProps {
   onOpenMarketplace?: () => void;
 }
 
-type SettingsSection = 'account' | 'profile' | 'appearance' | 'notifications' | 'privacy' | 'network' | 'data' | 'plugins';
+type SettingsSection = 'account' | 'profile' | 'appearance' | 'notifications' | 'privacy' | 'audio-video' | 'network' | 'data' | 'plugins';
 
 interface NavItem {
   id: SettingsSection;
@@ -91,6 +96,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'appearance', label: 'Appearance', icon: PaletteIcon },
   { id: 'notifications', label: 'Notifications', icon: BellIcon },
   { id: 'privacy', label: 'Privacy', icon: ShieldIcon },
+  { id: 'audio-video', label: 'Audio & Video', icon: VideoIcon },
   { id: 'network', label: 'Network', icon: GlobeIcon },
   { id: 'data', label: 'Data', icon: DatabaseIcon },
   { id: 'plugins', label: 'Plugins', icon: ZapIcon },
@@ -1028,6 +1034,168 @@ function PrivacySection() {
           )}
         </View>
       </Dialog>
+    </View>
+  );
+}
+
+function AudioVideoSection() {
+  const { theme } = useTheme();
+  const tc = theme.colors;
+  const { videoQuality, audioQuality, setVideoQuality, setAudioQuality, isScreenSharing } = useCall();
+  const { audioInputs, videoInputs, audioOutputs, isSupported } = useMediaDevices();
+
+  const videoQualityOptions: InlineDropdownOption[] = [
+    { value: 'auto', label: 'Auto', description: 'Adapts to network conditions' },
+    { value: '720p', label: '720p HD', description: '~2.5 Mbps' },
+    { value: '1080p', label: '1080p Full HD', description: '~5 Mbps' },
+    { value: '1440p', label: '1440p QHD', description: '~8 Mbps' },
+    { value: '4k', label: '4K Ultra HD', description: '~16 Mbps' },
+  ];
+
+  const audioQualityOptions: InlineDropdownOption[] = [
+    { value: 'opus', label: 'Opus (Adaptive)', description: '32-128 kbps, optimized for voice' },
+    { value: 'pcm', label: 'PCM Lossless', description: '~1.4 Mbps, uncompressed audio' },
+  ];
+
+  return (
+    <View style={{ gap: 20 }}>
+      <SectionHeader
+        title="Audio & Video"
+        description="Configure your camera, microphone, and call quality settings."
+      />
+
+      {/* Video Quality */}
+      <SettingRow label="Video Quality" description="Set the default video quality for calls." vertical>
+        <InlineDropdown
+          options={videoQualityOptions}
+          value={videoQuality}
+          onChange={(v) => setVideoQuality(v as VideoQuality)}
+          placeholder="Select quality"
+        />
+      </SettingRow>
+
+      {/* Audio Quality */}
+      <SettingRow label="Audio Quality" description="Choose between adaptive or lossless audio." vertical>
+        <InlineDropdown
+          options={audioQualityOptions}
+          value={audioQuality}
+          onChange={(v) => setAudioQuality(v as AudioQuality)}
+          placeholder="Select quality"
+        />
+        {audioQuality === 'pcm' && (
+          <View style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 8,
+            padding: 10,
+            borderRadius: 8,
+            backgroundColor: tc.status.warningSurface,
+            borderWidth: 1,
+            borderColor: tc.status.warningBorder,
+            marginTop: 8,
+          }}>
+            <AlertTriangleIcon size={16} color={tc.status.warning} />
+            <RNText style={{ fontSize: 12, color: tc.status.warning, flex: 1 }}>
+              Lossless audio uses ~1.4 Mbps. Ensure you have a stable connection.
+            </RNText>
+          </View>
+        )}
+      </SettingRow>
+
+      <Separator spacing="sm" />
+
+      {/* Devices section */}
+      <View style={{ gap: 16 }}>
+        <View>
+          <RNText style={{ fontSize: 15, fontWeight: '600', color: tc.text.primary }}>
+            Devices
+          </RNText>
+          <RNText style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
+            Your available audio and video input/output devices.
+          </RNText>
+        </View>
+
+        {/* Microphones */}
+        <View style={{ gap: 6 }}>
+          <RNText style={{ fontSize: 11, fontWeight: '600', color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+            Microphones
+          </RNText>
+          {audioInputs.length === 0 ? (
+            <RNText style={{ fontSize: 13, color: tc.text.secondary }}>No microphones detected</RNText>
+          ) : (
+            audioInputs.map((device) => (
+              <View key={device.deviceId} style={{
+                flexDirection: 'row', alignItems: 'center', gap: 8,
+                paddingVertical: 6, paddingHorizontal: 10,
+                borderRadius: 6, backgroundColor: tc.background.sunken,
+              }}>
+                <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: tc.status.success }} />
+                <RNText style={{ fontSize: 13, color: tc.text.primary, flex: 1 }} numberOfLines={1}>
+                  {device.label || `Microphone ${device.deviceId.slice(0, 8)}`}
+                </RNText>
+              </View>
+            ))
+          )}
+        </View>
+
+        {/* Cameras */}
+        <View style={{ gap: 6 }}>
+          <RNText style={{ fontSize: 11, fontWeight: '600', color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+            Cameras
+          </RNText>
+          {videoInputs.length === 0 ? (
+            <RNText style={{ fontSize: 13, color: tc.text.secondary }}>No cameras detected</RNText>
+          ) : (
+            videoInputs.map((device) => (
+              <View key={device.deviceId} style={{
+                flexDirection: 'row', alignItems: 'center', gap: 8,
+                paddingVertical: 6, paddingHorizontal: 10,
+                borderRadius: 6, backgroundColor: tc.background.sunken,
+              }}>
+                <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: tc.status.success }} />
+                <RNText style={{ fontSize: 13, color: tc.text.primary, flex: 1 }} numberOfLines={1}>
+                  {device.label || `Camera ${device.deviceId.slice(0, 8)}`}
+                </RNText>
+              </View>
+            ))
+          )}
+        </View>
+
+        {/* Speakers */}
+        <View style={{ gap: 6 }}>
+          <RNText style={{ fontSize: 11, fontWeight: '600', color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+            Speakers
+          </RNText>
+          {audioOutputs.length === 0 ? (
+            <RNText style={{ fontSize: 13, color: tc.text.secondary }}>No speakers detected</RNText>
+          ) : (
+            audioOutputs.map((device) => (
+              <View key={device.deviceId} style={{
+                flexDirection: 'row', alignItems: 'center', gap: 8,
+                paddingVertical: 6, paddingHorizontal: 10,
+                borderRadius: 6, backgroundColor: tc.background.sunken,
+              }}>
+                <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: tc.status.success }} />
+                <RNText style={{ fontSize: 13, color: tc.text.primary, flex: 1 }} numberOfLines={1}>
+                  {device.label || `Speaker ${device.deviceId.slice(0, 8)}`}
+                </RNText>
+              </View>
+            ))
+          )}
+        </View>
+
+        {!isSupported && (
+          <View style={{
+            padding: 12, borderRadius: 8,
+            backgroundColor: tc.status.warningSurface,
+            borderWidth: 1, borderColor: tc.status.warningBorder,
+          }}>
+            <RNText style={{ fontSize: 12, color: tc.status.warning }}>
+              Media devices are not available in this browser or environment.
+            </RNText>
+          </View>
+        )}
+      </View>
     </View>
   );
 }
@@ -2236,6 +2404,8 @@ export function SettingsDialog({ open, onClose, onOpenMarketplace }: SettingsDia
         return <NotificationsSection />;
       case 'privacy':
         return <PrivacySection />;
+      case 'audio-video':
+        return <AudioVideoSection />;
       case 'network':
         return <NetworkSection />;
       case 'data':

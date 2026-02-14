@@ -15,7 +15,7 @@ export interface ChatHeaderProps {
   onShowProfile: (name: string, event: any) => void;
   onVoiceCall?: () => void;
   onVideoCall?: () => void;
-  /** Whether to show call buttons (DM only for Phase 1) */
+  /** Whether to show call buttons */
   showCallButtons?: boolean;
 }
 
