@@ -203,6 +203,13 @@ export interface IceServer {
 export const DEFAULT_ICE_SERVERS: IceServer[] = [
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
+  {
+    urls: [
+      'turn:turn.deepspaceshipping.co:3478?transport=udp',
+      'turn:turn.deepspaceshipping.co:3478?transport=tcp',
+    ],
+    // Credentials set dynamically via generateTurnCredentials()
+  },
 ];
 
 // ─── Call Stats ──────────────────────────────────────────────────────────────

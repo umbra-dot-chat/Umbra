@@ -77,6 +77,8 @@ export function useVideoEffects(config: UseVideoEffectsConfig): UseVideoEffectsR
   // Refs for the offscreen canvas pipeline
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const ctxRef = useRef<CanvasRenderingContext2D | null>(null);
+  const offscreenCanvasRef = useRef<OffscreenCanvas | null>(null);
+  const offscreenCtxRef = useRef<OffscreenCanvasRenderingContext2D | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const animationFrameRef = useRef<number>(0);
   const backgroundImageRef = useRef<HTMLImageElement | null>(null);
@@ -115,17 +117,33 @@ export function useVideoEffects(config: UseVideoEffectsConfig): UseVideoEffectsR
   const renderFrame = useCallback(() => {
     const video = videoRef.current;
     const canvas = canvasRef.current;
-    const ctx = ctxRef.current;
+
+    // Prefer the OffscreenCanvas context for rendering; fall back to the
+    // regular canvas context. The OffscreenCanvas runs compositing off the
+    // main DOM, reducing layout/paint overhead.
+    const offCtx = offscreenCtxRef.current;
+    const mainCtx = ctxRef.current;
+    const ctx = offCtx ?? mainCtx;
 
     if (!video || !canvas || !ctx || video.paused || video.ended) {
       animationFrameRef.current = requestAnimationFrame(renderFrame);
       return;
     }
 
+    const videoW = video.videoWidth || 640;
+    const videoH = video.videoHeight || 480;
+
     // Ensure canvas dimensions match the video
-    if (canvas.width !== video.videoWidth || canvas.height !== video.videoHeight) {
-      canvas.width = video.videoWidth || 640;
-      canvas.height = video.videoHeight || 480;
+    if (canvas.width !== videoW || canvas.height !== videoH) {
+      canvas.width = videoW;
+      canvas.height = videoH;
+
+      // Keep the OffscreenCanvas in sync
+      const offCanvas = offscreenCanvasRef.current;
+      if (offCanvas) {
+        offCanvas.width = videoW;
+        offCanvas.height = videoH;
+      }
     }
 
     const width = canvas.width;
@@ -162,6 +180,12 @@ export function useVideoEffects(config: UseVideoEffectsConfig): UseVideoEffectsR
       // 'none' — should not reach here since we short-circuit, but
       // handle it gracefully just in case.
       ctx.drawImage(video, 0, 0, width, height);
+    }
+
+    // If we rendered to the OffscreenCanvas, blit the result to the main
+    // canvas so captureStream() picks it up.
+    if (offCtx && mainCtx && offscreenCanvasRef.current) {
+      mainCtx.drawImage(offscreenCanvasRef.current, 0, 0);
     }
 
     animationFrameRef.current = requestAnimationFrame(renderFrame);
@@ -217,10 +241,12 @@ export function useVideoEffects(config: UseVideoEffectsConfig): UseVideoEffectsR
 
         if (cancelled) return;
 
-        // Create offscreen canvas
+        // Create the main canvas (needed for captureStream())
         const canvas = document.createElement('canvas');
-        canvas.width = video.videoWidth || 640;
-        canvas.height = video.videoHeight || 480;
+        const w = video.videoWidth || 640;
+        const h = video.videoHeight || 480;
+        canvas.width = w;
+        canvas.height = h;
         canvasRef.current = canvas;
 
         const ctx = canvas.getContext('2d');
@@ -230,6 +256,28 @@ export function useVideoEffects(config: UseVideoEffectsConfig): UseVideoEffectsR
           return;
         }
         ctxRef.current = ctx;
+
+        // Performance optimisation: use an OffscreenCanvas for the
+        // compositing / effect work when the API is available. This keeps
+        // the heavy pixel manipulation off the main canvas and can be
+        // promoted to a GPU-backed surface by the browser. The result is
+        // blitted to the main HTMLCanvasElement each frame so that
+        // captureStream() (which is only available on HTMLCanvasElement)
+        // continues to work.
+        if (typeof OffscreenCanvas !== 'undefined') {
+          try {
+            const offscreen = new OffscreenCanvas(w, h);
+            const offCtx = offscreen.getContext('2d');
+            if (offCtx) {
+              offscreenCanvasRef.current = offscreen;
+              offscreenCtxRef.current = offCtx;
+            }
+          } catch {
+            // OffscreenCanvas 2d context not supported — fall back silently
+            offscreenCanvasRef.current = null;
+            offscreenCtxRef.current = null;
+          }
+        }
 
         // Capture the canvas as a MediaStream at 30 FPS
         const capturedStream = canvas.captureStream(30);
@@ -282,6 +330,8 @@ export function useVideoEffects(config: UseVideoEffectsConfig): UseVideoEffectsR
 
       canvasRef.current = null;
       ctxRef.current = null;
+      offscreenCanvasRef.current = null;
+      offscreenCtxRef.current = null;
       setIsProcessing(false);
     };
   }, [sourceStream, effect, enabled, renderFrame]);

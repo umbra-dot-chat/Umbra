@@ -1,0 +1,13 @@
+version: "3.8"
+
+services:
+  coturn:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      - TURN_SECRET=${TURN_SECRET:-umbra-turn-change-me}
+    volumes:
+      - ./turnserver.conf:/etc/coturn/turnserver.conf:ro

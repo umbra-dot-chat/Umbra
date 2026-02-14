@@ -18,6 +18,8 @@ import {
   VStack,
   Text,
   Tag,
+  Slider,
+  SegmentedControl,
   useTheme,
 } from '@coexist/wisp-react-native';
 import { useAuth } from '@/contexts/AuthContext';
@@ -53,6 +55,7 @@ import {
 } from '@/components/icons';
 import { useNetwork } from '@/hooks/useNetwork';
 import { useCall } from '@/hooks/useCall';
+import { useCallSettings } from '@/hooks/useCallSettings';
 import { useMediaDevices } from '@/hooks/useMediaDevices';
 import type { VideoQuality, AudioQuality } from '@/types/call';
 import { VIDEO_QUALITY_PRESETS } from '@/types/call';
@@ -1046,7 +1049,55 @@ function AudioVideoSection() {
     noiseSuppression, echoCancellation, autoGainControl,
     setNoiseSuppression, setEchoCancellation, setAutoGainControl,
   } = useCall();
+  const {
+    incomingCallDisplay, setIncomingCallDisplay,
+    ringVolume, setRingVolume,
+  } = useCallSettings();
   const { audioInputs, videoInputs, audioOutputs, isSupported } = useMediaDevices();
+  const [cameraPreviewStream, setCameraPreviewStream] = useState<MediaStream | null>(null);
+  const [micLevel, setMicLevel] = useState(0);
+  const micAnalyserRef = useRef<{ stop: () => void } | null>(null);
+
+  const startTestPreview = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      setCameraPreviewStream(stream);
+
+      // Mic level meter via Web Audio API
+      const ctx = new AudioContext();
+      const source = ctx.createMediaStreamSource(stream);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 256;
+      source.connect(analyser);
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+      let rafId: number;
+      const tick = () => {
+        analyser.getByteFrequencyData(dataArray);
+        const avg = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
+        setMicLevel(Math.min(100, Math.round((avg / 128) * 100)));
+        rafId = requestAnimationFrame(tick);
+      };
+      tick();
+
+      micAnalyserRef.current = {
+        stop: () => {
+          cancelAnimationFrame(rafId);
+          ctx.close();
+          for (const track of stream.getTracks()) track.stop();
+          setCameraPreviewStream(null);
+          setMicLevel(0);
+        },
+      };
+    } catch {
+      // Permission denied or not available
+    }
+  }, []);
+
+  const stopTestPreview = useCallback(() => {
+    micAnalyserRef.current?.stop();
+    micAnalyserRef.current = null;
+  }, []);
 
   const videoQualityOptions: InlineDropdownOption[] = [
     { value: 'auto', label: 'Auto', description: 'Adapts to network conditions' },
@@ -1223,6 +1274,98 @@ function AudioVideoSection() {
         <SettingRow label="Auto Gain Control" description="Automatically adjust microphone volume.">
           <Toggle checked={autoGainControl} onChange={setAutoGainControl} />
         </SettingRow>
+      </View>
+
+      <Separator spacing="sm" />
+
+      {/* Calling */}
+      <View style={{ gap: 16 }}>
+        <View>
+          <RNText style={{ fontSize: 15, fontWeight: '600', color: tc.text.primary }}>
+            Calling
+          </RNText>
+          <RNText style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
+            Configure incoming call behavior and test your devices.
+          </RNText>
+        </View>
+
+        <SettingRow label="Incoming Call Display" description="How incoming calls appear when the app is open." vertical>
+          <SegmentedControl
+            options={[
+              { value: 'fullscreen', label: 'Fullscreen' },
+              { value: 'toast', label: 'Toast' },
+            ]}
+            value={incomingCallDisplay}
+            onChange={(v) => setIncomingCallDisplay(v as 'fullscreen' | 'toast')}
+          />
+        </SettingRow>
+
+        <SettingRow label="Ring Volume" description={`Volume: ${ringVolume}%`}>
+          <View style={{ flex: 1, maxWidth: 200 }}>
+            <Slider
+              value={ringVolume}
+              min={0}
+              max={100}
+              step={5}
+              onChange={setRingVolume}
+            />
+          </View>
+        </SettingRow>
+      </View>
+
+      <Separator spacing="sm" />
+
+      {/* Device Test */}
+      <View style={{ gap: 16 }}>
+        <View>
+          <RNText style={{ fontSize: 15, fontWeight: '600', color: tc.text.primary }}>
+            Device Test
+          </RNText>
+          <RNText style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
+            Preview your camera and test your microphone.
+          </RNText>
+        </View>
+
+        {cameraPreviewStream ? (
+          <View style={{ gap: 12 }}>
+            {/* Camera preview */}
+            <View style={{
+              width: '100%', height: 180, borderRadius: 10, overflow: 'hidden',
+              backgroundColor: tc.background.sunken,
+            }}>
+              <video
+                ref={(el) => { if (el && cameraPreviewStream) el.srcObject = cameraPreviewStream; }}
+                autoPlay
+                muted
+                playsInline
+                style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)' } as any}
+              />
+            </View>
+
+            {/* Mic level meter */}
+            <View style={{ gap: 4 }}>
+              <RNText style={{ fontSize: 11, fontWeight: '600', color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                Microphone Level
+              </RNText>
+              <View style={{ height: 8, borderRadius: 4, backgroundColor: tc.background.sunken, overflow: 'hidden' }}>
+                <View style={{
+                  width: `${micLevel}%`,
+                  height: '100%',
+                  borderRadius: 4,
+                  backgroundColor: micLevel > 70 ? tc.status.error : micLevel > 30 ? tc.status.success : tc.accent.primary,
+                }} />
+              </View>
+            </View>
+
+            <Button variant="outlined" size="sm" onPress={stopTestPreview}>
+              Stop Test
+            </Button>
+          </View>
+        ) : (
+          <Button variant="outlined" size="sm" onPress={startTestPreview}>
+            Test Camera & Microphone
+          </Button>
+        )}
       </View>
     </View>
   );

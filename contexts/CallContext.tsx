@@ -72,6 +72,10 @@ interface CallContextValue {
   setEchoCancellation: (enabled: boolean) => void;
   /** Toggle auto gain control */
   setAutoGainControl: (enabled: boolean) => void;
+  /** Remote audio volume (0-100) */
+  volume: number;
+  /** Set remote audio volume */
+  setVolume: (volume: number) => void;
 }
 
 const CallContext = createContext<CallContextValue | null>(null);
@@ -97,8 +101,11 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
   const [noiseSuppression, setNoiseSuppressionState] = useState(true);
   const [echoCancellation, setEchoCancellationState] = useState(true);
   const [autoGainControl, setAutoGainControlState] = useState(true);
+  const [volume, setVolumeState] = useState(100);
   const callManagerRef = useRef<CallManager | null>(null);
   const ringTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const gainNodeRef = useRef<GainNode | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
 
   // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -466,6 +473,52 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     reacquireAudioTrack({ noiseSuppression, echoCancellation, autoGainControl: enabled });
   }, [reacquireAudioTrack, noiseSuppression, echoCancellation]);
 
+  // ── Volume Control (Web Audio GainNode) ────────────────────────────────────
+
+  const setVolume = useCallback((vol: number) => {
+    const clamped = Math.max(0, Math.min(100, vol));
+    setVolumeState(clamped);
+    if (gainNodeRef.current) {
+      gainNodeRef.current.gain.value = clamped / 100;
+    }
+  }, []);
+
+  // Apply GainNode to remote audio when connected
+  useEffect(() => {
+    const remoteStream = activeCall?.remoteStream;
+    if (!remoteStream || activeCall?.status !== 'connected') {
+      // Cleanup previous audio context
+      if (audioCtxRef.current) {
+        audioCtxRef.current.close().catch(() => {});
+        audioCtxRef.current = null;
+        gainNodeRef.current = null;
+      }
+      return;
+    }
+
+    try {
+      const ctx = new AudioContext();
+      const source = ctx.createMediaStreamSource(remoteStream);
+      const gain = ctx.createGain();
+      gain.gain.value = volume / 100;
+      source.connect(gain);
+      gain.connect(ctx.destination);
+
+      audioCtxRef.current = ctx;
+      gainNodeRef.current = gain;
+    } catch {
+      // Web Audio not available
+    }
+
+    return () => {
+      if (audioCtxRef.current) {
+        audioCtxRef.current.close().catch(() => {});
+        audioCtxRef.current = null;
+        gainNodeRef.current = null;
+      }
+    };
+  }, [activeCall?.remoteStream, activeCall?.status]);
+
   // ── Stats Collection ──────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -665,6 +718,8 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     setNoiseSuppression,
     setEchoCancellation,
     setAutoGainControl,
+    volume,
+    setVolume,
   };
 
   return (

@@ -27,6 +27,58 @@ export const BOOTSTRAP_PEERS: string[] = [
 ];
 
 /**
+ * ICE servers for WebRTC call connections.
+ * Includes public STUN and self-hosted TURN.
+ */
+export const ICE_SERVERS: IceServerConfig[] = [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'stun:stun1.l.google.com:19302' },
+  {
+    urls: [
+      'turn:turn.deepspaceshipping.co:3478?transport=udp',
+      'turn:turn.deepspaceshipping.co:3478?transport=tcp',
+    ],
+    // Credentials are generated dynamically via generateTurnCredentials()
+  },
+];
+
+export interface IceServerConfig {
+  urls: string | string[];
+  username?: string;
+  credential?: string;
+}
+
+/**
+ * Generate time-limited TURN credentials using HMAC-SHA1.
+ *
+ * The relay server shares a static secret with coturn.
+ * Credentials expire after `ttlSeconds` (default 24h).
+ */
+export async function generateTurnCredentials(
+  secret: string,
+  ttlSeconds = 86400,
+): Promise<{ username: string; credential: string }> {
+  const timestamp = Math.floor(Date.now() / 1000) + ttlSeconds;
+  const username = `${timestamp}:umbra`;
+
+  // HMAC-SHA1 via Web Crypto API
+  const encoder = new TextEncoder();
+  const key = await crypto.subtle.importKey(
+    'raw',
+    encoder.encode(secret),
+    { name: 'HMAC', hash: 'SHA-1' },
+    false,
+    ['sign'],
+  );
+  const signature = await crypto.subtle.sign('HMAC', key, encoder.encode(username));
+
+  // Base64-encode the signature
+  const credential = btoa(String.fromCharCode(...new Uint8Array(signature)));
+
+  return { username, credential };
+}
+
+/**
  * Network configuration defaults
  */
 export const NETWORK_CONFIG = {

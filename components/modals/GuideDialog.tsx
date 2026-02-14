@@ -31,7 +31,9 @@ import {
   PlusIcon,
   PuzzleIcon,
   XIcon,
+  PhoneIcon,
 } from '@/components/icons';
+import CallingContent from '@/components/guide/CallingContent';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -47,6 +49,7 @@ type Chapter =
   | 'friends'
   | 'messaging'
   | 'groups'
+  | 'calling'
   | 'data'
   | 'security'
   | 'network'
@@ -66,6 +69,7 @@ const CHAPTERS: ChapterItem[] = [
   { id: 'friends', label: 'Friends', icon: UsersIcon, color: '#8B5CF6' },
   { id: 'messaging', label: 'Messaging', icon: MessageIcon, color: '#3B82F6' },
   { id: 'groups', label: 'Groups', icon: UsersIcon, color: '#EC4899' },
+  { id: 'calling', label: 'Calling', icon: PhoneIcon, color: '#10B981' },
   { id: 'data', label: 'Data Management', icon: SettingsIcon, color: '#F59E0B' },
   { id: 'security', label: 'Security & Privacy', icon: ShieldIcon, color: '#EAB308' },
   { id: 'network', label: 'Network', icon: SettingsIcon, color: '#06B6D4' },
@@ -535,7 +539,7 @@ function LimitationsContent() {
           { label: 'Typing Indicators', value: 'Working' },
           { label: 'Data Persistence', value: 'Working' },
           { label: 'File Attachments', value: 'Coming Soon' },
-          { label: 'Voice/Video Calls', value: 'Coming Soon' },
+          { label: 'Voice/Video Calls', value: 'Working' },
         ]}
       />
       <TechSpec
@@ -727,6 +731,8 @@ export function GuideDialog({ open, onClose }: GuideDialogProps) {
         return <MessagingContent />;
       case 'groups':
         return <GroupsContent />;
+      case 'calling':
+        return <CallingContent />;
       case 'data':
         return <DataManagementContent />;
       case 'security':

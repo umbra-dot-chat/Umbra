@@ -15,6 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       relay: ${{ steps.filter.outputs.relay }}
+      coturn: ${{ steps.filter.outputs.coturn }}
       frontend: ${{ steps.filter.outputs.frontend }}
 
     steps:
@@ -28,6 +29,8 @@ jobs:
           filters: |
             relay:
               - 'packages/umbra-relay/**'
+            coturn:
+              - 'infra/coturn/**'
             frontend:
               - 'app/**'
               - 'components/**'
@@ -152,6 +155,69 @@ jobs:
              exit 1)
 
           echo "✓ Relay ${{ matrix.name }} is healthy"
+
+  # ─── Deploy TURN servers ────────────────────────────────────────
+  deploy-coturn:
+    name: Deploy TURN (${{ matrix.name }})
+    needs: changes
+    if: needs.changes.outputs.coturn == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: US East
+            host: 207.246.126.67
+          - name: Seoul
+            host: 158.247.209.160
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ matrix.host }} >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Sync coturn files to server
+        env:
+          SSH_USER: ${{ secrets.DEPLOY_SSH_USER }}
+          HOST: ${{ matrix.host }}
+          COTURN_PATH: /opt/coturn
+        run: |
+          SSH_OPTS="-i ~/.ssh/deploy_key -o StrictHostKeyChecking=no"
+          ssh $SSH_OPTS $SSH_USER@$HOST "mkdir -p $COTURN_PATH"
+          rsync -avz --delete -e "ssh $SSH_OPTS" \
+            infra/coturn/ \
+            $SSH_USER@$HOST:$COTURN_PATH/
+
+      - name: Build and restart coturn
+        env:
+          SSH_USER: ${{ secrets.DEPLOY_SSH_USER }}
+          HOST: ${{ matrix.host }}
+          COTURN_PATH: /opt/coturn
+        run: |
+          SSH_OPTS="-i ~/.ssh/deploy_key -o StrictHostKeyChecking=no"
+          ssh $SSH_OPTS $SSH_USER@$HOST "cd $COTURN_PATH && \
+            TURN_SECRET='${{ secrets.TURN_SECRET }}' \
+            docker compose build && \
+            docker compose down || true && \
+            TURN_SECRET='${{ secrets.TURN_SECRET }}' \
+            docker compose up -d"
+
+      - name: Verify coturn health
+        env:
+          SSH_USER: ${{ secrets.DEPLOY_SSH_USER }}
+          HOST: ${{ matrix.host }}
+        run: |
+          SSH_OPTS="-i ~/.ssh/deploy_key -o StrictHostKeyChecking=no"
+          sleep 5
+          ssh $SSH_OPTS $SSH_USER@$HOST "docker ps --filter name=coturn --format '{{.Status}}'" | grep -q "Up" || \
+            (echo "::error::TURN server not running on ${{ matrix.name }}" && exit 1)
+          echo "✓ TURN server ${{ matrix.name }} is running"
 
   # ─── Deploy frontend ──────────────────────────────────────────────
   deploy-frontend:

@@ -13,6 +13,7 @@ import type {
   VideoQualityPreset,
 } from '@/types/call';
 import { DEFAULT_ICE_SERVERS, VIDEO_QUALITY_PRESETS } from '@/types/call';
+import { generateTurnCredentials } from '@/config/network';
 
 export class CallManager {
   private pc: RTCPeerConnection | null = null;
@@ -29,6 +30,9 @@ export class CallManager {
   private screenShareStream: MediaStream | null = null;
   private _isScreenSharing = false;
 
+  // TURN credential secret (shared with coturn)
+  private turnSecret: string | null = null;
+
   // Callbacks
   onRemoteStream: ((stream: MediaStream) => void) | null = null;
   onIceCandidate: ((candidate: RTCIceCandidateInit) => void) | null = null;
@@ -36,15 +40,41 @@ export class CallManager {
   onStatsUpdate: ((stats: CallStats) => void) | null = null;
 
   /**
+   * Set the TURN shared secret for credential generation.
+   */
+  setTurnSecret(secret: string): void {
+    this.turnSecret = secret;
+  }
+
+  /**
+   * Build ICE servers with dynamic TURN credentials if a secret is set.
+   */
+  private async buildIceServers(iceServers: IceServer[] = DEFAULT_ICE_SERVERS): Promise<RTCIceServer[]> {
+    const servers: RTCIceServer[] = [];
+
+    for (const s of iceServers) {
+      const urls = Array.isArray(s.urls) ? s.urls : [s.urls];
+      const hasTurn = urls.some((u) => u.startsWith('turn:') || u.startsWith('turns:'));
+
+      if (hasTurn && !s.credential && this.turnSecret) {
+        // Generate time-limited credentials for TURN
+        const creds = await generateTurnCredentials(this.turnSecret);
+        servers.push({ urls: s.urls, username: creds.username, credential: creds.credential });
+      } else {
+        servers.push({ urls: s.urls, username: s.username, credential: s.credential });
+      }
+    }
+
+    return servers;
+  }
+
+  /**
    * Initialize a peer connection with optional ICE servers.
    */
-  private createPeerConnection(iceServers: IceServer[] = DEFAULT_ICE_SERVERS): RTCPeerConnection {
+  private async createPeerConnection(iceServers: IceServer[] = DEFAULT_ICE_SERVERS): Promise<RTCPeerConnection> {
+    const resolvedServers = await this.buildIceServers(iceServers);
     const pc = new RTCPeerConnection({
-      iceServers: iceServers.map((s) => ({
-        urls: s.urls,
-        username: s.username,
-        credential: s.credential,
-      })),
+      iceServers: resolvedServers,
     });
 
     pc.onicecandidate = (event) => {
@@ -116,7 +146,7 @@ export class CallManager {
    * Returns the SDP offer string.
    */
   async createOffer(video: boolean, iceServers?: IceServer[]): Promise<string> {
-    const pc = this.createPeerConnection(iceServers);
+    const pc = await this.createPeerConnection(iceServers);
     const stream = await this.getUserMedia(video);
 
     for (const track of stream.getTracks()) {
@@ -136,7 +166,7 @@ export class CallManager {
    * Accept an incoming SDP offer and return an SDP answer.
    */
   async acceptOffer(offerSdp: string, video: boolean, iceServers?: IceServer[]): Promise<string> {
-    const pc = this.createPeerConnection(iceServers);
+    const pc = await this.createPeerConnection(iceServers);
     const stream = await this.getUserMedia(video);
 
     for (const track of stream.getTracks()) {
