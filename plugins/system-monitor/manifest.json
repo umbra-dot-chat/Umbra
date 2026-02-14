@@ -1,0 +1,15 @@
+{
+  "id": "com.umbra.system-monitor",
+  "name": "System Monitor",
+  "version": "1.0.0",
+  "description": "View real-time system stats (CPU, memory, disk) from your desktop. Uses WASM for native performance.",
+  "author": { "name": "Umbra Team", "url": "https://umbra.chat" },
+  "platforms": ["desktop"],
+  "permissions": ["storage:kv"],
+  "slots": [
+    { "slot": "settings-tab", "component": "SystemInfoPanel", "priority": 50 },
+    { "slot": "sidebar-section", "component": "MiniStats", "priority": 80 }
+  ],
+  "entryPoint": "dist/bundle.js",
+  "storage": { "kv": true }
+}

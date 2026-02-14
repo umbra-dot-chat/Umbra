@@ -16,6 +16,7 @@ import { NewDmDialog } from '@/components/modals/NewDmDialog';
 import { ProfilePopover } from '@/components/modals/ProfilePopover';
 import { ProfilePopoverProvider, useProfilePopoverContext } from '@/contexts/ProfilePopoverContext';
 import { CommandPalette } from '@/components/modals/CommandPalette';
+import { PluginMarketplace } from '@/components/modals/PluginMarketplace';
 import { useCommandPalette } from '@/hooks/useCommandPalette';
 import type { Friend } from '@umbra/service';
 
@@ -111,6 +112,7 @@ function MainLayoutInner() {
   const [guideOpen, setGuideOpen] = useState(false);
   const [createGroupOpen, setCreateGroupOpen] = useState(false);
   const [newDmOpen, setNewDmOpen] = useState(false);
+  const [marketplaceOpen, setMarketplaceOpen] = useState(false);
   const { open: cmdOpen, setOpen: setCmdOpen } = useCommandPalette();
 
   // Handle group created — auto-select the new conversation
@@ -182,6 +184,7 @@ function MainLayoutInner() {
           onNewDm={() => setNewDmOpen(true)}
           onCreateGroup={() => setCreateGroupOpen(true)}
           onGuidePress={() => setGuideOpen(true)}
+          onMarketplacePress={() => setMarketplaceOpen(true)}
           isFriendsActive={isFriendsActive}
           pendingInvites={pendingInvites}
           onAcceptInvite={handleAcceptInvite}
@@ -202,6 +205,10 @@ function MainLayoutInner() {
       <SettingsDialog
         open={settingsOpen}
         onClose={() => setSettingsOpen(false)}
+        onOpenMarketplace={() => {
+          setSettingsOpen(false);
+          setMarketplaceOpen(true);
+        }}
       />
 
       <GuideDialog
@@ -228,6 +235,15 @@ function MainLayoutInner() {
           setCmdOpen(false);
           setSettingsOpen(true);
         }}
+        onOpenMarketplace={() => {
+          setCmdOpen(false);
+          setMarketplaceOpen(true);
+        }}
+      />
+
+      <PluginMarketplace
+        open={marketplaceOpen}
+        onClose={() => setMarketplaceOpen(false)}
       />
     </View>
   );

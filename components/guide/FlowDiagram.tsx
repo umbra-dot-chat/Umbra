@@ -96,8 +96,8 @@ export function FlowDiagram({
       container: {
         borderRadius: 10,
         borderWidth: 1,
-        borderColor: isDark ? '#27272A' : tc.border.subtle,
-        backgroundColor: isDark ? '#09090B' : tc.background.canvas,
+        borderColor: tc.border.subtle,
+        backgroundColor: tc.background.sunken,
         padding: 14,
         gap: 10,
       } as ViewStyle,
@@ -172,9 +172,69 @@ export function NetworkArchitectureFlow() {
     <FlowDiagram
       title="Network Architecture"
       steps={[
-        { label: 'Your\nBrowser', icon: '\uD83D\uDDA5\uFE0F', color: '#22C55E' },
+        { label: 'Your\nDevice', icon: '\uD83D\uDDA5\uFE0F', color: '#22C55E' },
         { label: 'Relay\nServer', icon: '\uD83C\uDF10', color: '#EAB308' },
-        { label: "Friend's\nBrowser", icon: '\uD83D\uDDA5\uFE0F', color: '#22C55E' },
+        { label: "Friend's\nDevice", icon: '\uD83D\uDDA5\uFE0F', color: '#22C55E' },
+      ]}
+    />
+  );
+}
+
+export function RelayFederationFlow() {
+  return (
+    <FlowDiagram
+      title="Relay Federation Mesh"
+      steps={[
+        { label: 'You\n(US Relay)', icon: '\uD83D\uDDA5\uFE0F', color: '#22C55E' },
+        { label: 'US East\nRelay', icon: '\uD83C\uDDFA\uD83C\uDDF8', color: '#3B82F6' },
+        { label: 'Seoul\nRelay', icon: '\uD83C\uDDF0\uD83C\uDDF7', color: '#8B5CF6' },
+        { label: 'Friend\n(Seoul Relay)', icon: '\uD83D\uDDA5\uFE0F', color: '#22C55E' },
+      ]}
+    />
+  );
+}
+
+export function KeyDerivationFlow() {
+  return (
+    <FlowDiagram
+      title="Key Derivation Chain"
+      direction="vertical"
+      steps={[
+        { label: '24-word\nRecovery Phrase', icon: '\uD83D\uDCDD', color: '#8B5CF6' },
+        { label: 'BIP39\nSeed Bytes', icon: '\uD83C\uDF31', color: '#06B6D4' },
+        { label: 'HKDF-SHA256\nKey Derivation', icon: '\u2699\uFE0F', color: '#EAB308' },
+        { label: 'Ed25519 Signing\n+ X25519 Encryption', icon: '\uD83D\uDD11', color: '#3B82F6' },
+        { label: 'did:key\nIdentifier', icon: '\uD83C\uDD94', color: '#22C55E' },
+      ]}
+    />
+  );
+}
+
+export function OfflineDeliveryFlow() {
+  return (
+    <FlowDiagram
+      title="Offline Message Delivery"
+      direction="vertical"
+      steps={[
+        { label: 'You send message\n(friend offline)', icon: '\u2709\uFE0F', color: '#3B82F6' },
+        { label: 'Relay queues\nencrypted payload', icon: '\uD83D\uDCE5', color: '#EAB308' },
+        { label: 'Friend comes\nonline', icon: '\uD83D\uDFE2', color: '#22C55E' },
+        { label: 'Relay delivers\nqueued messages', icon: '\uD83D\uDCE8', color: '#06B6D4' },
+        { label: 'Friend decrypts\nand reads', icon: '\uD83D\uDD13', color: '#8B5CF6' },
+      ]}
+    />
+  );
+}
+
+export function ZeroKnowledgeFlow() {
+  return (
+    <FlowDiagram
+      title="What the Relay Sees"
+      steps={[
+        { label: 'Sender\nDID', icon: '\uD83D\uDC64', color: '#3B82F6' },
+        { label: 'Encrypted\nBlob', icon: '\uD83D\uDD12', color: '#EF4444' },
+        { label: 'Recipient\nDID', icon: '\uD83D\uDC64', color: '#3B82F6' },
+        { label: 'Timestamp', icon: '\uD83D\uDD51', color: '#71717A' },
       ]}
     />
   );

@@ -6,6 +6,7 @@ import {
 import { SmileIcon, ReplyIcon, ThreadIcon, MoreIcon } from '@/components/icons';
 import { HoverBubble } from './HoverBubble';
 import { MsgGroup } from './MsgGroup';
+import { SlotRenderer } from '@/components/plugins/SlotRenderer';
 import type { Message } from '@umbra/service';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -268,6 +269,7 @@ export function ChatArea({
                     actions={makeActions(msg.id, name, text, time)}
                     contextActions={makeContextActions(msg.id, name, text, time, isOwn)}
                     themeColors={themeColors}
+                    message={{ id: msg.id, text, conversationId: msg.conversationId, senderDid: msg.senderDid }}
                   >
                     <ChatBubble
                       align={isOwn ? 'outgoing' : 'incoming'}
@@ -280,6 +282,10 @@ export function ChatArea({
                       {text}
                     </ChatBubble>
                   </HoverBubble>
+                  <SlotRenderer
+                    slot="message-decorator"
+                    props={{ message: msg, conversationId: msg.conversationId }}
+                  />
                   {threadCount > 0 && (
                     <Pressable
                       onPress={() => onOpenThread({ id: msg.id, sender: name, content: text, timestamp: time })}

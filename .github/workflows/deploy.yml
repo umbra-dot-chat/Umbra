@@ -1,0 +1,209 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ─── Detect what changed ──────────────────────────────────────────
+  changes:
+    name: Detect Changes
+    runs-on: ubuntu-latest
+    outputs:
+      relay: ${{ steps.filter.outputs.relay }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Check paths
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            relay:
+              - 'packages/umbra-relay/**'
+            frontend:
+              - 'app/**'
+              - 'components/**'
+              - 'contexts/**'
+              - 'hooks/**'
+              - 'config/**'
+              - 'themes/**'
+              - 'types/**'
+              - 'data/**'
+              - 'assets/**'
+              - 'packages/umbra-core/**'
+              - 'packages/umbra-wasm/**'
+              - 'packages/umbra-service/**'
+              - 'packages/umbra-plugin-runtime/**'
+              - 'packages/umbra-plugin-sdk/**'
+              - 'package.json'
+              - 'package-lock.json'
+              - 'tsconfig.json'
+              - 'app.json'
+
+  # ─── Deploy relay servers ─────────────────────────────────────────
+  deploy-relay:
+    name: Deploy Relay (${{ matrix.name }})
+    needs: changes
+    if: needs.changes.outputs.relay == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: US East
+            host: 207.246.126.67
+            relay_region: "US East"
+            relay_location: "New York"
+            relay_id: "relay-us-east-1"
+            relay_public_url: "wss://relay.deepspaceshipping.co/ws"
+            relay_peers: "wss://seoul.relay.deepspaceshipping.co/ws"
+          - name: Seoul
+            host: 158.247.209.160
+            relay_region: "Asia Pacific"
+            relay_location: "Seoul"
+            relay_id: "relay-ap-seoul-1"
+            relay_public_url: "wss://seoul.relay.deepspaceshipping.co/ws"
+            relay_peers: "wss://relay.deepspaceshipping.co/ws"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ matrix.host }} >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Sync relay files to server
+        env:
+          SSH_USER: ${{ secrets.DEPLOY_SSH_USER }}
+          HOST: ${{ matrix.host }}
+          RELAY_PATH: /opt/umbra-relay
+        run: |
+          SSH_OPTS="-i ~/.ssh/deploy_key -o StrictHostKeyChecking=no"
+
+          # Ensure directory structure exists
+          ssh $SSH_OPTS $SSH_USER@$HOST "mkdir -p $RELAY_PATH/src"
+
+          # Sync relay source files
+          rsync -avz --delete -e "ssh $SSH_OPTS" \
+            packages/umbra-relay/Dockerfile \
+            packages/umbra-relay/docker-compose.yml \
+            packages/umbra-relay/Cargo.toml \
+            packages/umbra-relay/Cargo.lock \
+            $SSH_USER@$HOST:$RELAY_PATH/
+
+          rsync -avz --delete -e "ssh $SSH_OPTS" \
+            packages/umbra-relay/src/ \
+            $SSH_USER@$HOST:$RELAY_PATH/src/
+
+      - name: Build and restart relay
+        env:
+          SSH_USER: ${{ secrets.DEPLOY_SSH_USER }}
+          HOST: ${{ matrix.host }}
+          RELAY_PATH: /opt/umbra-relay
+          RELAY_REGION: ${{ matrix.relay_region }}
+          RELAY_LOCATION: ${{ matrix.relay_location }}
+          RELAY_ID: ${{ matrix.relay_id }}
+          RELAY_PUBLIC_URL: ${{ matrix.relay_public_url }}
+          RELAY_PEERS: ${{ matrix.relay_peers }}
+        run: |
+          SSH_OPTS="-i ~/.ssh/deploy_key -o StrictHostKeyChecking=no"
+
+          ssh $SSH_OPTS $SSH_USER@$HOST "cd $RELAY_PATH && \
+            RELAY_REGION='$RELAY_REGION' \
+            RELAY_LOCATION='$RELAY_LOCATION' \
+            RELAY_ID='$RELAY_ID' \
+            RELAY_PUBLIC_URL='$RELAY_PUBLIC_URL' \
+            RELAY_PEERS='$RELAY_PEERS' \
+            docker compose build && \
+            docker compose down || true && \
+            RELAY_REGION='$RELAY_REGION' \
+            RELAY_LOCATION='$RELAY_LOCATION' \
+            RELAY_ID='$RELAY_ID' \
+            RELAY_PUBLIC_URL='$RELAY_PUBLIC_URL' \
+            RELAY_PEERS='$RELAY_PEERS' \
+            docker compose up -d"
+
+      - name: Verify relay health
+        env:
+          SSH_USER: ${{ secrets.DEPLOY_SSH_USER }}
+          HOST: ${{ matrix.host }}
+        run: |
+          SSH_OPTS="-i ~/.ssh/deploy_key -o StrictHostKeyChecking=no"
+
+          # Wait for container to start
+          sleep 10
+
+          # Check health endpoint via SSH
+          ssh $SSH_OPTS $SSH_USER@$HOST "curl -sf http://localhost:8080/health" || \
+            (echo "::error::Health check failed for ${{ matrix.name }}" && \
+             ssh $SSH_OPTS $SSH_USER@$HOST "cd /opt/umbra-relay && docker compose logs --tail=50" && \
+             exit 1)
+
+          echo "✓ Relay ${{ matrix.name }} is healthy"
+
+  # ─── Deploy frontend ──────────────────────────────────────────────
+  deploy-frontend:
+    name: Deploy Frontend
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build web
+        run: npx expo export --platform web
+
+      - name: Setup SSH key
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          ssh-keyscan -H ${{ secrets.FRONTEND_HOST_IP }} >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Deploy to server
+        env:
+          SSH_USER: ${{ secrets.DEPLOY_SSH_USER }}
+          HOST: ${{ secrets.FRONTEND_HOST_IP }}
+          DEPLOY_PATH: /var/www/chat.deepspaceshipping.co
+        run: |
+          SSH_OPTS="-i ~/.ssh/deploy_key -o StrictHostKeyChecking=no"
+
+          # Ensure target directory exists
+          ssh $SSH_OPTS $SSH_USER@$HOST "mkdir -p $DEPLOY_PATH"
+
+          # Sync built files
+          rsync -avz --delete -e "ssh $SSH_OPTS" \
+            dist/ $SSH_USER@$HOST:$DEPLOY_PATH/
+
+      - name: Verify deployment
+        run: |
+          sleep 5
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://chat.deepspaceshipping.co/) || true
+          if [ "$STATUS" = "200" ]; then
+            echo "✓ Frontend is live (HTTP $STATUS)"
+          else
+            echo "::warning::Frontend returned HTTP $STATUS (may need DNS propagation or cache clear)"
+          fi

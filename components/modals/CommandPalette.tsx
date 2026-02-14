@@ -3,9 +3,12 @@ import { useRouter } from 'expo-router';
 import {
   Command, CommandInput, CommandList, CommandGroup,
   CommandItem, CommandSeparator, CommandEmpty,
+  WispProvider,
+  useTheme,
 } from '@coexist/wisp-react-native';
 import { useFriends } from '@/hooks/useFriends';
-import { UsersIcon, SearchIcon, SettingsIcon, MessageIcon } from '@/components/icons';
+import { usePlugins } from '@/contexts/PluginContext';
+import { UsersIcon, SearchIcon, SettingsIcon, MessageIcon, ZapIcon, DownloadIcon } from '@/components/icons';
 
 type IconComponent = React.ComponentType<{ size?: number | string; color?: string }>;
 const Users = UsersIcon as IconComponent;
@@ -17,11 +20,17 @@ export interface CommandPaletteProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onOpenSettings: () => void;
+  onOpenMarketplace?: () => void;
 }
 
-export function CommandPalette({ open, onOpenChange, onOpenSettings }: CommandPaletteProps) {
+const Zap = ZapIcon as IconComponent;
+const Download = DownloadIcon as IconComponent;
+
+export function CommandPalette({ open, onOpenChange, onOpenSettings, onOpenMarketplace }: CommandPaletteProps) {
   const router = useRouter();
   const { friends } = useFriends();
+  const { pluginCommands } = usePlugins();
+  const { mode } = useTheme();
 
   const handleSelect = (value: string) => {
     if (value === 'nav:friends') {
@@ -30,16 +39,31 @@ export function CommandPalette({ open, onOpenChange, onOpenSettings }: CommandPa
       router.push('/');
     } else if (value === 'nav:settings') {
       onOpenSettings();
+    } else if (value === 'nav:marketplace') {
+      onOpenMarketplace?.();
     }
     // user: items are no-op for now — could navigate to DM
   };
 
+  // In light mode, override the raised surface to be light-colored instead of the
+  // default dark raised background from the Wisp design system.
+  const lightRaisedOverrides = mode === 'light' ? {
+    colors: {
+      background: { raised: '#FFFFFF', },
+      text: { onRaised: '#0C0C0E', onRaisedSecondary: '#71717A', muted: '#8E8E96' },
+      border: { subtle: '#E4E4E7' },
+      accent: { highlight: 'rgba(0, 0, 0, 0.04)', highlightRaised: 'rgba(0, 0, 0, 0.04)' },
+    },
+  } : undefined;
+
   return (
+    <WispProvider mode={mode} overrides={lightRaisedOverrides}>
     <Command
       open={open}
       onOpenChange={onOpenChange}
       onSelect={handleSelect}
       size="md"
+      style={mode === 'light' ? { borderWidth: 1, borderColor: '#E4E4E7', shadowOpacity: 0.15 } : undefined}
     >
       <CommandInput placeholder="Search users, messages, or type a command..." />
       <CommandList>
@@ -65,6 +89,15 @@ export function CommandPalette({ open, onOpenChange, onOpenSettings }: CommandPa
           >
             Open Settings
           </CommandItem>
+          {onOpenMarketplace && (
+            <CommandItem
+              value="nav:marketplace"
+              icon={Download}
+              keywords={['plugins', 'marketplace', 'extensions', 'addons', 'install']}
+            >
+              Plugin Marketplace
+            </CommandItem>
+          )}
         </CommandGroup>
 
         {friends.length > 0 && (
@@ -87,8 +120,28 @@ export function CommandPalette({ open, onOpenChange, onOpenSettings }: CommandPa
           </>
         )}
 
+        {pluginCommands.length > 0 && (
+          <>
+            <CommandSeparator />
+            <CommandGroup heading="Plugins">
+              {pluginCommands.map((cmd) => (
+                <CommandItem
+                  key={cmd.id}
+                  value={`plugin:${cmd.id}`}
+                  icon={Zap}
+                  keywords={[cmd.label, ...(cmd.description ? [cmd.description] : [])]}
+                  onSelect={() => { cmd.onSelect(); onOpenChange(false); }}
+                >
+                  {cmd.label}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </>
+        )}
+
         <CommandEmpty>No results found.</CommandEmpty>
       </CommandList>
     </Command>
+    </WispProvider>
   );
 }

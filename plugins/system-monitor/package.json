@@ -1,0 +1,25 @@
+{
+  "name": "@umbra/plugin-system-monitor",
+  "version": "1.0.0",
+  "private": true,
+  "description": "System Monitor plugin for Umbra — view real-time CPU, memory, and disk stats",
+  "main": "dist/bundle.js",
+  "scripts": {
+    "build": "node build.mjs",
+    "dev": "node build.mjs --watch",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@umbra/plugin-sdk": "file:../../packages/umbra-plugin-sdk"
+  },
+  "peerDependencies": {
+    "react": ">=18.0.0"
+  },
+  "devDependencies": {
+    "esbuild": "^0.20.0",
+    "typescript": "^5.0.0",
+    "@types/react": "^18.0.0"
+  },
+  "license": "MIT"
+}

@@ -1,0 +1,44 @@
+{
+  "name": "@umbra/plugin-runtime",
+  "version": "0.1.0",
+  "description": "Plugin runtime for Umbra — loader, registry, storage, sandbox, marketplace",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "module": "dist/index.mjs",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts --format cjs,esm --dts",
+    "dev": "tsup src/index.ts --format cjs,esm --dts --watch",
+    "clean": "rm -rf dist",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@umbra/plugin-sdk": "file:../umbra-plugin-sdk",
+    "@umbra/service": "file:../umbra-service",
+    "@umbra/wasm": "file:../umbra-wasm"
+  },
+  "peerDependencies": {
+    "react": ">=18.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "tsup": "^8.0.0",
+    "react": "^18.0.0",
+    "@types/react": "^18.0.0"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/InfamousVague/Umbra"
+  }
+}

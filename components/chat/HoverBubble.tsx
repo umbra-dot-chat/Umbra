@@ -3,6 +3,7 @@ import { Pressable, View, useWindowDimensions, Platform } from 'react-native';
 import { Text, useTheme } from '@coexist/wisp-react-native';
 import { MessageActionBar } from '@coexist/wisp-react-native/src/components/message-action-bar';
 import { ReplyIcon, ThreadIcon, CopyIcon, ForwardIcon, PinIcon, TrashIcon, EditIcon } from '@/components/icons';
+import { SlotRenderer } from '@/components/plugins/SlotRenderer';
 
 // Lazy-load createPortal only on web to avoid react-dom import in native/test
 let createPortal: ((children: React.ReactNode, container: Element) => React.ReactPortal) | null = null;
@@ -45,6 +46,8 @@ export interface HoverBubbleProps {
   };
   themeColors: any;
   children: React.ReactNode;
+  /** Message data for plugin message-actions slot */
+  message?: { id: string; text: string; conversationId?: string; senderDid?: string };
 }
 
 // ---------------------------------------------------------------------------
@@ -91,7 +94,7 @@ function ContextMenuItem({ icon, label, onPress, danger, colors }: MenuItemProps
 // ---------------------------------------------------------------------------
 export function HoverBubble({
   id, align, hoveredMessage, onHoverIn, onHoverOut,
-  actions, contextActions, themeColors, children,
+  actions, contextActions, themeColors, children, message,
 }: HoverBubbleProps) {
   const isOut = align === 'outgoing';
   const showBar = hoveredMessage === id;
@@ -175,9 +178,18 @@ export function HoverBubble({
             zIndex: 10,
             opacity: showBar ? 1 : 0,
             pointerEvents: showBar ? ('auto' as any) : ('none' as any),
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 4,
           }}
         >
           <MessageActionBar actions={actions} />
+          {message && (
+            <SlotRenderer
+              slot="message-actions"
+              props={{ message }}
+            />
+          )}
         </View>
         {children}
       </Pressable>

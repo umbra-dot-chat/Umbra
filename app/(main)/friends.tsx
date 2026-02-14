@@ -30,6 +30,16 @@ function getFriendStatus(friend: Friend): FriendStatus {
   return friend.online ? 'online' : 'offline';
 }
 
+/** Map app-level status to Wisp Avatar status values. */
+function toAvatarStatus(status: FriendStatus): 'online' | 'offline' | 'busy' | 'away' {
+  switch (status) {
+    case 'online': return 'online';
+    case 'idle': return 'away';
+    case 'dnd': return 'busy';
+    default: return 'offline';
+  }
+}
+
 function formatRelativeTime(timestamp: number): string {
   // Handle timestamps in seconds (Unix) vs milliseconds
   // If timestamp is less than year 2000 in ms, it's probably in seconds
@@ -169,7 +179,7 @@ export default function FriendsPage() {
       key={friend.did}
       name={friend.displayName}
       username={friend.did.slice(0, 20) + '...'}
-      avatar={<Avatar name={friend.displayName} size="md" />}
+      avatar={<Avatar name={friend.displayName} size="md" status={toAvatarStatus(getFriendStatus(friend))} />}
       status={getFriendStatus(friend)}
       statusText={friend.status}
       actions={friendActions(friend.did)}

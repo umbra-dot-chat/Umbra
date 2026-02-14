@@ -112,6 +112,11 @@ impl Database {
             sql_bridge_execute_batch(schema::MIGRATE_V2_TO_V3).map_err(js_err)?;
             tracing::info!("Migration v2 → v3 complete");
         }
+        if from_version < 4 {
+            tracing::info!("Running migration v3 → v4 (plugin KV storage, plugin bundles)");
+            sql_bridge_execute_batch(schema::MIGRATE_V3_TO_V4).map_err(js_err)?;
+            tracing::info!("Migration v3 → v4 complete");
+        }
         Ok(())
     }
 
@@ -789,6 +794,113 @@ impl Database {
     pub fn delete_setting(&self, key: &str) -> Result<bool> {
         Ok(self.exec("DELETE FROM settings WHERE key = ?", json!([key]))? > 0)
     }
+
+    // ── Plugin KV Storage ─────────────────────────────────────────────────
+
+    /// Get a plugin KV value
+    pub fn plugin_kv_get(&self, plugin_id: &str, key: &str) -> Result<Option<String>> {
+        self.query_scalar(
+            "SELECT value FROM plugin_kv WHERE plugin_id = ? AND key = ?",
+            json!([plugin_id, key]),
+        )
+    }
+
+    /// Set a plugin KV value (upsert)
+    pub fn plugin_kv_set(&self, plugin_id: &str, key: &str, value: &str) -> Result<()> {
+        let now = crate::time::now_timestamp();
+        self.exec(
+            "INSERT OR REPLACE INTO plugin_kv (plugin_id, key, value, updated_at) VALUES (?, ?, ?, ?)",
+            json!([plugin_id, key, value, now]),
+        )?;
+        Ok(())
+    }
+
+    /// Delete a plugin KV entry
+    pub fn plugin_kv_delete(&self, plugin_id: &str, key: &str) -> Result<bool> {
+        Ok(self.exec(
+            "DELETE FROM plugin_kv WHERE plugin_id = ? AND key = ?",
+            json!([plugin_id, key]),
+        )? > 0)
+    }
+
+    /// List plugin KV keys (optionally filtered by prefix)
+    pub fn plugin_kv_list(&self, plugin_id: &str, prefix: &str) -> Result<Vec<String>> {
+        let rows = if prefix.is_empty() {
+            self.query(
+                "SELECT key FROM plugin_kv WHERE plugin_id = ? ORDER BY key",
+                json!([plugin_id]),
+            )?
+        } else {
+            let like_pattern = format!("{}%", prefix);
+            self.query(
+                "SELECT key FROM plugin_kv WHERE plugin_id = ? AND key LIKE ? ORDER BY key",
+                json!([plugin_id, like_pattern]),
+            )?
+        };
+
+        Ok(rows.iter().filter_map(|r| r.get(0).and_then(|v| v.as_str().map(|s| s.to_string()))).collect())
+    }
+
+    /// Delete all KV entries for a plugin
+    pub fn plugin_kv_delete_all(&self, plugin_id: &str) -> Result<i32> {
+        self.exec("DELETE FROM plugin_kv WHERE plugin_id = ?", json!([plugin_id]))
+    }
+
+    // ── Plugin Bundle Storage ─────────────────────────────────────────────
+
+    /// Save a plugin bundle (upsert)
+    pub fn plugin_bundle_save(&self, plugin_id: &str, manifest: &str, bundle: &str) -> Result<()> {
+        let now = crate::time::now_timestamp();
+        self.exec(
+            "INSERT OR REPLACE INTO plugin_bundles (plugin_id, manifest, bundle, installed_at) VALUES (?, ?, ?, ?)",
+            json!([plugin_id, manifest, bundle, now]),
+        )?;
+        Ok(())
+    }
+
+    /// Load a plugin bundle by ID
+    pub fn plugin_bundle_load(&self, plugin_id: &str) -> Result<Option<PluginBundleRecord>> {
+        let rows = self.query(
+            "SELECT plugin_id, manifest, bundle, installed_at FROM plugin_bundles WHERE plugin_id = ?",
+            json!([plugin_id]),
+        )?;
+
+        if rows.is_empty() {
+            return Ok(None);
+        }
+
+        let row = &rows[0];
+        Ok(Some(PluginBundleRecord {
+            plugin_id: row.get(0).and_then(|v| v.as_str()).unwrap_or_default().to_string(),
+            manifest: row.get(1).and_then(|v| v.as_str()).unwrap_or_default().to_string(),
+            bundle: row.get(2).and_then(|v| v.as_str()).unwrap_or_default().to_string(),
+            installed_at: row.get(3).and_then(|v| v.as_i64()).unwrap_or(0),
+        }))
+    }
+
+    /// Delete a plugin bundle
+    pub fn plugin_bundle_delete(&self, plugin_id: &str) -> Result<bool> {
+        // Also clean up KV storage
+        let _ = self.plugin_kv_delete_all(plugin_id);
+        Ok(self.exec("DELETE FROM plugin_bundles WHERE plugin_id = ?", json!([plugin_id]))? > 0)
+    }
+
+    /// List all installed plugin bundles
+    pub fn plugin_bundle_list(&self) -> Result<Vec<PluginBundleRecord>> {
+        let rows = self.query(
+            "SELECT plugin_id, manifest, bundle, installed_at FROM plugin_bundles ORDER BY installed_at DESC",
+            json!([]),
+        )?;
+
+        Ok(rows.iter().map(|row| {
+            PluginBundleRecord {
+                plugin_id: row.get(0).and_then(|v| v.as_str()).unwrap_or_default().to_string(),
+                manifest: row.get(1).and_then(|v| v.as_str()).unwrap_or_default().to_string(),
+                bundle: String::new(), // Don't return full bundle in list (can be large)
+                installed_at: row.get(3).and_then(|v| v.as_i64()).unwrap_or(0),
+            }
+        }).collect())
+    }
 }
 
 // ============================================================================
@@ -988,4 +1100,17 @@ pub struct FriendRequestRecord {
     pub created_at: i64,
     /// Status
     pub status: String,
+}
+
+/// A plugin bundle record from the database
+#[derive(Debug, Clone)]
+pub struct PluginBundleRecord {
+    /// Plugin ID (reverse-domain, e.g. "com.example.translator")
+    pub plugin_id: String,
+    /// JSON-encoded plugin manifest
+    pub manifest: String,
+    /// JS bundle source code
+    pub bundle: String,
+    /// When the plugin was installed
+    pub installed_at: i64,
 }

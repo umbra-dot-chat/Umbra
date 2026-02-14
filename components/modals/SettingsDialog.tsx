@@ -1,5 +1,5 @@
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { View, Pressable, ScrollView, Text as RNText } from 'react-native';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
+import { View, Pressable, ScrollView, Text as RNText, Platform } from 'react-native';
 import type { ViewStyle, TextStyle } from 'react-native';
 import {
   Overlay,
@@ -17,6 +17,7 @@ import {
   HStack,
   VStack,
   Text,
+  Tag,
   useTheme,
 } from '@coexist/wisp-react-native';
 import { useAuth } from '@/contexts/AuthContext';
@@ -42,11 +43,22 @@ import {
   ServerIcon,
   ExternalLinkIcon,
   DownloadIcon,
+  MapPinIcon,
+  ActivityIcon,
+  ZapIcon,
+  NetworkIcon,
+  UsersIcon,
+  ChevronDownIcon,
 } from '@/components/icons';
 import { useNetwork } from '@/hooks/useNetwork';
 import { useUmbra } from '@/contexts/UmbraContext';
+import { usePlugins } from '@/contexts/PluginContext';
+import { useFonts, FONT_REGISTRY } from '@/contexts/FontContext';
+import { useAppTheme } from '@/contexts/ThemeContext';
+import { SlotRenderer } from '@/components/plugins/SlotRenderer';
 import { clearDatabaseExport, getSqlDatabase } from '@umbra/wasm';
 import { HelpIndicator } from '@/components/ui/HelpIndicator';
+import { HelpPopoverHost } from '@/components/ui/HelpPopoverHost';
 import { HelpText, HelpHighlight, HelpListItem } from '@/components/ui/HelpContent';
 import { PRIMARY_RELAY_URL, DEFAULT_RELAY_SERVERS } from '@/config';
 
@@ -62,9 +74,10 @@ const AtSignInputIcon = AtSignIcon as InputIcon;
 export interface SettingsDialogProps {
   open: boolean;
   onClose: () => void;
+  onOpenMarketplace?: () => void;
 }
 
-type SettingsSection = 'account' | 'profile' | 'appearance' | 'notifications' | 'privacy' | 'network' | 'data';
+type SettingsSection = 'account' | 'profile' | 'appearance' | 'notifications' | 'privacy' | 'network' | 'data' | 'plugins';
 
 interface NavItem {
   id: SettingsSection;
@@ -80,6 +93,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'privacy', label: 'Privacy', icon: ShieldIcon },
   { id: 'network', label: 'Network', icon: GlobeIcon },
   { id: 'data', label: 'Data', icon: DatabaseIcon },
+  { id: 'plugins', label: 'Plugins', icon: ZapIcon },
 ];
 
 const ACCENT_PRESETS = [
@@ -157,6 +171,157 @@ function SettingRow({
         )}
       </View>
       <View style={{ flexShrink: 0 }}>{children}</View>
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// InlineDropdown — reusable positioned dropdown for Settings selects
+// ---------------------------------------------------------------------------
+
+interface InlineDropdownOption {
+  value: string;
+  label: string;
+  description?: string;
+}
+
+// Lazy-load createPortal only on web
+let _createPortal: ((children: React.ReactNode, container: Element) => React.ReactPortal) | null = null;
+if (Platform.OS === 'web') {
+  try { _createPortal = require('react-dom').createPortal; } catch {}
+}
+
+function InlineDropdown({
+  options,
+  value,
+  onChange,
+  placeholder = 'Select…',
+}: {
+  options: InlineDropdownOption[];
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+}) {
+  const { theme, mode } = useTheme();
+  const tc = theme.colors;
+  const isDark = mode === 'dark';
+  const [open, setOpen] = useState(false);
+  const selected = options.find((o) => o.value === value);
+  const triggerRef = useRef<View>(null);
+  const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0, width: 0 });
+
+  // Measure trigger position when opening
+  useEffect(() => {
+    if (!open || Platform.OS !== 'web' || !triggerRef.current) return;
+    const el = triggerRef.current as unknown as HTMLElement;
+    const rect = el.getBoundingClientRect();
+    setDropdownPos({ top: rect.bottom + 4, left: rect.left, width: rect.width });
+  }, [open]);
+
+  const dropdownList = open && (
+    <>
+      <Pressable
+        onPress={() => setOpen(false)}
+        style={{ position: 'fixed' as any, top: 0, left: 0, right: 0, bottom: 0, zIndex: 99999 }}
+      />
+      <View
+        style={{
+          position: 'fixed' as any,
+          top: dropdownPos.top,
+          left: dropdownPos.left,
+          width: dropdownPos.width,
+          zIndex: 100000,
+          backgroundColor: isDark ? tc.background.raised : '#FFFFFF',
+          borderRadius: 10,
+          borderWidth: 1,
+          borderColor: tc.border.subtle,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: isDark ? 0.3 : 0.12,
+          shadowRadius: 16,
+          elevation: 8,
+          maxHeight: 240,
+          overflow: 'hidden' as any,
+        }}
+      >
+        <ScrollView style={{ maxHeight: 240 }} showsVerticalScrollIndicator={false} nestedScrollEnabled>
+          {options.map((opt) => {
+            const isActive = opt.value === value;
+            return (
+              <Pressable
+                key={opt.value}
+                onPress={() => { onChange(opt.value); setOpen(false); }}
+                style={({ pressed }) => ({
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  paddingVertical: 10,
+                  paddingHorizontal: 14,
+                  backgroundColor: isActive
+                    ? tc.accent.highlight
+                    : pressed
+                      ? tc.background.sunken
+                      : 'transparent',
+                })}
+              >
+                <View style={{ flex: 1 }}>
+                  <RNText style={{
+                    fontSize: 13,
+                    fontWeight: isActive ? '600' : '400',
+                    color: isActive ? tc.accent.primary : tc.text.primary,
+                  }}>
+                    {opt.label}
+                  </RNText>
+                  {opt.description && (
+                    <RNText style={{ fontSize: 11, color: tc.text.muted }}>
+                      {opt.description}
+                    </RNText>
+                  )}
+                </View>
+                {isActive && (
+                  <RNText style={{ fontSize: 12, color: tc.accent.primary, fontWeight: '600' }}>✓</RNText>
+                )}
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      </View>
+    </>
+  );
+
+  return (
+    <View>
+      <Pressable
+        ref={triggerRef}
+        onPress={() => setOpen((p) => !p)}
+        style={{
+          flexDirection: 'row',
+          alignItems: 'center',
+          height: 40,
+          paddingHorizontal: 14,
+          borderRadius: 8,
+          borderWidth: 1,
+          borderColor: open ? tc.accent.primary : tc.border.subtle,
+          backgroundColor: tc.background.sunken,
+          gap: 8,
+        }}
+      >
+        <RNText style={{ flex: 1, fontSize: 14, color: selected ? tc.text.primary : tc.text.muted }} numberOfLines={1}>
+          {selected?.label ?? placeholder}
+        </RNText>
+        {selected?.description && (
+          <RNText style={{ fontSize: 11, color: tc.text.muted }}>
+            {selected.description}
+          </RNText>
+        )}
+        <View style={{ transform: [{ rotate: open ? '180deg' : '0deg' }] }}>
+          <ChevronDownIcon size={16} color={tc.text.secondary} />
+        </View>
+      </Pressable>
+
+      {/* Portal dropdown to document.body so it renders above everything */}
+      {Platform.OS === 'web' && _createPortal
+        ? _createPortal(dropdownList, document.body)
+        : dropdownList}
     </View>
   );
 }
@@ -246,7 +411,7 @@ function AccountSection() {
                 justifyContent: 'center',
               }}
             >
-              <RNText style={{ fontSize: 20, fontWeight: '700', color: '#FFFFFF' }}>
+              <RNText style={{ fontSize: 20, fontWeight: '700', color: tc.text.inverse }}>
                 {identity.displayName.charAt(0).toUpperCase()}
               </RNText>
             </View>
@@ -276,7 +441,7 @@ function AccountSection() {
                 <HelpText>
                   Your DID is derived from your cryptographic keys. It's your permanent, verifiable identity on the network.
                 </HelpText>
-                <HelpHighlight icon={<KeyIcon size={22} color="#6366f1" />}>
+                <HelpHighlight icon={<KeyIcon size={22} color={tc.accent.primary} />}>
                   Unlike usernames, a DID can't be impersonated — it's mathematically tied to your private keys.
                 </HelpHighlight>
                 <HelpListItem>Share it with friends to connect</HelpListItem>
@@ -304,11 +469,11 @@ function AccountSection() {
                   paddingVertical: 4,
                   paddingHorizontal: 8,
                   borderRadius: 6,
-                  backgroundColor: didCopied ? '#22c55e20' : tc.background.sunken,
+                  backgroundColor: didCopied ? tc.status.successSurface : tc.background.sunken,
                 }}
               >
-                <CopyIcon size={14} color={didCopied ? '#22c55e' : tc.text.secondary} />
-                <RNText style={{ fontSize: 11, color: didCopied ? '#22c55e' : tc.text.secondary, fontWeight: '500' }}>
+                <CopyIcon size={14} color={didCopied ? tc.status.success : tc.text.secondary} />
+                <RNText style={{ fontSize: 11, color: didCopied ? tc.status.success : tc.text.secondary, fontWeight: '500' }}>
                   {didCopied ? 'Copied' : 'Copy'}
                 </RNText>
               </Pressable>
@@ -366,7 +531,7 @@ function AccountSection() {
       <View style={{ gap: 12 }}>
         <View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <RNText style={{ fontSize: 15, fontWeight: '600', color: '#EF4444' }}>
+            <RNText style={{ fontSize: 15, fontWeight: '600', color: tc.status.danger }}>
               Danger Zone
             </RNText>
             <HelpIndicator
@@ -379,7 +544,7 @@ function AccountSection() {
               <HelpText>
                 Logging out removes your identity from this device. Make sure you've saved your recovery phrase first!
               </HelpText>
-              <HelpHighlight icon={<AlertTriangleIcon size={22} color="#EF4444" />} color="#EF4444">
+              <HelpHighlight icon={<AlertTriangleIcon size={22} color={tc.status.danger} />} color={tc.status.danger}>
                 Without your recovery phrase, you'll lose access to your identity, friends, and message history permanently.
               </HelpHighlight>
             </HelpIndicator>
@@ -392,10 +557,10 @@ function AccountSection() {
         <Button
           variant="secondary"
           onPress={() => setShowLogoutConfirm(true)}
-          iconLeft={<LogOutIcon size={16} color="#EF4444" />}
-          style={{ borderColor: '#EF444440', backgroundColor: '#EF444410' }}
+          iconLeft={<LogOutIcon size={16} color={tc.status.danger} />}
+          style={{ borderColor: tc.status.dangerBorder, backgroundColor: tc.status.dangerSurface }}
         >
-          <RNText style={{ color: '#EF4444', fontWeight: '600', fontSize: 14 }}>
+          <RNText style={{ color: tc.status.danger, fontWeight: '600', fontSize: 14 }}>
             Log Out
           </RNText>
         </Button>
@@ -407,7 +572,7 @@ function AccountSection() {
         onClose={() => setShowLogoutConfirm(false)}
         title="Log Out?"
         description="Logging out will permanently clear your identity from this device. This action cannot be undone. Make sure you have backed up your recovery phrase before proceeding."
-        icon={<LogOutIcon size={24} color="#EF4444" />}
+        icon={<LogOutIcon size={24} color={tc.status.danger} />}
         size="sm"
         footer={
           <HStack gap="sm" style={{ justifyContent: 'flex-end' }}>
@@ -417,9 +582,9 @@ function AccountSection() {
             <Button
               variant="secondary"
               onPress={handleLogout}
-              style={{ borderColor: '#EF444440', backgroundColor: '#EF444410' }}
+              style={{ borderColor: tc.status.dangerBorder, backgroundColor: tc.status.dangerSurface }}
             >
-              <RNText style={{ color: '#EF4444', fontWeight: '600', fontSize: 14 }}>
+              <RNText style={{ color: tc.status.danger, fontWeight: '600', fontSize: 14 }}>
                 Log Out
               </RNText>
             </Button>
@@ -490,16 +655,29 @@ function ProfileSection() {
 }
 
 function AppearanceSection() {
-  const { mode, toggleMode, setOverrides, theme } = useTheme();
-  const [accentColor, setAccentColor] = useState(theme.colors.accent.primary);
+  const { mode, toggleMode, theme } = useTheme();
+  const { activeTheme, themes, installedThemeIds, setTheme, accentColor, setAccentColor, showModeToggle } = useAppTheme();
   const [textSize, setTextSize] = useState('md');
+  const tc = theme.colors;
+
+  // Build theme dropdown options (only installed themes)
+  const themeOptions = useMemo<InlineDropdownOption[]>(() => {
+    const installed = themes.filter((t) => installedThemeIds.has(t.id));
+    return [
+      { value: 'default', label: 'Default', description: 'Umbra default theme' },
+      ...installed.map((t) => ({
+        value: t.id,
+        label: t.name,
+        description: t.description,
+      })),
+    ];
+  }, [themes, installedThemeIds]);
 
   const handleAccentChange = useCallback(
     (color: string) => {
       setAccentColor(color);
-      setOverrides({ colors: { accent: { primary: color } } });
     },
-    [setOverrides],
+    [setAccentColor],
   );
 
   return (
@@ -509,13 +687,44 @@ function AppearanceSection() {
         description="Customize the look and feel of the application."
       />
 
-      <SettingRow label="Dark Mode" description="Switch between light and dark themes.">
-        <Toggle checked={mode === 'dark'} onChange={toggleMode} />
+      {/* Theme selector */}
+      <SettingRow label="Theme" description="Choose a color theme for the entire app." vertical>
+        <InlineDropdown
+          options={themeOptions}
+          value={activeTheme?.id ?? 'default'}
+          onChange={(id) => setTheme(id === 'default' ? null : id)}
+          placeholder="Select theme"
+        />
+        {/* Theme preview swatches */}
+        {activeTheme && (
+          <View style={{ flexDirection: 'row', gap: 6, marginTop: 8 }}>
+            {activeTheme.swatches.map((color, i) => (
+              <View
+                key={i}
+                style={{
+                  width: 24,
+                  height: 24,
+                  borderRadius: 12,
+                  backgroundColor: color,
+                  borderWidth: 1,
+                  borderColor: tc.border.subtle,
+                }}
+              />
+            ))}
+          </View>
+        )}
       </SettingRow>
+
+      {/* Dark Mode toggle — only shown when no custom theme is active */}
+      {showModeToggle && (
+        <SettingRow label="Dark Mode" description="Switch between light and dark themes.">
+          <Toggle checked={mode === 'dark'} onChange={toggleMode} />
+        </SettingRow>
+      )}
 
       <SettingRow label="Accent Color" description="Choose a primary color for buttons, links, and highlights." vertical>
         <ColorPicker
-          value={accentColor}
+          value={accentColor ?? theme.colors.accent.primary}
           onChange={handleAccentChange}
           presets={ACCENT_PRESETS}
           size="md"
@@ -523,17 +732,74 @@ function AppearanceSection() {
         />
       </SettingRow>
 
-      <SettingRow label="Text Size" description="Adjust the base text size across the app." vertical>
-        <Select
-          options={TEXT_SIZE_OPTIONS}
-          value={textSize}
-          onChange={setTextSize}
-          placeholder="Select size"
-          size="md"
-          fullWidth
-        />
-      </SettingRow>
+      <TextSizeSettingRow value={textSize} onChange={setTextSize} />
+
+      <FontSettingRow />
     </View>
+  );
+}
+
+function TextSizeSettingRow({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <SettingRow label="Text Size" description="Adjust the base text size across the app." vertical>
+      <InlineDropdown
+        options={TEXT_SIZE_OPTIONS}
+        value={value}
+        onChange={onChange}
+        placeholder="Select size"
+      />
+    </SettingRow>
+  );
+}
+
+function FontSettingRow() {
+  const { activeFont, fonts, installedFontIds, setActiveFont } = useFonts();
+  const { theme } = useTheme();
+  const tc = theme.colors;
+
+  // Build options from installed fonts + system default
+  const fontOptions = useMemo(() => {
+    const categoryLabel = (cat: string) =>
+      cat === 'sans-serif' ? 'Sans Serif' : cat.charAt(0).toUpperCase() + cat.slice(1);
+    const installed = fonts.filter((f) => f.id === 'system' || installedFontIds.has(f.id));
+    return installed.map((f) => ({
+      value: f.id,
+      label: f.name,
+      description: categoryLabel(f.category),
+    }));
+  }, [fonts, installedFontIds]);
+
+  const handleFontChange = useCallback((fontId: string) => {
+    setActiveFont(fontId);
+  }, [setActiveFont]);
+
+  return (
+    <SettingRow label="Font Family" description="Choose a typeface for the entire app. Install more fonts from the Marketplace." vertical>
+      <InlineDropdown
+        options={fontOptions}
+        value={activeFont.id}
+        onChange={handleFontChange}
+        placeholder="Select font"
+      />
+
+      {/* Preview of active font */}
+      {activeFont.id !== 'system' && (
+        <View style={{ marginTop: 8, padding: 12, borderRadius: 8, backgroundColor: 'rgba(99,102,241,0.06)', borderWidth: 1, borderColor: 'rgba(99,102,241,0.12)' }}>
+          <RNText style={{
+            fontSize: 16, fontWeight: '600', color: tc.text.primary,
+            fontFamily: activeFont.css.split(',')[0].replace(/"/g, ''),
+          }} numberOfLines={1}>
+            The quick brown fox jumps over the lazy dog
+          </RNText>
+          <RNText style={{
+            fontSize: 12, color: tc.text.muted, marginTop: 4,
+            fontFamily: activeFont.css.split(',')[0].replace(/"/g, ''),
+          }}>
+            ABCDEFGHIJKLMNOPQRSTUVWXYZ abcdefghijklmnopqrstuvwxyz 0123456789
+          </RNText>
+        </View>
+      )}
+    </SettingRow>
   );
 }
 
@@ -565,6 +831,8 @@ function NotificationsSection() {
 }
 
 function PrivacySection() {
+  const { theme } = useTheme();
+  const tc = theme.colors;
   const { hasPin, setPin, verifyPin } = useAuth();
   const [readReceipts, setReadReceipts] = useState(true);
   const [typingIndicators, setTypingIndicators] = useState(true);
@@ -656,7 +924,7 @@ function PrivacySection() {
               <HelpText>
                 Set a 6-digit PIN to prevent unauthorized access to your messages and keys.
               </HelpText>
-              <HelpHighlight icon={<LockIcon size={22} color="#6366f1" />}>
+              <HelpHighlight icon={<LockIcon size={22} color={tc.accent.primary} />}>
                 The PIN is stored locally on your device and required every time you open the app.
               </HelpHighlight>
               <HelpListItem>Your private keys stay encrypted behind the PIN</HelpListItem>
@@ -715,12 +983,12 @@ function PrivacySection() {
               ? 'Re-enter your PIN to confirm.'
               : 'Choose a 6-digit PIN to lock the app.'
         }
-        icon={<KeyIcon size={24} color="#6366f1" />}
+        icon={<KeyIcon size={24} color={tc.accent.primary} />}
         size="sm"
       >
         <View style={{ alignItems: 'center', paddingVertical: 8 }}>
           {pinError && (
-            <RNText style={{ color: '#EF4444', fontSize: 13, marginBottom: 12, textAlign: 'center' }}>
+            <RNText style={{ color: tc.status.danger, fontSize: 13, marginBottom: 12, textAlign: 'center' }}>
               {pinError}
             </RNText>
           )}
@@ -954,12 +1222,12 @@ function NetworkSection() {
 
   const connectionStateColor = {
     idle: tc.text.secondary,
-    creating_offer: '#f59e0b',
-    waiting_for_answer: '#3b82f6',
-    accepting_offer: '#f59e0b',
-    completing_handshake: '#f59e0b',
-    connected: '#22c55e',
-    error: '#ef4444',
+    creating_offer: tc.status.warning,
+    waiting_for_answer: tc.status.info,
+    accepting_offer: tc.status.warning,
+    completing_handshake: tc.status.warning,
+    connected: tc.status.success,
+    error: tc.status.danger,
   }[connectionState];
 
   return (
@@ -975,7 +1243,7 @@ function NetworkSection() {
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
             <View style={{
               width: 10, height: 10, borderRadius: 5,
-              backgroundColor: isConnected ? '#22c55e' : '#ef4444',
+              backgroundColor: isConnected ? tc.status.success : tc.status.danger,
             }} />
             <RNText style={{ fontSize: 16, fontWeight: '600', color: tc.text.primary }}>
               {isConnected ? 'Connected' : 'Disconnected'}
@@ -1006,7 +1274,7 @@ function NetworkSection() {
             <HelpText>
               The P2P network connects you directly to friends without any central server. Messages travel directly between devices.
             </HelpText>
-            <HelpHighlight icon={<GlobeIcon size={22} color="#6366f1" />}>
+            <HelpHighlight icon={<GlobeIcon size={22} color={tc.accent.primary} />}>
               When enabled, your device participates in the decentralized network and can exchange messages in real-time.
             </HelpHighlight>
             <HelpListItem>Uses WebRTC for browser-to-browser connections</HelpListItem>
@@ -1031,7 +1299,7 @@ function NetworkSection() {
         {relays.map((relay) => {
           const displayUrl = relay.url.replace('wss://', '').replace('ws://', '').replace(/\/ws\/?$/, '');
           const info = relayInfoMap[relay.url];
-          const pingColor = !info?.ping ? tc.text.muted : info.ping < 100 ? '#22c55e' : info.ping < 300 ? '#f59e0b' : '#ef4444';
+          const pingColor = !info?.ping ? tc.text.muted : info.ping < 100 ? tc.status.success : info.ping < 300 ? tc.status.warning : tc.status.danger;
           const locationLabel = info?.location && info?.region
             ? `${info.location}, ${info.region}`
             : info?.region || info?.location || null;
@@ -1053,42 +1321,66 @@ function NetworkSection() {
             >
               <View style={{
                 width: 8, height: 8, borderRadius: 4,
-                backgroundColor: relay.enabled ? '#22c55e' : tc.text.muted,
+                backgroundColor: relay.enabled ? tc.status.success : tc.text.muted,
               }} />
               <View style={{ flex: 1, gap: 3 }}>
-                <RNText style={{ fontSize: 13, color: tc.text.primary, fontFamily: 'monospace' }} numberOfLines={1}>
-                  {displayUrl}
-                </RNText>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                   {relay.isDefault && (
-                    <RNText style={{ fontSize: 10, color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: '600' }}>
-                      Default
-                    </RNText>
+                    <View style={{
+                      paddingHorizontal: 5,
+                      paddingVertical: 1,
+                      borderRadius: 4,
+                      backgroundColor: `${tc.text.muted}20`,
+                    }}>
+                      <RNText style={{ fontSize: 9, color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: '700' }}>
+                        Default
+                      </RNText>
+                    </View>
                   )}
+                  <RNText style={{ fontSize: 13, color: tc.text.primary, fontFamily: 'monospace', flex: 1 }} numberOfLines={1}>
+                    {displayUrl}
+                  </RNText>
+                </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                   {locationLabel && (
-                    <RNText style={{ fontSize: 11, color: tc.text.secondary }}>
-                      {locationLabel}
-                    </RNText>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                      <MapPinIcon size={10} color={tc.text.secondary} />
+                      <RNText style={{ fontSize: 11, color: tc.text.secondary }}>
+                        {locationLabel}
+                      </RNText>
+                    </View>
                   )}
                   {info?.ping != null && (
-                    <RNText style={{ fontSize: 11, color: pingColor, fontFamily: 'monospace' }}>
-                      {info.ping}ms
-                    </RNText>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                      <ActivityIcon size={10} color={pingColor} />
+                      <RNText style={{ fontSize: 11, color: pingColor, fontFamily: 'monospace' }}>
+                        {info.ping}ms
+                      </RNText>
+                    </View>
                   )}
                   {info?.online != null && (
-                    <RNText style={{ fontSize: 11, color: tc.text.muted }}>
-                      {info.online} online
-                    </RNText>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                      <UsersIcon size={10} color={tc.text.muted} />
+                      <RNText style={{ fontSize: 11, color: tc.text.muted }}>
+                        {info.online} online
+                      </RNText>
+                    </View>
                   )}
                   {info?.federationEnabled && info?.connectedPeers != null && info.connectedPeers > 0 && (
-                    <RNText style={{ fontSize: 11, color: '#8b5cf6' }}>
-                      ⚡ {info.connectedPeers} {info.connectedPeers === 1 ? 'peer' : 'peers'}
-                    </RNText>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                      <ZapIcon size={10} color={tc.accent.primary} />
+                      <RNText style={{ fontSize: 11, color: tc.accent.primary }}>
+                        {info.connectedPeers} {info.connectedPeers === 1 ? 'peer' : 'peers'}
+                      </RNText>
+                    </View>
                   )}
                   {info?.federationEnabled && info?.meshOnline != null && info.meshOnline > (info?.online ?? 0) && (
-                    <RNText style={{ fontSize: 11, color: tc.text.muted }}>
-                      ({info.meshOnline} mesh)
-                    </RNText>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                      <NetworkIcon size={10} color={tc.text.muted} />
+                      <RNText style={{ fontSize: 11, color: tc.text.muted }}>
+                        {info.meshOnline} mesh
+                      </RNText>
+                    </View>
                   )}
                 </View>
               </View>
@@ -1135,7 +1427,7 @@ function NetworkSection() {
           </Button>
         </View>
         {relayError && (
-          <RNText style={{ fontSize: 12, color: '#ef4444', marginTop: -4 }}>
+          <RNText style={{ fontSize: 12, color: tc.status.danger, marginTop: -4 }}>
             {relayError}
           </RNText>
         )}
@@ -1144,7 +1436,7 @@ function NetworkSection() {
         <Pressable
           onPress={() => {
             if (typeof window !== 'undefined') {
-              window.open('https://github.com/InfamousVague/Umbra/releases/tag/relay-v0.1.0', '_blank');
+              window.open('https://github.com/InfamousVague/Umbra/releases?q=relay', '_blank');
             }
           }}
           style={({ pressed }) => ({
@@ -1164,11 +1456,11 @@ function NetworkSection() {
             width: 36,
             height: 36,
             borderRadius: 8,
-            backgroundColor: '#6366f120',
+            backgroundColor: tc.accent.surface,
             alignItems: 'center',
             justifyContent: 'center',
           }}>
-            <ServerIcon size={18} color="#6366f1" />
+            <ServerIcon size={18} color={tc.accent.primary} />
           </View>
           <View style={{ flex: 1, gap: 2 }}>
             <RNText style={{ fontSize: 14, fontWeight: '600', color: tc.text.primary }}>
@@ -1241,7 +1533,7 @@ function NetworkSection() {
               <HelpText>
                 Exchange offer/answer data to establish a direct encrypted connection with another Umbra user.
               </HelpText>
-              <HelpHighlight icon={<HandshakeIcon size={22} color="#6366f1" />}>
+              <HelpHighlight icon={<HandshakeIcon size={22} color={tc.accent.primary} />}>
                 This creates a WebRTC data channel — messages travel directly between browsers with no server in between.
               </HelpHighlight>
               <HelpListItem>Step 1: Create an offer and share it</HelpListItem>
@@ -1332,8 +1624,8 @@ function NetworkSection() {
 
         {/* Connected state */}
         {connectionState === 'connected' && (
-          <Card variant="outlined" padding="md" style={{ width: '100%', backgroundColor: '#22c55e10' }}>
-            <RNText style={{ fontSize: 14, fontWeight: '600', color: '#22c55e', textAlign: 'center' }}>
+          <Card variant="outlined" padding="md" style={{ width: '100%', backgroundColor: tc.status.successSurface }}>
+            <RNText style={{ fontSize: 14, fontWeight: '600', color: tc.status.success, textAlign: 'center' }}>
               Peer connected successfully!
             </RNText>
           </Card>
@@ -1341,9 +1633,9 @@ function NetworkSection() {
 
         {/* Error state */}
         {connectionState === 'error' && networkError && (
-          <Card variant="outlined" padding="md" style={{ width: '100%', backgroundColor: '#ef444410' }}>
+          <Card variant="outlined" padding="md" style={{ width: '100%', backgroundColor: tc.status.dangerSurface }}>
             <View style={{ gap: 8 }}>
-              <RNText style={{ fontSize: 12, color: '#ef4444' }}>
+              <RNText style={{ fontSize: 12, color: tc.status.danger }}>
                 {networkError.message}
               </RNText>
               <Button size="sm" variant="outline" onPress={resetSignaling}>
@@ -1522,12 +1814,12 @@ function DataManagementSection() {
           padding="md"
           style={{
             width: '100%',
-            backgroundColor: clearStatus.includes('Failed') ? '#ef444410' : '#22c55e10',
+            backgroundColor: clearStatus.includes('Failed') ? tc.status.dangerSurface : tc.status.successSurface,
           }}
         >
           <RNText style={{
             fontSize: 13,
-            color: clearStatus.includes('Failed') ? '#ef4444' : '#22c55e',
+            color: clearStatus.includes('Failed') ? tc.status.danger : tc.status.success,
             fontWeight: '500',
             textAlign: 'center',
           }}>
@@ -1552,10 +1844,10 @@ function DataManagementSection() {
         <Button
           variant="secondary"
           onPress={() => setShowClearMessagesConfirm(true)}
-          iconLeft={<TrashIcon size={16} color="#F97316" />}
-          style={{ borderColor: '#F9731640', backgroundColor: '#F9731610' }}
+          iconLeft={<TrashIcon size={16} color={tc.status.warning} />}
+          style={{ borderColor: tc.status.warningBorder, backgroundColor: tc.status.warningSurface }}
         >
-          <RNText style={{ color: '#F97316', fontWeight: '600', fontSize: 14 }}>
+          <RNText style={{ color: tc.status.warning, fontWeight: '600', fontSize: 14 }}>
             Clear Messages
           </RNText>
         </Button>
@@ -1567,7 +1859,7 @@ function DataManagementSection() {
       <View style={{ gap: 12 }}>
         <View>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <RNText style={{ fontSize: 15, fontWeight: '600', color: '#EF4444' }}>
+            <RNText style={{ fontSize: 15, fontWeight: '600', color: tc.status.danger }}>
               Clear All Data
             </RNText>
             <HelpIndicator
@@ -1580,7 +1872,7 @@ function DataManagementSection() {
               <HelpText>
                 This removes all locally stored data including messages, friends, groups, and conversations.
               </HelpText>
-              <HelpHighlight icon={<AlertTriangleIcon size={22} color="#EF4444" />} color="#EF4444">
+              <HelpHighlight icon={<AlertTriangleIcon size={22} color={tc.status.danger} />} color={tc.status.danger}>
                 Your identity and recovery phrase are NOT affected. You can still log back in, but you'll need to re-add friends and start new conversations.
               </HelpHighlight>
             </HelpIndicator>
@@ -1593,10 +1885,10 @@ function DataManagementSection() {
         <Button
           variant="secondary"
           onPress={() => setShowClearAllConfirm(true)}
-          iconLeft={<AlertTriangleIcon size={16} color="#EF4444" />}
-          style={{ borderColor: '#EF444440', backgroundColor: '#EF444410' }}
+          iconLeft={<AlertTriangleIcon size={16} color={tc.status.danger} />}
+          style={{ borderColor: tc.status.dangerBorder, backgroundColor: tc.status.dangerSurface }}
         >
-          <RNText style={{ color: '#EF4444', fontWeight: '600', fontSize: 14 }}>
+          <RNText style={{ color: tc.status.danger, fontWeight: '600', fontSize: 14 }}>
             Clear All Data
           </RNText>
         </Button>
@@ -1608,7 +1900,7 @@ function DataManagementSection() {
         onClose={() => setShowClearMessagesConfirm(false)}
         title="Clear Messages?"
         description="This will permanently delete all messages, reactions, pins, and threads from this device. Your friends and groups will be kept. This action cannot be undone."
-        icon={<TrashIcon size={24} color="#F97316" />}
+        icon={<TrashIcon size={24} color={tc.status.warning} />}
         size="sm"
         footer={
           <HStack gap="sm" style={{ justifyContent: 'flex-end' }}>
@@ -1618,9 +1910,9 @@ function DataManagementSection() {
             <Button
               variant="secondary"
               onPress={handleClearMessages}
-              style={{ borderColor: '#F9731640', backgroundColor: '#F9731610' }}
+              style={{ borderColor: tc.status.warningBorder, backgroundColor: tc.status.warningSurface }}
             >
-              <RNText style={{ color: '#F97316', fontWeight: '600', fontSize: 14 }}>
+              <RNText style={{ color: tc.status.warning, fontWeight: '600', fontSize: 14 }}>
                 Clear Messages
               </RNText>
             </Button>
@@ -1634,7 +1926,7 @@ function DataManagementSection() {
         onClose={() => setShowClearAllConfirm(false)}
         title="Clear All Data?"
         description="This will permanently delete ALL locally stored data including messages, friends, groups, and conversations. Your identity and recovery phrase are NOT affected. This action cannot be undone."
-        icon={<AlertTriangleIcon size={24} color="#EF4444" />}
+        icon={<AlertTriangleIcon size={24} color={tc.status.danger} />}
         size="sm"
         footer={
           <HStack gap="sm" style={{ justifyContent: 'flex-end' }}>
@@ -1644,9 +1936,9 @@ function DataManagementSection() {
             <Button
               variant="secondary"
               onPress={handleClearAllData}
-              style={{ borderColor: '#EF444440', backgroundColor: '#EF444410' }}
+              style={{ borderColor: tc.status.dangerBorder, backgroundColor: tc.status.dangerSurface }}
             >
-              <RNText style={{ color: '#EF4444', fontWeight: '600', fontSize: 14 }}>
+              <RNText style={{ color: tc.status.danger, fontWeight: '600', fontSize: 14 }}>
                 Clear All Data
               </RNText>
             </Button>
@@ -1658,10 +1950,225 @@ function DataManagementSection() {
 }
 
 // ---------------------------------------------------------------------------
+// Plugins
+// ---------------------------------------------------------------------------
+
+function PluginsSection({ onOpenMarketplace }: { onOpenMarketplace?: () => void }) {
+  const { theme, mode } = useTheme();
+  const tc = theme.colors;
+  const isDark = mode === 'dark';
+  const { registry, enabledCount, enablePlugin, disablePlugin, uninstallPlugin } = usePlugins();
+
+  const allPlugins = registry.getAllPlugins();
+  const hasPlugins = allPlugins.length > 0;
+
+  const handleToggle = useCallback(async (pluginId: string) => {
+    const plugin = registry.getPlugin(pluginId);
+    if (!plugin) return;
+    try {
+      if (plugin.state === 'enabled') {
+        await disablePlugin(pluginId);
+      } else {
+        await enablePlugin(pluginId);
+      }
+    } catch (err) {
+      console.error('Failed to toggle plugin:', err);
+    }
+  }, [registry, enablePlugin, disablePlugin]);
+
+  const handleUninstall = useCallback(async (pluginId: string) => {
+    try {
+      await uninstallPlugin(pluginId);
+    } catch (err) {
+      console.error('Failed to uninstall plugin:', err);
+    }
+  }, [uninstallPlugin]);
+
+  return (
+    <View style={{ gap: 16 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <View style={{ flex: 1 }}>
+          <RNText style={{ fontSize: 18, fontWeight: '700', color: tc.text.primary, marginBottom: 4 }}>
+            Plugins
+          </RNText>
+          <RNText style={{ fontSize: 13, color: tc.text.secondary }}>
+            Extend Umbra with plugins. {enabledCount} plugin{enabledCount !== 1 ? 's' : ''} active.
+          </RNText>
+        </View>
+        {onOpenMarketplace && (
+          <Button
+            size="sm"
+            variant="primary"
+            onPress={onOpenMarketplace}
+            iconLeft={<DownloadIcon size={14} color={tc.text.inverse} />}
+          >
+            Marketplace
+          </Button>
+        )}
+      </View>
+
+      {!hasPlugins && (
+        <Pressable
+          onPress={onOpenMarketplace}
+          style={({ pressed }) => ({
+            padding: 24,
+            borderRadius: 10,
+            borderWidth: 1,
+            borderColor: tc.border.subtle,
+            backgroundColor: pressed
+              ? tc.background.hover
+              : tc.background.sunken,
+            alignItems: 'center',
+            gap: 8,
+          })}
+        >
+          <ZapIcon size={24} color={tc.text.muted} />
+          <RNText style={{ fontSize: 14, fontWeight: '600', color: tc.text.primary }}>
+            No plugins installed
+          </RNText>
+          <RNText style={{ fontSize: 12, color: tc.text.secondary, textAlign: 'center' }}>
+            Browse the marketplace to discover and install plugins that extend Umbra's functionality.
+          </RNText>
+          {onOpenMarketplace && (
+            <RNText style={{ fontSize: 12, color: tc.accent.primary, fontWeight: '600', marginTop: 4 }}>
+              Open Marketplace
+            </RNText>
+          )}
+        </Pressable>
+      )}
+
+      {hasPlugins && allPlugins.map((plugin) => (
+        <PluginSettingsCard
+          key={plugin.manifest.id}
+          plugin={plugin}
+          isDark={isDark}
+          tc={tc}
+          onToggle={() => handleToggle(plugin.manifest.id)}
+          onUninstall={() => handleUninstall(plugin.manifest.id)}
+        />
+      ))}
+
+    </View>
+  );
+}
+
+/** Individual plugin card in the Settings → Plugins section */
+function PluginSettingsCard({
+  plugin,
+  isDark,
+  tc,
+  onToggle,
+  onUninstall,
+}: {
+  plugin: { manifest: any; state: string; error?: string };
+  isDark: boolean;
+  tc: any;
+  onToggle: () => void;
+  onUninstall: () => void;
+}) {
+  const [showConfirm, setShowConfirm] = useState(false);
+
+  return (
+    <View
+      style={{
+        padding: 12,
+        borderRadius: 10,
+        borderWidth: 1,
+        borderColor: tc.border.subtle,
+        backgroundColor: tc.background.sunken,
+        gap: 8,
+      }}
+    >
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+        <View
+          style={{
+            width: 32,
+            height: 32,
+            borderRadius: 8,
+            backgroundColor: isDark ? tc.background.raised : tc.background.sunken,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+        >
+          <ZapIcon size={16} color={plugin.state === 'enabled' ? tc.status.success : tc.text.muted} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <RNText style={{ fontSize: 14, fontWeight: '600', color: tc.text.primary }}>
+            {plugin.manifest.name}
+          </RNText>
+          <RNText style={{ fontSize: 12, color: tc.text.secondary }} numberOfLines={1}>
+            {plugin.manifest.description}
+          </RNText>
+          <RNText style={{ fontSize: 11, color: tc.text.muted, marginTop: 1 }}>
+            v{plugin.manifest.version} · {plugin.manifest.author.name}
+          </RNText>
+          {plugin.state === 'error' && plugin.error && (
+            <RNText style={{ fontSize: 11, color: tc.status.danger, marginTop: 2 }} numberOfLines={1}>
+              Error: {plugin.error}
+            </RNText>
+          )}
+        </View>
+        <Toggle
+          checked={plugin.state === 'enabled'}
+          onChange={onToggle}
+          size="sm"
+        />
+      </View>
+
+      {/* Permissions badges */}
+      {plugin.manifest.permissions && plugin.manifest.permissions.length > 0 && (
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, paddingLeft: 44 }}>
+          {plugin.manifest.permissions.slice(0, 4).map((perm: string) => (
+            <Tag key={perm} size="sm" style={{ borderRadius: 6 }}>
+              {perm}
+            </Tag>
+          ))}
+          {plugin.manifest.permissions.length > 4 && (
+            <RNText style={{ fontSize: 9, color: tc.text.muted, alignSelf: 'center' }}>
+              +{plugin.manifest.permissions.length - 4} more
+            </RNText>
+          )}
+        </View>
+      )}
+
+      {/* Uninstall */}
+      {showConfirm ? (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingLeft: 44 }}>
+          <RNText style={{ fontSize: 11, color: tc.status.danger, flex: 1 }}>
+            Remove plugin and data?
+          </RNText>
+          <Button
+            size="xs"
+            variant="danger"
+            onPress={() => { onUninstall(); setShowConfirm(false); }}
+          >
+            Remove
+          </Button>
+          <Button size="xs" variant="tertiary" onPress={() => setShowConfirm(false)}>
+            Cancel
+          </Button>
+        </View>
+      ) : (
+        <View style={{ flexDirection: 'row', justifyContent: 'flex-end', paddingLeft: 44 }}>
+          <Button
+            size="xs"
+            variant="tertiary"
+            onPress={() => setShowConfirm(true)}
+            iconLeft={<TrashIcon size={11} color={tc.text.muted} />}
+          >
+            Uninstall
+          </Button>
+        </View>
+      )}
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // SettingsDialog
 // ---------------------------------------------------------------------------
 
-export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
+export function SettingsDialog({ open, onClose, onOpenMarketplace }: SettingsDialogProps) {
   const { theme, mode } = useTheme();
   const tc = theme.colors;
   const isDark = mode === 'dark';
@@ -1678,9 +2185,9 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
       flexDirection: 'row',
       borderRadius: 16,
       overflow: 'hidden',
-      backgroundColor: isDark ? '#1E1E22' : tc.background.canvas,
+      backgroundColor: isDark ? tc.background.raised : tc.background.canvas,
       borderWidth: isDark ? 1 : 0,
-      borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'transparent',
+      borderColor: isDark ? tc.border.subtle : 'transparent',
       shadowColor: '#000',
       shadowOffset: { width: 0, height: 12 },
       shadowOpacity: isDark ? 0.6 : 0.25,
@@ -1693,9 +2200,9 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
   const sidebarStyle = useMemo<ViewStyle>(
     () => ({
       width: 200,
-      backgroundColor: isDark ? '#161618' : tc.background.sunken,
+      backgroundColor: isDark ? tc.background.surface : tc.background.sunken,
       borderRightWidth: 1,
-      borderRightColor: isDark ? 'rgba(255,255,255,0.08)' : tc.border.subtle,
+      borderRightColor: tc.border.subtle,
       paddingVertical: 16,
       paddingHorizontal: 12,
     }),
@@ -1733,6 +2240,8 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
         return <NetworkSection />;
       case 'data':
         return <DataManagementSection />;
+      case 'plugins':
+        return <PluginsSection onOpenMarketplace={onOpenMarketplace} />;
     }
   };
 
@@ -1744,6 +2253,8 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
       onBackdropPress={onClose}
       animationType="fade"
     >
+
+      <HelpPopoverHost />
       <View style={modalStyle}>
         {/* ── Left Sidebar ── */}
         <View style={sidebarStyle}>
@@ -1767,20 +2278,20 @@ export function SettingsDialog({ open, onClose }: SettingsDialogProps) {
                   backgroundColor: isActive
                     ? tc.accent.primary
                     : pressed
-                      ? (isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)')
+                      ? tc.accent.highlight
                       : 'transparent',
                   marginBottom: 2,
                 })}
               >
                 <Icon
                   size={18}
-                  color={isActive ? '#FFFFFF' : tc.text.secondary}
+                  color={isActive ? tc.text.inverse : tc.text.secondary}
                 />
                 <RNText
                   style={{
                     fontSize: 14,
                     fontWeight: isActive ? '600' : '400',
-                    color: isActive ? '#FFFFFF' : tc.text.secondary,
+                    color: isActive ? tc.text.inverse : tc.text.secondary,
                   }}
                 >
                   {item.label}

@@ -1,0 +1,15 @@
+{
+  "id": "com.umbra.translator",
+  "name": "Message Translator",
+  "version": "1.0.0",
+  "description": "Translate messages to any language with one click. Supports 100+ languages via a free translation API.",
+  "author": { "name": "Umbra Team", "url": "https://umbra.chat" },
+  "platforms": ["web", "desktop"],
+  "permissions": ["messages:read", "network:local", "storage:kv"],
+  "slots": [
+    { "slot": "message-actions", "component": "TranslateAction", "priority": 50 },
+    { "slot": "message-decorator", "component": "TranslationDecorator", "priority": 50 }
+  ],
+  "entryPoint": "dist/bundle.js",
+  "storage": { "kv": true }
+}

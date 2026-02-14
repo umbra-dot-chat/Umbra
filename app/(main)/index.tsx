@@ -15,6 +15,7 @@ import { ChatHeader } from '@/components/chat/ChatHeader';
 import { ChatArea } from '@/components/chat/ChatArea';
 import { ChatInput } from '@/components/chat/ChatInput';
 import { RightPanel } from '@/components/panels/RightPanel';
+import { SlotRenderer } from '@/components/plugins/SlotRenderer';
 import { MessageIcon } from '@/components/icons';
 import { HelpIndicator } from '@/components/ui/HelpIndicator';
 import { HelpText, HelpHighlight, HelpListItem } from '@/components/ui/HelpContent';
@@ -306,6 +307,7 @@ export default function ChatPage() {
           togglePanel={togglePanel}
           onShowProfile={showProfile}
         />
+        <SlotRenderer slot="chat-header" props={{ conversationId: resolvedConversationId }} />
         <ChatArea
           messages={messages}
           myDid={myDid}
@@ -329,6 +331,7 @@ export default function ChatPage() {
           }}
           onCopyMessage={handleCopyMessage}
         />
+        <SlotRenderer slot="chat-toolbar" props={{ conversationId: resolvedConversationId }} />
         <ChatInput
           message={message}
           onMessageChange={(msg) => { setMessage(msg); if (msg.length > 0) sendTyping(); }}
@@ -357,6 +360,7 @@ export default function ChatPage() {
         onUnpinMessage={unpinMessage}
         onThreadReply={handleThreadReply}
       />
+      <SlotRenderer slot="right-panel" props={{ conversationId: resolvedConversationId }} />
 
     </View>
   );

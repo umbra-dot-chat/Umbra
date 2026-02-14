@@ -1,0 +1,325 @@
+/**
+ * FontContext — Manages font loading, selection, and persistence.
+ *
+ * Loads Google Fonts dynamically, persists selection via WASM KV store,
+ * and applies the selected font globally via CSS injection.
+ *
+ * NOTE: Wisp `setOverrides({ typography })` is handled by ThemeContext,
+ * which reads `activeFont` from this context and composes it with theme +
+ * accent overrides in a single call.
+ */
+
+import React, {
+  createContext,
+  useContext,
+  useEffect,
+  useState,
+  useCallback,
+  useMemo,
+} from 'react';
+import { Platform } from 'react-native';
+import { getWasm } from '@umbra/wasm';
+import { useUmbra } from '@/contexts/UmbraContext';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Font Registry
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface FontEntry {
+  /** Unique ID (lowercase, hyphenated) */
+  id: string;
+  /** Display name */
+  name: string;
+  /** Google Fonts family name (for URL) */
+  family: string;
+  /** Category for filtering */
+  category: 'sans-serif' | 'serif' | 'monospace' | 'display' | 'handwriting';
+  /** CSS font-family value (with fallbacks) */
+  css: string;
+  /** Google Fonts weights to load */
+  weights: number[];
+  /** Whether this font is bundled (always available) vs installable */
+  builtin?: boolean;
+  /** Preview text */
+  preview?: string;
+}
+
+/** Default system font stack */
+const SYSTEM_FONT: FontEntry = {
+  id: 'system',
+  name: 'System Default',
+  family: '',
+  category: 'sans-serif',
+  css: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
+  weights: [400, 500, 600, 700],
+  builtin: true,
+};
+
+/** Curated Google Fonts collection */
+export const FONT_REGISTRY: FontEntry[] = [
+  SYSTEM_FONT,
+  // ── Sans-Serif ──────────────────────────────────────────────────────
+  { id: 'inter', name: 'Inter', family: 'Inter', category: 'sans-serif', css: '"Inter", sans-serif', weights: [400, 500, 600, 700] },
+  { id: 'roboto', name: 'Roboto', family: 'Roboto', category: 'sans-serif', css: '"Roboto", sans-serif', weights: [400, 500, 700] },
+  { id: 'open-sans', name: 'Open Sans', family: 'Open+Sans', category: 'sans-serif', css: '"Open Sans", sans-serif', weights: [400, 500, 600, 700] },
+  { id: 'lato', name: 'Lato', family: 'Lato', category: 'sans-serif', css: '"Lato", sans-serif', weights: [400, 700] },
+  { id: 'poppins', name: 'Poppins', family: 'Poppins', category: 'sans-serif', css: '"Poppins", sans-serif', weights: [400, 500, 600, 700] },
+  { id: 'nunito', name: 'Nunito', family: 'Nunito', category: 'sans-serif', css: '"Nunito", sans-serif', weights: [400, 600, 700] },
+  { id: 'montserrat', name: 'Montserrat', family: 'Montserrat', category: 'sans-serif', css: '"Montserrat", sans-serif', weights: [400, 500, 600, 700] },
+  { id: 'raleway', name: 'Raleway', family: 'Raleway', category: 'sans-serif', css: '"Raleway", sans-serif', weights: [400, 500, 600, 700] },
+  { id: 'dm-sans', name: 'DM Sans', family: 'DM+Sans', category: 'sans-serif', css: '"DM Sans", sans-serif', weights: [400, 500, 700] },
+  { id: 'manrope', name: 'Manrope', family: 'Manrope', category: 'sans-serif', css: '"Manrope", sans-serif', weights: [400, 500, 600, 700] },
+  { id: 'plus-jakarta-sans', name: 'Plus Jakarta Sans', family: 'Plus+Jakarta+Sans', category: 'sans-serif', css: '"Plus Jakarta Sans", sans-serif', weights: [400, 500, 600, 700] },
+  { id: 'source-sans-3', name: 'Source Sans 3', family: 'Source+Sans+3', category: 'sans-serif', css: '"Source Sans 3", sans-serif', weights: [400, 600, 700] },
+  { id: 'work-sans', name: 'Work Sans', family: 'Work+Sans', category: 'sans-serif', css: '"Work Sans", sans-serif', weights: [400, 500, 600, 700] },
+  { id: 'outfit', name: 'Outfit', family: 'Outfit', category: 'sans-serif', css: '"Outfit", sans-serif', weights: [400, 500, 600, 700] },
+  { id: 'figtree', name: 'Figtree', family: 'Figtree', category: 'sans-serif', css: '"Figtree", sans-serif', weights: [400, 500, 600, 700] },
+  // ── Serif ───────────────────────────────────────────────────────────
+  { id: 'merriweather', name: 'Merriweather', family: 'Merriweather', category: 'serif', css: '"Merriweather", serif', weights: [400, 700] },
+  { id: 'playfair-display', name: 'Playfair Display', family: 'Playfair+Display', category: 'serif', css: '"Playfair Display", serif', weights: [400, 500, 600, 700] },
+  { id: 'lora', name: 'Lora', family: 'Lora', category: 'serif', css: '"Lora", serif', weights: [400, 500, 600, 700] },
+  { id: 'crimson-pro', name: 'Crimson Pro', family: 'Crimson+Pro', category: 'serif', css: '"Crimson Pro", serif', weights: [400, 500, 600, 700] },
+  { id: 'eb-garamond', name: 'EB Garamond', family: 'EB+Garamond', category: 'serif', css: '"EB Garamond", serif', weights: [400, 500, 600, 700] },
+  // ── Monospace ───────────────────────────────────────────────────────
+  { id: 'jetbrains-mono', name: 'JetBrains Mono', family: 'JetBrains+Mono', category: 'monospace', css: '"JetBrains Mono", monospace', weights: [400, 500, 700] },
+  { id: 'fira-code', name: 'Fira Code', family: 'Fira+Code', category: 'monospace', css: '"Fira Code", monospace', weights: [400, 500, 700] },
+  { id: 'source-code-pro', name: 'Source Code Pro', family: 'Source+Code+Pro', category: 'monospace', css: '"Source Code Pro", monospace', weights: [400, 500, 700] },
+  // ── Display ─────────────────────────────────────────────────────────
+  { id: 'space-grotesk', name: 'Space Grotesk', family: 'Space+Grotesk', category: 'display', css: '"Space Grotesk", sans-serif', weights: [400, 500, 600, 700] },
+  { id: 'sora', name: 'Sora', family: 'Sora', category: 'display', css: '"Sora", sans-serif', weights: [400, 500, 600, 700] },
+  { id: 'clash-display', name: 'Lexend', family: 'Lexend', category: 'display', css: '"Lexend", sans-serif', weights: [400, 500, 600, 700] },
+  // ── Handwriting ─────────────────────────────────────────────────────
+  { id: 'caveat', name: 'Caveat', family: 'Caveat', category: 'handwriting', css: '"Caveat", cursive', weights: [400, 500, 600, 700] },
+  { id: 'dancing-script', name: 'Dancing Script', family: 'Dancing+Script', category: 'handwriting', css: '"Dancing Script", cursive', weights: [400, 500, 600, 700] },
+];
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Google Fonts loader
+// ─────────────────────────────────────────────────────────────────────────────
+
+function buildGoogleFontsUrl(font: FontEntry): string {
+  const weights = font.weights.join(';');
+  return `https://fonts.googleapis.com/css2?family=${font.family}:wght@${weights}&display=swap`;
+}
+
+/** Load a Google Font by injecting a <link> stylesheet */
+function loadGoogleFont(font: FontEntry): Promise<void> {
+  if (Platform.OS !== 'web' || font.id === 'system') {
+    return Promise.resolve();
+  }
+
+  const url = buildGoogleFontsUrl(font);
+  const linkId = `font-${font.id}`;
+
+  return new Promise((resolve) => {
+    // Already loaded?
+    if (document.getElementById(linkId)) {
+      resolve();
+      return;
+    }
+
+    const link = document.createElement('link');
+    link.id = linkId;
+    link.rel = 'stylesheet';
+    link.href = url;
+    link.onload = () => {
+      // Wait for font to be ready via Font Loading API
+      if ('fonts' in document) {
+        document.fonts
+          .load(`400 16px ${font.css.split(',')[0]}`)
+          .then(() => resolve())
+          .catch(() => resolve());
+      } else {
+        resolve();
+      }
+    };
+    link.onerror = () => resolve(); // Don't block on failure
+    document.head.appendChild(link);
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Context
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface FontContextValue {
+  /** Currently active font */
+  activeFont: FontEntry;
+  /** All available fonts */
+  fonts: FontEntry[];
+  /** Set of font IDs that have been installed (loaded) */
+  installedFontIds: Set<string>;
+  /** Whether a font is currently loading */
+  loadingFontId: string | null;
+  /** Install (download/load) a font */
+  installFont: (fontId: string) => Promise<void>;
+  /** Set the active font (must be installed first) */
+  setActiveFont: (fontId: string) => Promise<void>;
+  /** Category filter options */
+  categories: string[];
+}
+
+const FontContext = createContext<FontContextValue | null>(null);
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Provider
+// ─────────────────────────────────────────────────────────────────────────────
+
+const SYSTEM_FONT_KV_ID = '__umbra_system__';
+const FONT_STATE_KEY = 'active_font';
+const INSTALLED_FONTS_KEY = 'installed_fonts';
+
+export function FontProvider({ children }: { children: React.ReactNode }) {
+  const { isReady } = useUmbra();
+  const [activeFont, setActiveFontState] = useState<FontEntry>(SYSTEM_FONT);
+  const [installedFontIds, setInstalledFontIds] = useState<Set<string>>(new Set(['system']));
+  const [loadingFontId, setLoadingFontId] = useState<string | null>(null);
+
+  // ── Persistence helpers ──────────────────────────────────────────────
+
+  const saveFontState = useCallback((key: string, value: string) => {
+    try {
+      const wasm = getWasm();
+      if (!wasm) return;
+      (wasm as any).umbra_wasm_plugin_kv_set(SYSTEM_FONT_KV_ID, key, value);
+    } catch (err) {
+      console.warn('[FontContext] Failed to save:', key, err);
+    }
+  }, []);
+
+  const loadFontState = useCallback((key: string): string | null => {
+    try {
+      const wasm = getWasm();
+      if (!wasm) return null;
+      const result = (wasm as any).umbra_wasm_plugin_kv_get(SYSTEM_FONT_KV_ID, key);
+      const parsed = JSON.parse(result);
+      return parsed.value ?? null;
+    } catch {
+      return null;
+    }
+  }, []);
+
+  // ── Apply font CSS override ─────────────────────────────────────────
+  // NOTE: Wisp typography override is handled by ThemeContext (reads activeFont).
+  // This only injects a global CSS rule for non-Wisp elements.
+
+  const applyFont = useCallback((font: FontEntry) => {
+    if (Platform.OS === 'web' && typeof document !== 'undefined') {
+      let style = document.getElementById('umbra-font-override');
+      if (!style) {
+        style = document.createElement('style');
+        style.id = 'umbra-font-override';
+        document.head.appendChild(style);
+      }
+      style.textContent = `
+        * { font-family: ${font.css} !important; }
+      `;
+    }
+  }, []);
+
+  // ── Load saved state on mount ───────────────────────────────────────
+
+  useEffect(() => {
+    if (!isReady) return;
+
+    // Load installed fonts
+    const savedInstalled = loadFontState(INSTALLED_FONTS_KEY);
+    let installed = new Set(['system']);
+    if (savedInstalled) {
+      try {
+        const ids: string[] = JSON.parse(savedInstalled);
+        ids.forEach((id) => installed.add(id));
+      } catch {}
+    }
+
+    // Load active font
+    const savedFontId = loadFontState(FONT_STATE_KEY);
+    const savedFont = savedFontId
+      ? FONT_REGISTRY.find((f) => f.id === savedFontId)
+      : null;
+
+    if (savedFont && savedFont.id !== 'system') {
+      // Need to load the font first, then apply
+      installed.add(savedFont.id);
+      setInstalledFontIds(new Set(installed));
+
+      loadGoogleFont(savedFont).then(() => {
+        setActiveFontState(savedFont);
+        applyFont(savedFont);
+      });
+    } else {
+      setInstalledFontIds(installed);
+    }
+  }, [isReady, loadFontState, applyFont]);
+
+  // ── Install a font ──────────────────────────────────────────────────
+
+  const installFont = useCallback(async (fontId: string) => {
+    const font = FONT_REGISTRY.find((f) => f.id === fontId);
+    if (!font || fontId === 'system') return;
+
+    setLoadingFontId(fontId);
+    try {
+      await loadGoogleFont(font);
+      setInstalledFontIds((prev) => {
+        const next = new Set(prev);
+        next.add(fontId);
+        // Persist
+        saveFontState(INSTALLED_FONTS_KEY, JSON.stringify(Array.from(next)));
+        return next;
+      });
+    } finally {
+      setLoadingFontId(null);
+    }
+  }, [saveFontState]);
+
+  // ── Set active font ─────────────────────────────────────────────────
+
+  const setActiveFont = useCallback(async (fontId: string) => {
+    const font = FONT_REGISTRY.find((f) => f.id === fontId);
+    if (!font) return;
+
+    // Install if not yet loaded
+    if (!installedFontIds.has(fontId)) {
+      await installFont(fontId);
+    }
+
+    setActiveFontState(font);
+    applyFont(font);
+    saveFontState(FONT_STATE_KEY, fontId);
+  }, [installedFontIds, installFont, applyFont, saveFontState]);
+
+  // ── Context value ───────────────────────────────────────────────────
+
+  const categories = useMemo(() => {
+    const cats = new Set(FONT_REGISTRY.map((f) => f.category));
+    return ['all', ...Array.from(cats)];
+  }, []);
+
+  const value = useMemo<FontContextValue>(
+    () => ({
+      activeFont,
+      fonts: FONT_REGISTRY,
+      installedFontIds,
+      loadingFontId,
+      installFont,
+      setActiveFont,
+      categories,
+    }),
+    [activeFont, installedFontIds, loadingFontId, installFont, setActiveFont, categories],
+  );
+
+  return <FontContext.Provider value={value}>{children}</FontContext.Provider>;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Hook
+// ─────────────────────────────────────────────────────────────────────────────
+
+export function useFonts(): FontContextValue {
+  const ctx = useContext(FontContext);
+  if (!ctx) {
+    throw new Error('useFonts must be used within a FontProvider');
+  }
+  return ctx;
+}

@@ -17,21 +17,6 @@ import {
 import { ChevronDownIcon, ChevronRightIcon } from '@/components/icons';
 
 // ---------------------------------------------------------------------------
-// Status dot colors — matches wisp MemberList resolveStatusDotColor
-// ---------------------------------------------------------------------------
-
-function useStatusDotColor(status: string) {
-  const { theme } = useTheme();
-  const tc = theme.colors;
-  switch (status) {
-    case 'online': return tc.status.success;
-    case 'idle': return tc.status.warning;
-    case 'dnd': return tc.status.danger;
-    default: return tc.text.muted;
-  }
-}
-
-// ---------------------------------------------------------------------------
 // FriendListItem
 // ---------------------------------------------------------------------------
 
@@ -52,6 +37,16 @@ export interface FriendListItemProps {
   flat?: boolean;
 }
 
+/** Map FriendListItem statuses to Wisp Avatar status values. */
+function toAvatarStatus(status: string): 'online' | 'offline' | 'busy' | 'away' {
+  switch (status) {
+    case 'online': return 'online';
+    case 'idle': return 'away';
+    case 'dnd': return 'busy';
+    default: return 'offline';
+  }
+}
+
 export function FriendListItem({
   name,
   username,
@@ -63,7 +58,6 @@ export function FriendListItem({
 }: FriendListItemProps) {
   const { theme } = useTheme();
   const tc = theme.colors;
-  const dotColor = useStatusDotColor(status);
 
   return (
     <HStack
@@ -76,23 +70,8 @@ export function FriendListItem({
         marginHorizontal: flat ? 0 : 4,
       }}
     >
-      {/* Avatar + status dot (matching MemberList layout) */}
-      <View style={{ position: 'relative' }}>
-        {avatar ?? <Avatar name={name} size="sm" />}
-        <View
-          style={{
-            position: 'absolute',
-            bottom: -1,
-            right: -1,
-            width: 10,
-            height: 10,
-            borderRadius: 5,
-            backgroundColor: dotColor,
-            borderWidth: 2,
-            borderColor: tc.background.canvas,
-          }}
-        />
-      </View>
+      {/* Avatar with built-in Wisp status indicator */}
+      {avatar ?? <Avatar name={name} size="sm" status={toAvatarStatus(status)} />}
 
       {/* Info */}
       <VStack style={{ flex: 1, gap: 1 }}>
@@ -297,7 +276,7 @@ export function AddFriendInput({
         <View style={{ flex: 1 }}>
           <Input
             value={value}
-            onValueChange={onValueChange}
+            onChangeText={onValueChange}
             onSubmitEditing={() => onSubmit(value)}
             placeholder={placeholder}
             size="md"

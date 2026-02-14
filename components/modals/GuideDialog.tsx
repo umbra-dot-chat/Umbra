@@ -29,6 +29,7 @@ import {
   SettingsIcon,
   ShieldIcon,
   PlusIcon,
+  PuzzleIcon,
   XIcon,
 } from '@/components/icons';
 
@@ -49,6 +50,7 @@ type Chapter =
   | 'data'
   | 'security'
   | 'network'
+  | 'plugins'
   | 'limitations'
   | 'technical';
 
@@ -67,6 +69,7 @@ const CHAPTERS: ChapterItem[] = [
   { id: 'data', label: 'Data Management', icon: SettingsIcon, color: '#F59E0B' },
   { id: 'security', label: 'Security & Privacy', icon: ShieldIcon, color: '#EAB308' },
   { id: 'network', label: 'Network', icon: SettingsIcon, color: '#06B6D4' },
+  { id: 'plugins', label: 'Plugins', icon: PuzzleIcon, color: '#8B5CF6' },
   { id: 'limitations', label: 'Limitations', icon: BookOpenIcon, color: '#F97316' },
   { id: 'technical', label: 'Tech Reference', icon: SettingsIcon, color: '#6366F1' },
 ];
@@ -394,6 +397,123 @@ function NetworkContent() {
   );
 }
 
+function PluginsContent() {
+  const { theme, mode } = useTheme();
+  const tc = theme.colors;
+  const isDark = mode === 'dark';
+
+  return (
+    <>
+      <FeatureCard
+        title="Plugin System"
+        description="Umbra supports a plugin architecture that lets you extend the app with custom functionality. Plugins can add UI components to predefined slots, register commands, store data, and interact with messages — all while running sandboxed within the app."
+        status="working"
+        howTo={[
+          'Open the Plugin Marketplace from the sidebar or Command Palette (Cmd+K)',
+          'Browse available plugins and click Install',
+          'Installed plugins activate automatically and appear in their designated UI slots',
+          'Manage plugins in Settings > Plugins — enable, disable, or uninstall',
+        ]}
+      />
+      <FeatureCard
+        title="Marketplace"
+        description="The Plugin Marketplace is a centralized registry that lists all available plugins. Each listing includes the plugin name, description, author, permissions, and an install button. The marketplace fetches its data from a static JSON registry."
+        status="working"
+        howTo={[
+          'Click "Plugins" in the sidebar to open the Marketplace',
+          'Or press Cmd+K and search for "Plugin Marketplace"',
+          'Browse by category or search by keyword',
+          'Click Install to download and activate a plugin',
+        ]}
+      />
+      <TechSpec
+        title="UI Slots"
+        accentColor="#8B5CF6"
+        entries={[
+          { label: 'message-actions', value: 'Buttons in the message hover bar' },
+          { label: 'message-decorator', value: 'Content below a message bubble' },
+          { label: 'sidebar-section', value: 'Widget at the bottom of the sidebar' },
+          { label: 'chat-toolbar', value: 'Toolbar above the message input' },
+          { label: 'chat-header', value: 'Content in the chat header row' },
+          { label: 'settings-tab', value: 'Custom tab in Settings' },
+          { label: 'right-panel', value: 'Panel in the right sidebar' },
+          { label: 'command-palette', value: 'Commands in the Command Palette' },
+        ]}
+      />
+      <TechSpec
+        title="Permissions"
+        accentColor="#22C55E"
+        entries={[
+          { label: 'messages:read', value: 'Read message content' },
+          { label: 'messages:write', value: 'Send messages to conversations' },
+          { label: 'friends:read', value: 'Access the friends list' },
+          { label: 'conversations:read', value: 'Access the conversation list' },
+          { label: 'storage:kv', value: 'Key-value storage (per-plugin)' },
+          { label: 'storage:sql', value: 'SQLite tables (namespaced)' },
+          { label: 'network:local', value: 'Fetch external APIs' },
+          { label: 'notifications', value: 'Show toast notifications' },
+          { label: 'commands', value: 'Register command palette entries' },
+        ]}
+      />
+      <FeatureCard
+        title="Building a Plugin"
+        description="Plugins are ES module bundles that export an activate() function, an optional deactivate() function, and a components object mapping component names to React components. Plugins use React.createElement for rendering (no JSX) since they run outside the app's build pipeline."
+        status="working"
+        howTo={[
+          'Create a new JS file (your bundle) that exports { activate, deactivate, components }',
+          'Access React via `const React = window.React || globalThis.React`',
+          'In activate(api), use api.kv for storage, api.registerCommand() for commands, api.showToast() for notifications',
+          'Export components as named entries — these map to the "component" field in your manifest slots',
+          'Use the Wisp font stack for consistent typography: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, etc.',
+        ]}
+      />
+      <TechSpec
+        title="Plugin Bundle Structure"
+        accentColor="#3B82F6"
+        entries={[
+          { label: 'activate(api)', value: 'Called when plugin is enabled' },
+          { label: 'deactivate()', value: 'Called when plugin is disabled' },
+          { label: 'components', value: 'Object mapping names to React components' },
+          { label: 'api.kv', value: 'Namespaced key-value store' },
+          { label: 'api.sql', value: 'Namespaced SQLite (optional)' },
+          { label: 'api.registerCommand()', value: 'Add to command palette' },
+          { label: 'api.showToast()', value: 'Display a notification' },
+        ]}
+      />
+      <FeatureCard
+        title="Example: Minimal Plugin"
+        description={`A minimal plugin that adds a sidebar widget:\n\nconst React = window.React;\nconst { createElement: h, useState } = React;\n\nfunction MyWidget() {\n  const [count, setCount] = useState(0);\n  return h('div', { style: { padding: 12 } },\n    h('span', null, 'Count: ' + count),\n    h('button', { onClick: () => setCount(c => c + 1) }, '+1')\n  );\n}\n\nexport async function activate(api) {\n  api.showToast('My Plugin activated!', 'info');\n}\n\nexport function deactivate() {}\nexport const components = { MyWidget };`}
+        status="working"
+      />
+      <TechSpec
+        title="Manifest (plugins.json)"
+        accentColor="#F59E0B"
+        entries={[
+          { label: 'id', value: 'Unique identifier (e.g. com.you.plugin)' },
+          { label: 'name', value: 'Human-readable name' },
+          { label: 'version', value: 'Semver version string' },
+          { label: 'downloadUrl', value: 'URL to the JS bundle' },
+          { label: 'permissions', value: 'Array of required permissions' },
+          { label: 'slots', value: 'Array of { slot, component, priority }' },
+          { label: 'platforms', value: '"web", "desktop", or both' },
+          { label: 'storage', value: '{ kv: true, sql: { tables: [...] } }' },
+        ]}
+      />
+      <FeatureCard
+        title="Dev Mode"
+        description="During development you can load a plugin from a local URL for hot reload. The Plugin Marketplace has a 'Load Dev Plugin' option in the Installed tab where you can paste a URL. The runtime polls the URL for changes and automatically reloads the module when it detects updates."
+        status="working"
+        howTo={[
+          'Build your plugin bundle with a watch mode (e.g. esbuild --watch)',
+          'Serve the bundle on a local port (e.g. http://localhost:3001/bundle.js)',
+          'Open Plugin Marketplace > Installed tab > "Load Dev Plugin"',
+          'Paste your URL and click Load — the plugin will hot reload on changes',
+        ]}
+      />
+    </>
+  );
+}
+
 function LimitationsContent() {
   return (
     <>
@@ -476,9 +596,9 @@ function TechnicalContent() {
           paddingVertical: 10,
           paddingHorizontal: 14,
           borderRadius: 8,
-          backgroundColor: isDark ? '#18181B' : tc.background.sunken,
+          backgroundColor: tc.background.sunken,
           borderWidth: 1,
-          borderColor: isDark ? '#27272A' : tc.border.subtle,
+          borderColor: tc.border.subtle,
         }}
       >
         <RNText style={{ fontSize: 14, color: tc.text.secondary }}>
@@ -571,9 +691,9 @@ export function GuideDialog({ open, onClose }: GuideDialogProps) {
       flexDirection: 'row',
       borderRadius: 16,
       overflow: 'hidden',
-      backgroundColor: isDark ? '#1E1E22' : tc.background.canvas,
+      backgroundColor: isDark ? tc.background.raised : tc.background.canvas,
       borderWidth: isDark ? 1 : 0,
-      borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'transparent',
+      borderColor: isDark ? tc.border.subtle : 'transparent',
       shadowColor: '#000',
       shadowOffset: { width: 0, height: 12 },
       shadowOpacity: isDark ? 0.6 : 0.25,
@@ -586,9 +706,9 @@ export function GuideDialog({ open, onClose }: GuideDialogProps) {
   const sidebarStyle = useMemo<ViewStyle>(
     () => ({
       width: 210,
-      backgroundColor: isDark ? '#161618' : tc.background.sunken,
+      backgroundColor: isDark ? tc.background.surface : tc.background.sunken,
       borderRightWidth: 1,
-      borderRightColor: isDark ? 'rgba(255,255,255,0.08)' : tc.border.subtle,
+      borderRightColor: tc.border.subtle,
       paddingVertical: 16,
       paddingHorizontal: 10,
     }),
@@ -613,6 +733,8 @@ export function GuideDialog({ open, onClose }: GuideDialogProps) {
         return <SecurityContent />;
       case 'network':
         return <NetworkContent />;
+      case 'plugins':
+        return <PluginsContent />;
       case 'limitations':
         return <LimitationsContent />;
       case 'technical':
@@ -636,12 +758,12 @@ export function GuideDialog({ open, onClose }: GuideDialogProps) {
                 width: 30,
                 height: 30,
                 borderRadius: 8,
-                backgroundColor: '#3B82F6',
+                backgroundColor: tc.accent.primary,
                 alignItems: 'center',
                 justifyContent: 'center',
               }}
             >
-              <BookOpenIcon size={16} color="#FFF" />
+              <BookOpenIcon size={16} color={tc.text.inverse} />
             </View>
             <RNText style={{ fontSize: 15, fontWeight: '700', color: tc.text.primary }}>User Guide</RNText>
           </View>
@@ -666,7 +788,7 @@ export function GuideDialog({ open, onClose }: GuideDialogProps) {
                     backgroundColor: isActive
                       ? tc.accent.primary
                       : pressed
-                        ? (isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.05)')
+                        ? tc.accent.highlight
                         : 'transparent',
                     marginBottom: 2,
                   })}
@@ -676,18 +798,18 @@ export function GuideDialog({ open, onClose }: GuideDialogProps) {
                       width: 24,
                       height: 24,
                       borderRadius: 6,
-                      backgroundColor: isActive ? ch.color : (isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'),
+                      backgroundColor: isActive ? ch.color : tc.accent.highlight,
                       alignItems: 'center',
                       justifyContent: 'center',
                     }}
                   >
-                    <Icon size={13} color={isActive ? '#FFF' : tc.text.secondary} />
+                    <Icon size={13} color={isActive ? tc.text.inverse : tc.text.secondary} />
                   </View>
                   <RNText
                     style={{
                       fontSize: 13,
                       fontWeight: isActive ? '600' : '400',
-                      color: isActive ? '#FFFFFF' : tc.text.secondary,
+                      color: isActive ? tc.text.inverse : tc.text.secondary,
                       flex: 1,
                     }}
                     numberOfLines={1}
@@ -716,7 +838,7 @@ export function GuideDialog({ open, onClose }: GuideDialogProps) {
               paddingHorizontal: 28,
               paddingVertical: 16,
               borderBottomWidth: 1,
-              borderBottomColor: isDark ? 'rgba(255,255,255,0.06)' : tc.border.subtle,
+              borderBottomColor: tc.border.subtle,
             }}
           >
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
@@ -730,7 +852,7 @@ export function GuideDialog({ open, onClose }: GuideDialogProps) {
                   justifyContent: 'center',
                 }}
               >
-                <activeInfo.icon size={18} color="#FFF" />
+                <activeInfo.icon size={18} color={tc.text.inverse} />
               </View>
               <RNText style={{ fontSize: 18, fontWeight: '700', color: tc.text.primary }}>
                 {activeInfo.label}

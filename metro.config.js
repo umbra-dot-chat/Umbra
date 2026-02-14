@@ -11,6 +11,8 @@ config.watchFolders = [
   ...(config.watchFolders || []),
   path.resolve(__dirname, 'packages/umbra-wasm'),
   path.resolve(__dirname, 'packages/umbra-service'),
+  path.resolve(__dirname, 'packages/umbra-plugin-sdk'),
+  path.resolve(__dirname, 'packages/umbra-plugin-runtime'),
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -64,6 +66,22 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
   // Resolve @umbra/service to local package
   if (moduleName === '@umbra/service') {
     const filePath = path.resolve(__dirname, 'packages/umbra-service/src/index.ts');
+    if (fs.existsSync(filePath)) {
+      return { type: 'sourceFile', filePath };
+    }
+  }
+
+  // Resolve @umbra/plugin-sdk to local package
+  if (moduleName === '@umbra/plugin-sdk') {
+    const filePath = path.resolve(__dirname, 'packages/umbra-plugin-sdk/src/index.ts');
+    if (fs.existsSync(filePath)) {
+      return { type: 'sourceFile', filePath };
+    }
+  }
+
+  // Resolve @umbra/plugin-runtime to local package
+  if (moduleName === '@umbra/plugin-runtime') {
+    const filePath = path.resolve(__dirname, 'packages/umbra-plugin-runtime/src/index.ts');
     if (fs.existsSync(filePath)) {
       return { type: 'sourceFile', filePath };
     }

@@ -30,6 +30,8 @@
     "@expo/vector-icons": "^15.0.3",
     "@react-navigation/native": "^7.1.8",
     "@tauri-apps/api": "^2.10.1",
+    "@umbra/plugin-runtime": "file:packages/umbra-plugin-runtime",
+    "@umbra/plugin-sdk": "file:packages/umbra-plugin-sdk",
     "@umbra/service": "file:packages/umbra-service",
     "@umbra/wasm": "file:packages/umbra-wasm",
     "expo": "~54.0.33",

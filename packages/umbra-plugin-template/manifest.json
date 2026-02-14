@@ -1,0 +1,32 @@
+{
+  "id": "com.example.my-plugin",
+  "name": "My Plugin",
+  "version": "0.1.0",
+  "description": "A starter plugin for Umbra. Customize this to build your own!",
+  "author": {
+    "name": "Your Name",
+    "url": "https://github.com/yourusername"
+  },
+  "platforms": ["web", "desktop"],
+  "permissions": [
+    "storage:kv",
+    "commands",
+    "notifications"
+  ],
+  "slots": [
+    {
+      "slot": "sidebar-section",
+      "component": "SidebarWidget",
+      "priority": 100
+    },
+    {
+      "slot": "right-panel",
+      "component": "MyPanel",
+      "priority": 100
+    }
+  ],
+  "entryPoint": "dist/bundle.js",
+  "storage": {
+    "kv": true
+  }
+}

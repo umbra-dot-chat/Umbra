@@ -95,6 +95,9 @@ struct Args {
 
 #[tokio::main]
 async fn main() {
+    // Install rustls crypto provider for federation TLS connections
+    let _ = rustls::crypto::ring::default_provider().install_default();
+
     // Initialize tracing
     tracing_subscriber::fmt()
         .with_env_filter(

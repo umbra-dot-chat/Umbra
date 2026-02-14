@@ -1,0 +1,10 @@
+export { draculaTheme } from './dracula';
+export { tokyoNightTheme } from './tokyo-night';
+export { monokaiTheme } from './monokai';
+export { nordTheme } from './nord';
+export { catppuccinMochaTheme } from './catppuccin-mocha';
+export { gruvboxDarkTheme } from './gruvbox-dark';
+export { solarizedDarkTheme } from './solarized-dark';
+export { oneDarkTheme } from './one-dark';
+export { rosePineTheme } from './rose-pine';
+export { synthwaveTheme } from './synthwave';

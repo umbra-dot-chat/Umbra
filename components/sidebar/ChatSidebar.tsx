@@ -1,4 +1,4 @@
-import { BookOpenIcon, CheckIcon, PlusIcon, SettingsIcon, UsersIcon, XIcon } from '@/components/icons';
+import { BookOpenIcon, CheckIcon, PlusIcon, SettingsIcon, ShoppingBagIcon, UsersIcon, XIcon } from '@/components/icons';
 import {
   Avatar, AvatarGroup, Button,
   SearchInput,
@@ -12,6 +12,7 @@ import React, { useCallback, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { Text } from '@coexist/wisp-react-native';
 import { NewChatMenu } from './NewChatMenu';
+import { SlotRenderer } from '@/components/plugins/SlotRenderer';
 
 export interface ChatSidebarProps {
   search: string;
@@ -24,6 +25,7 @@ export interface ChatSidebarProps {
   onNewDm?: () => void;
   onCreateGroup?: () => void;
   onGuidePress?: () => void;
+  onMarketplacePress?: () => void;
   isFriendsActive?: boolean;
   /** Pending group invites to display above conversations */
   pendingInvites?: PendingGroupInvite[];
@@ -44,7 +46,7 @@ export function ChatSidebar(props: ChatSidebarProps) {
 function ChatSidebarInner({
   search, onSearchChange, conversations,
   activeId, onSelectConversation, onOpenSettings,
-  onFriendsPress, onNewDm, onCreateGroup, onGuidePress, isFriendsActive,
+  onFriendsPress, onNewDm, onCreateGroup, onGuidePress, onMarketplacePress, isFriendsActive,
   pendingInvites, onAcceptInvite, onDeclineInvite,
 }: ChatSidebarProps) {
   const { theme } = useTheme();
@@ -108,6 +110,21 @@ function ChatSidebarInner({
               </Button>
             </View>
           )}
+          {onMarketplacePress && (
+            <View style={{ marginHorizontal: 6, marginTop: 2 }}>
+              <Button
+                variant="tertiary"
+                size="md"
+                fullWidth
+                iconLeft={<ShoppingBagIcon size={18} color={theme.colors.text.secondary} />}
+                onPress={onMarketplacePress}
+                accessibilityLabel="Marketplace"
+                style={{ justifyContent: 'flex-start' }}
+              >
+                Marketplace
+              </Button>
+            </View>
+          )}
         </SidebarSection>
         {/* Group Invites Section — only shown when there are pending invites */}
         {pendingInvites && pendingInvites.length > 0 && (
@@ -161,6 +178,7 @@ function ChatSidebarInner({
           </SidebarSection>
         )}
 
+        <SlotRenderer slot="sidebar-section" />
         <SidebarSection>
           {/* Custom header row: "Conversations" title + inline + button */}
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, marginBottom: 8, zIndex: 200 }}>

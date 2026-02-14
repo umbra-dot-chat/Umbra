@@ -73,7 +73,7 @@ export function ProfileCard({ style }: ProfileCardProps) {
               justifyContent: 'center',
             }}
           >
-            <RNText style={{ fontSize: 17, fontWeight: '700', color: '#FFFFFF' }}>
+            <RNText style={{ fontSize: 17, fontWeight: '700', color: tc.text.inverse }}>
               {identity.displayName.charAt(0).toUpperCase()}
             </RNText>
           </View>
@@ -103,7 +103,7 @@ export function ProfileCard({ style }: ProfileCardProps) {
                 width: 7,
                 height: 7,
                 borderRadius: 3.5,
-                backgroundColor: relayConnected ? '#22c55e' : '#ef4444',
+                backgroundColor: relayConnected ? tc.status.success : tc.status.danger,
               }}
             />
             <RNText style={{ fontSize: 11, color: tc.text.secondary, fontWeight: '500' }}>
@@ -118,7 +118,7 @@ export function ProfileCard({ style }: ProfileCardProps) {
               <HelpText>
                 The relay server helps deliver messages and friend requests when you can't connect directly peer-to-peer.
               </HelpText>
-              <HelpHighlight icon={<RadioIcon size={22} color="#6366f1" />}>
+              <HelpHighlight icon={<RadioIcon size={22} color={tc.accent.primary} />}>
                 Friend requests are sent through the relay server. Both you and your friend need to be registered with the relay for requests to be delivered.
               </HelpHighlight>
               <HelpListItem>Green dot means you're connected and can receive requests</HelpListItem>
@@ -153,7 +153,7 @@ export function ProfileCard({ style }: ProfileCardProps) {
               <HelpText>
                 Your Decentralized ID (DID) is your unique identity on the network. It's derived from your cryptographic keys and can't be forged.
               </HelpText>
-              <HelpHighlight icon={<KeyIcon size={22} color="#6366f1" />}>
+              <HelpHighlight icon={<KeyIcon size={22} color={tc.accent.primary} />}>
                 Share your DID with friends so they can send you a connection request. Copy it with the button below.
               </HelpHighlight>
               <HelpListItem>Starts with did:key:z6Mk...</HelpListItem>
@@ -182,14 +182,14 @@ export function ProfileCard({ style }: ProfileCardProps) {
                 paddingVertical: 4,
                 paddingHorizontal: 8,
                 borderRadius: 6,
-                backgroundColor: didCopied ? '#22c55e20' : tc.background.sunken,
+                backgroundColor: didCopied ? tc.status.successSurface : tc.background.sunken,
               }}
             >
-              <CopyIcon size={14} color={didCopied ? '#22c55e' : tc.text.secondary} />
+              <CopyIcon size={14} color={didCopied ? tc.status.success : tc.text.secondary} />
               <RNText
                 style={{
                   fontSize: 11,
-                  color: didCopied ? '#22c55e' : tc.text.secondary,
+                  color: didCopied ? tc.status.success : tc.text.secondary,
                   fontWeight: '500',
                 }}
               >

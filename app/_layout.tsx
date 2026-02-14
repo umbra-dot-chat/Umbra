@@ -5,7 +5,10 @@ import { StatusBar } from 'expo-status-bar';
 import { WispProvider, ToastProvider } from '@coexist/wisp-react-native';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { UmbraProvider, useUmbra } from '@/contexts/UmbraContext';
+import { PluginProvider } from '@/contexts/PluginContext';
 import { HelpProvider } from '@/contexts/HelpContext';
+import { FontProvider } from '@/contexts/FontContext';
+import { ThemeProvider } from '@/contexts/ThemeContext';
 import { HelpPopoverHost } from '@/components/ui/HelpPopoverHost';
 import { PinLockScreen } from '@/components/auth/PinLockScreen';
 import { LoadingScreen } from '@/components/loading/LoadingScreen';
@@ -162,11 +165,17 @@ export default function RootLayout() {
       <ToastProvider maxToasts={3}>
         <AuthProvider>
           <UmbraProvider>
-            <HelpProvider>
-              <StatusBar style="dark" />
-              <AuthGate />
-              <HelpPopoverHost />
-            </HelpProvider>
+            <FontProvider>
+              <ThemeProvider>
+                <PluginProvider>
+                  <HelpProvider>
+                    <StatusBar style="dark" />
+                    <AuthGate />
+                    <HelpPopoverHost />
+                  </HelpProvider>
+                </PluginProvider>
+              </ThemeProvider>
+            </FontProvider>
           </UmbraProvider>
         </AuthProvider>
       </ToastProvider>

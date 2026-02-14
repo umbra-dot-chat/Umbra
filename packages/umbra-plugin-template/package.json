@@ -1,0 +1,21 @@
+{
+  "name": "@umbra/plugin-template",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Starter template for building Umbra plugins",
+  "main": "dist/bundle.js",
+  "scripts": {
+    "dev": "node build.mjs --watch",
+    "build": "node build.mjs",
+    "serve": "npx serve dist -p 3099 --cors"
+  },
+  "dependencies": {},
+  "peerDependencies": {
+    "react": ">=18.0.0"
+  },
+  "devDependencies": {
+    "@umbra/plugin-sdk": "workspace:*",
+    "esbuild": "^0.20.0",
+    "typescript": "^5.0.0"
+  }
+}

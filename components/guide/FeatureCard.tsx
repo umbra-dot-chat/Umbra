@@ -6,11 +6,19 @@
  */
 
 import React from 'react';
-import { View } from 'react-native';
+import { View, Pressable, Platform } from 'react-native';
 import type { ViewStyle, TextStyle } from 'react-native';
 import { Text, useTheme } from '@coexist/wisp-react-native';
+import { ExternalLinkIcon } from '@/components/icons';
 
 export type FeatureStatus = 'working' | 'beta' | 'coming-soon';
+
+export interface SourceLink {
+  /** Display label for the source link */
+  label: string;
+  /** Relative path from repo root (e.g. 'packages/umbra-core/src/crypto/encryption.rs') */
+  path: string;
+}
 
 export interface FeatureCardProps {
   /** Feature title */
@@ -25,13 +33,26 @@ export interface FeatureCardProps {
   howTo?: string[];
   /** Limitations or caveats */
   limitations?: string[];
+  /** Links to source code in the repository */
+  sourceLinks?: SourceLink[];
 }
 
-const STATUS_CONFIG: Record<FeatureStatus, { label: string; bg: string; color: string }> = {
-  working: { label: 'Working', bg: '#22C55E20', color: '#22C55E' },
-  beta: { label: 'Beta', bg: '#EAB30820', color: '#EAB308' },
-  'coming-soon': { label: 'Coming Soon', bg: '#6366F120', color: '#6366F1' },
+const REPO_BASE = 'https://github.com/InfamousVague/Umbra/blob/main';
+
+// Status colors are resolved dynamically in the component using theme tokens.
+// This maps each status to the theme token keys used.
+const STATUS_CONFIG_KEYS: Record<FeatureStatus, { label: string; tokenKey: 'success' | 'warning' | 'info' }> = {
+  working: { label: 'Working', tokenKey: 'success' },
+  beta: { label: 'Beta', tokenKey: 'warning' },
+  'coming-soon': { label: 'Coming Soon', tokenKey: 'info' },
 };
+
+function openLink(path: string) {
+  const url = `${REPO_BASE}/${path}`;
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    window.open(url, '_blank');
+  }
+}
 
 export function FeatureCard({
   title,
@@ -40,19 +61,23 @@ export function FeatureCard({
   icon,
   howTo,
   limitations,
+  sourceLinks,
 }: FeatureCardProps) {
   const { theme, mode } = useTheme();
   const tc = theme.colors;
   const isDark = mode === 'dark';
-  const statusCfg = STATUS_CONFIG[status];
+  const statusCfg = STATUS_CONFIG_KEYS[status];
+  const statusColor = tc.status[statusCfg.tokenKey];
+  const statusSurfaceKey = `${statusCfg.tokenKey}Surface` as keyof typeof tc.status;
+  const statusBg = tc.status[statusSurfaceKey] ?? `${statusColor}20`;
 
   const styles = React.useMemo(
     () => ({
       container: {
         borderRadius: 10,
         borderWidth: 1,
-        borderColor: isDark ? '#27272A' : tc.border.subtle,
-        backgroundColor: isDark ? '#09090B' : tc.background.canvas,
+        borderColor: tc.border.subtle,
+        backgroundColor: tc.background.sunken,
         padding: 14,
         gap: 10,
       } as ViewStyle,
@@ -76,12 +101,12 @@ export function FeatureCard({
         paddingHorizontal: 8,
         paddingVertical: 2,
         borderRadius: 6,
-        backgroundColor: statusCfg.bg,
+        backgroundColor: statusBg,
       } as ViewStyle,
       badgeText: {
         fontSize: 11,
         fontWeight: '600' as const,
-        color: statusCfg.color,
+        color: statusColor,
       } as TextStyle,
       description: {
         fontSize: 13,
@@ -104,12 +129,35 @@ export function FeatureCard({
       } as TextStyle,
       limitation: {
         fontSize: 12,
-        color: '#F59E0B',
+        color: tc.status.warning,
         paddingLeft: 8,
         lineHeight: 18,
       } as TextStyle,
+      sourceRow: {
+        flexDirection: 'row' as const,
+        flexWrap: 'wrap' as const,
+        alignItems: 'center' as const,
+        gap: 6,
+        marginTop: 2,
+      } as ViewStyle,
+      sourceChip: {
+        flexDirection: 'row' as const,
+        alignItems: 'center' as const,
+        gap: 4,
+        paddingHorizontal: 8,
+        paddingVertical: 3,
+        borderRadius: 6,
+        backgroundColor: tc.background.sunken,
+        borderWidth: 1,
+        borderColor: tc.border.subtle,
+      } as ViewStyle,
+      sourceLabel: {
+        fontSize: 11,
+        color: tc.status.info,
+        fontFamily: 'monospace',
+      } as TextStyle,
     }),
-    [statusCfg, tc, isDark]
+    [statusColor, statusBg, tc, isDark]
   );
 
   return (
@@ -144,6 +192,25 @@ export function FeatureCard({
             <Text key={i} style={styles.limitation}>
               {'\u26A0'} {lim}
             </Text>
+          ))}
+        </View>
+      )}
+
+      {sourceLinks && sourceLinks.length > 0 && (
+        <View style={styles.sourceRow}>
+          <ExternalLinkIcon size={10} color={tc.text.muted} />
+          {sourceLinks.map((link, i) => (
+            <Pressable
+              key={i}
+              onPress={() => openLink(link.path)}
+              style={({ pressed }) => [
+                styles.sourceChip,
+                pressed && { opacity: 0.7 },
+              ]}
+              accessibilityLabel={`View source: ${link.label}`}
+            >
+              <Text style={styles.sourceLabel}>{link.label}</Text>
+            </Pressable>
           ))}
         </View>
       )}

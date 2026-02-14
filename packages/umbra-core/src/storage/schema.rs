@@ -38,7 +38,7 @@
 //! ```
 
 /// Current schema version
-pub const SCHEMA_VERSION: i32 = 3;
+pub const SCHEMA_VERSION: i32 = 4;
 
 /// SQL to create all tables
 pub const CREATE_TABLES: &str = r#"
@@ -348,8 +348,37 @@ CREATE INDEX IF NOT EXISTS idx_group_invites_group ON group_invites(group_id);
 UPDATE schema_version SET version = 3;
 "#;
 
+/// Migration SQL from schema version 3 → 4
+///
+/// Adds plugin KV storage and plugin bundle storage tables
+/// for the Umbra plugin/extension system.
+pub const MIGRATE_V3_TO_V4: &str = r#"
+-- Plugin key-value storage (namespaced per plugin)
+CREATE TABLE IF NOT EXISTS plugin_kv (
+    plugin_id TEXT NOT NULL,
+    key TEXT NOT NULL,
+    value TEXT NOT NULL,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (plugin_id, key)
+);
+CREATE INDEX IF NOT EXISTS idx_plugin_kv_plugin ON plugin_kv(plugin_id);
+
+-- Plugin bundle storage (for web platform; desktop uses filesystem)
+CREATE TABLE IF NOT EXISTS plugin_bundles (
+    plugin_id TEXT PRIMARY KEY,
+    manifest TEXT NOT NULL,
+    bundle TEXT NOT NULL,
+    installed_at INTEGER NOT NULL
+);
+
+-- Update schema version
+UPDATE schema_version SET version = 4;
+"#;
+
 /// SQL to drop all tables (for testing/reset)
 pub const DROP_TABLES: &str = r#"
+DROP TABLE IF EXISTS plugin_bundles;
+DROP TABLE IF EXISTS plugin_kv;
 DROP TABLE IF EXISTS settings;
 DROP TABLE IF EXISTS blocked_users;
 DROP TABLE IF EXISTS friend_requests;

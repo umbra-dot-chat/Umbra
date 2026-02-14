@@ -134,6 +134,11 @@ impl Database {
                     conn.execute_batch(schema::MIGRATE_V2_TO_V3)
                         .map_err(|e| Error::DatabaseError(format!("Migration v2→v3 failed: {}", e)))?;
                 }
+                if v < 4 {
+                    tracing::info!("Running migration v3 → v4 (plugin KV, plugin bundles)");
+                    conn.execute_batch(schema::MIGRATE_V3_TO_V4)
+                        .map_err(|e| Error::DatabaseError(format!("Migration v3→v4 failed: {}", e)))?;
+                }
 
                 tracing::info!("All migrations complete (now at version {})", schema::SCHEMA_VERSION);
             }
@@ -1293,6 +1298,156 @@ impl Database {
 
         Ok(rows > 0)
     }
+
+    // ── Plugin KV Storage ─────────────────────────────────────────────────
+
+    /// Get a plugin KV value
+    pub fn plugin_kv_get(&self, plugin_id: &str, key: &str) -> Result<Option<String>> {
+        let conn = self.conn.lock();
+        let result = conn.query_row(
+            "SELECT value FROM plugin_kv WHERE plugin_id = ? AND key = ?",
+            params![plugin_id, key],
+            |row| row.get(0),
+        );
+        match result {
+            Ok(value) => Ok(Some(value)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(Error::DatabaseError(format!("Failed to get plugin KV: {}", e))),
+        }
+    }
+
+    /// Set a plugin KV value (upsert)
+    pub fn plugin_kv_set(&self, plugin_id: &str, key: &str, value: &str) -> Result<()> {
+        let conn = self.conn.lock();
+        let now = crate::time::now_timestamp();
+        conn.execute(
+            "INSERT OR REPLACE INTO plugin_kv (plugin_id, key, value, updated_at) VALUES (?, ?, ?, ?)",
+            params![plugin_id, key, value, now],
+        )
+        .map_err(|e| Error::DatabaseError(format!("Failed to set plugin KV: {}", e)))?;
+        Ok(())
+    }
+
+    /// Delete a plugin KV entry
+    pub fn plugin_kv_delete(&self, plugin_id: &str, key: &str) -> Result<bool> {
+        let conn = self.conn.lock();
+        let rows = conn
+            .execute(
+                "DELETE FROM plugin_kv WHERE plugin_id = ? AND key = ?",
+                params![plugin_id, key],
+            )
+            .map_err(|e| Error::DatabaseError(format!("Failed to delete plugin KV: {}", e)))?;
+        Ok(rows > 0)
+    }
+
+    /// List plugin KV keys (optionally filtered by prefix)
+    pub fn plugin_kv_list(&self, plugin_id: &str, prefix: &str) -> Result<Vec<String>> {
+        let conn = self.conn.lock();
+        if prefix.is_empty() {
+            let mut stmt = conn
+                .prepare("SELECT key FROM plugin_kv WHERE plugin_id = ? ORDER BY key")
+                .map_err(|e| Error::DatabaseError(format!("Failed to prepare query: {}", e)))?;
+            let rows = stmt
+                .query_map(params![plugin_id], |row| row.get(0))
+                .map_err(|e| Error::DatabaseError(format!("Failed to query plugin KV keys: {}", e)))?;
+            let mut keys = Vec::new();
+            for row in rows {
+                keys.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?);
+            }
+            Ok(keys)
+        } else {
+            let like_pattern = format!("{}%", prefix);
+            let mut stmt = conn
+                .prepare("SELECT key FROM plugin_kv WHERE plugin_id = ? AND key LIKE ? ORDER BY key")
+                .map_err(|e| Error::DatabaseError(format!("Failed to prepare query: {}", e)))?;
+            let rows = stmt
+                .query_map(params![plugin_id, like_pattern], |row| row.get(0))
+                .map_err(|e| Error::DatabaseError(format!("Failed to query plugin KV keys: {}", e)))?;
+            let mut keys = Vec::new();
+            for row in rows {
+                keys.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?);
+            }
+            Ok(keys)
+        }
+    }
+
+    /// Delete all KV entries for a plugin
+    pub fn plugin_kv_delete_all(&self, plugin_id: &str) -> Result<usize> {
+        let conn = self.conn.lock();
+        let rows = conn
+            .execute("DELETE FROM plugin_kv WHERE plugin_id = ?", params![plugin_id])
+            .map_err(|e| Error::DatabaseError(format!("Failed to delete plugin KV: {}", e)))?;
+        Ok(rows)
+    }
+
+    // ── Plugin Bundle Storage ─────────────────────────────────────────────
+
+    /// Save a plugin bundle (upsert)
+    pub fn plugin_bundle_save(&self, plugin_id: &str, manifest: &str, bundle: &str) -> Result<()> {
+        let conn = self.conn.lock();
+        let now = crate::time::now_timestamp();
+        conn.execute(
+            "INSERT OR REPLACE INTO plugin_bundles (plugin_id, manifest, bundle, installed_at) VALUES (?, ?, ?, ?)",
+            params![plugin_id, manifest, bundle, now],
+        )
+        .map_err(|e| Error::DatabaseError(format!("Failed to save plugin bundle: {}", e)))?;
+        Ok(())
+    }
+
+    /// Load a plugin bundle by ID
+    pub fn plugin_bundle_load(&self, plugin_id: &str) -> Result<Option<PluginBundleRecord>> {
+        let conn = self.conn.lock();
+        let result = conn.query_row(
+            "SELECT plugin_id, manifest, bundle, installed_at FROM plugin_bundles WHERE plugin_id = ?",
+            params![plugin_id],
+            |row| {
+                Ok(PluginBundleRecord {
+                    plugin_id: row.get(0)?,
+                    manifest: row.get(1)?,
+                    bundle: row.get(2)?,
+                    installed_at: row.get(3)?,
+                })
+            },
+        );
+        match result {
+            Ok(record) => Ok(Some(record)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(Error::DatabaseError(format!("Failed to load plugin bundle: {}", e))),
+        }
+    }
+
+    /// Delete a plugin bundle and its KV data
+    pub fn plugin_bundle_delete(&self, plugin_id: &str) -> Result<bool> {
+        let _ = self.plugin_kv_delete_all(plugin_id);
+        let conn = self.conn.lock();
+        let rows = conn
+            .execute("DELETE FROM plugin_bundles WHERE plugin_id = ?", params![plugin_id])
+            .map_err(|e| Error::DatabaseError(format!("Failed to delete plugin bundle: {}", e)))?;
+        Ok(rows > 0)
+    }
+
+    /// List all installed plugin bundles (manifests only, no bundle code)
+    pub fn plugin_bundle_list(&self) -> Result<Vec<PluginBundleRecord>> {
+        let conn = self.conn.lock();
+        let mut stmt = conn
+            .prepare("SELECT plugin_id, manifest, '', installed_at FROM plugin_bundles ORDER BY installed_at DESC")
+            .map_err(|e| Error::DatabaseError(format!("Failed to prepare query: {}", e)))?;
+        let rows = stmt
+            .query_map([], |row| {
+                Ok(PluginBundleRecord {
+                    plugin_id: row.get(0)?,
+                    manifest: row.get(1)?,
+                    bundle: row.get(2)?,
+                    installed_at: row.get(3)?,
+                })
+            })
+            .map_err(|e| Error::DatabaseError(format!("Failed to list plugin bundles: {}", e)))?;
+        let mut bundles = Vec::new();
+        for row in rows {
+            bundles.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?);
+        }
+        Ok(bundles)
+    }
 }
 
 // ============================================================================
@@ -1472,6 +1627,19 @@ pub struct FriendRequestRecord {
     pub created_at: i64,
     /// Status
     pub status: String,
+}
+
+/// A plugin bundle record from the database
+#[derive(Debug, Clone)]
+pub struct PluginBundleRecord {
+    /// Plugin ID (reverse-domain, e.g. "com.example.translator")
+    pub plugin_id: String,
+    /// JSON-encoded plugin manifest
+    pub manifest: String,
+    /// JS bundle source code
+    pub bundle: String,
+    /// When the plugin was installed
+    pub installed_at: i64,
 }
 
 // ============================================================================

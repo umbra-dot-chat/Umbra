@@ -135,6 +135,18 @@ export interface UmbraWasmModule {
   // Crypto
   umbra_wasm_crypto_sign(data: Uint8Array): Uint8Array;
   umbra_wasm_crypto_verify(public_key_hex: string, data: Uint8Array, signature: Uint8Array): boolean;
+
+  // Plugin Storage — KV
+  umbra_wasm_plugin_kv_get(plugin_id: string, key: string): string;
+  umbra_wasm_plugin_kv_set(plugin_id: string, key: string, value: string): string;
+  umbra_wasm_plugin_kv_delete(plugin_id: string, key: string): string;
+  umbra_wasm_plugin_kv_list(plugin_id: string, prefix: string): string;
+
+  // Plugin Storage — Bundles
+  umbra_wasm_plugin_bundle_save(plugin_id: string, manifest: string, bundle: string): string;
+  umbra_wasm_plugin_bundle_load(plugin_id: string): string;
+  umbra_wasm_plugin_bundle_delete(plugin_id: string): string;
+  umbra_wasm_plugin_bundle_list(): string;
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -527,5 +539,99 @@ function buildModule(wasmPkg: any): UmbraWasmModule {
     umbra_wasm_crypto_sign: (data: Uint8Array) => wasmPkg.umbra_wasm_crypto_sign(data),
     umbra_wasm_crypto_verify: (pk: string, data: Uint8Array, sig: Uint8Array) =>
       wasmPkg.umbra_wasm_crypto_verify(pk, data, sig),
+
+    // ── Plugin KV Storage (JS stub — persists via localStorage) ──────
+    umbra_wasm_plugin_kv_get: (pluginId: string, key: string): string => {
+      try {
+        const storeKey = `plugin_kv:${pluginId}:${key}`;
+        const value = localStorage.getItem(storeKey);
+        return JSON.stringify(value !== null ? { value } : { value: null });
+      } catch { return JSON.stringify({ value: null }); }
+    },
+    umbra_wasm_plugin_kv_set: (pluginId: string, key: string, value: string): string => {
+      try {
+        const storeKey = `plugin_kv:${pluginId}:${key}`;
+        localStorage.setItem(storeKey, value);
+        return JSON.stringify({ ok: true });
+      } catch (e: any) { return JSON.stringify({ error: e.message }); }
+    },
+    umbra_wasm_plugin_kv_delete: (pluginId: string, key: string): string => {
+      try {
+        const storeKey = `plugin_kv:${pluginId}:${key}`;
+        localStorage.removeItem(storeKey);
+        return JSON.stringify({ ok: true });
+      } catch (e: any) { return JSON.stringify({ error: e.message }); }
+    },
+    umbra_wasm_plugin_kv_list: (pluginId: string, prefix: string): string => {
+      try {
+        const storePrefix = `plugin_kv:${pluginId}:${prefix}`;
+        const keys: string[] = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && k.startsWith(storePrefix)) {
+            keys.push(k.replace(`plugin_kv:${pluginId}:`, ''));
+          }
+        }
+        return JSON.stringify({ keys });
+      } catch { return JSON.stringify({ keys: [] }); }
+    },
+
+    // ── Plugin Bundle Storage (JS stub — persists via localStorage) ──
+    umbra_wasm_plugin_bundle_save: (pluginId: string, manifest: string, bundle: string): string => {
+      try {
+        const entry = {
+          plugin_id: pluginId,
+          manifest,
+          bundle,
+          installed_at: new Date().toISOString(),
+        };
+        localStorage.setItem(`plugin_bundle:${pluginId}`, JSON.stringify(entry));
+        // Also update the bundle index
+        const indexKey = 'plugin_bundle_index';
+        const index: string[] = JSON.parse(localStorage.getItem(indexKey) ?? '[]');
+        if (!index.includes(pluginId)) {
+          index.push(pluginId);
+          localStorage.setItem(indexKey, JSON.stringify(index));
+        }
+        return JSON.stringify({ ok: true });
+      } catch (e: any) { return JSON.stringify({ error: e.message }); }
+    },
+    umbra_wasm_plugin_bundle_load: (pluginId: string): string => {
+      try {
+        const raw = localStorage.getItem(`plugin_bundle:${pluginId}`);
+        if (!raw) return JSON.stringify({ error: 'not_found' });
+        return raw;
+      } catch (e: any) { return JSON.stringify({ error: e.message }); }
+    },
+    umbra_wasm_plugin_bundle_delete: (pluginId: string): string => {
+      try {
+        localStorage.removeItem(`plugin_bundle:${pluginId}`);
+        // Update index
+        const indexKey = 'plugin_bundle_index';
+        const index: string[] = JSON.parse(localStorage.getItem(indexKey) ?? '[]');
+        localStorage.setItem(indexKey, JSON.stringify(index.filter(id => id !== pluginId)));
+        // Clean up KV entries for this plugin
+        const kvPrefix = `plugin_kv:${pluginId}:`;
+        const toRemove: string[] = [];
+        for (let i = 0; i < localStorage.length; i++) {
+          const k = localStorage.key(i);
+          if (k && k.startsWith(kvPrefix)) toRemove.push(k);
+        }
+        for (const k of toRemove) localStorage.removeItem(k);
+        return JSON.stringify({ ok: true });
+      } catch (e: any) { return JSON.stringify({ error: e.message }); }
+    },
+    umbra_wasm_plugin_bundle_list: (): string => {
+      try {
+        const indexKey = 'plugin_bundle_index';
+        const index: string[] = JSON.parse(localStorage.getItem(indexKey) ?? '[]');
+        const plugins = index.map(id => {
+          const raw = localStorage.getItem(`plugin_bundle:${id}`);
+          if (!raw) return null;
+          try { return JSON.parse(raw); } catch { return null; }
+        }).filter(Boolean);
+        return JSON.stringify({ plugins });
+      } catch { return JSON.stringify({ plugins: [] }); }
+    },
   };
 }

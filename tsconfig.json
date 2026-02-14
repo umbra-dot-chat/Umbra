@@ -6,6 +6,12 @@
       "@/*": [
         "./*"
       ],
+      "@umbra/plugin-sdk": [
+        "./packages/umbra-plugin-sdk/src/index"
+      ],
+      "@umbra/plugin-runtime": [
+        "./packages/umbra-plugin-runtime/src/index"
+      ],
       "@umbra/service": [
         "./packages/umbra-service/src/index"
       ],

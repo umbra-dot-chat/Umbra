@@ -3547,3 +3547,151 @@ pub fn umbra_wasm_crypto_verify(
         .map(|_| true)
         .or(Ok(false))
 }
+
+// ============================================================================
+// PLUGIN STORAGE — KV & Bundles
+// ============================================================================
+
+/// Get a value from the plugin KV store
+#[wasm_bindgen]
+pub fn umbra_wasm_plugin_kv_get(plugin_id: &str, key: &str) -> Result<JsValue, JsValue> {
+    let state = get_state()?;
+    let state = state.read();
+    let database = state.database.as_ref()
+        .ok_or_else(|| JsValue::from_str("Database not initialized"))?;
+
+    match database.plugin_kv_get(plugin_id, key)
+        .map_err(|e| JsValue::from_str(&e.to_string()))? {
+        Some(value) => {
+            let json = serde_json::json!({ "value": value });
+            Ok(JsValue::from_str(&json.to_string()))
+        }
+        None => {
+            let json = serde_json::json!({ "value": null });
+            Ok(JsValue::from_str(&json.to_string()))
+        }
+    }
+}
+
+/// Set a value in the plugin KV store
+#[wasm_bindgen]
+pub fn umbra_wasm_plugin_kv_set(plugin_id: &str, key: &str, value: &str) -> Result<JsValue, JsValue> {
+    let state = get_state()?;
+    let state = state.read();
+    let database = state.database.as_ref()
+        .ok_or_else(|| JsValue::from_str("Database not initialized"))?;
+
+    database.plugin_kv_set(plugin_id, key, value)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    Ok(JsValue::from_str(r#"{"ok":true}"#))
+}
+
+/// Delete a value from the plugin KV store
+#[wasm_bindgen]
+pub fn umbra_wasm_plugin_kv_delete(plugin_id: &str, key: &str) -> Result<JsValue, JsValue> {
+    let state = get_state()?;
+    let state = state.read();
+    let database = state.database.as_ref()
+        .ok_or_else(|| JsValue::from_str("Database not initialized"))?;
+
+    let deleted = database.plugin_kv_delete(plugin_id, key)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let json = serde_json::json!({ "deleted": deleted });
+    Ok(JsValue::from_str(&json.to_string()))
+}
+
+/// List keys in the plugin KV store (optionally filtered by prefix)
+#[wasm_bindgen]
+pub fn umbra_wasm_plugin_kv_list(plugin_id: &str, prefix: &str) -> Result<JsValue, JsValue> {
+    let state = get_state()?;
+    let state = state.read();
+    let database = state.database.as_ref()
+        .ok_or_else(|| JsValue::from_str("Database not initialized"))?;
+
+    let keys = database.plugin_kv_list(plugin_id, prefix)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let json = serde_json::json!({ "keys": keys });
+    Ok(JsValue::from_str(&json.to_string()))
+}
+
+/// Save a plugin bundle to local storage
+#[wasm_bindgen]
+pub fn umbra_wasm_plugin_bundle_save(plugin_id: &str, manifest: &str, bundle: &str) -> Result<JsValue, JsValue> {
+    let state = get_state()?;
+    let state = state.read();
+    let database = state.database.as_ref()
+        .ok_or_else(|| JsValue::from_str("Database not initialized"))?;
+
+    database.plugin_bundle_save(plugin_id, manifest, bundle)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let json = serde_json::json!({ "ok": true, "plugin_id": plugin_id });
+    Ok(JsValue::from_str(&json.to_string()))
+}
+
+/// Load a plugin bundle from local storage
+#[wasm_bindgen]
+pub fn umbra_wasm_plugin_bundle_load(plugin_id: &str) -> Result<JsValue, JsValue> {
+    let state = get_state()?;
+    let state = state.read();
+    let database = state.database.as_ref()
+        .ok_or_else(|| JsValue::from_str("Database not initialized"))?;
+
+    match database.plugin_bundle_load(plugin_id)
+        .map_err(|e| JsValue::from_str(&e.to_string()))? {
+        Some(record) => {
+            let json = serde_json::json!({
+                "plugin_id": record.plugin_id,
+                "manifest": record.manifest,
+                "bundle": record.bundle,
+                "installed_at": record.installed_at,
+            });
+            Ok(JsValue::from_str(&json.to_string()))
+        }
+        None => {
+            let json = serde_json::json!({ "error": "not_found" });
+            Ok(JsValue::from_str(&json.to_string()))
+        }
+    }
+}
+
+/// Delete a plugin bundle from local storage
+#[wasm_bindgen]
+pub fn umbra_wasm_plugin_bundle_delete(plugin_id: &str) -> Result<JsValue, JsValue> {
+    let state = get_state()?;
+    let state = state.read();
+    let database = state.database.as_ref()
+        .ok_or_else(|| JsValue::from_str("Database not initialized"))?;
+
+    let deleted = database.plugin_bundle_delete(plugin_id)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let json = serde_json::json!({ "deleted": deleted });
+    Ok(JsValue::from_str(&json.to_string()))
+}
+
+/// List all installed plugin bundles (manifests only)
+#[wasm_bindgen]
+pub fn umbra_wasm_plugin_bundle_list() -> Result<JsValue, JsValue> {
+    let state = get_state()?;
+    let state = state.read();
+    let database = state.database.as_ref()
+        .ok_or_else(|| JsValue::from_str("Database not initialized"))?;
+
+    let bundles = database.plugin_bundle_list()
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let plugins: Vec<serde_json::Value> = bundles.iter().map(|b| {
+        serde_json::json!({
+            "plugin_id": b.plugin_id,
+            "manifest": b.manifest,
+            "installed_at": b.installed_at,
+        })
+    }).collect();
+
+    let json = serde_json::json!({ "plugins": plugins });
+    Ok(JsValue::from_str(&json.to_string()))
+}

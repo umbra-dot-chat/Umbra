@@ -251,14 +251,14 @@ export function CreateGroupDialog({ open, onClose, onCreated }: CreateGroupDialo
         </VStack>
 
         {validationError && (
-          <Text style={{ fontSize: 12, color: '#EF4444', marginTop: -8 }}>
+          <Text style={{ fontSize: 12, color: theme.colors.status.danger, marginTop: -8 }}>
             {validationError}
           </Text>
         )}
 
         {successMessage && (
-          <View style={{ backgroundColor: '#16A34A20', borderRadius: 8, padding: 10, marginTop: -8, alignItems: 'center' }}>
-            <Text style={{ fontSize: 13, fontWeight: '600', color: '#16A34A' }}>
+          <View style={{ backgroundColor: theme.colors.status.successSurface, borderRadius: 8, padding: 10, marginTop: -8, alignItems: 'center' }}>
+            <Text style={{ fontSize: 13, fontWeight: '600', color: theme.colors.status.success }}>
               {successMessage}
             </Text>
           </View>
