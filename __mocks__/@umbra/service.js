@@ -280,6 +280,10 @@ const mockInstance = {
   joinCallRoom: jest.fn(),
   leaveCallRoom: jest.fn(),
   sendCallRoomSignal: jest.fn(),
+  storeCallRecord: jest.fn(() => Promise.resolve({ id: 'call-1', startedAt: Date.now() })),
+  endCallRecord: jest.fn(() => Promise.resolve({ id: 'call-1', endedAt: Date.now(), durationMs: 60000 })),
+  getCallHistory: jest.fn(() => Promise.resolve([])),
+  getAllCallHistory: jest.fn(() => Promise.resolve([])),
 };
 
 class UmbraService {

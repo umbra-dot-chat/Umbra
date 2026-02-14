@@ -139,6 +139,11 @@ impl Database {
                     conn.execute_batch(schema::MIGRATE_V3_TO_V4)
                         .map_err(|e| Error::DatabaseError(format!("Migration v3→v4 failed: {}", e)))?;
                 }
+                if v < 5 {
+                    tracing::info!("Running migration v4 → v5 (call history)");
+                    conn.execute_batch(schema::MIGRATE_V4_TO_V5)
+                        .map_err(|e| Error::DatabaseError(format!("Migration v4→v5 failed: {}", e)))?;
+                }
 
                 tracing::info!("All migrations complete (now at version {})", schema::SCHEMA_VERSION);
             }
@@ -1448,6 +1453,144 @@ impl Database {
         }
         Ok(bundles)
     }
+
+    // ========================================================================
+    // CALL HISTORY OPERATIONS
+    // ========================================================================
+
+    /// Store a new call record
+    pub fn store_call_record(
+        &self,
+        id: &str,
+        conversation_id: &str,
+        call_type: &str,
+        direction: &str,
+        status: &str,
+        participants: &str,
+        started_at: i64,
+    ) -> Result<()> {
+        let conn = self.conn.lock();
+        let now = crate::time::now_timestamp_millis();
+
+        conn.execute(
+            "INSERT INTO call_history (id, conversation_id, call_type, direction, status, participants, started_at, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            params![
+                id,
+                conversation_id,
+                call_type,
+                direction,
+                status,
+                participants,
+                started_at,
+                now,
+            ],
+        )
+        .map_err(|e| Error::DatabaseError(format!("Failed to store call record: {}", e)))?;
+
+        Ok(())
+    }
+
+    /// End a call record by updating its status, ended_at, and duration_ms
+    pub fn end_call_record(
+        &self,
+        id: &str,
+        status: &str,
+        ended_at: i64,
+        duration_ms: i64,
+    ) -> Result<bool> {
+        let conn = self.conn.lock();
+
+        let rows = conn
+            .execute(
+                "UPDATE call_history SET status = ?, ended_at = ?, duration_ms = ? WHERE id = ?",
+                params![status, ended_at, duration_ms, id],
+            )
+            .map_err(|e| Error::DatabaseError(format!("Failed to end call record: {}", e)))?;
+
+        Ok(rows > 0)
+    }
+
+    /// Get call history for a specific conversation
+    pub fn get_call_history(
+        &self,
+        conversation_id: &str,
+        limit: usize,
+        offset: usize,
+    ) -> Result<Vec<CallHistoryRecord>> {
+        let conn = self.conn.lock();
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, conversation_id, call_type, direction, status, participants, started_at, ended_at, duration_ms, created_at
+                 FROM call_history WHERE conversation_id = ?
+                 ORDER BY started_at DESC LIMIT ? OFFSET ?",
+            )
+            .map_err(|e| Error::DatabaseError(format!("Failed to prepare query: {}", e)))?;
+
+        let rows = stmt
+            .query_map(params![conversation_id, limit as i64, offset as i64], |row| {
+                Ok(CallHistoryRecord {
+                    id: row.get(0)?,
+                    conversation_id: row.get(1)?,
+                    call_type: row.get(2)?,
+                    direction: row.get(3)?,
+                    status: row.get(4)?,
+                    participants: row.get(5)?,
+                    started_at: row.get(6)?,
+                    ended_at: row.get(7)?,
+                    duration_ms: row.get(8)?,
+                    created_at: row.get(9)?,
+                })
+            })
+            .map_err(|e| Error::DatabaseError(format!("Failed to query call history: {}", e)))?;
+
+        let mut records = Vec::new();
+        for row in rows {
+            records.push(row.map_err(|e| Error::DatabaseError(format!("Failed to read call record: {}", e)))?);
+        }
+
+        Ok(records)
+    }
+
+    /// Get all call history across all conversations
+    pub fn get_all_call_history(
+        &self,
+        limit: usize,
+        offset: usize,
+    ) -> Result<Vec<CallHistoryRecord>> {
+        let conn = self.conn.lock();
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, conversation_id, call_type, direction, status, participants, started_at, ended_at, duration_ms, created_at
+                 FROM call_history
+                 ORDER BY started_at DESC LIMIT ? OFFSET ?",
+            )
+            .map_err(|e| Error::DatabaseError(format!("Failed to prepare query: {}", e)))?;
+
+        let rows = stmt
+            .query_map(params![limit as i64, offset as i64], |row| {
+                Ok(CallHistoryRecord {
+                    id: row.get(0)?,
+                    conversation_id: row.get(1)?,
+                    call_type: row.get(2)?,
+                    direction: row.get(3)?,
+                    status: row.get(4)?,
+                    participants: row.get(5)?,
+                    started_at: row.get(6)?,
+                    ended_at: row.get(7)?,
+                    duration_ms: row.get(8)?,
+                    created_at: row.get(9)?,
+                })
+            })
+            .map_err(|e| Error::DatabaseError(format!("Failed to query all call history: {}", e)))?;
+
+        let mut records = Vec::new();
+        for row in rows {
+            records.push(row.map_err(|e| Error::DatabaseError(format!("Failed to read call record: {}", e)))?);
+        }
+
+        Ok(records)
+    }
 }
 
 // ============================================================================
@@ -1642,6 +1785,31 @@ pub struct PluginBundleRecord {
     pub installed_at: i64,
 }
 
+/// A call history record from the database
+#[derive(Debug, Clone)]
+pub struct CallHistoryRecord {
+    /// Call ID
+    pub id: String,
+    /// Conversation ID
+    pub conversation_id: String,
+    /// Call type: "voice" or "video"
+    pub call_type: String,
+    /// Direction: "incoming" or "outgoing"
+    pub direction: String,
+    /// Status: "active", "completed", "missed", "declined", "cancelled"
+    pub status: String,
+    /// JSON array of participant DIDs
+    pub participants: String,
+    /// When the call started (Unix timestamp ms)
+    pub started_at: i64,
+    /// When the call ended (Unix timestamp ms)
+    pub ended_at: Option<i64>,
+    /// Call duration in milliseconds
+    pub duration_ms: Option<i64>,
+    /// When the record was created (Unix timestamp ms)
+    pub created_at: i64,
+}
+
 // ============================================================================
 // TESTS
 // ============================================================================
@@ -1796,5 +1964,144 @@ mod tests {
         let unblocked = db.unblock_user("did:key:z6MkBad").unwrap();
         assert!(unblocked);
         assert!(!db.is_blocked("did:key:z6MkBad").unwrap());
+    }
+
+    #[tokio::test]
+    async fn test_store_and_get_call_history() {
+        let db = Database::open(None).await.unwrap();
+
+        // Setup: create a friend and conversation
+        let signing_key = [1u8; 32];
+        let encryption_key = [2u8; 32];
+        db.add_friend("did:key:z6MkTest", "Alice", &signing_key, &encryption_key, None)
+            .unwrap();
+        db.create_conversation("conv-1", "did:key:z6MkTest").unwrap();
+
+        // Store a call record
+        db.store_call_record(
+            "call-1",
+            "conv-1",
+            "voice",
+            "outgoing",
+            "active",
+            "[\"did:key:z6MkTest\"]",
+            1000,
+        )
+        .unwrap();
+
+        // Store another call record
+        db.store_call_record(
+            "call-2",
+            "conv-1",
+            "video",
+            "incoming",
+            "active",
+            "[\"did:key:z6MkTest\"]",
+            2000,
+        )
+        .unwrap();
+
+        // Get call history for the conversation
+        let history = db.get_call_history("conv-1", 10, 0).unwrap();
+        assert_eq!(history.len(), 2);
+        // Ordered by started_at DESC
+        assert_eq!(history[0].id, "call-2");
+        assert_eq!(history[1].id, "call-1");
+        assert_eq!(history[0].call_type, "video");
+        assert_eq!(history[1].call_type, "voice");
+        assert_eq!(history[0].direction, "incoming");
+        assert_eq!(history[1].direction, "outgoing");
+        assert_eq!(history[0].status, "active");
+        assert_eq!(history[1].participants, "[\"did:key:z6MkTest\"]");
+    }
+
+    #[tokio::test]
+    async fn test_end_call_record() {
+        let db = Database::open(None).await.unwrap();
+
+        // Setup
+        let signing_key = [1u8; 32];
+        let encryption_key = [2u8; 32];
+        db.add_friend("did:key:z6MkTest", "Alice", &signing_key, &encryption_key, None)
+            .unwrap();
+        db.create_conversation("conv-1", "did:key:z6MkTest").unwrap();
+
+        // Store a call record
+        db.store_call_record(
+            "call-1",
+            "conv-1",
+            "voice",
+            "outgoing",
+            "active",
+            "[]",
+            1000,
+        )
+        .unwrap();
+
+        // End the call
+        let updated = db.end_call_record("call-1", "completed", 6000, 5000).unwrap();
+        assert!(updated);
+
+        // Verify the update
+        let history = db.get_call_history("conv-1", 10, 0).unwrap();
+        assert_eq!(history.len(), 1);
+        assert_eq!(history[0].status, "completed");
+        assert_eq!(history[0].ended_at, Some(6000));
+        assert_eq!(history[0].duration_ms, Some(5000));
+    }
+
+    #[tokio::test]
+    async fn test_end_call_record_not_found() {
+        let db = Database::open(None).await.unwrap();
+
+        // Ending a non-existent call should return false
+        let updated = db.end_call_record("nonexistent", "completed", 6000, 5000).unwrap();
+        assert!(!updated);
+    }
+
+    #[tokio::test]
+    async fn test_get_all_call_history() {
+        let db = Database::open(None).await.unwrap();
+
+        // Setup: two conversations
+        let signing_key = [1u8; 32];
+        let encryption_key = [2u8; 32];
+        db.add_friend("did:key:z6MkAlice", "Alice", &signing_key, &encryption_key, None)
+            .unwrap();
+        db.add_friend("did:key:z6MkBob", "Bob", &signing_key, &encryption_key, None)
+            .unwrap();
+        db.create_conversation("conv-1", "did:key:z6MkAlice").unwrap();
+        db.create_conversation("conv-2", "did:key:z6MkBob").unwrap();
+
+        // Store calls across different conversations
+        db.store_call_record("call-1", "conv-1", "voice", "outgoing", "completed", "[]", 1000)
+            .unwrap();
+        db.store_call_record("call-2", "conv-2", "video", "incoming", "completed", "[]", 2000)
+            .unwrap();
+        db.store_call_record("call-3", "conv-1", "voice", "incoming", "missed", "[]", 3000)
+            .unwrap();
+
+        // Get all call history
+        let all_history = db.get_all_call_history(10, 0).unwrap();
+        assert_eq!(all_history.len(), 3);
+        // Ordered by started_at DESC
+        assert_eq!(all_history[0].id, "call-3");
+        assert_eq!(all_history[1].id, "call-2");
+        assert_eq!(all_history[2].id, "call-1");
+
+        // Test with limit
+        let limited = db.get_all_call_history(2, 0).unwrap();
+        assert_eq!(limited.len(), 2);
+
+        // Test with offset
+        let offset_history = db.get_all_call_history(10, 1).unwrap();
+        assert_eq!(offset_history.len(), 2);
+        assert_eq!(offset_history[0].id, "call-2");
+
+        // Get history for single conversation
+        let conv1_history = db.get_call_history("conv-1", 10, 0).unwrap();
+        assert_eq!(conv1_history.len(), 2);
+        let conv2_history = db.get_call_history("conv-2", 10, 0).unwrap();
+        assert_eq!(conv2_history.len(), 1);
     }
 }

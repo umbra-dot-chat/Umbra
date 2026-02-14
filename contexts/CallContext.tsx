@@ -60,6 +60,18 @@ interface CallContextValue {
   stopScreenShare: () => void;
   /** The screen share stream */
   screenShareStream: MediaStream | null;
+  /** Noise suppression enabled */
+  noiseSuppression: boolean;
+  /** Echo cancellation enabled */
+  echoCancellation: boolean;
+  /** Auto gain control enabled */
+  autoGainControl: boolean;
+  /** Toggle noise suppression */
+  setNoiseSuppression: (enabled: boolean) => void;
+  /** Toggle echo cancellation */
+  setEchoCancellation: (enabled: boolean) => void;
+  /** Toggle auto gain control */
+  setAutoGainControl: (enabled: boolean) => void;
 }
 
 const CallContext = createContext<CallContextValue | null>(null);
@@ -82,6 +94,9 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
   const [callStats, setCallStats] = useState<CallStats | null>(null);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [screenShareStream, setScreenShareStream] = useState<MediaStream | null>(null);
+  const [noiseSuppression, setNoiseSuppressionState] = useState(true);
+  const [echoCancellation, setEchoCancellationState] = useState(true);
+  const [autoGainControl, setAutoGainControlState] = useState(true);
   const callManagerRef = useRef<CallManager | null>(null);
   const ringTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -398,6 +413,59 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     setIsScreenSharing(false);
   }, []);
 
+  // ── Audio Processing ─────────────────────────────────────────────────────
+
+  const reacquireAudioTrack = useCallback(async (constraints: { noiseSuppression: boolean; echoCancellation: boolean; autoGainControl: boolean }) => {
+    const manager = callManagerRef.current;
+    if (!manager) return;
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          noiseSuppression: constraints.noiseSuppression,
+          echoCancellation: constraints.echoCancellation,
+          autoGainControl: constraints.autoGainControl,
+        },
+      });
+      const newTrack = stream.getAudioTracks()[0];
+      if (newTrack) {
+        const pc = (manager as any)._pc as RTCPeerConnection | undefined;
+        if (pc) {
+          const sender = pc.getSenders().find((s) => s.track?.kind === 'audio');
+          if (sender) {
+            await sender.replaceTrack(newTrack);
+          }
+        }
+        // Update the local stream's audio track
+        const localStream = manager.getLocalStream();
+        if (localStream) {
+          const oldTrack = localStream.getAudioTracks()[0];
+          if (oldTrack) {
+            localStream.removeTrack(oldTrack);
+            oldTrack.stop();
+          }
+          localStream.addTrack(newTrack);
+        }
+      }
+    } catch (err) {
+      console.warn('[CallContext] Failed to reacquire audio track:', err);
+    }
+  }, []);
+
+  const setNoiseSuppression = useCallback((enabled: boolean) => {
+    setNoiseSuppressionState(enabled);
+    reacquireAudioTrack({ noiseSuppression: enabled, echoCancellation, autoGainControl });
+  }, [reacquireAudioTrack, echoCancellation, autoGainControl]);
+
+  const setEchoCancellation = useCallback((enabled: boolean) => {
+    setEchoCancellationState(enabled);
+    reacquireAudioTrack({ noiseSuppression, echoCancellation: enabled, autoGainControl });
+  }, [reacquireAudioTrack, noiseSuppression, autoGainControl]);
+
+  const setAutoGainControl = useCallback((enabled: boolean) => {
+    setAutoGainControlState(enabled);
+    reacquireAudioTrack({ noiseSuppression, echoCancellation, autoGainControl: enabled });
+  }, [reacquireAudioTrack, noiseSuppression, echoCancellation]);
+
   // ── Stats Collection ──────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -591,6 +659,12 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     startScreenShare,
     stopScreenShare,
     screenShareStream,
+    noiseSuppression,
+    echoCancellation,
+    autoGainControl,
+    setNoiseSuppression,
+    setEchoCancellation,
+    setAutoGainControl,
   };
 
   return (

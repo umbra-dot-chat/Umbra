@@ -3,7 +3,6 @@ import {
   Avatar, AvatarGroup, Button,
   SearchInput,
   Sidebar, SidebarSection,
-  WispProvider,
   useTheme,
 } from '@coexist/wisp-react-native';
 import { ConversationListItem } from '@coexist/wisp-react-native/src/components/conversation-list-item';
@@ -36,11 +35,7 @@ export interface ChatSidebarProps {
 }
 
 export function ChatSidebar(props: ChatSidebarProps) {
-  return (
-    <WispProvider mode="dark">
-      <ChatSidebarInner {...props} />
-    </WispProvider>
-  );
+  return <ChatSidebarInner {...props} />;
 }
 
 function ChatSidebarInner({

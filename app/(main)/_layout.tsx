@@ -15,7 +15,8 @@ import { CreateGroupDialog } from '@/components/groups/CreateGroupDialog';
 import { NewDmDialog } from '@/components/modals/NewDmDialog';
 import { ProfilePopover } from '@/components/modals/ProfilePopover';
 import { ProfilePopoverProvider, useProfilePopoverContext } from '@/contexts/ProfilePopoverContext';
-import { CallProvider } from '@/contexts/CallContext';
+import { CallProvider, useCallContext } from '@/contexts/CallContext';
+import { CallPipWidget } from '@coexist/wisp-react-native';
 import { CommandPalette } from '@/components/modals/CommandPalette';
 import { PluginMarketplace } from '@/components/modals/PluginMarketplace';
 import { useCommandPalette } from '@/hooks/useCommandPalette';
@@ -54,6 +55,9 @@ function MainLayoutInner() {
 
   // Friend notifications (toast on incoming requests, acceptances)
   useFriendNotifications();
+
+  // Call state for PiP widget
+  const { activeCall, toggleMute, endCall } = useCallContext();
 
   // Build a DID → friend map for efficient lookups
   const friendMap = useMemo(() => {
@@ -246,6 +250,25 @@ function MainLayoutInner() {
         open={marketplaceOpen}
         onClose={() => setMarketplaceOpen(false)}
       />
+
+      {/* PiP widget: show when active call and user is on a different conversation */}
+      {activeCall && activeCall.status === 'connected' && activeCall.conversationId !== activeId && (
+        <CallPipWidget
+          stream={activeCall.remoteStream}
+          callerName={activeCall.remoteDisplayName}
+          connectedAt={activeCall.connectedAt}
+          isMuted={activeCall.isMuted}
+          isCameraOff={activeCall.isCameraOff}
+          onPress={() => {
+            setActiveId(activeCall.conversationId);
+            if (pathname !== '/') {
+              router.push('/');
+            }
+          }}
+          onEndCall={() => endCall()}
+          onToggleMute={toggleMute}
+        />
+      )}
     </View>
   );
 }

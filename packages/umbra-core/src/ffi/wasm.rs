@@ -3695,3 +3695,169 @@ pub fn umbra_wasm_plugin_bundle_list() -> Result<JsValue, JsValue> {
     let json = serde_json::json!({ "plugins": plugins });
     Ok(JsValue::from_str(&json.to_string()))
 }
+
+// ============================================================================
+// CALL HISTORY
+// ============================================================================
+
+/// Store a new call record.
+///
+/// Takes JSON: { "id": "...", "conversation_id": "...", "call_type": "voice|video",
+///               "direction": "incoming|outgoing", "participants": "[\"did1\",\"did2\"]" }
+///
+/// Creates a record with started_at = now (ms), status = "active".
+/// Returns JSON: { "id": "...", "started_at": ... }
+#[wasm_bindgen]
+pub fn umbra_wasm_calls_store(json: &str) -> Result<JsValue, JsValue> {
+    let state = get_state()?;
+    let state = state.read();
+
+    let database = state.database.as_ref()
+        .ok_or_else(|| JsValue::from_str("Database not initialized"))?;
+
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let id = data["id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing id"))?;
+    let conversation_id = data["conversation_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing conversation_id"))?;
+    let call_type = data["call_type"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing call_type"))?;
+    let direction = data["direction"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing direction"))?;
+    let participants = data["participants"].as_str().unwrap_or("[]");
+
+    let started_at = crate::time::now_timestamp_millis();
+
+    database.store_call_record(id, conversation_id, call_type, direction, "active", participants, started_at)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let result = serde_json::json!({
+        "id": id,
+        "started_at": started_at,
+    });
+    Ok(JsValue::from_str(&serde_json::to_string(&result).unwrap_or_default()))
+}
+
+/// End a call record.
+///
+/// Takes JSON: { "id": "...", "status": "completed|missed|declined|cancelled" }
+///
+/// Calculates duration_ms from started_at to now.
+/// Returns JSON: { "id": "...", "ended_at": ..., "duration_ms": ... }
+#[wasm_bindgen]
+pub fn umbra_wasm_calls_end(json: &str) -> Result<JsValue, JsValue> {
+    let state = get_state()?;
+    let state = state.read();
+
+    let database = state.database.as_ref()
+        .ok_or_else(|| JsValue::from_str("Database not initialized"))?;
+
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let id = data["id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing id"))?;
+    let status = data["status"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing status"))?;
+
+    // Get the call record to compute duration
+    let calls = database.get_all_call_history(1000, 0)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    let call = calls.iter().find(|c| c.id == id)
+        .ok_or_else(|| JsValue::from_str("Call record not found"))?;
+
+    let ended_at = crate::time::now_timestamp_millis();
+    let duration_ms = ended_at - call.started_at;
+
+    database.end_call_record(id, status, ended_at, duration_ms)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let result = serde_json::json!({
+        "id": id,
+        "ended_at": ended_at,
+        "duration_ms": duration_ms,
+    });
+    Ok(JsValue::from_str(&serde_json::to_string(&result).unwrap_or_default()))
+}
+
+/// Get call history for a specific conversation.
+///
+/// Takes JSON: { "conversation_id": "...", "limit": 50, "offset": 0 }
+/// Returns JSON array of call records.
+#[wasm_bindgen]
+pub fn umbra_wasm_calls_get_history(json: &str) -> Result<JsValue, JsValue> {
+    let state = get_state()?;
+    let state = state.read();
+
+    let database = state.database.as_ref()
+        .ok_or_else(|| JsValue::from_str("Database not initialized"))?;
+
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let conversation_id = data["conversation_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing conversation_id"))?;
+    let limit = data["limit"].as_i64().unwrap_or(50) as usize;
+    let offset = data["offset"].as_i64().unwrap_or(0) as usize;
+
+    let records = database.get_call_history(conversation_id, limit, offset)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let calls_json: Vec<serde_json::Value> = records.iter().map(|c| {
+        serde_json::json!({
+            "id": c.id,
+            "conversation_id": c.conversation_id,
+            "call_type": c.call_type,
+            "direction": c.direction,
+            "status": c.status,
+            "participants": c.participants,
+            "started_at": c.started_at,
+            "ended_at": c.ended_at,
+            "duration_ms": c.duration_ms,
+            "created_at": c.created_at,
+        })
+    }).collect();
+
+    Ok(JsValue::from_str(&serde_json::to_string(&calls_json).unwrap_or_default()))
+}
+
+/// Get all call history across all conversations.
+///
+/// Takes JSON: { "limit": 50, "offset": 0 }
+/// Returns JSON array of all call records.
+#[wasm_bindgen]
+pub fn umbra_wasm_calls_get_all_history(json: &str) -> Result<JsValue, JsValue> {
+    let state = get_state()?;
+    let state = state.read();
+
+    let database = state.database.as_ref()
+        .ok_or_else(|| JsValue::from_str("Database not initialized"))?;
+
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let limit = data["limit"].as_i64().unwrap_or(50) as usize;
+    let offset = data["offset"].as_i64().unwrap_or(0) as usize;
+
+    let records = database.get_all_call_history(limit, offset)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let calls_json: Vec<serde_json::Value> = records.iter().map(|c| {
+        serde_json::json!({
+            "id": c.id,
+            "conversation_id": c.conversation_id,
+            "call_type": c.call_type,
+            "direction": c.direction,
+            "status": c.status,
+            "participants": c.participants,
+            "started_at": c.started_at,
+            "ended_at": c.ended_at,
+            "duration_ms": c.duration_ms,
+            "created_at": c.created_at,
+        })
+    }).collect();
+
+    Ok(JsValue::from_str(&serde_json::to_string(&calls_json).unwrap_or_default()))
+}

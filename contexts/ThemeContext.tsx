@@ -259,8 +259,15 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         installTheme(theme.id);
       }
 
+      // When switching to a new theme, reset the custom accent color so the
+      // theme's own primary/accent colors take effect immediately.
+      if (theme) {
+        setAccentColorState(null);
+        kvSet(KEY_ACCENT_COLOR, '');
+      }
+
       setActiveTheme(theme);
-      applyOverrides(theme, accentColor, activeFont.css);
+      applyOverrides(theme, null, activeFont.css);
 
       // Persist
       if (theme) {
@@ -269,7 +276,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         kvSet(KEY_THEME_ID, '');
       }
     },
-    [accentColor, activeFont.css, applyOverrides, kvSet, installedThemeIds, installTheme],
+    [activeFont.css, applyOverrides, kvSet, installedThemeIds, installTheme],
   );
 
   const setAccentColor = useCallback(

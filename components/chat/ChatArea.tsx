@@ -96,6 +96,62 @@ function getMessageText(message: Message): string {
   return '[unsupported content]';
 }
 
+/** Check whether a message's text represents a call event (e.g. `[call:voice:completed:180]`). */
+function isCallEventMessage(text: string): boolean {
+  return text.startsWith('[call:');
+}
+
+/**
+ * Parse a call event string into its components.
+ * Expected format: `[call:<callType>:<status>:<duration>]`
+ * Duration is in seconds and only meaningful for "completed" status.
+ */
+function parseCallEvent(text: string): { callType: string; status: string; duration: number } | null {
+  const match = text.match(/^\[call:(\w+):(\w+):(\d+)\]$/);
+  if (!match) return null;
+  return {
+    callType: match[1],
+    status: match[2],
+    duration: parseInt(match[3], 10),
+  };
+}
+
+/**
+ * Format a parsed call event into a user-friendly display string.
+ *
+ * Examples:
+ *   "Voice call — 3:02"          (completed, < 1 hour)
+ *   "Video call — 1:23:45"       (completed, >= 1 hour)
+ *   "Missed voice call"          (missed)
+ *   "Declined video call"        (declined)
+ *   "Cancelled voice call"       (cancelled)
+ */
+function formatCallEventDisplay(callType: string, status: string, duration: number): string {
+  const label = callType === 'video' ? 'video call' : 'voice call';
+
+  if (status === 'completed' && duration > 0) {
+    const hrs = Math.floor(duration / 3600);
+    const mins = Math.floor((duration % 3600) / 60);
+    const secs = duration % 60;
+    const timePart =
+      hrs > 0
+        ? `${hrs}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
+        : `${mins}:${String(secs).padStart(2, '0')}`;
+    return `${label.charAt(0).toUpperCase() + label.slice(1)} \u2014 ${timePart}`;
+  }
+
+  switch (status) {
+    case 'missed':
+      return `Missed ${label}`;
+    case 'declined':
+      return `Declined ${label}`;
+    case 'cancelled':
+      return `Cancelled ${label}`;
+    default:
+      return `${label.charAt(0).toUpperCase() + label.slice(1)}`;
+  }
+}
+
 /**
  * Group consecutive messages from the same sender into display groups.
  * Each group shows sender name + avatar once, with multiple bubbles underneath.
@@ -109,8 +165,15 @@ function groupMessages(messages: Message[]): Message[][] {
   for (let i = 1; i < messages.length; i++) {
     const prev = messages[i - 1];
     const curr = messages[i];
-    // Group if same sender and within 5 minutes
+
+    const prevIsCall = isCallEventMessage(getMessageText(prev));
+    const currIsCall = isCallEventMessage(getMessageText(curr));
+
+    // Call events always live in their own single-message group.
+    // Regular messages group if same sender and within 5 minutes.
     const sameGroup =
+      !prevIsCall &&
+      !currIsCall &&
       curr.senderDid === prev.senderDid &&
       Math.abs(curr.timestamp - prev.timestamp) < 5 * 60 * 1000;
 
@@ -224,7 +287,61 @@ export function ChatArea({
         const isOutgoing = senderDid === myDid;
         const senderName = getSenderName(senderDid);
         const timeStr = formatTime(firstMsg.timestamp);
+        const firstText = getMessageText(firstMsg);
 
+        // ── Call event: render as a centered system-style row ──
+        if (isCallEventMessage(firstText)) {
+          const parsed = parseCallEvent(firstText);
+          const displayText = parsed
+            ? formatCallEventDisplay(parsed.callType, parsed.status, parsed.duration)
+            : firstText;
+          const icon = parsed?.callType === 'video' ? '\uD83D\uDCF9' : '\uD83D\uDCDE';
+
+          return (
+            <View
+              key={`group-${groupIdx}`}
+              style={{
+                alignItems: 'center',
+                paddingVertical: 6,
+              }}
+            >
+              <View
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 6,
+                  paddingHorizontal: 12,
+                  paddingVertical: 4,
+                  borderRadius: 12,
+                  backgroundColor: themeColors.bg.tertiary ?? themeColors.bg.secondary,
+                }}
+              >
+                <RNText style={{ fontSize: 12 }}>{icon}</RNText>
+                <RNText
+                  style={{
+                    fontSize: 12,
+                    color: themeColors.text.muted,
+                    fontWeight: '500',
+                  }}
+                >
+                  {displayText}
+                </RNText>
+                <RNText
+                  style={{
+                    fontSize: 11,
+                    color: themeColors.text.muted,
+                    opacity: 0.7,
+                    marginLeft: 4,
+                  }}
+                >
+                  {timeStr}
+                </RNText>
+              </View>
+            </View>
+          );
+        }
+
+        // ── Regular message group ──
         return (
           <MsgGroup
             key={`group-${groupIdx}`}

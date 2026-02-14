@@ -1041,7 +1041,11 @@ function PrivacySection() {
 function AudioVideoSection() {
   const { theme } = useTheme();
   const tc = theme.colors;
-  const { videoQuality, audioQuality, setVideoQuality, setAudioQuality, isScreenSharing } = useCall();
+  const {
+    videoQuality, audioQuality, setVideoQuality, setAudioQuality, isScreenSharing,
+    noiseSuppression, echoCancellation, autoGainControl,
+    setNoiseSuppression, setEchoCancellation, setAutoGainControl,
+  } = useCall();
   const { audioInputs, videoInputs, audioOutputs, isSupported } = useMediaDevices();
 
   const videoQualityOptions: InlineDropdownOption[] = [
@@ -1195,6 +1199,30 @@ function AudioVideoSection() {
             </RNText>
           </View>
         )}
+      </View>
+
+      <Separator spacing="sm" />
+
+      {/* Audio Processing */}
+      <View style={{ gap: 16 }}>
+        <View>
+          <RNText style={{ fontSize: 15, fontWeight: '600', color: tc.text.primary }}>
+            Audio Processing
+          </RNText>
+          <RNText style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
+            Enhance audio quality during calls.
+          </RNText>
+        </View>
+
+        <SettingRow label="Noise Suppression" description="Reduce background noise from your microphone.">
+          <Toggle checked={noiseSuppression} onChange={setNoiseSuppression} />
+        </SettingRow>
+        <SettingRow label="Echo Cancellation" description="Prevent audio feedback loops.">
+          <Toggle checked={echoCancellation} onChange={setEchoCancellation} />
+        </SettingRow>
+        <SettingRow label="Auto Gain Control" description="Automatically adjust microphone volume.">
+          <Toggle checked={autoGainControl} onChange={setAutoGainControl} />
+        </SettingRow>
       </View>
     </View>
   );

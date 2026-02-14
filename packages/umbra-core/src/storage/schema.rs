@@ -34,11 +34,26 @@
 //! │  │ status          │                                                    │
 //! │  └─────────────────┘                                                    │
 //! │                                                                         │
+//! │  ┌─────────────────┐                                                    │
+//! │  │  call_history   │                                                    │
+//! │  ├─────────────────┤                                                    │
+//! │  │ id              │                                                    │
+//! │  │ conversation_id │                                                    │
+//! │  │ call_type       │                                                    │
+//! │  │ direction       │                                                    │
+//! │  │ status          │                                                    │
+//! │  │ participants    │                                                    │
+//! │  │ started_at      │                                                    │
+//! │  │ ended_at        │                                                    │
+//! │  │ duration_ms     │                                                    │
+//! │  │ created_at      │                                                    │
+//! │  └─────────────────┘                                                    │
+//! │                                                                         │
 //! └─────────────────────────────────────────────────────────────────────────┘
 //! ```
 
 /// Current schema version
-pub const SCHEMA_VERSION: i32 = 4;
+pub const SCHEMA_VERSION: i32 = 5;
 
 /// SQL to create all tables
 pub const CREATE_TABLES: &str = r#"
@@ -244,6 +259,23 @@ CREATE TABLE IF NOT EXISTS settings (
     -- Last update timestamp
     updated_at INTEGER NOT NULL
 );
+
+-- Call history table
+-- Stores voice/video call records
+CREATE TABLE IF NOT EXISTS call_history (
+    id TEXT PRIMARY KEY,
+    conversation_id TEXT NOT NULL,
+    call_type TEXT NOT NULL,
+    direction TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'active',
+    participants TEXT NOT NULL DEFAULT '[]',
+    started_at INTEGER NOT NULL,
+    ended_at INTEGER,
+    duration_ms INTEGER,
+    created_at INTEGER NOT NULL,
+    FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_call_history_conversation ON call_history(conversation_id, started_at DESC);
 "#;
 
 /// Migration SQL from schema version 1 → 2
@@ -375,8 +407,33 @@ CREATE TABLE IF NOT EXISTS plugin_bundles (
 UPDATE schema_version SET version = 4;
 "#;
 
+/// Migration SQL from schema version 4 → 5
+///
+/// Adds call_history table for voice/video call records.
+pub const MIGRATE_V4_TO_V5: &str = r#"
+-- Call history table
+CREATE TABLE IF NOT EXISTS call_history (
+    id TEXT PRIMARY KEY,
+    conversation_id TEXT NOT NULL,
+    call_type TEXT NOT NULL,
+    direction TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'active',
+    participants TEXT NOT NULL DEFAULT '[]',
+    started_at INTEGER NOT NULL,
+    ended_at INTEGER,
+    duration_ms INTEGER,
+    created_at INTEGER NOT NULL,
+    FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_call_history_conversation ON call_history(conversation_id, started_at DESC);
+
+-- Update schema version
+UPDATE schema_version SET version = 5;
+"#;
+
 /// SQL to drop all tables (for testing/reset)
 pub const DROP_TABLES: &str = r#"
+DROP TABLE IF EXISTS call_history;
 DROP TABLE IF EXISTS plugin_bundles;
 DROP TABLE IF EXISTS plugin_kv;
 DROP TABLE IF EXISTS settings;
@@ -392,3 +449,123 @@ DROP TABLE IF EXISTS conversations;
 DROP TABLE IF EXISTS friends;
 DROP TABLE IF EXISTS schema_version;
 "#;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rusqlite::Connection;
+
+    #[test]
+    fn test_create_tables_sql_is_valid() {
+        let conn = Connection::open_in_memory().unwrap();
+        // CREATE_TABLES should execute without errors
+        conn.execute_batch(CREATE_TABLES).unwrap();
+        // Set schema version so we can verify it later
+        conn.execute(
+            "INSERT INTO schema_version (version) VALUES (?)",
+            rusqlite::params![SCHEMA_VERSION],
+        )
+        .unwrap();
+
+        let version: i32 = conn
+            .query_row("SELECT version FROM schema_version LIMIT 1", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(version, SCHEMA_VERSION);
+    }
+
+    #[test]
+    fn test_call_history_table_exists_after_create() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(CREATE_TABLES).unwrap();
+        conn.execute(
+            "INSERT INTO schema_version (version) VALUES (?)",
+            rusqlite::params![SCHEMA_VERSION],
+        )
+        .unwrap();
+
+        // Verify the call_history table exists by inserting a row
+        // First we need a conversation for the foreign key
+        conn.execute(
+            "INSERT INTO conversations (id, type, created_at, unread_count) VALUES ('conv-1', 'dm', 1000, 0)",
+            [],
+        )
+        .unwrap();
+
+        conn.execute(
+            "INSERT INTO call_history (id, conversation_id, call_type, direction, status, participants, started_at, created_at)
+             VALUES ('call-1', 'conv-1', 'voice', 'outgoing', 'active', '[]', 1000, 1000)",
+            [],
+        )
+        .unwrap();
+
+        let count: i32 = conn
+            .query_row("SELECT COUNT(*) FROM call_history", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn test_migrate_v4_to_v5_sql_is_valid() {
+        let conn = Connection::open_in_memory().unwrap();
+        // Simulate a v4 database by running CREATE_TABLES minus call_history,
+        // but it's simpler to just create the schema_version table and run migration
+        conn.execute_batch(CREATE_TABLES).unwrap();
+        conn.execute(
+            "INSERT INTO schema_version (version) VALUES (4)",
+            [],
+        )
+        .unwrap();
+
+        // Drop call_history so we can test the migration creates it
+        conn.execute_batch("DROP TABLE IF EXISTS call_history;").unwrap();
+
+        // Run the migration
+        conn.execute_batch(MIGRATE_V4_TO_V5).unwrap();
+
+        let version: i32 = conn
+            .query_row("SELECT version FROM schema_version LIMIT 1", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(version, 5);
+
+        // Verify call_history table was created
+        conn.execute(
+            "INSERT INTO conversations (id, type, created_at, unread_count) VALUES ('conv-1', 'dm', 1000, 0)",
+            [],
+        )
+        .unwrap();
+
+        conn.execute(
+            "INSERT INTO call_history (id, conversation_id, call_type, direction, status, participants, started_at, created_at)
+             VALUES ('call-1', 'conv-1', 'video', 'incoming', 'completed', '[\"did:key:z6Mk1\"]', 1000, 1000)",
+            [],
+        )
+        .unwrap();
+
+        let count: i32 = conn
+            .query_row("SELECT COUNT(*) FROM call_history", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn test_drop_tables_includes_call_history() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(CREATE_TABLES).unwrap();
+        conn.execute(
+            "INSERT INTO schema_version (version) VALUES (?)",
+            rusqlite::params![SCHEMA_VERSION],
+        )
+        .unwrap();
+
+        // DROP_TABLES should execute without errors
+        conn.execute_batch(DROP_TABLES).unwrap();
+
+        // Verify call_history table is gone
+        let result = conn.execute("SELECT 1 FROM call_history", []);
+        assert!(result.is_err());
+    }
+}
