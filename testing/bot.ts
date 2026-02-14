@@ -31,6 +31,8 @@ function parseArgs() {
       opts.echo = true;
     } else if (arg === '--no-auto-accept') {
       opts.noAutoAccept = true;
+    } else if (arg === '--no-auto-call') {
+      opts.noAutoCall = true;
     } else if (arg === '--debug') {
       opts.debug = true;
     } else if (arg.startsWith('--') && i + 1 < args.length) {
@@ -57,6 +59,9 @@ function printHelp() {
   --debug               Enable debug logging
   --bots <n>            Swarm mode: launch N bots that befriend each other
   --group <name>        Create a group with all bots/friends (used with --bots)
+  --call <did>          Start a 4K video call to this DID on startup
+  --voice <did>         Start a voice call to this DID on startup
+  --no-auto-call        Don't auto-accept incoming calls
   --help, -h            Show this help
 
 \x1b[4mExamples:\x1b[0m
@@ -69,10 +74,17 @@ function printHelp() {
   \x1b[90m# 3 bots that befriend each other and chat in a group\x1b[0m
   npx tsx bot.ts --bots 3 --group "Test Group" --interval 15000
 
+  \x1b[90m# Bot that calls a friend with 4K video after connecting\x1b[0m
+  npx tsx bot.ts --add did:key:z6Mk... --call did:key:z6Mk...
+
 \x1b[4mInteractive Commands (type while running):\x1b[0m
   send <did> <message>  Send a message to a friend
   broadcast <message>   Send message to all friends
   add <did>             Send friend request
+  call <did>            Start 4K video call to a friend
+  voice <did>           Start voice call to a friend
+  hangup                End the current call
+  callstatus            Show current call info
   friends               List friends
   pending               List pending requests
   group <name>          Create group with all friends
@@ -90,6 +102,7 @@ async function runSingleBot(opts: Record<string, string | boolean>) {
     name: (opts.name as string) || 'TestBot',
     relayUrl: (opts.relay as string) || undefined,
     autoAcceptFriends: !opts.noAutoAccept,
+    autoAcceptCalls: !opts.noAutoCall,
     messageIntervalMs: opts.interval ? parseInt(opts.interval as string, 10) : 0,
     echoMessages: !!opts.echo,
     logLevel: opts.debug ? 'debug' : 'info',
@@ -100,13 +113,33 @@ async function runSingleBot(opts: Record<string, string | boolean>) {
   console.log(`\x1b[1m╚══════════════════════════════════════════════════╝\x1b[0m\n`);
   console.log(`  Name:  ${bot.identity.displayName}`);
   console.log(`  DID:   \x1b[33m${bot.identity.did}\x1b[0m`);
-  console.log(`  Relay: ${bot.config.relayUrl}\n`);
+  console.log(`  Relay: ${bot.config.relayUrl}`);
+  console.log(`  Calls: ${bot.config.autoAcceptCalls ? 'auto-accept' : 'manual'}\n`);
 
   await bot.start();
 
   // Send initial friend request if --add was provided
   if (opts.add) {
     bot.sendFriendRequest(opts.add as string);
+  }
+
+  // Start call after a delay (wait for friendship to establish)
+  if (opts.call || opts.voice) {
+    const callDid = (opts.call || opts.voice) as string;
+    const callType = opts.call ? 'video' : 'voice';
+    console.log(`\x1b[36mWill start ${callType} call to ${callDid.slice(0, 30)}... after friendship establishes\x1b[0m\n`);
+
+    // Poll until the target is a friend, then call
+    const callTimer = setInterval(async () => {
+      if (bot.friendList.some((f) => f.did === callDid)) {
+        clearInterval(callTimer);
+        await sleep(1000); // Short grace period
+        await bot.startCall(callDid, callType as 'video' | 'voice');
+      }
+    }, 2000);
+
+    // Give up after 60s
+    setTimeout(() => clearInterval(callTimer), 60_000);
   }
 
   // Interactive CLI
@@ -259,6 +292,46 @@ async function setupInteractiveInput(bot: TestBot) {
             console.log(`    [${p.direction}] ${p.fromDisplayName} — ${p.fromDid.slice(0, 30)}...`);
           }
           console.log('');
+        }
+        break;
+      }
+      case 'call': {
+        const did = rest[0];
+        if (!did) {
+          console.log('Usage: call <did>');
+        } else {
+          bot.startCall(did, 'video');
+        }
+        break;
+      }
+      case 'voice': {
+        const did = rest[0];
+        if (!did) {
+          console.log('Usage: voice <did>');
+        } else {
+          bot.startCall(did, 'voice');
+        }
+        break;
+      }
+      case 'hangup': {
+        bot.endCall();
+        break;
+      }
+      case 'callstatus': {
+        const call = bot.currentCall;
+        if (!call) {
+          console.log('No active call.');
+        } else {
+          const duration = call.connectedAt
+            ? `${Math.floor((Date.now() - call.connectedAt) / 1000)}s`
+            : 'not connected';
+          console.log(`\n  Active Call:`);
+          console.log(`    ID:       ${call.callId.slice(0, 16)}...`);
+          console.log(`    Remote:   ${call.remoteDisplayName} (${call.remoteDid.slice(0, 30)}...)`);
+          console.log(`    Type:     ${call.callType}`);
+          console.log(`    Dir:      ${call.direction}`);
+          console.log(`    Status:   ${call.status}`);
+          console.log(`    Duration: ${duration}\n`);
         }
         break;
       }

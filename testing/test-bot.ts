@@ -21,6 +21,7 @@ import {
   uuid,
 } from './crypto.js';
 import { RelayClient, type ServerMessage } from './relay.js';
+import { BotCallManager, type CallType } from './call-manager.js';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -46,6 +47,18 @@ export interface PendingRequest {
   direction: 'incoming' | 'outgoing';
 }
 
+export interface ActiveBotCall {
+  callId: string;
+  remoteDid: string;
+  remoteDisplayName: string;
+  callType: CallType;
+  direction: 'outgoing' | 'incoming';
+  status: 'outgoing' | 'incoming' | 'connecting' | 'connected' | 'ended';
+  manager: BotCallManager;
+  startedAt: number;
+  connectedAt: number | null;
+}
+
 export interface BotConfig {
   /** Relay WebSocket URL */
   relayUrl: string;
@@ -53,6 +66,8 @@ export interface BotConfig {
   name: string;
   /** Auto-accept incoming friend requests */
   autoAcceptFriends: boolean;
+  /** Auto-accept incoming calls */
+  autoAcceptCalls: boolean;
   /** Interval (ms) between periodic messages (0 = disabled) */
   messageIntervalMs: number;
   /** Pool of messages to send randomly */
@@ -67,6 +82,7 @@ const DEFAULT_CONFIG: BotConfig = {
   relayUrl: 'wss://relay.deepspaceshipping.co/ws',
   name: 'TestBot',
   autoAcceptFriends: true,
+  autoAcceptCalls: true,
   messageIntervalMs: 0,
   messagePool: [
     'Hey! How are you?',
@@ -96,6 +112,7 @@ export class TestBot {
   private pendingRequests: Map<string, PendingRequest> = new Map();
   private messageTimer: ReturnType<typeof setInterval> | null = null;
   private running = false;
+  private activeCall: ActiveBotCall | null = null;
 
   constructor(config: Partial<BotConfig> = {}) {
     this.config = { ...DEFAULT_CONFIG, ...config };
@@ -135,6 +152,10 @@ export class TestBot {
     if (this.messageTimer) {
       clearInterval(this.messageTimer);
       this.messageTimer = null;
+    }
+    if (this.activeCall) {
+      this.activeCall.manager.close();
+      this.activeCall = null;
     }
     this.relay.disconnect();
     this.log('info', 'Bot stopped');
@@ -350,6 +371,203 @@ export class TestBot {
     return groupId;
   }
 
+  // ─── Calling ───────────────────────────────────────────────────────────
+
+  /**
+   * Start a call to a friend. Generates a 4K video stream and sends the
+   * SDP offer via the relay.
+   */
+  async startCall(friendDid: string, callType: CallType = 'video'): Promise<void> {
+    const friend = this.friends.get(friendDid);
+    if (!friend) {
+      this.log('warn', `Cannot call: ${friendDid.slice(0, 24)}... is not a friend`);
+      return;
+    }
+    if (this.activeCall) {
+      this.log('warn', 'Already in a call');
+      return;
+    }
+
+    const callId = `call-${Date.now()}-${uuid().slice(0, 8)}`;
+    const manager = new BotCallManager();
+    this.setupCallManagerHandlers(manager, callId, friend.did);
+
+    try {
+      const sdpOffer = await manager.createOffer(callType);
+
+      this.activeCall = {
+        callId,
+        remoteDid: friend.did,
+        remoteDisplayName: friend.displayName,
+        callType,
+        direction: 'outgoing',
+        status: 'outgoing',
+        manager,
+        startedAt: Date.now(),
+        connectedAt: null,
+      };
+
+      // Send offer via relay
+      const envelope = {
+        envelope: 'call_offer',
+        version: 1,
+        payload: {
+          callId,
+          callType,
+          senderDid: this.identity.did,
+          senderDisplayName: this.identity.displayName,
+          conversationId: friend.conversationId,
+          sdp: sdpOffer,
+          sdpType: 'offer',
+        },
+      };
+      this.relay.sendEnvelope(friend.did, envelope);
+
+      const quality = callType === 'video' ? '4K (3840x2160 @ 30fps)' : 'voice only';
+      this.log('info', `Calling ${friend.displayName} — ${callType} [${quality}]`);
+
+      // Ring timeout: auto-end after 45s
+      setTimeout(() => {
+        if (this.activeCall?.callId === callId && this.activeCall.status === 'outgoing') {
+          this.log('warn', `Call to ${friend.displayName} timed out (45s)`);
+          this.endCall('timeout');
+        }
+      }, 45_000);
+
+    } catch (err) {
+      this.log('error', `Failed to start call: ${err}`);
+      manager.close();
+      this.activeCall = null;
+    }
+  }
+
+  /**
+   * Accept an incoming call.
+   */
+  private async acceptIncomingCall(
+    callId: string,
+    fromDid: string,
+    fromName: string,
+    callType: CallType,
+    conversationId: string,
+    offerSdp: string,
+  ): Promise<void> {
+    if (this.activeCall) {
+      // Already in a call — send busy
+      this.log('info', `Busy: declining call from ${fromName}`);
+      const envelope = {
+        envelope: 'call_end',
+        version: 1,
+        payload: { callId, senderDid: this.identity.did, reason: 'busy' },
+      };
+      this.relay.sendEnvelope(fromDid, envelope);
+      return;
+    }
+
+    const manager = new BotCallManager();
+    this.setupCallManagerHandlers(manager, callId, fromDid);
+
+    try {
+      const sdpAnswer = await manager.acceptOffer(offerSdp, callType);
+
+      this.activeCall = {
+        callId,
+        remoteDid: fromDid,
+        remoteDisplayName: fromName,
+        callType,
+        direction: 'incoming',
+        status: 'connecting',
+        manager,
+        startedAt: Date.now(),
+        connectedAt: null,
+      };
+
+      // Send answer via relay
+      const envelope = {
+        envelope: 'call_answer',
+        version: 1,
+        payload: {
+          callId,
+          senderDid: this.identity.did,
+          sdp: sdpAnswer,
+          sdpType: 'answer',
+        },
+      };
+      this.relay.sendEnvelope(fromDid, envelope);
+
+      const quality = callType === 'video' ? '4K (3840x2160 @ 30fps)' : 'voice only';
+      this.log('info', `Accepted call from ${fromName} — ${callType} [${quality}]`);
+
+    } catch (err) {
+      this.log('error', `Failed to accept call: ${err}`);
+      manager.close();
+      this.activeCall = null;
+    }
+  }
+
+  /**
+   * End the current call.
+   */
+  endCall(reason: string = 'completed'): void {
+    if (!this.activeCall) {
+      this.log('warn', 'No active call to end');
+      return;
+    }
+
+    const { callId, remoteDid, remoteDisplayName, manager } = this.activeCall;
+
+    // Send call_end to remote
+    const envelope = {
+      envelope: 'call_end',
+      version: 1,
+      payload: { callId, senderDid: this.identity.did, reason },
+    };
+    this.relay.sendEnvelope(remoteDid, envelope);
+
+    manager.close();
+    this.log('info', `Call with ${remoteDisplayName} ended (${reason})`);
+    this.activeCall = null;
+  }
+
+  /**
+   * Get the current active call info (for CLI display).
+   */
+  get currentCall(): ActiveBotCall | null {
+    return this.activeCall;
+  }
+
+  private setupCallManagerHandlers(manager: BotCallManager, callId: string, remoteDid: string): void {
+    manager.onIceCandidate = (candidate) => {
+      const envelope = {
+        envelope: 'call_ice_candidate',
+        version: 1,
+        payload: {
+          callId,
+          senderDid: this.identity.did,
+          candidate: candidate.candidate,
+          sdpMid: candidate.sdpMid,
+          sdpMLineIndex: candidate.sdpMLineIndex,
+        },
+      };
+      this.relay.sendEnvelope(remoteDid, envelope);
+    };
+
+    manager.onConnectionStateChange = (state) => {
+      if (state === 'connected') {
+        if (this.activeCall?.callId === callId) {
+          this.activeCall.status = 'connected';
+          this.activeCall.connectedAt = Date.now();
+          this.log('info', `Call connected with ${this.activeCall.remoteDisplayName}`);
+        }
+      } else if (state === 'failed') {
+        this.log('warn', 'Call connection failed');
+        this.endCall('failed');
+      } else if (state === 'disconnected') {
+        this.log('warn', 'Call disconnected');
+      }
+    };
+  }
+
   // ─── State Queries ──────────────────────────────────────────────────────
 
   get friendCount(): number {
@@ -405,6 +623,21 @@ export class TestBot {
           break;
         case 'typing_indicator':
           this.handleTypingIndicator(envelope.payload);
+          break;
+        case 'call_offer':
+          this.handleCallOffer(envelope.payload);
+          break;
+        case 'call_answer':
+          this.handleCallAnswer(envelope.payload);
+          break;
+        case 'call_ice_candidate':
+          this.handleCallIceCandidate(envelope.payload);
+          break;
+        case 'call_end':
+          this.handleCallEnd(envelope.payload);
+          break;
+        case 'call_state':
+          this.handleCallState(envelope.payload);
           break;
         case 'group_invite':
           this.log('info', `Received group invite: "${envelope.payload.groupName}" from ${envelope.payload.inviterName}`);
@@ -528,6 +761,64 @@ export class TestBot {
     const friend = this.friends.get(payload.senderDid);
     const name = friend?.displayName ?? payload.senderName ?? 'Unknown';
     this.log('debug', `${name} ${payload.isTyping ? 'started' : 'stopped'} typing`);
+  }
+
+  private handleCallOffer(payload: any): void {
+    this.log('info', `Incoming ${payload.callType} call from ${payload.senderDisplayName ?? 'Unknown'} (call: ${payload.callId?.slice(0, 12)}...)`);
+
+    if (this.config.autoAcceptCalls) {
+      this.log('info', 'Auto-accepting call...');
+      this.acceptIncomingCall(
+        payload.callId,
+        payload.senderDid,
+        payload.senderDisplayName ?? 'Unknown',
+        payload.callType ?? 'voice',
+        payload.conversationId,
+        payload.sdp,
+      );
+    } else {
+      this.log('info', 'Call waiting for manual acceptance (type "accept" to answer)');
+    }
+  }
+
+  private handleCallAnswer(payload: any): void {
+    if (!this.activeCall || this.activeCall.callId !== payload.callId) {
+      this.log('debug', `Ignoring call answer for unknown call: ${payload.callId}`);
+      return;
+    }
+
+    this.log('info', 'Received call answer, completing handshake...');
+    this.activeCall.status = 'connecting';
+
+    this.activeCall.manager.completeHandshake(payload.sdp).catch((err) => {
+      this.log('error', `Handshake failed: ${err}`);
+      this.endCall('failed');
+    });
+  }
+
+  private handleCallIceCandidate(payload: any): void {
+    if (!this.activeCall || this.activeCall.callId !== payload.callId) return;
+
+    this.activeCall.manager.addIceCandidate({
+      candidate: payload.candidate,
+      sdpMid: payload.sdpMid,
+      sdpMLineIndex: payload.sdpMLineIndex,
+    }).catch((err) => {
+      this.log('warn', `Failed to add ICE candidate: ${err}`);
+    });
+  }
+
+  private handleCallEnd(payload: any): void {
+    if (!this.activeCall || this.activeCall.callId !== payload.callId) return;
+
+    this.log('info', `Call ended by remote (${payload.reason ?? 'completed'})`);
+    this.activeCall.manager.close();
+    this.activeCall = null;
+  }
+
+  private handleCallState(payload: any): void {
+    if (!this.activeCall || this.activeCall.callId !== payload.callId) return;
+    this.log('debug', `Remote state update: muted=${payload.isMuted}, cameraOff=${payload.isCameraOff}`);
   }
 
   private startPeriodicMessages(): void {
