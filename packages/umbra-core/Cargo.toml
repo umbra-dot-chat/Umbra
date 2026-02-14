@@ -171,7 +171,16 @@ web-sys = { version = "0.3", features = [
     "RtcIceConnectionState",
     "RtcIceGatheringState",
     "RtcSignalingState",
+    "RtcRtpSender",
+    "RtcRtpReceiver",
+    "RtcTrackEvent",
     "MessageEvent",
+    # Media (voice/video calling)
+    "MediaStream",
+    "MediaStreamTrack",
+    "MediaStreamConstraints",
+    "MediaDevices",
+    "Navigator",
     # Events
     "Event",
     "EventTarget",

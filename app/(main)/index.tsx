@@ -19,6 +19,9 @@ import { SlotRenderer } from '@/components/plugins/SlotRenderer';
 import { MessageIcon } from '@/components/icons';
 import { HelpIndicator } from '@/components/ui/HelpIndicator';
 import { HelpText, HelpHighlight, HelpListItem } from '@/components/ui/HelpContent';
+import { ActiveCallBar } from '@/components/call/ActiveCallBar';
+import { IncomingCallOverlay } from '@/components/call/IncomingCallOverlay';
+import { useCall } from '@/hooks/useCall';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Empty conversation state
@@ -134,6 +137,7 @@ export default function ChatPage() {
   const { hoveredMessage, handleHoverIn, handleHoverOut } = useHoverMessage();
   const { rightPanel, visiblePanel, panelWidth, togglePanel } = useRightPanel();
   const { showProfile } = useProfilePopoverContext();
+  const { startCall } = useCall();
 
   const [threadParent, setThreadParent] = useState<{ id: string; sender: string; content: string; timestamp: string } | null>(null);
   const [threadReplies, setThreadReplies] = useState<{ id: string; sender: string; content: string; timestamp: string; isOwn?: boolean }[]>([]);
@@ -289,6 +293,23 @@ export default function ChatPage() {
     })),
   [pinnedMessages, friendNames, myDid]);
 
+  // Call handlers (DM only for Phase 1)
+  const isDm = activeConversation?.type !== 'group';
+  const friendDid = activeConversation?.friendDid ?? null;
+  const friendDisplayName = friendDid ? (friendNames[friendDid] || friendDid.slice(0, 16)) : null;
+
+  const handleVoiceCall = useCallback(() => {
+    if (resolvedConversationId && friendDid && friendDisplayName) {
+      startCall(resolvedConversationId, friendDid, friendDisplayName, 'voice');
+    }
+  }, [resolvedConversationId, friendDid, friendDisplayName, startCall]);
+
+  const handleVideoCall = useCallback(() => {
+    if (resolvedConversationId && friendDid && friendDisplayName) {
+      startCall(resolvedConversationId, friendDid, friendDisplayName, 'video');
+    }
+  }, [resolvedConversationId, friendDid, friendDisplayName, startCall]);
+
   // No conversations yet — show welcome
   if (!convsLoading && conversations.length === 0) {
     return (
@@ -306,8 +327,12 @@ export default function ChatPage() {
           rightPanel={rightPanel}
           togglePanel={togglePanel}
           onShowProfile={showProfile}
+          showCallButtons={isDm && !!friendDid}
+          onVoiceCall={handleVoiceCall}
+          onVideoCall={handleVideoCall}
         />
         <SlotRenderer slot="chat-header" props={{ conversationId: resolvedConversationId }} />
+        <ActiveCallBar />
         <ChatArea
           messages={messages}
           myDid={myDid}
@@ -362,6 +387,7 @@ export default function ChatPage() {
       />
       <SlotRenderer slot="right-panel" props={{ conversationId: resolvedConversationId }} />
 
+      <IncomingCallOverlay />
     </View>
   );
 }

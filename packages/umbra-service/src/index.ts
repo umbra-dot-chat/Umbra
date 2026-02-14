@@ -676,7 +676,12 @@ export type RelayEnvelope =
   | { envelope: 'group_key_rotation'; version: 1; payload: GroupKeyRotationPayload }
   | { envelope: 'group_member_removed'; version: 1; payload: GroupMemberRemovedPayload }
   | { envelope: 'message_status'; version: 1; payload: MessageStatusPayload }
-  | { envelope: 'typing_indicator'; version: 1; payload: TypingIndicatorPayload };
+  | { envelope: 'typing_indicator'; version: 1; payload: TypingIndicatorPayload }
+  | { envelope: 'call_offer'; version: 1; payload: any }
+  | { envelope: 'call_answer'; version: 1; payload: any }
+  | { envelope: 'call_ice_candidate'; version: 1; payload: any }
+  | { envelope: 'call_end'; version: 1; payload: any }
+  | { envelope: 'call_state'; version: 1; payload: any };
 
 /**
  * Payload for friend request envelope
@@ -951,6 +956,8 @@ export class UmbraService {
   private _messageListeners: Array<(event: MessageEvent) => void> = [];
   private _relayListeners: Array<(event: RelayEvent) => void> = [];
   private _groupListeners: Array<(event: GroupEvent) => void> = [];
+  private _callListeners: Array<(event: any) => void> = [];
+  private _relayWsRef: WebSocket | null = null;
 
   private constructor() {}
 
@@ -2189,6 +2196,54 @@ export class UmbraService {
         this._messageListeners.splice(index, 1);
       }
     };
+  }
+
+  // ===========================================================================
+  // CALLING
+  // ===========================================================================
+
+  /**
+   * Subscribe to call events (offers, answers, ICE candidates, end signals).
+   */
+  onCallEvent(callback: (event: any) => void): () => void {
+    this._callListeners.push(callback);
+    return () => {
+      const index = this._callListeners.indexOf(callback);
+      if (index !== -1) {
+        this._callListeners.splice(index, 1);
+      }
+    };
+  }
+
+  /**
+   * Dispatch a call event to all registered listeners.
+   */
+  dispatchCallEvent(event: any): void {
+    for (const listener of this._callListeners) {
+      try {
+        listener(event);
+      } catch (err) {
+        console.error('[UmbraService] Call listener error:', err);
+      }
+    }
+  }
+
+  /**
+   * Store a reference to the relay WebSocket for call signaling.
+   */
+  setRelayWs(ws: WebSocket | null): void {
+    this._relayWsRef = ws;
+  }
+
+  /**
+   * Send a call signaling message via the relay WebSocket.
+   */
+  sendCallSignal(toDid: string, relayMessage: string): void {
+    if (this._relayWsRef && this._relayWsRef.readyState === WebSocket.OPEN) {
+      this._relayWsRef.send(relayMessage);
+    } else {
+      console.warn('[UmbraService] Cannot send call signal: relay not connected');
+    }
   }
 
   // ===========================================================================

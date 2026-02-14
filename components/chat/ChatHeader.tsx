@@ -6,16 +6,20 @@ import {
   Text, useTheme,
 } from '@coexist/wisp-react-native';
 import type { RightPanel } from '@/types/panels';
-import { SearchIcon, PinIcon, UsersIcon } from '@/components/icons';
+import { SearchIcon, PinIcon, UsersIcon, PhoneIcon, VideoIcon } from '@/components/icons';
 
 export interface ChatHeaderProps {
   active: { name: string; online?: boolean; group?: string[]; memberCount?: number } | undefined;
   rightPanel: RightPanel;
   togglePanel: (panel: NonNullable<RightPanel>) => void;
   onShowProfile: (name: string, event: any) => void;
+  onVoiceCall?: () => void;
+  onVideoCall?: () => void;
+  /** Whether to show call buttons (DM only for Phase 1) */
+  showCallButtons?: boolean;
 }
 
-export function ChatHeader({ active, rightPanel, togglePanel, onShowProfile }: ChatHeaderProps) {
+export function ChatHeader({ active, rightPanel, togglePanel, onShowProfile, onVoiceCall, onVideoCall, showCallButtons }: ChatHeaderProps) {
   const { theme } = useTheme();
   const themeColors = theme.colors;
 
@@ -55,6 +59,24 @@ export function ChatHeader({ active, rightPanel, togglePanel, onShowProfile }: C
         </HStack>
       </NavbarBrand>
       <NavbarContent align="end">
+        {showCallButtons && (
+          <>
+            <Button
+              variant="tertiary"
+              size="sm"
+              onPress={onVoiceCall}
+              accessibilityLabel="Voice call"
+              iconLeft={<PhoneIcon size={18} color={themeColors.text.secondary} />}
+            />
+            <Button
+              variant="tertiary"
+              size="sm"
+              onPress={onVideoCall}
+              accessibilityLabel="Video call"
+              iconLeft={<VideoIcon size={18} color={themeColors.text.secondary} />}
+            />
+          </>
+        )}
         <Button
           variant={rightPanel === 'search' ? 'secondary' : 'tertiary'}
           size="sm"

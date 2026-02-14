@@ -421,6 +421,7 @@ export function useNetwork(): UseNetworkResult {
         const ws = new WebSocket(url);
         _relayWs = ws;
         relayWsRef.current = ws;
+        service.setRelayWs(ws);
 
         ws.onopen = () => {
           // Send the register message
@@ -744,6 +745,16 @@ export function useNetwork(): UseNetworkResult {
                       conversationId: typingPayload.conversationId,
                       did: typingPayload.senderDid,
                     });
+                  } else if (envelope.envelope === 'call_offer' && envelope.version === 1) {
+                    service.dispatchCallEvent({ type: 'callOffer', payload: envelope.payload as any });
+                  } else if (envelope.envelope === 'call_answer' && envelope.version === 1) {
+                    service.dispatchCallEvent({ type: 'callAnswer', payload: envelope.payload as any });
+                  } else if (envelope.envelope === 'call_ice_candidate' && envelope.version === 1) {
+                    service.dispatchCallEvent({ type: 'callIceCandidate', payload: envelope.payload as any });
+                  } else if (envelope.envelope === 'call_end' && envelope.version === 1) {
+                    service.dispatchCallEvent({ type: 'callEnd', payload: envelope.payload as any });
+                  } else if (envelope.envelope === 'call_state' && envelope.version === 1) {
+                    service.dispatchCallEvent({ type: 'callState', payload: envelope.payload as any });
                   }
                 } catch (parseErr) {
                   console.log('[useNetwork] Message payload is not a relay envelope:', parseErr);

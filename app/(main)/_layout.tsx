@@ -15,6 +15,7 @@ import { CreateGroupDialog } from '@/components/groups/CreateGroupDialog';
 import { NewDmDialog } from '@/components/modals/NewDmDialog';
 import { ProfilePopover } from '@/components/modals/ProfilePopover';
 import { ProfilePopoverProvider, useProfilePopoverContext } from '@/contexts/ProfilePopoverContext';
+import { CallProvider } from '@/contexts/CallContext';
 import { CommandPalette } from '@/components/modals/CommandPalette';
 import { PluginMarketplace } from '@/components/modals/PluginMarketplace';
 import { useCommandPalette } from '@/hooks/useCommandPalette';
@@ -251,8 +252,10 @@ function MainLayoutInner() {
 
 export default function MainLayout() {
   return (
-    <ProfilePopoverProvider>
-      <MainLayoutInner />
-    </ProfilePopoverProvider>
+    <CallProvider>
+      <ProfilePopoverProvider>
+        <MainLayoutInner />
+      </ProfilePopoverProvider>
+    </CallProvider>
   );
 }

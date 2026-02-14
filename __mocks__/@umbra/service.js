@@ -270,6 +270,12 @@ const mockInstance = {
   onFriendEvent: jest.fn(() => jest.fn()),
   onDiscoveryEvent: jest.fn(() => jest.fn()),
   onRelayEvent: jest.fn(() => jest.fn()),
+
+  // Call events
+  onCallEvent: jest.fn(() => jest.fn()),
+  dispatchCallEvent: jest.fn(),
+  setRelayWs: jest.fn(),
+  sendCallSignal: jest.fn(),
 };
 
 class UmbraService {
