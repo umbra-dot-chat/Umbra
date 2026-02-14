@@ -62,8 +62,8 @@ class MockRTCIceCandidate {
   }
 }
 
-const mockAudioTrack = { kind: 'audio', enabled: true, stop: jest.fn() };
-const mockVideoTrack = { kind: 'video', enabled: true, stop: jest.fn() };
+const mockAudioTrack = { kind: 'audio', enabled: true, stop: jest.fn(), getSettings: () => ({ deviceId: 'audio-1' }) };
+const mockVideoTrack = { kind: 'video', enabled: true, stop: jest.fn(), getSettings: () => ({ deviceId: 'video-1' }) };
 
 const mockGetUserMedia = jest.fn((constraints: any) =>
   Promise.resolve({

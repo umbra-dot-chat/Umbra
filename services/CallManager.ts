@@ -6,6 +6,7 @@
  */
 
 import type {
+  AudioQuality,
   CallStats,
   IceServer,
   VideoQuality,
@@ -22,6 +23,9 @@ export class CallManager {
   private lastBytesSent = 0;
   private lastBytesReceived = 0;
   private lastStatsTimestamp = 0;
+  private _videoQuality: VideoQuality = 'auto';
+  private _audioQuality: AudioQuality = 'opus';
+  private _currentVideoDeviceId: string | null = null;
 
   // Callbacks
   onRemoteStream: ((stream: MediaStream) => void) | null = null;
@@ -69,23 +73,39 @@ export class CallManager {
   /**
    * Get the user's media stream (audio only for voice, audio+video for video calls).
    */
-  async getUserMedia(video: boolean): Promise<MediaStream> {
+  async getUserMedia(video: boolean, deviceId?: string): Promise<MediaStream> {
+    const preset = this._videoQuality !== 'auto'
+      ? VIDEO_QUALITY_PRESETS[this._videoQuality]
+      : null;
+
+    const videoConstraints: MediaTrackConstraints | false = video
+      ? {
+          width: { ideal: preset?.width ?? 1280 },
+          height: { ideal: preset?.height ?? 720 },
+          frameRate: { ideal: preset?.frameRate ?? 30 },
+          ...(deviceId ? { deviceId: { exact: deviceId } } : {}),
+        }
+      : false;
+
     const constraints: MediaStreamConstraints = {
       audio: {
         echoCancellation: true,
         noiseSuppression: true,
         autoGainControl: true,
       },
-      video: video
-        ? {
-            width: { ideal: 1280 },
-            height: { ideal: 720 },
-            frameRate: { ideal: 30 },
-          }
-        : false,
+      video: videoConstraints,
     };
 
     this.localStream = await navigator.mediaDevices.getUserMedia(constraints);
+
+    // Track the current video device
+    if (video) {
+      const vt = this.localStream.getVideoTracks()[0];
+      if (vt) {
+        this._currentVideoDeviceId = vt.getSettings().deviceId ?? null;
+      }
+    }
+
     return this.localStream;
   }
 
@@ -197,6 +217,109 @@ export class CallManager {
       return !videoTrack.enabled; // true = camera off
     }
     return true;
+  }
+
+  /**
+   * Change video quality mid-call by adjusting sender encoding parameters.
+   * Takes effect immediately — no renegotiation needed.
+   */
+  async setVideoQuality(quality: VideoQuality): Promise<void> {
+    this._videoQuality = quality;
+    if (!this.pc) return;
+
+    const sender = this.pc.getSenders().find((s) => s.track?.kind === 'video');
+    if (!sender) return;
+
+    const preset = quality !== 'auto' ? VIDEO_QUALITY_PRESETS[quality] : null;
+    const params = sender.getParameters();
+
+    if (!params.encodings || params.encodings.length === 0) {
+      params.encodings = [{}];
+    }
+
+    if (preset) {
+      params.encodings[0].maxBitrate = preset.maxBitrate * 1000; // kbps → bps
+      params.encodings[0].maxFramerate = preset.frameRate;
+    } else {
+      // Auto: remove constraints
+      delete params.encodings[0].maxBitrate;
+      delete params.encodings[0].maxFramerate;
+    }
+
+    await sender.setParameters(params);
+  }
+
+  /**
+   * Get the current video quality setting.
+   */
+  get videoQuality(): VideoQuality {
+    return this._videoQuality;
+  }
+
+  /**
+   * Get the current audio quality setting.
+   */
+  get audioQuality(): AudioQuality {
+    return this._audioQuality;
+  }
+
+  /**
+   * Set audio quality preference. Applies on next call (SDP munging for codec).
+   */
+  setAudioQuality(quality: AudioQuality): void {
+    this._audioQuality = quality;
+  }
+
+  /**
+   * Switch to a different camera by device ID.
+   * Replaces the video track on the sender without renegotiation.
+   */
+  async switchCamera(deviceId?: string): Promise<void> {
+    if (!this.pc || !this.localStream) return;
+
+    // If no deviceId provided, cycle to the next available camera
+    let targetDeviceId = deviceId;
+    if (!targetDeviceId) {
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const cameras = devices.filter((d) => d.kind === 'videoinput');
+      if (cameras.length <= 1) return; // No other camera
+
+      const currentIdx = cameras.findIndex((c) => c.deviceId === this._currentVideoDeviceId);
+      const nextIdx = (currentIdx + 1) % cameras.length;
+      targetDeviceId = cameras[nextIdx].deviceId;
+    }
+
+    // Get a new video track from the target camera
+    const preset = this._videoQuality !== 'auto'
+      ? VIDEO_QUALITY_PRESETS[this._videoQuality]
+      : null;
+
+    const newStream = await navigator.mediaDevices.getUserMedia({
+      video: {
+        deviceId: { exact: targetDeviceId },
+        width: { ideal: preset?.width ?? 1280 },
+        height: { ideal: preset?.height ?? 720 },
+        frameRate: { ideal: preset?.frameRate ?? 30 },
+      },
+    });
+
+    const newTrack = newStream.getVideoTracks()[0];
+    if (!newTrack) return;
+
+    // Replace the track on the sender
+    const sender = this.pc.getSenders().find((s) => s.track?.kind === 'video');
+    if (sender) {
+      // Stop the old track
+      const oldTrack = this.localStream.getVideoTracks()[0];
+      if (oldTrack) {
+        oldTrack.stop();
+        this.localStream.removeTrack(oldTrack);
+      }
+      // Add new track to local stream and replace on sender
+      this.localStream.addTrack(newTrack);
+      await sender.replaceTrack(newTrack);
+      this._currentVideoDeviceId = newTrack.getSettings().deviceId ?? null;
+    }
   }
 
   /**

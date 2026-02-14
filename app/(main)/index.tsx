@@ -20,6 +20,7 @@ import { MessageIcon } from '@/components/icons';
 import { HelpIndicator } from '@/components/ui/HelpIndicator';
 import { HelpText, HelpHighlight, HelpListItem } from '@/components/ui/HelpContent';
 import { ActiveCallBar } from '@/components/call/ActiveCallBar';
+import { ActiveCallPanel } from '@/components/call/ActiveCallPanel';
 import { IncomingCallOverlay } from '@/components/call/IncomingCallOverlay';
 import { useCall } from '@/hooks/useCall';
 
@@ -137,7 +138,11 @@ export default function ChatPage() {
   const { hoveredMessage, handleHoverIn, handleHoverOut } = useHoverMessage();
   const { rightPanel, visiblePanel, panelWidth, togglePanel } = useRightPanel();
   const { showProfile } = useProfilePopoverContext();
-  const { startCall } = useCall();
+  const {
+    activeCall, startCall, toggleMute, toggleCamera, endCall,
+    videoQuality, audioQuality, setVideoQuality, setAudioQuality,
+    switchCamera, callStats,
+  } = useCall();
 
   const [threadParent, setThreadParent] = useState<{ id: string; sender: string; content: string; timestamp: string } | null>(null);
   const [threadReplies, setThreadReplies] = useState<{ id: string; sender: string; content: string; timestamp: string; isOwn?: boolean }[]>([]);
@@ -332,7 +337,22 @@ export default function ChatPage() {
           onVideoCall={handleVideoCall}
         />
         <SlotRenderer slot="chat-header" props={{ conversationId: resolvedConversationId }} />
-        <ActiveCallBar />
+        {activeCall && activeCall.status !== 'incoming' && activeCall.conversationId === resolvedConversationId ? (
+          <ActiveCallPanel
+            activeCall={activeCall}
+            videoQuality={videoQuality}
+            audioQuality={audioQuality}
+            callStats={callStats}
+            onToggleMute={toggleMute}
+            onToggleCamera={toggleCamera}
+            onEndCall={() => endCall()}
+            onSwitchCamera={() => switchCamera()}
+            onVideoQualityChange={setVideoQuality}
+            onAudioQualityChange={setAudioQuality}
+          />
+        ) : (
+          <ActiveCallBar />
+        )}
         <ChatArea
           messages={messages}
           myDid={myDid}

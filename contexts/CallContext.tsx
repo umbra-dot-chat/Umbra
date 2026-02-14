@@ -9,15 +9,18 @@ import React, { createContext, useCallback, useContext, useEffect, useRef, useSt
 import { CallManager } from '@/services/CallManager';
 import type {
   ActiveCall,
+  AudioQuality,
   CallAnswerPayload,
   CallEndPayload,
   CallEvent,
   CallIceCandidatePayload,
   CallOfferPayload,
   CallStatePayload,
+  CallStats,
   CallStatus,
   CallType,
   CallEndReason,
+  VideoQuality,
 } from '@/types/call';
 import { useUmbra } from '@/contexts/UmbraContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -37,6 +40,18 @@ interface CallContextValue {
   toggleMute: () => void;
   /** Toggle camera */
   toggleCamera: () => void;
+  /** Current video quality */
+  videoQuality: VideoQuality;
+  /** Current audio quality */
+  audioQuality: AudioQuality;
+  /** Change video quality mid-call */
+  setVideoQuality: (quality: VideoQuality) => void;
+  /** Change audio quality (applies on next call) */
+  setAudioQuality: (quality: AudioQuality) => void;
+  /** Switch to next camera or specific device */
+  switchCamera: (deviceId?: string) => void;
+  /** Current call stats */
+  callStats: CallStats | null;
 }
 
 const CallContext = createContext<CallContextValue | null>(null);
@@ -54,6 +69,9 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
   const myName = identity?.displayName ?? '';
 
   const [activeCall, setActiveCall] = useState<ActiveCall | null>(null);
+  const [videoQuality, setVideoQualityState] = useState<VideoQuality>('auto');
+  const [audioQuality, setAudioQualityState] = useState<AudioQuality>('opus');
+  const [callStats, setCallStats] = useState<CallStats | null>(null);
   const callManagerRef = useRef<CallManager | null>(null);
   const ringTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -308,6 +326,62 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     }
   }, [activeCall, myDid, sendSignal]);
 
+  // ── Video Quality ────────────────────────────────────────────────────────
+
+  const setVideoQuality = useCallback((quality: VideoQuality) => {
+    setVideoQualityState(quality);
+    const manager = callManagerRef.current;
+    if (manager) {
+      manager.setVideoQuality(quality).catch((err) => {
+        console.warn('[CallContext] Failed to set video quality:', err);
+      });
+    }
+  }, []);
+
+  // ── Audio Quality ────────────────────────────────────────────────────────
+
+  const setAudioQuality = useCallback((quality: AudioQuality) => {
+    setAudioQualityState(quality);
+    const manager = callManagerRef.current;
+    if (manager) {
+      manager.setAudioQuality(quality);
+    }
+  }, []);
+
+  // ── Switch Camera ────────────────────────────────────────────────────────
+
+  const switchCamera = useCallback((deviceId?: string) => {
+    const manager = callManagerRef.current;
+    if (!manager) return;
+
+    manager.switchCamera(deviceId).then(() => {
+      // Update the local stream reference
+      setActiveCall((prev) => prev ? { ...prev, localStream: manager.getLocalStream() } : prev);
+    }).catch((err) => {
+      console.warn('[CallContext] Failed to switch camera:', err);
+    });
+  }, []);
+
+  // ── Stats Collection ──────────────────────────────────────────────────────
+
+  useEffect(() => {
+    const manager = callManagerRef.current;
+    if (!activeCall || activeCall.status !== 'connected' || !manager) {
+      setCallStats(null);
+      return;
+    }
+
+    manager.onStatsUpdate = (stats) => {
+      setCallStats(stats);
+    };
+    manager.startStats(2000);
+
+    return () => {
+      manager.stopStats();
+      manager.onStatsUpdate = null;
+    };
+  }, [activeCall?.status]);
+
   // ── Handle Incoming Call Events ──────────────────────────────────────────
 
   useEffect(() => {
@@ -471,6 +545,12 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     endCall,
     toggleMute,
     toggleCamera,
+    videoQuality,
+    audioQuality,
+    setVideoQuality,
+    setAudioQuality,
+    switchCamera,
+    callStats,
   };
 
   return (
