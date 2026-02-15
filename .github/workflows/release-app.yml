@@ -12,6 +12,10 @@ on:
         required: true
         type: string
 
+concurrency:
+  group: release-app-${{ github.ref }}
+  cancel-in-progress: false
+
 jobs:
   build-web:
     name: Build Web
@@ -94,6 +98,9 @@ jobs:
         run: |
           cd src-tauri
           cargo tauri build --target ${{ matrix.target }}
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
 
       - name: Upload macOS artifact
         if: startsWith(matrix.platform, 'macos')
@@ -102,12 +109,26 @@ jobs:
           name: ${{ matrix.artifact }}
           path: src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg
 
+      - name: Upload macOS signature
+        if: startsWith(matrix.platform, 'macos')
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}-sig
+          path: src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg.sig
+
       - name: Upload Windows artifact
         if: matrix.platform == 'windows'
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
           path: src-tauri/target/${{ matrix.target }}/release/bundle/msi/*.msi
+
+      - name: Upload Windows signature
+        if: matrix.platform == 'windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}-sig
+          path: src-tauri/target/${{ matrix.target }}/release/bundle/msi/*.msi.sig
 
       - name: Upload Linux artifact
         if: matrix.platform == 'linux'
@@ -117,6 +138,64 @@ jobs:
           path: |
             src-tauri/target/${{ matrix.target }}/release/bundle/deb/*.deb
             src-tauri/target/${{ matrix.target }}/release/bundle/appimage/*.AppImage
+
+      - name: Upload Linux signature
+        if: matrix.platform == 'linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}-sig
+          path: |
+            src-tauri/target/${{ matrix.target }}/release/bundle/appimage/*.AppImage.sig
+
+  build-ios:
+    name: Build iOS
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Setup EAS CLI
+        run: npm install -g eas-cli
+
+      - name: Build iOS
+        run: eas build --platform ios --profile production --non-interactive --no-wait
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+
+  build-android:
+    name: Build Android
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Setup EAS CLI
+        run: npm install -g eas-cli
+
+      - name: Build Android
+        run: eas build --platform android --profile production --non-interactive --no-wait
+        env:
+          EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
 
   release:
     name: Create Release
@@ -134,15 +213,6 @@ jobs:
         with:
           path: artifacts
 
-      - name: Prepare release files
-        run: |
-          mkdir -p release
-          # Flatten artifact directories
-          find artifacts -type f \( -name "*.dmg" -o -name "*.msi" -o -name "*.deb" -o -name "*.AppImage" \) -exec cp {} release/ \;
-          # Zip web build
-          cd artifacts/web-build && zip -r ../../release/umbra-web.zip . && cd ../..
-          ls -la release/
-
       - name: Get version from tag
         id: version
         run: |
@@ -154,6 +224,86 @@ jobs:
             echo "version=$VERSION" >> $GITHUB_OUTPUT
             echo "tag=v$VERSION" >> $GITHUB_OUTPUT
           fi
+
+      - name: Prepare release files
+        run: |
+          mkdir -p release
+
+          # Flatten artifact directories
+          find artifacts -type f \( -name "*.dmg" -o -name "*.msi" -o -name "*.deb" -o -name "*.AppImage" \) -exec cp {} release/ \;
+
+          # Copy signature files
+          find artifacts -type f -name "*.sig" -exec cp {} release/ \;
+
+          # Zip web build
+          cd artifacts/web-build && zip -r ../../release/umbra-web.zip . && cd ../..
+
+          ls -la release/
+
+      - name: Generate Tauri updater manifest (latest.json)
+        id: updater
+        run: |
+          VERSION="${{ steps.version.outputs.tag }}"
+          PUB_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          REPO="${{ github.repository }}"
+
+          # Read signature files if they exist
+          MACOS_ARM_SIG=""
+          MACOS_INTEL_SIG=""
+          WINDOWS_SIG=""
+          LINUX_SIG=""
+
+          for f in release/*.dmg.sig; do
+            [ -f "$f" ] || continue
+            if echo "$f" | grep -qi "aarch64\|arm"; then
+              MACOS_ARM_SIG=$(cat "$f")
+            else
+              MACOS_INTEL_SIG=$(cat "$f")
+            fi
+          done
+
+          for f in release/*.msi.sig; do
+            [ -f "$f" ] || continue
+            WINDOWS_SIG=$(cat "$f")
+          done
+
+          for f in release/*.AppImage.sig; do
+            [ -f "$f" ] || continue
+            LINUX_SIG=$(cat "$f")
+          done
+
+          # Find actual filenames — Tauri uses aarch64 for ARM and x86_64 for Intel
+          MACOS_ARM_FILE=$(ls release/*aarch64*.dmg 2>/dev/null | head -1 | xargs basename 2>/dev/null || echo "")
+          MACOS_INTEL_FILE=$(ls release/*x86_64*.dmg 2>/dev/null | head -1 | xargs basename 2>/dev/null || echo "")
+          WINDOWS_FILE=$(ls release/*.msi 2>/dev/null | head -1 | xargs basename 2>/dev/null || echo "")
+          LINUX_FILE=$(ls release/*.AppImage 2>/dev/null | head -1 | xargs basename 2>/dev/null || echo "")
+
+          # Build latest.json for Tauri updater
+          cat > release/latest.json << EOF
+          {
+            "version": "$VERSION",
+            "notes": "Umbra $VERSION",
+            "pub_date": "$PUB_DATE",
+            "platforms": {
+              "darwin-aarch64": {
+                "signature": "$MACOS_ARM_SIG",
+                "url": "https://github.com/$REPO/releases/download/$VERSION/$MACOS_ARM_FILE"
+              },
+              "darwin-x86_64": {
+                "signature": "$MACOS_INTEL_SIG",
+                "url": "https://github.com/$REPO/releases/download/$VERSION/$MACOS_INTEL_FILE"
+              },
+              "windows-x86_64": {
+                "signature": "$WINDOWS_SIG",
+                "url": "https://github.com/$REPO/releases/download/$VERSION/$WINDOWS_FILE"
+              },
+              "linux-x86_64": {
+                "signature": "$LINUX_SIG",
+                "url": "https://github.com/$REPO/releases/download/$VERSION/$LINUX_FILE"
+              }
+            }
+          }
+          EOF
 
       - name: Create Release
         uses: softprops/action-gh-release@v1
@@ -187,8 +337,12 @@ jobs:
             | Linux (Debian/Ubuntu) | `Umbra_*.deb` |
             | Linux (AppImage) | `Umbra_*.AppImage` |
 
+            #### Mobile
+            iOS and Android builds are triggered via EAS Build and will be available on their respective app stores.
+
             #### Web
             - `umbra-web.zip` - Self-hosted web build
+            - Live: [chat.deepspaceshipping.co](https://chat.deepspaceshipping.co)
 
             ### Relay Servers
             - US East: `wss://relay.deepspaceshipping.co/ws`

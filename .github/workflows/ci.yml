@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: [main]
 
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   CARGO_TERM_COLOR: always
 
@@ -32,7 +36,7 @@ jobs:
 
       - name: Clippy
         working-directory: packages/umbra-relay
-        run: cargo clippy -- -D warnings
+        run: cargo clippy --all-targets -- -D warnings
 
       - name: Test
         working-directory: packages/umbra-relay
@@ -66,6 +70,10 @@ jobs:
       - name: Check formatting
         working-directory: packages/umbra-core
         run: cargo fmt --check
+
+      - name: Clippy
+        working-directory: packages/umbra-core
+        run: cargo clippy --all-targets -- -D warnings
 
       - name: Test
         working-directory: packages/umbra-core

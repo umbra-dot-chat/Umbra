@@ -1,17 +1,20 @@
 /**
  * useVideoEffects — Canvas-based video background effects (blur, virtual backgrounds).
  *
- * Provides a processing pipeline that reads frames from a source MediaStream,
- * applies the selected effect on an offscreen canvas, and exposes a processed
- * output stream via `canvas.captureStream()`.
+ * Uses MediaPipe's ImageSegmenter (selfie segmentation model) to separate
+ * the person from the background in real-time. The segmentation mask is then
+ * used to:
+ *   - blur ONLY the background (not the person) for "blur" mode
+ *   - replace the background with a custom image for "virtual-background" mode
  *
- * The current implementation uses a simulated segmentation approach for the
- * virtual-background mode (simple overlay compositing). This can be swapped
- * for real ML-based body segmentation (e.g. TensorFlow.js BodyPix /
- * MediaPipe Selfie Segmentation) once those dependencies are added.
+ * Works in both Chrome and Safari (no dependency on ctx.filter).
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react';
+import {
+  bgOffice, bgNature, bgAbstract, bgGradient,
+  bgSolidDark, bgSolidLight, bgBeach, bgCity,
+} from '@/assets/backgrounds';
 
 // ── Types ───────────────────────────────────────────────────────────────
 
@@ -50,14 +53,94 @@ export interface UseVideoEffectsReturn {
 
 // ── Background Presets ──────────────────────────────────────────────────
 
-const BACKGROUND_PRESETS: BackgroundPreset[] = [
-  { id: 'office', name: 'Office', thumbnail: '/backgrounds/office-thumb.jpg', url: '/backgrounds/office.jpg' },
-  { id: 'nature', name: 'Nature', thumbnail: '/backgrounds/nature-thumb.jpg', url: '/backgrounds/nature.jpg' },
-  { id: 'abstract', name: 'Abstract', thumbnail: '/backgrounds/abstract-thumb.jpg', url: '/backgrounds/abstract.jpg' },
-  { id: 'gradient', name: 'Gradient', thumbnail: '/backgrounds/gradient-thumb.jpg', url: '/backgrounds/gradient.jpg' },
-  { id: 'solid-dark', name: 'Solid Dark', thumbnail: '/backgrounds/solid-dark-thumb.jpg', url: '/backgrounds/solid-dark.jpg' },
-  { id: 'solid-light', name: 'Solid Light', thumbnail: '/backgrounds/solid-light-thumb.jpg', url: '/backgrounds/solid-light.jpg' },
+export const BACKGROUND_PRESETS: BackgroundPreset[] = [
+  { id: 'office',      name: 'Office',      thumbnail: bgOffice,    url: bgOffice },
+  { id: 'nature',      name: 'Nature',      thumbnail: bgNature,    url: bgNature },
+  { id: 'abstract',    name: 'Abstract',    thumbnail: bgAbstract,  url: bgAbstract },
+  { id: 'gradient',    name: 'Gradient',    thumbnail: bgGradient,  url: bgGradient },
+  { id: 'beach',       name: 'Beach',       thumbnail: bgBeach,     url: bgBeach },
+  { id: 'city',        name: 'City',        thumbnail: bgCity,      url: bgCity },
+  { id: 'solid-dark',  name: 'Solid Dark',  thumbnail: bgSolidDark, url: bgSolidDark },
+  { id: 'solid-light', name: 'Solid Light', thumbnail: bgSolidLight,url: bgSolidLight },
 ];
+
+// ── MediaPipe CDN URLs ──────────────────────────────────────────────────
+
+const MEDIAPIPE_WASM_CDN =
+  'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.32/wasm';
+
+const SELFIE_SEGMENTER_MODEL =
+  'https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter/float16/latest/selfie_segmenter.tflite';
+
+// ── Stack Blur ──────────────────────────────────────────────────────────
+
+/**
+ * Fast O(w*h) box blur approximation (two-pass: horizontal + vertical).
+ * Does NOT rely on `ctx.filter` — works in Safari and all browsers.
+ */
+function stackBlurImageData(imageData: ImageData, radius: number): void {
+  const w = imageData.width;
+  const h = imageData.height;
+  const pixels = imageData.data;
+
+  if (radius < 1) return;
+  radius = Math.min(radius, 255) | 0;
+
+  const div = 2 * radius + 1;
+
+  // Horizontal pass
+  for (let y = 0; y < h; y++) {
+    let rSum = 0, gSum = 0, bSum = 0;
+    const yOff = y * w * 4;
+    for (let i = -radius; i <= radius; i++) {
+      const x = Math.min(Math.max(i, 0), w - 1);
+      const off = yOff + x * 4;
+      rSum += pixels[off];
+      gSum += pixels[off + 1];
+      bSum += pixels[off + 2];
+    }
+    for (let x = 0; x < w; x++) {
+      const off = yOff + x * 4;
+      pixels[off]     = (rSum / div) | 0;
+      pixels[off + 1] = (gSum / div) | 0;
+      pixels[off + 2] = (bSum / div) | 0;
+
+      const addX = Math.min(x + radius + 1, w - 1);
+      const subX = Math.max(x - radius, 0);
+      const addOff = yOff + addX * 4;
+      const subOff = yOff + subX * 4;
+      rSum += pixels[addOff]     - pixels[subOff];
+      gSum += pixels[addOff + 1] - pixels[subOff + 1];
+      bSum += pixels[addOff + 2] - pixels[subOff + 2];
+    }
+  }
+
+  // Vertical pass
+  for (let x = 0; x < w; x++) {
+    let rSum = 0, gSum = 0, bSum = 0;
+    for (let i = -radius; i <= radius; i++) {
+      const y = Math.min(Math.max(i, 0), h - 1);
+      const off = (y * w + x) * 4;
+      rSum += pixels[off];
+      gSum += pixels[off + 1];
+      bSum += pixels[off + 2];
+    }
+    for (let y = 0; y < h; y++) {
+      const off = (y * w + x) * 4;
+      pixels[off]     = (rSum / div) | 0;
+      pixels[off + 1] = (gSum / div) | 0;
+      pixels[off + 2] = (bSum / div) | 0;
+
+      const addY = Math.min(y + radius + 1, h - 1);
+      const subY = Math.max(y - radius, 0);
+      const addOff = (addY * w + x) * 4;
+      const subOff = (subY * w + x) * 4;
+      rSum += pixels[addOff]     - pixels[subOff];
+      gSum += pixels[addOff + 1] - pixels[subOff + 1];
+      bSum += pixels[addOff + 2] - pixels[subOff + 2];
+    }
+  }
+}
 
 // ── Hook ────────────────────────────────────────────────────────────────
 
@@ -74,15 +157,25 @@ export function useVideoEffects(config: UseVideoEffectsConfig): UseVideoEffectsR
   const [isProcessing, setIsProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Refs for the offscreen canvas pipeline
+  // Refs for the canvas pipeline
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const ctxRef = useRef<CanvasRenderingContext2D | null>(null);
-  const offscreenCanvasRef = useRef<OffscreenCanvas | null>(null);
-  const offscreenCtxRef = useRef<OffscreenCanvasRenderingContext2D | null>(null);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const animationFrameRef = useRef<number>(0);
   const backgroundImageRef = useRef<HTMLImageElement | null>(null);
   const capturedStreamRef = useRef<MediaStream | null>(null);
+
+  // MediaPipe segmenter (persists across pipeline restarts)
+  const segmenterRef = useRef<any>(null);
+  const segmenterReadyRef = useRef(false);
+
+  // Config refs — render loop reads without causing pipeline rebuild
+  const effectRef = useRef<VideoEffect>(effect);
+  const blurIntensityRef = useRef<number>(blurIntensity);
+  effectRef.current = effect;
+  blurIntensityRef.current = blurIntensity;
+
+  const needsPipeline = enabled && !!sourceStream && effect !== 'none';
 
   // ── Load background image ──────────────────────────────────────────
 
@@ -94,36 +187,26 @@ export function useVideoEffects(config: UseVideoEffectsConfig): UseVideoEffectsR
 
     const img = new Image();
     img.crossOrigin = 'anonymous';
-
-    img.onload = () => {
-      backgroundImageRef.current = img;
-    };
-
+    img.onload = () => { backgroundImageRef.current = img; };
     img.onerror = () => {
       console.warn('[useVideoEffects] Failed to load background image:', backgroundImage);
       backgroundImageRef.current = null;
     };
-
     img.src = backgroundImage;
 
-    return () => {
-      img.onload = null;
-      img.onerror = null;
-    };
+    return () => { img.onload = null; img.onerror = null; };
   }, [backgroundImage]);
 
   // ── Render loop ────────────────────────────────────────────────────
+  // Uses MediaPipe segmentation mask to separate person from background.
+  //   blur mode: blurs only background pixels via stack blur
+  //   virtual-background: composites person over custom image
 
   const renderFrame = useCallback(() => {
     const video = videoRef.current;
     const canvas = canvasRef.current;
-
-    // Prefer the OffscreenCanvas context for rendering; fall back to the
-    // regular canvas context. The OffscreenCanvas runs compositing off the
-    // main DOM, reducing layout/paint overhead.
-    const offCtx = offscreenCtxRef.current;
-    const mainCtx = ctxRef.current;
-    const ctx = offCtx ?? mainCtx;
+    const ctx = ctxRef.current;
+    const segmenter = segmenterRef.current;
 
     if (!video || !canvas || !ctx || video.paused || video.ended) {
       animationFrameRef.current = requestAnimationFrame(renderFrame);
@@ -133,95 +216,133 @@ export function useVideoEffects(config: UseVideoEffectsConfig): UseVideoEffectsR
     const videoW = video.videoWidth || 640;
     const videoH = video.videoHeight || 480;
 
-    // Ensure canvas dimensions match the video
     if (canvas.width !== videoW || canvas.height !== videoH) {
       canvas.width = videoW;
       canvas.height = videoH;
-
-      // Keep the OffscreenCanvas in sync
-      const offCanvas = offscreenCanvasRef.current;
-      if (offCanvas) {
-        offCanvas.width = videoW;
-        offCanvas.height = videoH;
-      }
     }
 
     const width = canvas.width;
     const height = canvas.height;
+    const currentEffect = effectRef.current;
+    const currentBlur = blurIntensityRef.current;
 
-    if (effect === 'blur') {
-      // Apply blur filter to the entire frame
-      ctx.filter = `blur(${blurIntensity}px)`;
+    // If segmenter is not ready, draw raw video
+    if (!segmenter || !segmenterReadyRef.current) {
       ctx.drawImage(video, 0, 0, width, height);
-      ctx.filter = 'none';
-    } else if (effect === 'virtual-background') {
-      // Draw the background image (or a fallback solid color) first
+      animationFrameRef.current = requestAnimationFrame(renderFrame);
+      return;
+    }
+
+    // Run segmentation
+    let mask: Float32Array | null = null;
+    try {
+      const result = segmenter.segmentForVideo(video, performance.now());
+      if (result.confidenceMasks && result.confidenceMasks.length > 0) {
+        mask = result.confidenceMasks[0].getAsFloat32Array();
+      }
+    } catch {
+      // Segmentation failed — draw raw
+      ctx.drawImage(video, 0, 0, width, height);
+      animationFrameRef.current = requestAnimationFrame(renderFrame);
+      return;
+    }
+
+    if (!mask) {
+      ctx.drawImage(video, 0, 0, width, height);
+      animationFrameRef.current = requestAnimationFrame(renderFrame);
+      return;
+    }
+
+    if (currentEffect === 'blur') {
+      // 1. Draw full video frame to get raw pixel data
+      ctx.drawImage(video, 0, 0, width, height);
+      const originalData = ctx.getImageData(0, 0, width, height);
+
+      // 2. Create a blurred copy
+      const blurredData = new ImageData(
+        new Uint8ClampedArray(originalData.data),
+        width,
+        height,
+      );
+      stackBlurImageData(blurredData, Math.max(1, Math.round(currentBlur * 0.8)));
+
+      // 3. Composite: person = original, background = blurred
+      const orig = originalData.data;
+      const blur = blurredData.data;
+
+      for (let i = 0; i < mask.length; i++) {
+        // mask[i]: 1.0 = person, 0.0 = background
+        const p = mask[i];
+        const b = 1.0 - p;
+        const px = i * 4;
+        orig[px]     = orig[px]     * p + blur[px]     * b;
+        orig[px + 1] = orig[px + 1] * p + blur[px + 1] * b;
+        orig[px + 2] = orig[px + 2] * p + blur[px + 2] * b;
+      }
+
+      ctx.putImageData(originalData, 0, 0);
+    } else if (currentEffect === 'virtual-background') {
+      // 1. Draw background first
       const bgImg = backgroundImageRef.current;
       if (bgImg && bgImg.complete && bgImg.naturalWidth > 0) {
         ctx.drawImage(bgImg, 0, 0, width, height);
       } else {
-        // Fallback: dark background when no image is loaded
         ctx.fillStyle = '#1a1a2e';
         ctx.fillRect(0, 0, width, height);
       }
+      const bgData = ctx.getImageData(0, 0, width, height);
 
-      // Composite the video frame on top.
-      //
-      // NOTE: This is a placeholder compositing step. Without ML-based
-      // body segmentation, we simply overlay the video with reduced
-      // opacity so the background is partially visible. When a real
-      // segmentation model is integrated, this should be replaced with
-      // a masked draw that only renders the person pixels on top of the
-      // background.
-      ctx.globalAlpha = 0.85;
+      // 2. Draw video to get person pixels
       ctx.drawImage(video, 0, 0, width, height);
-      ctx.globalAlpha = 1.0;
+      const vidData = ctx.getImageData(0, 0, width, height);
+
+      // 3. Composite: person from video, background from bgData
+      const bg = bgData.data;
+      const vid = vidData.data;
+
+      for (let i = 0; i < mask.length; i++) {
+        const p = mask[i];
+        const b = 1.0 - p;
+        const px = i * 4;
+        vid[px]     = vid[px]     * p + bg[px]     * b;
+        vid[px + 1] = vid[px + 1] * p + bg[px + 1] * b;
+        vid[px + 2] = vid[px + 2] * p + bg[px + 2] * b;
+      }
+
+      ctx.putImageData(vidData, 0, 0);
     } else {
-      // 'none' — should not reach here since we short-circuit, but
-      // handle it gracefully just in case.
       ctx.drawImage(video, 0, 0, width, height);
-    }
-
-    // If we rendered to the OffscreenCanvas, blit the result to the main
-    // canvas so captureStream() picks it up.
-    if (offCtx && mainCtx && offscreenCanvasRef.current) {
-      mainCtx.drawImage(offscreenCanvasRef.current, 0, 0);
     }
 
     animationFrameRef.current = requestAnimationFrame(renderFrame);
-  }, [effect, blurIntensity]);
+  }, []); // Stable — reads config from refs
 
   // ── Pipeline setup / teardown ──────────────────────────────────────
 
   useEffect(() => {
-    // If disabled or no source, pass through directly
-    if (!enabled || !sourceStream || effect === 'none') {
-      // Clean up any running pipeline
+    if (!needsPipeline) {
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
         animationFrameRef.current = 0;
       }
-
       if (capturedStreamRef.current) {
-        for (const track of capturedStreamRef.current.getTracks()) {
-          track.stop();
-        }
+        for (const track of capturedStreamRef.current.getVideoTracks()) track.stop();
         capturedStreamRef.current = null;
       }
-
       if (videoRef.current) {
         videoRef.current.pause();
         videoRef.current.srcObject = null;
         videoRef.current = null;
       }
+      canvasRef.current = null;
+      ctxRef.current = null;
 
-      setOutputStream(effect === 'none' ? sourceStream : null);
+      setOutputStream(sourceStream && enabled ? sourceStream : null);
       setIsProcessing(false);
       setError(null);
       return;
     }
 
-    // Set up the offscreen canvas pipeline
     let cancelled = false;
 
     const setup = async () => {
@@ -229,7 +350,40 @@ export function useVideoEffects(config: UseVideoEffectsConfig): UseVideoEffectsR
         setError(null);
         setIsProcessing(true);
 
-        // Create a hidden video element to consume the source stream
+        // 1. Initialize MediaPipe segmenter (once — persisted in ref)
+        if (!segmenterRef.current) {
+          try {
+            const { FilesetResolver, ImageSegmenter } = await import(
+              '@mediapipe/tasks-vision'
+            );
+
+            const vision = await FilesetResolver.forVisionTasks(MEDIAPIPE_WASM_CDN);
+            if (cancelled) return;
+
+            const segmenter = await ImageSegmenter.createFromOptions(vision, {
+              baseOptions: {
+                modelAssetPath: SELFIE_SEGMENTER_MODEL,
+                delegate: 'GPU',
+              },
+              outputConfidenceMasks: true,
+              outputCategoryMask: false,
+              runningMode: 'VIDEO',
+            });
+
+            if (cancelled) { segmenter.close(); return; }
+
+            segmenterRef.current = segmenter;
+            segmenterReadyRef.current = true;
+            console.info('[useVideoEffects] MediaPipe selfie segmenter ready');
+          } catch (segErr) {
+            console.warn('[useVideoEffects] MediaPipe init failed, effects will show raw video:', segErr);
+            segmenterReadyRef.current = false;
+          }
+        }
+
+        if (cancelled) return;
+
+        // 2. Hidden video element
         const video = document.createElement('video');
         video.setAttribute('playsinline', '');
         video.setAttribute('autoplay', '');
@@ -238,10 +392,9 @@ export function useVideoEffects(config: UseVideoEffectsConfig): UseVideoEffectsR
         videoRef.current = video;
 
         await video.play();
-
         if (cancelled) return;
 
-        // Create the main canvas (needed for captureStream())
+        // 3. Main canvas
         const canvas = document.createElement('canvas');
         const w = video.videoWidth || 640;
         const h = video.videoHeight || 480;
@@ -257,31 +410,9 @@ export function useVideoEffects(config: UseVideoEffectsConfig): UseVideoEffectsR
         }
         ctxRef.current = ctx;
 
-        // Performance optimisation: use an OffscreenCanvas for the
-        // compositing / effect work when the API is available. This keeps
-        // the heavy pixel manipulation off the main canvas and can be
-        // promoted to a GPU-backed surface by the browser. The result is
-        // blitted to the main HTMLCanvasElement each frame so that
-        // captureStream() (which is only available on HTMLCanvasElement)
-        // continues to work.
-        if (typeof OffscreenCanvas !== 'undefined') {
-          try {
-            const offscreen = new OffscreenCanvas(w, h);
-            const offCtx = offscreen.getContext('2d');
-            if (offCtx) {
-              offscreenCanvasRef.current = offscreen;
-              offscreenCtxRef.current = offCtx;
-            }
-          } catch {
-            // OffscreenCanvas 2d context not supported — fall back silently
-            offscreenCanvasRef.current = null;
-            offscreenCtxRef.current = null;
-          }
-        }
-
-        // Capture the canvas as a MediaStream at 30 FPS
+        // 4. Capture stream
         if (typeof canvas.captureStream !== 'function') {
-          console.warn('[useVideoEffects] canvas.captureStream() not supported; falling back to source stream');
+          console.warn('[useVideoEffects] captureStream not supported');
           setOutputStream(sourceStream);
           setIsProcessing(false);
           return;
@@ -289,14 +420,15 @@ export function useVideoEffects(config: UseVideoEffectsConfig): UseVideoEffectsR
         const capturedStream = canvas.captureStream(30);
         capturedStreamRef.current = capturedStream;
 
-        // Preserve audio tracks from the source stream
-        for (const audioTrack of sourceStream.getAudioTracks()) {
-          capturedStream.addTrack(audioTrack);
+        if (sourceStream) {
+          for (const audioTrack of sourceStream.getAudioTracks()) {
+            capturedStream.addTrack(audioTrack);
+          }
         }
 
         setOutputStream(capturedStream);
 
-        // Start the render loop
+        // 5. Start render loop
         animationFrameRef.current = requestAnimationFrame(renderFrame);
       } catch (err) {
         if (!cancelled) {
@@ -304,7 +436,6 @@ export function useVideoEffects(config: UseVideoEffectsConfig): UseVideoEffectsR
           console.error('[useVideoEffects] Pipeline setup failed:', message);
           setError(message);
           setIsProcessing(false);
-          // Fall back to the unprocessed source stream
           setOutputStream(sourceStream);
         }
       }
@@ -312,35 +443,38 @@ export function useVideoEffects(config: UseVideoEffectsConfig): UseVideoEffectsR
 
     setup();
 
-    // Cleanup
     return () => {
       cancelled = true;
-
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
         animationFrameRef.current = 0;
       }
-
       if (capturedStreamRef.current) {
-        for (const track of capturedStreamRef.current.getVideoTracks()) {
-          track.stop();
-        }
+        for (const track of capturedStreamRef.current.getVideoTracks()) track.stop();
         capturedStreamRef.current = null;
       }
-
       if (videoRef.current) {
         videoRef.current.pause();
         videoRef.current.srcObject = null;
         videoRef.current = null;
       }
-
       canvasRef.current = null;
       ctxRef.current = null;
-      offscreenCanvasRef.current = null;
-      offscreenCtxRef.current = null;
       setIsProcessing(false);
     };
-  }, [sourceStream, effect, enabled, renderFrame]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sourceStream, needsPipeline, renderFrame]);
+
+  // Cleanup segmenter on full unmount
+  useEffect(() => {
+    return () => {
+      if (segmenterRef.current) {
+        try { segmenterRef.current.close(); } catch { /* ignore */ }
+        segmenterRef.current = null;
+        segmenterReadyRef.current = false;
+      }
+    };
+  }, []);
 
   return {
     outputStream,

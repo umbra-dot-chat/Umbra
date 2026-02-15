@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { VideoQuality, AudioQuality } from '@/types/call';
 import type { OpusConfig, OpusApplication, AudioBitrate } from '@/types/call';
 import { DEFAULT_OPUS_CONFIG } from '@/types/call';
+import type { VideoEffect } from '@/hooks/useVideoEffects';
 
 export type IncomingCallDisplay = 'fullscreen' | 'toast';
 
@@ -14,6 +15,10 @@ interface CallSettings {
   inputVolume: number; // 0-100
   outputVolume: number; // 0-100
   mediaE2EE: boolean; // opt-in frame-level E2EE via RTCRtpScriptTransform
+  videoEffect: VideoEffect; // none | blur | virtual-background
+  blurIntensity: number; // 1-30
+  backgroundPresetId: string | null; // selected preset id or null for custom
+  customBackgroundUrl: string | null; // user-provided image URL
 }
 
 const STORAGE_KEYS = {
@@ -25,6 +30,10 @@ const STORAGE_KEYS = {
   inputVolume: 'umbra_call_input_volume',
   outputVolume: 'umbra_call_output_volume',
   mediaE2EE: 'umbra_call_media_e2ee',
+  videoEffect: 'umbra_call_video_effect',
+  blurIntensity: 'umbra_call_blur_intensity',
+  backgroundPresetId: 'umbra_call_bg_preset_id',
+  customBackgroundUrl: 'umbra_call_custom_bg_url',
 } as const;
 
 const DEFAULTS: CallSettings = {
@@ -36,6 +45,10 @@ const DEFAULTS: CallSettings = {
   inputVolume: 100,
   outputVolume: 100,
   mediaE2EE: false,
+  videoEffect: 'none',
+  blurIntensity: 10,
+  backgroundPresetId: null,
+  customBackgroundUrl: null,
 };
 
 function readFromStorage<T>(key: string, fallback: T): T {
@@ -72,6 +85,14 @@ export function useCallSettings() {
     useState<number>(DEFAULTS.outputVolume);
   const [mediaE2EE, setMediaE2EEState] =
     useState<boolean>(DEFAULTS.mediaE2EE);
+  const [videoEffect, setVideoEffectState] =
+    useState<VideoEffect>(DEFAULTS.videoEffect);
+  const [blurIntensity, setBlurIntensityState] =
+    useState<number>(DEFAULTS.blurIntensity);
+  const [backgroundPresetId, setBackgroundPresetIdState] =
+    useState<string | null>(DEFAULTS.backgroundPresetId);
+  const [customBackgroundUrl, setCustomBackgroundUrlState] =
+    useState<string | null>(DEFAULTS.customBackgroundUrl);
 
   // Hydrate state from localStorage on mount
   useEffect(() => {
@@ -120,6 +141,30 @@ export function useCallSettings() {
         DEFAULTS.mediaE2EE,
       ),
     );
+    setVideoEffectState(
+      readFromStorage<VideoEffect>(
+        STORAGE_KEYS.videoEffect,
+        DEFAULTS.videoEffect,
+      ),
+    );
+    setBlurIntensityState(
+      readFromStorage<number>(
+        STORAGE_KEYS.blurIntensity,
+        DEFAULTS.blurIntensity,
+      ),
+    );
+    setBackgroundPresetIdState(
+      readFromStorage<string | null>(
+        STORAGE_KEYS.backgroundPresetId,
+        DEFAULTS.backgroundPresetId,
+      ),
+    );
+    setCustomBackgroundUrlState(
+      readFromStorage<string | null>(
+        STORAGE_KEYS.customBackgroundUrl,
+        DEFAULTS.customBackgroundUrl,
+      ),
+    );
   }, []);
 
   const setIncomingCallDisplay = useCallback((value: IncomingCallDisplay) => {
@@ -165,6 +210,27 @@ export function useCallSettings() {
     writeToStorage(STORAGE_KEYS.mediaE2EE, value);
   }, []);
 
+  const setVideoEffect = useCallback((value: VideoEffect) => {
+    setVideoEffectState(value);
+    writeToStorage(STORAGE_KEYS.videoEffect, value);
+  }, []);
+
+  const setBlurIntensity = useCallback((value: number) => {
+    const clamped = Math.max(1, Math.min(30, value));
+    setBlurIntensityState(clamped);
+    writeToStorage(STORAGE_KEYS.blurIntensity, clamped);
+  }, []);
+
+  const setBackgroundPresetId = useCallback((value: string | null) => {
+    setBackgroundPresetIdState(value);
+    writeToStorage(STORAGE_KEYS.backgroundPresetId, value);
+  }, []);
+
+  const setCustomBackgroundUrl = useCallback((value: string | null) => {
+    setCustomBackgroundUrlState(value);
+    writeToStorage(STORAGE_KEYS.customBackgroundUrl, value);
+  }, []);
+
   return {
     incomingCallDisplay,
     setIncomingCallDisplay,
@@ -182,5 +248,13 @@ export function useCallSettings() {
     setOutputVolume,
     mediaE2EE,
     setMediaE2EE,
+    videoEffect,
+    setVideoEffect,
+    blurIntensity,
+    setBlurIntensity,
+    backgroundPresetId,
+    setBackgroundPresetId,
+    customBackgroundUrl,
+    setCustomBackgroundUrl,
   };
 }

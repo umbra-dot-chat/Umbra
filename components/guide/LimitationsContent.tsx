@@ -7,7 +7,6 @@ import { View, Pressable, Platform } from 'react-native';
 import { Text, useTheme } from '@coexist/wisp-react-native';
 
 import { TechSpec } from '@/components/guide/TechSpec';
-import { TestCoverageFlow, ArchitectureOverviewFlow } from '@/components/guide/FlowDiagram';
 
 const REPO_BASE = 'https://github.com/InfamousVague/Umbra';
 
@@ -65,8 +64,6 @@ export default function LimitationsContent() {
           </Text>
         </Pressable>
       </View>
-
-      <ArchitectureOverviewFlow />
 
       <TechSpec
         title="Core Features (Stable)"
@@ -131,8 +128,6 @@ export default function LimitationsContent() {
           { label: 'PiP Mode', value: 'Web (custom), Mobile (native)' },
         ]}
       />
-
-      <TestCoverageFlow />
 
       <TechSpec
         title="Test Coverage by Area"

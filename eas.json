@@ -1,0 +1,37 @@
+{
+  "cli": {
+    "version": ">= 14.0.0"
+  },
+  "build": {
+    "production": {
+      "ios": {
+        "buildConfiguration": "Release",
+        "distribution": "store"
+      },
+      "android": {
+        "buildType": "app-bundle",
+        "distribution": "store"
+      }
+    },
+    "preview": {
+      "ios": {
+        "buildConfiguration": "Release",
+        "distribution": "internal"
+      },
+      "android": {
+        "buildType": "apk",
+        "distribution": "internal"
+      }
+    }
+  },
+  "submit": {
+    "production": {
+      "ios": {
+        "appleId": "PLACEHOLDER"
+      },
+      "android": {
+        "track": "internal"
+      }
+    }
+  }
+}

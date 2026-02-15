@@ -21,6 +21,7 @@ import { CallPipWidget } from '@coexist/wisp-react-native';
 import { IncomingCallOverlay } from '@/components/call/IncomingCallOverlay';
 import { CommandPalette } from '@/components/modals/CommandPalette';
 import { PluginMarketplace } from '@/components/modals/PluginMarketplace';
+import { InstallBanner } from '@/components/ui/InstallBanner';
 import { useCommandPalette } from '@/hooks/useCommandPalette';
 import { SettingsDialogProvider, useSettingsDialog } from '@/contexts/SettingsDialogContext';
 import type { Friend, MessageEvent } from '@umbra/service';
@@ -240,6 +241,7 @@ function MainLayoutInner() {
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.background.canvas }}>
+      <InstallBanner />
       <HStack gap={0} style={{ flex: 1 }}>
         <ChatSidebar
           search={search}

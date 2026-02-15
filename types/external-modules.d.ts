@@ -85,3 +85,20 @@ declare module '/umbra_core.js' {
   export default mod.default;
   export = mod;
 }
+
+/**
+ * Tauri plugin-updater — OTA updates for desktop apps.
+ * Types are provided by the package itself; this fallback
+ * prevents TS errors when the package is not installed (web/mobile).
+ */
+declare module '@tauri-apps/plugin-updater' {
+  export function check(): Promise<any>;
+}
+
+/**
+ * Tauri plugin-process — Process management for desktop apps.
+ */
+declare module '@tauri-apps/plugin-process' {
+  export function relaunch(): Promise<void>;
+  export function exit(code?: number): Promise<void>;
+}

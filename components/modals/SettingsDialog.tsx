@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import { View, Pressable, ScrollView, Text as RNText, Platform, Image } from 'react-native';
+import { View, Pressable, ScrollView, Text as RNText, Platform, Image, Linking } from 'react-native';
 import type { ViewStyle, TextStyle } from 'react-native';
 import {
   Overlay,
@@ -53,9 +53,12 @@ import {
   ChevronDownIcon,
   VideoIcon,
   CheckIcon,
+  BookOpenIcon,
 } from '@/components/icons';
 import { useNetwork } from '@/hooks/useNetwork';
 import { useCall } from '@/hooks/useCall';
+import { BACKGROUND_PRESETS, useVideoEffects } from '@/hooks/useVideoEffects';
+import type { VideoEffect, BackgroundPreset } from '@/hooks/useVideoEffects';
 import { useCallSettings } from '@/hooks/useCallSettings';
 import { useMediaDevices } from '@/hooks/useMediaDevices';
 import type { VideoQuality, AudioQuality, OpusConfig, OpusApplication, AudioBitrate } from '@/types/call';
@@ -66,6 +69,8 @@ import { useFonts, FONT_REGISTRY } from '@/contexts/FontContext';
 import { useAppTheme } from '@/contexts/ThemeContext';
 import { SlotRenderer } from '@/components/plugins/SlotRenderer';
 import { clearDatabaseExport, getSqlDatabase } from '@umbra/wasm';
+import { useAppUpdate } from '@/hooks/useAppUpdate';
+import { AllPlatformsDialog } from '@/components/modals/AllPlatformsDialog';
 import { HelpIndicator } from '@/components/ui/HelpIndicator';
 import { HelpPopoverHost } from '@/components/ui/HelpPopoverHost';
 import { HelpText, HelpHighlight, HelpListItem } from '@/components/ui/HelpContent';
@@ -80,7 +85,7 @@ const AtSignInputIcon = AtSignIcon as InputIcon;
 // Types
 // ---------------------------------------------------------------------------
 
-export type SettingsSection = 'account' | 'profile' | 'appearance' | 'notifications' | 'privacy' | 'audio-video' | 'network' | 'data' | 'plugins';
+export type SettingsSection = 'account' | 'profile' | 'appearance' | 'notifications' | 'privacy' | 'audio-video' | 'network' | 'data' | 'plugins' | 'about';
 
 export interface SettingsDialogProps {
   open: boolean;
@@ -105,6 +110,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'network', label: 'Network', icon: GlobeIcon },
   { id: 'data', label: 'Data', icon: DatabaseIcon },
   { id: 'plugins', label: 'Plugins', icon: ZapIcon },
+  { id: 'about', label: 'About', icon: BookOpenIcon },
 ];
 
 const ACCENT_PRESETS = [
@@ -1174,6 +1180,10 @@ function AudioVideoSection() {
     inputVolume: savedInputVolume, setInputVolume: setSavedInputVolume,
     outputVolume: savedOutputVolume, setOutputVolume: setSavedOutputVolume,
     mediaE2EE, setMediaE2EE,
+    videoEffect, setVideoEffect,
+    blurIntensity, setBlurIntensity,
+    backgroundPresetId, setBackgroundPresetId,
+    customBackgroundUrl, setCustomBackgroundUrl,
   } = useCallSettings();
   const { audioInputs, videoInputs, audioOutputs, isSupported } = useMediaDevices();
   const [cameraPreviewStream, setCameraPreviewStream] = useState<MediaStream | null>(null);
@@ -1181,6 +1191,72 @@ function AudioVideoSection() {
   const micAnalyserRef = useRef<{ stop: () => void } | null>(null);
   const [micTestActive, setMicTestActive] = useState(false);
   const [micTestLevel, setMicTestLevel] = useState(0);
+
+  // Effects preview state
+  const [effectsPreviewStream, setEffectsPreviewStream] = useState<MediaStream | null>(null);
+  const effectsPreviewRef = useRef<{ stop: () => void } | null>(null);
+  const effectsVideoElRef = useRef<HTMLVideoElement | null>(null);
+
+  // Resolve the active background image URL from preset or custom
+  const activeBackgroundUrl = useMemo(() => {
+    if (customBackgroundUrl) return customBackgroundUrl;
+    if (backgroundPresetId) {
+      const preset = BACKGROUND_PRESETS.find((p) => p.id === backgroundPresetId);
+      return preset?.url || null;
+    }
+    return null;
+  }, [backgroundPresetId, customBackgroundUrl]);
+
+  // Pipe preview stream through useVideoEffects
+  const { outputStream: effectsOutputStream, isProcessing: effectsProcessing } = useVideoEffects({
+    sourceStream: effectsPreviewStream,
+    effect: videoEffect,
+    blurIntensity,
+    backgroundImage: activeBackgroundUrl,
+    enabled: !!effectsPreviewStream,
+  });
+
+  // Sync the processed (or raw) stream to the preview <video> element.
+  // Using a useEffect instead of an inline ref callback prevents the video
+  // from resetting srcObject on every React re-render.
+  const effectsDisplayStream = effectsOutputStream || effectsPreviewStream;
+  useEffect(() => {
+    const el = effectsVideoElRef.current;
+    if (el && effectsDisplayStream) {
+      if (el.srcObject !== effectsDisplayStream) {
+        el.srcObject = effectsDisplayStream;
+      }
+    } else if (el) {
+      el.srcObject = null;
+    }
+  }, [effectsDisplayStream]);
+
+  const startEffectsPreview = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      setEffectsPreviewStream(stream);
+      effectsPreviewRef.current = {
+        stop: () => {
+          for (const track of stream.getTracks()) track.stop();
+          setEffectsPreviewStream(null);
+        },
+      };
+    } catch {
+      // Permission denied or not available
+    }
+  }, []);
+
+  const stopEffectsPreview = useCallback(() => {
+    effectsPreviewRef.current?.stop();
+    effectsPreviewRef.current = null;
+  }, []);
+
+  // Clean up effects preview on unmount
+  useEffect(() => {
+    return () => {
+      effectsPreviewRef.current?.stop();
+    };
+  }, []);
   const micTestRef = useRef<{ stop: () => void } | null>(null);
 
   const startTestPreview = useCallback(async () => {
@@ -1377,6 +1453,224 @@ function AudioVideoSection() {
           placeholder="Select quality"
         />
       </SettingRow>
+
+      <Separator spacing="sm" />
+
+      {/* Test Video — live preview with effects applied */}
+      <View style={{ gap: 16 }}>
+        <View>
+          <RNText style={{ fontSize: 15, fontWeight: '600', color: tc.text.primary }}>
+            Test Video
+          </RNText>
+          <RNText style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
+            Preview your camera with the current video effect applied.
+          </RNText>
+        </View>
+
+        {effectsPreviewStream ? (
+          <View style={{ gap: 12 }}>
+            {/* Live preview with effects */}
+            <View style={{
+              width: '100%',
+              height: 220,
+              borderRadius: 10,
+              overflow: 'hidden',
+              backgroundColor: tc.background.sunken,
+              position: 'relative',
+            }}>
+              <video
+                ref={effectsVideoElRef as any}
+                autoPlay
+                muted
+                playsInline
+                style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)' } as any}
+              />
+
+              {/* Processing indicator */}
+              {effectsProcessing && videoEffect !== 'none' && (
+                <View style={{
+                  position: 'absolute',
+                  top: 8,
+                  left: 8,
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 6,
+                  backgroundColor: 'rgba(0,0,0,0.6)',
+                  paddingVertical: 3,
+                  paddingHorizontal: 8,
+                  borderRadius: 6,
+                }}>
+                  <View style={{
+                    width: 6,
+                    height: 6,
+                    borderRadius: 3,
+                    backgroundColor: tc.status.success,
+                  }} />
+                  <RNText style={{ fontSize: 10, color: '#fff', fontWeight: '500' }}>
+                    {videoEffect === 'blur' ? 'Blur active' : 'Background active'}
+                  </RNText>
+                </View>
+              )}
+
+              {/* Effect label */}
+              {videoEffect === 'none' && (
+                <View style={{
+                  position: 'absolute',
+                  top: 8,
+                  left: 8,
+                  backgroundColor: 'rgba(0,0,0,0.5)',
+                  paddingVertical: 3,
+                  paddingHorizontal: 8,
+                  borderRadius: 6,
+                }}>
+                  <RNText style={{ fontSize: 10, color: '#fff', opacity: 0.8 }}>
+                    No effect
+                  </RNText>
+                </View>
+              )}
+            </View>
+
+            <Button variant="secondary" size="sm" onPress={stopEffectsPreview}>
+              Stop Preview
+            </Button>
+          </View>
+        ) : (
+          <Button
+            variant="secondary"
+            size="sm"
+            onPress={startEffectsPreview}
+            iconLeft={<VideoIcon size={14} color={tc.text.secondary} />}
+          >
+            Start Camera Preview
+          </Button>
+        )}
+      </View>
+
+      <Separator spacing="sm" />
+
+      {/* Video Effects */}
+      <View style={{ gap: 16 }}>
+        <View>
+          <RNText style={{ fontSize: 15, fontWeight: '600', color: tc.text.primary }}>
+            Video Effects
+          </RNText>
+          <RNText style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
+            Apply background effects to your webcam during calls.
+          </RNText>
+        </View>
+
+        <SettingRow label="Background Effect" description="Choose how your background appears on video calls." vertical>
+          <SegmentedControl
+            options={[
+              { value: 'none', label: 'None' },
+              { value: 'blur', label: 'Blur' },
+              { value: 'virtual-background', label: 'Image' },
+            ]}
+            value={videoEffect}
+            onChange={(v) => setVideoEffect(v as VideoEffect)}
+          />
+        </SettingRow>
+
+        {videoEffect === 'blur' && (
+          <SettingRow label="Blur Intensity" description={`${blurIntensity}px`} vertical>
+            <Slider
+              value={blurIntensity}
+              min={1}
+              max={30}
+              step={1}
+              onChange={setBlurIntensity}
+            />
+          </SettingRow>
+        )}
+
+        {videoEffect === 'virtual-background' && (
+          <View style={{ gap: 10 }}>
+            <RNText style={{ fontSize: 11, fontWeight: '600', color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+              Background Image
+            </RNText>
+
+            {/* Preset grid */}
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+              {BACKGROUND_PRESETS.map((preset) => {
+                const isSelected = backgroundPresetId === preset.id;
+                return (
+                  <Pressable
+                    key={preset.id}
+                    onPress={() => {
+                      setBackgroundPresetId(preset.id);
+                      setCustomBackgroundUrl(null);
+                    }}
+                    style={({ pressed }) => ({
+                      width: 72,
+                      height: 48,
+                      borderRadius: 8,
+                      overflow: 'hidden',
+                      borderWidth: 2,
+                      borderColor: isSelected ? tc.accent.primary : pressed ? tc.border.subtle : 'transparent',
+                      backgroundColor: tc.background.sunken,
+                    })}
+                  >
+                    {/* Thumbnail preview — uses the SVG data URI */}
+                    <View style={{ width: '100%', height: '100%', position: 'relative' }}>
+                      <img
+                        src={preset.thumbnail}
+                        alt={preset.name}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' } as any}
+                      />
+                      <View style={{
+                        position: 'absolute',
+                        bottom: 0,
+                        left: 0,
+                        right: 0,
+                        paddingVertical: 1,
+                        backgroundColor: 'rgba(0,0,0,0.5)',
+                        alignItems: 'center',
+                      }}>
+                        <RNText style={{ fontSize: 8, color: '#fff', fontWeight: '500' }}>
+                          {preset.name}
+                        </RNText>
+                      </View>
+                    </View>
+                    {isSelected && (
+                      <View style={{
+                        position: 'absolute',
+                        top: 2,
+                        right: 2,
+                        width: 14,
+                        height: 14,
+                        borderRadius: 7,
+                        backgroundColor: tc.accent.primary,
+                        justifyContent: 'center',
+                        alignItems: 'center',
+                      }}>
+                        <CheckIcon size={9} color={tc.text.inverse} />
+                      </View>
+                    )}
+                  </Pressable>
+                );
+              })}
+            </View>
+
+            {/* Custom URL input */}
+            <View style={{ gap: 4 }}>
+              <RNText style={{ fontSize: 11, color: tc.text.muted }}>
+                Or use a custom image URL:
+              </RNText>
+              <Input
+                placeholder="https://example.com/background.jpg"
+                value={customBackgroundUrl || ''}
+                onChangeText={(url) => {
+                  setCustomBackgroundUrl(url || null);
+                  if (url) setBackgroundPresetId(null);
+                }}
+                size="sm"
+              />
+            </View>
+          </View>
+        )}
+      </View>
+
+      <Separator spacing="sm" />
 
       {/* Audio Quality Preset */}
       <SettingRow label="Audio Quality" description="Choose an audio codec and quality preset." vertical>
@@ -2938,6 +3232,134 @@ function PluginSettingsCard({
 }
 
 // ---------------------------------------------------------------------------
+// About Section
+// ---------------------------------------------------------------------------
+
+function AboutSection() {
+  const { theme } = useTheme();
+  const tc = theme.colors;
+  const update = useAppUpdate();
+  const [showAllPlatforms, setShowAllPlatforms] = useState(false);
+
+  // Get core version — it's a synchronous static method
+  let coreVersion = '';
+  try {
+    const { UmbraService } = require('@umbra/service');
+    coreVersion = UmbraService.getVersion();
+  } catch {
+    // Service not available (e.g. web without WASM)
+  }
+
+  const labelStyle = {
+    fontSize: 12,
+    color: tc.text.muted,
+    marginBottom: 2,
+  };
+
+  const valueStyle = {
+    fontSize: 14,
+    color: tc.text.primary,
+    fontWeight: '500' as const,
+    marginBottom: 12,
+  };
+
+  return (
+    <View>
+      <RNText style={{ fontSize: 20, fontWeight: '700', color: tc.text.primary, marginBottom: 20 }}>About</RNText>
+
+      <Card style={{ padding: 16, marginBottom: 16 }}>
+        <RNText style={{ fontSize: 16, fontWeight: '600', color: tc.text.primary, marginBottom: 12 }}>
+          Umbra
+        </RNText>
+
+        <RNText style={labelStyle}>App Version</RNText>
+        <RNText style={valueStyle}>{update.currentVersion}</RNText>
+
+        {coreVersion ? (
+          <>
+            <RNText style={labelStyle}>Core Version</RNText>
+            <RNText style={valueStyle}>{coreVersion}</RNText>
+          </>
+        ) : null}
+
+        <RNText style={labelStyle}>Latest Available</RNText>
+        <RNText style={valueStyle}>
+          {update.isLoading ? 'Checking...' : update.latestVersion || update.currentVersion}
+          {update.hasUpdate && !update.isWebUser && (
+            <RNText style={{ color: tc.status.success, fontSize: 12 }}> (update available)</RNText>
+          )}
+        </RNText>
+
+        <HStack gap={8} style={{ marginTop: 4 }}>
+          <Button
+            variant="secondary"
+            size="sm"
+            onPress={update.checkForUpdate}
+          >
+            Check for Updates
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            onPress={() => setShowAllPlatforms(true)}
+            iconLeft={<DownloadIcon size={14} color={tc.text.secondary} />}
+          >
+            All Downloads
+          </Button>
+        </HStack>
+      </Card>
+
+      <Card style={{ padding: 16, marginBottom: 16 }}>
+        <RNText style={{ fontSize: 14, fontWeight: '600', color: tc.text.primary, marginBottom: 10 }}>Links</RNText>
+
+        <Pressable
+          onPress={() => {
+            Linking.openURL('https://github.com/InfamousVague/Umbra');
+          }}
+          style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8 }}
+        >
+          <ExternalLinkIcon size={14} color={tc.text.link} />
+          <RNText style={{ fontSize: 13, color: tc.text.link }}>GitHub Repository</RNText>
+        </Pressable>
+
+        {update.releaseUrl && (
+          <Pressable
+            onPress={() => Linking.openURL(update.releaseUrl!)}
+            style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8 }}
+          >
+            <ExternalLinkIcon size={14} color={tc.text.link} />
+            <RNText style={{ fontSize: 13, color: tc.text.link }}>Release Notes</RNText>
+          </Pressable>
+        )}
+
+        <Pressable
+          onPress={() => Linking.openURL('https://chat.deepspaceshipping.co')}
+          style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8 }}
+        >
+          <GlobeIcon size={14} color={tc.text.link} />
+          <RNText style={{ fontSize: 13, color: tc.text.link }}>Web App</RNText>
+        </Pressable>
+      </Card>
+
+      <Card style={{ padding: 16 }}>
+        <RNText style={{ fontSize: 12, color: tc.text.muted, lineHeight: 18 }}>
+          Umbra is a private, peer-to-peer messaging application with end-to-end encryption.
+          Built with Ed25519/X25519/AES-256-GCM cryptography and WebRTC for direct communication.
+        </RNText>
+      </Card>
+
+      <AllPlatformsDialog
+        open={showAllPlatforms}
+        onClose={() => setShowAllPlatforms(false)}
+        downloads={update.downloads}
+        version={update.latestVersion || update.currentVersion}
+        releaseUrl={update.releaseUrl}
+      />
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // SettingsDialog
 // ---------------------------------------------------------------------------
 
@@ -3024,6 +3446,8 @@ export function SettingsDialog({ open, onClose, onOpenMarketplace, initialSectio
         return <DataManagementSection />;
       case 'plugins':
         return <PluginsSection onOpenMarketplace={onOpenMarketplace} />;
+      case 'about':
+        return <AboutSection />;
     }
   };
 

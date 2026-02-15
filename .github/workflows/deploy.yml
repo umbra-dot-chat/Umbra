@@ -242,6 +242,30 @@ jobs:
       - name: Build web
         run: npx expo export --platform web
 
+      - name: Generate version manifest
+        run: |
+          APP_VERSION=$(node -p "require('./package.json').version")
+
+          # Try to get latest release info from GitHub API
+          RELEASE_JSON=$(curl -s "https://api.github.com/repos/${{ github.repository }}/releases/latest" || echo '{}')
+          RELEASE_VERSION=$(echo "$RELEASE_JSON" | node -p "try{JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')).tag_name?.replace('v','')}catch(e){''}" 2>/dev/null || echo "")
+          RELEASE_URL=$(echo "$RELEASE_JSON" | node -p "try{JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')).html_url}catch(e){''}" 2>/dev/null || echo "")
+          RELEASE_DATE=$(echo "$RELEASE_JSON" | node -p "try{JSON.parse(require('fs').readFileSync('/dev/stdin','utf8')).published_at}catch(e){''}" 2>/dev/null || echo "")
+
+          # Use release version if available, otherwise use package.json version
+          VERSION="${RELEASE_VERSION:-$APP_VERSION}"
+
+          cat > dist/version.json << EOF
+          {
+            "version": "$VERSION",
+            "releasedAt": "${RELEASE_DATE:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}",
+            "releaseUrl": "${RELEASE_URL:-https://github.com/${{ github.repository }}/releases}"
+          }
+          EOF
+
+          echo "Generated version.json with version: $VERSION"
+          cat dist/version.json
+
       - name: Setup SSH key
         run: |
           mkdir -p ~/.ssh
@@ -260,7 +284,7 @@ jobs:
           # Ensure target directory exists
           ssh $SSH_OPTS $SSH_USER@$HOST "mkdir -p $DEPLOY_PATH"
 
-          # Sync built files
+          # Sync built files (includes version.json)
           rsync -avz --delete -e "ssh $SSH_OPTS" \
             dist/ $SSH_USER@$HOST:$DEPLOY_PATH/
 

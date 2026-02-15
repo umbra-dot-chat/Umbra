@@ -7,7 +7,7 @@ import { View } from 'react-native';
 
 import { FeatureCard } from '@/components/guide/FeatureCard';
 import { TechSpec } from '@/components/guide/TechSpec';
-import { KeyIcon, ShieldIcon, LockIcon } from '@/components/icons';
+import { KeyIcon, LockIcon, ShieldIcon } from '@/components/icons';
 
 export default function GettingStartedContent() {
   return (
