@@ -6,8 +6,8 @@
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:8081",
-    "beforeDevCommand": "npx expo start --web --port 8081",
-    "beforeBuildCommand": "npx expo export --platform web"
+    "beforeDevCommand": "node scripts/postinstall.js && npx expo start --web --port 8081",
+    "beforeBuildCommand": "node scripts/postinstall.js && npx expo export --platform web"
   },
   "app": {
     "windows": [

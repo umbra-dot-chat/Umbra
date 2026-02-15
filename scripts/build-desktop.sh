@@ -46,6 +46,19 @@ banner() {
     echo ""
 }
 
+# ── Sync Wisp packages ────────────────────────────────────────────────
+
+sync_wisp() {
+    info "Syncing Wisp design system packages..."
+    if [ -x "$SCRIPT_DIR/patch-wisp.sh" ]; then
+        bash "$SCRIPT_DIR/patch-wisp.sh"
+        ok "Wisp packages synced"
+    else
+        warn "patch-wisp.sh not found or not executable — skipping"
+    fi
+    echo ""
+}
+
 # ── Prerequisite checks ─────────────────────────────────────────────────
 
 check_prerequisites() {
@@ -119,6 +132,7 @@ do_clean() {
 do_dev() {
     banner "Starting Umbra Desktop (dev mode)"
     check_prerequisites
+    sync_wisp
 
     info "Launching tauri dev with hot-reload..."
     info "  Frontend: http://localhost:8081 (Expo web)"
@@ -134,6 +148,7 @@ do_dev() {
 do_debug() {
     banner "Building Umbra Desktop (debug)"
     check_prerequisites
+    sync_wisp
 
     info "Exporting Expo web bundle..."
     cd "$ROOT_DIR"
@@ -161,6 +176,7 @@ do_build() {
 
     banner "Building Umbra Desktop — $label"
     check_prerequisites
+    sync_wisp
 
     cd "$ROOT_DIR"
 

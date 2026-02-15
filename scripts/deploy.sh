@@ -171,6 +171,11 @@ build_frontend() {
     log_info "Building frontend..."
     cd "$PROJECT_ROOT"
 
+    # Sync Wisp design system packages before building
+    log_info "Syncing Wisp packages..."
+    node scripts/postinstall.js
+    log_success "Wisp packages synced"
+
     # Clean previous build
     rm -rf dist/
 
