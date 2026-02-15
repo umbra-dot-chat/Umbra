@@ -1,7 +1,7 @@
 {
   "name": "umbra",
   "main": "expo-router/entry",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "scripts": {
     "postinstall": "./scripts/patch-wisp.sh",
     "patch": "./scripts/patch-wisp.sh",
