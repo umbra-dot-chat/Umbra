@@ -270,9 +270,9 @@ jobs:
             LINUX_SIG=$(cat "$f")
           done
 
-          # Find actual filenames — Tauri uses aarch64 for ARM and x86_64 for Intel
+          # Find actual filenames — Tauri uses aarch64 for ARM, x64 or x86_64 for Intel
           MACOS_ARM_FILE=$(ls release/*aarch64*.dmg 2>/dev/null | head -1 | xargs basename 2>/dev/null || echo "")
-          MACOS_INTEL_FILE=$(ls release/*x86_64*.dmg 2>/dev/null | head -1 | xargs basename 2>/dev/null || echo "")
+          MACOS_INTEL_FILE=$(ls release/*x64*.dmg release/*x86_64*.dmg 2>/dev/null | grep -v aarch64 | head -1 | xargs basename 2>/dev/null || echo "")
           WINDOWS_FILE=$(ls release/*.msi 2>/dev/null | head -1 | xargs basename 2>/dev/null || echo "")
           LINUX_FILE=$(ls release/*.AppImage 2>/dev/null | head -1 | xargs basename 2>/dev/null || echo "")
 
