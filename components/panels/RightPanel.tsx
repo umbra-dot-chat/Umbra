@@ -21,6 +21,10 @@ export interface RightPanelProps {
   pinnedMessages?: { id: string; sender: string; content: string; timestamp: string }[];
   onUnpinMessage?: (messageId: string) => void;
   onThreadReply?: (text: string) => void;
+  /** Active conversation ID for search */
+  conversationId?: string | null;
+  /** Callback when a search result is clicked */
+  onSearchResultClick?: (messageId: string) => void;
 }
 
 export function RightPanel({
@@ -28,6 +32,7 @@ export function RightPanel({
   onMemberClick, searchQuery, onSearchQueryChange,
   threadParent, threadReplies,
   pinnedMessages, onUnpinMessage, onThreadReply,
+  conversationId, onSearchResultClick,
 }: RightPanelProps) {
   const { theme } = useTheme();
   const { friends } = useFriends();
@@ -49,7 +54,7 @@ export function RightPanel({
 
   return (
     <Animated.View style={{ width: panelWidth, overflow: 'hidden' }}>
-      <View style={{ width: PANEL_WIDTH, height: '100%' }}>
+      <View style={{ width: PANEL_WIDTH, height: '100%', borderLeftWidth: 1, borderLeftColor: theme.colors.border.subtle }}>
         {visiblePanel === 'members' && (
           <MemberList
             sections={memberSections}
@@ -80,6 +85,8 @@ export function RightPanel({
             query={searchQuery}
             onQueryChange={onSearchQueryChange}
             onClose={() => togglePanel('search')}
+            conversationId={conversationId}
+            onResultClick={onSearchResultClick}
           />
         )}
       </View>

@@ -132,8 +132,8 @@ describe('CallManager - Video Quality Controls', () => {
     expect(manager.videoQuality).toBe('auto');
   });
 
-  test('default audio quality is opus', () => {
-    expect(manager.audioQuality).toBe('opus');
+  test('default audio quality is opus-voice', () => {
+    expect(manager.audioQuality).toBe('opus-voice');
   });
 
   test('setVideoQuality updates internal state', async () => {

@@ -412,6 +412,23 @@ export function createTauriBackend(
       return invoke('relay_fetch_offline').then(ensureJsonString) as Promise<string>;
     },
 
+    // ── Calls ──────────────────────────────────────────────────────
+    umbra_wasm_calls_store: (json: string) => {
+      return invoke('calls_store', { json }).then(ensureJsonString) as any;
+    },
+
+    umbra_wasm_calls_end: (json: string) => {
+      return invoke('calls_end', { json }).then(ensureJsonString) as any;
+    },
+
+    umbra_wasm_calls_get_history: (json: string) => {
+      return invoke('calls_get_history', { json }).then(ensureJsonString) as any;
+    },
+
+    umbra_wasm_calls_get_all_history: (json: string) => {
+      return invoke('calls_get_all_history', { json }).then(ensureJsonString) as any;
+    },
+
     // ── Events ─────────────────────────────────────────────────────
     umbra_wasm_subscribe_events: (callback: (event_json: string) => void) => {
       // TODO: Wire up Tauri event system (tauri::Emitter / listen)
@@ -435,6 +452,48 @@ export function createTauriBackend(
         data: Array.from(data),
         signature: Array.from(signature),
       }) as any;
+    },
+
+    umbra_wasm_crypto_encrypt_for_peer: (json: string) => {
+      return invoke('crypto_encrypt_for_peer', { json }).then(ensureJsonString) as any;
+    },
+
+    umbra_wasm_crypto_decrypt_from_peer: (json: string) => {
+      return invoke('crypto_decrypt_from_peer', { json }).then(ensureJsonString) as any;
+    },
+
+    // ── Plugin KV Storage (via Tauri IPC) ──────────────────────────
+    umbra_wasm_plugin_kv_get: (pluginId: string, key: string) => {
+      return invoke('plugin_kv_get', { pluginId, key }).then(ensureJsonString) as any;
+    },
+
+    umbra_wasm_plugin_kv_set: (pluginId: string, key: string, value: string) => {
+      return invoke('plugin_kv_set', { pluginId, key, value }).then(ensureJsonString) as any;
+    },
+
+    umbra_wasm_plugin_kv_delete: (pluginId: string, key: string) => {
+      return invoke('plugin_kv_delete', { pluginId, key }).then(ensureJsonString) as any;
+    },
+
+    umbra_wasm_plugin_kv_list: (pluginId: string, prefix: string) => {
+      return invoke('plugin_kv_list', { pluginId, prefix }).then(ensureJsonString) as any;
+    },
+
+    // ── Plugin Bundle Storage (via Tauri IPC) ──────────────────────
+    umbra_wasm_plugin_bundle_save: (pluginId: string, manifest: string, bundle: string) => {
+      return invoke('plugin_bundle_save', { pluginId, manifest, bundle }).then(ensureJsonString) as any;
+    },
+
+    umbra_wasm_plugin_bundle_load: (pluginId: string) => {
+      return invoke('plugin_bundle_load', { pluginId }).then(ensureJsonString) as any;
+    },
+
+    umbra_wasm_plugin_bundle_delete: (pluginId: string) => {
+      return invoke('plugin_bundle_delete', { pluginId }).then(ensureJsonString) as any;
+    },
+
+    umbra_wasm_plugin_bundle_list: () => {
+      return invoke('plugin_bundle_list').then(ensureJsonString) as any;
     },
   };
 }

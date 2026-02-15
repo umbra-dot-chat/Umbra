@@ -31,7 +31,53 @@ export type CallDirection = 'outgoing' | 'incoming';
 
 export type VideoQuality = 'auto' | '720p' | '1080p' | '1440p' | '4k';
 
-export type AudioQuality = 'opus' | 'pcm';
+export type AudioQuality = 'opus-voice' | 'opus-music' | 'opus-low' | 'pcm';
+
+export type AudioBitrate = 16 | 24 | 32 | 48 | 64 | 96 | 128;
+
+export type OpusApplication = 'voip' | 'audio' | 'lowdelay';
+
+export interface OpusConfig {
+  /** Opus application mode: voip (voice), audio (music), lowdelay (low latency) */
+  application: OpusApplication;
+  /** Target bitrate in kbps */
+  bitrate: AudioBitrate;
+  /** Encoding complexity 0-10 (higher = better quality, more CPU) */
+  complexity: number;
+  /** Enable Forward Error Correction for packet loss resilience */
+  fec: boolean;
+  /** Discontinuous Transmission — save bandwidth when silent */
+  dtx: boolean;
+  /** Expected packet loss percentage (0-100), used to tune FEC */
+  packetLoss: number;
+}
+
+export const DEFAULT_OPUS_CONFIG: OpusConfig = {
+  application: 'voip',
+  bitrate: 48,
+  complexity: 10,
+  fec: true,
+  dtx: false,
+  packetLoss: 10,
+};
+
+export const AUDIO_QUALITY_PRESETS: Record<Exclude<AudioQuality, 'pcm'>, { label: string; description: string; config: OpusConfig }> = {
+  'opus-voice': {
+    label: 'Voice (VoIP)',
+    description: 'Optimized for speech, lower bandwidth',
+    config: { application: 'voip', bitrate: 48, complexity: 10, fec: true, dtx: false, packetLoss: 10 },
+  },
+  'opus-music': {
+    label: 'Music (Full Band)',
+    description: 'Full-band audio, higher quality',
+    config: { application: 'audio', bitrate: 96, complexity: 10, fec: true, dtx: false, packetLoss: 5 },
+  },
+  'opus-low': {
+    label: 'Low Latency',
+    description: 'Minimum delay, for real-time interaction',
+    config: { application: 'lowdelay', bitrate: 64, complexity: 5, fec: false, dtx: false, packetLoss: 0 },
+  },
+};
 
 export interface VideoQualityPreset {
   label: string;
@@ -156,6 +202,22 @@ export interface CallStatePayload {
   isCameraOff?: boolean;
 }
 
+// ─── Encrypted Call Signaling ────────────────────────────────────────────────
+
+/** Wrapper for encrypted call signaling payloads (SDP, ICE, state, end). */
+export interface EncryptedCallPayload {
+  /** Base64-encoded AES-256-GCM ciphertext */
+  encrypted: string;
+  /** Hex-encoded 12-byte nonce */
+  nonce: string;
+  /** Sender DID — needed for relay routing + key lookup before decryption */
+  senderDid: string;
+  /** Call ID — needed for call correlation before decryption */
+  callId: string;
+  /** Unix timestamp (ms) used in AAD binding */
+  timestamp: number;
+}
+
 // ─── Group Call Signaling ────────────────────────────────────────────────────
 
 export interface CallRoomCreatedPayload {
@@ -229,4 +291,40 @@ export interface CallStats {
   roundTripTime: number | null;
   /** Jitter in ms */
   jitter: number | null;
+  /** Total packets lost (inbound) */
+  packetsLost: number | null;
+  /** Fraction of packets lost (0-1, from remote report) */
+  fractionLost: number | null;
+  /** ICE candidate type in use (host/srflx/relay) */
+  candidateType: string | null;
+  /** Local ICE candidate type */
+  localCandidateType: string | null;
+  /** Remote ICE candidate type */
+  remoteCandidateType: string | null;
+  /** Available outgoing bitrate in kbps (from ICE candidate pair) */
+  availableOutgoingBitrate: number | null;
+  /** Audio level (0-1, from inbound-rtp) */
+  audioLevel: number | null;
+  /** Total frames decoded (video) */
+  framesDecoded: number | null;
+  /** Total frames dropped (video) */
+  framesDropped: number | null;
+  /** Audio bitrate in kbps (separate from video) */
+  audioBitrate: number | null;
+}
+
+// ─── Connectivity Test Results ──────────────────────────────────────────────
+
+export interface TurnTestResult {
+  success: boolean;
+  rtt: number;
+  candidateType: string;
+  error?: string;
+}
+
+export interface StunTestResult {
+  success: boolean;
+  publicIp: string;
+  rtt: number;
+  error?: string;
 }

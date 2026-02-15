@@ -1,8 +1,8 @@
-/// Platform-aware time utilities.
-///
-/// On native platforms, this uses `chrono::Utc::now()`.
-/// On WASM, this uses `js_sys::Date::now()` since `std::time::SystemTime`
-/// is not available on `wasm32-unknown-unknown`.
+//! Platform-aware time utilities.
+//!
+//! On native platforms, this uses `chrono::Utc::now()`.
+//! On WASM, this uses `js_sys::Date::now()` since `std::time::SystemTime`
+//! is not available on `wasm32-unknown-unknown`.
 
 /// Returns the current Unix timestamp in seconds.
 pub fn now_timestamp() -> i64 {
@@ -45,6 +45,6 @@ mod tests {
     fn test_now_timestamp_millis_is_reasonable() {
         let ts = now_timestamp_millis();
         // Should be after 2024-01-01 in millis
-        assert!(ts > 1704067200_000, "Timestamp {} is too old", ts);
+        assert!(ts > 1_704_067_200_000, "Timestamp {} is too old", ts);
     }
 }

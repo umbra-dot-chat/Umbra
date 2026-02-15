@@ -280,6 +280,12 @@ export function useVideoEffects(config: UseVideoEffectsConfig): UseVideoEffectsR
         }
 
         // Capture the canvas as a MediaStream at 30 FPS
+        if (typeof canvas.captureStream !== 'function') {
+          console.warn('[useVideoEffects] canvas.captureStream() not supported; falling back to source stream');
+          setOutputStream(sourceStream);
+          setIsProcessing(false);
+          return;
+        }
         const capturedStream = canvas.captureStream(30);
         capturedStreamRef.current = capturedStream;
 

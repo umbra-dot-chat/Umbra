@@ -65,8 +65,8 @@ fn main() {
     let public_identity = identity.public_identity();
     println!("  DID: {}", public_identity.did);
     println!("  Display Name: {}", public_identity.display_name);
-    println!("  Signing Key (hex): {}", hex::encode(&public_identity.public_keys.signing));
-    println!("  Encryption Key (hex): {}", hex::encode(&public_identity.public_keys.encryption));
+    println!("  Signing Key (hex): {}", hex::encode(public_identity.public_keys.signing));
+    println!("  Encryption Key (hex): {}", hex::encode(public_identity.public_keys.encryption));
     println!();
 
     println!("=== Example Complete ===");

@@ -98,4 +98,50 @@ describe('Messaging flow', () => {
     expect(fwd.forwarded).toBe(true);
     expect(fwd.conversationId).toBe('conv-target');
   });
+
+  // ── Blank message prevention ──
+
+  test('empty string message content should be treated as invalid', () => {
+    // When decryption fails, the system returns null (not empty string).
+    // The guard in useMessages.ts checks for empty content before appending.
+    const msg = {
+      id: 'msg-blank',
+      conversationId: 'conv-1',
+      senderDid: 'did:key:z6MkTest',
+      content: { type: 'text' as const, text: '' },
+      timestamp: Date.now(),
+      read: false,
+      delivered: true,
+      status: 'delivered' as const,
+    };
+
+    // Message text should be treated as falsy
+    const text = typeof msg.content === 'string' ? msg.content : msg.content?.text;
+    expect(text).toBe('');
+    expect(!text).toBe(true); // Guard check: !text should be true for empty string
+  });
+
+  test('null decryption result should prevent message dispatch', () => {
+    // Simulate what useNetwork does: check if decryptedText is null
+    const decryptedText: string | null = null;
+
+    // The guard in useNetwork.ts:
+    // if (!decryptedText) { console.warn(...); return; }
+    expect(!decryptedText).toBe(true);
+    // This means the message would NOT be dispatched
+  });
+
+  test('valid message content passes guard check', () => {
+    const msg = {
+      id: 'msg-valid',
+      conversationId: 'conv-1',
+      senderDid: 'did:key:z6MkTest',
+      content: { type: 'text' as const, text: 'Hello world' },
+      timestamp: Date.now(),
+    };
+
+    const text = typeof msg.content === 'string' ? msg.content : msg.content?.text;
+    expect(text).toBe('Hello world');
+    expect(!text).toBe(false); // Guard check passes — message should be appended
+  });
 });

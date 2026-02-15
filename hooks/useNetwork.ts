@@ -552,7 +552,11 @@ export function useNetwork(): UseNetworkResult {
                       // Decrypt the message content for real-time UI display
                       const decryptedText = await service.decryptIncomingMessage(chatPayload);
 
-                      if (chatPayload.threadId) {
+                      // Skip dispatch if decryption failed — message is stored
+                      // encrypted in DB and can be retried later
+                      if (!decryptedText) {
+                        console.warn('[useNetwork] Decryption failed, skipping dispatch for', chatPayload.messageId);
+                      } else if (chatPayload.threadId) {
                         // Thread reply — dispatch threadReplyReceived so the UI
                         // does NOT add this to the main chat list
                         service.dispatchMessageEvent({
@@ -845,7 +849,11 @@ export function useNetwork(): UseNetworkResult {
                         await service.storeIncomingMessage(chatPayload);
                         const decryptedText = await service.decryptIncomingMessage(chatPayload);
 
-                        if (chatPayload.threadId) {
+                        // Skip dispatch if decryption failed — message is stored
+                        // encrypted in DB and can be retried later
+                        if (!decryptedText) {
+                          console.warn('[useNetwork] Offline decryption failed, skipping dispatch for', chatPayload.messageId);
+                        } else if (chatPayload.threadId) {
                           // Thread reply — dispatch threadReplyReceived
                           service.dispatchMessageEvent({
                             type: 'threadReplyReceived',

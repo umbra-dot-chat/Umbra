@@ -17,7 +17,7 @@ export interface PluginPanelProps {
   /** Optional icon element */
   icon?: React.ReactNode;
   /** Panel content */
-  children: React.ReactNode;
+  children?: React.ReactNode;
 }
 
 /**

@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { VideoQuality, AudioQuality } from '@/types/call';
+import type { OpusConfig, OpusApplication, AudioBitrate } from '@/types/call';
+import { DEFAULT_OPUS_CONFIG } from '@/types/call';
 
 export type IncomingCallDisplay = 'fullscreen' | 'toast';
 
@@ -8,6 +10,10 @@ interface CallSettings {
   ringVolume: number; // 0-100
   defaultVideoQuality: VideoQuality; // from @/types/call
   defaultAudioQuality: AudioQuality; // from @/types/call
+  opusConfig: OpusConfig;
+  inputVolume: number; // 0-100
+  outputVolume: number; // 0-100
+  mediaE2EE: boolean; // opt-in frame-level E2EE via RTCRtpScriptTransform
 }
 
 const STORAGE_KEYS = {
@@ -15,13 +21,21 @@ const STORAGE_KEYS = {
   ringVolume: 'umbra_call_ring_volume',
   defaultVideoQuality: 'umbra_call_default_video_quality',
   defaultAudioQuality: 'umbra_call_default_audio_quality',
+  opusConfig: 'umbra_call_opus_config',
+  inputVolume: 'umbra_call_input_volume',
+  outputVolume: 'umbra_call_output_volume',
+  mediaE2EE: 'umbra_call_media_e2ee',
 } as const;
 
 const DEFAULTS: CallSettings = {
   incomingCallDisplay: 'fullscreen',
   ringVolume: 80,
   defaultVideoQuality: 'auto',
-  defaultAudioQuality: 'opus',
+  defaultAudioQuality: 'opus-voice',
+  opusConfig: { ...DEFAULT_OPUS_CONFIG },
+  inputVolume: 100,
+  outputVolume: 100,
+  mediaE2EE: false,
 };
 
 function readFromStorage<T>(key: string, fallback: T): T {
@@ -50,6 +64,14 @@ export function useCallSettings() {
     useState<VideoQuality>(DEFAULTS.defaultVideoQuality);
   const [defaultAudioQuality, setDefaultAudioQualityState] =
     useState<AudioQuality>(DEFAULTS.defaultAudioQuality);
+  const [opusConfig, setOpusConfigState] =
+    useState<OpusConfig>(DEFAULTS.opusConfig);
+  const [inputVolume, setInputVolumeState] =
+    useState<number>(DEFAULTS.inputVolume);
+  const [outputVolume, setOutputVolumeState] =
+    useState<number>(DEFAULTS.outputVolume);
+  const [mediaE2EE, setMediaE2EEState] =
+    useState<boolean>(DEFAULTS.mediaE2EE);
 
   // Hydrate state from localStorage on mount
   useEffect(() => {
@@ -72,6 +94,30 @@ export function useCallSettings() {
       readFromStorage<AudioQuality>(
         STORAGE_KEYS.defaultAudioQuality,
         DEFAULTS.defaultAudioQuality,
+      ),
+    );
+    setOpusConfigState(
+      readFromStorage<OpusConfig>(
+        STORAGE_KEYS.opusConfig,
+        DEFAULTS.opusConfig,
+      ),
+    );
+    setInputVolumeState(
+      readFromStorage<number>(
+        STORAGE_KEYS.inputVolume,
+        DEFAULTS.inputVolume,
+      ),
+    );
+    setOutputVolumeState(
+      readFromStorage<number>(
+        STORAGE_KEYS.outputVolume,
+        DEFAULTS.outputVolume,
+      ),
+    );
+    setMediaE2EEState(
+      readFromStorage<boolean>(
+        STORAGE_KEYS.mediaE2EE,
+        DEFAULTS.mediaE2EE,
       ),
     );
   }, []);
@@ -97,6 +143,28 @@ export function useCallSettings() {
     writeToStorage(STORAGE_KEYS.defaultAudioQuality, value);
   }, []);
 
+  const setOpusConfig = useCallback((value: OpusConfig) => {
+    setOpusConfigState(value);
+    writeToStorage(STORAGE_KEYS.opusConfig, value);
+  }, []);
+
+  const setInputVolume = useCallback((value: number) => {
+    const clamped = Math.max(0, Math.min(100, value));
+    setInputVolumeState(clamped);
+    writeToStorage(STORAGE_KEYS.inputVolume, clamped);
+  }, []);
+
+  const setOutputVolume = useCallback((value: number) => {
+    const clamped = Math.max(0, Math.min(100, value));
+    setOutputVolumeState(clamped);
+    writeToStorage(STORAGE_KEYS.outputVolume, clamped);
+  }, []);
+
+  const setMediaE2EE = useCallback((value: boolean) => {
+    setMediaE2EEState(value);
+    writeToStorage(STORAGE_KEYS.mediaE2EE, value);
+  }, []);
+
   return {
     incomingCallDisplay,
     setIncomingCallDisplay,
@@ -106,5 +174,13 @@ export function useCallSettings() {
     setDefaultVideoQuality,
     defaultAudioQuality,
     setDefaultAudioQuality,
+    opusConfig,
+    setOpusConfig,
+    inputVolume,
+    setInputVolume,
+    outputVolume,
+    setOutputVolume,
+    mediaE2EE,
+    setMediaE2EE,
   };
 }

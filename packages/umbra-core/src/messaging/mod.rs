@@ -201,9 +201,15 @@ pub enum MessageContent {
     /// Typing indicator (content is empty)
     Typing,
     /// Read receipt (references message ID)
-    ReadReceipt { message_id: String },
+    ReadReceipt {
+        /// The ID of the message that was read
+        message_id: String,
+    },
     /// Delivery receipt (references message ID)
-    DeliveryReceipt { message_id: String },
+    DeliveryReceipt {
+        /// The ID of the message that was delivered
+        message_id: String,
+    },
 }
 
 impl MessageContent {
@@ -804,10 +810,10 @@ impl MessagingService {
 
         for record in records {
             // Decrypt stored content
-            let ciphertext = hex::decode(&record.content_encrypted)
+            let _ciphertext = hex::decode(&record.content_encrypted)
                 .map_err(|e| Error::DatabaseError(format!("Invalid ciphertext: {}", e)))?;
 
-            let nonce_bytes = hex::decode(&record.nonce)
+            let _nonce_bytes = hex::decode(&record.nonce)
                 .map_err(|e| Error::DatabaseError(format!("Invalid nonce: {}", e)))?;
 
             // For stored messages, we'd need to re-derive the key or store decrypted

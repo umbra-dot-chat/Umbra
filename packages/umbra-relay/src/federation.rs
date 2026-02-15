@@ -32,6 +32,7 @@ use crate::protocol::PeerMessage;
 
 /// Information about a connected peer relay.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct PeerInfo {
     /// Unique relay ID (from Hello message)
     pub relay_id: String,
@@ -190,14 +191,14 @@ impl Federation {
             location: self.location.clone(),
         };
         let hello_json = serde_json::to_string(&hello)?;
-        ws_sender.send(WsMessage::Text(hello_json.into())).await?;
+        ws_sender.send(WsMessage::Text(hello_json)).await?;
 
         // Spawn sender task
         let sender_task = tokio::spawn(async move {
             while let Some(msg) = rx.recv().await {
                 match serde_json::to_string(&msg) {
                     Ok(json) => {
-                        if ws_sender.send(WsMessage::Text(json.into())).await.is_err() {
+                        if ws_sender.send(WsMessage::Text(json)).await.is_err() {
                             break;
                         }
                     }
@@ -506,6 +507,7 @@ impl Federation {
     }
 
     /// Queue an offline message on any peer (broadcast to all).
+    #[allow(dead_code)]
     pub fn broadcast_offline_message(
         &self,
         to_did: &str,

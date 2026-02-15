@@ -523,8 +523,8 @@ describe('GroupCallManager', () => {
     expect(manager.videoQuality).toBe('auto');
   });
 
-  test('audioQuality defaults to opus', () => {
-    expect(manager.audioQuality).toBe('opus');
+  test('audioQuality defaults to opus-voice', () => {
+    expect(manager.audioQuality).toBe('opus-voice');
   });
 
   test('setAudioQuality updates the audio quality setting', () => {

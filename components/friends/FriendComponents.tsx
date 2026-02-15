@@ -9,9 +9,8 @@
 
 import React, { useState } from 'react';
 import { View } from 'react-native';
-import type { ViewStyle } from 'react-native';
 import {
-  Text, Button, Input, HStack, VStack, Avatar,
+  Text, Button, HStack, VStack, Avatar,
   useTheme,
 } from '@coexist/wisp-react-native';
 import { ChevronDownIcon, ChevronRightIcon } from '@/components/icons';
@@ -239,67 +238,3 @@ export function FriendSection({
   );
 }
 
-// ---------------------------------------------------------------------------
-// AddFriendInput
-// ---------------------------------------------------------------------------
-
-export interface AddFriendInputProps {
-  value: string;
-  onValueChange: (v: string) => void;
-  onSubmit: (v: string) => void;
-  feedbackState?: 'idle' | 'loading' | 'success' | 'error';
-  feedbackMessage?: string;
-  placeholder?: string;
-  style?: ViewStyle;
-}
-
-export function AddFriendInput({
-  value,
-  onValueChange,
-  onSubmit,
-  feedbackState = 'idle',
-  feedbackMessage,
-  placeholder,
-  style,
-}: AddFriendInputProps) {
-  const { theme } = useTheme();
-  const tc = theme.colors;
-
-  const feedbackColor =
-    feedbackState === 'success' ? tc.status.success :
-    feedbackState === 'error' ? tc.status.danger :
-    tc.text.muted;
-
-  return (
-    <VStack style={style as any}>
-      <HStack style={{ gap: 8, alignItems: 'center' }}>
-        <View style={{ flex: 1 }}>
-          <Input
-            value={value}
-            onChangeText={onValueChange}
-            onSubmitEditing={() => onSubmit(value)}
-            placeholder={placeholder}
-            size="md"
-            fullWidth
-          />
-        </View>
-        <Button
-          variant="primary"
-          size="md"
-          onPress={() => onSubmit(value)}
-          disabled={feedbackState === 'loading' || value.trim().length === 0}
-          isLoading={feedbackState === 'loading'}
-        >
-          Add
-        </Button>
-      </HStack>
-
-      {/* Feedback */}
-      {feedbackState !== 'idle' && feedbackMessage && (
-        <Text size="xs" style={{ color: feedbackColor, marginTop: 6 }}>
-          {feedbackMessage}
-        </Text>
-      )}
-    </VStack>
-  );
-}

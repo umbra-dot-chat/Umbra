@@ -21,12 +21,14 @@ export interface CommandPaletteProps {
   onOpenChange: (open: boolean) => void;
   onOpenSettings: () => void;
   onOpenMarketplace?: () => void;
+  /** Open the in-conversation message search panel */
+  onSearchMessages?: () => void;
 }
 
 const Zap = ZapIcon as IconComponent;
 const Download = DownloadIcon as IconComponent;
 
-export function CommandPalette({ open, onOpenChange, onOpenSettings, onOpenMarketplace }: CommandPaletteProps) {
+export function CommandPalette({ open, onOpenChange, onOpenSettings, onOpenMarketplace, onSearchMessages }: CommandPaletteProps) {
   const router = useRouter();
   const { friends } = useFriends();
   const { pluginCommands } = usePlugins();
@@ -41,6 +43,8 @@ export function CommandPalette({ open, onOpenChange, onOpenSettings, onOpenMarke
       onOpenSettings();
     } else if (value === 'nav:marketplace') {
       onOpenMarketplace?.();
+    } else if (value === 'nav:search-messages') {
+      onSearchMessages?.();
     }
     // user: items are no-op for now — could navigate to DM
   };
@@ -89,6 +93,15 @@ export function CommandPalette({ open, onOpenChange, onOpenSettings, onOpenMarke
           >
             Open Settings
           </CommandItem>
+          {onSearchMessages && (
+            <CommandItem
+              value="nav:search-messages"
+              icon={Search}
+              keywords={['search', 'find', 'messages', 'lookup']}
+            >
+              Search Messages
+            </CommandItem>
+          )}
           {onOpenMarketplace && (
             <CommandItem
               value="nav:marketplace"

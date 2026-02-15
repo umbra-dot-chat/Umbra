@@ -7,6 +7,7 @@ module.exports = {
     '^@/(.*)$': '<rootDir>/$1',
     '^@coexist/wisp-core/tokens/motion$': '<rootDir>/__mocks__/@coexist/wisp-core/tokens/motion.js',
     '^@coexist/wisp-react-native$': '<rootDir>/__mocks__/@coexist/wisp-react-native.js',
+    '^@coexist/wisp-react-native/(.*)$': '<rootDir>/__mocks__/@coexist/wisp-react-native.js',
     '^react-native-svg$': '<rootDir>/__mocks__/react-native-svg.js',
     '^@umbra/service$': '<rootDir>/__mocks__/@umbra/service.js',
     '^@umbra/wasm$': '<rootDir>/__mocks__/@umbra/wasm.js',

@@ -11,6 +11,7 @@ import { useGroups } from '@/hooks/useGroups';
 import { useTyping } from '@/hooks/useTyping';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUmbra } from '@/contexts/UmbraContext';
+import { useActiveConversation } from '@/contexts/ActiveConversationContext';
 import { ChatHeader } from '@/components/chat/ChatHeader';
 import { ChatArea } from '@/components/chat/ChatArea';
 import { ChatInput } from '@/components/chat/ChatInput';
@@ -21,8 +22,8 @@ import { HelpIndicator } from '@/components/ui/HelpIndicator';
 import { HelpText, HelpHighlight, HelpListItem } from '@/components/ui/HelpContent';
 import { ActiveCallBar } from '@/components/call/ActiveCallBar';
 import { ActiveCallPanel } from '@/components/call/ActiveCallPanel';
-import { IncomingCallOverlay } from '@/components/call/IncomingCallOverlay';
 import { useCall } from '@/hooks/useCall';
+import { useSettingsDialog } from '@/contexts/SettingsDialogContext';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Empty conversation state
@@ -82,8 +83,8 @@ export default function ChatPage() {
     return map;
   }, [friends]);
 
-  // Active conversation — use the first one by default
-  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+  // Active conversation — shared with sidebar via context
+  const { activeId: activeConversationId, searchPanelRequested, clearSearchPanelRequest } = useActiveConversation();
 
   // Resolve active conversation: prefer explicitly selected, fall back to first
   const resolvedConversationId = activeConversationId ?? conversations[0]?.id ?? null;
@@ -137,12 +138,25 @@ export default function ChatPage() {
   // Custom hooks
   const { hoveredMessage, handleHoverIn, handleHoverOut } = useHoverMessage();
   const { rightPanel, visiblePanel, panelWidth, togglePanel } = useRightPanel();
+
+  // Open search panel when requested from CommandPalette
+  useEffect(() => {
+    if (searchPanelRequested) {
+      clearSearchPanelRequest();
+      // Only open if search panel is not already visible
+      if (rightPanel !== 'search') {
+        togglePanel('search');
+      }
+    }
+  }, [searchPanelRequested, clearSearchPanelRequest, rightPanel, togglePanel]);
   const { showProfile } = useProfilePopoverContext();
   const {
     activeCall, startCall, toggleMute, toggleCamera, endCall,
     videoQuality, audioQuality, setVideoQuality, setAudioQuality,
     switchCamera, callStats,
   } = useCall();
+
+  const { openSettings } = useSettingsDialog();
 
   const [threadParent, setThreadParent] = useState<{ id: string; sender: string; content: string; timestamp: string } | null>(null);
   const [threadReplies, setThreadReplies] = useState<{ id: string; sender: string; content: string; timestamp: string; isOwn?: boolean }[]>([]);
@@ -349,6 +363,7 @@ export default function ChatPage() {
             onSwitchCamera={() => switchCamera()}
             onVideoQualityChange={setVideoQuality}
             onAudioQualityChange={setAudioQuality}
+            onSettings={() => openSettings('audio-video')}
           />
         ) : (
           <ActiveCallBar />
@@ -404,10 +419,13 @@ export default function ChatPage() {
         pinnedMessages={pinnedForPanel}
         onUnpinMessage={unpinMessage}
         onThreadReply={handleThreadReply}
+        conversationId={resolvedConversationId}
+        onSearchResultClick={(messageId) => {
+          // TODO: Scroll to the matched message in the chat view
+          console.log('[ChatPage] Search result clicked, message:', messageId);
+        }}
       />
       <SlotRenderer slot="right-panel" props={{ conversationId: resolvedConversationId }} />
-
-      <IncomingCallOverlay />
     </View>
   );
 }

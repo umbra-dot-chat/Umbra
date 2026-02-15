@@ -372,12 +372,13 @@ impl DiscoveryService {
 
     /// Start the discovery service
     pub async fn start(&self) -> Result<()> {
-        let mut running = self.running.write();
-        if *running {
-            return Err(Error::ProtocolError("Discovery service already running".into()));
+        {
+            let mut running = self.running.write();
+            if *running {
+                return Err(Error::ProtocolError("Discovery service already running".into()));
+            }
+            *running = true;
         }
-        *running = true;
-        drop(running);
 
         tracing::info!("Discovery service starting...");
 

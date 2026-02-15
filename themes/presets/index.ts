@@ -8,3 +8,25 @@ export { solarizedDarkTheme } from './solarized-dark';
 export { oneDarkTheme } from './one-dark';
 export { rosePineTheme } from './rose-pine';
 export { synthwaveTheme } from './synthwave';
+
+// ── New presets ──────────────────────────────────────────────────────────────
+export { githubDarkTheme } from './github-dark';
+export { tokyoNightStormTheme } from './tokyo-night-storm';
+export { monokaiProTheme } from './monokai-pro';
+export { catppuccinFrappeTheme } from './catppuccin-frappe';
+export { nightOwlTheme } from './night-owl';
+export { rosePineMoonTheme } from './rose-pine-moon';
+export { palenightTheme } from './palenight';
+export { materialDarkerTheme } from './material-darker';
+export { andromedaTheme } from './andromeda';
+export { everforestTheme } from './everforest';
+export { kanagawaTheme } from './kanagawa';
+export { poimandresTheme } from './poimandres';
+export { shadesOfPurpleTheme } from './shades-of-purple';
+export { ayuMirageTheme } from './ayu-mirage';
+export { ayuDarkTheme } from './ayu-dark';
+export { monokaiClassicTheme } from './monokai-classic';
+export { moonlightTheme } from './moonlight';
+export { vesperTheme } from './vesper';
+export { midnightTheme } from './midnight';
+export { emberTheme } from './ember';

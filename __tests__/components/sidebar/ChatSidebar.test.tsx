@@ -2,6 +2,17 @@ import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
 import { ChatSidebar } from '@/components/sidebar/ChatSidebar';
 
+jest.mock('@/contexts/PluginContext', () => ({
+  usePlugins: jest.fn(() => ({
+    getSlotComponents: jest.fn(() => []),
+    plugins: [],
+    installPlugin: jest.fn(),
+    enablePlugin: jest.fn(),
+    disablePlugin: jest.fn(),
+    uninstallPlugin: jest.fn(),
+  })),
+}));
+
 /** Test fixture — shaped like the sidebar prop, not the old mock CONVERSATIONS. */
 const TEST_CONVERSATIONS = [
   { id: '1', name: 'Alice', last: 'Hey there!', time: '2m', unread: 1, online: true },

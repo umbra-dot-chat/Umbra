@@ -218,6 +218,7 @@ pub fn verify(public_key: &[u8; 32], message: &[u8], signature: &Signature) -> R
 }
 
 /// Verify a signature using a VerifyingKey directly
+#[allow(dead_code)]
 pub fn verify_with_key(
     verifying_key: &VerifyingKey,
     message: &[u8],
@@ -288,6 +289,7 @@ mod signature_bytes {
 /// │                                                                         │
 /// └─────────────────────────────────────────────────────────────────────────┘
 /// ```
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Signed<T: Serialize> {
     /// The signed data
@@ -299,6 +301,7 @@ pub struct Signed<T: Serialize> {
     pub signature: Signature,
 }
 
+#[allow(dead_code)]
 impl<T: Serialize + for<'de> Deserialize<'de>> Signed<T> {
     /// Create a new signed wrapper
     ///
@@ -334,6 +337,7 @@ impl<T: Serialize + for<'de> Deserialize<'de>> Signed<T> {
 }
 
 /// Serde helper for 32-byte arrays as hex
+#[allow(dead_code)]
 mod hex_bytes_32 {
     use serde::{Deserialize, Deserializer, Serializer};
 

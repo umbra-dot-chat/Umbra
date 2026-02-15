@@ -30,6 +30,7 @@ const DEFAULT_CALL_ROOM_TTL_SECS: i64 = 4 * 3600;
 
 /// Server configuration.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct RelayConfig {
     pub port: u16,
     pub max_offline_per_did: usize,
@@ -138,6 +139,7 @@ impl RelayState {
     }
 
     /// Check if a client is currently online.
+    #[allow(dead_code)]
     pub fn is_online(&self, did: &str) -> bool {
         self.online_clients.contains_key(did)
     }
@@ -152,6 +154,7 @@ impl RelayState {
     }
 
     /// Check if a DID is reachable — either locally connected or on a federated peer.
+    #[allow(dead_code)]
     pub fn is_reachable(&self, did: &str) -> bool {
         if self.online_clients.contains_key(did) {
             return true;
@@ -488,6 +491,7 @@ impl RelayState {
     }
 
     /// Get the participants in a call room.
+    #[allow(dead_code)]
     pub fn get_call_room_participants(&self, room_id: &str) -> Option<Vec<String>> {
         self.call_rooms.get(room_id).map(|r| r.participants.clone())
     }

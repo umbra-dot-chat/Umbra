@@ -11,6 +11,7 @@
 import { ed25519 } from '@noble/curves/ed25519';
 import { x25519 } from '@noble/curves/ed25519';
 import { sha256 } from '@noble/hashes/sha256';
+import { hkdf } from '@noble/hashes/hkdf';
 import { gcm } from '@noble/ciphers/aes';
 import { randomBytes } from '@noble/ciphers/webcrypto';
 import { bytesToHex, hexToBytes } from '@noble/curves/abstract/utils';
@@ -74,8 +75,10 @@ export function createIdentity(displayName: string): BotIdentity {
 /**
  * Encrypt a message for a friend using X25519 ECDH + AES-256-GCM.
  *
- * The shared secret is derived from our encryption private key and the
- * friend's encryption public key. The AES key is SHA-256(shared_secret).
+ * Matches the Umbra WASM core's encryption:
+ *   - ECDH shared secret from X25519
+ *   - HKDF-SHA256 with conversationId as salt and "umbra-message-encryption-v1" as info
+ *   - AES-256-GCM with AAD = senderDid + recipientDid + timestamp (string concat)
  */
 export function encryptMessage(
   plaintext: string,
@@ -84,6 +87,7 @@ export function encryptMessage(
   senderDid: string,
   recipientDid: string,
   timestamp: number,
+  conversationId: string,
 ): { ciphertext: string; nonce: string } {
   // ECDH shared secret
   const sharedSecret = x25519.getSharedSecret(
@@ -91,13 +95,14 @@ export function encryptMessage(
     hexToBytes(friendEncryptionPublicKey),
   );
 
-  // Derive AES key = SHA-256(shared_secret)
-  const aesKey = sha256(sharedSecret);
+  // Derive AES key via HKDF-SHA256 (matching Rust core's SharedSecret::derive_key)
+  const salt = new TextEncoder().encode(conversationId);
+  const aesKey = hkdf(sha256, sharedSecret, salt, 'umbra-message-encryption-v1', 32);
 
   // Random 12-byte nonce
   const nonce = randomBytes(12);
 
-  // AAD = senderDid + recipientDid + timestamp (matching Rust core)
+  // AAD = senderDid + recipientDid + timestamp (matching Rust core's format!())
   const encoder = new TextEncoder();
   const aad = encoder.encode(`${senderDid}${recipientDid}${timestamp}`);
 
@@ -123,6 +128,7 @@ export function decryptMessage(
   senderDid: string,
   recipientDid: string,
   timestamp: number,
+  conversationId: string,
 ): string {
   // ECDH shared secret
   const sharedSecret = x25519.getSharedSecret(
@@ -130,8 +136,9 @@ export function decryptMessage(
     hexToBytes(senderEncryptionPublicKey),
   );
 
-  // Derive AES key
-  const aesKey = sha256(sharedSecret);
+  // Derive AES key via HKDF-SHA256 (matching Rust core)
+  const salt = new TextEncoder().encode(conversationId);
+  const aesKey = hkdf(sha256, sharedSecret, salt, 'umbra-message-encryption-v1', 32);
 
   const nonce = hexToBytes(nonceHex);
   const ciphertext = Buffer.from(ciphertextBase64, 'base64');

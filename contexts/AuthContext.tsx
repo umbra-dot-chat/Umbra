@@ -37,6 +37,8 @@ interface AuthContextValue {
   isAuthenticated: boolean;
   /** Set the identity after a successful create or import */
   login: (identity: Identity) => void;
+  /** Directly update the identity in state (and persist if rememberMe is on) */
+  setIdentity: (identity: Identity | null) => void;
   /** Clear the identity (return to auth screen) */
   logout: () => void;
 
@@ -133,6 +135,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  const updateIdentity = useCallback((id: Identity | null) => {
+    setIdentity(id);
+    if (id && rememberMeRef.current) {
+      setStorageItem(STORAGE_KEY_IDENTITY, JSON.stringify(id));
+    }
+  }, []);
+
   const logout = useCallback(() => {
     setIdentity(null);
     setPinState(null);
@@ -178,6 +187,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       identity,
       isAuthenticated: identity !== null,
       login,
+      setIdentity: updateIdentity,
       logout,
       rememberMe,
       setRememberMe,
@@ -190,7 +200,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       verifyPin,
       lockApp,
     }),
-    [identity, login, logout, rememberMe, setRememberMe, recoveryPhrase, setRecoveryPhrase, pin, isPinVerified, setPin, verifyPin, lockApp],
+    [identity, login, updateIdentity, logout, rememberMe, setRememberMe, recoveryPhrase, setRecoveryPhrase, pin, isPinVerified, setPin, verifyPin, lockApp],
   );
 
   return (

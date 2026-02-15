@@ -99,6 +99,7 @@ pub mod network;
 pub mod discovery;
 pub mod friends;
 pub mod messaging;
+/// Platform-aware time utilities for native and WASM targets.
 pub mod time;
 
 #[cfg(any(feature = "ffi", feature = "wasm"))]
@@ -124,7 +125,7 @@ use once_cell::sync::OnceCell;
 static CORE_INSTANCE: OnceCell<Arc<RwLock<UmbraCore>>> = OnceCell::new();
 
 /// Configuration for initializing Umbra Core
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct CoreConfig {
     /// Bootstrap nodes to connect to on startup
     pub bootstrap_nodes: Vec<String>,
@@ -132,19 +133,6 @@ pub struct CoreConfig {
     pub verbose_logging: bool,
     /// Storage path (platform-specific default if None)
     pub storage_path: Option<String>,
-}
-
-impl Default for CoreConfig {
-    fn default() -> Self {
-        Self {
-            bootstrap_nodes: vec![
-                // Default bootstrap nodes (to be configured)
-                // "/dns/bootstrap1.umbra.chat/tcp/4001".to_string(),
-            ],
-            verbose_logging: false,
-            storage_path: None,
-        }
-    }
 }
 
 /// The main Umbra Core instance that coordinates all modules
@@ -194,8 +182,10 @@ impl Default for CoreConfig {
 /// ```
 pub struct UmbraCore {
     /// Current user's identity (if loaded)
+    #[allow(dead_code)]
     identity: Option<Identity>,
     /// Configuration
+    #[allow(dead_code)]
     config: CoreConfig,
     /// Whether the core is initialized
     initialized: bool,

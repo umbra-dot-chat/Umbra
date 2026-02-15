@@ -16,10 +16,12 @@ import React, {
   useState,
   useCallback,
   useMemo,
+  useRef,
 } from 'react';
 import { Platform } from 'react-native';
 import { getWasm } from '@umbra/wasm';
 import { useUmbra } from '@/contexts/UmbraContext';
+import { fetchGoogleFontsCatalog } from '@/services/googleFontsApi';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Font Registry
@@ -145,8 +147,10 @@ function loadGoogleFont(font: FontEntry): Promise<void> {
 export interface FontContextValue {
   /** Currently active font */
   activeFont: FontEntry;
-  /** All available fonts */
+  /** All available fonts (curated + catalog) */
   fonts: FontEntry[];
+  /** Curated featured fonts only */
+  featuredFonts: FontEntry[];
   /** Set of font IDs that have been installed (loaded) */
   installedFontIds: Set<string>;
   /** Whether a font is currently loading */
@@ -157,6 +161,8 @@ export interface FontContextValue {
   setActiveFont: (fontId: string) => Promise<void>;
   /** Category filter options */
   categories: string[];
+  /** Whether the full Google Fonts catalog has been loaded */
+  catalogLoaded: boolean;
 }
 
 const FontContext = createContext<FontContextValue | null>(null);
@@ -174,6 +180,9 @@ export function FontProvider({ children }: { children: React.ReactNode }) {
   const [activeFont, setActiveFontState] = useState<FontEntry>(SYSTEM_FONT);
   const [installedFontIds, setInstalledFontIds] = useState<Set<string>>(new Set(['system']));
   const [loadingFontId, setLoadingFontId] = useState<string | null>(null);
+  const [allFonts, setAllFonts] = useState<FontEntry[]>(FONT_REGISTRY);
+  const [catalogLoaded, setCatalogLoaded] = useState(false);
+  const pendingFontIdRef = useRef<string | null>(null);
 
   // ── Persistence helpers ──────────────────────────────────────────────
 
@@ -239,7 +248,7 @@ export function FontProvider({ children }: { children: React.ReactNode }) {
       : null;
 
     if (savedFont && savedFont.id !== 'system') {
-      // Need to load the font first, then apply
+      // Found in curated registry — load immediately
       installed.add(savedFont.id);
       setInstalledFontIds(new Set(installed));
 
@@ -247,15 +256,56 @@ export function FontProvider({ children }: { children: React.ReactNode }) {
         setActiveFontState(savedFont);
         applyFont(savedFont);
       });
+    } else if (savedFontId && savedFontId !== 'system' && !savedFont) {
+      // Font from catalog — defer until catalog loads
+      pendingFontIdRef.current = savedFontId;
+      setInstalledFontIds(installed);
     } else {
       setInstalledFontIds(installed);
     }
   }, [isReady, loadFontState, applyFont]);
 
+  // ── Fetch Google Fonts catalog ─────────────────────────────────────
+
+  useEffect(() => {
+    if (!isReady || Platform.OS !== 'web') return;
+
+    fetchGoogleFontsCatalog()
+      .then((catalogFonts) => {
+        // Merge: curated fonts first, then catalog fonts not already curated
+        const curatedIds = new Set(FONT_REGISTRY.map((f) => f.id));
+        const newFonts = catalogFonts.filter((f) => !curatedIds.has(f.id));
+        setAllFonts([...FONT_REGISTRY, ...newFonts]);
+        setCatalogLoaded(true);
+
+        // If there's a pending font from a previous session, restore it now
+        const pendingId = pendingFontIdRef.current;
+        if (pendingId) {
+          pendingFontIdRef.current = null;
+          const pendingFont = newFonts.find((f) => f.id === pendingId);
+          if (pendingFont) {
+            loadGoogleFont(pendingFont).then(() => {
+              setActiveFontState(pendingFont);
+              applyFont(pendingFont);
+              setInstalledFontIds((prev) => {
+                const next = new Set(prev);
+                next.add(pendingId);
+                return next;
+              });
+            });
+          }
+        }
+      })
+      .catch((err) => {
+        console.warn('[FontContext] Failed to fetch Google Fonts catalog:', err);
+        // Falls back to curated FONT_REGISTRY only — allFonts stays as-is
+      });
+  }, [isReady, applyFont]);
+
   // ── Install a font ──────────────────────────────────────────────────
 
   const installFont = useCallback(async (fontId: string) => {
-    const font = FONT_REGISTRY.find((f) => f.id === fontId);
+    const font = allFonts.find((f) => f.id === fontId);
     if (!font || fontId === 'system') return;
 
     setLoadingFontId(fontId);
@@ -271,12 +321,12 @@ export function FontProvider({ children }: { children: React.ReactNode }) {
     } finally {
       setLoadingFontId(null);
     }
-  }, [saveFontState]);
+  }, [allFonts, saveFontState]);
 
   // ── Set active font ─────────────────────────────────────────────────
 
   const setActiveFont = useCallback(async (fontId: string) => {
-    const font = FONT_REGISTRY.find((f) => f.id === fontId);
+    const font = allFonts.find((f) => f.id === fontId);
     if (!font) return;
 
     // Install if not yet loaded
@@ -287,26 +337,28 @@ export function FontProvider({ children }: { children: React.ReactNode }) {
     setActiveFontState(font);
     applyFont(font);
     saveFontState(FONT_STATE_KEY, fontId);
-  }, [installedFontIds, installFont, applyFont, saveFontState]);
+  }, [allFonts, installedFontIds, installFont, applyFont, saveFontState]);
 
   // ── Context value ───────────────────────────────────────────────────
 
   const categories = useMemo(() => {
-    const cats = new Set(FONT_REGISTRY.map((f) => f.category));
+    const cats = new Set(allFonts.map((f) => f.category));
     return ['all', ...Array.from(cats)];
-  }, []);
+  }, [allFonts]);
 
   const value = useMemo<FontContextValue>(
     () => ({
       activeFont,
-      fonts: FONT_REGISTRY,
+      fonts: allFonts,
+      featuredFonts: FONT_REGISTRY,
       installedFontIds,
       loadingFontId,
       installFont,
       setActiveFont,
       categories,
+      catalogLoaded,
     }),
-    [activeFont, installedFontIds, loadingFontId, installFont, setActiveFont, categories],
+    [activeFont, allFonts, installedFontIds, loadingFontId, installFont, setActiveFont, categories, catalogLoaded],
   );
 
   return <FontContext.Provider value={value}>{children}</FontContext.Provider>;

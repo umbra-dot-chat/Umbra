@@ -185,7 +185,7 @@ function ListingCard({
       style={({ pressed }) => ({
         padding: 14, borderRadius: 10, borderWidth: 1,
         borderColor: tc.border.subtle,
-        backgroundColor: pressed ? tc.background.hover : tc.background.sunken,
+        backgroundColor: pressed ? tc.background.surface : tc.background.sunken,
         gap: 10,
       })}
     >
@@ -277,7 +277,7 @@ function InstalledPluginCard({
       {confirmUninstall ? (
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingTop: 4 }}>
           <RNText style={{ fontSize: 12, color: tc.status.danger, flex: 1 }}>Remove this plugin and its data?</RNText>
-          <Button size="xs" variant="danger" onPress={() => { onUninstall(); setConfirmUninstall(false); }}>
+          <Button size="xs" variant="destructive" onPress={() => { onUninstall(); setConfirmUninstall(false); }}>
             Remove
           </Button>
           <Button size="xs" variant="tertiary" onPress={() => setConfirmUninstall(false)}>Cancel</Button>
@@ -335,7 +335,7 @@ function PluginDetailView({
             <Button size="sm" variant={plugin.state === 'enabled' ? 'secondary' : 'primary'} onPress={onToggle} style={{ flex: 1 }}>
               {plugin.state === 'enabled' ? 'Disable' : 'Enable'}
             </Button>
-            <Button size="sm" variant="danger" onPress={onUninstall} iconLeft={<TrashIcon size={14} color={tc.text.inverse} />}>
+            <Button size="sm" variant="destructive" onPress={onUninstall} iconLeft={<TrashIcon size={14} color={tc.text.inverse} />}>
               Uninstall
             </Button>
           </>
@@ -508,13 +508,23 @@ function FontCard({ font, isInstalled, isActive, isLoading, onInstall, onActivat
   );
 }
 
+const FONTS_PAGE_SIZE = 50;
+
 function FontsContent() {
   const { theme, mode } = useTheme();
   const tc = theme.colors;
   const isDark = mode === 'dark';
-  const { activeFont, fonts, installedFontIds, loadingFontId, installFont, setActiveFont } = useFonts();
+  const { activeFont, fonts, featuredFonts, installedFontIds, loadingFontId, installFont, setActiveFont, catalogLoaded } = useFonts();
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('all');
+  const [visibleCount, setVisibleCount] = useState(FONTS_PAGE_SIZE);
+
+  // Reset visible count when filters change
+  useEffect(() => {
+    setVisibleCount(FONTS_PAGE_SIZE);
+  }, [search, categoryFilter]);
+
+  const isSearching = search.trim().length > 0;
 
   const filteredFonts = useMemo(() => {
     let list = fonts;
@@ -528,7 +538,30 @@ function FontsContent() {
     return list;
   }, [fonts, categoryFilter, search]);
 
+  const filteredFeatured = useMemo(() => {
+    let list = featuredFonts;
+    if (categoryFilter !== 'all') {
+      list = list.filter((f) => f.category === categoryFilter);
+    }
+    if (search.trim()) {
+      const q = search.toLowerCase().trim();
+      list = list.filter((f) => f.name.toLowerCase().includes(q) || f.category.toLowerCase().includes(q));
+    }
+    return list;
+  }, [featuredFonts, categoryFilter, search]);
+
+  // For "All Google Fonts" — exclude featured, then paginate
+  const catalogFonts = useMemo(() => {
+    const featuredIds = new Set(featuredFonts.map((f) => f.id));
+    return filteredFonts.filter((f) => !featuredIds.has(f.id));
+  }, [filteredFonts, featuredFonts]);
+
+  const visibleCatalog = catalogFonts.slice(0, visibleCount);
+  const hasMore = visibleCount < catalogFonts.length;
+
   const categories = ['all', 'sans-serif', 'serif', 'monospace', 'display', 'handwriting'];
+
+  const totalCount = fonts.length;
 
   return (
     <View style={{ flex: 1, padding: 20 }}>
@@ -536,7 +569,9 @@ function FontsContent() {
       <View style={{ marginBottom: 16 }}>
         <RNText style={{ fontSize: 18, fontWeight: '700', color: tc.text.primary, marginBottom: 4 }}>Fonts</RNText>
         <RNText style={{ fontSize: 13, color: tc.text.secondary }}>
-          Choose from {fonts.length} curated typefaces to personalize your Umbra experience.
+          {catalogLoaded
+            ? `Choose from ${totalCount.toLocaleString()} Google Fonts to personalize your Umbra experience.`
+            : `Choose from ${featuredFonts.length} curated typefaces. Loading full catalog...`}
         </RNText>
       </View>
 
@@ -571,18 +606,75 @@ function FontsContent() {
 
       {/* Font list */}
       <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingBottom: 20 }}>
-        {filteredFonts.map((font) => (
-          <FontCard
-            key={font.id}
-            font={font}
-            isInstalled={installedFontIds.has(font.id)}
-            isActive={activeFont.id === font.id}
-            isLoading={loadingFontId === font.id}
-            onInstall={() => installFont(font.id)}
-            onActivate={() => setActiveFont(font.id)}
-          />
-        ))}
-        {filteredFonts.length === 0 && (
+        {/* Featured section */}
+        {filteredFeatured.length > 0 && (
+          <>
+            <RNText style={{ fontSize: 13, fontWeight: '600', color: tc.text.secondary, marginBottom: 4, marginTop: 2 }}>
+              {isSearching ? `Featured (${filteredFeatured.length})` : `Featured (${featuredFonts.length})`}
+            </RNText>
+            {filteredFeatured.map((font) => (
+              <FontCard
+                key={font.id}
+                font={font}
+                isInstalled={installedFontIds.has(font.id)}
+                isActive={activeFont.id === font.id}
+                isLoading={loadingFontId === font.id}
+                onInstall={() => installFont(font.id)}
+                onActivate={() => setActiveFont(font.id)}
+              />
+            ))}
+          </>
+        )}
+
+        {/* All Google Fonts section */}
+        {catalogLoaded && catalogFonts.length > 0 && (
+          <>
+            <View style={{ marginTop: 16, marginBottom: 4 }}>
+              <RNText style={{ fontSize: 13, fontWeight: '600', color: tc.text.secondary }}>
+                All Google Fonts ({catalogFonts.length.toLocaleString()})
+              </RNText>
+            </View>
+            {visibleCatalog.map((font) => (
+              <FontCard
+                key={font.id}
+                font={font}
+                isInstalled={installedFontIds.has(font.id)}
+                isActive={activeFont.id === font.id}
+                isLoading={loadingFontId === font.id}
+                onInstall={() => installFont(font.id)}
+                onActivate={() => setActiveFont(font.id)}
+              />
+            ))}
+            {hasMore && (
+              <Pressable
+                onPress={() => setVisibleCount((prev) => prev + FONTS_PAGE_SIZE)}
+                style={{
+                  paddingVertical: 12,
+                  borderRadius: 8,
+                  borderWidth: 1,
+                  borderColor: tc.border.subtle,
+                  alignItems: 'center',
+                  marginTop: 4,
+                }}
+              >
+                <RNText style={{ fontSize: 13, fontWeight: '600', color: tc.accent.primary }}>
+                  Load More ({(catalogFonts.length - visibleCount).toLocaleString()} remaining)
+                </RNText>
+              </Pressable>
+            )}
+          </>
+        )}
+
+        {/* Loading indicator for catalog */}
+        {!catalogLoaded && (
+          <View style={{ alignItems: 'center', paddingVertical: 20, gap: 8 }}>
+            <ActivityIndicator size="small" color={tc.text.muted} />
+            <RNText style={{ fontSize: 12, color: tc.text.muted }}>Loading full Google Fonts catalog...</RNText>
+          </View>
+        )}
+
+        {/* Empty state */}
+        {filteredFeatured.length === 0 && (catalogLoaded ? catalogFonts.length === 0 : true) && (
           <View style={{ alignItems: 'center', paddingVertical: 40 }}>
             <RNText style={{ fontSize: 14, color: tc.text.muted }}>No fonts match your search.</RNText>
           </View>
@@ -682,7 +774,7 @@ function ThemeCard({
             <RNText style={{ fontSize: 11, color: tc.status.danger, flex: 1 }}>Remove this theme?</RNText>
             <Button
               size="xs"
-              variant="danger"
+              variant="destructive"
               onPress={() => {
                 onUninstall();
                 setShowUninstallConfirm(false);
@@ -858,7 +950,7 @@ function ThemesContent() {
                 borderWidth: 1,
                 borderColor: tc.border.subtle,
                 backgroundColor: pressed
-                  ? tc.background.hover
+                  ? tc.background.surface
                   : tc.background.sunken,
                 alignItems: 'center',
                 gap: 8,
@@ -893,7 +985,7 @@ function ThemesContent() {
                   backgroundColor: !activeTheme
                     ? tc.accent.highlight
                     : pressed
-                      ? tc.background.hover
+                      ? tc.background.surface
                       : tc.background.sunken,
                 })}
               >
@@ -1236,7 +1328,7 @@ export function PluginMarketplace({ open, onClose }: PluginMarketplaceProps) {
                         <ZapIcon size={24} color={tc.text.muted} />
                         <RNText style={{ fontSize: 14, fontWeight: '600', color: tc.text.primary, marginTop: 8 }}>No plugins installed</RNText>
                         <RNText style={{ fontSize: 12, color: tc.text.muted, textAlign: 'center', marginTop: 4 }}>Browse the marketplace to discover and install plugins.</RNText>
-                        <Button size="sm" variant="outline" onPress={() => setPluginTab('browse')} style={{ marginTop: 12 }}>Browse Marketplace</Button>
+                        <Button size="sm" variant="secondary" onPress={() => setPluginTab('browse')} style={{ marginTop: 12 }}>Browse Marketplace</Button>
                       </View>
                     ) : (
                       allPlugins.map((plugin) => {
@@ -1262,7 +1354,7 @@ export function PluginMarketplace({ open, onClose }: PluginMarketplaceProps) {
                         <View style={{ flex: 1 }}>
                           <Input value={devUrl} onChangeText={setDevUrl} placeholder="http://localhost:3099/bundle.js" size="sm" fullWidth />
                         </View>
-                        <Button size="sm" variant="outline" onPress={handleLoadDevPlugin} disabled={!devUrl.trim() || devLoading}>
+                        <Button size="sm" variant="secondary" onPress={handleLoadDevPlugin} disabled={!devUrl.trim() || devLoading}>
                           {devLoading ? 'Loading...' : 'Load'}
                         </Button>
                       </View>

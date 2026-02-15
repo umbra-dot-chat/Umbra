@@ -102,7 +102,7 @@ use aes_gcm::{
     Aes256Gcm, Nonce as AesNonce,
 };
 use rand::RngCore;
-use zeroize::{Zeroize, ZeroizeOnDrop};
+use zeroize::ZeroizeOnDrop;
 
 use crate::error::{Error, Result};
 
@@ -110,6 +110,7 @@ use crate::error::{Error, Result};
 pub const NONCE_SIZE: usize = 12;
 
 /// Size of the AES-GCM authentication tag in bytes (128 bits)
+#[allow(dead_code)]
 pub const TAG_SIZE: usize = 16;
 
 /// Size of the encryption key in bytes (256 bits)
@@ -166,6 +167,7 @@ impl SharedSecret {
     }
 
     /// Get the raw bytes (for key derivation)
+    #[allow(dead_code)]
     pub(crate) fn as_bytes(&self) -> &[u8; 32] {
         &self.bytes
     }

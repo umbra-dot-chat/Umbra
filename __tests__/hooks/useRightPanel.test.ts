@@ -4,9 +4,9 @@ import { useRightPanel } from '@/hooks/useRightPanel';
 
 // Mock Animated.timing to call callbacks synchronously
 jest.spyOn(Animated, 'timing').mockImplementation((value, config) => ({
-  start: (callback?: () => void) => {
+  start: (callback?: (result: { finished: boolean }) => void) => {
     (value as any).setValue(config.toValue);
-    callback?.();
+    callback?.({ finished: true });
   },
   stop: jest.fn(),
   reset: jest.fn(),

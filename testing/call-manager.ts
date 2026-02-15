@@ -9,6 +9,7 @@
  */
 
 import wrtc from '@roamhq/wrtc';
+import { AudioGenerator, type AudioMode } from './audio-generator.js';
 
 const {
   RTCPeerConnection,
@@ -30,6 +31,8 @@ export interface BotCallConfig {
   height: number;
   /** Video frame rate (default 30) */
   frameRate: number;
+  /** Audio mode for test audio generation */
+  audioMode: AudioMode;
   /** ICE servers */
   iceServers: { urls: string | string[]; username?: string; credential?: string }[];
 }
@@ -38,6 +41,7 @@ const DEFAULT_CALL_CONFIG: BotCallConfig = {
   width: 3840,
   height: 2160,
   frameRate: 30,
+  audioMode: 'sine',
   iceServers: [
     { urls: 'stun:stun.l.google.com:19302' },
     { urls: 'stun:stun1.l.google.com:19302' },
@@ -55,6 +59,7 @@ export class BotCallManager {
   private pendingCandidates: any[] = [];
   private config: BotCallConfig;
   private frameCount = 0;
+  private audioGenerator: AudioGenerator | null = null;
 
   // Callbacks
   onIceCandidate: ((candidate: { candidate: string; sdpMid: string | null; sdpMLineIndex: number | null }) => void) | null = null;
@@ -155,6 +160,10 @@ export class BotCallManager {
       this.pc.close();
       this.pc = null;
     }
+    if (this.audioGenerator) {
+      this.audioGenerator.stop();
+      this.audioGenerator = null;
+    }
     this.videoSource = null;
     this.audioSource = null;
     this.pendingCandidates = [];
@@ -188,14 +197,18 @@ export class BotCallManager {
   private setupMediaSources(callType: CallType): void {
     if (!this.pc) return;
 
-    // Always add audio (silent)
+    // Always add audio
     this.audioSource = new RTCAudioSource();
     const audioTrack = this.audioSource.createTrack();
     const stream = new MediaStream([audioTrack]);
     this.pc.addTrack(audioTrack, stream);
 
-    // Start sending silent audio frames
-    this.startSilentAudio();
+    // Start sending test audio frames
+    this.audioGenerator = new AudioGenerator({
+      sampleRate: 48000,
+      mode: this.config.audioMode,
+    });
+    this.startTestAudio();
 
     // Add video for video calls
     if (callType === 'video') {
@@ -210,21 +223,30 @@ export class BotCallManager {
   }
 
   /**
-   * Generate and send silent audio at 48kHz.
+   * Change the audio mode at runtime (sine, sweep, dtmf, silence).
+   */
+  setAudioMode(mode: AudioMode): void {
+    if (this.audioGenerator) {
+      this.audioGenerator.setMode(mode);
+    }
+  }
+
+  /**
+   * Generate and send test audio at 48kHz.
    * node-webrtc expects 10ms audio frames (480 samples at 48kHz).
    */
-  private startSilentAudio(): void {
+  private startTestAudio(): void {
     if (this.audioInterval) return;
 
     const sampleRate = 48000;
     const channelCount = 1;
     const samplesPerFrame = sampleRate / 100; // 10ms = 480 samples
-    const silence = new Int16Array(samplesPerFrame * channelCount);
 
     this.audioInterval = setInterval(() => {
-      if (this.audioSource) {
+      if (this.audioSource && this.audioGenerator) {
+        const samples = this.audioGenerator.getNextFrame(samplesPerFrame);
         this.audioSource.onData({
-          samples: silence,
+          samples,
           sampleRate,
           bitsPerSample: 16,
           channelCount,

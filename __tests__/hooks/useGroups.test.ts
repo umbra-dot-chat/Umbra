@@ -5,6 +5,17 @@ jest.mock('@/contexts/UmbraContext', () => ({
   useUmbra: jest.fn(),
 }));
 
+jest.mock('@/hooks/useNetwork', () => ({
+  useNetwork: jest.fn(() => ({
+    getRelayWs: jest.fn(() => null),
+    sendSignal: jest.fn(),
+    isConnected: false,
+    relayConnected: false,
+    relayUrl: null,
+  })),
+  pushPendingRelayAck: jest.fn(),
+}));
+
 const { useUmbra } = require('@/contexts/UmbraContext');
 
 const mockGroups = [
@@ -87,6 +98,11 @@ function createMockService(overrides = {}) {
     addGroupMember: jest.fn().mockResolvedValue(undefined),
     removeGroupMember: jest.fn().mockResolvedValue(undefined),
     getGroupMembers: jest.fn().mockResolvedValue(mockMembers),
+    onGroupEvent: jest.fn().mockReturnValue(jest.fn()),
+    getPendingGroupInvites: jest.fn().mockResolvedValue([]),
+    sendGroupInvite: jest.fn().mockResolvedValue(undefined),
+    acceptGroupInvite: jest.fn().mockResolvedValue({ groupId: 'group-1', conversationId: 'conv-group-1' }),
+    declineGroupInvite: jest.fn().mockResolvedValue(undefined),
     ...overrides,
   };
 }
@@ -351,14 +367,19 @@ describe('useGroups', () => {
       expect(result.current.isLoading).toBe(false);
     });
 
-    let created: any;
+    let thrownError: Error | undefined;
     await act(async () => {
-      created = await result.current.createGroup('Fail Group');
+      try {
+        await result.current.createGroup('Fail Group');
+      } catch (err) {
+        thrownError = err as Error;
+      }
     });
 
-    expect(created).toBeNull();
+    expect(thrownError).toBeInstanceOf(Error);
+    expect((thrownError as Error).message).toBe('Create failed');
     expect(result.current.error).toBeInstanceOf(Error);
-    expect(result.current.error?.message).toBe('Create failed');
+    expect((result.current.error as Error).message).toBe('Create failed');
   });
 
   test('createGroup returns null when service not available', async () => {

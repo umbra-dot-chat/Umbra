@@ -78,6 +78,70 @@ export async function generateTurnCredentials(
   return { username, credential };
 }
 
+// ─── TURN Credential Resolution ──────────────────────────────────────────────
+
+/** Cached TURN credentials (shared across all CallManager instances). */
+let _turnCredsCache: { username: string; credential: string; expiresAt: number } | null = null;
+
+/**
+ * Resolve TURN credentials for WebRTC calls.
+ *
+ * Tries in order:
+ * 1. Return cached credentials if still valid (> 1 hour remaining)
+ * 2. Fetch from relay server `/turn-credentials` endpoint
+ * 3. Generate locally from EXPO_PUBLIC_TURN_SECRET env var
+ *
+ * Returns null if no TURN credentials are available.
+ */
+export async function resolveTurnCredentials(): Promise<{ username: string; credential: string } | null> {
+  // Return cached if still valid (1 hour buffer before expiry)
+  if (_turnCredsCache && _turnCredsCache.expiresAt - Date.now() > 60 * 60 * 1000) {
+    return { username: _turnCredsCache.username, credential: _turnCredsCache.credential };
+  }
+
+  // Try fetching from relay server
+  for (const wsUrl of DEFAULT_RELAY_SERVERS) {
+    try {
+      const httpUrl = wsUrl
+        .replace('wss://', 'https://')
+        .replace('ws://', 'http://')
+        .replace(/\/ws\/?$/, '/turn-credentials');
+      const res = await fetch(httpUrl, { signal: AbortSignal.timeout(5000) });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.username && data.credential) {
+          const ttl = data.ttl ?? 86400;
+          _turnCredsCache = {
+            username: data.username,
+            credential: data.credential,
+            expiresAt: Date.now() + ttl * 1000,
+          };
+          console.log('[TURN] Credentials fetched from relay');
+          return { username: data.username, credential: data.credential };
+        }
+      }
+    } catch {
+      // Relay endpoint not available, try next
+    }
+  }
+
+  // Fall back to local secret from env var
+  const secret =
+    (typeof process !== 'undefined' && (process.env as any)?.EXPO_PUBLIC_TURN_SECRET) || null;
+  if (secret) {
+    const creds = await generateTurnCredentials(secret);
+    _turnCredsCache = {
+      ...creds,
+      expiresAt: Date.now() + 24 * 60 * 60 * 1000,
+    };
+    console.log('[TURN] Credentials generated from env secret');
+    return creds;
+  }
+
+  console.warn('[TURN] No TURN credentials available — remote calls may fail on restrictive NATs');
+  return null;
+}
+
 /**
  * Network configuration defaults
  */

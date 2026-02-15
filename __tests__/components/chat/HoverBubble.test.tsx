@@ -3,6 +3,17 @@ import { render } from '@testing-library/react-native';
 import { Text } from 'react-native';
 import { HoverBubble } from '@/components/chat/HoverBubble';
 
+jest.mock('@/contexts/PluginContext', () => ({
+  usePlugins: jest.fn(() => ({
+    getSlotComponents: jest.fn(() => []),
+    plugins: [],
+    installPlugin: jest.fn(),
+    enablePlugin: jest.fn(),
+    disablePlugin: jest.fn(),
+    uninstallPlugin: jest.fn(),
+  })),
+}));
+
 const mockActions = [
   { key: 'react', label: 'React', icon: <Text>smile</Text>, onClick: jest.fn() },
   { key: 'reply', label: 'Reply', icon: <Text>reply</Text>, onClick: jest.fn() },

@@ -174,7 +174,7 @@ export function PluginProvider({ children }: { children: React.ReactNode }) {
       },
 
       getMessages: async (conversationId, limit) => {
-        const messages = await service.getMessages(conversationId, limit ?? 50, 0);
+        const messages = await service.getMessages(conversationId, { limit: limit ?? 50, offset: 0 });
         return messages.map((m: any): PluginMessage => ({
           id: m.id,
           conversationId: m.conversationId,

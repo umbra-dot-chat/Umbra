@@ -1,6 +1,6 @@
 import { useRef, useState, useCallback } from 'react';
 import { Animated, Easing } from 'react-native';
-import { durations } from '@coexist/wisp-core/tokens/motion';
+import { durations } from '@coexist/wisp-core';
 import { PANEL_WIDTH } from '@/types/panels';
 import type { RightPanel } from '@/types/panels';
 

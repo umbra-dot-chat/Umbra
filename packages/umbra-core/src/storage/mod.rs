@@ -82,23 +82,14 @@ pub use database::{
     GroupKeyRecord, GroupInviteRecord, ReactionRecord,
 };
 pub use secure_store::SecureStore;
-pub(crate) use schema::{CREATE_TABLES, SCHEMA_VERSION};
 
 use crate::error::Result;
 
 /// Storage configuration
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct StorageConfig {
     /// Path to the database file (None for in-memory)
     pub database_path: Option<String>,
-}
-
-impl Default for StorageConfig {
-    fn default() -> Self {
-        Self {
-            database_path: None,
-        }
-    }
 }
 
 /// Initialize the storage system

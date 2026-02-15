@@ -409,7 +409,7 @@ impl RequestStatus {
     }
 
     /// Parse from database string
-    pub fn from_str(s: &str) -> Option<Self> {
+    pub fn parse(s: &str) -> Option<Self> {
         match s {
             "pending" => Some(RequestStatus::Pending),
             "accepted" => Some(RequestStatus::Accepted),
@@ -544,8 +544,8 @@ impl FriendsService {
             to_did: request.to_did.clone(),
             direction: "outgoing".to_string(),
             message: request.message.clone(),
-            from_signing_key: Some(hex::encode(&request.from.public_keys.signing)),
-            from_encryption_key: Some(hex::encode(&request.from.public_keys.encryption)),
+            from_signing_key: Some(hex::encode(request.from.public_keys.signing)),
+            from_encryption_key: Some(hex::encode(request.from.public_keys.encryption)),
             from_display_name: Some(request.from.display_name.clone()),
             created_at: request.created_at,
             status: "pending".to_string(),
@@ -592,8 +592,8 @@ impl FriendsService {
             to_did: request.to_did.clone(),
             direction: "incoming".to_string(),
             message: request.message.clone(),
-            from_signing_key: Some(hex::encode(&request.from.public_keys.signing)),
-            from_encryption_key: Some(hex::encode(&request.from.public_keys.encryption)),
+            from_signing_key: Some(hex::encode(request.from.public_keys.signing)),
+            from_encryption_key: Some(hex::encode(request.from.public_keys.encryption)),
             from_display_name: Some(request.from.display_name.clone()),
             created_at: request.created_at,
             status: "pending".to_string(),
@@ -993,8 +993,8 @@ mod tests {
     fn test_request_status() {
         assert_eq!(RequestStatus::Pending.as_str(), "pending");
         assert_eq!(RequestStatus::Accepted.as_str(), "accepted");
-        assert_eq!(RequestStatus::from_str("pending"), Some(RequestStatus::Pending));
-        assert_eq!(RequestStatus::from_str("invalid"), None);
+        assert_eq!(RequestStatus::parse("pending"), Some(RequestStatus::Pending));
+        assert_eq!(RequestStatus::parse("invalid"), None);
     }
 
     #[tokio::test]

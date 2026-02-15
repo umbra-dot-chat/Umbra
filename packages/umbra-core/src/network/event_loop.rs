@@ -465,11 +465,11 @@ async fn handle_swarm_event(
             tracing::info!("Listener {:?} closed: {:?}", listener_id, reason);
         }
 
-        SwarmEvent::Dialing { peer_id, .. } => {
-            if let Some(peer_id) = peer_id {
-                tracing::debug!("Dialing peer: {}", peer_id);
-            }
+        SwarmEvent::Dialing { peer_id: Some(peer_id), .. } => {
+            tracing::debug!("Dialing peer: {}", peer_id);
         }
+
+        SwarmEvent::Dialing { peer_id: None, .. } => {}
 
         _ => {
             // Catch-all for any other events

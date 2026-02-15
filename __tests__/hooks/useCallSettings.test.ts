@@ -30,7 +30,7 @@ describe('useCallSettings', () => {
     expect(result.current.incomingCallDisplay).toBe('fullscreen');
     expect(result.current.ringVolume).toBe(80);
     expect(result.current.defaultVideoQuality).toBe('auto');
-    expect(result.current.defaultAudioQuality).toBe('opus');
+    expect(result.current.defaultAudioQuality).toBe('opus-voice');
   });
 
   it('persists incomingCallDisplay to localStorage', () => {

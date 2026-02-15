@@ -147,6 +147,9 @@ export function useMessages(conversationId: string | null): UseMessagesResult {
           return;
         }
         if (msg.conversationId === conversationId) {
+          // Don't append messages with empty content (e.g. from decryption failure)
+          const text = typeof msg.content === 'string' ? msg.content : msg.content?.text;
+          if (!text) return;
           setMessages((prev) => [...prev, msg]);
         }
       } else if (event.type === 'threadReplyReceived') {

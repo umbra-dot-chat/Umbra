@@ -137,6 +137,7 @@ impl UmbraBehaviour {
     }
 
     /// Send a response back on a request-response channel
+    #[allow(clippy::result_large_err)]
     pub fn send_response(
         &mut self,
         channel: request_response::ResponseChannel<UmbraResponse>,

@@ -6,9 +6,10 @@ use libp2p::{PeerId, Multiaddr};
 use serde::{Deserialize, Serialize};
 
 /// State of a peer connection
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub enum PeerState {
     /// Not connected
+    #[default]
     Disconnected,
     /// Connection in progress
     Connecting,
@@ -16,12 +17,6 @@ pub enum PeerState {
     Connected,
     /// Connection failed
     Failed,
-}
-
-impl Default for PeerState {
-    fn default() -> Self {
-        Self::Disconnected
-    }
 }
 
 /// Information about a connected peer

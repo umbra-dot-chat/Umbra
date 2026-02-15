@@ -22,38 +22,63 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum RelayClientMessage {
+    /// Register this client's DID with the relay server.
     Register {
+        /// The DID to register.
         did: String,
     },
+    /// Forward a signaling payload to another peer via the relay.
     Signal {
+        /// The recipient's DID.
         to_did: String,
+        /// The opaque signaling payload.
         payload: String,
     },
+    /// Send an encrypted message to another peer (may be queued if offline).
     Send {
+        /// The recipient's DID.
         to_did: String,
+        /// The encrypted message payload.
         payload: String,
     },
+    /// Create a new single-scan friend-adding session.
     CreateSession {
+        /// The SDP offer payload for the session.
         offer_payload: String,
     },
+    /// Join an existing single-scan friend-adding session.
     JoinSession {
+        /// The session identifier to join.
         session_id: String,
+        /// The SDP answer payload.
         answer_payload: String,
     },
+    /// Fetch any queued offline messages from the relay.
     FetchOffline,
+    /// Keepalive ping to the relay server.
     Ping,
+    /// Create a new call room for a group.
     CreateCallRoom {
+        /// The group identifier for the call room.
         group_id: String,
     },
+    /// Join an existing call room.
     JoinCallRoom {
+        /// The room identifier to join.
         room_id: String,
     },
+    /// Leave a call room.
     LeaveCallRoom {
+        /// The room identifier to leave.
         room_id: String,
     },
+    /// Send a call signaling payload to a peer in a room.
     CallSignal {
+        /// The call room identifier.
         room_id: String,
+        /// The recipient's DID.
         to_did: String,
+        /// The signaling payload (SDP, ICE candidates, etc.).
         payload: String,
     },
 }
@@ -63,56 +88,95 @@ pub enum RelayClientMessage {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum RelayServerMessage {
+    /// Confirmation that the client has been registered.
     Registered {
+        /// The registered DID.
         did: String,
     },
+    /// A forwarded signaling payload from another peer.
     Signal {
+        /// The sender's DID.
         from_did: String,
+        /// The opaque signaling payload.
         payload: String,
     },
+    /// An incoming message from another peer.
     Message {
+        /// The sender's DID.
         from_did: String,
+        /// The encrypted message payload.
         payload: String,
+        /// Unix timestamp of when the message was sent.
         timestamp: i64,
     },
+    /// Confirmation that a session was created.
     SessionCreated {
+        /// The newly created session identifier.
         session_id: String,
     },
+    /// Notification that a peer joined a session.
     SessionJoined {
+        /// The session identifier.
         session_id: String,
+        /// The joining peer's DID.
         from_did: String,
+        /// The SDP answer payload.
         answer_payload: String,
     },
+    /// Notification of a session offer from another peer.
     SessionOffer {
+        /// The session identifier.
         session_id: String,
+        /// The offering peer's DID.
         from_did: String,
+        /// The SDP offer payload.
         offer_payload: String,
     },
+    /// A batch of offline messages that were queued while the client was away.
     OfflineMessages {
+        /// The list of offline messages.
         messages: Vec<OfflineMessageData>,
     },
+    /// Keepalive pong response from the relay server.
     Pong,
+    /// An error message from the relay server.
     Error {
+        /// The error description.
         message: String,
     },
+    /// Acknowledgment of a previously sent message.
     Ack {
+        /// The acknowledged message identifier.
         id: String,
     },
+    /// Confirmation that a call room was created.
     CallRoomCreated {
+        /// The new room identifier.
         room_id: String,
+        /// The group identifier associated with the room.
         group_id: String,
     },
+    /// Notification that a participant joined a call room.
     CallParticipantJoined {
+        /// The call room identifier.
         room_id: String,
+        /// The joining participant's DID.
         did: String,
     },
+    /// Notification that a participant left a call room.
     CallParticipantLeft {
+        /// The call room identifier.
         room_id: String,
+        /// The departing participant's DID.
         did: String,
     },
+    /// A forwarded call signaling payload from another participant.
     CallSignalForward {
+        /// The call room identifier.
         room_id: String,
+        /// The sender's DID.
         from_did: String,
+        /// The signaling payload.
         payload: String,
     },
 }
@@ -120,19 +184,28 @@ pub enum RelayServerMessage {
 /// An offline message received from the relay.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct OfflineMessageData {
+    /// Unique message identifier.
     pub id: String,
+    /// The sender's DID.
     pub from_did: String,
+    /// The encrypted message payload.
     pub payload: String,
+    /// Unix timestamp of when the message was originally sent.
     pub timestamp: i64,
 }
 
 /// Relay connection status.
 #[derive(Debug, Clone, PartialEq)]
 pub enum RelayStatus {
+    /// Not connected to the relay server.
     Disconnected,
+    /// Currently establishing a connection.
     Connecting,
+    /// WebSocket connection established but not yet registered.
     Connected,
+    /// Registered with the relay server and ready for operations.
     Registered,
+    /// Connection is in an error state.
     Error(String),
 }
 

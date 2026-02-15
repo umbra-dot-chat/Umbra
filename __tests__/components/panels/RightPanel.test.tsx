@@ -30,6 +30,23 @@ jest.mock('@/contexts/UmbraContext', () => ({
   }),
 }));
 
+jest.mock('@/contexts/AuthContext', () => ({
+  useAuth: () => ({
+    identity: { did: 'did:key:z6MkMe', displayName: 'Me', createdAt: Date.now() / 1000 },
+    isAuthenticated: true,
+    hasPin: false,
+    isPinVerified: false,
+    rememberMe: false,
+    login: jest.fn(),
+    logout: jest.fn(),
+    setRememberMe: jest.fn(),
+    setPin: jest.fn(),
+    verifyPin: jest.fn(),
+    lockApp: jest.fn(),
+  }),
+  AuthProvider: ({ children }: any) => children,
+}));
+
 describe('RightPanel', () => {
   const defaultProps = {
     panelWidth: new Animated.Value(280),

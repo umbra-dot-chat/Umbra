@@ -82,6 +82,7 @@ use crate::error::{Error, Result};
 use crate::crypto::{encrypt, decrypt, EncryptionKey, Nonce};
 
 /// Key names for secure storage
+#[allow(dead_code)]
 pub mod keys {
     /// The encrypted identity keypair
     pub const IDENTITY_KEYS: &str = "umbra.identity.keys";
@@ -491,6 +492,7 @@ impl Default for SecureStore {
 /// Store an identity's private keys securely
 ///
 /// The keys are encrypted with a storage key derived from the master seed.
+#[allow(dead_code)]
 pub fn store_identity_keys(
     store: &SecureStore,
     signing_key: &[u8; 32],
@@ -514,6 +516,7 @@ pub fn store_identity_keys(
 /// Retrieve identity private keys from secure storage
 ///
 /// Returns (signing_key, encryption_key, did).
+#[allow(dead_code, clippy::type_complexity)]
 pub fn retrieve_identity_keys(
     store: &SecureStore,
 ) -> Result<Option<(Zeroizing<[u8; 32]>, Zeroizing<[u8; 32]>, String)>> {
@@ -544,6 +547,7 @@ pub fn retrieve_identity_keys(
 }
 
 /// Delete identity keys from secure storage
+#[allow(dead_code)]
 pub fn delete_identity_keys(store: &SecureStore) -> Result<()> {
     store.delete(keys::IDENTITY_KEYS)?;
     store.delete(keys::IDENTITY_DID)?;

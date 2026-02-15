@@ -90,6 +90,8 @@ export function useVideoFilters(config: UseVideoFiltersConfig): UseVideoFiltersR
 
     const draw = () => {
       if (!active) return;
+      // Guard against refs that may have been nulled during cleanup
+      if (!canvasRef.current || !videoRef.current) return;
       ctx.filter = cssFilter;
       ctx.drawImage(video, 0, 0, width, height);
       animationFrameIdRef.current = requestAnimationFrame(draw);

@@ -27,6 +27,8 @@ export interface GuideSectionProps {
   iconBg?: string;
   /** Whether the section starts expanded */
   defaultExpanded?: boolean;
+  /** Extra content to render below subtitle (e.g., badges) */
+  headerExtra?: React.ReactNode;
   /** Children content */
   children: React.ReactNode;
 }
@@ -37,6 +39,7 @@ export function GuideSection({
   icon,
   iconBg = '#3B82F6',
   defaultExpanded = false,
+  headerExtra,
   children,
 }: GuideSectionProps) {
   const { theme, mode } = useTheme();
@@ -111,6 +114,7 @@ export function GuideSection({
         <View style={styles.titleContainer}>
           <Text style={styles.title}>{title}</Text>
           {subtitle && <Text style={styles.subtitle}>{subtitle}</Text>}
+          {headerExtra}
         </View>
         <Text style={styles.chevron}>{expanded ? '\u25B2' : '\u25BC'}</Text>
       </Pressable>

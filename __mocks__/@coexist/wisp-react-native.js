@@ -20,6 +20,7 @@ module.exports = {
         border: { subtle: '#eee', strong: '#ccc', focus: '#00f' },
         accent: { primary: '#000', primaryHover: '#333' },
         status: { success: '#0f0', danger: '#f00' },
+        brand: { surface: '#6366f1', text: '#fff' },
       },
       mode: 'light',
     },
@@ -112,4 +113,18 @@ module.exports = {
   NavbarItem: mockComponent('NavbarItem'),
   ThreadPanel: mockComponent('ThreadPanel'),
   MentionAutocomplete: mockComponent('MentionAutocomplete'),
+
+  // Form controls
+  Tag: mockComponent('Tag'),
+  Slider: mockComponent('Slider'),
+  SegmentedControl: mockComponent('SegmentedControl'),
+
+  // Call components
+  CallNotification: mockComponent('CallNotification'),
+  CallTimer: mockComponent('CallTimer'),
+  CallControls: mockComponent('CallControls'),
+
+  // Deep-import component mocks (re-exported here for moduleNameMapper)
+  MessageActionBar: mockComponent('MessageActionBar'),
+  UserProfileCard: mockComponent('UserProfileCard'),
 };

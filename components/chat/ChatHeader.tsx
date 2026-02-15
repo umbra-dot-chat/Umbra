@@ -39,7 +39,7 @@ export function ChatHeader({ active, rightPanel, togglePanel, onShowProfile, onV
                 variant="tertiary"
                 size="sm"
                 onPress={(e) => onShowProfile(active.name, e)}
-                iconLeft={<Avatar name={active.name} size="sm" />}
+                iconLeft={<Avatar name={active.name} size="sm" status={active.online ? 'online' : undefined} />}
               />
             )
           )}

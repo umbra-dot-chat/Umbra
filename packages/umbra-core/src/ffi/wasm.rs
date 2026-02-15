@@ -3548,6 +3548,158 @@ pub fn umbra_wasm_crypto_verify(
         .or(Ok(false))
 }
 
+/// Encrypt arbitrary data for a peer (friend) identified by DID.
+///
+/// Input JSON: { "peer_did": "did:key:...", "plaintext_b64": "base64-encoded-data", "context": "optional-context-string" }
+/// Returns JSON: { "ciphertext_b64": "...", "nonce_hex": "...", "timestamp": unix_ms }
+///
+/// Uses X25519 ECDH + AES-256-GCM, same as message encryption but for generic data.
+#[wasm_bindgen]
+pub fn umbra_wasm_crypto_encrypt_for_peer(json: &str) -> Result<JsValue, JsValue> {
+    let state = get_state()?;
+    let state = state.read();
+
+    let identity = state.identity.as_ref()
+        .ok_or_else(|| JsValue::from_str("No identity loaded"))?;
+
+    let database = state.database.as_ref()
+        .ok_or_else(|| JsValue::from_str("Database not initialized"))?;
+
+    let input: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let peer_did = input["peer_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing 'peer_did' field"))?;
+
+    let plaintext_b64 = input["plaintext_b64"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing 'plaintext_b64' field"))?;
+
+    let context = input["context"].as_str().unwrap_or("");
+
+    // Decode plaintext from base64
+    let plaintext = base64::engine::general_purpose::STANDARD.decode(plaintext_b64)
+        .map_err(|e| JsValue::from_str(&format!("Invalid base64 plaintext: {}", e)))?;
+
+    // Look up the peer's encryption key from friends table
+    let friend_record = database.get_friend(peer_did)
+        .map_err(|e| JsValue::from_str(&format!("Failed to get friend: {}", e)))?
+        .ok_or_else(|| JsValue::from_str("Friend not found — cannot encrypt for peer"))?;
+
+    let friend_encryption_key_bytes = hex::decode(&friend_record.encryption_key)
+        .map_err(|e| JsValue::from_str(&format!("Invalid friend encryption key: {}", e)))?;
+    let mut friend_enc_key = [0u8; 32];
+    if friend_encryption_key_bytes.len() != 32 {
+        return Err(JsValue::from_str("Friend encryption key must be 32 bytes"));
+    }
+    friend_enc_key.copy_from_slice(&friend_encryption_key_bytes);
+
+    let our_did = identity.did_string();
+    let timestamp = crate::time::now_timestamp_millis();
+    let aad = format!("{}{}{}", our_did, peer_did, timestamp);
+
+    let (nonce, ciphertext) = crate::crypto::encrypt_for_recipient(
+        &identity.keypair().encryption,
+        &friend_enc_key,
+        context.as_bytes(),
+        &plaintext,
+        aad.as_bytes(),
+    ).map_err(|e| JsValue::from_str(&format!("Encryption failed: {}", e)))?;
+
+    let ciphertext_b64 = base64::engine::general_purpose::STANDARD.encode(&ciphertext);
+    let nonce_hex = hex::encode(&nonce.0);
+
+    let result = serde_json::json!({
+        "ciphertext_b64": ciphertext_b64,
+        "nonce_hex": nonce_hex,
+        "timestamp": timestamp,
+    });
+
+    Ok(JsValue::from_str(&result.to_string()))
+}
+
+/// Decrypt arbitrary data received from a peer (friend) identified by DID.
+///
+/// Input JSON: { "peer_did": "did:key:...", "ciphertext_b64": "...", "nonce_hex": "...", "timestamp": unix_ms, "context": "optional" }
+/// Returns JSON: { "plaintext_b64": "..." }
+///
+/// Uses X25519 ECDH + AES-256-GCM, same as message decryption but for generic data.
+#[wasm_bindgen]
+pub fn umbra_wasm_crypto_decrypt_from_peer(json: &str) -> Result<JsValue, JsValue> {
+    let state = get_state()?;
+    let state = state.read();
+
+    let identity = state.identity.as_ref()
+        .ok_or_else(|| JsValue::from_str("No identity loaded"))?;
+
+    let database = state.database.as_ref()
+        .ok_or_else(|| JsValue::from_str("Database not initialized"))?;
+
+    let input: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let peer_did = input["peer_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing 'peer_did' field"))?;
+
+    let ciphertext_b64 = input["ciphertext_b64"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing 'ciphertext_b64' field"))?;
+
+    let nonce_hex = input["nonce_hex"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing 'nonce_hex' field"))?;
+
+    let timestamp = input["timestamp"].as_i64()
+        .ok_or_else(|| JsValue::from_str("Missing or invalid 'timestamp' field"))?;
+
+    let context = input["context"].as_str().unwrap_or("");
+
+    // Decode ciphertext from base64
+    let ciphertext = base64::engine::general_purpose::STANDARD.decode(ciphertext_b64)
+        .map_err(|e| JsValue::from_str(&format!("Invalid base64 ciphertext: {}", e)))?;
+
+    // Decode nonce from hex
+    let nonce_bytes = hex::decode(nonce_hex)
+        .map_err(|e| JsValue::from_str(&format!("Invalid nonce hex: {}", e)))?;
+    if nonce_bytes.len() != 12 {
+        return Err(JsValue::from_str("Nonce must be 12 bytes"));
+    }
+    let mut nonce_arr = [0u8; 12];
+    nonce_arr.copy_from_slice(&nonce_bytes);
+    let nonce = crate::crypto::Nonce(nonce_arr);
+
+    // Look up the peer's encryption key from friends table
+    let friend_record = database.get_friend(peer_did)
+        .map_err(|e| JsValue::from_str(&format!("Failed to get friend: {}", e)))?
+        .ok_or_else(|| JsValue::from_str("Friend not found — cannot decrypt from peer"))?;
+
+    let friend_encryption_key_bytes = hex::decode(&friend_record.encryption_key)
+        .map_err(|e| JsValue::from_str(&format!("Invalid friend encryption key: {}", e)))?;
+    let mut friend_enc_key = [0u8; 32];
+    if friend_encryption_key_bytes.len() != 32 {
+        return Err(JsValue::from_str("Friend encryption key must be 32 bytes"));
+    }
+    friend_enc_key.copy_from_slice(&friend_encryption_key_bytes);
+
+    let our_did = identity.did_string();
+    // AAD uses sender/recipient order: peer sent to us, so peer_did first, then our_did
+    let aad = format!("{}{}{}", peer_did, our_did, timestamp);
+
+    let plaintext = crate::crypto::decrypt_from_sender(
+        &identity.keypair().encryption,
+        &friend_enc_key,
+        context.as_bytes(),
+        &nonce,
+        &ciphertext,
+        aad.as_bytes(),
+    ).map_err(|e| JsValue::from_str(&format!("Decryption failed: {}", e)))?;
+
+    let plaintext_b64 = base64::engine::general_purpose::STANDARD.encode(&plaintext);
+
+    let result = serde_json::json!({
+        "plaintext_b64": plaintext_b64,
+    });
+
+    Ok(JsValue::from_str(&result.to_string()))
+}
+
 // ============================================================================
 // PLUGIN STORAGE — KV & Bundles
 // ============================================================================

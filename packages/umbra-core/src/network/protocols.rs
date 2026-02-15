@@ -145,6 +145,7 @@ pub struct FriendResponse {
     pub responder_display_name: Option<String>,
     /// Responder's public keys (for Accept)
     pub responder_signing_key: Option<String>,
+    /// Responder's encryption public key (for Accept)
     pub responder_encryption_key: Option<String>,
 }
 
@@ -186,9 +187,10 @@ pub struct PresenceAnnouncement {
 }
 
 /// Online status
-#[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Default, Serialize, Deserialize, PartialEq, Eq)]
 pub enum OnlineStatus {
     /// User is online and active
+    #[default]
     Online,
     /// User is online but idle
     Away,
@@ -196,12 +198,6 @@ pub enum OnlineStatus {
     DoNotDisturb,
     /// User is offline
     Offline,
-}
-
-impl Default for OnlineStatus {
-    fn default() -> Self {
-        Self::Online
-    }
 }
 
 // ============================================================================

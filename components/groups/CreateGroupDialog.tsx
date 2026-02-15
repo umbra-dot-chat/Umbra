@@ -5,8 +5,8 @@
  * and select initial members from their friends list.
  */
 
-import React, { useState, useCallback } from 'react';
-import { View, ScrollView, Pressable } from 'react-native';
+import React, { useState, useCallback, useMemo } from 'react';
+import { View } from 'react-native';
 import type { ViewStyle, TextStyle } from 'react-native';
 import {
   Dialog,
@@ -14,12 +14,14 @@ import {
   TextArea,
   Button,
   Text,
+  Avatar,
   HStack,
   VStack,
-  Card,
   useTheme,
+  UserPicker,
 } from '@coexist/wisp-react-native';
-import { UsersIcon, PlusIcon, CheckIcon, XIcon } from '@/components/icons';
+import type { UserPickerUser } from '@coexist/wisp-react-native';
+import { UsersIcon } from '@/components/icons';
 import { useFriends } from '@/hooks/useFriends';
 import { useGroups } from '@/hooks/useGroups';
 import type { Friend } from '@umbra/service';
@@ -42,18 +44,23 @@ export function CreateGroupDialog({ open, onClose, onCreated }: CreateGroupDialo
   const [validationError, setValidationError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
-  const toggleFriend = useCallback((did: string) => {
+  const handleSelectionChange = useCallback((selected: string[]) => {
     setValidationError(null);
-    setSelectedFriends((prev) => {
-      const next = new Set(prev);
-      if (next.has(did)) {
-        next.delete(did);
-      } else {
-        next.add(did);
-      }
-      return next;
-    });
+    setSelectedFriends(new Set(selected));
   }, []);
+
+  // Map friends to UserPickerUser format
+  const pickerUsers: UserPickerUser[] = useMemo(
+    () =>
+      friends.map((f) => ({
+        id: f.did,
+        name: f.displayName,
+        username: f.did.slice(0, 20) + '...',
+        avatar: <Avatar name={f.displayName} size="sm" status={f.online ? 'online' : 'offline'} />,
+        status: f.online ? 'online' as const : 'offline' as const,
+      })),
+    [friends],
+  );
 
   const handleCreate = useCallback(async () => {
     // Validation
@@ -123,56 +130,13 @@ export function CreateGroupDialog({ open, onClose, onCreated }: CreateGroupDialo
     header: {
       fontSize: 18,
       fontWeight: '600',
-      color: theme.colors.text,
+      color: theme.colors.text.primary,
     } as TextStyle,
     label: {
       fontSize: 13,
       fontWeight: '500',
-      color: theme.colors.textSecondary,
+      color: theme.colors.text.secondary,
       marginBottom: 4,
-    } as TextStyle,
-    friendsList: {
-      maxHeight: 200,
-      borderRadius: 8,
-      borderWidth: 1,
-      borderColor: theme.colors.border,
-      overflow: 'hidden' as const,
-    } as ViewStyle,
-    friendRow: {
-      flexDirection: 'row' as const,
-      alignItems: 'center' as const,
-      justifyContent: 'space-between' as const,
-      paddingHorizontal: 12,
-      paddingVertical: 10,
-      borderBottomWidth: 1,
-      borderBottomColor: theme.colors.border,
-    } as ViewStyle,
-    friendRowSelected: {
-      backgroundColor: theme.colors.primary + '15',
-    } as ViewStyle,
-    friendName: {
-      fontSize: 14,
-      color: theme.colors.text,
-    } as TextStyle,
-    friendDid: {
-      fontSize: 11,
-      color: theme.colors.textSecondary,
-    } as TextStyle,
-    checkIcon: {
-      width: 20,
-      height: 20,
-      borderRadius: 10,
-      backgroundColor: theme.colors.primary,
-      alignItems: 'center' as const,
-      justifyContent: 'center' as const,
-    } as ViewStyle,
-    emptyFriends: {
-      padding: 16,
-      alignItems: 'center' as const,
-    } as ViewStyle,
-    emptyText: {
-      fontSize: 13,
-      color: theme.colors.textSecondary,
     } as TextStyle,
     buttons: {
       flexDirection: 'row' as const,
@@ -185,7 +149,7 @@ export function CreateGroupDialog({ open, onClose, onCreated }: CreateGroupDialo
     <Dialog open={open} onClose={handleClose}>
       <View style={styles.container}>
         <HStack style={{ alignItems: 'center', gap: 8 }}>
-          <UsersIcon size={20} color={theme.colors.primary} />
+          <UsersIcon size={20} color={theme.colors.accent.primary} />
           <Text style={styles.header}>Create Group & Invite Members</Text>
         </HStack>
 
@@ -211,42 +175,17 @@ export function CreateGroupDialog({ open, onClose, onCreated }: CreateGroupDialo
 
           <VStack style={{ gap: 4 }}>
             <Text style={styles.label}>
-              Invite Members ({selectedFriends.size} selected, min 1)
+              Invite Members (min 1)
             </Text>
-            <View style={styles.friendsList}>
-              {friends.length === 0 ? (
-                <View style={styles.emptyFriends}>
-                  <Text style={styles.emptyText}>No friends to add yet</Text>
-                </View>
-              ) : (
-                <ScrollView>
-                  {friends.map((friend) => {
-                    const isSelected = selectedFriends.has(friend.did);
-                    return (
-                      <Pressable
-                        key={friend.did}
-                        onPress={() => toggleFriend(friend.did)}
-                        style={[styles.friendRow, isSelected && styles.friendRowSelected]}
-                      >
-                        <VStack>
-                          <Text style={styles.friendName}>
-                            {friend.displayName}
-                          </Text>
-                          <Text style={styles.friendDid}>
-                            {friend.did.slice(0, 24)}...
-                          </Text>
-                        </VStack>
-                        {isSelected && (
-                          <View style={styles.checkIcon}>
-                            <CheckIcon size={12} color="#fff" />
-                          </View>
-                        )}
-                      </Pressable>
-                    );
-                  })}
-                </ScrollView>
-              )}
-            </View>
+            <UserPicker
+              users={pickerUsers}
+              selected={selectedFriends}
+              onSelectionChange={handleSelectionChange}
+              max={255}
+              emptyMessage="No friends to add yet"
+              maxHeight={200}
+              searchPlaceholder="Search friends..."
+            />
           </VStack>
         </VStack>
 
@@ -265,7 +204,7 @@ export function CreateGroupDialog({ open, onClose, onCreated }: CreateGroupDialo
         )}
 
         <View style={styles.buttons}>
-          <Button variant="ghost" onPress={handleClose}>
+          <Button variant="tertiary" onPress={handleClose}>
             Cancel
           </Button>
           <Button

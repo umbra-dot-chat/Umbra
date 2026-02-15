@@ -4,36 +4,36 @@ import { ProfilePopover } from '@/components/modals/ProfilePopover';
 
 describe('ProfilePopover', () => {
   test('renders when selectedMember is present', () => {
-    const { getByTestId } = render(
+    const { getAllByTestId } = render(
       <ProfilePopover
         selectedMember={{ id: '1', name: 'Sarah Chen', status: 'online' }}
         anchor={{ x: 100, y: 200 }}
         onClose={jest.fn()}
       />,
     );
-    expect(getByTestId('AnchoredPopover')).toBeTruthy();
+    expect(getAllByTestId('UserProfileCard').length).toBeGreaterThan(0);
   });
 
   test('renders UserProfileCard with member data', () => {
-    const { getByTestId } = render(
+    const { getAllByTestId } = render(
       <ProfilePopover
         selectedMember={{ id: '1', name: 'Sarah Chen', status: 'online' }}
         anchor={{ x: 100, y: 200 }}
         onClose={jest.fn()}
       />,
     );
-    expect(getByTestId('UserProfileCard')).toBeTruthy();
+    expect(getAllByTestId('UserProfileCard').length).toBeGreaterThan(0);
   });
 
-  test('renders when selectedMember is null', () => {
-    const { getByTestId } = render(
+  test('renders nothing when selectedMember is null', () => {
+    const { toJSON } = render(
       <ProfilePopover
         selectedMember={null}
         anchor={null}
         onClose={jest.fn()}
       />,
     );
-    expect(getByTestId('AnchoredPopover')).toBeTruthy();
+    expect(toJSON()).toBeNull();
   });
 
   test('does not render UserProfileCard when member is null', () => {

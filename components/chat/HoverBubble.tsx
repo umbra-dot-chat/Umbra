@@ -166,7 +166,7 @@ export function HoverBubble({
         onHoverOut={onHoverOut}
         style={{
           alignSelf: isOut ? 'flex-end' : 'flex-start',
-          maxWidth: '75%',
+          maxWidth: '85%',
           position: 'relative' as any,
         }}
       >
@@ -188,6 +188,7 @@ export function HoverBubble({
             <SlotRenderer
               slot="message-actions"
               props={{ message }}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
             />
           )}
         </View>

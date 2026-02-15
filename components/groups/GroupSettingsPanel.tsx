@@ -86,12 +86,12 @@ export function GroupSettingsPanel({ groupId, onClose }: GroupSettingsPanelProps
     header: {
       fontSize: 16,
       fontWeight: '600',
-      color: theme.colors.text,
+      color: theme.colors.text.primary,
     } as TextStyle,
     sectionTitle: {
       fontSize: 13,
       fontWeight: '600',
-      color: theme.colors.textSecondary,
+      color: theme.colors.text.secondary,
       textTransform: 'uppercase' as const,
       letterSpacing: 0.5,
       marginBottom: 8,
@@ -105,22 +105,22 @@ export function GroupSettingsPanel({ groupId, onClose }: GroupSettingsPanelProps
     } as ViewStyle,
     memberName: {
       fontSize: 14,
-      color: theme.colors.text,
+      color: theme.colors.text.primary,
       fontWeight: '500' as const,
     } as TextStyle,
     memberDid: {
       fontSize: 11,
-      color: theme.colors.textSecondary,
+      color: theme.colors.text.secondary,
     } as TextStyle,
     roleBadge: {
       paddingHorizontal: 6,
       paddingVertical: 2,
       borderRadius: 4,
-      backgroundColor: theme.colors.primary + '20',
+      backgroundColor: theme.colors.accent.primary + '20',
     } as ViewStyle,
     roleText: {
       fontSize: 11,
-      color: theme.colors.primary,
+      color: theme.colors.accent.primary,
       fontWeight: '600' as const,
     } as TextStyle,
     dangerButton: {
@@ -132,7 +132,7 @@ export function GroupSettingsPanel({ groupId, onClose }: GroupSettingsPanelProps
     <ScrollView style={styles.container}>
       <VStack style={{ gap: 20 }}>
         <HStack style={{ alignItems: 'center', gap: 8 }}>
-          <SettingsIcon size={18} color={theme.colors.text} />
+          <SettingsIcon size={18} color={theme.colors.text.primary} />
           <Text style={styles.header}>Group Settings</Text>
         </HStack>
 
@@ -150,7 +150,7 @@ export function GroupSettingsPanel({ groupId, onClose }: GroupSettingsPanelProps
               numberOfLines={2}
             />
             <HStack style={{ gap: 8, justifyContent: 'flex-end' }}>
-              <Button variant="ghost" onPress={() => setIsEditing(false)}>
+              <Button variant="tertiary" onPress={() => setIsEditing(false)}>
                 Cancel
               </Button>
               <Button onPress={handleSave} disabled={isSaving}>
@@ -160,15 +160,15 @@ export function GroupSettingsPanel({ groupId, onClose }: GroupSettingsPanelProps
           </VStack>
         ) : (
           <VStack style={{ gap: 4 }}>
-            <Text style={{ fontSize: 16, fontWeight: '600', color: theme.colors.text }}>
+            <Text style={{ fontSize: 16, fontWeight: '600', color: theme.colors.text.primary }}>
               {group?.name || 'Loading...'}
             </Text>
             {group?.description && (
-              <Text style={{ fontSize: 13, color: theme.colors.textSecondary }}>
+              <Text style={{ fontSize: 13, color: theme.colors.text.secondary }}>
                 {group.description}
               </Text>
             )}
-            <Button variant="ghost" size="sm" onPress={startEditing} style={{ alignSelf: 'flex-start', marginTop: 4 }}>
+            <Button variant="tertiary" size="sm" onPress={startEditing} style={{ alignSelf: 'flex-start', marginTop: 4 }}>
               Edit
             </Button>
           </VStack>
@@ -178,7 +178,7 @@ export function GroupSettingsPanel({ groupId, onClose }: GroupSettingsPanelProps
 
         <VStack style={{ gap: 8 }}>
           <HStack style={{ alignItems: 'center', gap: 6 }}>
-            <UsersIcon size={14} color={theme.colors.textSecondary} />
+            <UsersIcon size={14} color={theme.colors.text.secondary} />
             <Text style={styles.sectionTitle}>
               Members ({members.length})
             </Text>
@@ -203,7 +203,7 @@ export function GroupSettingsPanel({ groupId, onClose }: GroupSettingsPanelProps
               </VStack>
               {member.role !== 'admin' && (
                 <Pressable onPress={() => handleRemoveMember(member.memberDid)}>
-                  <UserMinusIcon size={16} color={theme.colors.error || '#ef4444'} />
+                  <UserMinusIcon size={16} color={theme.colors.status.danger || '#ef4444'} />
                 </Pressable>
               )}
             </View>

@@ -1,9 +1,10 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { View } from 'react-native';
 import { Slot, usePathname, useRouter } from 'expo-router';
 import { HStack, useTheme } from '@coexist/wisp-react-native';
 
 import { useUmbra } from '@/contexts/UmbraContext';
+import { ActiveConversationProvider, useActiveConversation } from '@/contexts/ActiveConversationContext';
 import { useConversations } from '@/hooks/useConversations';
 import { useFriends } from '@/hooks/useFriends';
 import { useGroups } from '@/hooks/useGroups';
@@ -17,10 +18,12 @@ import { ProfilePopover } from '@/components/modals/ProfilePopover';
 import { ProfilePopoverProvider, useProfilePopoverContext } from '@/contexts/ProfilePopoverContext';
 import { CallProvider, useCallContext } from '@/contexts/CallContext';
 import { CallPipWidget } from '@coexist/wisp-react-native';
+import { IncomingCallOverlay } from '@/components/call/IncomingCallOverlay';
 import { CommandPalette } from '@/components/modals/CommandPalette';
 import { PluginMarketplace } from '@/components/modals/PluginMarketplace';
 import { useCommandPalette } from '@/hooks/useCommandPalette';
-import type { Friend } from '@umbra/service';
+import { SettingsDialogProvider, useSettingsDialog } from '@/contexts/SettingsDialogContext';
+import type { Friend, MessageEvent } from '@umbra/service';
 
 /** Format a relative time string from a Unix timestamp. */
 function formatRelativeTime(ts?: number): string {
@@ -77,6 +80,10 @@ function MainLayoutInner() {
     return map;
   }, [groups]);
 
+  // Last message previews for sidebar
+  const [lastMessages, setLastMessages] = useState<Record<string, string>>({});
+  const lastMessagesLoadedRef = useRef<Set<string>>(new Set());
+
   // Transform Conversation[] to sidebar-compatible shape
   const sidebarConversations = useMemo(() => {
     return conversations.map((c) => {
@@ -89,7 +96,7 @@ function MainLayoutInner() {
         return {
           id: c.id,
           name: groupName,
-          last: 'Group',
+          last: lastMessages[c.id] || 'Group',
           time: formatRelativeTime(c.lastMessageAt),
           unread: c.unreadCount,
           group: avatarNames,
@@ -102,23 +109,67 @@ function MainLayoutInner() {
       return {
         id: c.id,
         name: friend?.displayName || c.friendDid?.slice(0, 16) + '...' || 'Chat',
-        last: '',
+        last: lastMessages[c.id] || '',
         time: formatRelativeTime(c.lastMessageAt),
         unread: c.unreadCount,
         online: friend?.online,
       };
     });
-  }, [conversations, friendMap, groupMap]);
+  }, [conversations, friendMap, groupMap, lastMessages]);
 
   // Sidebar state
   const [search, setSearch] = useState('');
-  const [activeId, setActiveId] = useState('1');
-  const [settingsOpen, setSettingsOpen] = useState(false);
+  const { activeId, setActiveId, requestSearchPanel } = useActiveConversation();
+  const { isOpen: settingsOpen, openSettings, closeSettings, initialSection: settingsInitialSection } = useSettingsDialog();
   const [guideOpen, setGuideOpen] = useState(false);
   const [createGroupOpen, setCreateGroupOpen] = useState(false);
   const [newDmOpen, setNewDmOpen] = useState(false);
   const [marketplaceOpen, setMarketplaceOpen] = useState(false);
   const { open: cmdOpen, setOpen: setCmdOpen } = useCommandPalette();
+
+  // Load last messages for all conversations
+  useEffect(() => {
+    if (!service || conversations.length === 0) return;
+
+    const loadLastMessages = async () => {
+      const updates: Record<string, string> = {};
+      for (const c of conversations) {
+        if (lastMessagesLoadedRef.current.has(c.id)) continue;
+        try {
+          const msgs = await service.getMessages(c.id, { limit: 1 });
+          if (msgs.length > 0 && msgs[0].content.type === 'text') {
+            updates[c.id] = msgs[0].content.text;
+          }
+          lastMessagesLoadedRef.current.add(c.id);
+        } catch {
+          // Ignore errors for individual conversations
+        }
+      }
+      if (Object.keys(updates).length > 0) {
+        setLastMessages((prev) => ({ ...prev, ...updates }));
+      }
+    };
+    loadLastMessages();
+  }, [service, conversations]);
+
+  // Listen for new messages to update last message in real-time
+  useEffect(() => {
+    if (!service) return;
+
+    const unsubscribe = service.onMessageEvent((event: MessageEvent) => {
+      if (
+        (event.type === 'messageReceived' || event.type === 'messageSent') &&
+        event.message.content.type === 'text'
+      ) {
+        setLastMessages((prev) => ({
+          ...prev,
+          [event.message.conversationId]: event.message.content.text,
+        }));
+      }
+    });
+
+    return unsubscribe;
+  }, [service]);
 
   // Handle group created — auto-select the new conversation
   const handleGroupCreated = useCallback((groupId: string, conversationId: string) => {
@@ -163,10 +214,27 @@ function MainLayoutInner() {
     }
   }, [service, refreshConversations, pathname, router]);
 
-  // Derived
-  const filtered = sidebarConversations.filter((c) =>
-    c.name.toLowerCase().includes(search.toLowerCase()),
-  );
+  // Derived — search across conversation name, last message preview, and friend names
+  const filtered = useMemo(() => {
+    if (!search.trim()) return sidebarConversations;
+    const lowerSearch = search.toLowerCase();
+    // Pre-compute matching friend names for the search term
+    const matchingFriendDids = new Set(
+      friends
+        .filter((f) => f.displayName.toLowerCase().includes(lowerSearch))
+        .map((f) => f.did)
+    );
+    return sidebarConversations.filter((c) => {
+      // Match by conversation name
+      if (c.name.toLowerCase().includes(lowerSearch)) return true;
+      // Match by last message preview
+      if (c.last && c.last.toLowerCase().includes(lowerSearch)) return true;
+      // Match by friend name in conversation (for DMs, check if friend matches)
+      const conv = conversations.find((conv) => conv.id === c.id);
+      if (conv?.friendDid && matchingFriendDids.has(conv.friendDid)) return true;
+      return false;
+    });
+  }, [sidebarConversations, search, friends, conversations]);
 
   const isFriendsActive = pathname === '/friends';
 
@@ -184,7 +252,7 @@ function MainLayoutInner() {
               router.push('/');
             }
           }}
-          onOpenSettings={() => setSettingsOpen(true)}
+          onOpenSettings={() => openSettings()}
           onFriendsPress={() => router.push('/friends')}
           onNewDm={() => setNewDmOpen(true)}
           onCreateGroup={() => setCreateGroupOpen(true)}
@@ -209,9 +277,10 @@ function MainLayoutInner() {
 
       <SettingsDialog
         open={settingsOpen}
-        onClose={() => setSettingsOpen(false)}
+        onClose={() => closeSettings()}
+        initialSection={settingsInitialSection}
         onOpenMarketplace={() => {
-          setSettingsOpen(false);
+          closeSettings();
           setMarketplaceOpen(true);
         }}
       />
@@ -238,11 +307,19 @@ function MainLayoutInner() {
         onOpenChange={setCmdOpen}
         onOpenSettings={() => {
           setCmdOpen(false);
-          setSettingsOpen(true);
+          openSettings();
         }}
         onOpenMarketplace={() => {
           setCmdOpen(false);
           setMarketplaceOpen(true);
+        }}
+        onSearchMessages={() => {
+          setCmdOpen(false);
+          // Navigate to chat if not already there, then open search panel
+          if (pathname !== '/') {
+            router.push('/');
+          }
+          requestSearchPanel();
         }}
       />
 
@@ -269,16 +346,22 @@ function MainLayoutInner() {
           onToggleMute={toggleMute}
         />
       )}
+
+      <IncomingCallOverlay />
     </View>
   );
 }
 
 export default function MainLayout() {
   return (
-    <CallProvider>
-      <ProfilePopoverProvider>
-        <MainLayoutInner />
-      </ProfilePopoverProvider>
-    </CallProvider>
+    <SettingsDialogProvider>
+      <ActiveConversationProvider>
+        <CallProvider>
+          <ProfilePopoverProvider>
+            <MainLayoutInner />
+          </ProfilePopoverProvider>
+        </CallProvider>
+      </ActiveConversationProvider>
+    </SettingsDialogProvider>
   );
 }

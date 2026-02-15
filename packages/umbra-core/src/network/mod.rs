@@ -278,7 +278,7 @@ impl NetworkService {
         // Create libp2p Ed25519 SecretKey from the seed
         // libp2p uses the 32-byte seed format
         let ed25519_secret = libp2p::identity::ed25519::SecretKey::try_from_bytes(
-            secret_bytes.clone()
+            secret_bytes
         ).map_err(|e| Error::InvalidKey(format!("Failed to convert keypair: {}", e)))?;
 
         let ed25519_keypair = libp2p::identity::ed25519::Keypair::from(ed25519_secret);
@@ -452,7 +452,8 @@ impl NetworkService {
         let _ = self.command_tx.send(NetworkCommand::Shutdown).await;
 
         // Wait for the event loop to finish
-        if let Some(handle) = self.event_loop_handle.write().take() {
+        let handle = self.event_loop_handle.write().take();
+        if let Some(handle) = handle {
             let _ = handle.await;
         }
 

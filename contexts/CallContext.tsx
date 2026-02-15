@@ -20,10 +20,14 @@ import type {
   CallStatus,
   CallType,
   CallEndReason,
+  OpusConfig,
   VideoQuality,
 } from '@/types/call';
+import { DEFAULT_OPUS_CONFIG } from '@/types/call';
+import type { EncryptedCallPayload } from '@/types/call';
 import { useUmbra } from '@/contexts/UmbraContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { encryptSignal, decryptSignal, isSignalEncryptionAvailable } from '@/services/callCrypto';
 
 // ─── Context Value ───────────────────────────────────────────────────────────
 
@@ -76,6 +80,14 @@ interface CallContextValue {
   volume: number;
   /** Set remote audio volume */
   setVolume: (volume: number) => void;
+  /** Microphone input volume (0-100) */
+  inputVolume: number;
+  /** Set microphone input volume */
+  setInputVolume: (volume: number) => void;
+  /** Current Opus configuration */
+  opusConfig: OpusConfig;
+  /** Set granular Opus configuration */
+  setOpusConfig: (config: OpusConfig) => void;
 }
 
 const CallContext = createContext<CallContextValue | null>(null);
@@ -94,7 +106,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
 
   const [activeCall, setActiveCall] = useState<ActiveCall | null>(null);
   const [videoQuality, setVideoQualityState] = useState<VideoQuality>('auto');
-  const [audioQuality, setAudioQualityState] = useState<AudioQuality>('opus');
+  const [audioQuality, setAudioQualityState] = useState<AudioQuality>('opus-voice');
   const [callStats, setCallStats] = useState<CallStats | null>(null);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [screenShareStream, setScreenShareStream] = useState<MediaStream | null>(null);
@@ -102,10 +114,24 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
   const [echoCancellation, setEchoCancellationState] = useState(true);
   const [autoGainControl, setAutoGainControlState] = useState(true);
   const [volume, setVolumeState] = useState(100);
+  const [inputVolume, setInputVolumeState] = useState(100);
+  const [opusConfig, setOpusConfigState] = useState<OpusConfig>({ ...DEFAULT_OPUS_CONFIG });
   const callManagerRef = useRef<CallManager | null>(null);
   const ringTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const gainNodeRef = useRef<GainNode | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
+  const inputGainNodeRef = useRef<GainNode | null>(null);
+  const inputAudioCtxRef = useRef<AudioContext | null>(null);
+  // Ref to avoid stale closure in call event handler
+  const activeCallRef = useRef<ActiveCall | null>(null);
+  // Set synchronously in callOffer handler so ICE candidates arriving
+  // before setActiveCall propagates are not dropped
+  const pendingCallIdRef = useRef<string | null>(null);
+
+  // Keep activeCallRef in sync with state for use in event handler closures
+  useEffect(() => {
+    activeCallRef.current = activeCall;
+  }, [activeCall]);
 
   // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -122,6 +148,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       callManagerRef.current.close();
       callManagerRef.current = null;
     }
+    pendingCallIdRef.current = null;
     setActiveCall(null);
     setIsScreenSharing(false);
     setScreenShareStream(null);
@@ -130,19 +157,50 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     } catch { /* not available */ }
   }, [clearRingTimeout]);
 
-  const sendSignal = useCallback((toDid: string, envelope: string, envelopeType: string) => {
+  // Track whether WASM signal encryption is available
+  const signalEncryptionRef = useRef<boolean | null>(null);
+  useEffect(() => {
+    isSignalEncryptionAvailable().then((available) => {
+      signalEncryptionRef.current = available;
+    });
+  }, []);
+
+  const sendSignal = useCallback(async (toDid: string, envelope: string, envelopeType: string) => {
     if (!service) return;
     try {
+      const parsedPayload = JSON.parse(envelope);
+
+      let finalPayload: object;
+
+      // Attempt to encrypt the signaling payload
+      if (signalEncryptionRef.current) {
+        try {
+          const callId = parsedPayload.callId ?? '';
+          const { ciphertext, nonce, timestamp } = await encryptSignal(toDid, parsedPayload, callId);
+          finalPayload = {
+            encrypted: ciphertext,
+            nonce,
+            senderDid: parsedPayload.senderDid,
+            callId,
+            timestamp,
+          } satisfies EncryptedCallPayload;
+        } catch (encErr) {
+          console.warn('[CallContext] Signal encryption failed, sending unencrypted:', encErr);
+          finalPayload = parsedPayload;
+        }
+      } else {
+        finalPayload = parsedPayload;
+      }
+
       const relayMessage = JSON.stringify({
         type: 'send',
         to_did: toDid,
         payload: JSON.stringify({
           envelope: envelopeType,
           version: 1,
-          payload: JSON.parse(envelope),
+          payload: finalPayload,
         }),
       });
-      // Access the relay WebSocket through the service's send method
       service.sendCallSignal(toDid, relayMessage);
     } catch (err) {
       console.warn('[CallContext] Failed to send signal:', err);
@@ -163,9 +221,11 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     }
 
     const callId = `call-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    console.log('[CallContext] Starting', callType, 'call to', remoteDid, 'callId:', callId);
     const isVideo = callType === 'video';
     const manager = new CallManager();
     callManagerRef.current = manager;
+    pendingCallIdRef.current = callId;
 
     // Set up ICE candidate handler
     manager.onIceCandidate = (candidate) => {
@@ -186,6 +246,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
 
     // Set up connection state handler
     manager.onConnectionStateChange = (state) => {
+      console.log('[CallContext] Outgoing connection state →', state, 'at', new Date().toISOString());
       if (state === 'connected') {
         clearRingTimeout();
         setActiveCall((prev) => prev ? {
@@ -194,6 +255,13 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
           connectedAt: Date.now(),
         } : prev);
       } else if (state === 'failed' || state === 'disconnected') {
+        if (state === 'failed') {
+          const pc = (manager as any).pc as RTCPeerConnection | undefined;
+          if (pc) {
+            console.error('[CallContext] Outgoing call FAILED — iceConnectionState:', pc.iceConnectionState,
+              'iceGatheringState:', pc.iceGatheringState, 'signalingState:', pc.signalingState);
+          }
+        }
         setActiveCall((prev) => {
           if (!prev) return prev;
           if (state === 'failed') {
@@ -285,10 +353,17 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       // The offer SDP was stored when we received the call_offer
       const storedOffer = (manager as any)._pendingOfferSdp;
       if (!storedOffer) throw new Error('No pending offer SDP');
+      console.log('[CallContext] Accepting call, offer SDP length:', storedOffer.length);
 
       const isVideo = activeCall.callType === 'video';
       const sdpAnswer = await manager.acceptOffer(storedOffer, isVideo);
       const localStream = manager.getLocalStream();
+
+      if (!localStream) {
+        console.error('[CallContext] acceptOffer succeeded but localStream is null');
+        cleanup();
+        return;
+      }
 
       setActiveCall((prev) => prev ? { ...prev, localStream } : prev);
 
@@ -379,6 +454,26 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     const manager = callManagerRef.current;
     if (manager) {
       manager.setAudioQuality(quality);
+    }
+  }, []);
+
+  // ── Opus Configuration ──────────────────────────────────────────────────
+
+  const setOpusConfig = useCallback((config: OpusConfig) => {
+    setOpusConfigState(config);
+    const manager = callManagerRef.current;
+    if (manager) {
+      manager.setOpusConfig(config);
+    }
+  }, []);
+
+  // ── Input Volume (Microphone GainNode) ──────────────────────────────────
+
+  const setInputVolume = useCallback((vol: number) => {
+    const clamped = Math.max(0, Math.min(100, vol));
+    setInputVolumeState(clamped);
+    if (inputGainNodeRef.current) {
+      inputGainNodeRef.current.gain.value = clamped / 100;
     }
   }, []);
 
@@ -519,6 +614,57 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     };
   }, [activeCall?.remoteStream, activeCall?.status]);
 
+  // Apply GainNode to local audio (input volume) when connected
+  useEffect(() => {
+    const localStream = activeCall?.localStream;
+    if (!localStream || activeCall?.status !== 'connected') {
+      if (inputAudioCtxRef.current) {
+        inputAudioCtxRef.current.close().catch(() => {});
+        inputAudioCtxRef.current = null;
+        inputGainNodeRef.current = null;
+      }
+      return;
+    }
+
+    try {
+      const ctx = new AudioContext();
+      const source = ctx.createMediaStreamSource(localStream);
+      const gain = ctx.createGain();
+      gain.gain.value = inputVolume / 100;
+
+      // Create a destination to pipe gained audio into a new MediaStream
+      const dest = ctx.createMediaStreamDestination();
+      source.connect(gain);
+      gain.connect(dest);
+
+      // Replace the audio track on the peer connection sender with the gained track
+      const manager = callManagerRef.current;
+      if (manager) {
+        const pc = (manager as any).pc as RTCPeerConnection | undefined;
+        if (pc) {
+          const sender = pc.getSenders().find((s) => s.track?.kind === 'audio');
+          const gainedTrack = dest.stream.getAudioTracks()[0];
+          if (sender && gainedTrack) {
+            sender.replaceTrack(gainedTrack).catch(() => {});
+          }
+        }
+      }
+
+      inputAudioCtxRef.current = ctx;
+      inputGainNodeRef.current = gain;
+    } catch {
+      // Web Audio not available
+    }
+
+    return () => {
+      if (inputAudioCtxRef.current) {
+        inputAudioCtxRef.current.close().catch(() => {});
+        inputAudioCtxRef.current = null;
+        inputGainNodeRef.current = null;
+      }
+    };
+  }, [activeCall?.localStream, activeCall?.status]);
+
   // ── Stats Collection ──────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -541,16 +687,48 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
 
   // ── Handle Incoming Call Events ──────────────────────────────────────────
 
+  /**
+   * Attempt to decrypt an incoming call signaling payload.
+   * If the payload has an `encrypted` field, decrypt it; otherwise return as-is.
+   */
+  const maybeDecryptPayload = useCallback(async <T,>(payload: any): Promise<T> => {
+    if (payload && typeof payload.encrypted === 'string' && payload.nonce && payload.senderDid) {
+      try {
+        return await decryptSignal<T>(
+          payload.senderDid,
+          payload.encrypted,
+          payload.nonce,
+          payload.timestamp ?? 0,
+          payload.callId ?? '',
+        );
+      } catch (err) {
+        console.warn('[CallContext] Failed to decrypt signal, using as-is:', err);
+        return payload as T;
+      }
+    }
+    return payload as T;
+  }, []);
+
   useEffect(() => {
     if (!service) return;
 
-    const unsubscribe = service.onCallEvent((event: CallEvent) => {
+    const unsubscribe = service.onCallEvent(async (event: CallEvent) => {
+      // Decrypt payload if encrypted — replace in the event object
+      const rawPayload = (event as any).payload;
+      const decryptedPayload = await maybeDecryptPayload<any>(rawPayload);
+      // Overwrite event.payload with decrypted version for all handlers below
+      (event as any).payload = decryptedPayload;
+
+      // Use refs to avoid stale closure — activeCall state may lag behind
+      const currentCall = activeCallRef.current;
+      const currentCallId = currentCall?.callId ?? pendingCallIdRef.current;
+
       switch (event.type) {
         case 'callOffer': {
           const { payload } = event;
 
           // If we're already in a call, send busy
-          if (activeCall) {
+          if (currentCall) {
             const endPayload: CallEndPayload = {
               callId: payload.callId,
               senderDid: myDid,
@@ -559,6 +737,12 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
             sendSignal(payload.senderDid, JSON.stringify(endPayload), 'call_end');
             return;
           }
+
+          console.log('[CallContext] Incoming call offer from', payload.senderDid, 'callId:', payload.callId, 'type:', payload.callType);
+
+          // Set pendingCallIdRef synchronously so ICE candidates arriving
+          // before setActiveCall propagates are not dropped
+          pendingCallIdRef.current = payload.callId;
 
           // Create a manager and store the offer for later acceptance
           const manager = new CallManager();
@@ -582,6 +766,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
           };
 
           manager.onConnectionStateChange = (state) => {
+            console.log('[CallContext] Connection state →', state, 'at', new Date().toISOString());
             if (state === 'connected') {
               clearRingTimeout();
               setActiveCall((prev) => prev ? {
@@ -590,7 +775,14 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
                 connectedAt: Date.now(),
               } : prev);
             } else if (state === 'failed') {
+              const pc = (manager as any).pc as RTCPeerConnection | undefined;
+              if (pc) {
+                console.error('[CallContext] Connection FAILED — iceConnectionState:', pc.iceConnectionState,
+                  'iceGatheringState:', pc.iceGatheringState, 'signalingState:', pc.signalingState);
+              }
               cleanup();
+            } else if (state === 'disconnected') {
+              setActiveCall((prev) => prev ? { ...prev, status: 'reconnecting' } : prev);
             }
           };
 
@@ -623,11 +815,12 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
 
         case 'callAnswer': {
           const { payload } = event;
-          if (!activeCall || activeCall.callId !== payload.callId) return;
+          if (!currentCallId || currentCallId !== payload.callId) return;
 
           const manager = callManagerRef.current;
           if (!manager) return;
 
+          console.log('[CallContext] Call answer received, SDP length:', payload.sdp?.length);
           clearRingTimeout();
           setActiveCall((prev) => prev ? { ...prev, status: 'connecting' } : prev);
 
@@ -641,10 +834,19 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
 
         case 'callIceCandidate': {
           const { payload } = event;
-          if (!activeCall || activeCall.callId !== payload.callId) return;
+
+          // Use pendingCallIdRef as fallback — ICE candidates can arrive
+          // before setActiveCall state propagates from callOffer handler
+          if (!currentCallId || currentCallId !== payload.callId) {
+            console.warn('[CallContext] Dropping ICE candidate: no matching call. callId:', payload.callId, 'current:', currentCallId);
+            return;
+          }
 
           const manager = callManagerRef.current;
-          if (!manager) return;
+          if (!manager) {
+            console.warn('[CallContext] Dropping ICE candidate: no CallManager');
+            return;
+          }
 
           manager.addIceCandidate({
             candidate: payload.candidate,
@@ -659,7 +861,8 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
 
         case 'callEnd': {
           const { payload } = event;
-          if (activeCall && activeCall.callId === payload.callId) {
+          if (currentCallId && currentCallId === payload.callId) {
+            console.log('[CallContext] Call ended by remote, reason:', payload.reason);
             cleanup();
           }
           break;
@@ -667,7 +870,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
 
         case 'callState': {
           const { payload } = event;
-          if (!activeCall || activeCall.callId !== payload.callId) return;
+          if (!currentCallId || currentCallId !== payload.callId) return;
 
           setActiveCall((prev) => {
             if (!prev) return prev;
@@ -683,7 +886,8 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     });
 
     return unsubscribe;
-  }, [service, activeCall, myDid, sendSignal, clearRingTimeout, cleanup]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps — activeCall accessed via ref
+  }, [service, myDid, sendSignal, clearRingTimeout, cleanup, maybeDecryptPayload]);
 
   // ── Cleanup on unmount ───────────────────────────────────────────────────
 
@@ -720,6 +924,10 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     setAutoGainControl,
     volume,
     setVolume,
+    inputVolume,
+    setInputVolume,
+    opusConfig,
+    setOpusConfig,
   };
 
   return (

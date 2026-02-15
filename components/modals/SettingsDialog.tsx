@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import { View, Pressable, ScrollView, Text as RNText, Platform } from 'react-native';
+import { View, Pressable, ScrollView, Text as RNText, Platform, Image } from 'react-native';
 import type { ViewStyle, TextStyle } from 'react-native';
 import {
   Overlay,
@@ -52,13 +52,14 @@ import {
   UsersIcon,
   ChevronDownIcon,
   VideoIcon,
+  CheckIcon,
 } from '@/components/icons';
 import { useNetwork } from '@/hooks/useNetwork';
 import { useCall } from '@/hooks/useCall';
 import { useCallSettings } from '@/hooks/useCallSettings';
 import { useMediaDevices } from '@/hooks/useMediaDevices';
-import type { VideoQuality, AudioQuality } from '@/types/call';
-import { VIDEO_QUALITY_PRESETS } from '@/types/call';
+import type { VideoQuality, AudioQuality, OpusConfig, OpusApplication, AudioBitrate } from '@/types/call';
+import { VIDEO_QUALITY_PRESETS, AUDIO_QUALITY_PRESETS, DEFAULT_OPUS_CONFIG } from '@/types/call';
 import { useUmbra } from '@/contexts/UmbraContext';
 import { usePlugins } from '@/contexts/PluginContext';
 import { useFonts, FONT_REGISTRY } from '@/contexts/FontContext';
@@ -79,13 +80,14 @@ const AtSignInputIcon = AtSignIcon as InputIcon;
 // Types
 // ---------------------------------------------------------------------------
 
+export type SettingsSection = 'account' | 'profile' | 'appearance' | 'notifications' | 'privacy' | 'audio-video' | 'network' | 'data' | 'plugins';
+
 export interface SettingsDialogProps {
   open: boolean;
   onClose: () => void;
   onOpenMarketplace?: () => void;
+  initialSection?: SettingsSection;
 }
-
-type SettingsSection = 'account' | 'profile' | 'appearance' | 'notifications' | 'privacy' | 'audio-video' | 'network' | 'data' | 'plugins';
 
 interface NavItem {
   id: SettingsSection;
@@ -309,8 +311,8 @@ function InlineDropdown({
           paddingHorizontal: 14,
           borderRadius: 8,
           borderWidth: 1,
-          borderColor: open ? tc.accent.primary : tc.border.subtle,
-          backgroundColor: tc.background.sunken,
+          borderColor: open ? tc.accent.primary : tc.border.strong,
+          backgroundColor: 'transparent',
           gap: 8,
         }}
       >
@@ -605,10 +607,95 @@ function AccountSection() {
 }
 
 function ProfileSection() {
-  const [displayName, setDisplayName] = useState('Alice Chen');
-  const [username, setUsername] = useState('alice');
-  const [bio, setBio] = useState('');
-  const [status, setStatus] = useState('online');
+  const { identity, setIdentity } = useAuth();
+  const { service } = useUmbra();
+  const { theme } = useTheme();
+  const tc = theme.colors;
+
+  const [displayName, setDisplayName] = useState(identity?.displayName ?? '');
+  const [status, setStatus] = useState(identity?.status ?? 'online');
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(identity?.avatar ?? null);
+  const [pendingAvatar, setPendingAvatar] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  // Track whether the user has changed anything
+  const hasChanges =
+    displayName !== (identity?.displayName ?? '') ||
+    status !== (identity?.status ?? 'online') ||
+    pendingAvatar !== null;
+
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleAvatarPick = useCallback(() => {
+    if (Platform.OS !== 'web') return;
+    // Create a hidden file input and trigger it
+    if (!fileInputRef.current) {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/*';
+      input.style.display = 'none';
+      input.addEventListener('change', () => {
+        const file = input.files?.[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+          const base64 = reader.result as string;
+          setAvatarPreview(base64);
+          setPendingAvatar(base64);
+        };
+        reader.readAsDataURL(file);
+      });
+      document.body.appendChild(input);
+      fileInputRef.current = input;
+    }
+    fileInputRef.current.value = '';
+    fileInputRef.current.click();
+  }, []);
+
+  // Cleanup hidden file input on unmount
+  useEffect(() => {
+    return () => {
+      if (fileInputRef.current) {
+        document.body.removeChild(fileInputRef.current);
+        fileInputRef.current = null;
+      }
+    };
+  }, []);
+
+  const handleSave = useCallback(async () => {
+    if (!service || !identity) return;
+    setSaving(true);
+    setSaved(false);
+    try {
+      // Update display name if changed
+      if (displayName !== identity.displayName) {
+        await service.updateProfile({ type: 'displayName', value: displayName });
+      }
+      // Update status if changed
+      if (status !== (identity.status ?? 'online')) {
+        await service.updateProfile({ type: 'status', value: status });
+      }
+      // Update avatar if changed
+      if (pendingAvatar !== null) {
+        await service.updateProfile({ type: 'avatar', value: pendingAvatar });
+      }
+      // Update identity in AuthContext so the rest of the app reflects changes
+      setIdentity({
+        ...identity,
+        displayName,
+        status,
+        ...(pendingAvatar !== null ? { avatar: pendingAvatar } : {}),
+      });
+      setPendingAvatar(null);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (err) {
+      console.error('[ProfileSection] Failed to save profile:', err);
+    } finally {
+      setSaving(false);
+    }
+  }, [service, identity, displayName, status, pendingAvatar, setIdentity]);
 
   return (
     <View style={{ gap: 20 }}>
@@ -617,6 +704,38 @@ function ProfileSection() {
         description="Manage your public profile information visible to other users."
       />
 
+      <SettingRow label="Avatar" description="Your profile picture. Click to upload a new image." vertical>
+        <HStack gap="md" style={{ alignItems: 'center' }}>
+          <Pressable onPress={handleAvatarPick}>
+            <View
+              style={{
+                width: 64,
+                height: 64,
+                borderRadius: 32,
+                backgroundColor: tc.background.surface,
+                alignItems: 'center',
+                justifyContent: 'center',
+                overflow: 'hidden',
+                borderWidth: 2,
+                borderColor: tc.border.subtle,
+              }}
+            >
+              {avatarPreview ? (
+                <Image
+                  source={{ uri: avatarPreview }}
+                  style={{ width: 64, height: 64, borderRadius: 32 }}
+                />
+              ) : (
+                <UserIcon size={28} color={tc.text.muted} />
+              )}
+            </View>
+          </Pressable>
+          <Button variant="tertiary" size="sm" onPress={handleAvatarPick}>
+            Upload Photo
+          </Button>
+        </HStack>
+      </SettingRow>
+
       <SettingRow label="Display Name" description="How others see you in conversations." vertical>
         <Input
           value={displayName}
@@ -624,27 +743,6 @@ function ProfileSection() {
           placeholder="Your display name"
           icon={UserInputIcon}
           size="md"
-          fullWidth
-        />
-      </SettingRow>
-
-      <SettingRow label="Username" description="Your unique identifier. Others can add you with this." vertical>
-        <Input
-          value={username}
-          onChangeText={setUsername}
-          placeholder="username"
-          icon={AtSignInputIcon}
-          size="md"
-          fullWidth
-        />
-      </SettingRow>
-
-      <SettingRow label="Bio" description="A short description about yourself." vertical>
-        <TextArea
-          value={bio}
-          onChangeText={setBio}
-          placeholder="Tell us about yourself..."
-          numberOfLines={3}
           fullWidth
         />
       </SettingRow>
@@ -659,6 +757,24 @@ function ProfileSection() {
           fullWidth
         />
       </SettingRow>
+
+      {hasChanges && (
+        <HStack gap="sm" style={{ justifyContent: 'flex-end' }}>
+          <Button
+            variant="secondary"
+            size="sm"
+            onPress={handleSave}
+            disabled={saving}
+          >
+            <HStack gap="xs" style={{ alignItems: 'center' }}>
+              {saved ? <CheckIcon size={14} color={tc.text.primary} /> : null}
+              <RNText style={{ color: tc.text.primary, fontWeight: '600', fontSize: 14 }}>
+                {saving ? 'Saving...' : saved ? 'Saved' : 'Save Changes'}
+              </RNText>
+            </HStack>
+          </Button>
+        </HStack>
+      )}
     </View>
   );
 }
@@ -1048,15 +1164,24 @@ function AudioVideoSection() {
     videoQuality, audioQuality, setVideoQuality, setAudioQuality, isScreenSharing,
     noiseSuppression, echoCancellation, autoGainControl,
     setNoiseSuppression, setEchoCancellation, setAutoGainControl,
+    volume, setVolume, inputVolume, setInputVolume,
+    opusConfig, setOpusConfig,
   } = useCall();
   const {
     incomingCallDisplay, setIncomingCallDisplay,
     ringVolume, setRingVolume,
+    opusConfig: savedOpusConfig, setOpusConfig: setSavedOpusConfig,
+    inputVolume: savedInputVolume, setInputVolume: setSavedInputVolume,
+    outputVolume: savedOutputVolume, setOutputVolume: setSavedOutputVolume,
+    mediaE2EE, setMediaE2EE,
   } = useCallSettings();
   const { audioInputs, videoInputs, audioOutputs, isSupported } = useMediaDevices();
   const [cameraPreviewStream, setCameraPreviewStream] = useState<MediaStream | null>(null);
   const [micLevel, setMicLevel] = useState(0);
   const micAnalyserRef = useRef<{ stop: () => void } | null>(null);
+  const [micTestActive, setMicTestActive] = useState(false);
+  const [micTestLevel, setMicTestLevel] = useState(0);
+  const micTestRef = useRef<{ stop: () => void } | null>(null);
 
   const startTestPreview = useCallback(async () => {
     try {
@@ -1099,6 +1224,52 @@ function AudioVideoSection() {
     micAnalyserRef.current = null;
   }, []);
 
+  const startMicTest = useCallback(async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const ctx = new AudioContext();
+      const source = ctx.createMediaStreamSource(stream);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 256;
+      source.connect(analyser);
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+      let rafId: number;
+      const tick = () => {
+        analyser.getByteFrequencyData(dataArray);
+        const avg = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
+        setMicTestLevel(Math.min(100, Math.round((avg / 128) * 100)));
+        rafId = requestAnimationFrame(tick);
+      };
+      tick();
+
+      setMicTestActive(true);
+      micTestRef.current = {
+        stop: () => {
+          cancelAnimationFrame(rafId);
+          ctx.close();
+          stream.getTracks().forEach((t) => t.stop());
+          setMicTestActive(false);
+          setMicTestLevel(0);
+        },
+      };
+    } catch (err) {
+      console.warn('Mic test failed:', err);
+    }
+  }, []);
+
+  const stopMicTest = useCallback(() => {
+    micTestRef.current?.stop();
+    micTestRef.current = null;
+  }, []);
+
+  // Clean up mic test on unmount
+  useEffect(() => {
+    return () => {
+      micTestRef.current?.stop();
+    };
+  }, []);
+
   const videoQualityOptions: InlineDropdownOption[] = [
     { value: 'auto', label: 'Auto', description: 'Adapts to network conditions' },
     { value: '720p', label: '720p HD', description: '~2.5 Mbps' },
@@ -1108,9 +1279,52 @@ function AudioVideoSection() {
   ];
 
   const audioQualityOptions: InlineDropdownOption[] = [
-    { value: 'opus', label: 'Opus (Adaptive)', description: '32-128 kbps, optimized for voice' },
+    { value: 'opus-voice', label: 'Voice (VoIP)', description: 'Optimized for speech, lower bandwidth' },
+    { value: 'opus-music', label: 'Music (Full Band)', description: 'Full-band audio, higher quality' },
+    { value: 'opus-low', label: 'Low Latency', description: 'Minimum delay, real-time interaction' },
     { value: 'pcm', label: 'PCM Lossless', description: '~1.4 Mbps, uncompressed audio' },
   ];
+
+  const opusApplicationOptions: InlineDropdownOption[] = [
+    { value: 'voip', label: 'Voice (VoIP)', description: 'Best for speech and calls' },
+    { value: 'audio', label: 'Music (Full Band)', description: 'Best for music and high-fidelity' },
+    { value: 'lowdelay', label: 'Low Latency', description: 'Minimum encoding delay' },
+  ];
+
+  const bitratePresets = [
+    { value: 24, label: 'Low (24 kbps)' },
+    { value: 48, label: 'Medium (48 kbps)' },
+    { value: 96, label: 'High (96 kbps)' },
+    { value: 128, label: 'Max (128 kbps)' },
+  ];
+
+  // Handlers that sync both context and persisted settings
+  const handleOpusConfigChange = useCallback((patch: Partial<OpusConfig>) => {
+    const newConfig = { ...opusConfig, ...patch };
+    setOpusConfig(newConfig);
+    setSavedOpusConfig(newConfig);
+  }, [opusConfig, setOpusConfig, setSavedOpusConfig]);
+
+  const handleInputVolumeChange = useCallback((val: number) => {
+    setInputVolume(val);
+    setSavedInputVolume(val);
+  }, [setInputVolume, setSavedInputVolume]);
+
+  const handleOutputVolumeChange = useCallback((val: number) => {
+    setVolume(val);
+    setSavedOutputVolume(val);
+  }, [setVolume, setSavedOutputVolume]);
+
+  const handleAudioQualityChange = useCallback((quality: AudioQuality) => {
+    setAudioQuality(quality);
+    // When selecting a preset, apply its Opus config too
+    if (quality !== 'pcm') {
+      const preset = AUDIO_QUALITY_PRESETS[quality];
+      if (preset) {
+        handleOpusConfigChange(preset.config);
+      }
+    }
+  }, [setAudioQuality, handleOpusConfigChange]);
 
   return (
     <View style={{ gap: 20 }}>
@@ -1118,6 +1332,41 @@ function AudioVideoSection() {
         title="Audio & Video"
         description="Configure your camera, microphone, and call quality settings."
       />
+
+      {/* Calling */}
+      <View style={{ gap: 16 }}>
+        <View>
+          <RNText style={{ fontSize: 15, fontWeight: '600', color: tc.text.primary }}>
+            Calling
+          </RNText>
+          <RNText style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
+            Configure incoming call behavior and ring volume.
+          </RNText>
+        </View>
+
+        <SettingRow label="Incoming Call Display" description="How incoming calls appear when the app is open." vertical>
+          <SegmentedControl
+            options={[
+              { value: 'fullscreen', label: 'Fullscreen' },
+              { value: 'toast', label: 'Toast' },
+            ]}
+            value={incomingCallDisplay}
+            onChange={(v) => setIncomingCallDisplay(v as 'fullscreen' | 'toast')}
+          />
+        </SettingRow>
+
+        <SettingRow label="Ring Volume" description={`Volume: ${ringVolume}%`} vertical>
+          <Slider
+            value={ringVolume}
+            min={0}
+            max={100}
+            step={5}
+            onChange={setRingVolume}
+          />
+        </SettingRow>
+      </View>
+
+      <Separator spacing="sm" />
 
       {/* Video Quality */}
       <SettingRow label="Video Quality" description="Set the default video quality for calls." vertical>
@@ -1129,12 +1378,12 @@ function AudioVideoSection() {
         />
       </SettingRow>
 
-      {/* Audio Quality */}
-      <SettingRow label="Audio Quality" description="Choose between adaptive or lossless audio." vertical>
+      {/* Audio Quality Preset */}
+      <SettingRow label="Audio Quality" description="Choose an audio codec and quality preset." vertical>
         <InlineDropdown
           options={audioQualityOptions}
           value={audioQuality}
-          onChange={(v) => setAudioQuality(v as AudioQuality)}
+          onChange={(v) => handleAudioQualityChange(v as AudioQuality)}
           placeholder="Select quality"
         />
         {audioQuality === 'pcm' && (
@@ -1156,6 +1405,191 @@ function AudioVideoSection() {
           </View>
         )}
       </SettingRow>
+
+      {/* Opus Configuration (only when not PCM) */}
+      {audioQuality !== 'pcm' && (
+        <>
+          <Separator spacing="sm" />
+          <View style={{ gap: 16 }}>
+            <View>
+              <RNText style={{ fontSize: 15, fontWeight: '600', color: tc.text.primary }}>
+                Opus Configuration
+              </RNText>
+              <RNText style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
+                Fine-tune the Opus audio encoder for your needs.
+              </RNText>
+            </View>
+
+            {/* Application Mode */}
+            <SettingRow label="Application Mode" description="Optimize encoding for voice, music, or low latency." vertical>
+              <InlineDropdown
+                options={opusApplicationOptions}
+                value={opusConfig.application}
+                onChange={(v) => handleOpusConfigChange({ application: v as OpusApplication })}
+                placeholder="Select mode"
+              />
+            </SettingRow>
+
+            {/* Bitrate Slider */}
+            <SettingRow label="Bitrate" description={`${opusConfig.bitrate} kbps`} vertical>
+              <View style={{ gap: 8 }}>
+                <Slider
+                  value={opusConfig.bitrate}
+                  min={16}
+                  max={128}
+                  step={8}
+                  onChange={(val) => handleOpusConfigChange({ bitrate: val as AudioBitrate })}
+                />
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                  {bitratePresets.map((preset) => {
+                    const isActive = opusConfig.bitrate >= preset.value;
+                    return (
+                      <Pressable
+                        key={preset.value}
+                        onPress={() => handleOpusConfigChange({ bitrate: preset.value as AudioBitrate })}
+                        style={{
+                          paddingVertical: 4,
+                          paddingHorizontal: 8,
+                          borderRadius: 6,
+                          backgroundColor: isActive ? tc.accent.primary : tc.background.sunken,
+                        }}
+                      >
+                        <RNText style={{
+                          fontSize: 10,
+                          fontWeight: '600',
+                          color: isActive ? tc.text.inverse : tc.text.secondary,
+                        }}>
+                          {preset.label}
+                        </RNText>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+              </View>
+            </SettingRow>
+
+            {/* Complexity Slider */}
+            <SettingRow label="Complexity" description={`Level ${opusConfig.complexity} — ${opusConfig.complexity >= 8 ? 'High quality, more CPU' : opusConfig.complexity >= 4 ? 'Balanced' : 'Low CPU usage'}`} vertical>
+              <Slider
+                value={opusConfig.complexity}
+                min={0}
+                max={10}
+                step={1}
+                onChange={(val) => handleOpusConfigChange({ complexity: val })}
+              />
+            </SettingRow>
+
+            {/* Forward Error Correction */}
+            <SettingRow label="Forward Error Correction" description="Adds redundancy to resist packet loss.">
+              <Toggle
+                checked={opusConfig.fec}
+                onChange={(val) => handleOpusConfigChange({ fec: val })}
+              />
+            </SettingRow>
+
+            {/* DTX */}
+            <SettingRow label="Discontinuous Transmission" description="Save bandwidth during silence.">
+              <Toggle
+                checked={opusConfig.dtx}
+                onChange={(val) => handleOpusConfigChange({ dtx: val })}
+              />
+            </SettingRow>
+          </View>
+        </>
+      )}
+
+      <Separator spacing="sm" />
+
+      {/* Volume Controls */}
+      <View style={{ gap: 16 }}>
+        <View>
+          <RNText style={{ fontSize: 15, fontWeight: '600', color: tc.text.primary }}>
+            Volume Controls
+          </RNText>
+          <RNText style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
+            Adjust input and output volume levels.
+          </RNText>
+        </View>
+
+        <SettingRow label="Microphone Volume" description={`${inputVolume}%`} vertical>
+          <Slider
+            value={inputVolume}
+            min={0}
+            max={100}
+            step={5}
+            onChange={handleInputVolumeChange}
+          />
+        </SettingRow>
+
+        {/* Voice Meter */}
+        <View style={{ gap: 8 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <View>
+              <RNText style={{ fontSize: 13, fontWeight: '600', color: tc.text.primary }}>
+                Voice Meter
+              </RNText>
+              <RNText style={{ fontSize: 11, color: tc.text.secondary }}>
+                Test your microphone levels and check for clipping.
+              </RNText>
+            </View>
+            <Button
+              variant="secondary"
+              size="sm"
+              onPress={micTestActive ? stopMicTest : startMicTest}
+            >
+              {micTestActive ? 'Stop' : 'Test Mic'}
+            </Button>
+          </View>
+          {micTestActive && (
+            <View style={{ gap: 6 }}>
+              {/* Level bar */}
+              <View style={{ height: 12, borderRadius: 6, backgroundColor: tc.background.sunken, overflow: 'hidden', position: 'relative' }}>
+                {/* Clipping threshold marker at 85% */}
+                <View style={{
+                  position: 'absolute',
+                  left: '85%',
+                  top: 0,
+                  bottom: 0,
+                  width: 2,
+                  backgroundColor: tc.status.danger,
+                  opacity: 0.5,
+                  zIndex: 1,
+                }} />
+                <View style={{
+                  width: `${micTestLevel}%`,
+                  height: '100%',
+                  borderRadius: 6,
+                  backgroundColor: micTestLevel > 85
+                    ? tc.status.danger
+                    : micTestLevel > 50
+                    ? tc.status.success
+                    : tc.accent.primary,
+                  transition: 'width 0.05s ease-out',
+                } as any} />
+              </View>
+              {/* Labels */}
+              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <RNText style={{ fontSize: 10, color: tc.text.muted }}>
+                  {micTestLevel > 85 ? '⚠ Clipping — lower your mic volume' : micTestLevel > 50 ? 'Good level' : micTestLevel > 10 ? 'Low — speak louder or raise mic volume' : 'Waiting for input...'}
+                </RNText>
+                <RNText style={{ fontSize: 10, fontWeight: '600', fontVariant: ['tabular-nums'], color: micTestLevel > 85 ? tc.status.danger : tc.text.muted }}>
+                  {micTestLevel}%
+                </RNText>
+              </View>
+            </View>
+          )}
+        </View>
+
+        <SettingRow label="Output Volume" description={`${volume}%`} vertical>
+          <Slider
+            value={volume}
+            min={0}
+            max={100}
+            step={5}
+            onChange={handleOutputVolumeChange}
+          />
+        </SettingRow>
+      </View>
 
       <Separator spacing="sm" />
 
@@ -1250,79 +1684,12 @@ function AudioVideoSection() {
             </RNText>
           </View>
         )}
-      </View>
 
-      <Separator spacing="sm" />
-
-      {/* Audio Processing */}
-      <View style={{ gap: 16 }}>
+        {/* Device Test — inline within Devices section */}
+        <Separator spacing="sm" />
         <View>
-          <RNText style={{ fontSize: 15, fontWeight: '600', color: tc.text.primary }}>
-            Audio Processing
-          </RNText>
-          <RNText style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
-            Enhance audio quality during calls.
-          </RNText>
-        </View>
-
-        <SettingRow label="Noise Suppression" description="Reduce background noise from your microphone.">
-          <Toggle checked={noiseSuppression} onChange={setNoiseSuppression} />
-        </SettingRow>
-        <SettingRow label="Echo Cancellation" description="Prevent audio feedback loops.">
-          <Toggle checked={echoCancellation} onChange={setEchoCancellation} />
-        </SettingRow>
-        <SettingRow label="Auto Gain Control" description="Automatically adjust microphone volume.">
-          <Toggle checked={autoGainControl} onChange={setAutoGainControl} />
-        </SettingRow>
-      </View>
-
-      <Separator spacing="sm" />
-
-      {/* Calling */}
-      <View style={{ gap: 16 }}>
-        <View>
-          <RNText style={{ fontSize: 15, fontWeight: '600', color: tc.text.primary }}>
-            Calling
-          </RNText>
-          <RNText style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
-            Configure incoming call behavior and test your devices.
-          </RNText>
-        </View>
-
-        <SettingRow label="Incoming Call Display" description="How incoming calls appear when the app is open." vertical>
-          <SegmentedControl
-            options={[
-              { value: 'fullscreen', label: 'Fullscreen' },
-              { value: 'toast', label: 'Toast' },
-            ]}
-            value={incomingCallDisplay}
-            onChange={(v) => setIncomingCallDisplay(v as 'fullscreen' | 'toast')}
-          />
-        </SettingRow>
-
-        <SettingRow label="Ring Volume" description={`Volume: ${ringVolume}%`}>
-          <View style={{ flex: 1, maxWidth: 200 }}>
-            <Slider
-              value={ringVolume}
-              min={0}
-              max={100}
-              step={5}
-              onChange={setRingVolume}
-            />
-          </View>
-        </SettingRow>
-      </View>
-
-      <Separator spacing="sm" />
-
-      {/* Device Test */}
-      <View style={{ gap: 16 }}>
-        <View>
-          <RNText style={{ fontSize: 15, fontWeight: '600', color: tc.text.primary }}>
-            Device Test
-          </RNText>
-          <RNText style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
-            Preview your camera and test your microphone.
+          <RNText style={{ fontSize: 11, fontWeight: '600', color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+            Test Devices
           </RNText>
         </View>
 
@@ -1352,21 +1719,88 @@ function AudioVideoSection() {
                   width: `${micLevel}%`,
                   height: '100%',
                   borderRadius: 4,
-                  backgroundColor: micLevel > 70 ? tc.status.error : micLevel > 30 ? tc.status.success : tc.accent.primary,
+                  backgroundColor: micLevel > 70 ? tc.status.danger : micLevel > 30 ? tc.status.success : tc.accent.primary,
                 }} />
               </View>
             </View>
 
-            <Button variant="outlined" size="sm" onPress={stopTestPreview}>
+            <Button variant="secondary" size="sm" onPress={stopTestPreview}>
               Stop Test
             </Button>
           </View>
         ) : (
-          <Button variant="outlined" size="sm" onPress={startTestPreview}>
+          <Button variant="secondary" size="sm" onPress={startTestPreview}>
             Test Camera & Microphone
           </Button>
         )}
       </View>
+
+      <Separator spacing="sm" />
+
+      {/* Audio Processing */}
+      <View style={{ gap: 16 }}>
+        <View>
+          <RNText style={{ fontSize: 15, fontWeight: '600', color: tc.text.primary }}>
+            Audio Processing
+          </RNText>
+          <RNText style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
+            Enhance audio quality during calls.
+          </RNText>
+        </View>
+
+        <SettingRow label="Noise Suppression" description="Reduce background noise from your microphone.">
+          <Toggle checked={noiseSuppression} onChange={setNoiseSuppression} />
+        </SettingRow>
+        <SettingRow label="Echo Cancellation" description="Prevent audio feedback loops.">
+          <Toggle checked={echoCancellation} onChange={setEchoCancellation} />
+        </SettingRow>
+        <SettingRow label="Auto Gain Control" description="Automatically adjust microphone volume.">
+          <Toggle checked={autoGainControl} onChange={setAutoGainControl} />
+        </SettingRow>
+      </View>
+
+      <Separator spacing="sm" />
+
+      {/* Encryption */}
+      <View style={{ gap: 16 }}>
+        <View>
+          <RNText style={{ fontSize: 15, fontWeight: '600', color: tc.text.primary }}>
+            Encryption
+          </RNText>
+          <RNText style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
+            Call signaling is always end-to-end encrypted. Optionally encrypt media frames too.
+          </RNText>
+        </View>
+
+        <SettingRow
+          label="End-to-End Media Encryption"
+          description={
+            typeof window !== 'undefined' && 'RTCRtpScriptTransform' in window
+              ? 'Encrypts audio and video frames with AES-256-GCM. May increase CPU usage.'
+              : 'Not available in this browser. Supported in Chrome and Edge.'
+          }
+        >
+          <Toggle
+            checked={mediaE2EE}
+            onChange={setMediaE2EE}
+            disabled={typeof window === 'undefined' || !('RTCRtpScriptTransform' in window)}
+          />
+        </SettingRow>
+
+        {mediaE2EE && (
+          <View style={{
+            padding: 12, borderRadius: 8,
+            backgroundColor: tc.status.infoSurface,
+            borderWidth: 1, borderColor: tc.status.infoBorder,
+          }}>
+            <RNText style={{ fontSize: 12, color: tc.status.info }}>
+              Media E2EE is enabled. Both peers must have this setting enabled for encrypted media.
+              Call signaling (SDP, ICE) is always encrypted regardless of this setting.
+            </RNText>
+          </View>
+        )}
+      </View>
+
     </View>
   );
 }
@@ -1757,7 +2191,7 @@ function NetworkSection() {
           </View>
           <Button
             size="sm"
-            variant="outline"
+            variant="secondary"
             onPress={handleAddRelay}
             disabled={!newRelayUrl.trim()}
             iconLeft={<PlusIcon size={14} />}
@@ -1785,7 +2219,7 @@ function NetworkSection() {
             paddingVertical: 12,
             paddingHorizontal: 14,
             borderRadius: 8,
-            backgroundColor: pressed ? tc.background.hover : tc.background.sunken,
+            backgroundColor: pressed ? tc.accent.highlight : tc.background.sunken,
             borderWidth: 1,
             borderColor: tc.border.subtle,
             marginTop: 4,
@@ -1795,7 +2229,7 @@ function NetworkSection() {
             width: 36,
             height: 36,
             borderRadius: 8,
-            backgroundColor: tc.accent.surface,
+            backgroundColor: tc.brand.surface,
             alignItems: 'center',
             justifyContent: 'center',
           }}>
@@ -1912,7 +2346,7 @@ function NetworkSection() {
               <RNText style={{ fontSize: 10, color: tc.text.secondary, fontFamily: 'monospace' }} numberOfLines={3}>
                 {offerData.slice(0, 200)}...
               </RNText>
-              <Button size="sm" variant={offerCopied ? 'ghost' : 'outline'} onPress={handleCopyOffer}>
+              <Button size="sm" variant={offerCopied ? 'tertiary' : 'secondary'} onPress={handleCopyOffer}>
                 {offerCopied ? 'Copied!' : 'Copy Offer'}
               </Button>
             </View>
@@ -1929,7 +2363,7 @@ function NetworkSection() {
               <RNText style={{ fontSize: 10, color: tc.text.secondary, fontFamily: 'monospace' }} numberOfLines={3}>
                 {answerData.slice(0, 200)}...
               </RNText>
-              <Button size="sm" variant={answerCopied ? 'ghost' : 'outline'} onPress={handleCopyAnswer}>
+              <Button size="sm" variant={answerCopied ? 'tertiary' : 'secondary'} onPress={handleCopyAnswer}>
                 {answerCopied ? 'Copied!' : 'Copy Answer'}
               </Button>
             </View>
@@ -1977,7 +2411,7 @@ function NetworkSection() {
               <RNText style={{ fontSize: 12, color: tc.status.danger }}>
                 {networkError.message}
               </RNText>
-              <Button size="sm" variant="outline" onPress={resetSignaling}>
+              <Button size="sm" variant="secondary" onPress={resetSignaling}>
                 Try Again
               </Button>
             </View>
@@ -1986,7 +2420,7 @@ function NetworkSection() {
 
         {/* Reset button for non-idle states */}
         {connectionState !== 'idle' && connectionState !== 'error' && (
-          <Button size="sm" variant="ghost" onPress={resetSignaling}>
+          <Button size="sm" variant="tertiary" onPress={resetSignaling}>
             Reset
           </Button>
         )}
@@ -2355,7 +2789,7 @@ function PluginsSection({ onOpenMarketplace }: { onOpenMarketplace?: () => void 
             borderWidth: 1,
             borderColor: tc.border.subtle,
             backgroundColor: pressed
-              ? tc.background.hover
+              ? tc.accent.highlight
               : tc.background.sunken,
             alignItems: 'center',
             gap: 8,
@@ -2478,7 +2912,7 @@ function PluginSettingsCard({
           </RNText>
           <Button
             size="xs"
-            variant="danger"
+            variant="destructive"
             onPress={() => { onUninstall(); setShowConfirm(false); }}
           >
             Remove
@@ -2507,11 +2941,18 @@ function PluginSettingsCard({
 // SettingsDialog
 // ---------------------------------------------------------------------------
 
-export function SettingsDialog({ open, onClose, onOpenMarketplace }: SettingsDialogProps) {
+export function SettingsDialog({ open, onClose, onOpenMarketplace, initialSection }: SettingsDialogProps) {
   const { theme, mode } = useTheme();
   const tc = theme.colors;
   const isDark = mode === 'dark';
   const [activeSection, setActiveSection] = useState<SettingsSection>('account');
+
+  // Jump to requested section when dialog opens with initialSection
+  useEffect(() => {
+    if (open && initialSection) {
+      setActiveSection(initialSection);
+    }
+  }, [open, initialSection]);
 
   // -- Styles ----------------------------------------------------------------
 

@@ -128,6 +128,7 @@ pub mod domain {
     pub const MESSAGE_ENCRYPTION: &[u8] = b"umbra-message-encryption-v1";
 
     /// Domain for storage encryption key derivation
+    #[allow(dead_code)]
     pub const STORAGE_ENCRYPTION: &[u8] = b"umbra-storage-encryption-v1";
 }
 
@@ -209,6 +210,7 @@ pub fn derive_shared_secret(
 ///
 /// The storage key is derived from both signing and encryption keys,
 /// ensuring it's tied to the user's identity.
+#[allow(dead_code)]
 pub fn derive_storage_key(
     signing_key: &[u8; 32],
     encryption_key: &[u8; 32],
@@ -243,6 +245,7 @@ pub fn derive_storage_key(
 ///       ├──► Key for Bob → Alice messages
 ///       └──► Key for read receipts
 /// ```
+#[allow(dead_code)]
 pub fn derive_multiple_keys<const N: usize>(
     shared_secret: &[u8; 32],
     salt: &[u8],

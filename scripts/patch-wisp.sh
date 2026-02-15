@@ -37,16 +37,31 @@ cp -R "$CORE_SRC/src" "$CORE_DEST/src"
 [ -d "$CORE_SRC/dist" ] && cp -R "$CORE_SRC/dist" "$CORE_DEST/dist"
 cp "$CORE_SRC/package.json" "$CORE_DEST/package.json"
 
-# Patch core package.json so Metro can resolve deep sub-path imports from source.
-# Metro doesn't support the "exports" field well, so we rewrite main/module/types
-# to point at src/ and remove the exports field entirely.
+# Patch core package.json so Metro and TypeScript can resolve deep sub-path imports
+# from source. We rewrite main/module/types to point at src/ and rewrite the
+# exports map to point at ./src/**/*.ts instead of ./dist/**/*.{js,mjs,d.ts}.
 node -e "
 const fs = require('fs');
 const pkg = JSON.parse(fs.readFileSync('$CORE_DEST/package.json', 'utf8'));
 pkg.main = './src/index.ts';
 pkg.module = './src/index.ts';
 pkg.types = './src/index.ts';
-delete pkg.exports;
+if (pkg.exports) {
+  const newExports = {};
+  for (const [key, value] of Object.entries(pkg.exports)) {
+    if (typeof value === 'object' && value.types) {
+      // Rewrite ./dist/foo/bar.d.ts -> ./src/foo/bar.ts
+      const srcPath = value.types.replace(/^\\.\/dist\//, './src/').replace(/\\.d\\.ts$/, '.ts');
+      newExports[key] = srcPath;
+    } else if (typeof value === 'string') {
+      const srcPath = value.replace(/^\\.\/dist\//, './src/').replace(/\\.(mjs|js|d\\.ts)$/, '.ts');
+      newExports[key] = srcPath;
+    } else {
+      newExports[key] = value;
+    }
+  }
+  pkg.exports = newExports;
+}
 fs.writeFileSync('$CORE_DEST/package.json', JSON.stringify(pkg, null, 2) + '\n');
 "
 

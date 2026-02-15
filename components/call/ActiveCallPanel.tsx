@@ -20,6 +20,7 @@ interface ActiveCallPanelProps {
   onSwitchCamera: () => void;
   onVideoQualityChange: (quality: VideoQuality) => void;
   onAudioQualityChange: (quality: AudioQuality) => void;
+  onSettings?: () => void;
 }
 
 export function ActiveCallPanel({
@@ -28,6 +29,7 @@ export function ActiveCallPanel({
   onToggleCamera,
   onEndCall,
   onSwitchCamera,
+  onSettings,
 }: ActiveCallPanelProps) {
   return (
     <WispActiveCallPanel
@@ -42,6 +44,7 @@ export function ActiveCallPanel({
       onToggleCamera={onToggleCamera}
       onEndCall={onEndCall}
       onSwitchCamera={onSwitchCamera}
+      onSettings={onSettings}
     />
   );
 }

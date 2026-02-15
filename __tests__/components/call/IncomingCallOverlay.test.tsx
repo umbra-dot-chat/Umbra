@@ -30,6 +30,18 @@ jest.mock('@coexist/wisp-react-native', () => ({
     const { Text: RNText } = require('react-native');
     return <RNText {...props}>{children}</RNText>;
   },
+  CallNotification: ({ callerName, callType, onAccept, onDecline, ...props }: any) => {
+    const { View, Text: RNText, Pressable } = require('react-native');
+    const typeLabel = callType === 'video' ? 'video' : 'voice';
+    return (
+      <View testID="CallNotification" {...props}>
+        <RNText>{callerName}</RNText>
+        <RNText>{`Incoming ${typeLabel} call...`}</RNText>
+        <Pressable onPress={onAccept} accessibilityLabel="Accept call"><RNText>Accept</RNText></Pressable>
+        <Pressable onPress={onDecline} accessibilityLabel="Decline call"><RNText>Decline</RNText></Pressable>
+      </View>
+    );
+  },
   useTheme: () => ({
     theme: {
       colors: {

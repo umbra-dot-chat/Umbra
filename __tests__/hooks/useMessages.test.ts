@@ -5,6 +5,17 @@ jest.mock('@/contexts/UmbraContext', () => ({
   useUmbra: jest.fn(),
 }));
 
+jest.mock('@/hooks/useNetwork', () => ({
+  useNetwork: jest.fn(() => ({
+    getRelayWs: jest.fn(() => null),
+    sendSignal: jest.fn(),
+    isConnected: false,
+    relayConnected: false,
+    relayUrl: null,
+  })),
+  pushPendingRelayAck: jest.fn(),
+}));
+
 jest.mock('@/contexts/AuthContext', () => ({
   useAuth: jest.fn().mockReturnValue({
     identity: { did: 'did:key:z6MkMe', displayName: 'Me', createdAt: Date.now() / 1000 },
@@ -417,7 +428,7 @@ describe('useMessages', () => {
       reply = await result.current.sendThreadReply('msg-1', 'Reply text');
     });
 
-    expect(mockService.sendThreadReply).toHaveBeenCalledWith('msg-1', 'Reply text');
+    expect(mockService.sendThreadReply).toHaveBeenCalledWith('msg-1', 'Reply text', null);
     expect(reply).toBeDefined();
     expect(reply.content.text).toBe('thread reply');
   });

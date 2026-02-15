@@ -5,12 +5,12 @@ import {
   Text,
   useTheme,
   Avatar,
+  AddFriendInput,
 } from '@coexist/wisp-react-native';
 import {
   FriendListItem,
   FriendRequestItem,
   FriendSection,
-  AddFriendInput,
 } from '@/components/friends/FriendComponents';
 import { useRouter } from 'expo-router';
 import { UsersIcon, MessageIcon, MoreIcon, UserXIcon, UserCheckIcon } from '@/components/icons';

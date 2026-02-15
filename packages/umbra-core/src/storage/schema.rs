@@ -432,6 +432,7 @@ UPDATE schema_version SET version = 5;
 "#;
 
 /// SQL to drop all tables (for testing/reset)
+#[allow(dead_code)]
 pub const DROP_TABLES: &str = r#"
 DROP TABLE IF EXISTS call_history;
 DROP TABLE IF EXISTS plugin_bundles;

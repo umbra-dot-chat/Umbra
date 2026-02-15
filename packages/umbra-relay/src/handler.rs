@@ -35,7 +35,7 @@ pub async fn handle_websocket(socket: WebSocket, state: RelayState) {
                                 message: "Invalid DID format".to_string(),
                             };
                             let _ = ws_sender
-                                .send(Message::Text(serde_json::to_string(&err).unwrap().into()))
+                                .send(Message::Text(serde_json::to_string(&err).unwrap()))
                                 .await;
                             continue;
                         }
@@ -43,7 +43,7 @@ pub async fn handle_websocket(socket: WebSocket, state: RelayState) {
                         // Send registration confirmation
                         let ack = ServerMessage::Registered { did: did.clone() };
                         if ws_sender
-                            .send(Message::Text(serde_json::to_string(&ack).unwrap().into()))
+                            .send(Message::Text(serde_json::to_string(&ack).unwrap()))
                             .await
                             .is_err()
                         {
@@ -55,7 +55,7 @@ pub async fn handle_websocket(socket: WebSocket, state: RelayState) {
                     Ok(ClientMessage::Ping) => {
                         let pong = ServerMessage::Pong;
                         let _ = ws_sender
-                            .send(Message::Text(serde_json::to_string(&pong).unwrap().into()))
+                            .send(Message::Text(serde_json::to_string(&pong).unwrap()))
                             .await;
                     }
                     Ok(_) => {
@@ -63,7 +63,7 @@ pub async fn handle_websocket(socket: WebSocket, state: RelayState) {
                             message: "Must register before sending other messages".to_string(),
                         };
                         let _ = ws_sender
-                            .send(Message::Text(serde_json::to_string(&err).unwrap().into()))
+                            .send(Message::Text(serde_json::to_string(&err).unwrap()))
                             .await;
                     }
                     Err(e) => {
@@ -72,7 +72,7 @@ pub async fn handle_websocket(socket: WebSocket, state: RelayState) {
                             message: format!("Invalid message format: {}", e),
                         };
                         let _ = ws_sender
-                            .send(Message::Text(serde_json::to_string(&err).unwrap().into()))
+                            .send(Message::Text(serde_json::to_string(&err).unwrap()))
                             .await;
                     }
                 }
@@ -98,7 +98,7 @@ pub async fn handle_websocket(socket: WebSocket, state: RelayState) {
         while let Some(msg) = rx.recv().await {
             match serde_json::to_string(&msg) {
                 Ok(json) => {
-                    if ws_sender.send(Message::Text(json.into())).await.is_err() {
+                    if ws_sender.send(Message::Text(json)).await.is_err() {
                         break; // Connection closed
                     }
                 }
@@ -517,7 +517,7 @@ pub async fn handle_federation_peer(socket: WebSocket, state: RelayState) {
                 message: "Federation not enabled on this relay".to_string(),
             })
             .unwrap();
-            let _ = ws_sender.send(Message::Text(err.into())).await;
+            let _ = ws_sender.send(Message::Text(err)).await;
             return;
         }
     };
@@ -530,7 +530,7 @@ pub async fn handle_federation_peer(socket: WebSocket, state: RelayState) {
         location: federation.location.clone(),
     };
     if let Ok(json) = serde_json::to_string(&hello) {
-        if ws_sender.send(Message::Text(json.into())).await.is_err() {
+        if ws_sender.send(Message::Text(json)).await.is_err() {
             return;
         }
     }
@@ -541,7 +541,7 @@ pub async fn handle_federation_peer(socket: WebSocket, state: RelayState) {
         online_dids: state.local_online_dids(),
     };
     if let Ok(json) = serde_json::to_string(&presence) {
-        if ws_sender.send(Message::Text(json.into())).await.is_err() {
+        if ws_sender.send(Message::Text(json)).await.is_err() {
             return;
         }
     }
@@ -554,7 +554,7 @@ pub async fn handle_federation_peer(socket: WebSocket, state: RelayState) {
     let sender_task = tokio::spawn(async move {
         while let Some(msg) = rx.recv().await {
             if let Ok(json) = serde_json::to_string(&msg) {
-                if ws_sender.send(Message::Text(json.into())).await.is_err() {
+                if ws_sender.send(Message::Text(json)).await.is_err() {
                     break;
                 }
             }

@@ -101,6 +101,81 @@ jest.mock('@/contexts/ProfilePopoverContext', () => ({
   }),
 }));
 
+jest.mock('@/hooks/useGroups', () => ({
+  useGroups: () => ({
+    groups: [],
+    isLoading: false,
+    error: null,
+    createGroup: jest.fn(),
+    updateGroup: jest.fn(),
+    deleteGroup: jest.fn(),
+    addMember: jest.fn(),
+    removeMember: jest.fn(),
+    getMembers: jest.fn().mockResolvedValue([]),
+    pendingInvites: [],
+    sendInvite: jest.fn(),
+    acceptInvite: jest.fn(),
+    declineInvite: jest.fn(),
+    refreshInvites: jest.fn(),
+    refresh: jest.fn(),
+  }),
+}));
+
+jest.mock('@/hooks/useTyping', () => ({
+  useTyping: () => ({
+    typingDisplay: null,
+    sendTyping: jest.fn(),
+    sendStopTyping: jest.fn(),
+  }),
+}));
+
+jest.mock('@/hooks/useCall', () => ({
+  useCall: () => ({
+    activeCall: null,
+    startCall: jest.fn(),
+    acceptCall: jest.fn(),
+    endCall: jest.fn(),
+    toggleMute: jest.fn(),
+    toggleCamera: jest.fn(),
+    switchCamera: jest.fn(),
+    videoQuality: 'auto',
+    audioQuality: 'auto',
+    setVideoQuality: jest.fn(),
+    setAudioQuality: jest.fn(),
+    callStats: null,
+  }),
+}));
+
+jest.mock('@/contexts/ActiveConversationContext', () => ({
+  useActiveConversation: () => ({
+    activeId: null,
+    setActiveId: jest.fn(),
+    searchPanelRequested: false,
+    requestSearchPanel: jest.fn(),
+    clearSearchPanelRequest: jest.fn(),
+  }),
+}));
+
+jest.mock('@/contexts/SettingsDialogContext', () => ({
+  useSettingsDialog: () => ({
+    openSettings: jest.fn(),
+    closeSettings: jest.fn(),
+    isOpen: false,
+    activeSection: null,
+  }),
+}));
+
+jest.mock('@/contexts/PluginContext', () => ({
+  usePlugins: jest.fn(() => ({
+    getSlotComponents: jest.fn(() => []),
+    plugins: [],
+    installPlugin: jest.fn(),
+    enablePlugin: jest.fn(),
+    disablePlugin: jest.fn(),
+    uninstallPlugin: jest.fn(),
+  })),
+}));
+
 const Wrapper = ({ children }: { children: React.ReactNode }) => (
   <HelpProvider>{children}</HelpProvider>
 );

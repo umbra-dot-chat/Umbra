@@ -91,7 +91,7 @@ function getMessageText(message: Message): string {
   // Handle missing content gracefully
   if (!message.content) return '[empty message]';
   if (message.content.type === 'text') {
-    return message.content.text;
+    return message.content.text || '[decryption pending]';
   }
   return '[unsupported content]';
 }
@@ -313,7 +313,7 @@ export function ChatArea({
                   paddingHorizontal: 12,
                   paddingVertical: 4,
                   borderRadius: 12,
-                  backgroundColor: themeColors.bg.tertiary ?? themeColors.bg.secondary,
+                  backgroundColor: themeColors.background.surface ?? themeColors.background.sunken,
                 }}
               >
                 <RNText style={{ fontSize: 12 }}>{icon}</RNText>

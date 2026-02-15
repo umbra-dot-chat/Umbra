@@ -5,7 +5,8 @@
  * - Connection and DID registration
  * - Sending/receiving relay envelopes
  * - Offline message fetching
- * - Automatic reconnection
+ * - Automatic reconnection with exponential backoff
+ * - Message queueing when disconnected
  */
 
 import WebSocket from 'ws';
@@ -30,6 +31,21 @@ export class RelayClient {
   private _registered = false;
   private pingInterval: ReturnType<typeof setInterval> | null = null;
 
+  // Reconnection
+  private _reconnectEnabled = false;
+  private _reconnectAttempts = 0;
+  private _maxReconnectAttempts = 5;
+  private _reconnectBaseDelay = 1000;
+  private _reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private _intentionalDisconnect = false;
+
+  // Message queue (used when disconnected + reconnect enabled)
+  private _messageQueue: object[] = [];
+
+  // Callbacks
+  onReconnected: (() => void) | null = null;
+  onDisconnected: (() => void) | null = null;
+
   constructor(url: string, did: string) {
     this.url = url;
     this.did = did;
@@ -47,11 +63,40 @@ export class RelayClient {
     return this.ws;
   }
 
+  get reconnectEnabled(): boolean {
+    return this._reconnectEnabled;
+  }
+
+  get queueSize(): number {
+    return this._messageQueue.length;
+  }
+
+  /**
+   * Enable automatic reconnection with exponential backoff.
+   */
+  enableReconnect(maxAttempts = 5, baseDelayMs = 1000): void {
+    this._reconnectEnabled = true;
+    this._maxReconnectAttempts = maxAttempts;
+    this._reconnectBaseDelay = baseDelayMs;
+  }
+
+  /**
+   * Disable automatic reconnection.
+   */
+  disableReconnect(): void {
+    this._reconnectEnabled = false;
+    if (this._reconnectTimer) {
+      clearTimeout(this._reconnectTimer);
+      this._reconnectTimer = null;
+    }
+  }
+
   /**
    * Connect to the relay and register our DID.
    */
   connect(): Promise<void> {
     return new Promise((resolve, reject) => {
+      this._intentionalDisconnect = false;
       this.ws = new WebSocket(this.url);
 
       const timeout = setTimeout(() => {
@@ -72,7 +117,9 @@ export class RelayClient {
 
           if (msg.type === 'registered') {
             this._registered = true;
+            this._reconnectAttempts = 0; // Reset on successful registration
             // Start keepalive pings
+            if (this.pingInterval) clearInterval(this.pingInterval);
             this.pingInterval = setInterval(() => {
               if (this.connected) this.send({ type: 'ping' });
             }, 30000);
@@ -94,8 +141,21 @@ export class RelayClient {
       });
 
       this.ws.on('close', () => {
+        const wasRegistered = this._registered;
         this._registered = false;
-        if (this.pingInterval) clearInterval(this.pingInterval);
+        if (this.pingInterval) {
+          clearInterval(this.pingInterval);
+          this.pingInterval = null;
+        }
+
+        if (wasRegistered && !this._intentionalDisconnect) {
+          this.onDisconnected?.();
+
+          // Auto-reconnect if enabled
+          if (this._reconnectEnabled) {
+            this.attemptReconnect();
+          }
+        }
       });
     });
   }
@@ -149,21 +209,94 @@ export class RelayClient {
   }
 
   /**
-   * Send raw JSON to relay.
+   * Send raw JSON to relay. Queues if disconnected and reconnect is enabled.
    */
   send(msg: object): void {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(msg));
+    } else if (this._reconnectEnabled) {
+      // Queue for later delivery
+      this._messageQueue.push(msg);
+    }
+    // Otherwise silently drop (original behavior)
+  }
+
+  /**
+   * Send raw data directly to the WebSocket (for malformed envelope tests).
+   */
+  sendRaw(data: string): void {
+    if (this.ws?.readyState === WebSocket.OPEN) {
+      this.ws.send(data);
     }
   }
 
   /**
-   * Disconnect from relay.
+   * Simulate a disconnect for testing reconnection scenarios.
+   * Closes the WebSocket without marking it as intentional,
+   * so reconnect logic triggers if enabled.
+   */
+  simulateDisconnect(): void {
+    if (this.ws) {
+      this.ws.close();
+      this.ws = null;
+    }
+  }
+
+  /**
+   * Disconnect from relay (intentional — will NOT auto-reconnect).
    */
   disconnect(): void {
+    this._intentionalDisconnect = true;
+    if (this._reconnectTimer) {
+      clearTimeout(this._reconnectTimer);
+      this._reconnectTimer = null;
+    }
     if (this.pingInterval) clearInterval(this.pingInterval);
     this.ws?.close();
     this.ws = null;
     this._registered = false;
+  }
+
+  // ─── Internal ─────────────────────────────────────────────────────────────
+
+  /**
+   * Attempt to reconnect with exponential backoff.
+   */
+  private attemptReconnect(): void {
+    if (this._reconnectAttempts >= this._maxReconnectAttempts) {
+      return; // Give up
+    }
+
+    const delay = Math.min(
+      this._reconnectBaseDelay * Math.pow(2, this._reconnectAttempts),
+      30000, // Cap at 30s
+    );
+
+    this._reconnectAttempts++;
+
+    this._reconnectTimer = setTimeout(async () => {
+      this._reconnectTimer = null;
+      try {
+        await this.connect();
+        // Reconnected — fetch offline messages and flush queue
+        this.fetchOffline();
+        this.flushQueue();
+        this.onReconnected?.();
+      } catch {
+        // Connect failed — will retry via the close handler
+        // (connect() sets up a new close handler that calls attemptReconnect)
+      }
+    }, delay);
+  }
+
+  /**
+   * Flush all queued messages after reconnection.
+   */
+  private flushQueue(): void {
+    const queued = [...this._messageQueue];
+    this._messageQueue = [];
+    for (const msg of queued) {
+      this.send(msg);
+    }
   }
 }

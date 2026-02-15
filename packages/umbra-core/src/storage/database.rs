@@ -46,16 +46,10 @@ use crate::error::{Error, Result};
 use super::schema;
 
 /// Database configuration
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct DatabaseConfig {
     /// Path to the database file
     pub path: Option<String>,
-}
-
-impl Default for DatabaseConfig {
-    fn default() -> Self {
-        Self { path: None }
-    }
 }
 
 /// The main database handle
@@ -1459,6 +1453,7 @@ impl Database {
     // ========================================================================
 
     /// Store a new call record
+    #[allow(clippy::too_many_arguments)]
     pub fn store_call_record(
         &self,
         id: &str,

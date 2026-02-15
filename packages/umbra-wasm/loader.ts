@@ -132,9 +132,17 @@ export interface UmbraWasmModule {
   // Events
   umbra_wasm_subscribe_events(callback: (event_json: string) => void): void;
 
+  // Calls
+  umbra_wasm_calls_store(json: string): string;
+  umbra_wasm_calls_end(json: string): string;
+  umbra_wasm_calls_get_history(json: string): string;
+  umbra_wasm_calls_get_all_history(json: string): string;
+
   // Crypto
   umbra_wasm_crypto_sign(data: Uint8Array): Uint8Array;
   umbra_wasm_crypto_verify(public_key_hex: string, data: Uint8Array, signature: Uint8Array): boolean;
+  umbra_wasm_crypto_encrypt_for_peer(json: string): string;
+  umbra_wasm_crypto_decrypt_from_peer(json: string): string;
 
   // Plugin Storage — KV
   umbra_wasm_plugin_kv_get(plugin_id: string, key: string): string;
@@ -321,6 +329,7 @@ async function doInitWasm(did?: string): Promise<UmbraWasmModule> {
     // Dynamic import from the public directory (served at root by Expo web).
     // This bypasses Metro bundling entirely — the browser loads the ES module
     // directly, which is exactly what wasm-bindgen expects.
+    // @ts-expect-error — runtime URL import from public directory, not a real module
     wasmPkg = await import(/* webpackIgnore: true */ '/umbra_core.js');
 
     // Initialize the WASM binary with an explicit URL to avoid import.meta.url
@@ -529,6 +538,16 @@ function buildModule(wasmPkg: any): UmbraWasmModule {
     umbra_wasm_relay_fetch_offline: () =>
       wasmPkg.umbra_wasm_relay_fetch_offline(),
 
+    // ── Calls (real WASM) ───────────────────────────────────────────
+    umbra_wasm_calls_store: (json: string) =>
+      wasmPkg.umbra_wasm_calls_store(json),
+    umbra_wasm_calls_end: (json: string) =>
+      wasmPkg.umbra_wasm_calls_end(json),
+    umbra_wasm_calls_get_history: (json: string) =>
+      wasmPkg.umbra_wasm_calls_get_history(json),
+    umbra_wasm_calls_get_all_history: (json: string) =>
+      wasmPkg.umbra_wasm_calls_get_all_history(json),
+
     // ── Events (real WASM) ──────────────────────────────────────────
     umbra_wasm_subscribe_events: (callback: (event_json: string) => void) => {
       eventCallback = callback;
@@ -539,6 +558,10 @@ function buildModule(wasmPkg: any): UmbraWasmModule {
     umbra_wasm_crypto_sign: (data: Uint8Array) => wasmPkg.umbra_wasm_crypto_sign(data),
     umbra_wasm_crypto_verify: (pk: string, data: Uint8Array, sig: Uint8Array) =>
       wasmPkg.umbra_wasm_crypto_verify(pk, data, sig),
+    umbra_wasm_crypto_encrypt_for_peer: (json: string) =>
+      wasmPkg.umbra_wasm_crypto_encrypt_for_peer(json),
+    umbra_wasm_crypto_decrypt_from_peer: (json: string) =>
+      wasmPkg.umbra_wasm_crypto_decrypt_from_peer(json),
 
     // ── Plugin KV Storage (JS stub — persists via localStorage) ──────
     umbra_wasm_plugin_kv_get: (pluginId: string, key: string): string => {

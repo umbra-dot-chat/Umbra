@@ -47,12 +47,12 @@ export function GroupMemberList({ groupId, onMemberPress }: GroupMemberListProps
       paddingBottom: 8,
       marginBottom: 8,
       borderBottomWidth: 1,
-      borderBottomColor: theme.colors.border,
+      borderBottomColor: theme.colors.border.subtle,
     } as ViewStyle,
     headerText: {
       fontSize: 13,
       fontWeight: '600',
-      color: theme.colors.textSecondary,
+      color: theme.colors.text.secondary,
       textTransform: 'uppercase' as const,
       letterSpacing: 0.5,
     } as TextStyle,
@@ -68,29 +68,29 @@ export function GroupMemberList({ groupId, onMemberPress }: GroupMemberListProps
       width: 32,
       height: 32,
       borderRadius: 16,
-      backgroundColor: theme.colors.primary + '20',
+      backgroundColor: theme.colors.accent.primary + '20',
       alignItems: 'center' as const,
       justifyContent: 'center' as const,
     } as ViewStyle,
     name: {
       fontSize: 14,
       fontWeight: '500' as const,
-      color: theme.colors.text,
+      color: theme.colors.text.primary,
     } as TextStyle,
     roleText: {
       fontSize: 11,
-      color: theme.colors.primary,
+      color: theme.colors.accent.primary,
       fontWeight: '600' as const,
     } as TextStyle,
     emptyText: {
       fontSize: 13,
-      color: theme.colors.textSecondary,
+      color: theme.colors.text.secondary,
       textAlign: 'center' as const,
       paddingVertical: 16,
     } as TextStyle,
     count: {
       fontSize: 12,
-      color: theme.colors.textSecondary,
+      color: theme.colors.text.secondary,
     } as TextStyle,
   }), [theme]);
 
@@ -114,7 +114,7 @@ export function GroupMemberList({ groupId, onMemberPress }: GroupMemberListProps
       <View style={styles.header}>
         <HStack style={{ alignItems: 'center', justifyContent: 'space-between' }}>
           <HStack style={{ alignItems: 'center', gap: 6 }}>
-            <UsersIcon size={14} color={theme.colors.textSecondary} />
+            <UsersIcon size={14} color={theme.colors.text.secondary} />
             <Text style={styles.headerText}>Members</Text>
           </HStack>
           <Text style={styles.count}>{members.length}</Text>
@@ -133,9 +133,9 @@ export function GroupMemberList({ groupId, onMemberPress }: GroupMemberListProps
             >
               <View style={styles.avatar}>
                 {member.role === 'admin' ? (
-                  <ShieldIcon size={16} color={theme.colors.primary} />
+                  <ShieldIcon size={16} color={theme.colors.accent.primary} />
                 ) : (
-                  <UserIcon size={16} color={theme.colors.primary} />
+                  <UserIcon size={16} color={theme.colors.accent.primary} />
                 )}
               </View>
               <VStack style={{ flex: 1 }}>

@@ -67,7 +67,7 @@ export function ProfilePopover({ selectedMember, anchor, onClose }: ProfilePopov
           bannerColor={tc.accent.primary}
           onClose={onClose}
           actions={[
-            { id: 'message', label: 'Message', variant: 'secondary' as any },
+            { id: 'message', label: 'Message' },
           ]}
         />
       </View>

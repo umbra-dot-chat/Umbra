@@ -124,7 +124,7 @@ fn main() {
     let dht_key = DiscoveryService::did_to_dht_key(did);
 
     println!("   DID: {}", did);
-    println!("   DHT Key (SHA256 hash): {}", hex::encode(&dht_key));
+    println!("   DHT Key (SHA256 hash): {}", hex::encode(dht_key));
     println!();
     println!("   The DHT key is used to:");
     println!("   - Announce peer presence on the network");

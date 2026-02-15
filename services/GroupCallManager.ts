@@ -13,6 +13,7 @@ import type {
   VideoQualityPreset,
 } from '@/types/call';
 import { DEFAULT_ICE_SERVERS, VIDEO_QUALITY_PRESETS } from '@/types/call';
+import { resolveTurnCredentials } from '@/config/network';
 
 interface PeerConnection {
   pc: RTCPeerConnection;
@@ -26,7 +27,7 @@ export class GroupCallManager {
   private screenShareStream: MediaStream | null = null;
   private peers: Map<string, PeerConnection> = new Map();
   private _videoQuality: VideoQuality = 'auto';
-  private _audioQuality: AudioQuality = 'opus';
+  private _audioQuality: AudioQuality = 'opus-voice';
   private _isScreenSharing = false;
 
   // Callbacks
@@ -36,18 +37,50 @@ export class GroupCallManager {
   onConnectionStateChange: ((did: string, state: RTCPeerConnectionState) => void) | null = null;
 
   /**
+   * Build ICE servers with dynamic TURN credentials.
+   *
+   * Credential resolution order:
+   * 1. Credentials already on the IceServer entry
+   * 2. Auto-resolved from relay or env var via resolveTurnCredentials()
+   */
+  private async buildIceServers(iceServers: IceServer[] = DEFAULT_ICE_SERVERS): Promise<RTCIceServer[]> {
+    const servers: RTCIceServer[] = [];
+    let resolvedCreds: { username: string; credential: string } | null = null;
+
+    for (const s of iceServers) {
+      const urls = Array.isArray(s.urls) ? s.urls : [s.urls];
+      const hasTurn = urls.some((u) => u.startsWith('turn:') || u.startsWith('turns:'));
+
+      if (hasTurn && !s.credential) {
+        // Auto-resolve from relay or env var (cached)
+        if (resolvedCreds === null) {
+          resolvedCreds = (await resolveTurnCredentials()) ?? (undefined as any);
+        }
+        if (resolvedCreds) {
+          servers.push({ urls: s.urls, username: resolvedCreds.username, credential: resolvedCreds.credential });
+        } else {
+          // No credentials available — skip to avoid Chrome InvalidAccessError
+          console.warn('[GroupCallManager] Skipping TURN server (no credentials):', urls[0]);
+          continue;
+        }
+      } else {
+        servers.push({ urls: s.urls, username: s.username, credential: s.credential });
+      }
+    }
+
+    return servers;
+  }
+
+  /**
    * Create and store an RTCPeerConnection for a specific remote peer.
    */
-  private createPeerConnectionForPeer(
+  private async createPeerConnectionForPeer(
     did: string,
     iceServers: IceServer[] = DEFAULT_ICE_SERVERS,
-  ): RTCPeerConnection {
+  ): Promise<RTCPeerConnection> {
+    const resolvedServers = await this.buildIceServers(iceServers);
     const pc = new RTCPeerConnection({
-      iceServers: iceServers.map((s) => ({
-        urls: s.urls,
-        username: s.username,
-        credential: s.credential,
-      })),
+      iceServers: resolvedServers,
     });
 
     pc.onicecandidate = (event) => {
@@ -131,7 +164,7 @@ export class GroupCallManager {
     video: boolean,
     iceServers?: IceServer[],
   ): Promise<string> {
-    const pc = this.createPeerConnectionForPeer(did, iceServers);
+    const pc = await this.createPeerConnectionForPeer(did, iceServers);
     const stream = this.localStream ?? await this.getUserMedia(video);
 
     for (const track of stream.getTracks()) {
@@ -157,7 +190,7 @@ export class GroupCallManager {
     video: boolean,
     iceServers?: IceServer[],
   ): Promise<string> {
-    const pc = this.createPeerConnectionForPeer(did, iceServers);
+    const pc = await this.createPeerConnectionForPeer(did, iceServers);
     const stream = this.localStream ?? await this.getUserMedia(video);
 
     for (const track of stream.getTracks()) {

@@ -265,6 +265,7 @@ pub struct OfflineMessage {
 
 /// A call room for group calling.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct CallRoom {
     /// Unique room identifier
     pub room_id: String,
@@ -282,6 +283,7 @@ pub struct CallRoom {
 
 /// A signaling session for single-scan friend adding.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct SignalingSession {
     /// Unique session identifier
     pub id: String,

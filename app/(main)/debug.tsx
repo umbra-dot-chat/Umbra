@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, ScrollView, Pressable } from 'react-native';
 import { Text, useTheme } from '@coexist/wisp-react-native';
+import { useRouter } from 'expo-router';
 import { useUmbra } from '@/contexts/UmbraContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNetwork } from '@/hooks/useNetwork';
@@ -14,6 +15,7 @@ import { useFriends } from '@/hooks/useFriends';
 export default function DebugPage() {
   const { theme } = useTheme();
   const colors = theme.colors;
+  const router = useRouter();
   const { isReady, isLoading, error, service, version } = useUmbra();
   const { identity } = useAuth();
   const { isConnected, peerCount, listenAddresses } = useNetwork();
@@ -81,9 +83,26 @@ export default function DebugPage() {
       style={{ flex: 1, backgroundColor: colors.background.canvas }}
       contentContainerStyle={{ padding: 20, maxWidth: 700 }}
     >
-      <Text size="display-sm" weight="bold" style={{ color: colors.text.primary, marginBottom: 20 }}>
+      <Text size="display-sm" weight="bold" style={{ color: colors.text.primary, marginBottom: 12 }}>
         Debug & Diagnostics
       </Text>
+
+      {/* ─── Quick Links ─── */}
+      <Pressable
+        onPress={() => router.push('/call-diagnostics')}
+        style={{
+          backgroundColor: colors.accent.primary,
+          borderRadius: 8,
+          paddingHorizontal: 16,
+          paddingVertical: 10,
+          alignItems: 'center' as const,
+          marginBottom: 16,
+        }}
+      >
+        <Text size="sm" weight="semibold" style={{ color: '#FFF' }}>
+          Open Call Diagnostics
+        </Text>
+      </Pressable>
 
       {/* ─── WASM Status ─── */}
       <View style={sectionStyle}>

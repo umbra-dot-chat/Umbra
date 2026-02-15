@@ -58,6 +58,7 @@ pub enum UmbraResponse {
 pub struct UmbraCodec;
 
 impl UmbraCodec {
+    /// Returns the stream protocol identifier for the Umbra RPC protocol.
     pub fn protocol() -> StreamProtocol {
         StreamProtocol::new(UMBRA_RPC_PROTOCOL)
     }

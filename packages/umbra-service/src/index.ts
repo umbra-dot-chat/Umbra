@@ -1689,7 +1689,7 @@ export class UmbraService {
    * for the conversation. Returns the decrypted plaintext, or a
    * fallback string if decryption fails.
    */
-  async decryptIncomingMessage(payload: ChatMessagePayload): Promise<string> {
+  async decryptIncomingMessage(payload: ChatMessagePayload): Promise<string | null> {
     try {
       // WASM expects i64 (BigInt) for timestamp
       const decryptedJson = wasm().umbra_wasm_messaging_decrypt(
@@ -1699,10 +1699,19 @@ export class UmbraService {
         payload.senderDid,
         BigInt(payload.timestamp)
       );
-      return await parseWasm<string>(decryptedJson);
+      const text = await parseWasm<string>(decryptedJson);
+      // Guard against empty string from WASM (shouldn't happen, but be safe)
+      return text || null;
     } catch (err) {
-      console.warn('[decryptIncomingMessage] failed:', err);
-      return '';
+      console.warn(
+        '[decryptIncomingMessage] Decryption failed for message',
+        payload.messageId,
+        'in conversation', payload.conversationId,
+        'from', payload.senderDid,
+        '— nonce:', payload.nonce?.slice(0, 16) + '…',
+        '— error:', err,
+      );
+      return null;
     }
   }
 
@@ -1861,9 +1870,13 @@ export class UmbraService {
       delivered: boolean;
       read: boolean;
       threadReplyCount?: number;
+      threadId?: string;
     }>>(resultJson);
 
-    return await Promise.all(raw.map(async (m) => {
+    // Filter out thread replies — they belong in the thread panel, not the main chat
+    const mainMessages = raw.filter((m) => !m.threadId);
+
+    return await Promise.all(mainMessages.map(async (m) => {
       let text = '';
       try {
         // DB stores ciphertext as hex, but the WASM decrypt function expects base64.
@@ -1904,6 +1917,7 @@ export class UmbraService {
         delivered: m.delivered,
         status: m.read ? ('read' as const) : m.delivered ? ('delivered' as const) : ('sent' as const),
         threadReplyCount: m.threadReplyCount ?? 0,
+        threadId: m.threadId,
       };
     }));
   }

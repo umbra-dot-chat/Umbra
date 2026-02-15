@@ -3,13 +3,14 @@
  *
  * Shows an icon, title, status badge (Working, Beta, Coming Soon),
  * description, and optional how-to-use steps + limitations.
+ * Also displays test coverage info and links to source code and tests.
  */
 
 import React from 'react';
 import { View, Pressable, Platform } from 'react-native';
 import type { ViewStyle, TextStyle } from 'react-native';
 import { Text, useTheme } from '@coexist/wisp-react-native';
-import { ExternalLinkIcon } from '@/components/icons';
+import { ExternalLinkIcon, CheckCircleIcon, CodeIcon } from '@/components/icons';
 
 export type FeatureStatus = 'working' | 'beta' | 'coming-soon';
 
@@ -17,6 +18,13 @@ export interface SourceLink {
   /** Display label for the source link */
   label: string;
   /** Relative path from repo root (e.g. 'packages/umbra-core/src/crypto/encryption.rs') */
+  path: string;
+}
+
+export interface TestLink {
+  /** Display label for the test file */
+  label: string;
+  /** Relative path from repo root (e.g. '__tests__/hooks/useMessages.test.ts') */
   path: string;
 }
 
@@ -35,6 +43,8 @@ export interface FeatureCardProps {
   limitations?: string[];
   /** Links to source code in the repository */
   sourceLinks?: SourceLink[];
+  /** Links to test files in the repository */
+  testLinks?: TestLink[];
 }
 
 const REPO_BASE = 'https://github.com/InfamousVague/Umbra/blob/main';
@@ -62,6 +72,7 @@ export function FeatureCard({
   howTo,
   limitations,
   sourceLinks,
+  testLinks,
 }: FeatureCardProps) {
   const { theme, mode } = useTheme();
   const tc = theme.colors;
@@ -198,7 +209,8 @@ export function FeatureCard({
 
       {sourceLinks && sourceLinks.length > 0 && (
         <View style={styles.sourceRow}>
-          <ExternalLinkIcon size={10} color={tc.text.muted} />
+          <CodeIcon size={10} color={tc.text.muted} />
+          <Text style={{ fontSize: 10, color: tc.text.muted, marginRight: 2 }}>Source:</Text>
           {sourceLinks.map((link, i) => (
             <Pressable
               key={i}
@@ -210,6 +222,27 @@ export function FeatureCard({
               accessibilityLabel={`View source: ${link.label}`}
             >
               <Text style={styles.sourceLabel}>{link.label}</Text>
+            </Pressable>
+          ))}
+        </View>
+      )}
+
+      {testLinks && testLinks.length > 0 && (
+        <View style={styles.sourceRow}>
+          <CheckCircleIcon size={10} color="#22C55E" />
+          <Text style={{ fontSize: 10, color: tc.text.muted, marginRight: 2 }}>Tests:</Text>
+          {testLinks.map((link, i) => (
+            <Pressable
+              key={i}
+              onPress={() => openLink(link.path)}
+              style={({ pressed }) => [
+                styles.sourceChip,
+                { borderColor: '#22C55E40', backgroundColor: '#22C55E10' },
+                pressed && { opacity: 0.7 },
+              ]}
+              accessibilityLabel={`View test: ${link.label}`}
+            >
+              <Text style={[styles.sourceLabel, { color: '#22C55E' }]}>{link.label}</Text>
             </Pressable>
           ))}
         </View>

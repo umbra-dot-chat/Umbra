@@ -222,3 +222,109 @@ describe('Call event dispatch', () => {
     ]);
   });
 });
+
+describe('ICE candidate handling', () => {
+  test('ICE candidate with null sdpMid and sdpMLineIndex is valid', () => {
+    const candidate: CallIceCandidatePayload = {
+      callId: 'call-ice-1',
+      senderDid: 'did:key:z6MkTest',
+      candidate: 'candidate:0 1 UDP 2122252543 192.168.1.100 12345 typ host',
+      sdpMid: null,
+      sdpMLineIndex: null,
+    };
+
+    expect(candidate.candidate).toContain('candidate:');
+    expect(candidate.sdpMid).toBeNull();
+    expect(candidate.sdpMLineIndex).toBeNull();
+  });
+
+  test('ICE candidates should arrive before or after offer', () => {
+    // Simulate the race condition: candidates arriving before the offer is accepted
+    // In CallManager, they're queued in pendingCandidates[]
+    const candidates: CallIceCandidatePayload[] = [];
+
+    for (let i = 0; i < 5; i++) {
+      candidates.push({
+        callId: 'call-ice-race',
+        senderDid: 'did:key:z6MkTest',
+        candidate: `candidate:${i} 1 UDP ${2122252543 - i} 192.168.1.${100 + i} ${12345 + i} typ host`,
+        sdpMid: '0',
+        sdpMLineIndex: 0,
+      });
+    }
+
+    expect(candidates).toHaveLength(5);
+    // Each candidate should have a unique address
+    const addresses = candidates.map((c) => c.candidate);
+    const unique = new Set(addresses);
+    expect(unique.size).toBe(5);
+  });
+
+  test('CallStats has extended fields', () => {
+    const stats: import('@/types/call').CallStats = {
+      resolution: { width: 1280, height: 720 },
+      frameRate: 30,
+      bitrate: 2500,
+      packetLoss: 0.5,
+      codec: 'video/VP8',
+      roundTripTime: 45,
+      jitter: 2.3,
+      packetsLost: 12,
+      fractionLost: 0.005,
+      candidateType: 'srflx',
+      localCandidateType: 'host',
+      remoteCandidateType: 'srflx',
+      availableOutgoingBitrate: 3000,
+      audioLevel: 0.42,
+      framesDecoded: 1800,
+      framesDropped: 3,
+      audioBitrate: 32,
+    };
+
+    expect(stats.packetsLost).toBe(12);
+    expect(stats.fractionLost).toBe(0.005);
+    expect(stats.candidateType).toBe('srflx');
+    expect(stats.localCandidateType).toBe('host');
+    expect(stats.remoteCandidateType).toBe('srflx');
+    expect(stats.availableOutgoingBitrate).toBe(3000);
+    expect(stats.audioLevel).toBe(0.42);
+    expect(stats.framesDecoded).toBe(1800);
+    expect(stats.framesDropped).toBe(3);
+    expect(stats.audioBitrate).toBe(32);
+  });
+});
+
+describe('TURN credential resolution', () => {
+  test('TurnTestResult has required fields', () => {
+    const result: import('@/types/call').TurnTestResult = {
+      success: true,
+      rtt: 150,
+      candidateType: 'relay',
+    };
+    expect(result.success).toBe(true);
+    expect(result.rtt).toBe(150);
+    expect(result.candidateType).toBe('relay');
+  });
+
+  test('StunTestResult has required fields', () => {
+    const result: import('@/types/call').StunTestResult = {
+      success: true,
+      publicIp: '203.0.113.1',
+      rtt: 25,
+    };
+    expect(result.success).toBe(true);
+    expect(result.publicIp).toBe('203.0.113.1');
+    expect(result.rtt).toBe(25);
+  });
+
+  test('TurnTestResult supports error field', () => {
+    const result: import('@/types/call').TurnTestResult = {
+      success: false,
+      rtt: 0,
+      candidateType: '',
+      error: 'Timeout (10s)',
+    };
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('Timeout (10s)');
+  });
+});

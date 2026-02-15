@@ -35,6 +35,24 @@ jest.mock('@coexist/wisp-react-native', () => ({
     const { Text } = require('react-native');
     return <Text>0:00</Text>;
   },
+  CallControls: ({ isMuted, isVideoOff, onToggleMute, onToggleVideo, onEndCall, callType }: any) => {
+    const { View, Pressable, Text } = require('react-native');
+    return (
+      <View testID="CallControls">
+        <Pressable onPress={onToggleMute} accessibilityLabel={isMuted ? 'Unmute' : 'Mute'}>
+          <Text>{isMuted ? 'Unmute' : 'Mute'}</Text>
+        </Pressable>
+        {callType === 'video' && (
+          <Pressable onPress={onToggleVideo} accessibilityLabel={isVideoOff ? 'Turn on camera' : 'Turn off camera'}>
+            <Text>{isVideoOff ? 'Camera On' : 'Camera Off'}</Text>
+          </Pressable>
+        )}
+        <Pressable onPress={onEndCall} accessibilityLabel="End call">
+          <Text>End</Text>
+        </Pressable>
+      </View>
+    );
+  },
   useTheme: () => ({
     theme: {
       colors: {

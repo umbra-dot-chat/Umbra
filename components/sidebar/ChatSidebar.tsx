@@ -17,7 +17,7 @@ export interface ChatSidebarProps {
   search: string;
   onSearchChange: (s: string) => void;
   conversations: { id: string; name: string; last: string; time: string; unread: number; online?: boolean; pinned?: boolean; status?: string; group?: string[]; isGroup?: boolean }[];
-  activeId: string;
+  activeId: string | null;
   onSelectConversation: (id: string) => void;
   onOpenSettings: () => void;
   onFriendsPress: () => void;
@@ -57,8 +57,9 @@ function ChatSidebarInner({
 
   return (
       <Sidebar width="wide" style={{ paddingHorizontal: 8, paddingTop: 20 }}>
+        {/* Search bar */}
         <SidebarSection>
-          <View style={{ paddingHorizontal: 6, paddingBottom: 10, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <View style={{ paddingHorizontal: 6, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
             <View style={{ flex: 1 }}>
               <SearchInput
                 value={search}
@@ -66,23 +67,30 @@ function ChatSidebarInner({
                 placeholder="Search..."
                 size="md"
                 fullWidth
+                onSurface
                 onClear={() => onSearchChange('')}
               />
             </View>
             <Button
               variant="tertiary"
+              onSurface
               size="md"
               onPress={onOpenSettings}
               accessibilityLabel="Settings"
-              iconLeft={<SettingsIcon size={16} color={theme.colors.text.secondary} />}
+              iconLeft={<SettingsIcon size={16} color={theme.colors.text.onRaisedSecondary} />}
             />
           </View>
+        </SidebarSection>
+
+        {/* Navigation buttons */}
+        <SidebarSection style={{ marginTop: 12 }}>
           <View style={{ marginHorizontal: 6 }}>
             <Button
               variant={isFriendsActive ? 'secondary' : 'tertiary'}
+              onSurface
               size="md"
               fullWidth
-              iconLeft={<UsersIcon size={18} color={isFriendsActive ? theme.colors.text.primary : theme.colors.text.secondary} />}
+              iconLeft={<UsersIcon size={18} color={isFriendsActive ? theme.colors.text.onRaised : theme.colors.text.onRaisedSecondary} />}
               onPress={onFriendsPress}
               accessibilityLabel="Friends"
               style={{ justifyContent: 'flex-start' }}
@@ -94,9 +102,10 @@ function ChatSidebarInner({
             <View style={{ marginHorizontal: 6, marginTop: 2 }}>
               <Button
                 variant="tertiary"
+                onSurface
                 size="md"
                 fullWidth
-                iconLeft={<BookOpenIcon size={18} color={theme.colors.text.secondary} />}
+                iconLeft={<BookOpenIcon size={18} color={theme.colors.text.onRaisedSecondary} />}
                 onPress={onGuidePress}
                 accessibilityLabel="User Guide"
                 style={{ justifyContent: 'flex-start' }}
@@ -109,9 +118,10 @@ function ChatSidebarInner({
             <View style={{ marginHorizontal: 6, marginTop: 2 }}>
               <Button
                 variant="tertiary"
+                onSurface
                 size="md"
                 fullWidth
-                iconLeft={<ShoppingBagIcon size={18} color={theme.colors.text.secondary} />}
+                iconLeft={<ShoppingBagIcon size={18} color={theme.colors.text.onRaisedSecondary} />}
                 onPress={onMarketplacePress}
                 accessibilityLabel="Marketplace"
                 style={{ justifyContent: 'flex-start' }}
@@ -137,12 +147,12 @@ function ChatSidebarInner({
                   }}
                 >
                   <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                    <UsersIcon size={14} color={theme.colors.text.secondary} />
+                    <UsersIcon size={14} color={theme.colors.text.onRaisedSecondary} />
                     <View style={{ flex: 1 }}>
-                      <Text size="xs" weight="semibold" numberOfLines={1}>
+                      <Text size="xs" weight="semibold" style={{ color: theme.colors.text.onRaised }} numberOfLines={1}>
                         {invite.groupName}
                       </Text>
-                      <Text size="xs" style={{ color: theme.colors.text.muted }} numberOfLines={1}>
+                      <Text size="xs" style={{ color: theme.colors.text.onRaisedSecondary }} numberOfLines={1}>
                         from {invite.inviterName}
                       </Text>
                     </View>
@@ -152,7 +162,7 @@ function ChatSidebarInner({
                       variant="success"
                       size="xs"
                       fullWidth
-                      iconLeft={<CheckIcon size={12} color={theme.colors.text.primary} />}
+                      iconLeft={<CheckIcon size={12} color={theme.colors.text.inverse} />}
                       onPress={() => onAcceptInvite?.(invite.id)}
                     >
                       Accept
@@ -161,7 +171,7 @@ function ChatSidebarInner({
                       variant="secondary"
                       size="xs"
                       fullWidth
-                      iconLeft={<XIcon size={12} color={theme.colors.text.secondary} />}
+                      iconLeft={<XIcon size={12} color={theme.colors.text.onRaisedSecondary} />}
                       onPress={() => onDeclineInvite?.(invite.id)}
                     >
                       Decline
@@ -174,20 +184,21 @@ function ChatSidebarInner({
         )}
 
         <SlotRenderer slot="sidebar-section" />
-        <SidebarSection>
+        <SidebarSection style={{ marginTop: 12 }}>
           {/* Custom header row: "Conversations" title + inline + button */}
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, marginBottom: 8, zIndex: 200 }}>
-            <Text size="xs" weight="semibold" style={{ color: theme.colors.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+            <Text size="xs" weight="semibold" style={{ color: theme.colors.text.onRaisedSecondary, textTransform: 'uppercase', letterSpacing: 0.5 }}>
               Conversations
             </Text>
             {(onNewDm || onCreateGroup) && (
               <View style={{ position: 'relative', zIndex: 200 }}>
                 <Button
                   variant="tertiary"
+                  onSurface
                   size="xs"
                   onPress={handleToggleMenu}
                   accessibilityLabel="New conversation"
-                  iconLeft={<PlusIcon size={13} color={theme.colors.text.secondary} />}
+                  iconLeft={<PlusIcon size={13} color={theme.colors.text.onRaisedSecondary} />}
                   shape="pill"
                 />
 
@@ -215,13 +226,13 @@ function ChatSidebarInner({
                 onPress={() => onSelectConversation(c.id)}
                 avatar={
                   c.group ? (
-                    <AvatarGroup max={2} size="sm" spacing={10}>
+                    <AvatarGroup max={2} size="sm" spacing={10} onSurface>
                       {c.group.map((name) => (
                         <Avatar key={name} name={name} size="sm" />
                       ))}
                     </AvatarGroup>
                   ) : (
-                    <Avatar name={c.name} size="md" />
+                    <Avatar name={c.name} size="md" onSurface status={c.online ? 'online' : undefined} />
                   )
                 }
               />

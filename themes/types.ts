@@ -5,7 +5,7 @@
  * deep-merged onto the Wisp dark base palette via `createTheme()`.
  */
 
-import type { ThemeColors } from '@coexist/wisp-core/theme';
+import type { ThemeColors } from '@coexist/wisp-core';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DeepPartial utility

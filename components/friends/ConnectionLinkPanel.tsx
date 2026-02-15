@@ -162,7 +162,7 @@ export function ConnectionLinkPanel({ style }: ConnectionLinkPanelProps) {
                   style={{
                     flexDirection: 'row',
                     alignItems: 'center',
-                    backgroundColor: theme.colors.background.muted,
+                    backgroundColor: theme.colors.background.sunken,
                     borderRadius: 6,
                     padding: 8,
                     gap: 8,
@@ -201,7 +201,7 @@ export function ConnectionLinkPanel({ style }: ConnectionLinkPanelProps) {
                     style={{
                       flexDirection: 'row',
                       alignItems: 'center',
-                      backgroundColor: theme.colors.background.muted,
+                      backgroundColor: theme.colors.background.sunken,
                       borderRadius: 6,
                       padding: 8,
                       gap: 8,
@@ -259,7 +259,7 @@ export function ConnectionLinkPanel({ style }: ConnectionLinkPanelProps) {
             placeholderTextColor={theme.colors.text.muted}
             style={{
               flex: 1,
-              backgroundColor: theme.colors.background.muted,
+              backgroundColor: theme.colors.background.sunken,
               borderRadius: 6,
               padding: 10,
               fontSize: 13,
@@ -283,7 +283,7 @@ export function ConnectionLinkPanel({ style }: ConnectionLinkPanelProps) {
           <View
             style={{
               backgroundColor: parseResult.success
-                ? theme.colors.background.muted
+                ? theme.colors.background.sunken
                 : `${theme.colors.status.danger}15`,
               borderRadius: 6,
               padding: 12,

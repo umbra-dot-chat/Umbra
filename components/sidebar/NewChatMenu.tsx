@@ -94,24 +94,26 @@ export function NewChatMenu({ visible, onClose, onNewDm, onNewGroup }: NewChatMe
     >
       <Button
         variant="tertiary"
+        onSurface
         size="sm"
         onPress={handleNewDm}
-        iconLeft={<MessageIcon size={16} color={tc.text.secondary} />}
+        iconLeft={<MessageIcon size={16} color={tc.text.onRaisedSecondary} />}
         style={{ justifyContent: 'flex-start', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 0 }}
       >
-        <Text size="sm" weight="medium">New DM</Text>
+        <Text size="sm" weight="medium" style={{ color: tc.text.onRaised }}>New DM</Text>
       </Button>
 
       <View style={{ height: 1, backgroundColor: tc.border.strong }} />
 
       <Button
         variant="tertiary"
+        onSurface
         size="sm"
         onPress={handleNewGroup}
-        iconLeft={<UsersIcon size={16} color={tc.text.secondary} />}
+        iconLeft={<UsersIcon size={16} color={tc.text.onRaisedSecondary} />}
         style={{ justifyContent: 'flex-start', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 0 }}
       >
-        <Text size="sm" weight="medium">New Group</Text>
+        <Text size="sm" weight="medium" style={{ color: tc.text.onRaised }}>New Group</Text>
       </Button>
     </View>
   );
