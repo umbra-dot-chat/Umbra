@@ -87,7 +87,8 @@ pub async fn send_message(
         .map_err(|e| format!("Failed to get conversation: {}", e))?
         .ok_or("Conversation not found")?;
 
-    let friend_did = &conversation.friend_did;
+    let friend_did = conversation.friend_did.as_deref()
+        .ok_or("Conversation has no friend DID")?;
 
     // Look up the friend's encryption key
     let friend_record = database.get_friend(friend_did)

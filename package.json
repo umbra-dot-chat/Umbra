@@ -3,7 +3,7 @@
   "main": "expo-router/entry",
   "version": "1.1.0",
   "scripts": {
-    "postinstall": "./scripts/patch-wisp.sh",
+    "postinstall": "node scripts/postinstall.js",
     "patch": "./scripts/patch-wisp.sh",
     "start": "expo start",
     "android": "expo start --android",
