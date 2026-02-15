@@ -8,19 +8,21 @@
 set -euo pipefail
 
 UMBRA_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-WISP_DIR="$(cd "$UMBRA_DIR/../Wisp" && pwd)"
+WISP_DIR="$UMBRA_DIR/../Wisp"
+
+# Gracefully skip if Wisp repo isn't present (e.g. CI environment)
+if [ ! -d "$WISP_DIR/packages" ]; then
+  echo "Wisp repo not found at $WISP_DIR — skipping patch (CI mode)."
+  exit 0
+fi
+
+WISP_DIR="$(cd "$WISP_DIR" && pwd)"
 
 CORE_SRC="$WISP_DIR/packages/core"
 RN_SRC="$WISP_DIR/packages/react-native"
 
 CORE_DEST="$UMBRA_DIR/node_modules/@coexist/wisp-core"
 RN_DEST="$UMBRA_DIR/node_modules/@coexist/wisp-react-native"
-
-# Verify Wisp repo exists
-if [ ! -d "$WISP_DIR/packages" ]; then
-  echo "Error: Wisp repo not found at $WISP_DIR"
-  exit 1
-fi
 
 # Verify node_modules exists
 if [ ! -d "$UMBRA_DIR/node_modules" ]; then
