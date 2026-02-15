@@ -3,7 +3,7 @@ import { Platform } from 'react-native';
 import type { PlatformDownload, AppUpdateState } from '@/types/version';
 
 // Current app version from package.json / app.json
-const APP_VERSION = '1.1.0';
+const APP_VERSION = '1.1.1';
 
 const GITHUB_REPO = 'InfamousVague/Umbra';
 const GITHUB_API_URL = `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`;
