@@ -10,9 +10,38 @@ set -euo pipefail
 UMBRA_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 WISP_DIR="$UMBRA_DIR/../Wisp"
 
-# Gracefully skip if Wisp repo isn't present (e.g. CI environment)
+# If Wisp repo isn't present (CI), fix .mjs references in published packages
 if [ ! -d "$WISP_DIR/packages" ]; then
-  echo "Wisp repo not found at $WISP_DIR — skipping patch (CI mode)."
+  echo "Wisp repo not found — running CI fixup for published packages."
+
+  CORE_DEST="$UMBRA_DIR/node_modules/@coexist/wisp-core"
+  RN_DEST="$UMBRA_DIR/node_modules/@coexist/wisp-react-native"
+
+  # The published packages reference .mjs files that don't exist.
+  # Rewrite module/exports to use .js files instead.
+  for PKG_DIR in "$CORE_DEST" "$RN_DEST"; do
+    [ -f "$PKG_DIR/package.json" ] || continue
+    node -e "
+const fs = require('fs');
+const pkgPath = '$PKG_DIR/package.json';
+const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8'));
+// Fix main/module to point at .js instead of .mjs
+if (pkg.module) pkg.module = pkg.module.replace(/\\.mjs$/, '.js');
+if (pkg.exports) {
+  for (const [key, value] of Object.entries(pkg.exports)) {
+    if (typeof value === 'object') {
+      if (value.import) value.import = value.import.replace(/\\.mjs$/, '.js');
+    } else if (typeof value === 'string') {
+      pkg.exports[key] = value.replace(/\\.mjs$/, '.js');
+    }
+  }
+}
+fs.writeFileSync(pkgPath, JSON.stringify(pkg, null, 2) + '\n');
+"
+    echo "  Fixed $PKG_DIR/package.json"
+  done
+
+  echo "Done (CI fixup)."
   exit 0
 fi
 
