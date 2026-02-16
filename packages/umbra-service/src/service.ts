@@ -1,0 +1,872 @@
+/**
+ * Main Umbra Service class
+ *
+ * Provides a unified API for interacting with Umbra Core across all platforms.
+ * This is the main entry point that composes all domain modules.
+ *
+ * @packageDocumentation
+ */
+
+import {
+  initUmbraWasm,
+  getWasm,
+  isWasmReady,
+  eventBridge,
+} from '@umbra/wasm';
+import type { UmbraEvent } from '@umbra/wasm';
+
+import { ErrorCode, UmbraError } from './errors';
+import { snakeToCamel } from './helpers';
+import type {
+  InitConfig,
+  Identity,
+  PublicIdentity,
+  CreateIdentityResult,
+  ProfileUpdate,
+  NetworkStatus,
+  ConnectionInfo,
+  DiscoveryResult,
+  DiscoveryEvent,
+  FriendRequest,
+  Friend,
+  FriendEvent,
+  Message,
+  Conversation,
+  MessageReaction,
+  MessageEvent,
+  ChatMessagePayload,
+  Group,
+  GroupMember,
+  GroupEvent,
+  PendingGroupInvite,
+  GroupInvitePayload,
+  RelayStatus,
+  RelaySession,
+  RelayAcceptResult,
+  RelayEvent,
+} from './types';
+
+// Import domain modules
+import * as identity from './identity';
+import * as network from './network';
+import * as friends from './friends';
+import * as messaging from './messaging';
+import * as calling from './calling';
+import * as groups from './groups';
+import * as crypto from './crypto';
+import * as relay from './relay';
+
+/**
+ * Main Umbra Service class
+ *
+ * Provides a unified API for interacting with Umbra Core across all platforms.
+ * Methods delegate to WASM (web) or native (mobile) bindings.
+ */
+export class UmbraService {
+  private static _instance: UmbraService | null = null;
+  private static _initialized = false;
+
+  // Event listeners
+  private _discoveryListeners: Array<(event: DiscoveryEvent) => void> = [];
+  private _friendListeners: Array<(event: FriendEvent) => void> = [];
+  private _messageListeners: Array<(event: MessageEvent) => void> = [];
+  private _relayListeners: Array<(event: RelayEvent) => void> = [];
+  private _groupListeners: Array<(event: GroupEvent) => void> = [];
+  private _callListeners: Array<(event: any) => void> = [];
+  private _relayWsRef: WebSocket | null = null;
+
+  private constructor() {}
+
+  // ===========================================================================
+  // INITIALIZATION
+  // ===========================================================================
+
+  /**
+   * Initialize Umbra Service
+   *
+   * Loads the WASM module, initializes sql.js, and sets up the event bridge.
+   *
+   * @param config - Optional configuration
+   * @throws {UmbraError} If already initialized
+   */
+  static async initialize(config?: InitConfig): Promise<void> {
+    if (this._initialized && this._instance) {
+      // Already initialized — safe to return (handles HMR re-renders)
+      return;
+    }
+
+    // Load and initialize the WASM module (includes sql.js + DB schema init)
+    // Pass DID for IndexedDB persistence when available
+    const wasmModule = await initUmbraWasm(config?.did);
+
+    const instance = new UmbraService();
+
+    // Connect event bridge to dispatch events to our listeners
+    eventBridge.connect(wasmModule);
+    eventBridge.onAll((event: UmbraEvent) => {
+      instance._dispatchEvent(event);
+    });
+
+    this._instance = instance;
+    this._initialized = true;
+
+    console.log(
+      '[UmbraService] Initialized — WASM version:',
+      wasmModule.umbra_wasm_version()
+    );
+  }
+
+  /**
+   * Get the service instance
+   *
+   * @throws {UmbraError} If not initialized
+   */
+  static get instance(): UmbraService {
+    if (!this._initialized || !this._instance) {
+      throw new UmbraError(
+        ErrorCode.NotInitialized,
+        'UmbraService not initialized. Call UmbraService.initialize() first.'
+      );
+    }
+    return this._instance;
+  }
+
+  /**
+   * Check if the service is initialized
+   */
+  static get isInitialized(): boolean {
+    return this._initialized;
+  }
+
+  /**
+   * Shutdown the service
+   */
+  static async shutdown(): Promise<void> {
+    if (this._instance) {
+      eventBridge.clear();
+      this._instance = null;
+      this._initialized = false;
+    }
+  }
+
+  // ===========================================================================
+  // IDENTITY (delegated to identity module)
+  // ===========================================================================
+
+  createIdentity(displayName: string): Promise<CreateIdentityResult> {
+    return identity.createIdentity(displayName);
+  }
+
+  restoreIdentity(recoveryPhrase: string[], displayName: string): Promise<Identity> {
+    return identity.restoreIdentity(recoveryPhrase, displayName);
+  }
+
+  loadIdentity(): Promise<Identity | null> {
+    return identity.loadIdentity();
+  }
+
+  getIdentity(): Promise<Identity> {
+    return identity.getIdentity();
+  }
+
+  updateProfile(update: ProfileUpdate): Promise<void> {
+    return identity.updateProfile(update);
+  }
+
+  getPublicIdentity(): Promise<PublicIdentity> {
+    return identity.getPublicIdentity();
+  }
+
+  // ===========================================================================
+  // NETWORK & DISCOVERY (delegated to network module)
+  // ===========================================================================
+
+  startNetwork(): Promise<void> {
+    return network.startNetwork();
+  }
+
+  stopNetwork(): Promise<void> {
+    return network.stopNetwork();
+  }
+
+  createOffer(): Promise<string> {
+    return network.createOffer();
+  }
+
+  acceptOffer(offerJson: string): Promise<string> {
+    return network.acceptOffer(offerJson);
+  }
+
+  completeHandshake(answerJson: string): Promise<void> {
+    return network.completeHandshake(answerJson);
+  }
+
+  completeAnswerer(offererDid?: string, offererPeerId?: string): Promise<void> {
+    return network.completeAnswerer(offererDid, offererPeerId);
+  }
+
+  getNetworkStatus(): Promise<NetworkStatus> {
+    return network.getNetworkStatus();
+  }
+
+  lookupPeer(did: string): Promise<DiscoveryResult> {
+    return network.lookupPeer(did);
+  }
+
+  getConnectionInfo(): Promise<ConnectionInfo> {
+    return network.getConnectionInfo();
+  }
+
+  parseConnectionInfo(info: string): Promise<ConnectionInfo> {
+    return network.parseConnectionInfo(info);
+  }
+
+  connectDirect(info: ConnectionInfo): Promise<void> {
+    return network.connectDirect(info);
+  }
+
+  onDiscoveryEvent(callback: (event: DiscoveryEvent) => void): () => void {
+    this._discoveryListeners.push(callback);
+    return () => {
+      const index = this._discoveryListeners.indexOf(callback);
+      if (index !== -1) {
+        this._discoveryListeners.splice(index, 1);
+      }
+    };
+  }
+
+  // ===========================================================================
+  // FRIENDS (delegated to friends module)
+  // ===========================================================================
+
+  sendFriendRequest(
+    toDid: string,
+    message?: string,
+    relayWs?: WebSocket | null,
+    fromIdentity?: { did: string; displayName: string } | null
+  ): Promise<FriendRequest & { relayDelivered?: boolean }> {
+    return friends.sendFriendRequest(toDid, message, relayWs, fromIdentity);
+  }
+
+  getIncomingRequests(): Promise<FriendRequest[]> {
+    return friends.getIncomingRequests();
+  }
+
+  getOutgoingRequests(): Promise<FriendRequest[]> {
+    return friends.getOutgoingRequests();
+  }
+
+  acceptFriendRequest(
+    requestId: string,
+    relayWs?: WebSocket | null,
+    fromIdentity?: { did: string; displayName: string } | null
+  ): Promise<{ requestId: string; status: string; relayDelivered?: boolean }> {
+    return friends.acceptFriendRequest(requestId, relayWs, fromIdentity);
+  }
+
+  rejectFriendRequest(requestId: string): Promise<void> {
+    return friends.rejectFriendRequest(requestId);
+  }
+
+  getFriends(): Promise<Friend[]> {
+    return friends.getFriends();
+  }
+
+  removeFriend(did: string): Promise<boolean> {
+    return friends.removeFriend(did);
+  }
+
+  blockUser(did: string, reason?: string): Promise<void> {
+    return friends.blockUser(did, reason);
+  }
+
+  unblockUser(did: string): Promise<boolean> {
+    return friends.unblockUser(did);
+  }
+
+  storeIncomingRequest(request: FriendRequest): Promise<void> {
+    return friends.storeIncomingRequest(request);
+  }
+
+  processAcceptedFriendResponse(payload: {
+    fromDid: string;
+    fromDisplayName?: string;
+    fromSigningKey?: string;
+    fromEncryptionKey?: string;
+  }): Promise<void> {
+    return friends.processAcceptedFriendResponse(payload);
+  }
+
+  sendFriendAcceptAck(
+    accepterDid: string,
+    myDid: string,
+    relayWs?: WebSocket | null
+  ): Promise<void> {
+    return friends.sendFriendAcceptAck(accepterDid, myDid, relayWs);
+  }
+
+  onFriendEvent(callback: (event: FriendEvent) => void): () => void {
+    this._friendListeners.push(callback);
+    return () => {
+      const index = this._friendListeners.indexOf(callback);
+      if (index !== -1) {
+        this._friendListeners.splice(index, 1);
+      }
+    };
+  }
+
+  dispatchFriendEvent(event: FriendEvent): void {
+    for (const listener of this._friendListeners) {
+      try {
+        listener(event);
+      } catch (err) {
+        console.error('[UmbraService] Friend listener error:', err);
+      }
+    }
+  }
+
+  // ===========================================================================
+  // MESSAGING (delegated to messaging module)
+  // ===========================================================================
+
+  getConversations(): Promise<Conversation[]> {
+    return messaging.getConversations();
+  }
+
+  createDmConversation(friendDid: string): Promise<string> {
+    return messaging.createDmConversation(friendDid);
+  }
+
+  sendMessage(
+    conversationId: string,
+    text: string,
+    relayWs?: WebSocket | null
+  ): Promise<Message> {
+    return messaging.sendMessage(conversationId, text, relayWs);
+  }
+
+  getMessages(
+    conversationId: string,
+    options?: { offset?: number; limit?: number }
+  ): Promise<Message[]> {
+    return messaging.getMessages(conversationId, options);
+  }
+
+  markAsRead(conversationId: string): Promise<number> {
+    return messaging.markAsRead(conversationId);
+  }
+
+  editMessage(messageId: string, newText: string): Promise<Message> {
+    return messaging.editMessage(messageId, newText);
+  }
+
+  deleteMessage(messageId: string): Promise<void> {
+    return messaging.deleteMessage(messageId);
+  }
+
+  pinMessage(messageId: string): Promise<Message> {
+    return messaging.pinMessage(messageId);
+  }
+
+  unpinMessage(messageId: string): Promise<void> {
+    return messaging.unpinMessage(messageId);
+  }
+
+  addReaction(messageId: string, emoji: string): Promise<MessageReaction[]> {
+    return messaging.addReaction(messageId, emoji);
+  }
+
+  removeReaction(messageId: string, emoji: string): Promise<MessageReaction[]> {
+    return messaging.removeReaction(messageId, emoji);
+  }
+
+  forwardMessage(messageId: string, targetConversationId: string): Promise<Message> {
+    return messaging.forwardMessage(messageId, targetConversationId);
+  }
+
+  getThreadReplies(parentId: string): Promise<Message[]> {
+    return messaging.getThreadReplies(parentId);
+  }
+
+  sendThreadReply(
+    parentId: string,
+    text: string,
+    relayWs?: WebSocket | null
+  ): Promise<Message> {
+    return messaging.sendThreadReply(parentId, text, relayWs);
+  }
+
+  getPinnedMessages(conversationId: string): Promise<Message[]> {
+    return messaging.getPinnedMessages(conversationId);
+  }
+
+  sendTypingIndicator(
+    conversationId: string,
+    recipientDid: string,
+    senderDid: string,
+    senderName: string,
+    isTyping: boolean,
+    relayWs?: WebSocket | null
+  ): Promise<void> {
+    return messaging.sendTypingIndicator(
+      conversationId,
+      recipientDid,
+      senderDid,
+      senderName,
+      isTyping,
+      relayWs
+    );
+  }
+
+  storeIncomingMessage(payload: ChatMessagePayload): Promise<void> {
+    return messaging.storeIncomingMessage(payload);
+  }
+
+  decryptIncomingMessage(payload: ChatMessagePayload): Promise<string | null> {
+    return messaging.decryptIncomingMessage(payload);
+  }
+
+  updateMessageStatus(messageId: string, status: 'sent' | 'delivered' | 'read'): Promise<void> {
+    return messaging.updateMessageStatus(messageId, status);
+  }
+
+  sendDeliveryReceipt(
+    messageId: string,
+    conversationId: string,
+    senderDid: string,
+    status: 'delivered' | 'read',
+    relayWs?: WebSocket | null
+  ): Promise<void> {
+    return messaging.sendDeliveryReceipt(messageId, conversationId, senderDid, status, relayWs);
+  }
+
+  onMessageEvent(callback: (event: MessageEvent) => void): () => void {
+    this._messageListeners.push(callback);
+    return () => {
+      const index = this._messageListeners.indexOf(callback);
+      if (index !== -1) {
+        this._messageListeners.splice(index, 1);
+      }
+    };
+  }
+
+  dispatchMessageEvent(event: MessageEvent): void {
+    for (const listener of this._messageListeners) {
+      try {
+        listener(event);
+      } catch (err) {
+        console.error('[UmbraService] Message listener error:', err);
+      }
+    }
+  }
+
+  // ===========================================================================
+  // CALLING (delegated to calling module)
+  // ===========================================================================
+
+  storeCallRecord(
+    id: string,
+    conversationId: string,
+    callType: string,
+    direction: string,
+    participants: string[]
+  ): Promise<{ id: string; startedAt: number }> {
+    return calling.storeCallRecord(id, conversationId, callType, direction, participants);
+  }
+
+  endCallRecord(
+    callId: string,
+    status: string
+  ): Promise<{ id: string; endedAt: number; durationMs: number }> {
+    return calling.endCallRecord(callId, status);
+  }
+
+  getCallHistory(conversationId: string, limit?: number, offset?: number): Promise<any[]> {
+    return calling.getCallHistory(conversationId, limit, offset);
+  }
+
+  getAllCallHistory(limit?: number, offset?: number): Promise<any[]> {
+    return calling.getAllCallHistory(limit, offset);
+  }
+
+  onCallEvent(callback: (event: any) => void): () => void {
+    this._callListeners.push(callback);
+    return () => {
+      const index = this._callListeners.indexOf(callback);
+      if (index !== -1) {
+        this._callListeners.splice(index, 1);
+      }
+    };
+  }
+
+  dispatchCallEvent(event: any): void {
+    for (const listener of this._callListeners) {
+      try {
+        listener(event);
+      } catch (err) {
+        console.error('[UmbraService] Call listener error:', err);
+      }
+    }
+  }
+
+  setRelayWs(ws: WebSocket | null): void {
+    this._relayWsRef = ws;
+  }
+
+  sendCallSignal(toDid: string, relayMessage: string): void {
+    if (this._relayWsRef && this._relayWsRef.readyState === WebSocket.OPEN) {
+      this._relayWsRef.send(relayMessage);
+    } else {
+      console.warn('[UmbraService] Cannot send call signal: relay not connected');
+    }
+  }
+
+  createCallRoom(groupId: string): void {
+    if (this._relayWsRef && this._relayWsRef.readyState === WebSocket.OPEN) {
+      this._relayWsRef.send(JSON.stringify({ type: 'create_call_room', group_id: groupId }));
+    } else {
+      console.warn('[UmbraService] Cannot create call room: relay not connected');
+    }
+  }
+
+  joinCallRoom(roomId: string): void {
+    if (this._relayWsRef && this._relayWsRef.readyState === WebSocket.OPEN) {
+      this._relayWsRef.send(JSON.stringify({ type: 'join_call_room', room_id: roomId }));
+    } else {
+      console.warn('[UmbraService] Cannot join call room: relay not connected');
+    }
+  }
+
+  leaveCallRoom(roomId: string): void {
+    if (this._relayWsRef && this._relayWsRef.readyState === WebSocket.OPEN) {
+      this._relayWsRef.send(JSON.stringify({ type: 'leave_call_room', room_id: roomId }));
+    } else {
+      console.warn('[UmbraService] Cannot leave call room: relay not connected');
+    }
+  }
+
+  sendCallRoomSignal(roomId: string, toDid: string, payload: string): void {
+    if (this._relayWsRef && this._relayWsRef.readyState === WebSocket.OPEN) {
+      this._relayWsRef.send(JSON.stringify({ type: 'call_signal', room_id: roomId, to_did: toDid, payload }));
+    } else {
+      console.warn('[UmbraService] Cannot send call room signal: relay not connected');
+    }
+  }
+
+  // ===========================================================================
+  // GROUPS (delegated to groups module)
+  // ===========================================================================
+
+  createGroup(name: string, description?: string): Promise<{ groupId: string; conversationId: string }> {
+    return groups.createGroup(name, description);
+  }
+
+  getGroup(groupId: string): Promise<Group> {
+    return groups.getGroup(groupId);
+  }
+
+  getGroups(): Promise<Group[]> {
+    return groups.getGroups();
+  }
+
+  updateGroup(groupId: string, name: string, description?: string): Promise<void> {
+    return groups.updateGroup(groupId, name, description);
+  }
+
+  deleteGroup(groupId: string): Promise<void> {
+    return groups.deleteGroup(groupId);
+  }
+
+  addGroupMember(groupId: string, did: string, displayName?: string): Promise<void> {
+    return groups.addGroupMember(groupId, did, displayName);
+  }
+
+  removeGroupMember(groupId: string, did: string): Promise<void> {
+    return groups.removeGroupMember(groupId, did);
+  }
+
+  getGroupMembers(groupId: string): Promise<GroupMember[]> {
+    return groups.getGroupMembers(groupId);
+  }
+
+  generateGroupKey(groupId: string): Promise<{ groupId: string; keyVersion: number }> {
+    return groups.generateGroupKey(groupId);
+  }
+
+  rotateGroupKey(groupId: string): Promise<{ groupId: string; keyVersion: number }> {
+    return groups.rotateGroupKey(groupId);
+  }
+
+  importGroupKey(
+    encryptedKey: string,
+    nonce: string,
+    senderDid: string,
+    groupId: string,
+    keyVersion: number
+  ): Promise<void> {
+    return groups.importGroupKey(encryptedKey, nonce, senderDid, groupId, keyVersion);
+  }
+
+  encryptGroupKeyForMember(
+    groupId: string,
+    memberDid: string,
+    keyVersion: number
+  ): Promise<{ encryptedKey: string; nonce: string }> {
+    return groups.encryptGroupKeyForMember(groupId, memberDid, keyVersion);
+  }
+
+  encryptGroupMessage(
+    groupId: string,
+    plaintext: string
+  ): Promise<{ ciphertext: string; nonce: string; keyVersion: number }> {
+    return groups.encryptGroupMessage(groupId, plaintext);
+  }
+
+  decryptGroupMessage(
+    groupId: string,
+    ciphertext: string,
+    nonce: string,
+    keyVersion: number
+  ): Promise<string> {
+    return groups.decryptGroupMessage(groupId, ciphertext, nonce, keyVersion);
+  }
+
+  sendGroupInvite(groupId: string, memberDid: string, relayWs?: WebSocket | null): Promise<void> {
+    return groups.sendGroupInvite(groupId, memberDid, relayWs);
+  }
+
+  storeGroupInvite(payload: GroupInvitePayload): Promise<void> {
+    return groups.storeGroupInvite(payload);
+  }
+
+  getPendingGroupInvites(): Promise<PendingGroupInvite[]> {
+    return groups.getPendingGroupInvites();
+  }
+
+  acceptGroupInvite(
+    inviteId: string,
+    relayWs?: WebSocket | null
+  ): Promise<{ groupId: string; conversationId: string }> {
+    return groups.acceptGroupInvite(inviteId, relayWs);
+  }
+
+  declineGroupInvite(inviteId: string, relayWs?: WebSocket | null): Promise<void> {
+    return groups.declineGroupInvite(inviteId, relayWs);
+  }
+
+  sendGroupMessage(
+    groupId: string,
+    conversationId: string,
+    text: string,
+    relayWs?: WebSocket | null
+  ): Promise<Message> {
+    return groups.sendGroupMessage(groupId, conversationId, text, relayWs);
+  }
+
+  removeGroupMemberWithRotation(
+    groupId: string,
+    memberDid: string,
+    relayWs?: WebSocket | null
+  ): Promise<void> {
+    return groups.removeGroupMemberWithRotation(groupId, memberDid, relayWs);
+  }
+
+  onGroupEvent(callback: (event: GroupEvent) => void): () => void {
+    this._groupListeners.push(callback);
+    return () => {
+      const index = this._groupListeners.indexOf(callback);
+      if (index !== -1) {
+        this._groupListeners.splice(index, 1);
+      }
+    };
+  }
+
+  dispatchGroupEvent(event: GroupEvent): void {
+    for (const listener of this._groupListeners) {
+      try {
+        listener(event);
+      } catch (err) {
+        console.error('[UmbraService] Group listener error:', err);
+      }
+    }
+  }
+
+  // ===========================================================================
+  // CRYPTO (delegated to crypto module)
+  // ===========================================================================
+
+  sign(data: Uint8Array): Promise<Uint8Array> {
+    return crypto.sign(data);
+  }
+
+  verify(publicKeyHex: string, data: Uint8Array, signature: Uint8Array): Promise<boolean> {
+    return crypto.verify(publicKeyHex, data, signature);
+  }
+
+  // ===========================================================================
+  // RELAY (delegated to relay module)
+  // ===========================================================================
+
+  connectRelay(relayUrl: string): Promise<RelayStatus & { registerMessage: string }> {
+    return relay.connectRelay(relayUrl);
+  }
+
+  disconnectRelay(): Promise<void> {
+    return relay.disconnectRelay();
+  }
+
+  createOfferSession(relayUrl: string): Promise<RelaySession> {
+    return relay.createOfferSession(relayUrl);
+  }
+
+  acceptSession(sessionId: string, offerPayload: string): Promise<RelayAcceptResult> {
+    return relay.acceptSession(sessionId, offerPayload);
+  }
+
+  relaySend(toDid: string, payload: string): Promise<{ relayMessage: string }> {
+    return relay.relaySend(toDid, payload);
+  }
+
+  relayFetchOffline(): Promise<string> {
+    return relay.relayFetchOffline();
+  }
+
+  onRelayEvent(callback: (event: RelayEvent) => void): () => void {
+    this._relayListeners.push(callback);
+    return () => {
+      const index = this._relayListeners.indexOf(callback);
+      if (index !== -1) {
+        this._relayListeners.splice(index, 1);
+      }
+    };
+  }
+
+  // ===========================================================================
+  // UTILITIES
+  // ===========================================================================
+
+  /**
+   * Get WASM module version
+   */
+  static getVersion(): string {
+    if (!isWasmReady()) return 'not loaded';
+    return getWasm()!.umbra_wasm_version();
+  }
+
+  /**
+   * Validate a recovery phrase
+   *
+   * Checks if the phrase has valid words and checksum.
+   *
+   * @param phrase - Recovery phrase (space-separated or array)
+   * @returns True if valid
+   */
+  static validateRecoveryPhrase(phrase: string | string[]): boolean {
+    const words = Array.isArray(phrase) ? phrase : phrase.split(' ');
+    if (words.length !== 24) {
+      return false;
+    }
+    // TODO: call WASM validation when available
+    return true;
+  }
+
+  /**
+   * Get word suggestions for recovery phrase input
+   *
+   * @param _prefix - Partial word typed by user
+   * @returns Matching BIP39 words
+   */
+  static suggestRecoveryWords(_prefix: string): string[] {
+    // TODO: call WASM suggestion when available
+    return [];
+  }
+
+  // ===========================================================================
+  // INTERNAL: Event Dispatch
+  // ===========================================================================
+
+  /**
+   * Dispatch a WASM event to registered listeners.
+   *
+   * Called by the event bridge when Rust emits an event.
+   */
+  private _dispatchEvent(event: UmbraEvent): void {
+    const { domain, data } = event;
+    const camelData = snakeToCamel(data) as Record<string, unknown>;
+
+    switch (domain) {
+      case 'message': {
+        // Transform message events from WASM: the Rust side sends `content`
+        // as a plain string, but the TypeScript Message type expects
+        // `content: { type: 'text', text: string }`.
+        const msgData = camelData as Record<string, unknown>;
+        if (
+          (msgData.type === 'messageSent' || msgData.type === 'messageReceived') &&
+          msgData.message &&
+          typeof msgData.message === 'object'
+        ) {
+          const msg = msgData.message as Record<string, unknown>;
+          if (typeof msg.content === 'string') {
+            msg.content = { type: 'text', text: msg.content };
+          } else if (!msg.content) {
+            msg.content = { type: 'text', text: '' };
+          }
+          // Ensure required fields
+          if (msg.status === undefined) {
+            msg.status = msgData.type === 'messageSent' ? 'sent' : 'delivered';
+          }
+        }
+
+        for (const listener of this._messageListeners) {
+          try {
+            listener(camelData as unknown as MessageEvent);
+          } catch (err) {
+            console.error('[UmbraService] Message listener error:', err);
+          }
+        }
+        break;
+      }
+
+      case 'friend':
+        for (const listener of this._friendListeners) {
+          try {
+            listener(camelData as unknown as FriendEvent);
+          } catch (err) {
+            console.error('[UmbraService] Friend listener error:', err);
+          }
+        }
+        break;
+
+      case 'discovery':
+      case 'network':
+        for (const listener of this._discoveryListeners) {
+          try {
+            listener(camelData as unknown as DiscoveryEvent);
+          } catch (err) {
+            console.error('[UmbraService] Discovery listener error:', err);
+          }
+        }
+        break;
+
+      case 'relay':
+        for (const listener of this._relayListeners) {
+          try {
+            listener(camelData as unknown as RelayEvent);
+          } catch (err) {
+            console.error('[UmbraService] Relay listener error:', err);
+          }
+        }
+        break;
+
+      case 'group':
+        for (const listener of this._groupListeners) {
+          try {
+            listener(camelData as unknown as GroupEvent);
+          } catch (err) {
+            console.error('[UmbraService] Group listener error:', err);
+          }
+        }
+        break;
+    }
+  }
+}
