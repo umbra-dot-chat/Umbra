@@ -185,6 +185,7 @@ export interface FriendSectionProps {
   count?: number;
   emptyMessage?: string;
   defaultCollapsed?: boolean;
+  headerRight?: React.ReactNode;
   children?: React.ReactNode;
 }
 
@@ -193,6 +194,7 @@ export function FriendSection({
   count,
   emptyMessage,
   defaultCollapsed = false,
+  headerRight,
   children,
 }: FriendSectionProps) {
   const { theme } = useTheme();
@@ -205,22 +207,25 @@ export function FriendSection({
   return (
     <View style={{ marginBottom: 12 }}>
       {/* Section header — matches wisp MemberList chevron + label pattern */}
-      <Button
-        variant="tertiary"
-        size="xs"
-        onPress={() => setCollapsed(!collapsed)}
-        accessibilityLabel={`${headerText}, ${collapsed ? 'collapsed' : 'expanded'}`}
-        iconLeft={
-          collapsed
-            ? <ChevronRightIcon size={12} color={tc.text.muted} />
-            : <ChevronDownIcon size={12} color={tc.text.muted} />
-        }
-        style={{ justifyContent: 'flex-start', paddingHorizontal: 4, marginBottom: 2 }}
-      >
-        <Text size="xs" weight="semibold" style={{ textTransform: 'uppercase', letterSpacing: 0.6, color: tc.text.muted }}>
-          {headerText}
-        </Text>
-      </Button>
+      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+        <Button
+          variant="tertiary"
+          size="xs"
+          onPress={() => setCollapsed(!collapsed)}
+          accessibilityLabel={`${headerText}, ${collapsed ? 'collapsed' : 'expanded'}`}
+          iconLeft={
+            collapsed
+              ? <ChevronRightIcon size={12} color={tc.text.muted} />
+              : <ChevronDownIcon size={12} color={tc.text.muted} />
+          }
+          style={{ justifyContent: 'flex-start', paddingHorizontal: 4, marginBottom: 2 }}
+        >
+          <Text size="xs" weight="semibold" style={{ textTransform: 'uppercase', letterSpacing: 0.6, color: tc.text.muted }}>
+            {headerText}
+          </Text>
+        </Button>
+        {headerRight && <View style={{ marginLeft: 4 }}>{headerRight}</View>}
+      </View>
 
       {/* Body */}
       {!collapsed && (

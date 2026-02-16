@@ -6,7 +6,8 @@
  * popover state, ensuring correct viewport-relative positioning.
  *
  * Features:
- * - Priority-based pulsing animation (only one pulses at a time)
+ * - Ghost HotspotIndicator-style glow + pulse animation
+ * - Priority-based animation (only one pulses at a time)
  * - Persistent viewed state via HelpContext
  * - Root-level popup anchored near the click point
  * - Muted appearance after viewed
@@ -27,7 +28,10 @@ import React, { useEffect, useRef, useCallback } from 'react';
 import {
   Pressable,
   Animated,
+  Easing,
+  Platform,
   Text as RNText,
+  View,
 } from 'react-native';
 import type { ViewStyle, GestureResponderEvent } from 'react-native';
 import { useTheme } from '@coexist/wisp-react-native';
@@ -70,7 +74,10 @@ export function HelpIndicator({
   const { theme } = useTheme();
   const tc = theme.colors;
   const { registerHint, unregisterHint, isActive, isViewed, openPopover } = useHelp();
-  const pulseAnim = useRef(new Animated.Value(1)).current;
+
+  // Ghost HotspotIndicator-style animations: gentle scale + glow opacity
+  const scaleAnim = useRef(new Animated.Value(1)).current;
+  const glowAnim = useRef(new Animated.Value(0)).current;
 
   const active = isActive(id);
   const viewed = isViewed(id);
@@ -81,29 +88,48 @@ export function HelpIndicator({
     return () => unregisterHint(id);
   }, [id, priority, registerHint, unregisterHint]);
 
-  // Pulse animation when active
+  // Ghost HotspotIndicator-style animation: gentle scale + glow pulse
   useEffect(() => {
     if (active && !viewed) {
       const pulse = Animated.loop(
         Animated.sequence([
-          Animated.timing(pulseAnim, {
-            toValue: 1.3,
-            duration: 800,
-            useNativeDriver: true,
-          }),
-          Animated.timing(pulseAnim, {
-            toValue: 1,
-            duration: 800,
-            useNativeDriver: true,
-          }),
+          Animated.parallel([
+            Animated.timing(scaleAnim, {
+              toValue: 1.15,
+              duration: 600,
+              easing: Easing.inOut(Easing.ease),
+              useNativeDriver: true,
+            }),
+            Animated.timing(glowAnim, {
+              toValue: 0.6,
+              duration: 600,
+              easing: Easing.inOut(Easing.ease),
+              useNativeDriver: true,
+            }),
+          ]),
+          Animated.parallel([
+            Animated.timing(scaleAnim, {
+              toValue: 1,
+              duration: 600,
+              easing: Easing.inOut(Easing.ease),
+              useNativeDriver: true,
+            }),
+            Animated.timing(glowAnim, {
+              toValue: 0,
+              duration: 600,
+              easing: Easing.inOut(Easing.ease),
+              useNativeDriver: true,
+            }),
+          ]),
         ])
       );
       pulse.start();
       return () => pulse.stop();
     } else {
-      pulseAnim.setValue(1);
+      scaleAnim.setValue(1);
+      glowAnim.setValue(0);
     }
-  }, [active, viewed, pulseAnim]);
+  }, [active, viewed, scaleAnim, glowAnim]);
 
   const handlePress = useCallback((e: GestureResponderEvent) => {
     const x = e.nativeEvent?.pageX ?? 0;
@@ -117,61 +143,83 @@ export function HelpIndicator({
     });
   }, [title, icon, children, openPopover, id]);
 
-  // Colors
+  // Accent color for the indicator
+  const accentColor = '#A78BFA';
+
+  // Colors — boosted contrast for visibility
   const iconColor = viewed
-    ? tc.text.muted
+    ? tc.text.secondary
     : active
-      ? tc.accent.primary
-      : tc.text.secondary;
+      ? '#FFFFFF'
+      : tc.text.primary;
 
   const iconBg = viewed
-    ? tc.background.sunken
+    ? tc.background.raised
     : active
-      ? tc.accent.primary + '18'
-      : tc.background.sunken;
+      ? accentColor
+      : tc.background.raised;
 
-  const iconOpacity = viewed ? 0.6 : 1;
+  const borderColor = viewed
+    ? tc.border.default
+    : active
+      ? accentColor
+      : tc.border.strong;
+
+  const iconOpacity = viewed ? 0.5 : 1;
 
   return (
-    <Animated.View
-      style={[
-        {
-          transform: active && !viewed ? [{ scale: pulseAnim }] : [],
-          opacity: iconOpacity,
-        },
-        style,
-      ]}
-    >
-      <Pressable
-        onPress={handlePress}
-        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        style={({ pressed }) => ({
-          width: size,
-          height: size,
-          borderRadius: size / 2,
-          backgroundColor: pressed ? tc.accent.primary + '30' : iconBg,
-          alignItems: 'center',
-          justifyContent: 'center',
-          borderWidth: 1,
-          borderColor: viewed
-            ? 'transparent'
-            : active
-              ? tc.accent.primary + '40'
-              : 'transparent',
-        })}
-      >
-        <RNText
+    <View style={[{ alignItems: 'center', justifyContent: 'center' }, style]}>
+      {/* Glow ring (Ghost HotspotIndicator style) */}
+      {active && !viewed && (
+        <Animated.View
           style={{
-            fontSize: size * 0.55,
-            fontWeight: '700',
-            color: iconColor,
-            lineHeight: size * 0.7,
-            textAlign: 'center',
+            position: 'absolute',
+            width: size,
+            height: size,
+            borderRadius: size / 2,
+            backgroundColor: accentColor,
+            opacity: glowAnim,
+            transform: [{ scale: 1.8 }],
           }}
+        />
+      )}
+      <Animated.View
+        style={{
+          transform: active && !viewed ? [{ scale: scaleAnim }] : [],
+          opacity: iconOpacity,
+          ...(active && !viewed && Platform.OS === 'web' ? {
+            // @ts-ignore — web-only boxShadow
+            boxShadow: `0 0 ${size * 0.6}px ${accentColor}`,
+          } : {}),
+        }}
+      >
+        <Pressable
+          onPress={handlePress}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          style={({ pressed }) => ({
+            width: size,
+            height: size,
+            borderRadius: size / 2,
+            backgroundColor: pressed ? accentColor + '50' : iconBg,
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderWidth: 1,
+            borderColor: pressed ? accentColor : borderColor,
+          })}
         >
-          {icon}
-        </RNText>
-      </Pressable>
-    </Animated.View>
+          <RNText
+            style={{
+              fontSize: size * 0.55,
+              fontWeight: '700',
+              color: iconColor,
+              lineHeight: size * 0.7,
+              textAlign: 'center',
+            }}
+          >
+            {icon}
+          </RNText>
+        </Pressable>
+      </Animated.View>
+    </View>
   );
 }

@@ -160,6 +160,7 @@ export function CreateGroupDialog({ open, onClose, onCreated }: CreateGroupDialo
               value={name}
               onChangeText={setName}
               placeholder="Enter group name..."
+              style={{ width: '100%' }}
             />
           </VStack>
 
@@ -170,6 +171,7 @@ export function CreateGroupDialog({ open, onClose, onCreated }: CreateGroupDialo
               onChangeText={setDescription}
               placeholder="What's this group about?"
               numberOfLines={2}
+              style={{ width: '100%' }}
             />
           </VStack>
 

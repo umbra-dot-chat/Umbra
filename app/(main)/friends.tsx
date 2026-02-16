@@ -317,27 +317,27 @@ export default function FriendsPage() {
               style={{ marginBottom: 16 }}
             />
 
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-              <HelpIndicator
-                id="pending-requests"
-                title="Friend Requests"
-                priority={30}
-                size={14}
-              >
-                <HelpText>
-                  Incoming requests are from people who want to connect with you. You can accept or decline each one.
-                </HelpText>
-                <HelpHighlight icon={<UserCheckIcon size={22} color="#6366f1" />}>
-                  Accepting a request creates an encrypted conversation between you and your new friend.
-                </HelpHighlight>
-                <HelpListItem>Outgoing requests are ones you've sent to others</HelpListItem>
-                <HelpListItem>Requests include the sender's public keys for verification</HelpListItem>
-              </HelpIndicator>
-            </View>
             <FriendSection
               title="Incoming"
               count={incomingRequests.length}
               emptyMessage="No incoming requests."
+              headerRight={
+                <HelpIndicator
+                  id="pending-requests"
+                  title="Friend Requests"
+                  priority={30}
+                  size={14}
+                >
+                  <HelpText>
+                    Incoming requests are from people who want to connect with you. You can accept or decline each one.
+                  </HelpText>
+                  <HelpHighlight icon={<UserCheckIcon size={22} color="#6366f1" />}>
+                    Accepting a request creates an encrypted conversation between you and your new friend.
+                  </HelpHighlight>
+                  <HelpListItem>Outgoing requests are ones you've sent to others</HelpListItem>
+                  <HelpListItem>Requests include the sender's public keys for verification</HelpListItem>
+                </HelpIndicator>
+              }
             >
               {incomingRequests.map(renderIncomingRequest)}
             </FriendSection>
