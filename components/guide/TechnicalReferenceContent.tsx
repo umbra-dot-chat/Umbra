@@ -5,7 +5,7 @@
  */
 
 import React from 'react';
-import { View, Pressable, Platform } from 'react-native';
+import { View, Pressable, Linking } from 'react-native';
 import { Text, useTheme } from '@coexist/wisp-react-native';
 
 import { FeatureCard } from '@/components/guide/FeatureCard';
@@ -21,9 +21,7 @@ function SourceLink({ label, path }: { label: string; path: string }) {
   const { theme } = useTheme();
 
   const openLink = () => {
-    if (Platform.OS === 'web' && typeof window !== 'undefined') {
-      window.open(`${REPO_BASE}/${path}`, '_blank');
-    }
+    Linking.openURL(`${REPO_BASE}/${path}`).catch(() => {});
   };
 
   return (
@@ -35,10 +33,11 @@ function SourceLink({ label, path }: { label: string; path: string }) {
         gap: 4,
         paddingHorizontal: 8,
         paddingVertical: 4,
-        backgroundColor: theme.colors.background.sunken,
+        backgroundColor: theme.colors.background.raised,
         borderRadius: 6,
         borderWidth: 1,
         borderColor: theme.colors.border.subtle,
+        cursor: 'pointer',
       }}
     >
       <ExternalLinkIcon size={10} color={theme.colors.status.info} />

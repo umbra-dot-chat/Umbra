@@ -7,7 +7,7 @@
  */
 
 import React from 'react';
-import { View, Pressable, Platform } from 'react-native';
+import { View, Pressable, Linking } from 'react-native';
 import type { ViewStyle, TextStyle } from 'react-native';
 import { Text, useTheme } from '@coexist/wisp-react-native';
 import { ExternalLinkIcon, CheckCircleIcon, CodeIcon } from '@/components/icons';
@@ -59,9 +59,7 @@ const STATUS_CONFIG_KEYS: Record<FeatureStatus, { label: string; tokenKey: 'succ
 
 function openLink(path: string) {
   const url = `${REPO_BASE}/${path}`;
-  if (Platform.OS === 'web' && typeof window !== 'undefined') {
-    window.open(url, '_blank');
-  }
+  Linking.openURL(url).catch(() => {});
 }
 
 export function FeatureCard({
@@ -158,9 +156,10 @@ export function FeatureCard({
         paddingHorizontal: 8,
         paddingVertical: 3,
         borderRadius: 6,
-        backgroundColor: tc.background.sunken,
+        backgroundColor: tc.background.raised,
         borderWidth: 1,
         borderColor: tc.border.subtle,
+        cursor: 'pointer',
       } as ViewStyle,
       sourceLabel: {
         fontSize: 11,

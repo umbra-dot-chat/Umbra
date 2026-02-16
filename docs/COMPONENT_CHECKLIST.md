@@ -13,8 +13,8 @@
 | # | Component | Description | Status |
 |---|-----------|-------------|--------|
 | 1.1 | **CommunityCreateDialog** | Dialog with name, description, optional icon upload. Calls `community_create`. | ✅ |
-| 1.2 | **CommunitySidebar** | Sidebar showing spaces as collapsible sections, channels within each space. Active channel highlight. | ⬜ |
-| 1.3 | **ChannelHeader** | Top bar for active channel — channel name, topic, settings cog icon, E2EE indicator. | ⬜ |
+| 1.2 | **CommunitySidebar** | Sidebar showing spaces as collapsible sections, channels within each space. Active channel highlight. | ✅ |
+| 1.3 | **ChannelHeader** | Top bar for active channel — channel name, topic, settings cog icon, E2EE indicator. | ✅ |
 | 1.4 | **MemberListPanel** | Right-side panel listing members grouped by hoisted roles with role colors. Online status dots. | ⬜ |
 | 1.5 | **RoleManagementPanel** | Admin panel to create/edit roles, set colors, drag-to-reorder hierarchy, permission checkbox grid. | ⬜ |
 | 1.6 | **InviteManagement** | Create invite links, copy to clipboard, set expiry/max uses, manage vanity URL. | ⬜ |

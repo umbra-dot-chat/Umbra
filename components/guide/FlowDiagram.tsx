@@ -12,7 +12,7 @@
  */
 
 import React from 'react';
-import { View, Pressable, Platform } from 'react-native';
+import { View, Pressable, Linking } from 'react-native';
 import type { ViewStyle, TextStyle } from 'react-native';
 import { Text, useTheme } from '@coexist/wisp-react-native';
 
@@ -44,9 +44,7 @@ const REPO_BASE = 'https://github.com/InfamousVague/Umbra/blob/main';
 
 function openLink(path: string) {
   const url = `${REPO_BASE}/${path}`;
-  if (Platform.OS === 'web' && typeof window !== 'undefined') {
-    window.open(url, '_blank');
-  }
+  Linking.openURL(url).catch(() => {});
 }
 
 function FlowBlock({ label, icon, color = '#3B82F6', description }: FlowStep & { stepNumber?: number }) {
@@ -234,7 +232,7 @@ export function FlowDiagram({
           {description && <Text style={styles.description}>{description}</Text>}
         </View>
         {sourceLink && (
-          <Pressable onPress={() => openLink(sourceLink)}>
+          <Pressable onPress={() => openLink(sourceLink)} style={{ cursor: 'pointer' }}>
             <Text style={styles.sourceLink}>View Code</Text>
           </Pressable>
         )}

@@ -3,7 +3,7 @@
  */
 
 import React from 'react';
-import { View, Pressable, Platform } from 'react-native';
+import { View, Pressable, Linking } from 'react-native';
 import { Text, useTheme } from '@coexist/wisp-react-native';
 
 import { TechSpec } from '@/components/guide/TechSpec';
@@ -11,9 +11,7 @@ import { TechSpec } from '@/components/guide/TechSpec';
 const REPO_BASE = 'https://github.com/InfamousVague/Umbra';
 
 function openLink(path: string) {
-  if (Platform.OS === 'web' && typeof window !== 'undefined') {
-    window.open(`${REPO_BASE}${path}`, '_blank');
-  }
+  Linking.openURL(`${REPO_BASE}${path}`).catch(() => {});
 }
 
 export default function LimitationsContent() {
@@ -57,7 +55,7 @@ export default function LimitationsContent() {
         </Text>
         <Pressable
           onPress={() => openLink('/tree/main/__tests__')}
-          style={{ marginTop: 8 }}
+          style={{ marginTop: 8, cursor: 'pointer' }}
         >
           <Text style={{ fontSize: 12, color: tc.status.info }}>
             View all tests on GitHub
