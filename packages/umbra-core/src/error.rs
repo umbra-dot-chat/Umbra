@@ -286,6 +286,70 @@ pub enum Error {
     InvalidMessageContent(String),
 
     // ========================================================================
+    // Community Errors (800-899)
+    // ========================================================================
+
+    /// Community not found
+    #[error("Community not found.")]
+    CommunityNotFound,
+
+    /// Space not found
+    #[error("Space not found.")]
+    SpaceNotFound,
+
+    /// Channel not found
+    #[error("Channel not found.")]
+    ChannelNotFound,
+
+    /// Role not found
+    #[error("Role not found.")]
+    RoleNotFound,
+
+    /// Already a member of this community
+    #[error("Already a member of this community.")]
+    AlreadyMember,
+
+    /// Not a member of this community
+    #[error("Not a member of this community.")]
+    NotMember,
+
+    /// Insufficient permissions for this action
+    #[error("Insufficient permissions: {0}")]
+    InsufficientPermissions(String),
+
+    /// Cannot modify the owner role
+    #[error("Cannot modify the owner role.")]
+    CannotModifyOwner,
+
+    /// Invite not found or expired
+    #[error("Invite not found or expired.")]
+    InviteNotFound,
+
+    /// Invite has expired
+    #[error("Invite has expired.")]
+    InviteExpired,
+
+    /// Invite has reached max uses
+    #[error("Invite has reached its maximum uses.")]
+    InviteMaxUsesReached,
+
+    /// User is banned from this community
+    #[error("Banned from this community.")]
+    BannedFromCommunity,
+
+    /// Invalid community operation
+    #[error("Invalid community operation: {0}")]
+    InvalidCommunityOperation(String),
+
+    /// Member is timed out
+    #[error("Member is timed out: {0}")]
+    MemberTimedOut(String),
+
+    /// Channel type restriction
+    #[error("Channel type restriction: {0}")]
+    ChannelTypeRestriction(String),
+
+    // ========================================================================
     // Internal Errors (900-999)
     // ========================================================================
 
@@ -374,6 +438,23 @@ impl Error {
             Error::RecipientOffline => 702,
             Error::DeliveryFailed(_) => 703,
             Error::InvalidMessageContent(_) => 704,
+
+            // Community (800-899)
+            Error::CommunityNotFound => 800,
+            Error::SpaceNotFound => 801,
+            Error::ChannelNotFound => 802,
+            Error::RoleNotFound => 803,
+            Error::AlreadyMember => 804,
+            Error::NotMember => 805,
+            Error::InsufficientPermissions(_) => 806,
+            Error::CannotModifyOwner => 807,
+            Error::InviteNotFound => 808,
+            Error::InviteExpired => 809,
+            Error::InviteMaxUsesReached => 810,
+            Error::BannedFromCommunity => 811,
+            Error::InvalidCommunityOperation(_) => 812,
+            Error::MemberTimedOut(_) => 813,
+            Error::ChannelTypeRestriction(_) => 814,
 
             // Internal (900-999)
             Error::Internal(_) => 900,

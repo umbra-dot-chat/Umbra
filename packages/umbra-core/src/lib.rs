@@ -99,6 +99,7 @@ pub mod network;
 pub mod discovery;
 pub mod friends;
 pub mod messaging;
+pub mod community;
 /// Platform-aware time utilities for native and WASM targets.
 pub mod time;
 
