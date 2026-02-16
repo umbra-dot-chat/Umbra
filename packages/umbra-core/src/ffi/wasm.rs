@@ -11,6 +11,29 @@
 //! - Network: start, stop, status
 //! - Events: subscribe
 //! - Crypto: sign, verify
+//! - Community: create, get, get_mine, update, delete, transfer_ownership
+//! - Community Spaces: create, list, update, reorder, delete
+//! - Community Channels: create, list, list_all, get, update, set_slow_mode, set_e2ee, delete, reorder
+//! - Community Members: join, leave, kick, ban, unban, list, get, update_profile, ban_list
+//! - Community Roles: list, member_roles, assign, unassign, create_custom, update, update_permissions, delete
+//! - Community Invites: create, use, list, delete, set_vanity
+//! - Community Audit Log: get
+//! - Community Messages: send, send_encrypted, list, get, edit, delete, delete_for_me
+//! - Community Reactions: add, remove, list
+//! - Community Read Receipts: mark_read, list
+//! - Community Pins: pin, unpin, list
+//! - Community Channel Keys: store, get_latest
+//! - Community Threads: create, get, list, messages
+//! - Community Search: channel, community-wide
+//! - Community Moderation: warn, warnings, member_warnings, active_count, delete_warning, check_escalation, check_keyword_filter, check_ban_evasion
+//! - Community Files: upload, list, get, download, delete
+//! - Community Folders: create, list, delete
+//! - Community Branding: update_branding, set_vanity_url
+//! - Community Emoji: create, list, delete
+//! - Community Stickers: create, list, delete
+//! - Community Webhooks: create, list, get, update, delete
+//! - Community Channel Overrides: set, list, remove
+//! - Community Boost Nodes: register, list, get, update, heartbeat, delete
 
 #![cfg(feature = "wasm")]
 
@@ -28,6 +51,7 @@ use crate::network::NetworkService;
 use crate::discovery::ConnectionInfo;
 use crate::friends::FriendRequest;
 use crate::storage::{Database, FriendRequestRecord, GroupInviteRecord};
+use crate::community::CommunityService;
 
 /// Generate a deterministic conversation ID from two DIDs.
 ///
@@ -4012,4 +4036,3270 @@ pub fn umbra_wasm_calls_get_all_history(json: &str) -> Result<JsValue, JsValue> 
     }).collect();
 
     Ok(JsValue::from_str(&serde_json::to_string(&calls_json).unwrap_or_default()))
+}
+
+// ============================================================================
+// COMMUNITIES
+// ============================================================================
+
+/// Helper: create a CommunityService from the current state.
+fn community_service() -> Result<CommunityService, JsValue> {
+    let state = get_state()?;
+    let state = state.read();
+    let database = state.database.as_ref()
+        .ok_or_else(|| JsValue::from_str("Database not initialized"))?;
+    Ok(CommunityService::new(database.clone()))
+}
+
+/// Create a new community.
+///
+/// Takes JSON: { "name": "...", "description": "...", "owner_did": "..." }
+/// Returns JSON: { "community_id", "space_id", "welcome_channel_id", "general_channel_id", "role_ids": { ... } }
+#[wasm_bindgen]
+pub fn umbra_wasm_community_create(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let name = data["name"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing name"))?;
+    let description = data["description"].as_str();
+    let owner_did = data["owner_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing owner_did"))?;
+
+    let svc = community_service()?;
+    let result = svc.create_community(name, description, owner_did)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let json_result = serde_json::json!({
+        "community_id": result.community_id,
+        "space_id": result.space_id,
+        "welcome_channel_id": result.welcome_channel_id,
+        "general_channel_id": result.general_channel_id,
+        "role_ids": {
+            "owner": result.role_ids.owner,
+            "admin": result.role_ids.admin,
+            "moderator": result.role_ids.moderator,
+            "member": result.role_ids.member,
+        },
+    });
+
+    emit_event("community", &serde_json::json!({
+        "type": "communityCreated",
+        "community_id": result.community_id,
+        "name": name,
+    }));
+
+    Ok(JsValue::from_str(&json_result.to_string()))
+}
+
+/// Get a community by ID.
+///
+/// Returns JSON: Community object
+#[wasm_bindgen]
+pub fn umbra_wasm_community_get(community_id: &str) -> Result<JsValue, JsValue> {
+    let svc = community_service()?;
+    let c = svc.get_community(community_id)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let json = serde_json::json!({
+        "id": c.id,
+        "name": c.name,
+        "description": c.description,
+        "icon_url": c.icon_url,
+        "banner_url": c.banner_url,
+        "splash_url": c.splash_url,
+        "accent_color": c.accent_color,
+        "custom_css": c.custom_css,
+        "owner_did": c.owner_did,
+        "vanity_url": c.vanity_url,
+        "created_at": c.created_at,
+        "updated_at": c.updated_at,
+    });
+    Ok(JsValue::from_str(&json.to_string()))
+}
+
+/// Get all communities the user is a member of.
+///
+/// Returns JSON: Community[]
+#[wasm_bindgen]
+pub fn umbra_wasm_community_get_mine(member_did: &str) -> Result<JsValue, JsValue> {
+    let svc = community_service()?;
+    let communities = svc.get_my_communities(member_did)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let arr: Vec<serde_json::Value> = communities.iter().map(|c| {
+        serde_json::json!({
+            "id": c.id,
+            "name": c.name,
+            "description": c.description,
+            "icon_url": c.icon_url,
+            "banner_url": c.banner_url,
+            "splash_url": c.splash_url,
+            "accent_color": c.accent_color,
+            "custom_css": c.custom_css,
+            "owner_did": c.owner_did,
+            "vanity_url": c.vanity_url,
+            "created_at": c.created_at,
+            "updated_at": c.updated_at,
+        })
+    }).collect();
+
+    Ok(JsValue::from_str(&serde_json::to_string(&arr).unwrap_or_default()))
+}
+
+/// Update a community's name and/or description.
+///
+/// Takes JSON: { "id": "...", "name": "...", "description": "...", "actor_did": "..." }
+#[wasm_bindgen]
+pub fn umbra_wasm_community_update(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let id = data["id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing id"))?;
+    let name = data["name"].as_str();
+    let description = data["description"].as_str();
+    let actor_did = data["actor_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing actor_did"))?;
+
+    let svc = community_service()?;
+    svc.update_community(id, name, description, actor_did)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    emit_event("community", &serde_json::json!({
+        "type": "communityUpdated",
+        "community_id": id,
+    }));
+
+    Ok(JsValue::from_str(&serde_json::json!({"success": true}).to_string()))
+}
+
+/// Delete a community (owner only).
+///
+/// Takes JSON: { "id": "...", "actor_did": "..." }
+#[wasm_bindgen]
+pub fn umbra_wasm_community_delete(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let id = data["id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing id"))?;
+    let actor_did = data["actor_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing actor_did"))?;
+
+    let svc = community_service()?;
+    svc.delete_community(id, actor_did)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    emit_event("community", &serde_json::json!({
+        "type": "communityDeleted",
+        "community_id": id,
+    }));
+
+    Ok(JsValue::from_str(&serde_json::json!({"success": true}).to_string()))
+}
+
+/// Transfer community ownership.
+///
+/// Takes JSON: { "community_id": "...", "current_owner_did": "...", "new_owner_did": "..." }
+#[wasm_bindgen]
+pub fn umbra_wasm_community_transfer_ownership(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let community_id = data["community_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing community_id"))?;
+    let current_owner_did = data["current_owner_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing current_owner_did"))?;
+    let new_owner_did = data["new_owner_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing new_owner_did"))?;
+
+    let svc = community_service()?;
+    svc.transfer_ownership(community_id, current_owner_did, new_owner_did)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    emit_event("community", &serde_json::json!({
+        "type": "ownershipTransferred",
+        "community_id": community_id,
+        "new_owner_did": new_owner_did,
+    }));
+
+    Ok(JsValue::from_str(&serde_json::json!({"success": true}).to_string()))
+}
+
+// ============================================================================
+// COMMUNITY — SPACES
+// ============================================================================
+
+/// Create a new space in a community.
+///
+/// Takes JSON: { "community_id": "...", "name": "...", "position": 0, "actor_did": "..." }
+/// Returns JSON: CommunitySpace object
+#[wasm_bindgen]
+pub fn umbra_wasm_community_space_create(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let community_id = data["community_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing community_id"))?;
+    let name = data["name"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing name"))?;
+    let position = data["position"].as_i64().unwrap_or(0) as i32;
+    let actor_did = data["actor_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing actor_did"))?;
+
+    let svc = community_service()?;
+    let space = svc.create_space(community_id, name, position, actor_did)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let json_result = serde_json::json!({
+        "id": space.id,
+        "community_id": space.community_id,
+        "name": space.name,
+        "position": space.position,
+        "created_at": space.created_at,
+        "updated_at": space.updated_at,
+    });
+
+    emit_event("community", &serde_json::json!({
+        "type": "spaceCreated",
+        "community_id": community_id,
+        "space_id": space.id,
+    }));
+
+    Ok(JsValue::from_str(&json_result.to_string()))
+}
+
+/// Get all spaces in a community.
+///
+/// Returns JSON: CommunitySpace[]
+#[wasm_bindgen]
+pub fn umbra_wasm_community_space_list(community_id: &str) -> Result<JsValue, JsValue> {
+    let svc = community_service()?;
+    let spaces = svc.get_spaces(community_id)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let arr: Vec<serde_json::Value> = spaces.iter().map(|s| {
+        serde_json::json!({
+            "id": s.id,
+            "community_id": s.community_id,
+            "name": s.name,
+            "position": s.position,
+            "created_at": s.created_at,
+            "updated_at": s.updated_at,
+        })
+    }).collect();
+
+    Ok(JsValue::from_str(&serde_json::to_string(&arr).unwrap_or_default()))
+}
+
+/// Update a space's name.
+///
+/// Takes JSON: { "space_id": "...", "name": "...", "actor_did": "..." }
+#[wasm_bindgen]
+pub fn umbra_wasm_community_space_update(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let space_id = data["space_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing space_id"))?;
+    let name = data["name"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing name"))?;
+    let actor_did = data["actor_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing actor_did"))?;
+
+    let svc = community_service()?;
+    svc.update_space(space_id, name, actor_did)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    emit_event("community", &serde_json::json!({
+        "type": "spaceUpdated",
+        "space_id": space_id,
+    }));
+
+    Ok(JsValue::from_str(&serde_json::json!({"success": true}).to_string()))
+}
+
+/// Reorder spaces in a community.
+///
+/// Takes JSON: { "community_id": "...", "space_ids": ["id1", "id2", ...] }
+#[wasm_bindgen]
+pub fn umbra_wasm_community_space_reorder(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let community_id = data["community_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing community_id"))?;
+    let space_ids: Vec<String> = data["space_ids"].as_array()
+        .ok_or_else(|| JsValue::from_str("Missing space_ids array"))?
+        .iter()
+        .filter_map(|v| v.as_str().map(|s| s.to_string()))
+        .collect();
+
+    let svc = community_service()?;
+    svc.reorder_spaces(community_id, &space_ids, "system")
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    Ok(JsValue::from_str(&serde_json::json!({"success": true}).to_string()))
+}
+
+/// Delete a space and all its channels.
+///
+/// Takes JSON: { "space_id": "...", "actor_did": "..." }
+#[wasm_bindgen]
+pub fn umbra_wasm_community_space_delete(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let space_id = data["space_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing space_id"))?;
+    let actor_did = data["actor_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing actor_did"))?;
+
+    let svc = community_service()?;
+    svc.delete_space(space_id, actor_did)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    emit_event("community", &serde_json::json!({
+        "type": "spaceDeleted",
+        "space_id": space_id,
+    }));
+
+    Ok(JsValue::from_str(&serde_json::json!({"success": true}).to_string()))
+}
+
+// ============================================================================
+// COMMUNITY — CHANNELS
+// ============================================================================
+
+/// Create a new channel in a space.
+///
+/// Takes JSON: { "community_id", "space_id", "name", "channel_type", "topic"?, "position", "actor_did" }
+/// Returns JSON: CommunityChannel object
+#[wasm_bindgen]
+pub fn umbra_wasm_community_channel_create(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let community_id = data["community_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing community_id"))?;
+    let space_id = data["space_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing space_id"))?;
+    let name = data["name"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing name"))?;
+    let channel_type = data["channel_type"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing channel_type"))?;
+    let topic = data["topic"].as_str();
+    let position = data["position"].as_i64().unwrap_or(0) as i32;
+    let actor_did = data["actor_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing actor_did"))?;
+
+    let svc = community_service()?;
+    let ch = svc.create_channel(community_id, space_id, name, channel_type, topic, position, actor_did)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let json_result = serde_json::json!({
+        "id": ch.id,
+        "community_id": ch.community_id,
+        "space_id": ch.space_id,
+        "name": ch.name,
+        "channel_type": ch.channel_type,
+        "topic": ch.topic,
+        "position": ch.position,
+        "slow_mode_seconds": ch.slow_mode_seconds,
+        "e2ee_enabled": ch.e2ee_enabled,
+        "pin_limit": ch.pin_limit,
+        "created_at": ch.created_at,
+        "updated_at": ch.updated_at,
+    });
+
+    emit_event("community", &serde_json::json!({
+        "type": "channelCreated",
+        "community_id": community_id,
+        "channel_id": ch.id,
+    }));
+
+    Ok(JsValue::from_str(&json_result.to_string()))
+}
+
+/// Get all channels in a space.
+///
+/// Returns JSON: CommunityChannel[]
+#[wasm_bindgen]
+pub fn umbra_wasm_community_channel_list(space_id: &str) -> Result<JsValue, JsValue> {
+    let svc = community_service()?;
+    let channels = svc.get_channels(space_id)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let arr: Vec<serde_json::Value> = channels.iter().map(|ch| {
+        serde_json::json!({
+            "id": ch.id,
+            "community_id": ch.community_id,
+            "space_id": ch.space_id,
+            "name": ch.name,
+            "channel_type": ch.channel_type,
+            "topic": ch.topic,
+            "position": ch.position,
+            "slow_mode_seconds": ch.slow_mode_seconds,
+            "e2ee_enabled": ch.e2ee_enabled,
+            "pin_limit": ch.pin_limit,
+            "created_at": ch.created_at,
+            "updated_at": ch.updated_at,
+        })
+    }).collect();
+
+    Ok(JsValue::from_str(&serde_json::to_string(&arr).unwrap_or_default()))
+}
+
+/// Get all channels in a community (across all spaces).
+///
+/// Returns JSON: CommunityChannel[]
+#[wasm_bindgen]
+pub fn umbra_wasm_community_channel_list_all(community_id: &str) -> Result<JsValue, JsValue> {
+    let svc = community_service()?;
+    let channels = svc.get_all_channels(community_id)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let arr: Vec<serde_json::Value> = channels.iter().map(|ch| {
+        serde_json::json!({
+            "id": ch.id,
+            "community_id": ch.community_id,
+            "space_id": ch.space_id,
+            "name": ch.name,
+            "channel_type": ch.channel_type,
+            "topic": ch.topic,
+            "position": ch.position,
+            "slow_mode_seconds": ch.slow_mode_seconds,
+            "e2ee_enabled": ch.e2ee_enabled,
+            "pin_limit": ch.pin_limit,
+            "created_at": ch.created_at,
+            "updated_at": ch.updated_at,
+        })
+    }).collect();
+
+    Ok(JsValue::from_str(&serde_json::to_string(&arr).unwrap_or_default()))
+}
+
+/// Get a single channel by ID.
+///
+/// Returns JSON: CommunityChannel object
+#[wasm_bindgen]
+pub fn umbra_wasm_community_channel_get(channel_id: &str) -> Result<JsValue, JsValue> {
+    let svc = community_service()?;
+    let ch = svc.get_channel(channel_id)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let json = serde_json::json!({
+        "id": ch.id,
+        "community_id": ch.community_id,
+        "space_id": ch.space_id,
+        "name": ch.name,
+        "channel_type": ch.channel_type,
+        "topic": ch.topic,
+        "position": ch.position,
+        "slow_mode_seconds": ch.slow_mode_seconds,
+        "e2ee_enabled": ch.e2ee_enabled,
+        "pin_limit": ch.pin_limit,
+        "created_at": ch.created_at,
+        "updated_at": ch.updated_at,
+    });
+    Ok(JsValue::from_str(&json.to_string()))
+}
+
+/// Update a channel's name and/or topic.
+///
+/// Takes JSON: { "channel_id": "...", "name"?: "...", "topic"?: "...", "actor_did": "..." }
+#[wasm_bindgen]
+pub fn umbra_wasm_community_channel_update(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let channel_id = data["channel_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing channel_id"))?;
+    let name = data["name"].as_str();
+    let topic = data["topic"].as_str();
+    let actor_did = data["actor_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing actor_did"))?;
+
+    let svc = community_service()?;
+    svc.update_channel(channel_id, name, topic, actor_did)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    emit_event("community", &serde_json::json!({
+        "type": "channelUpdated",
+        "channel_id": channel_id,
+    }));
+
+    Ok(JsValue::from_str(&serde_json::json!({"success": true}).to_string()))
+}
+
+/// Set slow mode for a channel.
+///
+/// Takes JSON: { "channel_id": "...", "seconds": 0, "actor_did": "..." }
+#[wasm_bindgen]
+pub fn umbra_wasm_community_channel_set_slow_mode(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let channel_id = data["channel_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing channel_id"))?;
+    let seconds = data["seconds"].as_i64()
+        .ok_or_else(|| JsValue::from_str("Missing seconds"))? as i32;
+    let actor_did = data["actor_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing actor_did"))?;
+
+    let svc = community_service()?;
+    svc.set_slow_mode(channel_id, seconds, actor_did)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    Ok(JsValue::from_str(&serde_json::json!({"success": true}).to_string()))
+}
+
+/// Toggle E2EE for a channel.
+///
+/// Takes JSON: { "channel_id": "...", "enabled": true, "actor_did": "..." }
+#[wasm_bindgen]
+pub fn umbra_wasm_community_channel_set_e2ee(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let channel_id = data["channel_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing channel_id"))?;
+    let enabled = data["enabled"].as_bool()
+        .ok_or_else(|| JsValue::from_str("Missing enabled"))?;
+    let actor_did = data["actor_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing actor_did"))?;
+
+    let svc = community_service()?;
+    svc.set_channel_e2ee(channel_id, enabled, actor_did)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    Ok(JsValue::from_str(&serde_json::json!({"success": true}).to_string()))
+}
+
+/// Delete a channel.
+///
+/// Takes JSON: { "channel_id": "...", "actor_did": "..." }
+#[wasm_bindgen]
+pub fn umbra_wasm_community_channel_delete(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let channel_id = data["channel_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing channel_id"))?;
+    let actor_did = data["actor_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing actor_did"))?;
+
+    let svc = community_service()?;
+    svc.delete_channel(channel_id, actor_did)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    emit_event("community", &serde_json::json!({
+        "type": "channelDeleted",
+        "channel_id": channel_id,
+    }));
+
+    Ok(JsValue::from_str(&serde_json::json!({"success": true}).to_string()))
+}
+
+/// Reorder channels within a space.
+///
+/// Takes JSON: { "space_id": "...", "channel_ids": ["id1", "id2", ...] }
+#[wasm_bindgen]
+pub fn umbra_wasm_community_channel_reorder(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let space_id = data["space_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing space_id"))?;
+    let channel_ids: Vec<String> = data["channel_ids"].as_array()
+        .ok_or_else(|| JsValue::from_str("Missing channel_ids array"))?
+        .iter()
+        .filter_map(|v| v.as_str().map(|s| s.to_string()))
+        .collect();
+
+    let svc = community_service()?;
+    svc.reorder_channels(space_id, &channel_ids)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    Ok(JsValue::from_str(&serde_json::json!({"success": true}).to_string()))
+}
+
+// ============================================================================
+// COMMUNITY — MEMBERS
+// ============================================================================
+
+/// Join a community.
+///
+/// Takes JSON: { "community_id": "...", "member_did": "..." }
+#[wasm_bindgen]
+pub fn umbra_wasm_community_join(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let community_id = data["community_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing community_id"))?;
+    let member_did = data["member_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing member_did"))?;
+
+    let svc = community_service()?;
+    svc.join_community(community_id, member_did)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    emit_event("community", &serde_json::json!({
+        "type": "memberJoined",
+        "community_id": community_id,
+        "member_did": member_did,
+    }));
+
+    Ok(JsValue::from_str(&serde_json::json!({"success": true}).to_string()))
+}
+
+/// Leave a community.
+///
+/// Takes JSON: { "community_id": "...", "member_did": "..." }
+#[wasm_bindgen]
+pub fn umbra_wasm_community_leave(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let community_id = data["community_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing community_id"))?;
+    let member_did = data["member_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing member_did"))?;
+
+    let svc = community_service()?;
+    svc.leave_community(community_id, member_did)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    emit_event("community", &serde_json::json!({
+        "type": "memberLeft",
+        "community_id": community_id,
+        "member_did": member_did,
+    }));
+
+    Ok(JsValue::from_str(&serde_json::json!({"success": true}).to_string()))
+}
+
+/// Kick a member from a community.
+///
+/// Takes JSON: { "community_id": "...", "target_did": "...", "actor_did": "..." }
+#[wasm_bindgen]
+pub fn umbra_wasm_community_kick(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let community_id = data["community_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing community_id"))?;
+    let target_did = data["target_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing target_did"))?;
+    let actor_did = data["actor_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing actor_did"))?;
+
+    let svc = community_service()?;
+    svc.kick_member(community_id, target_did, actor_did)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    emit_event("community", &serde_json::json!({
+        "type": "memberKicked",
+        "community_id": community_id,
+        "target_did": target_did,
+    }));
+
+    Ok(JsValue::from_str(&serde_json::json!({"success": true}).to_string()))
+}
+
+/// Ban a member from a community.
+///
+/// Takes JSON: { "community_id", "target_did", "reason"?, "expires_at"?, "device_fingerprint"?, "actor_did" }
+#[wasm_bindgen]
+pub fn umbra_wasm_community_ban(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let community_id = data["community_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing community_id"))?;
+    let target_did = data["target_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing target_did"))?;
+    let reason = data["reason"].as_str();
+    let expires_at = data["expires_at"].as_i64();
+    let device_fingerprint = data["device_fingerprint"].as_str();
+    let actor_did = data["actor_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing actor_did"))?;
+
+    let svc = community_service()?;
+    svc.ban_member(community_id, target_did, reason, expires_at, device_fingerprint, actor_did)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    emit_event("community", &serde_json::json!({
+        "type": "memberBanned",
+        "community_id": community_id,
+        "target_did": target_did,
+    }));
+
+    Ok(JsValue::from_str(&serde_json::json!({"success": true}).to_string()))
+}
+
+/// Unban a member.
+///
+/// Takes JSON: { "community_id": "...", "target_did": "...", "actor_did": "..." }
+#[wasm_bindgen]
+pub fn umbra_wasm_community_unban(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let community_id = data["community_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing community_id"))?;
+    let target_did = data["target_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing target_did"))?;
+    let actor_did = data["actor_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing actor_did"))?;
+
+    let svc = community_service()?;
+    svc.unban_member(community_id, target_did, actor_did)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    emit_event("community", &serde_json::json!({
+        "type": "memberUnbanned",
+        "community_id": community_id,
+        "target_did": target_did,
+    }));
+
+    Ok(JsValue::from_str(&serde_json::json!({"success": true}).to_string()))
+}
+
+/// Get all members of a community.
+///
+/// Returns JSON: CommunityMember[]
+#[wasm_bindgen]
+pub fn umbra_wasm_community_member_list(community_id: &str) -> Result<JsValue, JsValue> {
+    let svc = community_service()?;
+    let members = svc.get_members(community_id)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let arr: Vec<serde_json::Value> = members.iter().map(|m| {
+        serde_json::json!({
+            "community_id": m.community_id,
+            "member_did": m.member_did,
+            "nickname": m.nickname,
+            "avatar_url": m.avatar_url,
+            "bio": m.bio,
+            "joined_at": m.joined_at,
+        })
+    }).collect();
+
+    Ok(JsValue::from_str(&serde_json::to_string(&arr).unwrap_or_default()))
+}
+
+/// Get a single member record.
+///
+/// Returns JSON: CommunityMember object
+#[wasm_bindgen]
+pub fn umbra_wasm_community_member_get(community_id: &str, member_did: &str) -> Result<JsValue, JsValue> {
+    let svc = community_service()?;
+    let m = svc.get_member(community_id, member_did)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let json = serde_json::json!({
+        "community_id": m.community_id,
+        "member_did": m.member_did,
+        "nickname": m.nickname,
+        "avatar_url": m.avatar_url,
+        "bio": m.bio,
+        "joined_at": m.joined_at,
+    });
+    Ok(JsValue::from_str(&json.to_string()))
+}
+
+/// Update a member's community profile.
+///
+/// Takes JSON: { "community_id", "member_did", "nickname"?, "avatar_url"?, "bio"? }
+#[wasm_bindgen]
+pub fn umbra_wasm_community_member_update_profile(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let community_id = data["community_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing community_id"))?;
+    let member_did = data["member_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing member_did"))?;
+    let nickname = data["nickname"].as_str();
+    let avatar_url = data["avatar_url"].as_str();
+    let bio = data["bio"].as_str();
+
+    let svc = community_service()?;
+    svc.update_member_profile(community_id, member_did, nickname, avatar_url, bio)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    Ok(JsValue::from_str(&serde_json::json!({"success": true}).to_string()))
+}
+
+/// Get all bans for a community.
+///
+/// Returns JSON: CommunityBan[]
+#[wasm_bindgen]
+pub fn umbra_wasm_community_ban_list(community_id: &str) -> Result<JsValue, JsValue> {
+    let svc = community_service()?;
+    let bans = svc.get_bans(community_id)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let arr: Vec<serde_json::Value> = bans.iter().map(|b| {
+        serde_json::json!({
+            "community_id": b.community_id,
+            "banned_did": b.banned_did,
+            "reason": b.reason,
+            "banned_by": b.banned_by,
+            "device_fingerprint": b.device_fingerprint,
+            "expires_at": b.expires_at,
+            "created_at": b.created_at,
+        })
+    }).collect();
+
+    Ok(JsValue::from_str(&serde_json::to_string(&arr).unwrap_or_default()))
+}
+
+// ============================================================================
+// COMMUNITY — ROLES
+// ============================================================================
+
+/// Get all roles for a community.
+///
+/// Returns JSON: CommunityRole[]
+#[wasm_bindgen]
+pub fn umbra_wasm_community_role_list(community_id: &str) -> Result<JsValue, JsValue> {
+    let svc = community_service()?;
+    let roles = svc.get_roles(community_id)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let arr: Vec<serde_json::Value> = roles.iter().map(|r| {
+        serde_json::json!({
+            "id": r.id,
+            "community_id": r.community_id,
+            "name": r.name,
+            "color": r.color,
+            "icon": r.icon,
+            "badge": r.badge,
+            "position": r.position,
+            "hoisted": r.hoisted,
+            "mentionable": r.mentionable,
+            "is_preset": r.is_preset,
+            "permissions_bitfield": r.permissions_bitfield,
+            "created_at": r.created_at,
+            "updated_at": r.updated_at,
+        })
+    }).collect();
+
+    Ok(JsValue::from_str(&serde_json::to_string(&arr).unwrap_or_default()))
+}
+
+/// Get roles assigned to a specific member.
+///
+/// Returns JSON: CommunityRole[]
+#[wasm_bindgen]
+pub fn umbra_wasm_community_member_roles(community_id: &str, member_did: &str) -> Result<JsValue, JsValue> {
+    let svc = community_service()?;
+    let roles = svc.get_member_roles(community_id, member_did)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let arr: Vec<serde_json::Value> = roles.iter().map(|r| {
+        serde_json::json!({
+            "id": r.id,
+            "community_id": r.community_id,
+            "name": r.name,
+            "color": r.color,
+            "icon": r.icon,
+            "badge": r.badge,
+            "position": r.position,
+            "hoisted": r.hoisted,
+            "mentionable": r.mentionable,
+            "is_preset": r.is_preset,
+            "permissions_bitfield": r.permissions_bitfield,
+            "created_at": r.created_at,
+            "updated_at": r.updated_at,
+        })
+    }).collect();
+
+    Ok(JsValue::from_str(&serde_json::to_string(&arr).unwrap_or_default()))
+}
+
+/// Assign a role to a member.
+///
+/// Takes JSON: { "community_id", "member_did", "role_id", "actor_did" }
+#[wasm_bindgen]
+pub fn umbra_wasm_community_role_assign(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let community_id = data["community_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing community_id"))?;
+    let member_did = data["member_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing member_did"))?;
+    let role_id = data["role_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing role_id"))?;
+    let actor_did = data["actor_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing actor_did"))?;
+
+    let svc = community_service()?;
+    svc.assign_role(community_id, member_did, role_id, actor_did)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    emit_event("community", &serde_json::json!({
+        "type": "roleAssigned",
+        "community_id": community_id,
+        "member_did": member_did,
+        "role_id": role_id,
+    }));
+
+    Ok(JsValue::from_str(&serde_json::json!({"success": true}).to_string()))
+}
+
+/// Unassign a role from a member.
+///
+/// Takes JSON: { "community_id", "member_did", "role_id", "actor_did" }
+#[wasm_bindgen]
+pub fn umbra_wasm_community_role_unassign(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let community_id = data["community_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing community_id"))?;
+    let member_did = data["member_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing member_did"))?;
+    let role_id = data["role_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing role_id"))?;
+    let actor_did = data["actor_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing actor_did"))?;
+
+    let svc = community_service()?;
+    svc.unassign_role(community_id, member_did, role_id, actor_did)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    emit_event("community", &serde_json::json!({
+        "type": "roleUnassigned",
+        "community_id": community_id,
+        "member_did": member_did,
+        "role_id": role_id,
+    }));
+
+    Ok(JsValue::from_str(&serde_json::json!({"success": true}).to_string()))
+}
+
+// ============================================================================
+// COMMUNITY — INVITES
+// ============================================================================
+
+/// Create an invite link for a community.
+///
+/// Takes JSON: { "community_id", "creator_did", "max_uses"?, "expires_at"? }
+/// Returns JSON: CommunityInvite object
+#[wasm_bindgen]
+pub fn umbra_wasm_community_invite_create(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let community_id = data["community_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing community_id"))?;
+    let creator_did = data["creator_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing creator_did"))?;
+    let max_uses = data["max_uses"].as_i64().map(|v| v as i32);
+    let expires_at = data["expires_at"].as_i64();
+
+    let svc = community_service()?;
+    let invite = svc.create_invite(community_id, creator_did, max_uses, expires_at)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let json_result = serde_json::json!({
+        "id": invite.id,
+        "community_id": invite.community_id,
+        "code": invite.code,
+        "vanity": invite.vanity,
+        "creator_did": invite.creator_did,
+        "max_uses": invite.max_uses,
+        "use_count": invite.use_count,
+        "expires_at": invite.expires_at,
+        "created_at": invite.created_at,
+    });
+    Ok(JsValue::from_str(&json_result.to_string()))
+}
+
+/// Use an invite code to join a community.
+///
+/// Takes JSON: { "code": "...", "member_did": "..." }
+/// Returns JSON: { "community_id": "..." }
+#[wasm_bindgen]
+pub fn umbra_wasm_community_invite_use(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let code = data["code"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing code"))?;
+    let member_did = data["member_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing member_did"))?;
+
+    let svc = community_service()?;
+    let community_id = svc.use_invite(code, member_did)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    emit_event("community", &serde_json::json!({
+        "type": "memberJoined",
+        "community_id": community_id,
+        "member_did": member_did,
+    }));
+
+    let json_result = serde_json::json!({
+        "community_id": community_id,
+    });
+    Ok(JsValue::from_str(&json_result.to_string()))
+}
+
+/// Get all invites for a community.
+///
+/// Returns JSON: CommunityInvite[]
+#[wasm_bindgen]
+pub fn umbra_wasm_community_invite_list(community_id: &str) -> Result<JsValue, JsValue> {
+    let svc = community_service()?;
+    let invites = svc.get_invites(community_id)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let arr: Vec<serde_json::Value> = invites.iter().map(|i| {
+        serde_json::json!({
+            "id": i.id,
+            "community_id": i.community_id,
+            "code": i.code,
+            "vanity": i.vanity,
+            "creator_did": i.creator_did,
+            "max_uses": i.max_uses,
+            "use_count": i.use_count,
+            "expires_at": i.expires_at,
+            "created_at": i.created_at,
+        })
+    }).collect();
+
+    Ok(JsValue::from_str(&serde_json::to_string(&arr).unwrap_or_default()))
+}
+
+/// Delete an invite.
+///
+/// Takes JSON: { "invite_id": "...", "actor_did": "..." }
+#[wasm_bindgen]
+pub fn umbra_wasm_community_invite_delete(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let invite_id = data["invite_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing invite_id"))?;
+    let actor_did = data["actor_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing actor_did"))?;
+
+    let svc = community_service()?;
+    svc.delete_invite(invite_id, actor_did)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    Ok(JsValue::from_str(&serde_json::json!({"success": true}).to_string()))
+}
+
+/// Set a vanity invite code for a community.
+///
+/// Takes JSON: { "community_id": "...", "vanity_code": "...", "creator_did": "..." }
+/// Returns JSON: CommunityInvite object
+#[wasm_bindgen]
+pub fn umbra_wasm_community_invite_set_vanity(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let community_id = data["community_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing community_id"))?;
+    let vanity_code = data["vanity_code"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing vanity_code"))?;
+    let creator_did = data["creator_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing creator_did"))?;
+
+    let svc = community_service()?;
+    let invite = svc.set_vanity_invite(community_id, vanity_code, creator_did)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let json_result = serde_json::json!({
+        "id": invite.id,
+        "community_id": invite.community_id,
+        "code": invite.code,
+        "vanity": invite.vanity,
+        "creator_did": invite.creator_did,
+        "max_uses": invite.max_uses,
+        "use_count": invite.use_count,
+        "expires_at": invite.expires_at,
+        "created_at": invite.created_at,
+    });
+    Ok(JsValue::from_str(&json_result.to_string()))
+}
+
+// ============================================================================
+// COMMUNITY — AUDIT LOG
+// ============================================================================
+
+/// Get audit log entries for a community.
+///
+/// Takes JSON: { "community_id": "...", "limit": 50, "offset": 0 }
+/// Returns JSON: AuditLogEntry[]
+#[wasm_bindgen]
+pub fn umbra_wasm_community_audit_log(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let community_id = data["community_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing community_id"))?;
+    let limit = data["limit"].as_i64().unwrap_or(50) as usize;
+    let offset = data["offset"].as_i64().unwrap_or(0) as usize;
+
+    let state = get_state()?;
+    let state = state.read();
+    let database = state.database.as_ref()
+        .ok_or_else(|| JsValue::from_str("Database not initialized"))?;
+
+    let entries = database.get_audit_log(community_id, limit, offset)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let arr: Vec<serde_json::Value> = entries.iter().map(|e| {
+        serde_json::json!({
+            "id": e.id,
+            "community_id": e.community_id,
+            "actor_did": e.actor_did,
+            "action_type": e.action_type,
+            "target_type": e.target_type,
+            "target_id": e.target_id,
+            "metadata_json": e.metadata_json,
+            "content_detail": e.content_detail,
+            "created_at": e.created_at,
+        })
+    }).collect();
+
+    Ok(JsValue::from_str(&serde_json::to_string(&arr).unwrap_or_default()))
+}
+
+// ============================================================================
+// COMMUNITY — MESSAGING (Phase 2)
+// ============================================================================
+
+/// Send a plaintext message to a community channel.
+///
+/// Takes JSON: { "channel_id": "...", "sender_did": "...", "content": "...",
+///               "reply_to_id": null, "thread_id": null, "content_warning": null }
+/// Returns JSON: CommunityMessage object
+#[wasm_bindgen]
+pub fn umbra_wasm_community_message_send(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let channel_id = data["channel_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing channel_id"))?;
+    let sender_did = data["sender_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing sender_did"))?;
+    let content = data["content"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing content"))?;
+    let reply_to_id = data["reply_to_id"].as_str();
+    let thread_id = data["thread_id"].as_str();
+    let content_warning = data["content_warning"].as_str();
+
+    let svc = community_service()?;
+    let msg = svc.send_message(channel_id, sender_did, content, reply_to_id, thread_id, content_warning)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let json_result = message_to_json(&msg);
+
+    emit_event("community", &serde_json::json!({
+        "type": "communityMessageSent",
+        "channel_id": channel_id,
+        "message_id": msg.id,
+        "sender_did": sender_did,
+    }));
+
+    Ok(JsValue::from_str(&json_result.to_string()))
+}
+
+/// Send an encrypted message to a community channel (E2EE).
+///
+/// Takes JSON: { "channel_id": "...", "sender_did": "...", "content_encrypted_b64": "...",
+///               "nonce": "...", "key_version": 1, "reply_to_id": null, "thread_id": null }
+/// Returns JSON: { "message_id": "..." }
+#[wasm_bindgen]
+pub fn umbra_wasm_community_message_send_encrypted(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let channel_id = data["channel_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing channel_id"))?;
+    let sender_did = data["sender_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing sender_did"))?;
+    let content_b64 = data["content_encrypted_b64"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing content_encrypted_b64"))?;
+    let nonce = data["nonce"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing nonce"))?;
+    let key_version = data["key_version"].as_i64()
+        .ok_or_else(|| JsValue::from_str("Missing key_version"))? as i32;
+    let reply_to_id = data["reply_to_id"].as_str();
+    let thread_id = data["thread_id"].as_str();
+
+    let encrypted_bytes = base64::engine::general_purpose::STANDARD.decode(content_b64)
+        .map_err(|e| JsValue::from_str(&format!("Invalid base64: {}", e)))?;
+
+    let svc = community_service()?;
+    let id = svc.send_encrypted_message(
+        channel_id, sender_did, &encrypted_bytes, nonce, key_version, reply_to_id, thread_id,
+    ).map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    emit_event("community", &serde_json::json!({
+        "type": "communityMessageSent",
+        "channel_id": channel_id,
+        "message_id": id,
+        "sender_did": sender_did,
+        "is_e2ee": true,
+    }));
+
+    Ok(JsValue::from_str(&serde_json::json!({"message_id": id}).to_string()))
+}
+
+/// Get messages for a community channel (paginated).
+///
+/// Takes JSON: { "channel_id": "...", "limit": 50, "before_timestamp": null }
+/// Returns JSON: CommunityMessage[]
+#[wasm_bindgen]
+pub fn umbra_wasm_community_message_list(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let channel_id = data["channel_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing channel_id"))?;
+    let limit = data["limit"].as_i64().unwrap_or(50) as usize;
+    let before_timestamp = data["before_timestamp"].as_i64();
+
+    let svc = community_service()?;
+    let msgs = svc.get_messages(channel_id, limit, before_timestamp)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let arr: Vec<serde_json::Value> = msgs.iter().map(|m| message_to_json(m)).collect();
+    Ok(JsValue::from_str(&serde_json::to_string(&arr).unwrap_or_default()))
+}
+
+/// Get a single message by ID.
+///
+/// Returns JSON: CommunityMessage object
+#[wasm_bindgen]
+pub fn umbra_wasm_community_message_get(message_id: &str) -> Result<JsValue, JsValue> {
+    let svc = community_service()?;
+    let msg = svc.get_message(message_id)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    Ok(JsValue::from_str(&message_to_json(&msg).to_string()))
+}
+
+/// Edit a message.
+///
+/// Takes JSON: { "message_id": "...", "new_content": "...", "editor_did": "..." }
+/// Returns JSON: { "success": true }
+#[wasm_bindgen]
+pub fn umbra_wasm_community_message_edit(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let message_id = data["message_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing message_id"))?;
+    let new_content = data["new_content"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing new_content"))?;
+    let editor_did = data["editor_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing editor_did"))?;
+
+    let svc = community_service()?;
+    svc.edit_message(message_id, new_content, editor_did)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    emit_event("community", &serde_json::json!({
+        "type": "communityMessageEdited",
+        "message_id": message_id,
+    }));
+
+    Ok(JsValue::from_str("{\"success\":true}"))
+}
+
+/// Delete a message for everyone.
+///
+/// Returns JSON: { "success": true }
+#[wasm_bindgen]
+pub fn umbra_wasm_community_message_delete(message_id: &str) -> Result<JsValue, JsValue> {
+    let svc = community_service()?;
+    svc.delete_message_for_everyone(message_id)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    emit_event("community", &serde_json::json!({
+        "type": "communityMessageDeleted",
+        "message_id": message_id,
+    }));
+
+    Ok(JsValue::from_str("{\"success\":true}"))
+}
+
+/// Delete a message for the current user only.
+///
+/// Takes JSON: { "message_id": "...", "member_did": "..." }
+/// Returns JSON: { "success": true }
+#[wasm_bindgen]
+pub fn umbra_wasm_community_message_delete_for_me(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let message_id = data["message_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing message_id"))?;
+    let member_did = data["member_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing member_did"))?;
+
+    let svc = community_service()?;
+    svc.delete_message_for_me(message_id, member_did)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    Ok(JsValue::from_str("{\"success\":true}"))
+}
+
+// ============================================================================
+// COMMUNITY — REACTIONS (Phase 2)
+// ============================================================================
+
+/// Add a reaction to a message.
+///
+/// Takes JSON: { "message_id": "...", "member_did": "...", "emoji": "...", "is_custom": false }
+/// Returns JSON: { "success": true }
+#[wasm_bindgen]
+pub fn umbra_wasm_community_reaction_add(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let message_id = data["message_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing message_id"))?;
+    let member_did = data["member_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing member_did"))?;
+    let emoji = data["emoji"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing emoji"))?;
+    let is_custom = data["is_custom"].as_bool().unwrap_or(false);
+
+    let svc = community_service()?;
+    svc.add_reaction(message_id, member_did, emoji, is_custom)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    emit_event("community", &serde_json::json!({
+        "type": "communityReactionAdded",
+        "message_id": message_id,
+        "emoji": emoji,
+        "member_did": member_did,
+    }));
+
+    Ok(JsValue::from_str("{\"success\":true}"))
+}
+
+/// Remove a reaction from a message.
+///
+/// Takes JSON: { "message_id": "...", "member_did": "...", "emoji": "..." }
+/// Returns JSON: { "success": true }
+#[wasm_bindgen]
+pub fn umbra_wasm_community_reaction_remove(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let message_id = data["message_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing message_id"))?;
+    let member_did = data["member_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing member_did"))?;
+    let emoji = data["emoji"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing emoji"))?;
+
+    let svc = community_service()?;
+    svc.remove_reaction(message_id, member_did, emoji)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    emit_event("community", &serde_json::json!({
+        "type": "communityReactionRemoved",
+        "message_id": message_id,
+        "emoji": emoji,
+        "member_did": member_did,
+    }));
+
+    Ok(JsValue::from_str("{\"success\":true}"))
+}
+
+/// Get reactions for a message.
+///
+/// Returns JSON: CommunityReaction[]
+#[wasm_bindgen]
+pub fn umbra_wasm_community_reaction_list(message_id: &str) -> Result<JsValue, JsValue> {
+    let svc = community_service()?;
+    let reactions = svc.get_reactions(message_id)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let arr: Vec<serde_json::Value> = reactions.iter().map(|r| {
+        serde_json::json!({
+            "id": r.id,
+            "message_id": r.message_id,
+            "member_did": r.member_did,
+            "emoji": r.emoji,
+            "is_custom": r.is_custom,
+            "created_at": r.created_at,
+        })
+    }).collect();
+
+    Ok(JsValue::from_str(&serde_json::to_string(&arr).unwrap_or_default()))
+}
+
+// ============================================================================
+// COMMUNITY — READ RECEIPTS (Phase 2)
+// ============================================================================
+
+/// Mark a channel as read up to a specific message.
+///
+/// Takes JSON: { "channel_id": "...", "member_did": "...", "last_read_message_id": "..." }
+/// Returns JSON: { "success": true }
+#[wasm_bindgen]
+pub fn umbra_wasm_community_mark_read(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let channel_id = data["channel_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing channel_id"))?;
+    let member_did = data["member_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing member_did"))?;
+    let last_read_message_id = data["last_read_message_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing last_read_message_id"))?;
+
+    let svc = community_service()?;
+    svc.mark_read(channel_id, member_did, last_read_message_id)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    Ok(JsValue::from_str("{\"success\":true}"))
+}
+
+/// Get read receipts for a channel.
+///
+/// Returns JSON: ReadReceipt[]
+#[wasm_bindgen]
+pub fn umbra_wasm_community_read_receipts(channel_id: &str) -> Result<JsValue, JsValue> {
+    let svc = community_service()?;
+    let receipts = svc.get_read_receipts(channel_id)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let arr: Vec<serde_json::Value> = receipts.iter().map(|r| {
+        serde_json::json!({
+            "channel_id": r.channel_id,
+            "member_did": r.member_did,
+            "last_read_message_id": r.last_read_message_id,
+            "read_at": r.read_at,
+        })
+    }).collect();
+
+    Ok(JsValue::from_str(&serde_json::to_string(&arr).unwrap_or_default()))
+}
+
+// ============================================================================
+// COMMUNITY — PINS (Phase 2)
+// ============================================================================
+
+/// Pin a message in a channel.
+///
+/// Takes JSON: { "channel_id": "...", "message_id": "...", "pinned_by": "..." }
+/// Returns JSON: { "success": true }
+#[wasm_bindgen]
+pub fn umbra_wasm_community_pin_message(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let channel_id = data["channel_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing channel_id"))?;
+    let message_id = data["message_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing message_id"))?;
+    let pinned_by = data["pinned_by"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing pinned_by"))?;
+
+    let svc = community_service()?;
+    svc.pin_message(channel_id, message_id, pinned_by)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    emit_event("community", &serde_json::json!({
+        "type": "communityMessagePinned",
+        "channel_id": channel_id,
+        "message_id": message_id,
+    }));
+
+    Ok(JsValue::from_str("{\"success\":true}"))
+}
+
+/// Unpin a message.
+///
+/// Takes JSON: { "channel_id": "...", "message_id": "..." }
+/// Returns JSON: { "success": true }
+#[wasm_bindgen]
+pub fn umbra_wasm_community_unpin_message(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let channel_id = data["channel_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing channel_id"))?;
+    let message_id = data["message_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing message_id"))?;
+
+    let svc = community_service()?;
+    svc.unpin_message(channel_id, message_id)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    emit_event("community", &serde_json::json!({
+        "type": "communityMessageUnpinned",
+        "channel_id": channel_id,
+        "message_id": message_id,
+    }));
+
+    Ok(JsValue::from_str("{\"success\":true}"))
+}
+
+/// Get pinned messages for a channel.
+///
+/// Returns JSON: CommunityPin[]
+#[wasm_bindgen]
+pub fn umbra_wasm_community_pin_list(channel_id: &str) -> Result<JsValue, JsValue> {
+    let svc = community_service()?;
+    let pins = svc.get_pins(channel_id)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let arr: Vec<serde_json::Value> = pins.iter().map(|p| {
+        serde_json::json!({
+            "channel_id": p.channel_id,
+            "message_id": p.message_id,
+            "pinned_by": p.pinned_by,
+            "pinned_at": p.pinned_at,
+        })
+    }).collect();
+
+    Ok(JsValue::from_str(&serde_json::to_string(&arr).unwrap_or_default()))
+}
+
+// ============================================================================
+// COMMUNITY — CHANNEL KEYS / E2EE (Phase 2)
+// ============================================================================
+
+/// Store a channel encryption key.
+///
+/// Takes JSON: { "channel_id": "...", "key_version": 1, "encrypted_key_b64": "..." }
+/// Returns JSON: { "success": true }
+#[wasm_bindgen]
+pub fn umbra_wasm_community_channel_key_store(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let channel_id = data["channel_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing channel_id"))?;
+    let key_version = data["key_version"].as_i64()
+        .ok_or_else(|| JsValue::from_str("Missing key_version"))? as i32;
+    let encrypted_key_b64 = data["encrypted_key_b64"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing encrypted_key_b64"))?;
+
+    let key_bytes = base64::engine::general_purpose::STANDARD.decode(encrypted_key_b64)
+        .map_err(|e| JsValue::from_str(&format!("Invalid base64: {}", e)))?;
+
+    let svc = community_service()?;
+    svc.store_channel_key(channel_id, key_version, &key_bytes)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    Ok(JsValue::from_str("{\"success\":true}"))
+}
+
+/// Get the latest channel encryption key.
+///
+/// Returns JSON: ChannelKey object or null
+#[wasm_bindgen]
+pub fn umbra_wasm_community_channel_key_latest(channel_id: &str) -> Result<JsValue, JsValue> {
+    let svc = community_service()?;
+    let key = svc.get_latest_channel_key(channel_id)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    match key {
+        Some(k) => {
+            let b64 = base64::engine::general_purpose::STANDARD.encode(&k.encrypted_key);
+            let json = serde_json::json!({
+                "channel_id": k.channel_id,
+                "key_version": k.key_version,
+                "encrypted_key_b64": b64,
+                "created_at": k.created_at,
+            });
+            Ok(JsValue::from_str(&json.to_string()))
+        }
+        None => Ok(JsValue::from_str("null")),
+    }
+}
+
+// ============================================================================
+// COMMUNITY — THREADS (Phase 3)
+// ============================================================================
+
+/// Create a thread from a parent message.
+///
+/// Takes JSON: { "channel_id": "...", "parent_message_id": "...", "name": null, "created_by": "..." }
+/// Returns JSON: CommunityThread object
+#[wasm_bindgen]
+pub fn umbra_wasm_community_thread_create(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let channel_id = data["channel_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing channel_id"))?;
+    let parent_message_id = data["parent_message_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing parent_message_id"))?;
+    let name = data["name"].as_str();
+    let created_by = data["created_by"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing created_by"))?;
+
+    let svc = community_service()?;
+    let thread = svc.create_thread(channel_id, parent_message_id, name, created_by)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let json_result = thread_to_json(&thread);
+
+    emit_event("community", &serde_json::json!({
+        "type": "communityThreadCreated",
+        "channel_id": channel_id,
+        "thread_id": thread.id,
+    }));
+
+    Ok(JsValue::from_str(&json_result.to_string()))
+}
+
+/// Get a thread by ID.
+///
+/// Returns JSON: CommunityThread object
+#[wasm_bindgen]
+pub fn umbra_wasm_community_thread_get(thread_id: &str) -> Result<JsValue, JsValue> {
+    let svc = community_service()?;
+    let thread = svc.get_thread(thread_id)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    Ok(JsValue::from_str(&thread_to_json(&thread).to_string()))
+}
+
+/// Get all threads in a channel.
+///
+/// Returns JSON: CommunityThread[]
+#[wasm_bindgen]
+pub fn umbra_wasm_community_thread_list(channel_id: &str) -> Result<JsValue, JsValue> {
+    let svc = community_service()?;
+    let threads = svc.get_threads(channel_id)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let arr: Vec<serde_json::Value> = threads.iter().map(|t| thread_to_json(t)).collect();
+    Ok(JsValue::from_str(&serde_json::to_string(&arr).unwrap_or_default()))
+}
+
+/// Get messages in a thread.
+///
+/// Takes JSON: { "thread_id": "...", "limit": 50, "before_timestamp": null }
+/// Returns JSON: CommunityMessage[]
+#[wasm_bindgen]
+pub fn umbra_wasm_community_thread_messages(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let thread_id = data["thread_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing thread_id"))?;
+    let limit = data["limit"].as_i64().unwrap_or(50) as usize;
+    let before_timestamp = data["before_timestamp"].as_i64();
+
+    let svc = community_service()?;
+    let msgs = svc.get_thread_messages(thread_id, limit, before_timestamp)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let arr: Vec<serde_json::Value> = msgs.iter().map(|m| message_to_json(m)).collect();
+    Ok(JsValue::from_str(&serde_json::to_string(&arr).unwrap_or_default()))
+}
+
+// ============================================================================
+// COMMUNITY — SEARCH (Phase 3)
+// ============================================================================
+
+/// Search messages in a channel.
+///
+/// Takes JSON: { "channel_id": "...", "query": "...", "limit": 50 }
+/// Returns JSON: CommunityMessage[]
+#[wasm_bindgen]
+pub fn umbra_wasm_community_search_channel(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let channel_id = data["channel_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing channel_id"))?;
+    let query = data["query"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing query"))?;
+    let limit = data["limit"].as_i64().unwrap_or(50) as usize;
+
+    let svc = community_service()?;
+    let msgs = svc.search_messages(channel_id, query, limit)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let arr: Vec<serde_json::Value> = msgs.iter().map(|m| message_to_json(m)).collect();
+    Ok(JsValue::from_str(&serde_json::to_string(&arr).unwrap_or_default()))
+}
+
+/// Search messages across all channels in a community.
+///
+/// Takes JSON: { "community_id": "...", "query": "...", "limit": 50 }
+/// Returns JSON: CommunityMessage[]
+#[wasm_bindgen]
+pub fn umbra_wasm_community_search(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let community_id = data["community_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing community_id"))?;
+    let query = data["query"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing query"))?;
+    let limit = data["limit"].as_i64().unwrap_or(50) as usize;
+
+    let svc = community_service()?;
+    let msgs = svc.search_community_messages(community_id, query, limit)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let arr: Vec<serde_json::Value> = msgs.iter().map(|m| message_to_json(m)).collect();
+    Ok(JsValue::from_str(&serde_json::to_string(&arr).unwrap_or_default()))
+}
+
+// ============================================================================
+// COMMUNITY — MODERATION (Phase 5)
+// ============================================================================
+
+/// Issue a warning to a member.
+///
+/// Takes JSON: { "community_id": "...", "member_did": "...", "reason": "...",
+///               "warned_by": "...", "expires_at": null }
+/// Returns JSON: CommunityWarning object
+#[wasm_bindgen]
+pub fn umbra_wasm_community_warn_member(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let community_id = data["community_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing community_id"))?;
+    let member_did = data["member_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing member_did"))?;
+    let reason = data["reason"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing reason"))?;
+    let warned_by = data["warned_by"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing warned_by"))?;
+    let expires_at = data["expires_at"].as_i64();
+
+    let svc = community_service()?;
+    let warning = svc.warn_member(community_id, member_did, reason, warned_by, expires_at)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let json_result = warning_to_json(&warning);
+
+    emit_event("community", &serde_json::json!({
+        "type": "communityMemberWarned",
+        "community_id": community_id,
+        "member_did": member_did,
+        "warning_id": warning.id,
+    }));
+
+    Ok(JsValue::from_str(&json_result.to_string()))
+}
+
+/// Get warnings for a specific member.
+///
+/// Takes JSON: { "community_id": "...", "member_did": "..." }
+/// Returns JSON: CommunityWarning[]
+#[wasm_bindgen]
+pub fn umbra_wasm_community_member_warnings(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let community_id = data["community_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing community_id"))?;
+    let member_did = data["member_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing member_did"))?;
+
+    let svc = community_service()?;
+    let warnings = svc.get_member_warnings(community_id, member_did)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let arr: Vec<serde_json::Value> = warnings.iter().map(|w| warning_to_json(w)).collect();
+    Ok(JsValue::from_str(&serde_json::to_string(&arr).unwrap_or_default()))
+}
+
+/// Get all warnings for a community (paginated).
+///
+/// Takes JSON: { "community_id": "...", "limit": 50, "offset": 0 }
+/// Returns JSON: CommunityWarning[]
+#[wasm_bindgen]
+pub fn umbra_wasm_community_warnings(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let community_id = data["community_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing community_id"))?;
+    let limit = data["limit"].as_i64().unwrap_or(50) as usize;
+    let offset = data["offset"].as_i64().unwrap_or(0) as usize;
+
+    let svc = community_service()?;
+    let warnings = svc.get_all_warnings(community_id, limit, offset)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let arr: Vec<serde_json::Value> = warnings.iter().map(|w| warning_to_json(w)).collect();
+    Ok(JsValue::from_str(&serde_json::to_string(&arr).unwrap_or_default()))
+}
+
+/// Get the active warning count for a member.
+///
+/// Takes JSON: { "community_id": "...", "member_did": "..." }
+/// Returns JSON: { "count": N }
+#[wasm_bindgen]
+pub fn umbra_wasm_community_active_warning_count(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let community_id = data["community_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing community_id"))?;
+    let member_did = data["member_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing member_did"))?;
+
+    let svc = community_service()?;
+    let count = svc.get_active_warning_count(community_id, member_did)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    Ok(JsValue::from_str(&serde_json::json!({"count": count}).to_string()))
+}
+
+/// Delete a warning.
+///
+/// Takes JSON: { "warning_id": "...", "actor_did": "..." }
+/// Returns JSON: { "success": true }
+#[wasm_bindgen]
+pub fn umbra_wasm_community_warning_delete(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let warning_id = data["warning_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing warning_id"))?;
+    let actor_did = data["actor_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing actor_did"))?;
+
+    let svc = community_service()?;
+    svc.delete_warning(warning_id, actor_did)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    Ok(JsValue::from_str("{\"success\":true}"))
+}
+
+/// Check warning escalation for a member.
+///
+/// Takes JSON: { "community_id": "...", "member_did": "...", "timeout_threshold": null, "ban_threshold": null }
+/// Returns JSON: { "action": "timeout" | "ban" | null }
+#[wasm_bindgen]
+pub fn umbra_wasm_community_check_escalation(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let community_id = data["community_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing community_id"))?;
+    let member_did = data["member_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing member_did"))?;
+    let timeout_threshold = data["timeout_threshold"].as_i64().map(|v| v as i32);
+    let ban_threshold = data["ban_threshold"].as_i64().map(|v| v as i32);
+
+    let svc = community_service()?;
+    let action = svc.check_warning_escalation(community_id, member_did, timeout_threshold, ban_threshold)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    Ok(JsValue::from_str(&serde_json::json!({"action": action}).to_string()))
+}
+
+/// Check if a message matches keyword filters.
+///
+/// Takes JSON: { "content": "...", "filters": [{"pattern": "...", "action": "delete"}] }
+/// Returns JSON: { "action": "delete" | "warn" | "timeout" | null }
+#[wasm_bindgen]
+pub fn umbra_wasm_community_check_keyword_filter(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let content = data["content"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing content"))?;
+    let filters_arr = data["filters"].as_array()
+        .ok_or_else(|| JsValue::from_str("Missing filters array"))?;
+
+    let filters: Vec<(String, String)> = filters_arr.iter().map(|f| {
+        let pattern = f["pattern"].as_str().unwrap_or("").to_string();
+        let action = f["action"].as_str().unwrap_or("delete").to_string();
+        (pattern, action)
+    }).collect();
+
+    let filter_refs: Vec<(&str, &str)> = filters.iter()
+        .map(|(p, a)| (p.as_str(), a.as_str()))
+        .collect();
+
+    let svc = community_service()?;
+    let action = svc.check_keyword_filter(content, &filter_refs);
+
+    Ok(JsValue::from_str(&serde_json::json!({"action": action}).to_string()))
+}
+
+/// Check for ban evasion by device fingerprint.
+///
+/// Takes JSON: { "community_id": "...", "device_fingerprint": "..." }
+/// Returns JSON: { "banned_did": "..." | null }
+#[wasm_bindgen]
+pub fn umbra_wasm_community_check_ban_evasion(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let community_id = data["community_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing community_id"))?;
+    let device_fingerprint = data["device_fingerprint"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing device_fingerprint"))?;
+
+    let svc = community_service()?;
+    let result = svc.check_ban_evasion(community_id, device_fingerprint)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    Ok(JsValue::from_str(&serde_json::json!({"banned_did": result}).to_string()))
+}
+
+// ============================================================================
+// COMMUNITY — FILES (Phase 7)
+// ============================================================================
+
+/// Upload a file record to a channel.
+///
+/// Takes JSON: { "channel_id": "...", "folder_id": null, "filename": "...",
+///               "description": null, "file_size": 1024, "mime_type": null,
+///               "storage_chunks_json": "...", "uploaded_by": "..." }
+/// Returns JSON: CommunityFile object
+#[wasm_bindgen]
+pub fn umbra_wasm_community_file_upload(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let channel_id = data["channel_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing channel_id"))?;
+    let folder_id = data["folder_id"].as_str();
+    let filename = data["filename"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing filename"))?;
+    let description = data["description"].as_str();
+    let file_size = data["file_size"].as_i64()
+        .ok_or_else(|| JsValue::from_str("Missing file_size"))?;
+    let mime_type = data["mime_type"].as_str();
+    let storage_chunks_json = data["storage_chunks_json"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing storage_chunks_json"))?;
+    let uploaded_by = data["uploaded_by"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing uploaded_by"))?;
+
+    let svc = community_service()?;
+    let file = svc.upload_file(
+        channel_id, folder_id, filename, description,
+        file_size, mime_type, storage_chunks_json, uploaded_by,
+    ).map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let json_result = file_to_json(&file);
+
+    emit_event("community", &serde_json::json!({
+        "type": "communityFileUploaded",
+        "channel_id": channel_id,
+        "file_id": file.id,
+        "filename": filename,
+    }));
+
+    Ok(JsValue::from_str(&json_result.to_string()))
+}
+
+/// Get files in a channel.
+///
+/// Takes JSON: { "channel_id": "...", "folder_id": null, "limit": 50, "offset": 0 }
+/// Returns JSON: CommunityFile[]
+#[wasm_bindgen]
+pub fn umbra_wasm_community_file_list(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let channel_id = data["channel_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing channel_id"))?;
+    let folder_id = data["folder_id"].as_str();
+    let limit = data["limit"].as_i64().unwrap_or(50) as usize;
+    let offset = data["offset"].as_i64().unwrap_or(0) as usize;
+
+    let svc = community_service()?;
+    let files = svc.get_files(channel_id, folder_id, limit, offset)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let arr: Vec<serde_json::Value> = files.iter().map(|f| file_to_json(f)).collect();
+    Ok(JsValue::from_str(&serde_json::to_string(&arr).unwrap_or_default()))
+}
+
+/// Get a file by ID.
+///
+/// Returns JSON: CommunityFile object
+#[wasm_bindgen]
+pub fn umbra_wasm_community_file_get(file_id: &str) -> Result<JsValue, JsValue> {
+    let svc = community_service()?;
+    let file = svc.get_file(file_id)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    Ok(JsValue::from_str(&file_to_json(&file).to_string()))
+}
+
+/// Record a file download (increment count).
+///
+/// Returns JSON: { "success": true }
+#[wasm_bindgen]
+pub fn umbra_wasm_community_file_download(file_id: &str) -> Result<JsValue, JsValue> {
+    let svc = community_service()?;
+    svc.record_file_download(file_id)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    Ok(JsValue::from_str("{\"success\":true}"))
+}
+
+/// Delete a file.
+///
+/// Takes JSON: { "file_id": "...", "actor_did": "..." }
+/// Returns JSON: { "success": true }
+#[wasm_bindgen]
+pub fn umbra_wasm_community_file_delete(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let file_id = data["file_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing file_id"))?;
+    let actor_did = data["actor_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing actor_did"))?;
+
+    let svc = community_service()?;
+    svc.delete_file(file_id, actor_did)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    emit_event("community", &serde_json::json!({
+        "type": "communityFileDeleted",
+        "file_id": file_id,
+    }));
+
+    Ok(JsValue::from_str("{\"success\":true}"))
+}
+
+// ============================================================================
+// COMMUNITY — FOLDERS (Phase 7)
+// ============================================================================
+
+/// Create a folder in a file channel.
+///
+/// Takes JSON: { "channel_id": "...", "parent_folder_id": null, "name": "...", "created_by": "..." }
+/// Returns JSON: CommunityFileFolder object
+#[wasm_bindgen]
+pub fn umbra_wasm_community_folder_create(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let channel_id = data["channel_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing channel_id"))?;
+    let parent_folder_id = data["parent_folder_id"].as_str();
+    let name = data["name"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing name"))?;
+    let created_by = data["created_by"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing created_by"))?;
+
+    let svc = community_service()?;
+    let folder = svc.create_folder(channel_id, parent_folder_id, name, created_by)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let json_result = serde_json::json!({
+        "id": folder.id,
+        "channel_id": folder.channel_id,
+        "parent_folder_id": folder.parent_folder_id,
+        "name": folder.name,
+        "created_by": folder.created_by,
+        "created_at": folder.created_at,
+    });
+
+    Ok(JsValue::from_str(&json_result.to_string()))
+}
+
+/// Get folders in a channel (optionally within a parent folder).
+///
+/// Takes JSON: { "channel_id": "...", "parent_folder_id": null }
+/// Returns JSON: CommunityFileFolder[]
+#[wasm_bindgen]
+pub fn umbra_wasm_community_folder_list(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let channel_id = data["channel_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing channel_id"))?;
+    let parent_folder_id = data["parent_folder_id"].as_str();
+
+    let svc = community_service()?;
+    let folders = svc.get_folders(channel_id, parent_folder_id)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let arr: Vec<serde_json::Value> = folders.iter().map(|f| {
+        serde_json::json!({
+            "id": f.id,
+            "channel_id": f.channel_id,
+            "parent_folder_id": f.parent_folder_id,
+            "name": f.name,
+            "created_by": f.created_by,
+            "created_at": f.created_at,
+        })
+    }).collect();
+
+    Ok(JsValue::from_str(&serde_json::to_string(&arr).unwrap_or_default()))
+}
+
+/// Delete a folder.
+///
+/// Returns JSON: { "success": true }
+#[wasm_bindgen]
+pub fn umbra_wasm_community_folder_delete(folder_id: &str) -> Result<JsValue, JsValue> {
+    let svc = community_service()?;
+    svc.delete_folder(folder_id)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    Ok(JsValue::from_str("{\"success\":true}"))
+}
+
+// ============================================================================
+// COMMUNITY — CUSTOMIZATION / BRANDING (Phase 9)
+// ============================================================================
+
+/// Update community branding.
+///
+/// Takes JSON: { "community_id": "...", "icon_url": null, "banner_url": null,
+///               "splash_url": null, "accent_color": null, "custom_css": null, "actor_did": "..." }
+/// Returns JSON: { "success": true }
+#[wasm_bindgen]
+pub fn umbra_wasm_community_update_branding(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let community_id = data["community_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing community_id"))?;
+    let icon_url = data["icon_url"].as_str();
+    let banner_url = data["banner_url"].as_str();
+    let splash_url = data["splash_url"].as_str();
+    let accent_color = data["accent_color"].as_str();
+    let custom_css = data["custom_css"].as_str();
+    let actor_did = data["actor_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing actor_did"))?;
+
+    let svc = community_service()?;
+    svc.update_branding(community_id, icon_url, banner_url, splash_url, accent_color, custom_css, actor_did)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    emit_event("community", &serde_json::json!({
+        "type": "communityBrandingUpdated",
+        "community_id": community_id,
+    }));
+
+    Ok(JsValue::from_str("{\"success\":true}"))
+}
+
+/// Set a vanity URL for a community.
+///
+/// Takes JSON: { "community_id": "...", "vanity_url": "...", "actor_did": "..." }
+/// Returns JSON: { "success": true }
+#[wasm_bindgen]
+pub fn umbra_wasm_community_set_vanity_url(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let community_id = data["community_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing community_id"))?;
+    let vanity_url = data["vanity_url"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing vanity_url"))?;
+    let actor_did = data["actor_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing actor_did"))?;
+
+    let svc = community_service()?;
+    svc.set_vanity_url(community_id, vanity_url, actor_did)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    Ok(JsValue::from_str("{\"success\":true}"))
+}
+
+// ============================================================================
+// COMMUNITY — CUSTOM EMOJI (Phase 9)
+// ============================================================================
+
+/// Create a custom emoji.
+///
+/// Takes JSON: { "community_id": "...", "name": "...", "image_url": "...",
+///               "animated": false, "uploaded_by": "..." }
+/// Returns JSON: CommunityEmoji object
+#[wasm_bindgen]
+pub fn umbra_wasm_community_emoji_create(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let community_id = data["community_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing community_id"))?;
+    let name = data["name"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing name"))?;
+    let image_url = data["image_url"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing image_url"))?;
+    let animated = data["animated"].as_bool().unwrap_or(false);
+    let uploaded_by = data["uploaded_by"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing uploaded_by"))?;
+
+    let svc = community_service()?;
+    let emoji = svc.create_emoji(community_id, name, image_url, animated, uploaded_by)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let json_result = serde_json::json!({
+        "id": emoji.id,
+        "community_id": emoji.community_id,
+        "name": emoji.name,
+        "image_url": emoji.image_url,
+        "animated": emoji.animated,
+        "uploaded_by": emoji.uploaded_by,
+        "created_at": emoji.created_at,
+    });
+
+    emit_event("community", &serde_json::json!({
+        "type": "communityEmojiCreated",
+        "community_id": community_id,
+        "emoji_id": emoji.id,
+    }));
+
+    Ok(JsValue::from_str(&json_result.to_string()))
+}
+
+/// Get all custom emoji for a community.
+///
+/// Returns JSON: CommunityEmoji[]
+#[wasm_bindgen]
+pub fn umbra_wasm_community_emoji_list(community_id: &str) -> Result<JsValue, JsValue> {
+    let svc = community_service()?;
+    let emoji = svc.get_emoji(community_id)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let arr: Vec<serde_json::Value> = emoji.iter().map(|e| {
+        serde_json::json!({
+            "id": e.id,
+            "community_id": e.community_id,
+            "name": e.name,
+            "image_url": e.image_url,
+            "animated": e.animated,
+            "uploaded_by": e.uploaded_by,
+            "created_at": e.created_at,
+        })
+    }).collect();
+
+    Ok(JsValue::from_str(&serde_json::to_string(&arr).unwrap_or_default()))
+}
+
+/// Delete a custom emoji.
+///
+/// Takes JSON: { "emoji_id": "...", "actor_did": "..." }
+/// Returns JSON: { "success": true }
+#[wasm_bindgen]
+pub fn umbra_wasm_community_emoji_delete(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let emoji_id = data["emoji_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing emoji_id"))?;
+    let actor_did = data["actor_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing actor_did"))?;
+
+    let svc = community_service()?;
+    svc.delete_emoji(emoji_id, actor_did)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    Ok(JsValue::from_str("{\"success\":true}"))
+}
+
+// ============================================================================
+// COMMUNITY — STICKERS (Phase 9)
+// ============================================================================
+
+/// Create a custom sticker.
+///
+/// Takes JSON: { "community_id": "...", "pack_id": null, "name": "...",
+///               "image_url": "...", "animated": false, "uploaded_by": "..." }
+/// Returns JSON: CommunitySticker object
+#[wasm_bindgen]
+pub fn umbra_wasm_community_sticker_create(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let community_id = data["community_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing community_id"))?;
+    let pack_id = data["pack_id"].as_str();
+    let name = data["name"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing name"))?;
+    let image_url = data["image_url"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing image_url"))?;
+    let animated = data["animated"].as_bool().unwrap_or(false);
+    let uploaded_by = data["uploaded_by"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing uploaded_by"))?;
+
+    let svc = community_service()?;
+    let sticker = svc.create_sticker(community_id, pack_id, name, image_url, animated, uploaded_by)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let json_result = serde_json::json!({
+        "id": sticker.id,
+        "community_id": sticker.community_id,
+        "pack_id": sticker.pack_id,
+        "name": sticker.name,
+        "image_url": sticker.image_url,
+        "animated": sticker.animated,
+        "uploaded_by": sticker.uploaded_by,
+        "created_at": sticker.created_at,
+    });
+
+    Ok(JsValue::from_str(&json_result.to_string()))
+}
+
+/// Get all stickers for a community.
+///
+/// Returns JSON: CommunitySticker[]
+#[wasm_bindgen]
+pub fn umbra_wasm_community_sticker_list(community_id: &str) -> Result<JsValue, JsValue> {
+    let svc = community_service()?;
+    let stickers = svc.get_stickers(community_id)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let arr: Vec<serde_json::Value> = stickers.iter().map(|s| {
+        serde_json::json!({
+            "id": s.id,
+            "community_id": s.community_id,
+            "pack_id": s.pack_id,
+            "name": s.name,
+            "image_url": s.image_url,
+            "animated": s.animated,
+            "uploaded_by": s.uploaded_by,
+            "created_at": s.created_at,
+        })
+    }).collect();
+
+    Ok(JsValue::from_str(&serde_json::to_string(&arr).unwrap_or_default()))
+}
+
+/// Delete a custom sticker.
+///
+/// Returns JSON: { "success": true }
+#[wasm_bindgen]
+pub fn umbra_wasm_community_sticker_delete(sticker_id: &str) -> Result<JsValue, JsValue> {
+    let svc = community_service()?;
+    svc.delete_sticker(sticker_id)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    Ok(JsValue::from_str("{\"success\":true}"))
+}
+
+// ============================================================================
+// COMMUNITY — WEBHOOKS (Phase 10)
+// ============================================================================
+
+/// Create a webhook for a channel.
+///
+/// Takes JSON: { "channel_id": "...", "name": "...", "avatar_url": null, "creator_did": "..." }
+/// Returns JSON: CommunityWebhook object
+#[wasm_bindgen]
+pub fn umbra_wasm_community_webhook_create(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let channel_id = data["channel_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing channel_id"))?;
+    let name = data["name"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing name"))?;
+    let avatar_url = data["avatar_url"].as_str();
+    let creator_did = data["creator_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing creator_did"))?;
+
+    let svc = community_service()?;
+    let webhook = svc.create_webhook(channel_id, name, avatar_url, creator_did)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let json_result = webhook_to_json(&webhook);
+
+    emit_event("community", &serde_json::json!({
+        "type": "communityWebhookCreated",
+        "channel_id": channel_id,
+        "webhook_id": webhook.id,
+    }));
+
+    Ok(JsValue::from_str(&json_result.to_string()))
+}
+
+/// Get webhooks for a channel.
+///
+/// Returns JSON: CommunityWebhook[]
+#[wasm_bindgen]
+pub fn umbra_wasm_community_webhook_list(channel_id: &str) -> Result<JsValue, JsValue> {
+    let svc = community_service()?;
+    let webhooks = svc.get_webhooks(channel_id)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let arr: Vec<serde_json::Value> = webhooks.iter().map(|w| webhook_to_json(w)).collect();
+    Ok(JsValue::from_str(&serde_json::to_string(&arr).unwrap_or_default()))
+}
+
+/// Get a webhook by ID.
+///
+/// Returns JSON: CommunityWebhook object
+#[wasm_bindgen]
+pub fn umbra_wasm_community_webhook_get(webhook_id: &str) -> Result<JsValue, JsValue> {
+    let svc = community_service()?;
+    let webhook = svc.get_webhook(webhook_id)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    Ok(JsValue::from_str(&webhook_to_json(&webhook).to_string()))
+}
+
+/// Update a webhook.
+///
+/// Takes JSON: { "webhook_id": "...", "name": null, "avatar_url": null }
+/// Returns JSON: { "success": true }
+#[wasm_bindgen]
+pub fn umbra_wasm_community_webhook_update(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let webhook_id = data["webhook_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing webhook_id"))?;
+    let name = data["name"].as_str();
+    let avatar_url = data["avatar_url"].as_str();
+
+    let svc = community_service()?;
+    svc.update_webhook(webhook_id, name, avatar_url)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    Ok(JsValue::from_str("{\"success\":true}"))
+}
+
+/// Delete a webhook.
+///
+/// Takes JSON: { "webhook_id": "...", "actor_did": "..." }
+/// Returns JSON: { "success": true }
+#[wasm_bindgen]
+pub fn umbra_wasm_community_webhook_delete(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let webhook_id = data["webhook_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing webhook_id"))?;
+    let actor_did = data["actor_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing actor_did"))?;
+
+    let svc = community_service()?;
+    svc.delete_webhook(webhook_id, actor_did)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    emit_event("community", &serde_json::json!({
+        "type": "communityWebhookDeleted",
+        "webhook_id": webhook_id,
+    }));
+
+    Ok(JsValue::from_str("{\"success\":true}"))
+}
+
+// ============================================================================
+// COMMUNITY — CHANNEL PERMISSION OVERRIDES (Phase 4)
+// ============================================================================
+
+/// Set a permission override for a role or member on a channel.
+///
+/// Takes JSON: { "channel_id": "...", "target_type": "role"|"member",
+///               "target_id": "...", "allow_bitfield": "...", "deny_bitfield": "...", "actor_did": "..." }
+/// Returns JSON: { "success": true }
+#[wasm_bindgen]
+pub fn umbra_wasm_community_channel_override_set(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let channel_id = data["channel_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing channel_id"))?;
+    let target_type = data["target_type"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing target_type"))?;
+    let target_id = data["target_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing target_id"))?;
+    let allow_bitfield = data["allow_bitfield"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing allow_bitfield"))?;
+    let deny_bitfield = data["deny_bitfield"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing deny_bitfield"))?;
+    let actor_did = data["actor_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing actor_did"))?;
+
+    let svc = community_service()?;
+    svc.set_channel_override(channel_id, target_type, target_id, allow_bitfield, deny_bitfield, actor_did)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    Ok(JsValue::from_str("{\"success\":true}"))
+}
+
+/// Get all permission overrides for a channel.
+///
+/// Returns JSON: ChannelPermissionOverride[]
+#[wasm_bindgen]
+pub fn umbra_wasm_community_channel_override_list(channel_id: &str) -> Result<JsValue, JsValue> {
+    let svc = community_service()?;
+    let overrides = svc.get_channel_overrides(channel_id)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let arr: Vec<serde_json::Value> = overrides.iter().map(|o| {
+        serde_json::json!({
+            "id": o.id,
+            "channel_id": o.channel_id,
+            "target_type": o.target_type,
+            "target_id": o.target_id,
+            "allow_bitfield": o.allow_bitfield,
+            "deny_bitfield": o.deny_bitfield,
+        })
+    }).collect();
+
+    Ok(JsValue::from_str(&serde_json::to_string(&arr).unwrap_or_default()))
+}
+
+/// Remove a permission override.
+///
+/// Returns JSON: { "success": true }
+#[wasm_bindgen]
+pub fn umbra_wasm_community_channel_override_remove(override_id: &str) -> Result<JsValue, JsValue> {
+    let svc = community_service()?;
+    svc.remove_channel_override(override_id)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    Ok(JsValue::from_str("{\"success\":true}"))
+}
+
+// ============================================================================
+// COMMUNITY — CUSTOM ROLES (Phase 4)
+// ============================================================================
+
+/// Create a custom role.
+///
+/// Takes JSON: { "community_id": "...", "name": "...", "color": null,
+///               "position": 10, "hoisted": false, "mentionable": false,
+///               "permissions_bitfield": "...", "actor_did": "..." }
+/// Returns JSON: CommunityRole object
+#[wasm_bindgen]
+pub fn umbra_wasm_community_custom_role_create(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let community_id = data["community_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing community_id"))?;
+    let name = data["name"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing name"))?;
+    let color = data["color"].as_str();
+    let position = data["position"].as_i64().unwrap_or(10) as i32;
+    let hoisted = data["hoisted"].as_bool().unwrap_or(false);
+    let mentionable = data["mentionable"].as_bool().unwrap_or(false);
+    let permissions_bitfield = data["permissions_bitfield"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing permissions_bitfield"))?;
+    let actor_did = data["actor_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing actor_did"))?;
+
+    let svc = community_service()?;
+    let role = svc.create_custom_role(
+        community_id, name, color, position, hoisted, mentionable, permissions_bitfield, actor_did,
+    ).map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let json_result = serde_json::json!({
+        "id": role.id,
+        "community_id": role.community_id,
+        "name": role.name,
+        "color": role.color,
+        "icon": role.icon,
+        "badge": role.badge,
+        "position": role.position,
+        "hoisted": role.hoisted,
+        "mentionable": role.mentionable,
+        "is_preset": role.is_preset,
+        "permissions_bitfield": role.permissions_bitfield,
+        "created_at": role.created_at,
+        "updated_at": role.updated_at,
+    });
+
+    emit_event("community", &serde_json::json!({
+        "type": "communityRoleCreated",
+        "community_id": community_id,
+        "role_id": role.id,
+    }));
+
+    Ok(JsValue::from_str(&json_result.to_string()))
+}
+
+/// Update a role's properties.
+///
+/// Takes JSON: { "role_id": "...", "name": null, "color": null,
+///               "hoisted": null, "mentionable": null, "position": null, "actor_did": "..." }
+/// Returns JSON: { "success": true }
+#[wasm_bindgen]
+pub fn umbra_wasm_community_role_update(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let role_id = data["role_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing role_id"))?;
+    let name = data["name"].as_str();
+    let color = data["color"].as_str();
+    let hoisted = data["hoisted"].as_bool();
+    let mentionable = data["mentionable"].as_bool();
+    let position = data["position"].as_i64().map(|v| v as i32);
+    let actor_did = data["actor_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing actor_did"))?;
+
+    let svc = community_service()?;
+    svc.update_role(role_id, name, color, hoisted, mentionable, position, actor_did)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    emit_event("community", &serde_json::json!({
+        "type": "communityRoleUpdated",
+        "role_id": role_id,
+    }));
+
+    Ok(JsValue::from_str("{\"success\":true}"))
+}
+
+/// Update a role's permission bitfield.
+///
+/// Takes JSON: { "role_id": "...", "permissions_bitfield": "...", "actor_did": "..." }
+/// Returns JSON: { "success": true }
+#[wasm_bindgen]
+pub fn umbra_wasm_community_role_update_permissions(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let role_id = data["role_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing role_id"))?;
+    let permissions_bitfield = data["permissions_bitfield"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing permissions_bitfield"))?;
+    let actor_did = data["actor_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing actor_did"))?;
+
+    let svc = community_service()?;
+    svc.update_role_permissions(role_id, permissions_bitfield, actor_did)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    emit_event("community", &serde_json::json!({
+        "type": "communityRolePermissionsUpdated",
+        "role_id": role_id,
+    }));
+
+    Ok(JsValue::from_str("{\"success\":true}"))
+}
+
+/// Delete a custom role.
+///
+/// Takes JSON: { "role_id": "...", "actor_did": "..." }
+/// Returns JSON: { "success": true }
+#[wasm_bindgen]
+pub fn umbra_wasm_community_role_delete(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let role_id = data["role_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing role_id"))?;
+    let actor_did = data["actor_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing actor_did"))?;
+
+    let svc = community_service()?;
+    svc.delete_role(role_id, actor_did)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    emit_event("community", &serde_json::json!({
+        "type": "communityRoleDeleted",
+        "role_id": role_id,
+    }));
+
+    Ok(JsValue::from_str("{\"success\":true}"))
+}
+
+// ============================================================================
+// COMMUNITY — BOOST NODES (Phase 11)
+// ============================================================================
+
+/// Register a new boost node.
+///
+/// Takes JSON: { "owner_did": "...", "node_type": "local"|"remote",
+///               "node_public_key": "...", "name": "...",
+///               "max_storage_bytes": 1073741824, "max_bandwidth_mbps": 100,
+///               "auto_start": true, "prioritized_communities": null,
+///               "pairing_token": null, "remote_address": null }
+/// Returns JSON: BoostNode object
+#[wasm_bindgen]
+pub fn umbra_wasm_community_boost_node_register(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let owner_did = data["owner_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing owner_did"))?;
+    let node_type = data["node_type"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing node_type"))?;
+    let node_public_key = data["node_public_key"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing node_public_key"))?;
+    let name = data["name"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing name"))?;
+    let max_storage_bytes = data["max_storage_bytes"].as_i64()
+        .ok_or_else(|| JsValue::from_str("Missing max_storage_bytes"))?;
+    let max_bandwidth_mbps = data["max_bandwidth_mbps"].as_i64()
+        .ok_or_else(|| JsValue::from_str("Missing max_bandwidth_mbps"))? as i32;
+    let auto_start = data["auto_start"].as_bool().unwrap_or(true);
+    let prioritized_communities = data["prioritized_communities"].as_str();
+    let pairing_token = data["pairing_token"].as_str();
+    let remote_address = data["remote_address"].as_str();
+
+    let svc = community_service()?;
+    let node = svc.register_boost_node(
+        owner_did, node_type, node_public_key, name,
+        max_storage_bytes, max_bandwidth_mbps, auto_start,
+        prioritized_communities, pairing_token, remote_address,
+    ).map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let json_result = boost_node_to_json(&node);
+
+    emit_event("community", &serde_json::json!({
+        "type": "boostNodeRegistered",
+        "node_id": node.id,
+        "owner_did": owner_did,
+    }));
+
+    Ok(JsValue::from_str(&json_result.to_string()))
+}
+
+/// Get all boost nodes for a user.
+///
+/// Returns JSON: BoostNode[]
+#[wasm_bindgen]
+pub fn umbra_wasm_community_boost_node_list(owner_did: &str) -> Result<JsValue, JsValue> {
+    let svc = community_service()?;
+    let nodes = svc.get_boost_nodes(owner_did)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let arr: Vec<serde_json::Value> = nodes.iter().map(|n| boost_node_to_json(n)).collect();
+    Ok(JsValue::from_str(&serde_json::to_string(&arr).unwrap_or_default()))
+}
+
+/// Get a specific boost node.
+///
+/// Returns JSON: BoostNode object
+#[wasm_bindgen]
+pub fn umbra_wasm_community_boost_node_get(node_id: &str) -> Result<JsValue, JsValue> {
+    let svc = community_service()?;
+    let node = svc.get_boost_node(node_id)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    Ok(JsValue::from_str(&boost_node_to_json(&node).to_string()))
+}
+
+/// Update boost node configuration.
+///
+/// Takes JSON: { "node_id": "...", "name": null, "enabled": null,
+///               "max_storage_bytes": null, "max_bandwidth_mbps": null,
+///               "auto_start": null, "prioritized_communities": null }
+/// Returns JSON: { "success": true }
+#[wasm_bindgen]
+pub fn umbra_wasm_community_boost_node_update(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let node_id = data["node_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing node_id"))?;
+    let name = data["name"].as_str();
+    let enabled = data["enabled"].as_bool();
+    let max_storage_bytes = data["max_storage_bytes"].as_i64();
+    let max_bandwidth_mbps = data["max_bandwidth_mbps"].as_i64().map(|v| v as i32);
+    let auto_start = data["auto_start"].as_bool();
+    let prioritized_communities = data["prioritized_communities"].as_str();
+
+    let svc = community_service()?;
+    svc.update_boost_node(node_id, name, enabled, max_storage_bytes, max_bandwidth_mbps, auto_start, prioritized_communities)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    emit_event("community", &serde_json::json!({
+        "type": "boostNodeUpdated",
+        "node_id": node_id,
+    }));
+
+    Ok(JsValue::from_str("{\"success\":true}"))
+}
+
+/// Update boost node heartbeat (last seen).
+///
+/// Returns JSON: { "success": true }
+#[wasm_bindgen]
+pub fn umbra_wasm_community_boost_node_heartbeat(node_id: &str) -> Result<JsValue, JsValue> {
+    let svc = community_service()?;
+    svc.update_boost_node_heartbeat(node_id)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    Ok(JsValue::from_str("{\"success\":true}"))
+}
+
+/// Delete a boost node.
+///
+/// Returns JSON: { "success": true }
+#[wasm_bindgen]
+pub fn umbra_wasm_community_boost_node_delete(node_id: &str) -> Result<JsValue, JsValue> {
+    let svc = community_service()?;
+    svc.delete_boost_node(node_id)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    emit_event("community", &serde_json::json!({
+        "type": "boostNodeDeleted",
+        "node_id": node_id,
+    }));
+
+    Ok(JsValue::from_str("{\"success\":true}"))
+}
+
+// ============================================================================
+// COMMUNITY — GAP FILL: TIMEOUTS
+// ============================================================================
+
+/// Timeout a member (mute or restrict).
+#[wasm_bindgen]
+pub fn umbra_wasm_community_timeout_member(json: &str) -> Result<JsValue, JsValue> {
+    let v: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let svc = community_service()?;
+    let record = svc.timeout_member(
+        v["community_id"].as_str().unwrap_or(""),
+        v["member_did"].as_str().unwrap_or(""),
+        v["reason"].as_str(),
+        v["timeout_type"].as_str().unwrap_or("mute"),
+        v["duration_seconds"].as_i64().unwrap_or(3600),
+        v["issued_by"].as_str().unwrap_or(""),
+    ).map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    emit_event("community", &serde_json::json!({
+        "type": "memberTimedOut",
+        "community_id": record.community_id,
+        "member_did": record.member_did,
+        "timeout_type": record.timeout_type,
+        "expires_at": record.expires_at,
+    }));
+
+    Ok(JsValue::from_str(&serde_json::json!({
+        "id": record.id,
+        "community_id": record.community_id,
+        "member_did": record.member_did,
+        "reason": record.reason,
+        "timeout_type": record.timeout_type,
+        "issued_by": record.issued_by,
+        "expires_at": record.expires_at,
+        "created_at": record.created_at,
+    }).to_string()))
+}
+
+/// Remove a timeout early.
+#[wasm_bindgen]
+pub fn umbra_wasm_community_remove_timeout(timeout_id: &str, actor_did: &str) -> Result<JsValue, JsValue> {
+    let svc = community_service()?;
+    svc.remove_timeout(timeout_id, actor_did)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    emit_event("community", &serde_json::json!({
+        "type": "timeoutRemoved",
+        "timeout_id": timeout_id,
+    }));
+
+    Ok(JsValue::from_str("{\"success\":true}"))
+}
+
+/// Get active timeouts for a member.
+#[wasm_bindgen]
+pub fn umbra_wasm_community_get_active_timeouts(community_id: &str, member_did: &str) -> Result<JsValue, JsValue> {
+    let svc = community_service()?;
+    let timeouts = svc.get_active_timeouts(community_id, member_did)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let arr: Vec<serde_json::Value> = timeouts.iter().map(|t| timeout_to_json(t)).collect();
+    Ok(JsValue::from_str(&serde_json::to_string(&arr).unwrap_or_default()))
+}
+
+/// Get all timeouts for a community.
+#[wasm_bindgen]
+pub fn umbra_wasm_community_get_timeouts(community_id: &str) -> Result<JsValue, JsValue> {
+    let svc = community_service()?;
+    let timeouts = svc.get_community_timeouts(community_id)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let arr: Vec<serde_json::Value> = timeouts.iter().map(|t| timeout_to_json(t)).collect();
+    Ok(JsValue::from_str(&serde_json::to_string(&arr).unwrap_or_default()))
+}
+
+/// Check if a member is muted.
+#[wasm_bindgen]
+pub fn umbra_wasm_community_is_member_muted(community_id: &str, member_did: &str) -> Result<JsValue, JsValue> {
+    let svc = community_service()?;
+    let muted = svc.is_member_muted(community_id, member_did)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    Ok(JsValue::from_str(&serde_json::json!({"muted": muted}).to_string()))
+}
+
+// ============================================================================
+// COMMUNITY — GAP FILL: THREAD FOLLOW/UNFOLLOW
+// ============================================================================
+
+/// Follow a thread.
+#[wasm_bindgen]
+pub fn umbra_wasm_community_follow_thread(thread_id: &str, member_did: &str) -> Result<JsValue, JsValue> {
+    let svc = community_service()?;
+    svc.follow_thread(thread_id, member_did)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    emit_event("community", &serde_json::json!({
+        "type": "threadFollowed",
+        "thread_id": thread_id,
+        "member_did": member_did,
+    }));
+
+    Ok(JsValue::from_str("{\"success\":true}"))
+}
+
+/// Unfollow a thread.
+#[wasm_bindgen]
+pub fn umbra_wasm_community_unfollow_thread(thread_id: &str, member_did: &str) -> Result<JsValue, JsValue> {
+    let svc = community_service()?;
+    svc.unfollow_thread(thread_id, member_did)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    emit_event("community", &serde_json::json!({
+        "type": "threadUnfollowed",
+        "thread_id": thread_id,
+        "member_did": member_did,
+    }));
+
+    Ok(JsValue::from_str("{\"success\":true}"))
+}
+
+/// Get thread followers.
+#[wasm_bindgen]
+pub fn umbra_wasm_community_get_thread_followers(thread_id: &str) -> Result<JsValue, JsValue> {
+    let svc = community_service()?;
+    let followers = svc.get_thread_followers(thread_id)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let arr: Vec<serde_json::Value> = followers.iter().map(|f| serde_json::json!({
+        "thread_id": f.thread_id,
+        "member_did": f.member_did,
+        "followed_at": f.followed_at,
+    })).collect();
+    Ok(JsValue::from_str(&serde_json::to_string(&arr).unwrap_or_default()))
+}
+
+/// Check if following a thread.
+#[wasm_bindgen]
+pub fn umbra_wasm_community_is_following_thread(thread_id: &str, member_did: &str) -> Result<JsValue, JsValue> {
+    let svc = community_service()?;
+    let following = svc.is_following_thread(thread_id, member_did)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    Ok(JsValue::from_str(&serde_json::json!({"following": following}).to_string()))
+}
+
+// ============================================================================
+// COMMUNITY — GAP FILL: ADVANCED SEARCH
+// ============================================================================
+
+/// Advanced search with filters.
+#[wasm_bindgen]
+pub fn umbra_wasm_community_search_advanced(json: &str) -> Result<JsValue, JsValue> {
+    let v: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let svc = community_service()?;
+    let results = svc.search_advanced(
+        v["community_id"].as_str().unwrap_or(""),
+        v["query"].as_str(),
+        v["from_did"].as_str(),
+        v["channel_id"].as_str(),
+        v["before"].as_i64(),
+        v["after"].as_i64(),
+        v["has_file"].as_bool(),
+        v["has_reaction"].as_bool(),
+        v["is_pinned"].as_bool(),
+        v["limit"].as_u64().unwrap_or(50) as usize,
+    ).map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let arr: Vec<serde_json::Value> = results.iter().map(|m| message_to_json(m)).collect();
+    Ok(JsValue::from_str(&serde_json::to_string(&arr).unwrap_or_default()))
+}
+
+// ============================================================================
+// COMMUNITY — GAP FILL: MEMBER STATUS
+// ============================================================================
+
+/// Set a custom member status.
+#[wasm_bindgen]
+pub fn umbra_wasm_community_set_member_status(json: &str) -> Result<JsValue, JsValue> {
+    let v: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let svc = community_service()?;
+    let record = svc.set_member_status(
+        v["community_id"].as_str().unwrap_or(""),
+        v["member_did"].as_str().unwrap_or(""),
+        v["status_text"].as_str(),
+        v["status_emoji"].as_str(),
+        v["expires_at"].as_i64(),
+    ).map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    emit_event("community", &serde_json::json!({
+        "type": "memberStatusChanged",
+        "community_id": record.community_id,
+        "member_did": record.member_did,
+    }));
+
+    Ok(JsValue::from_str(&member_status_to_json(&record).to_string()))
+}
+
+/// Get a member's custom status.
+#[wasm_bindgen]
+pub fn umbra_wasm_community_get_member_status(community_id: &str, member_did: &str) -> Result<JsValue, JsValue> {
+    let svc = community_service()?;
+    let status = svc.get_member_status(community_id, member_did)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    match status {
+        Some(s) => Ok(JsValue::from_str(&member_status_to_json(&s).to_string())),
+        None => Ok(JsValue::from_str("null")),
+    }
+}
+
+/// Clear a member's custom status.
+#[wasm_bindgen]
+pub fn umbra_wasm_community_clear_member_status(community_id: &str, member_did: &str) -> Result<JsValue, JsValue> {
+    let svc = community_service()?;
+    svc.clear_member_status(community_id, member_did)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    emit_event("community", &serde_json::json!({
+        "type": "memberStatusCleared",
+        "community_id": community_id,
+        "member_did": member_did,
+    }));
+
+    Ok(JsValue::from_str("{\"success\":true}"))
+}
+
+// ============================================================================
+// COMMUNITY — GAP FILL: NOTIFICATION SETTINGS
+// ============================================================================
+
+/// Set notification settings.
+#[wasm_bindgen]
+pub fn umbra_wasm_community_set_notification_settings(json: &str) -> Result<JsValue, JsValue> {
+    let v: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let svc = community_service()?;
+    let record = svc.set_notification_settings(
+        v["community_id"].as_str().unwrap_or(""),
+        v["member_did"].as_str().unwrap_or(""),
+        v["target_type"].as_str().unwrap_or("community"),
+        v["target_id"].as_str().unwrap_or(""),
+        v["mute_until"].as_i64(),
+        v["suppress_everyone"].as_bool().unwrap_or(false),
+        v["suppress_roles"].as_bool().unwrap_or(false),
+        v["level"].as_str().unwrap_or("all"),
+    ).map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    Ok(JsValue::from_str(&notification_setting_to_json(&record).to_string()))
+}
+
+/// Get notification settings for a member.
+#[wasm_bindgen]
+pub fn umbra_wasm_community_get_notification_settings(community_id: &str, member_did: &str) -> Result<JsValue, JsValue> {
+    let svc = community_service()?;
+    let settings = svc.get_notification_settings(community_id, member_did)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let arr: Vec<serde_json::Value> = settings.iter().map(|s| notification_setting_to_json(s)).collect();
+    Ok(JsValue::from_str(&serde_json::to_string(&arr).unwrap_or_default()))
+}
+
+/// Delete a notification setting.
+#[wasm_bindgen]
+pub fn umbra_wasm_community_delete_notification_setting(setting_id: &str) -> Result<JsValue, JsValue> {
+    let svc = community_service()?;
+    svc.delete_notification_setting(setting_id)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    Ok(JsValue::from_str("{\"success\":true}"))
+}
+
+// ============================================================================
+// COMMUNITY — GAP FILL: MENTION PARSING
+// ============================================================================
+
+/// Parse mentions from message content.
+#[wasm_bindgen]
+pub fn umbra_wasm_community_parse_mentions(content: &str) -> Result<JsValue, JsValue> {
+    let mentions = crate::community::parse_mentions(content);
+    let arr: Vec<serde_json::Value> = mentions.iter().map(|m| match m {
+        crate::community::MentionType::Everyone => serde_json::json!({"type": "everyone"}),
+        crate::community::MentionType::Here => serde_json::json!({"type": "here"}),
+        crate::community::MentionType::Role(id) => serde_json::json!({"type": "role", "id": id}),
+        crate::community::MentionType::User(did) => serde_json::json!({"type": "user", "did": did}),
+    }).collect();
+
+    Ok(JsValue::from_str(&serde_json::to_string(&arr).unwrap_or_default()))
+}
+
+/// Send a system message to a channel.
+#[wasm_bindgen]
+pub fn umbra_wasm_community_send_system_message(channel_id: &str, content: &str) -> Result<JsValue, JsValue> {
+    let svc = community_service()?;
+    let msg = svc.send_system_message(channel_id, content)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    emit_event("community", &serde_json::json!({
+        "type": "systemMessage",
+        "channel_id": channel_id,
+        "message_id": msg.id,
+    }));
+
+    Ok(JsValue::from_str(&message_to_json(&msg).to_string()))
+}
+
+// ============================================================================
+// COMMUNITY — JSON HELPERS (Phase 2-11)
+// ============================================================================
+
+/// Convert a CommunityTimeoutRecord to JSON.
+fn timeout_to_json(t: &crate::storage::CommunityTimeoutRecord) -> serde_json::Value {
+    serde_json::json!({
+        "id": t.id,
+        "community_id": t.community_id,
+        "member_did": t.member_did,
+        "reason": t.reason,
+        "timeout_type": t.timeout_type,
+        "issued_by": t.issued_by,
+        "expires_at": t.expires_at,
+        "created_at": t.created_at,
+    })
+}
+
+/// Convert a CommunityMemberStatusRecord to JSON.
+fn member_status_to_json(s: &crate::storage::CommunityMemberStatusRecord) -> serde_json::Value {
+    serde_json::json!({
+        "community_id": s.community_id,
+        "member_did": s.member_did,
+        "status_text": s.status_text,
+        "status_emoji": s.status_emoji,
+        "expires_at": s.expires_at,
+        "updated_at": s.updated_at,
+    })
+}
+
+/// Convert a CommunityNotificationSettingRecord to JSON.
+fn notification_setting_to_json(s: &crate::storage::CommunityNotificationSettingRecord) -> serde_json::Value {
+    serde_json::json!({
+        "id": s.id,
+        "community_id": s.community_id,
+        "member_did": s.member_did,
+        "target_type": s.target_type,
+        "target_id": s.target_id,
+        "mute_until": s.mute_until,
+        "suppress_everyone": s.suppress_everyone,
+        "suppress_roles": s.suppress_roles,
+        "level": s.level,
+        "updated_at": s.updated_at,
+    })
+}
+
+/// Convert a CommunityMessageRecord to JSON.
+fn message_to_json(m: &crate::storage::CommunityMessageRecord) -> serde_json::Value {
+    let content_encrypted_b64 = m.content_encrypted.as_ref().map(|bytes| {
+        base64::engine::general_purpose::STANDARD.encode(bytes)
+    });
+    serde_json::json!({
+        "id": m.id,
+        "channel_id": m.channel_id,
+        "sender_did": m.sender_did,
+        "content_encrypted_b64": content_encrypted_b64,
+        "content_plaintext": m.content_plaintext,
+        "nonce": m.nonce,
+        "key_version": m.key_version,
+        "is_e2ee": m.is_e2ee,
+        "reply_to_id": m.reply_to_id,
+        "thread_id": m.thread_id,
+        "has_embed": m.has_embed,
+        "has_attachment": m.has_attachment,
+        "content_warning": m.content_warning,
+        "edited_at": m.edited_at,
+        "deleted_for_everyone": m.deleted_for_everyone,
+        "created_at": m.created_at,
+    })
+}
+
+/// Convert a CommunityThreadRecord to JSON.
+fn thread_to_json(t: &crate::storage::CommunityThreadRecord) -> serde_json::Value {
+    serde_json::json!({
+        "id": t.id,
+        "channel_id": t.channel_id,
+        "parent_message_id": t.parent_message_id,
+        "name": t.name,
+        "created_by": t.created_by,
+        "message_count": t.message_count,
+        "last_message_at": t.last_message_at,
+        "created_at": t.created_at,
+    })
+}
+
+/// Convert a CommunityWarningRecord to JSON.
+fn warning_to_json(w: &crate::storage::CommunityWarningRecord) -> serde_json::Value {
+    serde_json::json!({
+        "id": w.id,
+        "community_id": w.community_id,
+        "member_did": w.member_did,
+        "reason": w.reason,
+        "warned_by": w.warned_by,
+        "expires_at": w.expires_at,
+        "created_at": w.created_at,
+    })
+}
+
+/// Convert a CommunityFileRecord to JSON.
+fn file_to_json(f: &crate::storage::CommunityFileRecord) -> serde_json::Value {
+    serde_json::json!({
+        "id": f.id,
+        "channel_id": f.channel_id,
+        "folder_id": f.folder_id,
+        "filename": f.filename,
+        "description": f.description,
+        "file_size": f.file_size,
+        "mime_type": f.mime_type,
+        "storage_chunks_json": f.storage_chunks_json,
+        "uploaded_by": f.uploaded_by,
+        "version": f.version,
+        "download_count": f.download_count,
+        "created_at": f.created_at,
+    })
+}
+
+/// Convert a CommunityWebhookRecord to JSON.
+fn webhook_to_json(w: &crate::storage::CommunityWebhookRecord) -> serde_json::Value {
+    serde_json::json!({
+        "id": w.id,
+        "channel_id": w.channel_id,
+        "name": w.name,
+        "avatar_url": w.avatar_url,
+        "token": w.token,
+        "creator_did": w.creator_did,
+        "created_at": w.created_at,
+    })
+}
+
+/// Convert a BoostNodeRecord to JSON.
+fn boost_node_to_json(n: &crate::storage::BoostNodeRecord) -> serde_json::Value {
+    serde_json::json!({
+        "id": n.id,
+        "owner_did": n.owner_did,
+        "node_type": n.node_type,
+        "node_public_key": n.node_public_key,
+        "name": n.name,
+        "enabled": n.enabled,
+        "max_storage_bytes": n.max_storage_bytes,
+        "max_bandwidth_mbps": n.max_bandwidth_mbps,
+        "auto_start": n.auto_start,
+        "prioritized_communities": n.prioritized_communities,
+        "pairing_token": n.pairing_token,
+        "remote_address": n.remote_address,
+        "last_seen_at": n.last_seen_at,
+        "created_at": n.created_at,
+        "updated_at": n.updated_at,
+    })
 }
