@@ -2,6 +2,14 @@
 
 This guide explains how to set up and run the Umbra project in development and production.
 
+## Related Documentation
+
+- **[Architecture Guide](./architecture/ARCHITECTURE.md)** - Deep dive into how services work and how Rust interfaces with the frontend
+- **[Security Guide](./architecture/SECURITY.md)** - Cryptographic architecture and security model
+- **[Community Plan](./COMMUNITY_PLAN.md)** - Full community feature plan with implementation status
+- **[Frontend Requirements](./frontend_requirements.md)** - WASM function contracts, data types, and UI component specs
+- **[Component Checklist](./COMPONENT_CHECKLIST.md)** - 73 UI components to build across all phases
+
 ## Table of Contents
 
 1. [Project Structure](#project-structure)
@@ -11,6 +19,7 @@ This guide explains how to set up and run the Umbra project in development and p
 5. [Platform-Specific Notes](#platform-specific-notes)
 6. [Testing](#testing)
 7. [Troubleshooting](#troubleshooting)
+8. [Community Module](#community-module)
 
 ---
 
@@ -31,27 +40,72 @@ Umbra/
 │   │   │   ├── lib.rs           # Main entry
 │   │   │   ├── crypto/          # Cryptographic primitives
 │   │   │   ├── identity/        # Identity management
-│   │   │   ├── storage/         # Local storage
+│   │   │   ├── storage/         # Local storage (schema v7, 26 community tables)
 │   │   │   ├── network/         # P2P networking
 │   │   │   ├── discovery/       # Peer discovery
 │   │   │   ├── friends/         # Friend management
-│   │   │   └── messaging/       # E2E messaging
+│   │   │   ├── messaging/       # E2E messaging
+│   │   │   ├── community/       # Community system (16 modules, 3141 lines)
+│   │   │   └── ffi/             # FFI + WASM bindings (122 community functions)
 │   │   └── bindings/            # Generated FFI bindings
 │   │
 │   ├── umbra-service/           # TypeScript API layer
 │   │   ├── package.json
-│   │   └── src/index.ts
+│   │   └── src/
+│   │       ├── index.ts         # Re-exports
+│   │       ├── service.ts       # Main UmbraService class
+│   │       ├── types.ts         # Type definitions
+│   │       ├── errors.ts        # Error codes & UmbraError
+│   │       ├── helpers.ts       # Utility functions
+│   │       ├── identity.ts      # Identity operations
+│   │       ├── network.ts       # Network operations
+│   │       ├── friends.ts       # Friend management
+│   │       ├── messaging.ts     # Messaging operations
+│   │       ├── calling.ts       # Call records
+│   │       ├── groups.ts        # Group operations
+│   │       ├── crypto.ts        # Sign/verify
+│   │       └── relay.ts         # Relay client
 │   │
-│   ├── umbra-native/            # React Native native module (future)
-│   │   ├── ios/
-│   │   └── android/
+│   ├── umbra-wasm/              # WASM bindings & web layer
+│   │   ├── loader.ts            # WASM/Tauri initialization
+│   │   ├── sql-bridge.ts        # sql.js SQLite bridge
+│   │   ├── indexed-db.ts        # IndexedDB persistence
+│   │   ├── event-bridge.ts      # Rust → JS events
+│   │   ├── tauri-backend.ts     # Tauri IPC adapter
+│   │   └── index.ts             # Exports
 │   │
-│   └── umbra-web/               # Web WASM wrapper (future)
-│       └── src/
+│   ├── umbra-relay/             # WebSocket relay server
+│   │   └── src/
+│   │       ├── main.rs          # Server entry
+│   │       ├── protocol.rs      # Message types
+│   │       ├── handler.rs       # Connection handler
+│   │       ├── state.rs         # Server state
+│   │       └── federation.rs    # Relay-to-relay mesh
+│   │
+│   ├── umbra-plugin-sdk/        # Plugin development kit
+│   │   └── src/
+│   │
+│   ├── umbra-plugin-runtime/    # Plugin execution runtime
+│   │   └── src/
+│   │
+│   └── umbra-plugin-template/   # Plugin template
+│
+├── src-tauri/                   # Tauri desktop app
+│   ├── src/
+│   │   ├── main.rs              # Entry point
+│   │   ├── lib.rs               # Command registration
+│   │   ├── state.rs             # App state
+│   │   └── commands/            # IPC command handlers
+│   ├── Cargo.toml
+│   └── tauri.conf.json
 │
 ├── docs/
 │   ├── architecture/
+│   │   ├── ARCHITECTURE.md      # Architecture deep dive
 │   │   └── SECURITY.md          # Security documentation
+│   ├── COMMUNITY_PLAN.md        # Community feature plan & implementation status
+│   ├── COMPONENT_CHECKLIST.md   # UI component checklist (73 components)
+│   ├── frontend_requirements.md # WASM function contracts for frontend
 │   └── DEVELOPMENT.md           # This file
 │
 ├── package.json                 # Root package.json
@@ -545,12 +599,142 @@ jobs:
 
 ---
 
+## 8. Community Module
+
+The community system is Umbra's largest feature module. All business logic is in Rust with 122 WASM bindings for the frontend. The module spans 16 source files (3141 lines) plus 26 database tables and a comprehensive WASM layer.
+
+### Related Docs
+
+| Document | Path | Description |
+|----------|------|-------------|
+| Community Plan | [`docs/COMMUNITY_PLAN.md`](./COMMUNITY_PLAN.md) | Full feature plan, data model, implementation phases with status |
+| Frontend Requirements | [`docs/frontend_requirements.md`](./frontend_requirements.md) | WASM function signatures, data types, events, UI component specs |
+| Component Checklist | [`docs/COMPONENT_CHECKLIST.md`](./COMPONENT_CHECKLIST.md) | 73 UI components to build, organized by phase |
+
+### Source Code
+
+#### Core Service (`packages/umbra-core/src/community/`)
+
+| File | Lines | Purpose | Key Functions |
+|------|-------|---------|---------------|
+| [`mod.rs`](../packages/umbra-core/src/community/mod.rs) | 53 | Module root, public API | Exports `CommunityService`, `Permission`, `Permissions`, `RolePreset`, `MentionType`, `parse_mentions` |
+| [`service.rs`](../packages/umbra-core/src/community/service.rs) | 261 | Community CRUD | `create_community`, `get_community`, `update_community`, `delete_community`, `transfer_ownership` |
+| [`spaces.rs`](../packages/umbra-core/src/community/spaces.rs) | 125 | Space organization | `create_space`, `get_spaces`, `update_space`, `reorder_spaces`, `delete_space` |
+| [`channels.rs`](../packages/umbra-core/src/community/channels.rs) | 174 | Channel management (6 types) | `create_channel`, `get_channels`, `get_all_channels`, `update_channel`, `delete_channel` |
+| [`permissions.rs`](../packages/umbra-core/src/community/permissions.rs) | 357 | 64-bit permission bitfield | `Permission` enum (34+ flags), `Permissions` struct, resolution with administrator bypass |
+| [`roles.rs`](../packages/umbra-core/src/community/roles.rs) | 127 | Role presets + hierarchy | `RolePreset` enum (Owner/Admin/Moderator/Member), `create_preset_roles` |
+| [`members.rs`](../packages/umbra-core/src/community/members.rs) | 292 | Member lifecycle | `join_community`, `leave_community`, `kick_member`, `ban_member`, `unban_member` |
+| [`invites.rs`](../packages/umbra-core/src/community/invites.rs) | 182 | Invite links + vanity URLs | `create_invite`, `use_invite`, `set_vanity`, `delete_invite` |
+| [`messaging.rs`](../packages/umbra-core/src/community/messaging.rs) | 382 | Messages, reactions, pins | `send_message`, `add_reaction`, `pin_message`, `mark_as_read`, `parse_mentions` |
+| [`threads.rs`](../packages/umbra-core/src/community/threads.rs) | 182 | Threads + search | `create_thread`, `get_thread_messages`, `search_messages`, `follow_thread` |
+| [`moderation.rs`](../packages/umbra-core/src/community/moderation.rs) | 261 | Warnings + AutoMod | `warn_member`, `check_warning_escalation`, keyword filter management |
+| [`files.rs`](../packages/umbra-core/src/community/files.rs) | 134 | File management + folders | `upload_file`, `get_files`, `create_folder`, `record_file_download` |
+| [`customization.rs`](../packages/umbra-core/src/community/customization.rs) | 147 | Branding + emoji | `update_branding`, `set_vanity_url`, `create_emoji`, `create_sticker` |
+| [`integrations.rs`](../packages/umbra-core/src/community/integrations.rs) | 241 | Webhooks + permission overrides | `create_webhook`, `set_channel_override`, custom role CRUD |
+| [`boost_nodes.rs`](../packages/umbra-core/src/community/boost_nodes.rs) | 104 | Boost node config | `register_boost_node`, `update_boost_node`, `update_boost_node_heartbeat` |
+| [`member_experience.rs`](../packages/umbra-core/src/community/member_experience.rs) | 119 | Status, notifications, timeouts | `set_member_status`, `set_notification_settings`, timeout tracking |
+
+#### WASM Bindings (`packages/umbra-core/src/ffi/`)
+
+| File | Lines | Description |
+|------|-------|-------------|
+| [`wasm.rs`](../packages/umbra-core/src/ffi/wasm.rs) | 7305 | 122 community `umbra_wasm_community_*` functions exposing all service methods to JavaScript |
+
+#### Database Schema (`packages/umbra-core/src/storage/`)
+
+| File | Description |
+|------|-------------|
+| [`schema.rs`](../packages/umbra-core/src/storage/schema.rs) | Schema v7 — 26 community tables (`communities`, `community_spaces`, `community_channels`, `community_roles`, `community_member_roles`, `community_members`, `community_messages`, `community_reactions`, `community_read_receipts`, `community_pins`, `community_threads`, `community_invites`, `community_bans`, `community_warnings`, `community_audit_log`, `community_emoji`, `community_stickers`, `community_files`, `community_file_folders`, `community_webhooks`, `community_channel_keys`, `boost_nodes`, `community_deleted_messages`, `community_timeouts`, `community_thread_followers`, `community_member_status`, `community_notification_settings`) |
+
+### Tests
+
+| File | Status | Description |
+|------|--------|-------------|
+| [`permissions.rs`](../packages/umbra-core/src/community/permissions.rs) (inline `#[cfg(test)]`) | ✅ | Permission bitfield creation, has/check, administrator bypass, string conversion |
+| `service.rs` | ❌ Needs tests | Community CRUD, ownership transfer |
+| `spaces.rs` | ❌ Needs tests | Space CRUD, reordering |
+| `channels.rs` | ❌ Needs tests | Channel CRUD, type validation |
+| `members.rs` | ❌ Needs tests | Join/leave, kick/ban, ban evasion |
+| `invites.rs` | ❌ Needs tests | Invite create/use, expiry, vanity |
+| `messaging.rs` | ❌ Needs tests | Message send, reactions, pins, mentions |
+| `threads.rs` | ❌ Needs tests | Thread CRUD, search, followers |
+| `moderation.rs` | ❌ Needs tests | Warnings, escalation, keyword filters |
+| `files.rs` | ❌ Needs tests | File upload, folders, downloads |
+| `customization.rs` | ❌ Needs tests | Branding, emoji, stickers |
+| `integrations.rs` | ❌ Needs tests | Webhooks, permission overrides |
+| `boost_nodes.rs` | ❌ Needs tests | Node registration, heartbeat |
+| `member_experience.rs` | ❌ Needs tests | Status, notifications, timeouts |
+| `roles.rs` | ❌ Needs tests | Preset creation, hierarchy |
+
+To run existing community tests:
+
+```bash
+cd packages/umbra-core
+cargo test community -- --nocapture
+```
+
+### Architecture
+
+```
+┌─────────────────────────────────────────────────────────────────────┐
+│                      Community Module                                │
+│                                                                      │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────────────┐   │
+│  │ service  │  │ spaces   │  │ channels │  │ permissions      │   │
+│  │ (CRUD)   │──│ (org)    │──│ (6 types)│  │ (64-bit bitfield)│   │
+│  └──────────┘  └──────────┘  └──────────┘  └──────────────────┘   │
+│                                                                      │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────────────┐   │
+│  │ members  │  │ roles    │  │ invites  │  │ messaging        │   │
+│  │ (join/   │  │ (4 pre-  │  │ (links,  │  │ (send, reactions,│   │
+│  │  ban)    │  │  sets)   │  │  vanity) │  │  pins, mentions) │   │
+│  └──────────┘  └──────────┘  └──────────┘  └──────────────────┘   │
+│                                                                      │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────────────┐   │
+│  │ threads  │  │ moderat- │  │ files    │  │ customization    │   │
+│  │ (thread, │  │ ion      │  │ (upload, │  │ (branding, emoji,│   │
+│  │  search) │  │ (warn)   │  │  folders)│  │  stickers)       │   │
+│  └──────────┘  └──────────┘  └──────────┘  └──────────────────┘   │
+│                                                                      │
+│  ┌──────────┐  ┌──────────────────┐                                 │
+│  │ integra- │  │ member_experience │                                │
+│  │ tions    │  │ (status, notif,   │                                │
+│  │ (webhook)│  │  timeouts)        │                                │
+│  └──────────┘  └──────────────────┘                                 │
+│                                                                      │
+│  ┌──────────────────┐                                               │
+│  │ boost_nodes      │  ← config only; standalone binary planned     │
+│  │ (register, CRUD) │                                               │
+│  └──────────────────┘                                               │
+└─────────────────────────────────────────────────────────────────────┘
+           │
+           ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  ffi/wasm.rs — 122 WASM bindings (umbra_wasm_community_*)           │
+└─────────────────────────────────────────────────────────────────────┘
+           │
+           ▼
+┌─────────────────────────────────────────────────────────────────────┐
+│  storage/schema.rs — Schema v7 (26 community tables)                │
+└─────────────────────────────────────────────────────────────────────┘
+```
+
+### Running Community Functions
+
+```bash
+# Build and test the community module
+cd packages/umbra-core
+cargo build
+cargo test community -- --nocapture
+
+# Run only permission tests
+cargo test community::permissions -- --nocapture
+```
+
+---
+
 ## Next Steps
 
-1. **Phase 2**: Implement networking and discovery
-2. **Phase 3**: Implement friends system
-3. **Phase 4**: Implement messaging
-4. **Phase 5**: Web support (WASM)
-5. **Phase 6**: Integration and polish
+See [`COMMUNITY_PLAN.md`](./COMMUNITY_PLAN.md) for the full implementation roadmap and [`COMPONENT_CHECKLIST.md`](./COMPONENT_CHECKLIST.md) for frontend work.
 
-See `RUST_BACKEND_PLAN.md` for the full implementation roadmap.
+See `RUST_BACKEND_PLAN.md` for the overall Rust backend architecture plan.

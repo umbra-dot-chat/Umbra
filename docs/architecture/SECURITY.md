@@ -40,14 +40,14 @@ This document provides a comprehensive security overview of Umbra Core for audit
 │  • Deterministic: No RNG needed during signing (no nonce reuse risk)       │
 │  • Fast: ~50,000 signatures/second on modern hardware                      │
 │  • Compact: 64-byte signatures, 32-byte public keys                        │
-│  • Widely audited and deployed (Signal, Tor, SSH, etc.)                    │
+│  • Widely audited and deployed (Tor, SSH, etc.)                            │
 │                                                                             │
 │  X25519 (Key Exchange)                                                     │
 │  ─────────────────────                                                      │
 │  • Same curve as Ed25519 (Curve25519)                                      │
 │  • Constant-time implementation prevents timing attacks                     │
 │  • No cofactor issues (safe curve)                                         │
-│  • Used by: Signal, WhatsApp, Wire, Noise Protocol                         │
+│  • Used by: Tor, SSH, Noise Protocol, WireGuard                            │
 │                                                                             │
 │  AES-256-GCM (Encryption)                                                  │
 │  ────────────────────────                                                   │
