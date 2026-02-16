@@ -31,6 +31,7 @@ import NetworkContent from './NetworkContent';
 import LimitationsContent from './LimitationsContent';
 import TechnicalReferenceContent from './TechnicalReferenceContent';
 import PluginsContent from './PluginsContent';
+import CommunitiesContent from './CommunitiesContent';
 
 // ── Development stage definitions ──────────────────────────────────────
 
@@ -129,6 +130,27 @@ const SECTIONS: SectionDef[] = [
       testFiles: [
         '__tests__/hooks/useGroups.test.ts',
         '__tests__/integration/groups-flow.test.ts',
+      ],
+      integrationTests: [],
+    },
+  },
+  {
+    id: 'communities',
+    title: 'Communities',
+    subtitle: 'Large-scale community spaces',
+    iconBg: '#F97316',
+    keywords: [
+      'community', 'space', 'channel', 'role', 'permission', 'bitfield', 'invite',
+      'moderation', 'warning', 'ban', 'kick', 'timeout', 'thread', 'search',
+      'webhook', 'emoji', 'sticker', 'branding', 'boost', 'node', 'audit',
+      'announcement', 'bulletin', 'file', 'folder', 'mention', 'reaction', 'pin',
+      'vanity', 'slow mode', 'e2ee', 'notification', 'status', 'member',
+    ],
+    stage: 'alpha',
+    testCoverage: {
+      percentage: 8,
+      testFiles: [
+        'packages/umbra-core/src/community/permissions.rs',
       ],
       integrationTests: [],
     },
@@ -259,6 +281,10 @@ const SECTION_CONFIG: Record<string, {
   groups: {
     icon: <UsersIcon size={20} color="#FFF" />,
     content: <GroupsContent />,
+  },
+  communities: {
+    icon: <GlobeIcon size={20} color="#FFF" />,
+    content: <CommunitiesContent />,
   },
   calling: {
     icon: <PhoneIcon size={20} color="#FFF" />,

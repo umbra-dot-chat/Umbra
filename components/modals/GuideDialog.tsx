@@ -19,6 +19,7 @@ import {
   PuzzleIcon,
   XIcon,
   PhoneIcon,
+  GlobeIcon,
 } from '@/components/icons';
 
 // Import content components from separate files
@@ -26,6 +27,7 @@ import GettingStartedContent from '@/components/guide/GettingStartedContent';
 import FriendsContent from '@/components/guide/FriendsContent';
 import MessagingContent from '@/components/guide/MessagingContent';
 import GroupsContent from '@/components/guide/GroupsContent';
+import CommunitiesContent from '@/components/guide/CommunitiesContent';
 import CallingContent from '@/components/guide/CallingContent';
 import DataManagementContent from '@/components/guide/DataManagementContent';
 import SecurityContent from '@/components/guide/SecurityContent';
@@ -48,6 +50,7 @@ type Chapter =
   | 'friends'
   | 'messaging'
   | 'groups'
+  | 'communities'
   | 'calling'
   | 'data'
   | 'security'
@@ -68,6 +71,7 @@ const CHAPTERS: ChapterItem[] = [
   { id: 'friends', label: 'Friends', icon: UsersIcon, color: '#8B5CF6' },
   { id: 'messaging', label: 'Messaging', icon: MessageIcon, color: '#3B82F6' },
   { id: 'groups', label: 'Groups', icon: UsersIcon, color: '#EC4899' },
+  { id: 'communities', label: 'Communities', icon: GlobeIcon, color: '#F97316' },
   { id: 'calling', label: 'Calling', icon: PhoneIcon, color: '#10B981' },
   { id: 'data', label: 'Data Management', icon: SettingsIcon, color: '#F59E0B' },
   { id: 'security', label: 'Security & Privacy', icon: ShieldIcon, color: '#EAB308' },
@@ -134,6 +138,8 @@ export function GuideDialog({ open, onClose }: GuideDialogProps) {
         return <MessagingContent />;
       case 'groups':
         return <GroupsContent />;
+      case 'communities':
+        return <CommunitiesContent />;
       case 'calling':
         return <CallingContent />;
       case 'data':
