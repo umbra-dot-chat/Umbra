@@ -117,6 +117,16 @@ impl Database {
             sql_bridge_execute_batch(schema::MIGRATE_V3_TO_V4).map_err(js_err)?;
             tracing::info!("Migration v3 → v4 complete");
         }
+        if from_version < 5 {
+            tracing::info!("Running migration v4 → v5 (call history)");
+            sql_bridge_execute_batch(schema::MIGRATE_V4_TO_V5).map_err(js_err)?;
+            tracing::info!("Migration v4 → v5 complete");
+        }
+        if from_version < 6 {
+            tracing::info!("Running migration v5 → v6 (communities)");
+            sql_bridge_execute_batch(schema::MIGRATE_V5_TO_V6).map_err(js_err)?;
+            tracing::info!("Migration v5 → v6 complete");
+        }
         Ok(())
     }
 
@@ -1113,4 +1123,219 @@ pub struct PluginBundleRecord {
     pub bundle: String,
     /// When the plugin was installed
     pub installed_at: i64,
+}
+
+// ============================================================================
+// COMMUNITY RECORD TYPES
+// ============================================================================
+
+/// A community record from the database
+#[derive(Debug, Clone)]
+pub struct CommunityRecord {
+    pub id: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub icon_url: Option<String>,
+    pub banner_url: Option<String>,
+    pub splash_url: Option<String>,
+    pub accent_color: Option<String>,
+    pub custom_css: Option<String>,
+    pub owner_did: String,
+    pub vanity_url: Option<String>,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+/// A community space record
+#[derive(Debug, Clone)]
+pub struct CommunitySpaceRecord {
+    pub id: String,
+    pub community_id: String,
+    pub name: String,
+    pub position: i32,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+/// A community channel record
+#[derive(Debug, Clone)]
+pub struct CommunityChannelRecord {
+    pub id: String,
+    pub community_id: String,
+    pub space_id: String,
+    pub name: String,
+    pub channel_type: String,
+    pub topic: Option<String>,
+    pub position: i32,
+    pub slow_mode_seconds: i32,
+    pub e2ee_enabled: bool,
+    pub pin_limit: i32,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+/// A community role record
+#[derive(Debug, Clone)]
+pub struct CommunityRoleRecord {
+    pub id: String,
+    pub community_id: String,
+    pub name: String,
+    pub color: Option<String>,
+    pub icon: Option<String>,
+    pub badge: Option<String>,
+    pub position: i32,
+    pub hoisted: bool,
+    pub mentionable: bool,
+    pub is_preset: bool,
+    pub permissions_bitfield: String,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+/// A community member-role assignment record
+#[derive(Debug, Clone)]
+pub struct CommunityMemberRoleRecord {
+    pub community_id: String,
+    pub member_did: String,
+    pub role_id: String,
+    pub assigned_at: i64,
+    pub assigned_by: Option<String>,
+}
+
+/// A channel permission override record
+#[derive(Debug, Clone)]
+pub struct ChannelPermissionOverrideRecord {
+    pub id: String,
+    pub channel_id: String,
+    pub target_type: String,
+    pub target_id: String,
+    pub allow_bitfield: String,
+    pub deny_bitfield: String,
+}
+
+/// A community member record
+#[derive(Debug, Clone)]
+pub struct CommunityMemberRecord {
+    pub community_id: String,
+    pub member_did: String,
+    pub nickname: Option<String>,
+    pub avatar_url: Option<String>,
+    pub bio: Option<String>,
+    pub joined_at: i64,
+}
+
+/// A community message record
+#[derive(Debug, Clone)]
+pub struct CommunityMessageRecord {
+    pub id: String,
+    pub channel_id: String,
+    pub sender_did: String,
+    pub content_encrypted: Option<Vec<u8>>,
+    pub content_plaintext: Option<String>,
+    pub nonce: Option<String>,
+    pub key_version: Option<i32>,
+    pub is_e2ee: bool,
+    pub reply_to_id: Option<String>,
+    pub thread_id: Option<String>,
+    pub has_embed: bool,
+    pub has_attachment: bool,
+    pub content_warning: Option<String>,
+    pub edited_at: Option<i64>,
+    pub deleted_for_everyone: bool,
+    pub created_at: i64,
+}
+
+/// A community reaction record
+#[derive(Debug, Clone)]
+pub struct CommunityReactionRecord {
+    pub message_id: String,
+    pub member_did: String,
+    pub emoji: String,
+    pub is_custom: bool,
+    pub created_at: i64,
+}
+
+/// A community invite record
+#[derive(Debug, Clone)]
+pub struct CommunityInviteRecord {
+    pub id: String,
+    pub community_id: String,
+    pub code: String,
+    pub vanity: bool,
+    pub creator_did: String,
+    pub max_uses: Option<i32>,
+    pub use_count: i32,
+    pub expires_at: Option<i64>,
+    pub created_at: i64,
+}
+
+/// A community ban record
+#[derive(Debug, Clone)]
+pub struct CommunityBanRecord {
+    pub community_id: String,
+    pub banned_did: String,
+    pub reason: Option<String>,
+    pub banned_by: String,
+    pub device_fingerprint: Option<String>,
+    pub expires_at: Option<i64>,
+    pub created_at: i64,
+}
+
+/// A community warning record
+#[derive(Debug, Clone)]
+pub struct CommunityWarningRecord {
+    pub id: String,
+    pub community_id: String,
+    pub member_did: String,
+    pub reason: String,
+    pub warned_by: String,
+    pub expires_at: Option<i64>,
+    pub created_at: i64,
+}
+
+/// A community audit log entry
+#[derive(Debug, Clone)]
+pub struct CommunityAuditLogRecord {
+    pub id: String,
+    pub community_id: String,
+    pub actor_did: String,
+    pub action_type: String,
+    pub target_type: Option<String>,
+    pub target_id: Option<String>,
+    pub metadata_json: Option<String>,
+    pub content_detail: Option<String>,
+    pub created_at: i64,
+}
+
+/// A community thread record
+#[derive(Debug, Clone)]
+pub struct CommunityThreadRecord {
+    pub id: String,
+    pub channel_id: String,
+    pub parent_message_id: String,
+    pub name: Option<String>,
+    pub created_by: String,
+    pub message_count: i32,
+    pub last_message_at: Option<i64>,
+    pub created_at: i64,
+}
+
+/// A boost node record
+#[derive(Debug, Clone)]
+pub struct BoostNodeRecord {
+    pub id: String,
+    pub owner_did: String,
+    pub node_type: String,
+    pub node_public_key: String,
+    pub name: String,
+    pub enabled: bool,
+    pub max_storage_bytes: i64,
+    pub max_bandwidth_mbps: i32,
+    pub auto_start: bool,
+    pub prioritized_communities: Option<String>,
+    pub pairing_token: Option<String>,
+    pub remote_address: Option<String>,
+    pub last_seen_at: Option<i64>,
+    pub created_at: i64,
+    pub updated_at: i64,
 }

@@ -53,7 +53,7 @@
 //! ```
 
 /// Current schema version
-pub const SCHEMA_VERSION: i32 = 5;
+pub const SCHEMA_VERSION: i32 = 7;
 
 /// SQL to create all tables
 pub const CREATE_TABLES: &str = r#"
@@ -276,6 +276,407 @@ CREATE TABLE IF NOT EXISTS call_history (
     FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_call_history_conversation ON call_history(conversation_id, started_at DESC);
+
+-- =========================================================================
+-- COMMUNITY TABLES
+-- =========================================================================
+
+-- Core community table
+CREATE TABLE IF NOT EXISTS communities (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    description TEXT,
+    icon_url TEXT,
+    banner_url TEXT,
+    splash_url TEXT,
+    accent_color TEXT,
+    custom_css TEXT,
+    owner_did TEXT NOT NULL,
+    vanity_url TEXT UNIQUE,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_communities_owner ON communities(owner_did);
+
+-- Spaces (one level of organization within a community)
+CREATE TABLE IF NOT EXISTS community_spaces (
+    id TEXT PRIMARY KEY,
+    community_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    position INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    FOREIGN KEY (community_id) REFERENCES communities(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_community_spaces_community ON community_spaces(community_id, position);
+
+-- Channels within spaces
+CREATE TABLE IF NOT EXISTS community_channels (
+    id TEXT PRIMARY KEY,
+    community_id TEXT NOT NULL,
+    space_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    type TEXT NOT NULL CHECK(type IN ('text', 'voice', 'files', 'announcement', 'bulletin', 'welcome')),
+    topic TEXT,
+    position INTEGER NOT NULL DEFAULT 0,
+    slow_mode_seconds INTEGER DEFAULT 0,
+    e2ee_enabled INTEGER NOT NULL DEFAULT 0,
+    pin_limit INTEGER NOT NULL DEFAULT 50,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    FOREIGN KEY (community_id) REFERENCES communities(id) ON DELETE CASCADE,
+    FOREIGN KEY (space_id) REFERENCES community_spaces(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_community_channels_space ON community_channels(space_id, position);
+CREATE INDEX IF NOT EXISTS idx_community_channels_community ON community_channels(community_id);
+
+-- Roles
+CREATE TABLE IF NOT EXISTS community_roles (
+    id TEXT PRIMARY KEY,
+    community_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    color TEXT,
+    icon TEXT,
+    badge TEXT,
+    position INTEGER NOT NULL DEFAULT 0,
+    hoisted INTEGER NOT NULL DEFAULT 0,
+    mentionable INTEGER NOT NULL DEFAULT 0,
+    is_preset INTEGER NOT NULL DEFAULT 0,
+    permissions_bitfield TEXT NOT NULL DEFAULT '0',
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    FOREIGN KEY (community_id) REFERENCES communities(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_community_roles_community ON community_roles(community_id, position);
+
+-- Role assignments (many-to-many: members ↔ roles)
+CREATE TABLE IF NOT EXISTS community_member_roles (
+    community_id TEXT NOT NULL,
+    member_did TEXT NOT NULL,
+    role_id TEXT NOT NULL,
+    assigned_at INTEGER NOT NULL,
+    assigned_by TEXT,
+    PRIMARY KEY (community_id, member_did, role_id),
+    FOREIGN KEY (role_id) REFERENCES community_roles(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_community_member_roles_member ON community_member_roles(community_id, member_did);
+
+-- Channel permission overrides (per-role or per-member)
+CREATE TABLE IF NOT EXISTS channel_permission_overrides (
+    id TEXT PRIMARY KEY,
+    channel_id TEXT NOT NULL,
+    target_type TEXT NOT NULL CHECK(target_type IN ('role', 'member')),
+    target_id TEXT NOT NULL,
+    allow_bitfield TEXT NOT NULL DEFAULT '0',
+    deny_bitfield TEXT NOT NULL DEFAULT '0',
+    FOREIGN KEY (channel_id) REFERENCES community_channels(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_channel_perm_overrides_channel ON channel_permission_overrides(channel_id);
+
+-- Community members
+CREATE TABLE IF NOT EXISTS community_members (
+    community_id TEXT NOT NULL,
+    member_did TEXT NOT NULL,
+    nickname TEXT,
+    avatar_url TEXT,
+    bio TEXT,
+    joined_at INTEGER NOT NULL,
+    PRIMARY KEY (community_id, member_did),
+    FOREIGN KEY (community_id) REFERENCES communities(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_community_members_did ON community_members(member_did);
+
+-- Community messages
+CREATE TABLE IF NOT EXISTS community_messages (
+    id TEXT PRIMARY KEY,
+    channel_id TEXT NOT NULL,
+    sender_did TEXT NOT NULL,
+    content_encrypted BLOB,
+    content_plaintext TEXT,
+    nonce TEXT,
+    key_version INTEGER,
+    is_e2ee INTEGER NOT NULL DEFAULT 0,
+    reply_to_id TEXT,
+    thread_id TEXT,
+    has_embed INTEGER NOT NULL DEFAULT 0,
+    has_attachment INTEGER NOT NULL DEFAULT 0,
+    content_warning TEXT,
+    edited_at INTEGER,
+    deleted_for_everyone INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    FOREIGN KEY (channel_id) REFERENCES community_channels(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_community_messages_channel ON community_messages(channel_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_community_messages_sender ON community_messages(sender_did);
+CREATE INDEX IF NOT EXISTS idx_community_messages_thread ON community_messages(thread_id);
+
+-- Community message reactions
+CREATE TABLE IF NOT EXISTS community_reactions (
+    message_id TEXT NOT NULL,
+    member_did TEXT NOT NULL,
+    emoji TEXT NOT NULL,
+    is_custom INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (message_id, member_did, emoji),
+    FOREIGN KEY (message_id) REFERENCES community_messages(id) ON DELETE CASCADE
+);
+
+-- Read receipts
+CREATE TABLE IF NOT EXISTS community_read_receipts (
+    channel_id TEXT NOT NULL,
+    member_did TEXT NOT NULL,
+    last_read_message_id TEXT NOT NULL,
+    read_at INTEGER NOT NULL,
+    PRIMARY KEY (channel_id, member_did),
+    FOREIGN KEY (channel_id) REFERENCES community_channels(id) ON DELETE CASCADE
+);
+
+-- Message pins
+CREATE TABLE IF NOT EXISTS community_pins (
+    channel_id TEXT NOT NULL,
+    message_id TEXT NOT NULL,
+    pinned_by TEXT NOT NULL,
+    pinned_at INTEGER NOT NULL,
+    PRIMARY KEY (channel_id, message_id),
+    FOREIGN KEY (channel_id) REFERENCES community_channels(id) ON DELETE CASCADE,
+    FOREIGN KEY (message_id) REFERENCES community_messages(id) ON DELETE CASCADE
+);
+
+-- Threads
+CREATE TABLE IF NOT EXISTS community_threads (
+    id TEXT PRIMARY KEY,
+    channel_id TEXT NOT NULL,
+    parent_message_id TEXT NOT NULL,
+    name TEXT,
+    created_by TEXT NOT NULL,
+    message_count INTEGER NOT NULL DEFAULT 0,
+    last_message_at INTEGER,
+    created_at INTEGER NOT NULL,
+    FOREIGN KEY (channel_id) REFERENCES community_channels(id) ON DELETE CASCADE,
+    FOREIGN KEY (parent_message_id) REFERENCES community_messages(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_community_threads_channel ON community_threads(channel_id);
+
+-- Invite links
+CREATE TABLE IF NOT EXISTS community_invites (
+    id TEXT PRIMARY KEY,
+    community_id TEXT NOT NULL,
+    code TEXT NOT NULL UNIQUE,
+    vanity INTEGER NOT NULL DEFAULT 0,
+    creator_did TEXT NOT NULL,
+    max_uses INTEGER,
+    use_count INTEGER NOT NULL DEFAULT 0,
+    expires_at INTEGER,
+    created_at INTEGER NOT NULL,
+    FOREIGN KEY (community_id) REFERENCES communities(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_community_invites_code ON community_invites(code);
+CREATE INDEX IF NOT EXISTS idx_community_invites_community ON community_invites(community_id);
+
+-- Bans
+CREATE TABLE IF NOT EXISTS community_bans (
+    community_id TEXT NOT NULL,
+    banned_did TEXT NOT NULL,
+    reason TEXT,
+    banned_by TEXT NOT NULL,
+    device_fingerprint TEXT,
+    expires_at INTEGER,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (community_id, banned_did),
+    FOREIGN KEY (community_id) REFERENCES communities(id) ON DELETE CASCADE
+);
+
+-- Warnings
+CREATE TABLE IF NOT EXISTS community_warnings (
+    id TEXT PRIMARY KEY,
+    community_id TEXT NOT NULL,
+    member_did TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    warned_by TEXT NOT NULL,
+    expires_at INTEGER,
+    created_at INTEGER NOT NULL,
+    FOREIGN KEY (community_id) REFERENCES communities(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_community_warnings_member ON community_warnings(community_id, member_did);
+
+-- Audit log
+CREATE TABLE IF NOT EXISTS community_audit_log (
+    id TEXT PRIMARY KEY,
+    community_id TEXT NOT NULL,
+    actor_did TEXT NOT NULL,
+    action_type TEXT NOT NULL,
+    target_type TEXT,
+    target_id TEXT,
+    metadata_json TEXT,
+    content_detail TEXT,
+    created_at INTEGER NOT NULL,
+    FOREIGN KEY (community_id) REFERENCES communities(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_community_audit_log_community ON community_audit_log(community_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_community_audit_log_actor ON community_audit_log(actor_did);
+
+-- Custom emoji
+CREATE TABLE IF NOT EXISTS community_emoji (
+    id TEXT PRIMARY KEY,
+    community_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    image_url TEXT NOT NULL,
+    animated INTEGER NOT NULL DEFAULT 0,
+    uploaded_by TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    FOREIGN KEY (community_id) REFERENCES communities(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_community_emoji_community ON community_emoji(community_id);
+
+-- Custom stickers
+CREATE TABLE IF NOT EXISTS community_stickers (
+    id TEXT PRIMARY KEY,
+    community_id TEXT NOT NULL,
+    pack_id TEXT,
+    name TEXT NOT NULL,
+    image_url TEXT NOT NULL,
+    animated INTEGER NOT NULL DEFAULT 0,
+    uploaded_by TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    FOREIGN KEY (community_id) REFERENCES communities(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_community_stickers_community ON community_stickers(community_id);
+
+-- File sharing
+CREATE TABLE IF NOT EXISTS community_files (
+    id TEXT PRIMARY KEY,
+    channel_id TEXT NOT NULL,
+    folder_id TEXT,
+    filename TEXT NOT NULL,
+    description TEXT,
+    file_size INTEGER NOT NULL,
+    mime_type TEXT,
+    storage_chunks_json TEXT NOT NULL,
+    uploaded_by TEXT NOT NULL,
+    version INTEGER NOT NULL DEFAULT 1,
+    download_count INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    FOREIGN KEY (channel_id) REFERENCES community_channels(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_community_files_channel ON community_files(channel_id);
+CREATE INDEX IF NOT EXISTS idx_community_files_folder ON community_files(folder_id);
+
+-- File folders
+CREATE TABLE IF NOT EXISTS community_file_folders (
+    id TEXT PRIMARY KEY,
+    channel_id TEXT NOT NULL,
+    parent_folder_id TEXT,
+    name TEXT NOT NULL,
+    created_by TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    FOREIGN KEY (channel_id) REFERENCES community_channels(id) ON DELETE CASCADE,
+    FOREIGN KEY (parent_folder_id) REFERENCES community_file_folders(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_community_file_folders_channel ON community_file_folders(channel_id);
+
+-- Webhooks
+CREATE TABLE IF NOT EXISTS community_webhooks (
+    id TEXT PRIMARY KEY,
+    channel_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    avatar_url TEXT,
+    token TEXT NOT NULL UNIQUE,
+    creator_did TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    FOREIGN KEY (channel_id) REFERENCES community_channels(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_community_webhooks_channel ON community_webhooks(channel_id);
+
+-- Channel E2EE keys (versioned for rotation)
+CREATE TABLE IF NOT EXISTS community_channel_keys (
+    channel_id TEXT NOT NULL,
+    key_version INTEGER NOT NULL,
+    encrypted_key BLOB NOT NULL,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (channel_id, key_version),
+    FOREIGN KEY (channel_id) REFERENCES community_channels(id) ON DELETE CASCADE
+);
+
+-- Boost node configuration (local and remote nodes)
+CREATE TABLE IF NOT EXISTS boost_nodes (
+    id TEXT PRIMARY KEY,
+    owner_did TEXT NOT NULL,
+    node_type TEXT NOT NULL CHECK(node_type IN ('local', 'remote')),
+    node_public_key TEXT NOT NULL,
+    name TEXT NOT NULL DEFAULT 'My Boost Node',
+    enabled INTEGER NOT NULL DEFAULT 0,
+    max_storage_bytes INTEGER NOT NULL DEFAULT 1073741824,
+    max_bandwidth_mbps INTEGER NOT NULL DEFAULT 10,
+    auto_start INTEGER NOT NULL DEFAULT 0,
+    prioritized_communities TEXT,
+    pairing_token TEXT,
+    remote_address TEXT,
+    last_seen_at INTEGER,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_boost_nodes_owner ON boost_nodes(owner_did);
+
+-- Deleted messages tracking (for "delete for me" per-user)
+CREATE TABLE IF NOT EXISTS community_deleted_messages (
+    message_id TEXT NOT NULL,
+    member_did TEXT NOT NULL,
+    deleted_at INTEGER NOT NULL,
+    PRIMARY KEY (message_id, member_did)
+);
+
+-- Timeouts (temporary mute/restrict a member)
+CREATE TABLE IF NOT EXISTS community_timeouts (
+    id TEXT PRIMARY KEY,
+    community_id TEXT NOT NULL,
+    member_did TEXT NOT NULL,
+    reason TEXT,
+    timeout_type TEXT NOT NULL DEFAULT 'mute' CHECK(timeout_type IN ('mute', 'restrict')),
+    issued_by TEXT NOT NULL,
+    expires_at INTEGER NOT NULL,
+    created_at INTEGER NOT NULL,
+    FOREIGN KEY (community_id) REFERENCES communities(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_community_timeouts_member ON community_timeouts(community_id, member_did);
+CREATE INDEX IF NOT EXISTS idx_community_timeouts_expires ON community_timeouts(expires_at);
+
+-- Thread followers (subscribe/unsubscribe from thread notifications)
+CREATE TABLE IF NOT EXISTS community_thread_followers (
+    thread_id TEXT NOT NULL,
+    member_did TEXT NOT NULL,
+    followed_at INTEGER NOT NULL,
+    PRIMARY KEY (thread_id, member_did),
+    FOREIGN KEY (thread_id) REFERENCES community_threads(id) ON DELETE CASCADE
+);
+
+-- Member status (custom status text + emoji)
+CREATE TABLE IF NOT EXISTS community_member_status (
+    community_id TEXT NOT NULL,
+    member_did TEXT NOT NULL,
+    status_text TEXT,
+    status_emoji TEXT,
+    expires_at INTEGER,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (community_id, member_did),
+    FOREIGN KEY (community_id) REFERENCES communities(id) ON DELETE CASCADE
+);
+
+-- Notification settings (per-community, per-space, or per-channel)
+CREATE TABLE IF NOT EXISTS community_notification_settings (
+    id TEXT PRIMARY KEY,
+    community_id TEXT NOT NULL,
+    member_did TEXT NOT NULL,
+    target_type TEXT NOT NULL CHECK(target_type IN ('community', 'space', 'channel')),
+    target_id TEXT NOT NULL,
+    mute_until INTEGER,
+    suppress_everyone INTEGER NOT NULL DEFAULT 0,
+    suppress_roles INTEGER NOT NULL DEFAULT 0,
+    level TEXT NOT NULL DEFAULT 'all' CHECK(level IN ('all', 'mentions', 'none')),
+    updated_at INTEGER NOT NULL,
+    FOREIGN KEY (community_id) REFERENCES communities(id) ON DELETE CASCADE,
+    UNIQUE(community_id, member_did, target_type, target_id)
+);
+CREATE INDEX IF NOT EXISTS idx_community_notification_settings_member ON community_notification_settings(community_id, member_did);
 "#;
 
 /// Migration SQL from schema version 1 → 2
@@ -431,9 +832,452 @@ CREATE INDEX IF NOT EXISTS idx_call_history_conversation ON call_history(convers
 UPDATE schema_version SET version = 5;
 "#;
 
+/// Migration SQL from schema version 5 → 6
+///
+/// Adds all community infrastructure tables: communities, spaces, channels,
+/// roles, members, messages, reactions, threads, invites, bans, warnings,
+/// audit log, emoji, stickers, files, webhooks, channel keys, and boost nodes.
+pub const MIGRATE_V5_TO_V6: &str = r#"
+-- Core community table
+CREATE TABLE IF NOT EXISTS communities (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    description TEXT,
+    icon_url TEXT,
+    banner_url TEXT,
+    splash_url TEXT,
+    accent_color TEXT,
+    custom_css TEXT,
+    owner_did TEXT NOT NULL,
+    vanity_url TEXT UNIQUE,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_communities_owner ON communities(owner_did);
+
+-- Spaces
+CREATE TABLE IF NOT EXISTS community_spaces (
+    id TEXT PRIMARY KEY,
+    community_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    position INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    FOREIGN KEY (community_id) REFERENCES communities(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_community_spaces_community ON community_spaces(community_id, position);
+
+-- Channels
+CREATE TABLE IF NOT EXISTS community_channels (
+    id TEXT PRIMARY KEY,
+    community_id TEXT NOT NULL,
+    space_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    type TEXT NOT NULL CHECK(type IN ('text', 'voice', 'files', 'announcement', 'bulletin', 'welcome')),
+    topic TEXT,
+    position INTEGER NOT NULL DEFAULT 0,
+    slow_mode_seconds INTEGER DEFAULT 0,
+    e2ee_enabled INTEGER NOT NULL DEFAULT 0,
+    pin_limit INTEGER NOT NULL DEFAULT 50,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    FOREIGN KEY (community_id) REFERENCES communities(id) ON DELETE CASCADE,
+    FOREIGN KEY (space_id) REFERENCES community_spaces(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_community_channels_space ON community_channels(space_id, position);
+CREATE INDEX IF NOT EXISTS idx_community_channels_community ON community_channels(community_id);
+
+-- Roles
+CREATE TABLE IF NOT EXISTS community_roles (
+    id TEXT PRIMARY KEY,
+    community_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    color TEXT,
+    icon TEXT,
+    badge TEXT,
+    position INTEGER NOT NULL DEFAULT 0,
+    hoisted INTEGER NOT NULL DEFAULT 0,
+    mentionable INTEGER NOT NULL DEFAULT 0,
+    is_preset INTEGER NOT NULL DEFAULT 0,
+    permissions_bitfield TEXT NOT NULL DEFAULT '0',
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    FOREIGN KEY (community_id) REFERENCES communities(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_community_roles_community ON community_roles(community_id, position);
+
+-- Role assignments
+CREATE TABLE IF NOT EXISTS community_member_roles (
+    community_id TEXT NOT NULL,
+    member_did TEXT NOT NULL,
+    role_id TEXT NOT NULL,
+    assigned_at INTEGER NOT NULL,
+    assigned_by TEXT,
+    PRIMARY KEY (community_id, member_did, role_id),
+    FOREIGN KEY (role_id) REFERENCES community_roles(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_community_member_roles_member ON community_member_roles(community_id, member_did);
+
+-- Channel permission overrides
+CREATE TABLE IF NOT EXISTS channel_permission_overrides (
+    id TEXT PRIMARY KEY,
+    channel_id TEXT NOT NULL,
+    target_type TEXT NOT NULL CHECK(target_type IN ('role', 'member')),
+    target_id TEXT NOT NULL,
+    allow_bitfield TEXT NOT NULL DEFAULT '0',
+    deny_bitfield TEXT NOT NULL DEFAULT '0',
+    FOREIGN KEY (channel_id) REFERENCES community_channels(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_channel_perm_overrides_channel ON channel_permission_overrides(channel_id);
+
+-- Community members
+CREATE TABLE IF NOT EXISTS community_members (
+    community_id TEXT NOT NULL,
+    member_did TEXT NOT NULL,
+    nickname TEXT,
+    avatar_url TEXT,
+    bio TEXT,
+    joined_at INTEGER NOT NULL,
+    PRIMARY KEY (community_id, member_did),
+    FOREIGN KEY (community_id) REFERENCES communities(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_community_members_did ON community_members(member_did);
+
+-- Community messages
+CREATE TABLE IF NOT EXISTS community_messages (
+    id TEXT PRIMARY KEY,
+    channel_id TEXT NOT NULL,
+    sender_did TEXT NOT NULL,
+    content_encrypted BLOB,
+    content_plaintext TEXT,
+    nonce TEXT,
+    key_version INTEGER,
+    is_e2ee INTEGER NOT NULL DEFAULT 0,
+    reply_to_id TEXT,
+    thread_id TEXT,
+    has_embed INTEGER NOT NULL DEFAULT 0,
+    has_attachment INTEGER NOT NULL DEFAULT 0,
+    content_warning TEXT,
+    edited_at INTEGER,
+    deleted_for_everyone INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    FOREIGN KEY (channel_id) REFERENCES community_channels(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_community_messages_channel ON community_messages(channel_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_community_messages_sender ON community_messages(sender_did);
+CREATE INDEX IF NOT EXISTS idx_community_messages_thread ON community_messages(thread_id);
+
+-- Community reactions
+CREATE TABLE IF NOT EXISTS community_reactions (
+    message_id TEXT NOT NULL,
+    member_did TEXT NOT NULL,
+    emoji TEXT NOT NULL,
+    is_custom INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (message_id, member_did, emoji),
+    FOREIGN KEY (message_id) REFERENCES community_messages(id) ON DELETE CASCADE
+);
+
+-- Read receipts
+CREATE TABLE IF NOT EXISTS community_read_receipts (
+    channel_id TEXT NOT NULL,
+    member_did TEXT NOT NULL,
+    last_read_message_id TEXT NOT NULL,
+    read_at INTEGER NOT NULL,
+    PRIMARY KEY (channel_id, member_did),
+    FOREIGN KEY (channel_id) REFERENCES community_channels(id) ON DELETE CASCADE
+);
+
+-- Message pins
+CREATE TABLE IF NOT EXISTS community_pins (
+    channel_id TEXT NOT NULL,
+    message_id TEXT NOT NULL,
+    pinned_by TEXT NOT NULL,
+    pinned_at INTEGER NOT NULL,
+    PRIMARY KEY (channel_id, message_id),
+    FOREIGN KEY (channel_id) REFERENCES community_channels(id) ON DELETE CASCADE,
+    FOREIGN KEY (message_id) REFERENCES community_messages(id) ON DELETE CASCADE
+);
+
+-- Threads
+CREATE TABLE IF NOT EXISTS community_threads (
+    id TEXT PRIMARY KEY,
+    channel_id TEXT NOT NULL,
+    parent_message_id TEXT NOT NULL,
+    name TEXT,
+    created_by TEXT NOT NULL,
+    message_count INTEGER NOT NULL DEFAULT 0,
+    last_message_at INTEGER,
+    created_at INTEGER NOT NULL,
+    FOREIGN KEY (channel_id) REFERENCES community_channels(id) ON DELETE CASCADE,
+    FOREIGN KEY (parent_message_id) REFERENCES community_messages(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_community_threads_channel ON community_threads(channel_id);
+
+-- Invite links
+CREATE TABLE IF NOT EXISTS community_invites (
+    id TEXT PRIMARY KEY,
+    community_id TEXT NOT NULL,
+    code TEXT NOT NULL UNIQUE,
+    vanity INTEGER NOT NULL DEFAULT 0,
+    creator_did TEXT NOT NULL,
+    max_uses INTEGER,
+    use_count INTEGER NOT NULL DEFAULT 0,
+    expires_at INTEGER,
+    created_at INTEGER NOT NULL,
+    FOREIGN KEY (community_id) REFERENCES communities(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_community_invites_code ON community_invites(code);
+CREATE INDEX IF NOT EXISTS idx_community_invites_community ON community_invites(community_id);
+
+-- Bans
+CREATE TABLE IF NOT EXISTS community_bans (
+    community_id TEXT NOT NULL,
+    banned_did TEXT NOT NULL,
+    reason TEXT,
+    banned_by TEXT NOT NULL,
+    device_fingerprint TEXT,
+    expires_at INTEGER,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (community_id, banned_did),
+    FOREIGN KEY (community_id) REFERENCES communities(id) ON DELETE CASCADE
+);
+
+-- Warnings
+CREATE TABLE IF NOT EXISTS community_warnings (
+    id TEXT PRIMARY KEY,
+    community_id TEXT NOT NULL,
+    member_did TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    warned_by TEXT NOT NULL,
+    expires_at INTEGER,
+    created_at INTEGER NOT NULL,
+    FOREIGN KEY (community_id) REFERENCES communities(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_community_warnings_member ON community_warnings(community_id, member_did);
+
+-- Audit log
+CREATE TABLE IF NOT EXISTS community_audit_log (
+    id TEXT PRIMARY KEY,
+    community_id TEXT NOT NULL,
+    actor_did TEXT NOT NULL,
+    action_type TEXT NOT NULL,
+    target_type TEXT,
+    target_id TEXT,
+    metadata_json TEXT,
+    content_detail TEXT,
+    created_at INTEGER NOT NULL,
+    FOREIGN KEY (community_id) REFERENCES communities(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_community_audit_log_community ON community_audit_log(community_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_community_audit_log_actor ON community_audit_log(actor_did);
+
+-- Custom emoji
+CREATE TABLE IF NOT EXISTS community_emoji (
+    id TEXT PRIMARY KEY,
+    community_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    image_url TEXT NOT NULL,
+    animated INTEGER NOT NULL DEFAULT 0,
+    uploaded_by TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    FOREIGN KEY (community_id) REFERENCES communities(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_community_emoji_community ON community_emoji(community_id);
+
+-- Custom stickers
+CREATE TABLE IF NOT EXISTS community_stickers (
+    id TEXT PRIMARY KEY,
+    community_id TEXT NOT NULL,
+    pack_id TEXT,
+    name TEXT NOT NULL,
+    image_url TEXT NOT NULL,
+    animated INTEGER NOT NULL DEFAULT 0,
+    uploaded_by TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    FOREIGN KEY (community_id) REFERENCES communities(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_community_stickers_community ON community_stickers(community_id);
+
+-- File sharing
+CREATE TABLE IF NOT EXISTS community_files (
+    id TEXT PRIMARY KEY,
+    channel_id TEXT NOT NULL,
+    folder_id TEXT,
+    filename TEXT NOT NULL,
+    description TEXT,
+    file_size INTEGER NOT NULL,
+    mime_type TEXT,
+    storage_chunks_json TEXT NOT NULL,
+    uploaded_by TEXT NOT NULL,
+    version INTEGER NOT NULL DEFAULT 1,
+    download_count INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    FOREIGN KEY (channel_id) REFERENCES community_channels(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_community_files_channel ON community_files(channel_id);
+CREATE INDEX IF NOT EXISTS idx_community_files_folder ON community_files(folder_id);
+
+-- File folders
+CREATE TABLE IF NOT EXISTS community_file_folders (
+    id TEXT PRIMARY KEY,
+    channel_id TEXT NOT NULL,
+    parent_folder_id TEXT,
+    name TEXT NOT NULL,
+    created_by TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    FOREIGN KEY (channel_id) REFERENCES community_channels(id) ON DELETE CASCADE,
+    FOREIGN KEY (parent_folder_id) REFERENCES community_file_folders(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_community_file_folders_channel ON community_file_folders(channel_id);
+
+-- Webhooks
+CREATE TABLE IF NOT EXISTS community_webhooks (
+    id TEXT PRIMARY KEY,
+    channel_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    avatar_url TEXT,
+    token TEXT NOT NULL UNIQUE,
+    creator_did TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    FOREIGN KEY (channel_id) REFERENCES community_channels(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_community_webhooks_channel ON community_webhooks(channel_id);
+
+-- Channel E2EE keys
+CREATE TABLE IF NOT EXISTS community_channel_keys (
+    channel_id TEXT NOT NULL,
+    key_version INTEGER NOT NULL,
+    encrypted_key BLOB NOT NULL,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (channel_id, key_version),
+    FOREIGN KEY (channel_id) REFERENCES community_channels(id) ON DELETE CASCADE
+);
+
+-- Boost node configuration
+CREATE TABLE IF NOT EXISTS boost_nodes (
+    id TEXT PRIMARY KEY,
+    owner_did TEXT NOT NULL,
+    node_type TEXT NOT NULL CHECK(node_type IN ('local', 'remote')),
+    node_public_key TEXT NOT NULL,
+    name TEXT NOT NULL DEFAULT 'My Boost Node',
+    enabled INTEGER NOT NULL DEFAULT 0,
+    max_storage_bytes INTEGER NOT NULL DEFAULT 1073741824,
+    max_bandwidth_mbps INTEGER NOT NULL DEFAULT 10,
+    auto_start INTEGER NOT NULL DEFAULT 0,
+    prioritized_communities TEXT,
+    pairing_token TEXT,
+    remote_address TEXT,
+    last_seen_at INTEGER,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_boost_nodes_owner ON boost_nodes(owner_did);
+
+-- Deleted messages tracking
+CREATE TABLE IF NOT EXISTS community_deleted_messages (
+    message_id TEXT NOT NULL,
+    member_did TEXT NOT NULL,
+    deleted_at INTEGER NOT NULL,
+    PRIMARY KEY (message_id, member_did)
+);
+
+-- Update schema version
+UPDATE schema_version SET version = 6;
+"#;
+
+/// Migration SQL from schema version 6 → 7
+///
+/// Adds community timeouts, thread followers, member status, and notification settings.
+pub const MIGRATE_V6_TO_V7: &str = r#"
+-- Timeouts
+CREATE TABLE IF NOT EXISTS community_timeouts (
+    id TEXT PRIMARY KEY,
+    community_id TEXT NOT NULL,
+    member_did TEXT NOT NULL,
+    reason TEXT,
+    timeout_type TEXT NOT NULL DEFAULT 'mute' CHECK(timeout_type IN ('mute', 'restrict')),
+    issued_by TEXT NOT NULL,
+    expires_at INTEGER NOT NULL,
+    created_at INTEGER NOT NULL,
+    FOREIGN KEY (community_id) REFERENCES communities(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_community_timeouts_member ON community_timeouts(community_id, member_did);
+CREATE INDEX IF NOT EXISTS idx_community_timeouts_expires ON community_timeouts(expires_at);
+
+-- Thread followers
+CREATE TABLE IF NOT EXISTS community_thread_followers (
+    thread_id TEXT NOT NULL,
+    member_did TEXT NOT NULL,
+    followed_at INTEGER NOT NULL,
+    PRIMARY KEY (thread_id, member_did),
+    FOREIGN KEY (thread_id) REFERENCES community_threads(id) ON DELETE CASCADE
+);
+
+-- Member status
+CREATE TABLE IF NOT EXISTS community_member_status (
+    community_id TEXT NOT NULL,
+    member_did TEXT NOT NULL,
+    status_text TEXT,
+    status_emoji TEXT,
+    expires_at INTEGER,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (community_id, member_did),
+    FOREIGN KEY (community_id) REFERENCES communities(id) ON DELETE CASCADE
+);
+
+-- Notification settings
+CREATE TABLE IF NOT EXISTS community_notification_settings (
+    id TEXT PRIMARY KEY,
+    community_id TEXT NOT NULL,
+    member_did TEXT NOT NULL,
+    target_type TEXT NOT NULL CHECK(target_type IN ('community', 'space', 'channel')),
+    target_id TEXT NOT NULL,
+    mute_until INTEGER,
+    suppress_everyone INTEGER NOT NULL DEFAULT 0,
+    suppress_roles INTEGER NOT NULL DEFAULT 0,
+    level TEXT NOT NULL DEFAULT 'all' CHECK(level IN ('all', 'mentions', 'none')),
+    updated_at INTEGER NOT NULL,
+    FOREIGN KEY (community_id) REFERENCES communities(id) ON DELETE CASCADE,
+    UNIQUE(community_id, member_did, target_type, target_id)
+);
+CREATE INDEX IF NOT EXISTS idx_community_notification_settings_member ON community_notification_settings(community_id, member_did);
+
+-- Update schema version
+UPDATE schema_version SET version = 7;
+"#;
+
 /// SQL to drop all tables (for testing/reset)
 #[allow(dead_code)]
 pub const DROP_TABLES: &str = r#"
+DROP TABLE IF EXISTS community_notification_settings;
+DROP TABLE IF EXISTS community_member_status;
+DROP TABLE IF EXISTS community_thread_followers;
+DROP TABLE IF EXISTS community_timeouts;
+DROP TABLE IF EXISTS community_deleted_messages;
+DROP TABLE IF EXISTS boost_nodes;
+DROP TABLE IF EXISTS community_channel_keys;
+DROP TABLE IF EXISTS community_webhooks;
+DROP TABLE IF EXISTS community_file_folders;
+DROP TABLE IF EXISTS community_files;
+DROP TABLE IF EXISTS community_stickers;
+DROP TABLE IF EXISTS community_emoji;
+DROP TABLE IF EXISTS community_audit_log;
+DROP TABLE IF EXISTS community_warnings;
+DROP TABLE IF EXISTS community_bans;
+DROP TABLE IF EXISTS community_invites;
+DROP TABLE IF EXISTS community_threads;
+DROP TABLE IF EXISTS community_pins;
+DROP TABLE IF EXISTS community_read_receipts;
+DROP TABLE IF EXISTS community_reactions;
+DROP TABLE IF EXISTS community_messages;
+DROP TABLE IF EXISTS community_members;
+DROP TABLE IF EXISTS channel_permission_overrides;
+DROP TABLE IF EXISTS community_member_roles;
+DROP TABLE IF EXISTS community_roles;
+DROP TABLE IF EXISTS community_channels;
+DROP TABLE IF EXISTS community_spaces;
+DROP TABLE IF EXISTS communities;
 DROP TABLE IF EXISTS call_history;
 DROP TABLE IF EXISTS plugin_bundles;
 DROP TABLE IF EXISTS plugin_kv;
@@ -550,6 +1394,201 @@ mod tests {
             .query_row("SELECT COUNT(*) FROM call_history", [], |row| row.get(0))
             .unwrap();
         assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn test_migrate_v5_to_v6_sql_is_valid() {
+        let conn = Connection::open_in_memory().unwrap();
+        // Create a v5 database
+        conn.execute_batch(CREATE_TABLES).unwrap();
+        conn.execute(
+            "INSERT INTO schema_version (version) VALUES (5)",
+            [],
+        )
+        .unwrap();
+
+        // Drop all community tables so we can test the migration creates them
+        conn.execute_batch(
+            "DROP TABLE IF EXISTS community_deleted_messages;
+             DROP TABLE IF EXISTS boost_nodes;
+             DROP TABLE IF EXISTS community_channel_keys;
+             DROP TABLE IF EXISTS community_webhooks;
+             DROP TABLE IF EXISTS community_file_folders;
+             DROP TABLE IF EXISTS community_files;
+             DROP TABLE IF EXISTS community_stickers;
+             DROP TABLE IF EXISTS community_emoji;
+             DROP TABLE IF EXISTS community_audit_log;
+             DROP TABLE IF EXISTS community_warnings;
+             DROP TABLE IF EXISTS community_bans;
+             DROP TABLE IF EXISTS community_invites;
+             DROP TABLE IF EXISTS community_threads;
+             DROP TABLE IF EXISTS community_pins;
+             DROP TABLE IF EXISTS community_read_receipts;
+             DROP TABLE IF EXISTS community_reactions;
+             DROP TABLE IF EXISTS community_messages;
+             DROP TABLE IF EXISTS community_members;
+             DROP TABLE IF EXISTS channel_permission_overrides;
+             DROP TABLE IF EXISTS community_member_roles;
+             DROP TABLE IF EXISTS community_roles;
+             DROP TABLE IF EXISTS community_channels;
+             DROP TABLE IF EXISTS community_spaces;
+             DROP TABLE IF EXISTS communities;"
+        ).unwrap();
+
+        // Run the migration
+        conn.execute_batch(MIGRATE_V5_TO_V6).unwrap();
+
+        let version: i32 = conn
+            .query_row("SELECT version FROM schema_version LIMIT 1", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(version, 6);
+
+        // Verify communities table was created
+        conn.execute(
+            "INSERT INTO communities (id, name, owner_did, created_at, updated_at)
+             VALUES ('comm-1', 'Test Community', 'did:key:z6MkOwner', 1000, 1000)",
+            [],
+        )
+        .unwrap();
+
+        // Verify spaces
+        conn.execute(
+            "INSERT INTO community_spaces (id, community_id, name, position, created_at, updated_at)
+             VALUES ('space-1', 'comm-1', 'General', 0, 1000, 1000)",
+            [],
+        )
+        .unwrap();
+
+        // Verify channels
+        conn.execute(
+            "INSERT INTO community_channels (id, community_id, space_id, name, type, position, created_at, updated_at)
+             VALUES ('chan-1', 'comm-1', 'space-1', 'general', 'text', 0, 1000, 1000)",
+            [],
+        )
+        .unwrap();
+
+        // Verify roles
+        conn.execute(
+            "INSERT INTO community_roles (id, community_id, name, position, permissions_bitfield, created_at, updated_at)
+             VALUES ('role-1', 'comm-1', 'Admin', 0, '255', 1000, 1000)",
+            [],
+        )
+        .unwrap();
+
+        // Verify members
+        conn.execute(
+            "INSERT INTO community_members (community_id, member_did, joined_at)
+             VALUES ('comm-1', 'did:key:z6MkMember', 1000)",
+            [],
+        )
+        .unwrap();
+
+        // Verify boost_nodes
+        conn.execute(
+            "INSERT INTO boost_nodes (id, owner_did, node_type, node_public_key, created_at, updated_at)
+             VALUES ('node-1', 'did:key:z6MkOwner', 'local', 'abcdef', 1000, 1000)",
+            [],
+        )
+        .unwrap();
+
+        let count: i32 = conn
+            .query_row("SELECT COUNT(*) FROM communities", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn test_migrate_v6_to_v7_sql_is_valid() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch(CREATE_TABLES).unwrap();
+        conn.execute(
+            "INSERT INTO schema_version (version) VALUES (6)",
+            [],
+        )
+        .unwrap();
+
+        // Drop v7 tables so we can test the migration creates them
+        conn.execute_batch(
+            "DROP TABLE IF EXISTS community_notification_settings;
+             DROP TABLE IF EXISTS community_member_status;
+             DROP TABLE IF EXISTS community_thread_followers;
+             DROP TABLE IF EXISTS community_timeouts;"
+        ).unwrap();
+
+        // Run the migration
+        conn.execute_batch(MIGRATE_V6_TO_V7).unwrap();
+
+        let version: i32 = conn
+            .query_row("SELECT version FROM schema_version LIMIT 1", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        assert_eq!(version, 7);
+
+        // Verify timeouts table
+        conn.execute(
+            "INSERT INTO communities (id, name, owner_did, created_at, updated_at) VALUES ('comm-1', 'Test', 'did:key:z6MkOwner', 1000, 1000)",
+            [],
+        ).unwrap();
+
+        conn.execute(
+            "INSERT INTO community_timeouts (id, community_id, member_did, timeout_type, issued_by, expires_at, created_at)
+             VALUES ('to-1', 'comm-1', 'did:key:z6MkMember', 'mute', 'did:key:z6MkMod', 9999999, 1000)",
+            [],
+        ).unwrap();
+
+        // Verify thread_followers table
+        conn.execute(
+            "INSERT INTO community_spaces (id, community_id, name, position, created_at, updated_at)
+             VALUES ('space-1', 'comm-1', 'General', 0, 1000, 1000)",
+            [],
+        ).unwrap();
+        conn.execute(
+            "INSERT INTO community_channels (id, community_id, space_id, name, type, position, created_at, updated_at)
+             VALUES ('chan-1', 'comm-1', 'space-1', 'general', 'text', 0, 1000, 1000)",
+            [],
+        ).unwrap();
+        conn.execute(
+            "INSERT INTO community_messages (id, channel_id, sender_did, is_e2ee, created_at)
+             VALUES ('msg-1', 'chan-1', 'did:key:z6MkMember', 0, 1000)",
+            [],
+        ).unwrap();
+        conn.execute(
+            "INSERT INTO community_threads (id, channel_id, parent_message_id, created_by, created_at)
+             VALUES ('thread-1', 'chan-1', 'msg-1', 'did:key:z6MkMember', 1000)",
+            [],
+        ).unwrap();
+        conn.execute(
+            "INSERT INTO community_thread_followers (thread_id, member_did, followed_at)
+             VALUES ('thread-1', 'did:key:z6MkMember', 1000)",
+            [],
+        ).unwrap();
+
+        // Verify member_status table
+        conn.execute(
+            "INSERT INTO community_member_status (community_id, member_did, status_text, status_emoji, updated_at)
+             VALUES ('comm-1', 'did:key:z6MkMember', 'Busy coding', '💻', 1000)",
+            [],
+        ).unwrap();
+
+        // Verify notification_settings table
+        conn.execute(
+            "INSERT INTO community_notification_settings (id, community_id, member_did, target_type, target_id, level, updated_at)
+             VALUES ('ns-1', 'comm-1', 'did:key:z6MkMember', 'community', 'comm-1', 'mentions', 1000)",
+            [],
+        ).unwrap();
+
+        // Verify counts
+        let timeout_count: i32 = conn.query_row("SELECT COUNT(*) FROM community_timeouts", [], |row| row.get(0)).unwrap();
+        assert_eq!(timeout_count, 1);
+        let follower_count: i32 = conn.query_row("SELECT COUNT(*) FROM community_thread_followers", [], |row| row.get(0)).unwrap();
+        assert_eq!(follower_count, 1);
+        let status_count: i32 = conn.query_row("SELECT COUNT(*) FROM community_member_status", [], |row| row.get(0)).unwrap();
+        assert_eq!(status_count, 1);
+        let notif_count: i32 = conn.query_row("SELECT COUNT(*) FROM community_notification_settings", [], |row| row.get(0)).unwrap();
+        assert_eq!(notif_count, 1);
     }
 
     #[test]

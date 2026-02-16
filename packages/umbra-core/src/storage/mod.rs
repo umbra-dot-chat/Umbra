@@ -80,6 +80,20 @@ pub use database::{
     Database, DatabaseConfig, FriendRecord, FriendRequestRecord,
     ConversationRecord, MessageRecord, GroupRecord, GroupMemberRecord,
     GroupKeyRecord, GroupInviteRecord, ReactionRecord,
+    // Community record types
+    CommunityRecord, CommunitySpaceRecord, CommunityChannelRecord,
+    CommunityRoleRecord, CommunityMemberRoleRecord, ChannelPermissionOverrideRecord,
+    CommunityMemberRecord, CommunityMessageRecord, CommunityReactionRecord,
+    CommunityInviteRecord, CommunityBanRecord, CommunityWarningRecord,
+    CommunityAuditLogRecord, CommunityThreadRecord, BoostNodeRecord,
+    // Phase 2-11 record types
+    CommunityReadReceiptRecord, CommunityPinRecord,
+    CommunityFileRecord, CommunityFileFolderRecord,
+    CommunityEmojiRecord, CommunityStickerRecord,
+    CommunityWebhookRecord, ChannelKeyRecord, CommunityDeletedMessageRecord,
+    // Gap fill record types
+    CommunityTimeoutRecord, CommunityThreadFollowerRecord,
+    CommunityMemberStatusRecord, CommunityNotificationSettingRecord,
 };
 pub use secure_store::SecureStore;
 
