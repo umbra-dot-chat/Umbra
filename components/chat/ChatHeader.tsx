@@ -6,7 +6,7 @@ import {
   Text, useTheme,
 } from '@coexist/wisp-react-native';
 import type { RightPanel } from '@/types/panels';
-import { SearchIcon, PinIcon, UsersIcon, PhoneIcon, VideoIcon } from '@/components/icons';
+import { SearchIcon, PinIcon, UsersIcon, PhoneIcon, VideoIcon, PaperclipIcon } from '@/components/icons';
 
 export interface ChatHeaderProps {
   active: { name: string; online?: boolean; group?: string[]; memberCount?: number } | undefined;
@@ -83,6 +83,13 @@ export function ChatHeader({ active, rightPanel, togglePanel, onShowProfile, onV
           onPress={() => togglePanel('search')}
           accessibilityLabel="Search messages"
           iconLeft={<SearchIcon size={18} color={themeColors.text.secondary} />}
+        />
+        <Button
+          variant={rightPanel === 'files' ? 'secondary' : 'tertiary'}
+          size="sm"
+          onPress={() => togglePanel('files')}
+          accessibilityLabel="Toggle shared files"
+          iconLeft={<PaperclipIcon size={18} color={themeColors.text.secondary} />}
         />
         <Button
           variant={rightPanel === 'pins' ? 'secondary' : 'tertiary'}
