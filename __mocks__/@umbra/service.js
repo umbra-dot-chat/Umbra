@@ -363,6 +363,88 @@ const mockInstance = {
   dispatchGroupEvent: jest.fn(),
   dispatchFriendEvent: jest.fn(),
   dispatchMessageEvent: jest.fn(),
+
+  // Community files
+  getCommunityFiles: jest.fn(() => Promise.resolve([])),
+  getCommunityFile: jest.fn((id) =>
+    Promise.resolve({ id, channelId: 'ch-1', filename: 'test.txt', fileSize: 1024, mimeType: 'text/plain', uploadedBy: 'did:key:z6MkTest', version: 1, downloadCount: 0, createdAt: Date.now(), storageChunksJson: '[]' })
+  ),
+  uploadCommunityFile: jest.fn(() =>
+    Promise.resolve({ id: `file-${Date.now()}`, channelId: 'ch-1', filename: 'upload.txt', fileSize: 512, mimeType: 'text/plain', uploadedBy: 'did:key:z6MkTest', version: 1, downloadCount: 0, createdAt: Date.now(), storageChunksJson: '[]' })
+  ),
+  deleteCommunityFile: jest.fn(() => Promise.resolve()),
+  getCommunityFolders: jest.fn(() => Promise.resolve([])),
+  createCommunityFolder: jest.fn((channelId, name) =>
+    Promise.resolve({ id: `folder-${Date.now()}`, channelId, name, parentFolderId: null, createdBy: 'did:key:z6MkTest', createdAt: Date.now() })
+  ),
+  deleteCommunityFolder: jest.fn(() => Promise.resolve()),
+
+  // DM files
+  uploadDmFile: jest.fn(() => Promise.resolve({ id: `dm-file-${Date.now()}` })),
+  getDmFiles: jest.fn(() => Promise.resolve([])),
+  getDmFile: jest.fn((id) =>
+    Promise.resolve({ id, conversationId: 'conv-1', filename: 'shared.txt', fileSize: 256, mimeType: 'text/plain', uploadedBy: 'did:key:z6MkTest', version: 1, downloadCount: 0, createdAt: Date.now(), storageChunksJson: '[]' })
+  ),
+  deleteDmFile: jest.fn(() => Promise.resolve()),
+  recordDmFileDownload: jest.fn(() => Promise.resolve()),
+  moveDmFile: jest.fn(() => Promise.resolve()),
+  createDmFolder: jest.fn((convId, parentId, name, createdBy) =>
+    Promise.resolve({ id: `dm-folder-${Date.now()}`, conversationId: convId, name, parentFolderId: parentId, createdBy, createdAt: Date.now() })
+  ),
+  getDmFolders: jest.fn(() => Promise.resolve([])),
+  deleteDmFolder: jest.fn(() => Promise.resolve()),
+  renameDmFolder: jest.fn(() => Promise.resolve()),
+
+  // File chunking
+  chunkFile: jest.fn((fileId, filename, dataBase64) =>
+    Promise.resolve({
+      fileId,
+      filename,
+      totalSize: 1024,
+      chunkSize: 262144,
+      totalChunks: 1,
+      fileHash: 'abc123',
+      chunks: [{ chunkId: 'chunk-0', index: 0, size: 1024, hash: 'hash0' }],
+    })
+  ),
+  reassembleFile: jest.fn((fileId) =>
+    Promise.resolve({ dataB64: 'SGVsbG8gV29ybGQ=', filename: 'test.txt', fileHash: 'abc123', totalSize: 11 })
+  ),
+  getFileManifest: jest.fn(() => Promise.resolve(null)),
+
+  // File transfer
+  initiateTransfer: jest.fn(() =>
+    Promise.resolve({ transferId: 'xfer-1', fileId: 'file-1', peerDid: 'did:key:z6MkPeer', direction: 'upload', state: 'negotiating', bytesTransferred: 0, totalBytes: 1024, chunksCompleted: 0, totalChunks: 1, speedBps: 0 })
+  ),
+  acceptTransfer: jest.fn(() => Promise.resolve({ transferId: 'xfer-1', state: 'transferring' })),
+  pauseTransfer: jest.fn(() => Promise.resolve({ transferId: 'xfer-1', state: 'paused' })),
+  resumeTransfer: jest.fn(() => Promise.resolve({ transferId: 'xfer-1', state: 'transferring' })),
+  cancelTransfer: jest.fn(() => Promise.resolve({ transferId: 'xfer-1', state: 'cancelled' })),
+  processTransferMessage: jest.fn(() => Promise.resolve({ events: [] })),
+  getTransfers: jest.fn(() => Promise.resolve([])),
+  getTransfer: jest.fn(() => Promise.resolve(null)),
+  getIncompleteTransfers: jest.fn(() => Promise.resolve([])),
+  getChunksToSend: jest.fn(() => Promise.resolve([])),
+  markChunkSent: jest.fn(() => Promise.resolve()),
+  onFileTransferEvent: jest.fn(() => jest.fn()),
+  dispatchFileTransferEvent: jest.fn(),
+
+  // DM file events
+  buildDmFileEventEnvelope: jest.fn((convId, senderDid, event) => ({
+    type: 'dm_file_event', conversationId: convId, senderDid, event,
+  })),
+  broadcastDmFileEvent: jest.fn(() => Promise.resolve()),
+
+  // File encryption (E2EE)
+  deriveFileKey: jest.fn((peerDid, fileId) =>
+    Promise.resolve({ keyHex: 'a'.repeat(64) })
+  ),
+  encryptFileChunk: jest.fn((keyHex, chunkDataB64, fileId, chunkIndex) =>
+    Promise.resolve({ nonceHex: 'b'.repeat(24), encryptedDataB64: chunkDataB64 })
+  ),
+  decryptFileChunk: jest.fn((keyHex, nonceHex, encryptedDataB64, fileId, chunkIndex) =>
+    Promise.resolve({ chunkDataB64: encryptedDataB64 })
+  ),
 };
 
 class UmbraService {
