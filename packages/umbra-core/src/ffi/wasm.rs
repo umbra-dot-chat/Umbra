@@ -4053,7 +4053,7 @@ fn community_service() -> Result<CommunityService, JsValue> {
 
 /// Create a new community.
 ///
-/// Takes JSON: { "name": "...", "description": "...", "owner_did": "..." }
+/// Takes JSON: { "name": "...", "description"?: "...", "owner_did": "...", "owner_nickname"?: "..." }
 /// Returns JSON: { "community_id", "space_id", "welcome_channel_id", "general_channel_id", "role_ids": { ... } }
 #[wasm_bindgen]
 pub fn umbra_wasm_community_create(json: &str) -> Result<JsValue, JsValue> {
@@ -4065,9 +4065,10 @@ pub fn umbra_wasm_community_create(json: &str) -> Result<JsValue, JsValue> {
     let description = data["description"].as_str();
     let owner_did = data["owner_did"].as_str()
         .ok_or_else(|| JsValue::from_str("Missing owner_did"))?;
+    let owner_nickname = data["owner_nickname"].as_str();
 
     let svc = community_service()?;
-    let result = svc.create_community(name, description, owner_did)
+    let result = svc.create_community(name, description, owner_did, owner_nickname)
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
 
     let json_result = serde_json::json!({
@@ -4393,15 +4394,17 @@ pub fn umbra_wasm_community_channel_create(json: &str) -> Result<JsValue, JsValu
     let position = data["position"].as_i64().unwrap_or(0) as i32;
     let actor_did = data["actor_did"].as_str()
         .ok_or_else(|| JsValue::from_str("Missing actor_did"))?;
+    let category_id = data["category_id"].as_str();
 
     let svc = community_service()?;
-    let ch = svc.create_channel(community_id, space_id, name, channel_type, topic, position, actor_did)
+    let ch = svc.create_channel(community_id, space_id, name, channel_type, topic, position, actor_did, category_id)
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
 
     let json_result = serde_json::json!({
         "id": ch.id,
         "community_id": ch.community_id,
         "space_id": ch.space_id,
+        "category_id": ch.category_id,
         "name": ch.name,
         "channel_type": ch.channel_type,
         "topic": ch.topic,
@@ -4436,6 +4439,7 @@ pub fn umbra_wasm_community_channel_list(space_id: &str) -> Result<JsValue, JsVa
             "id": ch.id,
             "community_id": ch.community_id,
             "space_id": ch.space_id,
+            "category_id": ch.category_id,
             "name": ch.name,
             "channel_type": ch.channel_type,
             "topic": ch.topic,
@@ -4465,6 +4469,7 @@ pub fn umbra_wasm_community_channel_list_all(community_id: &str) -> Result<JsVal
             "id": ch.id,
             "community_id": ch.community_id,
             "space_id": ch.space_id,
+            "category_id": ch.category_id,
             "name": ch.name,
             "channel_type": ch.channel_type,
             "topic": ch.topic,
@@ -4493,6 +4498,7 @@ pub fn umbra_wasm_community_channel_get(channel_id: &str) -> Result<JsValue, JsV
         "id": ch.id,
         "community_id": ch.community_id,
         "space_id": ch.space_id,
+        "category_id": ch.category_id,
         "name": ch.name,
         "channel_type": ch.channel_type,
         "topic": ch.topic,
@@ -4631,7 +4637,7 @@ pub fn umbra_wasm_community_channel_reorder(json: &str) -> Result<JsValue, JsVal
 
 /// Join a community.
 ///
-/// Takes JSON: { "community_id": "...", "member_did": "..." }
+/// Takes JSON: { "community_id": "...", "member_did": "...", "nickname"?: "..." }
 #[wasm_bindgen]
 pub fn umbra_wasm_community_join(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -4641,9 +4647,10 @@ pub fn umbra_wasm_community_join(json: &str) -> Result<JsValue, JsValue> {
         .ok_or_else(|| JsValue::from_str("Missing community_id"))?;
     let member_did = data["member_did"].as_str()
         .ok_or_else(|| JsValue::from_str("Missing member_did"))?;
+    let nickname = data["nickname"].as_str();
 
     let svc = community_service()?;
-    svc.join_community(community_id, member_did)
+    svc.join_community(community_id, member_did, nickname)
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
 
     emit_event("community", &serde_json::json!({
@@ -5035,9 +5042,10 @@ pub fn umbra_wasm_community_invite_use(json: &str) -> Result<JsValue, JsValue> {
         .ok_or_else(|| JsValue::from_str("Missing code"))?;
     let member_did = data["member_did"].as_str()
         .ok_or_else(|| JsValue::from_str("Missing member_did"))?;
+    let nickname = data["nickname"].as_str();
 
     let svc = community_service()?;
-    let community_id = svc.use_invite(code, member_did)
+    let community_id = svc.use_invite(code, member_did, nickname)
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
 
     emit_event("community", &serde_json::json!({
@@ -5432,7 +5440,7 @@ pub fn umbra_wasm_community_reaction_list(message_id: &str) -> Result<JsValue, J
 
     let arr: Vec<serde_json::Value> = reactions.iter().map(|r| {
         serde_json::json!({
-            "id": r.id,
+            "id": format!("{}_{}_{}", r.message_id, r.member_did, r.emoji),
             "message_id": r.message_id,
             "member_did": r.member_did,
             "emoji": r.emoji,
@@ -6706,6 +6714,205 @@ pub fn umbra_wasm_community_role_delete(json: &str) -> Result<JsValue, JsValue> 
 }
 
 // ============================================================================
+// COMMUNITY — CATEGORIES
+// ============================================================================
+
+/// Create a new category in a space.
+///
+/// Takes JSON: { "community_id": "...", "space_id": "...", "name": "...", "position": 0, "actor_did": "..." }
+/// Returns JSON: CommunityCategory object
+#[wasm_bindgen]
+pub fn umbra_wasm_community_category_create(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let community_id = data["community_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing community_id"))?;
+    let space_id = data["space_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing space_id"))?;
+    let name = data["name"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing name"))?;
+    let position = data["position"].as_i64().unwrap_or(0) as i32;
+    let actor_did = data["actor_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing actor_did"))?;
+
+    let svc = community_service()?;
+    let cat = svc.create_category(community_id, space_id, name, position, actor_did)
+        .map_err(|e: crate::error::Error| JsValue::from_str(&e.to_string()))?;
+
+    let json_result = serde_json::json!({
+        "id": cat.id,
+        "community_id": cat.community_id,
+        "space_id": cat.space_id,
+        "name": cat.name,
+        "position": cat.position,
+        "created_at": cat.created_at,
+        "updated_at": cat.updated_at,
+    });
+
+    emit_event("community", &serde_json::json!({
+        "type": "categoryCreated",
+        "community_id": community_id,
+        "category_id": cat.id,
+    }));
+
+    Ok(JsValue::from_str(&json_result.to_string()))
+}
+
+/// Get all categories in a space.
+///
+/// Returns JSON: CommunityCategory[]
+#[wasm_bindgen]
+pub fn umbra_wasm_community_category_list(space_id: &str) -> Result<JsValue, JsValue> {
+    let svc = community_service()?;
+    let categories = svc.get_categories(space_id)
+        .map_err(|e: crate::error::Error| JsValue::from_str(&e.to_string()))?;
+
+    let arr: Vec<serde_json::Value> = categories.iter().map(|c| {
+        serde_json::json!({
+            "id": c.id,
+            "community_id": c.community_id,
+            "space_id": c.space_id,
+            "name": c.name,
+            "position": c.position,
+            "created_at": c.created_at,
+            "updated_at": c.updated_at,
+        })
+    }).collect();
+
+    Ok(JsValue::from_str(&serde_json::to_string(&arr).unwrap_or_default()))
+}
+
+/// Get all categories in a community (across all spaces).
+///
+/// Returns JSON: CommunityCategory[]
+#[wasm_bindgen]
+pub fn umbra_wasm_community_category_list_all(community_id: &str) -> Result<JsValue, JsValue> {
+    let svc = community_service()?;
+    let categories = svc.get_all_categories(community_id)
+        .map_err(|e: crate::error::Error| JsValue::from_str(&e.to_string()))?;
+
+    let arr: Vec<serde_json::Value> = categories.iter().map(|c| {
+        serde_json::json!({
+            "id": c.id,
+            "community_id": c.community_id,
+            "space_id": c.space_id,
+            "name": c.name,
+            "position": c.position,
+            "created_at": c.created_at,
+            "updated_at": c.updated_at,
+        })
+    }).collect();
+
+    Ok(JsValue::from_str(&serde_json::to_string(&arr).unwrap_or_default()))
+}
+
+/// Update a category's name.
+///
+/// Takes JSON: { "category_id": "...", "name": "...", "actor_did": "..." }
+/// Returns JSON: { "success": true }
+#[wasm_bindgen]
+pub fn umbra_wasm_community_category_update(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let category_id = data["category_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing category_id"))?;
+    let name = data["name"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing name"))?;
+    let actor_did = data["actor_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing actor_did"))?;
+
+    let svc = community_service()?;
+    svc.update_category(category_id, name, actor_did)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    emit_event("community", &serde_json::json!({
+        "type": "categoryUpdated",
+        "category_id": category_id,
+    }));
+
+    Ok(JsValue::from_str("{\"success\":true}"))
+}
+
+/// Reorder categories in a space.
+///
+/// Takes JSON: { "space_id": "...", "category_ids": ["...", "..."] }
+/// Returns JSON: { "success": true }
+#[wasm_bindgen]
+pub fn umbra_wasm_community_category_reorder(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let space_id = data["space_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing space_id"))?;
+    let category_ids: Vec<String> = data["category_ids"].as_array()
+        .ok_or_else(|| JsValue::from_str("Missing category_ids"))?
+        .iter()
+        .filter_map(|v| v.as_str().map(|s| s.to_string()))
+        .collect();
+
+    let svc = community_service()?;
+    svc.reorder_categories(space_id, &category_ids)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    Ok(JsValue::from_str("{\"success\":true}"))
+}
+
+/// Delete a category. Channels in this category become uncategorized.
+///
+/// Takes JSON: { "category_id": "...", "actor_did": "..." }
+/// Returns JSON: { "success": true }
+#[wasm_bindgen]
+pub fn umbra_wasm_community_category_delete(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let category_id = data["category_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing category_id"))?;
+    let actor_did = data["actor_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing actor_did"))?;
+
+    let svc = community_service()?;
+    svc.delete_category(category_id, actor_did)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    emit_event("community", &serde_json::json!({
+        "type": "categoryDeleted",
+        "category_id": category_id,
+    }));
+
+    Ok(JsValue::from_str("{\"success\":true}"))
+}
+
+/// Move a channel to a different category (or uncategorize it).
+///
+/// Takes JSON: { "channel_id": "...", "category_id": "..." or null, "actor_did": "..." }
+/// Returns JSON: { "success": true }
+#[wasm_bindgen]
+pub fn umbra_wasm_community_channel_move_category(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let channel_id = data["channel_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing channel_id"))?;
+    let category_id = data["category_id"].as_str();
+    let actor_did = data["actor_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing actor_did"))?;
+
+    let svc = community_service()?;
+    svc.move_channel_to_category(channel_id, category_id, actor_did)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    emit_event("community", &serde_json::json!({
+        "type": "channelUpdated",
+        "channel_id": channel_id,
+    }));
+
+    Ok(JsValue::from_str("{\"success\":true}"))
+}
+
+// ============================================================================
 // COMMUNITY — BOOST NODES (Phase 11)
 // ============================================================================
 
@@ -7155,6 +7362,600 @@ pub fn umbra_wasm_community_send_system_message(channel_id: &str, content: &str)
 }
 
 // ============================================================================
+// COMMUNITY — FILE OPERATIONS
+// ============================================================================
+
+/// Upload a file record to a community file channel.
+///
+/// Takes JSON: { channel_id, folder_id?, filename, description?, file_size, mime_type?, storage_chunks_json, uploaded_by }
+/// Returns JSON: CommunityFileRecord
+#[wasm_bindgen]
+pub fn umbra_wasm_community_upload_file(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let channel_id = data["channel_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing channel_id"))?;
+    let folder_id = data["folder_id"].as_str();
+    let filename = data["filename"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing filename"))?;
+    let description = data["description"].as_str();
+    let file_size = data["file_size"].as_i64()
+        .ok_or_else(|| JsValue::from_str("Missing file_size"))?;
+    let mime_type = data["mime_type"].as_str();
+    let storage_chunks_json = data["storage_chunks_json"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing storage_chunks_json"))?;
+    let uploaded_by = data["uploaded_by"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing uploaded_by"))?;
+
+    let svc = community_service()?;
+    let record = svc.upload_file(channel_id, folder_id, filename, description, file_size, mime_type, storage_chunks_json, uploaded_by)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let result = community_file_to_json(&record);
+
+    emit_event("community", &serde_json::json!({
+        "type": "fileUploaded",
+        "channelId": channel_id,
+        "fileId": record.id,
+    }));
+
+    Ok(JsValue::from_str(&result.to_string()))
+}
+
+/// List files in a community channel/folder.
+///
+/// Takes JSON: { channel_id, folder_id?, limit, offset }
+/// Returns JSON: CommunityFileRecord[]
+#[wasm_bindgen]
+pub fn umbra_wasm_community_get_files(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let channel_id = data["channel_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing channel_id"))?;
+    let folder_id = data["folder_id"].as_str();
+    let limit = data["limit"].as_u64().unwrap_or(100) as usize;
+    let offset = data["offset"].as_u64().unwrap_or(0) as usize;
+
+    let svc = community_service()?;
+    let files = svc.get_files(channel_id, folder_id, limit, offset)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let arr: Vec<serde_json::Value> = files.iter().map(community_file_to_json).collect();
+    Ok(JsValue::from_str(&serde_json::to_string(&arr).unwrap_or_default()))
+}
+
+/// Get a single community file by ID.
+///
+/// Takes JSON: { id }
+/// Returns JSON: CommunityFileRecord
+#[wasm_bindgen]
+pub fn umbra_wasm_community_get_file(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let id = data["id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing id"))?;
+
+    let svc = community_service()?;
+    let file = svc.get_file(id)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    Ok(JsValue::from_str(&community_file_to_json(&file).to_string()))
+}
+
+/// Delete a community file.
+///
+/// Takes JSON: { id, actor_did }
+#[wasm_bindgen]
+pub fn umbra_wasm_community_delete_file(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let id = data["id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing id"))?;
+    let actor_did = data["actor_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing actor_did"))?;
+
+    let svc = community_service()?;
+    svc.delete_file(id, actor_did)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    emit_event("community", &serde_json::json!({
+        "type": "fileDeleted",
+        "fileId": id,
+    }));
+
+    Ok(JsValue::from_str("true"))
+}
+
+/// Record a file download (increments download count).
+///
+/// Takes JSON: { id }
+#[wasm_bindgen]
+pub fn umbra_wasm_community_record_file_download(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let id = data["id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing id"))?;
+
+    let svc = community_service()?;
+    svc.record_file_download(id)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    Ok(JsValue::from_str("true"))
+}
+
+/// Create a folder in a community file channel.
+///
+/// Takes JSON: { channel_id, parent_folder_id?, name, created_by }
+/// Returns JSON: CommunityFileFolderRecord
+#[wasm_bindgen]
+pub fn umbra_wasm_community_create_folder(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let channel_id = data["channel_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing channel_id"))?;
+    let parent_folder_id = data["parent_folder_id"].as_str();
+    let name = data["name"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing name"))?;
+    let created_by = data["created_by"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing created_by"))?;
+
+    let svc = community_service()?;
+    let folder = svc.create_folder(channel_id, parent_folder_id, name, created_by)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let result = community_folder_to_json(&folder);
+
+    emit_event("community", &serde_json::json!({
+        "type": "folderCreated",
+        "channelId": channel_id,
+        "folderId": folder.id,
+    }));
+
+    Ok(JsValue::from_str(&result.to_string()))
+}
+
+/// List folders in a community channel.
+///
+/// Takes JSON: { channel_id, parent_folder_id? }
+/// Returns JSON: CommunityFileFolderRecord[]
+#[wasm_bindgen]
+pub fn umbra_wasm_community_get_folders(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let channel_id = data["channel_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing channel_id"))?;
+    let parent_folder_id = data["parent_folder_id"].as_str();
+
+    let svc = community_service()?;
+    let folders = svc.get_folders(channel_id, parent_folder_id)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let arr: Vec<serde_json::Value> = folders.iter().map(community_folder_to_json).collect();
+    Ok(JsValue::from_str(&serde_json::to_string(&arr).unwrap_or_default()))
+}
+
+/// Delete a community folder.
+///
+/// Takes JSON: { id }
+#[wasm_bindgen]
+pub fn umbra_wasm_community_delete_folder(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let id = data["id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing id"))?;
+
+    let svc = community_service()?;
+    svc.delete_folder(id)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    emit_event("community", &serde_json::json!({
+        "type": "folderDeleted",
+        "folderId": id,
+    }));
+
+    Ok(JsValue::from_str("true"))
+}
+
+// ============================================================================
+// DM FILE OPERATIONS
+// ============================================================================
+
+fn dm_file_service() -> Result<crate::messaging::files::DmFileService, JsValue> {
+    let state = get_state()?;
+    let state = state.read();
+    let database = state.database.as_ref()
+        .ok_or_else(|| JsValue::from_str("Database not initialized"))?;
+    Ok(crate::messaging::files::DmFileService::new(database.clone()))
+}
+
+/// Upload a DM shared file.
+///
+/// Takes JSON: { conversation_id, folder_id?, filename, description?, file_size, mime_type?, storage_chunks_json, uploaded_by, encrypted_metadata?, encryption_nonce? }
+/// Returns JSON: DmSharedFileRecord
+#[wasm_bindgen]
+pub fn umbra_wasm_dm_upload_file(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let conversation_id = data["conversation_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing conversation_id"))?;
+    let folder_id = data["folder_id"].as_str();
+    let filename = data["filename"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing filename"))?;
+    let description = data["description"].as_str();
+    let file_size = data["file_size"].as_i64()
+        .ok_or_else(|| JsValue::from_str("Missing file_size"))?;
+    let mime_type = data["mime_type"].as_str();
+    let storage_chunks_json = data["storage_chunks_json"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing storage_chunks_json"))?;
+    let uploaded_by = data["uploaded_by"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing uploaded_by"))?;
+    let encrypted_metadata = data["encrypted_metadata"].as_str();
+    let encryption_nonce = data["encryption_nonce"].as_str();
+
+    let svc = dm_file_service()?;
+    let record = svc.upload_file(conversation_id, folder_id, filename, description, file_size, mime_type, storage_chunks_json, uploaded_by, encrypted_metadata, encryption_nonce)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let result = dm_file_to_json(&record);
+    Ok(JsValue::from_str(&result.to_string()))
+}
+
+/// List DM shared files.
+///
+/// Takes JSON: { conversation_id, folder_id?, limit, offset }
+/// Returns JSON: DmSharedFileRecord[]
+#[wasm_bindgen]
+pub fn umbra_wasm_dm_get_files(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let conversation_id = data["conversation_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing conversation_id"))?;
+    let folder_id = data["folder_id"].as_str();
+    let limit = data["limit"].as_u64().unwrap_or(100) as usize;
+    let offset = data["offset"].as_u64().unwrap_or(0) as usize;
+
+    let svc = dm_file_service()?;
+    let files = svc.get_files(conversation_id, folder_id, limit, offset)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let arr: Vec<serde_json::Value> = files.iter().map(dm_file_to_json).collect();
+    Ok(JsValue::from_str(&serde_json::to_string(&arr).unwrap_or_default()))
+}
+
+/// Get a single DM shared file by ID.
+///
+/// Takes JSON: { id }
+/// Returns JSON: DmSharedFileRecord
+#[wasm_bindgen]
+pub fn umbra_wasm_dm_get_file(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let id = data["id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing id"))?;
+
+    let svc = dm_file_service()?;
+    let file = svc.get_file(id)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    Ok(JsValue::from_str(&dm_file_to_json(&file).to_string()))
+}
+
+/// Delete a DM shared file.
+///
+/// Takes JSON: { id }
+#[wasm_bindgen]
+pub fn umbra_wasm_dm_delete_file(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let id = data["id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing id"))?;
+
+    let svc = dm_file_service()?;
+    svc.delete_file(id)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    Ok(JsValue::from_str("true"))
+}
+
+/// Record a DM file download.
+///
+/// Takes JSON: { id }
+#[wasm_bindgen]
+pub fn umbra_wasm_dm_record_file_download(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let id = data["id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing id"))?;
+
+    let svc = dm_file_service()?;
+    svc.record_download(id)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    Ok(JsValue::from_str("true"))
+}
+
+/// Move a DM file to a different folder.
+///
+/// Takes JSON: { id, target_folder_id? }
+#[wasm_bindgen]
+pub fn umbra_wasm_dm_move_file(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let id = data["id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing id"))?;
+    let target_folder_id = data["target_folder_id"].as_str();
+
+    let svc = dm_file_service()?;
+    svc.move_file(id, target_folder_id)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    Ok(JsValue::from_str("true"))
+}
+
+/// Create a DM shared folder.
+///
+/// Takes JSON: { conversation_id, parent_folder_id?, name, created_by }
+/// Returns JSON: DmSharedFolderRecord
+#[wasm_bindgen]
+pub fn umbra_wasm_dm_create_folder(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let conversation_id = data["conversation_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing conversation_id"))?;
+    let parent_folder_id = data["parent_folder_id"].as_str();
+    let name = data["name"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing name"))?;
+    let created_by = data["created_by"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing created_by"))?;
+
+    let svc = dm_file_service()?;
+    let folder = svc.create_folder(conversation_id, parent_folder_id, name, created_by)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let result = dm_folder_to_json(&folder);
+    Ok(JsValue::from_str(&result.to_string()))
+}
+
+/// List DM shared folders.
+///
+/// Takes JSON: { conversation_id, parent_folder_id? }
+/// Returns JSON: DmSharedFolderRecord[]
+#[wasm_bindgen]
+pub fn umbra_wasm_dm_get_folders(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let conversation_id = data["conversation_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing conversation_id"))?;
+    let parent_folder_id = data["parent_folder_id"].as_str();
+
+    let svc = dm_file_service()?;
+    let folders = svc.get_folders(conversation_id, parent_folder_id)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let arr: Vec<serde_json::Value> = folders.iter().map(dm_folder_to_json).collect();
+    Ok(JsValue::from_str(&serde_json::to_string(&arr).unwrap_or_default()))
+}
+
+/// Delete a DM shared folder.
+///
+/// Takes JSON: { id }
+#[wasm_bindgen]
+pub fn umbra_wasm_dm_delete_folder(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let id = data["id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing id"))?;
+
+    let svc = dm_file_service()?;
+    svc.delete_folder(id)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    Ok(JsValue::from_str("true"))
+}
+
+/// Rename a DM shared folder.
+///
+/// Takes JSON: { id, name }
+#[wasm_bindgen]
+pub fn umbra_wasm_dm_rename_folder(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let id = data["id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing id"))?;
+    let name = data["name"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing name"))?;
+
+    let svc = dm_file_service()?;
+    svc.rename_folder(id, name)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    Ok(JsValue::from_str("true"))
+}
+
+// ============================================================================
+// FILE CHUNKING OPERATIONS
+// ============================================================================
+
+/// Chunk a file and store chunks locally.
+///
+/// Takes JSON: { file_id, filename, data_b64, chunk_size? }
+/// Returns JSON: ChunkManifest
+#[wasm_bindgen]
+pub fn umbra_wasm_chunk_file(json: &str) -> Result<JsValue, JsValue> {
+    use base64::Engine as _;
+    use crate::storage::chunking;
+
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let file_id = data["file_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing file_id"))?;
+    let filename = data["filename"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing filename"))?;
+    let data_b64 = data["data_b64"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing data_b64"))?;
+    let chunk_size = data["chunk_size"].as_u64()
+        .map(|v| v as usize)
+        .unwrap_or(chunking::DEFAULT_CHUNK_SIZE);
+
+    let file_bytes = base64::engine::general_purpose::STANDARD.decode(data_b64)
+        .map_err(|e| JsValue::from_str(&format!("Invalid base64: {}", e)))?;
+
+    let (manifest, chunks) = chunking::chunk_file(file_id, filename, &file_bytes, chunk_size)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    // Store chunks in database
+    let state = get_state()?;
+    let state_read = state.read();
+    let database = state_read.database.as_ref()
+        .ok_or_else(|| JsValue::from_str("Database not initialized"))?;
+
+    let now = crate::time::now_timestamp();
+    for chunk in &chunks {
+        database.store_chunk(&chunk.chunk_id, &chunk.file_id, chunk.chunk_index as i32, &chunk.data, chunk.data.len() as i64, now)
+            .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    }
+
+    // Store manifest
+    let chunks_json = serde_json::to_string(&manifest.chunks)
+        .map_err(|e| JsValue::from_str(&format!("Failed to serialize chunks: {}", e)))?;
+    database.store_manifest(file_id, filename, manifest.total_size as i64, manifest.chunk_size as i64, manifest.total_chunks as i32, &chunks_json, &manifest.file_hash, false, None, now)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    // Return manifest as JSON
+    let result = serde_json::to_string(&manifest)
+        .map_err(|e| JsValue::from_str(&format!("Failed to serialize manifest: {}", e)))?;
+
+    Ok(JsValue::from_str(&result))
+}
+
+/// Reassemble a file from stored chunks.
+///
+/// Takes JSON: { file_id } (manifest must be stored)
+/// Returns JSON: { data_b64: string }
+#[wasm_bindgen]
+pub fn umbra_wasm_reassemble_file(json: &str) -> Result<JsValue, JsValue> {
+    use base64::Engine as _;
+    use crate::storage::chunking;
+
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let file_id = data["file_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing file_id"))?;
+
+    let state = get_state()?;
+    let state_read = state.read();
+    let database = state_read.database.as_ref()
+        .ok_or_else(|| JsValue::from_str("Database not initialized"))?;
+
+    // Get manifest
+    let manifest_record = database.get_manifest(file_id)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?
+        .ok_or_else(|| JsValue::from_str("Manifest not found"))?;
+
+    // Rebuild ChunkManifest from record
+    let chunk_refs: Vec<chunking::ChunkRef> = serde_json::from_str(&manifest_record.chunks_json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid chunks JSON: {}", e)))?;
+
+    let manifest = chunking::ChunkManifest {
+        file_id: manifest_record.file_id.clone(),
+        filename: manifest_record.filename.clone(),
+        total_size: manifest_record.total_size as u64,
+        chunk_size: manifest_record.chunk_size as usize,
+        total_chunks: manifest_record.total_chunks as u32,
+        chunks: chunk_refs,
+        file_hash: manifest_record.file_hash.clone(),
+    };
+
+    // Get all chunks
+    let chunk_records = database.get_chunks_for_file(file_id)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let file_chunks: Vec<chunking::FileChunk> = chunk_records.iter().map(|r| {
+        chunking::FileChunk {
+            chunk_id: r.chunk_id.clone(),
+            chunk_index: r.chunk_index as u32,
+            total_chunks: manifest.total_chunks,
+            data: r.data.clone(),
+            file_id: r.file_id.clone(),
+        }
+    }).collect();
+
+    // Reassemble
+    let file_bytes = chunking::reassemble_file(&manifest, &file_chunks)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let data_b64 = base64::engine::general_purpose::STANDARD.encode(&file_bytes);
+    let result = serde_json::json!({
+        "data_b64": data_b64,
+        "filename": manifest.filename,
+        "file_hash": manifest.file_hash,
+        "total_size": manifest.total_size,
+    });
+
+    Ok(JsValue::from_str(&result.to_string()))
+}
+
+/// Get a stored file manifest.
+///
+/// Takes JSON: { file_id }
+/// Returns JSON: FileManifestRecord or null
+#[wasm_bindgen]
+pub fn umbra_wasm_get_file_manifest(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let file_id = data["file_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing file_id"))?;
+
+    let state = get_state()?;
+    let state_read = state.read();
+    let database = state_read.database.as_ref()
+        .ok_or_else(|| JsValue::from_str("Database not initialized"))?;
+
+    let manifest = database.get_manifest(file_id)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    match manifest {
+        Some(m) => {
+            let result = serde_json::json!({
+                "file_id": m.file_id,
+                "filename": m.filename,
+                "total_size": m.total_size,
+                "chunk_size": m.chunk_size,
+                "total_chunks": m.total_chunks,
+                "chunks_json": m.chunks_json,
+                "file_hash": m.file_hash,
+                "encrypted": m.encrypted,
+                "encryption_key_id": m.encryption_key_id,
+                "created_at": m.created_at,
+            });
+            Ok(JsValue::from_str(&result.to_string()))
+        }
+        None => Ok(JsValue::from_str("null")),
+    }
+}
+
+// ============================================================================
 // COMMUNITY — JSON HELPERS (Phase 2-11)
 // ============================================================================
 
@@ -7201,6 +8002,8 @@ fn notification_setting_to_json(s: &crate::storage::CommunityNotificationSetting
 }
 
 /// Convert a CommunityMessageRecord to JSON.
+///
+/// The TS `CommunityMessage` type expects `content` (mapped from snake_case `content`).
 fn message_to_json(m: &crate::storage::CommunityMessageRecord) -> serde_json::Value {
     let content_encrypted_b64 = m.content_encrypted.as_ref().map(|bytes| {
         base64::engine::general_purpose::STANDARD.encode(bytes)
@@ -7210,7 +8013,7 @@ fn message_to_json(m: &crate::storage::CommunityMessageRecord) -> serde_json::Va
         "channel_id": m.channel_id,
         "sender_did": m.sender_did,
         "content_encrypted_b64": content_encrypted_b64,
-        "content_plaintext": m.content_plaintext,
+        "content": m.content_plaintext,
         "nonce": m.nonce,
         "key_version": m.key_version,
         "is_e2ee": m.is_e2ee,
@@ -7219,9 +8022,12 @@ fn message_to_json(m: &crate::storage::CommunityMessageRecord) -> serde_json::Va
         "has_embed": m.has_embed,
         "has_attachment": m.has_attachment,
         "content_warning": m.content_warning,
+        "edited": m.edited_at.is_some(),
         "edited_at": m.edited_at,
+        "pinned": false,
         "deleted_for_everyone": m.deleted_for_everyone,
         "created_at": m.created_at,
+        "thread_reply_count": 0,
     })
 }
 
@@ -7265,7 +8071,57 @@ fn file_to_json(f: &crate::storage::CommunityFileRecord) -> serde_json::Value {
         "storage_chunks_json": f.storage_chunks_json,
         "uploaded_by": f.uploaded_by,
         "version": f.version,
+        "previous_version_id": f.previous_version_id,
         "download_count": f.download_count,
+        "created_at": f.created_at,
+    })
+}
+
+/// Convert a CommunityFileRecord to JSON (aliased for new file WASM exports).
+fn community_file_to_json(f: &crate::storage::CommunityFileRecord) -> serde_json::Value {
+    file_to_json(f)
+}
+
+/// Convert a CommunityFileFolderRecord to JSON.
+fn community_folder_to_json(f: &crate::storage::CommunityFileFolderRecord) -> serde_json::Value {
+    serde_json::json!({
+        "id": f.id,
+        "channel_id": f.channel_id,
+        "parent_folder_id": f.parent_folder_id,
+        "name": f.name,
+        "created_by": f.created_by,
+        "created_at": f.created_at,
+    })
+}
+
+/// Convert a DmSharedFileRecord to JSON.
+fn dm_file_to_json(f: &crate::storage::DmSharedFileRecord) -> serde_json::Value {
+    serde_json::json!({
+        "id": f.id,
+        "conversation_id": f.conversation_id,
+        "folder_id": f.folder_id,
+        "filename": f.filename,
+        "description": f.description,
+        "file_size": f.file_size,
+        "mime_type": f.mime_type,
+        "storage_chunks_json": f.storage_chunks_json,
+        "uploaded_by": f.uploaded_by,
+        "version": f.version,
+        "download_count": f.download_count,
+        "encrypted_metadata": f.encrypted_metadata,
+        "encryption_nonce": f.encryption_nonce,
+        "created_at": f.created_at,
+    })
+}
+
+/// Convert a DmSharedFolderRecord to JSON.
+fn dm_folder_to_json(f: &crate::storage::DmSharedFolderRecord) -> serde_json::Value {
+    serde_json::json!({
+        "id": f.id,
+        "conversation_id": f.conversation_id,
+        "parent_folder_id": f.parent_folder_id,
+        "name": f.name,
+        "created_by": f.created_by,
         "created_at": f.created_at,
     })
 }

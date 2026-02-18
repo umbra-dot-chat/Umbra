@@ -2146,12 +2146,12 @@ impl Database {
     pub fn get_community_files(&self, channel_id: &str, folder_id: Option<&str>, limit: usize, offset: usize) -> Result<Vec<CommunityFileRecord>> {
         let rows = if let Some(fid) = folder_id {
             self.query(
-                "SELECT id, channel_id, folder_id, filename, description, file_size, mime_type, storage_chunks_json, uploaded_by, version, download_count, created_at FROM community_files WHERE channel_id = ? AND folder_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                "SELECT id, channel_id, folder_id, filename, description, file_size, mime_type, storage_chunks_json, uploaded_by, version, previous_version_id, download_count, created_at FROM community_files WHERE channel_id = ? AND folder_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
                 json!([channel_id, fid, limit as i64, offset as i64]),
             )?
         } else {
             self.query(
-                "SELECT id, channel_id, folder_id, filename, description, file_size, mime_type, storage_chunks_json, uploaded_by, version, download_count, created_at FROM community_files WHERE channel_id = ? AND folder_id IS NULL ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                "SELECT id, channel_id, folder_id, filename, description, file_size, mime_type, storage_chunks_json, uploaded_by, version, previous_version_id, download_count, created_at FROM community_files WHERE channel_id = ? AND folder_id IS NULL ORDER BY created_at DESC LIMIT ? OFFSET ?",
                 json!([channel_id, limit as i64, offset as i64]),
             )?
         };
@@ -2166,6 +2166,7 @@ impl Database {
             storage_chunks_json: row["storage_chunks_json"].as_str().unwrap_or("[]").to_string(),
             uploaded_by: row["uploaded_by"].as_str().unwrap_or("").to_string(),
             version: row["version"].as_i64().unwrap_or(1) as i32,
+            previous_version_id: row["previous_version_id"].as_str().map(|s| s.to_string()),
             download_count: row["download_count"].as_i64().unwrap_or(0) as i32,
             created_at: row["created_at"].as_i64().unwrap_or(0),
         }).collect())
@@ -2174,7 +2175,7 @@ impl Database {
     /// Get a file by ID
     pub fn get_community_file(&self, id: &str) -> Result<Option<CommunityFileRecord>> {
         let rows = self.query(
-            "SELECT id, channel_id, folder_id, filename, description, file_size, mime_type, storage_chunks_json, uploaded_by, version, download_count, created_at FROM community_files WHERE id = ?",
+            "SELECT id, channel_id, folder_id, filename, description, file_size, mime_type, storage_chunks_json, uploaded_by, version, previous_version_id, download_count, created_at FROM community_files WHERE id = ?",
             json!([id]),
         )?;
         Ok(rows.first().map(|row| CommunityFileRecord {
@@ -2188,6 +2189,7 @@ impl Database {
             storage_chunks_json: row["storage_chunks_json"].as_str().unwrap_or("[]").to_string(),
             uploaded_by: row["uploaded_by"].as_str().unwrap_or("").to_string(),
             version: row["version"].as_i64().unwrap_or(1) as i32,
+            previous_version_id: row["previous_version_id"].as_str().map(|s| s.to_string()),
             download_count: row["download_count"].as_i64().unwrap_or(0) as i32,
             created_at: row["created_at"].as_i64().unwrap_or(0),
         }))
@@ -2241,6 +2243,121 @@ impl Database {
     pub fn delete_community_file_folder(&self, id: &str) -> Result<()> {
         self.exec("DELETE FROM community_file_folders WHERE id = ?", json!([id]))?;
         Ok(())
+    }
+
+    // ── Auto-versioning ──────────────────────────────────────────────────
+
+    /// Find an existing file with the same name in the same channel+folder.
+    /// Returns the existing file's (id, version) if found.
+    pub fn find_existing_community_file(
+        &self,
+        channel_id: &str,
+        folder_id: Option<&str>,
+        filename: &str,
+    ) -> Result<Option<(String, i32)>> {
+        let rows = if let Some(fid) = folder_id {
+            self.query(
+                "SELECT id, version FROM community_files WHERE channel_id = ? AND folder_id = ? AND filename = ? ORDER BY version DESC LIMIT 1",
+                json!([channel_id, fid, filename]),
+            )?
+        } else {
+            self.query(
+                "SELECT id, version FROM community_files WHERE channel_id = ? AND folder_id IS NULL AND filename = ? ORDER BY version DESC LIMIT 1",
+                json!([channel_id, filename]),
+            )?
+        };
+        Ok(rows.first().map(|row| {
+            (
+                row["id"].as_str().unwrap_or("").to_string(),
+                row["version"].as_i64().unwrap_or(1) as i32,
+            )
+        }))
+    }
+
+    /// Store a community file with auto-versioning.
+    /// If a file with the same name already exists in the same channel+folder,
+    /// the new file gets an incremented version and links to the previous version.
+    #[allow(clippy::too_many_arguments)]
+    pub fn store_community_file_versioned(
+        &self,
+        id: &str,
+        channel_id: &str,
+        folder_id: Option<&str>,
+        filename: &str,
+        description: Option<&str>,
+        file_size: i64,
+        mime_type: Option<&str>,
+        storage_chunks_json: &str,
+        uploaded_by: &str,
+        created_at: i64,
+    ) -> Result<i32> {
+        // Check for existing file with same name
+        let (version, prev_id) = if let Some((existing_id, existing_version)) =
+            self.find_existing_community_file(channel_id, folder_id, filename)?
+        {
+            (existing_version + 1, Some(existing_id))
+        } else {
+            (1, None)
+        };
+
+        self.exec(
+            "INSERT INTO community_files (id, channel_id, folder_id, filename, description, file_size, mime_type, storage_chunks_json, uploaded_by, version, previous_version_id, download_count, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)",
+            json!([id, channel_id, folder_id, filename, description, file_size, mime_type, storage_chunks_json, uploaded_by, version, prev_id, created_at]),
+        )?;
+
+        Ok(version)
+    }
+
+    /// Get version history for a file (follows previous_version_id chain)
+    pub fn get_file_version_history(&self, file_id: &str) -> Result<Vec<CommunityFileRecord>> {
+        // Start from the given file and follow the version chain backwards
+        let mut versions = Vec::new();
+        let mut current_id = Some(file_id.to_string());
+
+        while let Some(id) = current_id {
+            if let Some(file) = self.get_community_file(&id)? {
+                current_id = {
+                    let rows = self.query(
+                        "SELECT previous_version_id FROM community_files WHERE id = ?",
+                        json!([id]),
+                    )?;
+                    rows.first()
+                        .and_then(|row| row["previous_version_id"].as_str())
+                        .map(|s| s.to_string())
+                };
+                versions.push(file);
+            } else {
+                break;
+            }
+        }
+
+        Ok(versions)
+    }
+
+    /// Find an existing DM file with the same name in the same conversation+folder.
+    pub fn find_existing_dm_file(
+        &self,
+        conversation_id: &str,
+        folder_id: Option<&str>,
+        filename: &str,
+    ) -> Result<Option<(String, i32)>> {
+        let rows = if let Some(fid) = folder_id {
+            self.query(
+                "SELECT id, version FROM dm_shared_files WHERE conversation_id = ? AND folder_id = ? AND filename = ? ORDER BY version DESC LIMIT 1",
+                json!([conversation_id, fid, filename]),
+            )?
+        } else {
+            self.query(
+                "SELECT id, version FROM dm_shared_files WHERE conversation_id = ? AND folder_id IS NULL AND filename = ? ORDER BY version DESC LIMIT 1",
+                json!([conversation_id, filename]),
+            )?
+        };
+        Ok(rows.first().map(|row| {
+            (
+                row["id"].as_str().unwrap_or("").to_string(),
+                row["version"].as_i64().unwrap_or(1) as i32,
+            )
+        }))
     }
 
     // ── Emoji & Stickers ─────────────────────────────────────────────────
@@ -3439,6 +3556,7 @@ pub struct CommunityFileRecord {
     pub storage_chunks_json: String,
     pub uploaded_by: String,
     pub version: i32,
+    pub previous_version_id: Option<String>,
     pub download_count: i32,
     pub created_at: i64,
 }

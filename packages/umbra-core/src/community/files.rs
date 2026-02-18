@@ -10,6 +10,8 @@ impl super::CommunityService {
     // ── Files ───────────────────────────────────────────────────────────
 
     /// Upload a file record (metadata + chunk references).
+    /// Auto-versioning: if a file with the same name exists in the same folder,
+    /// the new file gets an incremented version number and links to the previous version.
     #[allow(clippy::too_many_arguments)]
     pub fn upload_file(
         &self,
@@ -29,10 +31,20 @@ impl super::CommunityService {
         let _channel = self.db().get_community_channel(channel_id)?
             .ok_or(Error::ChannelNotFound)?;
 
-        self.db().store_community_file(
+        // Auto-versioning: check for existing file with same name in same folder
+        let version = self.db().store_community_file_versioned(
             &id, channel_id, folder_id, filename, description,
             file_size, mime_type, storage_chunks_json, uploaded_by, now,
         )?;
+
+        // Get the previous_version_id that was set by store_community_file_versioned
+        let previous_version_id = if version > 1 {
+            self.db().find_existing_community_file(channel_id, folder_id, filename)?
+                .filter(|(found_id, _)| found_id != &id)
+                .map(|(found_id, _)| found_id)
+        } else {
+            None
+        };
 
         Ok(CommunityFileRecord {
             id,
@@ -44,7 +56,8 @@ impl super::CommunityService {
             mime_type: mime_type.map(|s| s.to_string()),
             storage_chunks_json: storage_chunks_json.to_string(),
             uploaded_by: uploaded_by.to_string(),
-            version: 1,
+            version,
+            previous_version_id,
             download_count: 0,
             created_at: now,
         })
