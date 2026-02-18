@@ -75,13 +75,18 @@ mod database;
 
 mod secure_store;
 mod schema;
+pub mod chunking;
+
+/// OPFS storage adapter for web chunk data (WASM-only)
+#[cfg(target_arch = "wasm32")]
+pub mod opfs;
 
 pub use database::{
     Database, DatabaseConfig, FriendRecord, FriendRequestRecord,
     ConversationRecord, MessageRecord, GroupRecord, GroupMemberRecord,
     GroupKeyRecord, GroupInviteRecord, ReactionRecord,
     // Community record types
-    CommunityRecord, CommunitySpaceRecord, CommunityChannelRecord,
+    CommunityRecord, CommunitySpaceRecord, CommunityCategoryRecord, CommunityChannelRecord,
     CommunityRoleRecord, CommunityMemberRoleRecord, ChannelPermissionOverrideRecord,
     CommunityMemberRecord, CommunityMessageRecord, CommunityReactionRecord,
     CommunityInviteRecord, CommunityBanRecord, CommunityWarningRecord,
@@ -94,6 +99,10 @@ pub use database::{
     // Gap fill record types
     CommunityTimeoutRecord, CommunityThreadFollowerRecord,
     CommunityMemberStatusRecord, CommunityNotificationSettingRecord,
+    // File chunk and DM file record types
+    FileChunkRecord, FileManifestRecord, DmSharedFileRecord, DmSharedFolderRecord,
+    // Transfer session record type
+    TransferSessionRecord,
 };
 pub use secure_store::SecureStore;
 
