@@ -104,6 +104,44 @@ function getMessageText(message: Message): string {
   return '[unsupported content]';
 }
 
+/** Try to parse a JSON-encoded file message marker from text content. */
+function tryParseFileMessage(message: Message): {
+  fileId: string;
+  filename: string;
+  size: number;
+  mimeType: string;
+} | null {
+  // Check native file content type first
+  if (message.content && typeof message.content === 'object' && message.content.type === 'file') {
+    return {
+      fileId: message.content.fileId,
+      filename: message.content.filename,
+      size: message.content.size,
+      mimeType: message.content.mimeType,
+    };
+  }
+  // Check for JSON-encoded file marker in text content
+  if (message.content && typeof message.content === 'object' && message.content.type === 'text') {
+    const text = message.content.text;
+    if (text.startsWith('{"__file":true')) {
+      try {
+        const parsed = JSON.parse(text);
+        if (parsed.__file && parsed.fileId && parsed.filename) {
+          return {
+            fileId: parsed.fileId,
+            filename: parsed.filename,
+            size: parsed.size ?? 0,
+            mimeType: parsed.mimeType ?? 'application/octet-stream',
+          };
+        }
+      } catch {
+        // Not valid JSON, treat as regular text
+      }
+    }
+  }
+  return null;
+}
+
 /** Check whether a message's text represents a call event (e.g. `[call:voice:completed:180]`). */
 function isCallEventMessage(text: string): boolean {
   return text.startsWith('[call:');
@@ -364,6 +402,7 @@ export function ChatArea({
             const name = getSenderName(msg.senderDid);
             const time = formatTime(msg.timestamp);
             const isOwn = msg.senderDid === myDid;
+            const fileInfo = tryParseFileMessage(msg);
 
             // Build reaction chips for Wisp ChatBubble
             const reactionChips = msg.reactions?.map((r) => ({
@@ -410,12 +449,12 @@ export function ChatArea({
                           </RNText>
                         </View>
                       )}
-                      {msg.content && typeof msg.content === 'object' && msg.content.type === 'file' ? (
+                      {fileInfo ? (
                         <DmFileMessage
-                          fileId={msg.content.fileId}
-                          filename={msg.content.filename}
-                          size={msg.content.size}
-                          mimeType={msg.content.mimeType}
+                          fileId={fileInfo.fileId}
+                          filename={fileInfo.filename}
+                          size={fileInfo.size}
+                          mimeType={fileInfo.mimeType}
                           isOutgoing={isOwn}
                         />
                       ) : (
@@ -436,12 +475,12 @@ export function ChatArea({
                       edited={msg.edited}
                       forwarded={msg.forwarded}
                     >
-                      {msg.content && typeof msg.content === 'object' && msg.content.type === 'file' ? (
+                      {fileInfo ? (
                         <DmFileMessage
-                          fileId={msg.content.fileId}
-                          filename={msg.content.filename}
-                          size={msg.content.size}
-                          mimeType={msg.content.mimeType}
+                          fileId={fileInfo.fileId}
+                          filename={fileInfo.filename}
+                          size={fileInfo.size}
+                          mimeType={fileInfo.mimeType}
                           isOutgoing={isOwn}
                         />
                       ) : (

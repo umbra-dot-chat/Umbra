@@ -23,7 +23,9 @@ import { HelpText, HelpHighlight, HelpListItem } from '@/components/ui/HelpConte
 import { ActiveCallBar } from '@/components/call/ActiveCallBar';
 import { ActiveCallPanel } from '@/components/call/ActiveCallPanel';
 import { useCall } from '@/hooks/useCall';
+import { pickFile } from '@/utils/filePicker';
 import { useSettingsDialog } from '@/contexts/SettingsDialogContext';
+import { E2EEKeyExchangeUI } from '@coexist/wisp-react-native/src/components/e2ee-key-exchange-ui';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Empty conversation state
@@ -254,6 +256,38 @@ export default function ChatPage() {
     }
   }, []);
 
+  // Handle file attachment
+  const handleAttachment = useCallback(async () => {
+    if (!service || !resolvedConversationId) return;
+    try {
+      const picked = await pickFile();
+      if (!picked) return; // User cancelled
+
+      // 1. Chunk the file
+      const fileId = crypto.randomUUID();
+      const manifest = await service.chunkFile(
+        fileId,
+        picked.filename,
+        picked.dataBase64,
+      );
+
+      // 2. Send a message with file metadata encoded as JSON
+      // The WASM messaging layer only supports text content for now,
+      // so we encode file info as a JSON marker that the UI parses.
+      const fileContent = JSON.stringify({
+        __file: true,
+        fileId,
+        filename: picked.filename,
+        size: picked.size,
+        mimeType: picked.mimeType,
+        storageChunksJson: JSON.stringify(manifest),
+      });
+      await sendMessage(fileContent);
+    } catch (err) {
+      console.error('[ChatPage] File attachment failed:', err);
+    }
+  }, [service, resolvedConversationId, sendMessage]);
+
   // Handle thread reply
   const handleThreadReply = useCallback(async (text: string) => {
     if (!threadParent) return;
@@ -390,6 +424,15 @@ export default function ChatPage() {
             if (resolvedConversationId) forwardMessage(msgId, resolvedConversationId);
           }}
           onCopyMessage={handleCopyMessage}
+          stickyHeader={
+            resolvedConversationId ? (
+              <E2EEKeyExchangeUI
+                status="active"
+                keyVersion={1}
+                compact
+              />
+            ) : undefined
+          }
         />
         <SlotRenderer slot="chat-toolbar" props={{ conversationId: resolvedConversationId }} />
         <ChatInput
@@ -402,6 +445,7 @@ export default function ChatPage() {
           onSubmit={handleSubmit}
           editing={editingMessage}
           onCancelEdit={handleCancelEdit}
+          onAttachmentClick={handleAttachment}
         />
       </View>
 

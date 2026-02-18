@@ -17,12 +17,14 @@ export interface ChatInputProps {
   editing?: { messageId: string; text: string } | null;
   /** Cancel edit mode */
   onCancelEdit?: () => void;
+  /** Called when the attachment button is clicked */
+  onAttachmentClick?: () => void;
 }
 
 export function ChatInput({
   message, onMessageChange, emojiOpen, onToggleEmoji,
   replyingTo, onClearReply, onSubmit,
-  editing, onCancelEdit,
+  editing, onCancelEdit, onAttachmentClick,
 }: ChatInputProps) {
   const { theme } = useTheme();
   const { friends } = useFriends();
@@ -175,6 +177,7 @@ export function ChatInput({
           placeholder={editing ? 'Edit message...' : 'Type a message...'}
           variant="pill"
           showAttachment={!editing}
+          onAttachmentClick={onAttachmentClick}
           showEmoji
           onEmojiClick={onToggleEmoji}
           highlightMentions
