@@ -6,7 +6,10 @@ import {
 import { SmileIcon, ReplyIcon, ThreadIcon, MoreIcon } from '@/components/icons';
 import { HoverBubble } from './HoverBubble';
 import { MsgGroup } from './MsgGroup';
+import { InlineMsgGroup } from './InlineMsgGroup';
+import { DmFileMessage } from '@/components/messaging/DmFileMessage';
 import { SlotRenderer } from '@/components/plugins/SlotRenderer';
+import { useMessaging } from '@/contexts/MessagingContext';
 import type { Message } from '@umbra/service';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -39,6 +42,8 @@ export interface ChatAreaProps {
   onPinMessage?: (messageId: string) => void;
   onForwardMessage?: (messageId: string) => void;
   onCopyMessage?: (text: string) => void;
+  /** Content rendered at the very top of the scroll area, scrolls away with messages. */
+  stickyHeader?: React.ReactNode;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -92,6 +97,9 @@ function getMessageText(message: Message): string {
   if (!message.content) return '[empty message]';
   if (message.content.type === 'text') {
     return message.content.text || '[decryption pending]';
+  }
+  if (message.content.type === 'file') {
+    return `[file: ${message.content.filename}]`;
   }
   return '[unsupported content]';
 }
@@ -227,9 +235,12 @@ export function ChatArea({
   hoveredMessage, onHoverIn, onHoverOut,
   onReplyTo, onOpenThread, onShowProfile,
   onToggleReaction, onEditMessage, onDeleteMessage, onPinMessage, onForwardMessage, onCopyMessage,
+  stickyHeader,
 }: ChatAreaProps) {
   const { theme } = useTheme();
   const themeColors = theme.colors;
+  const { displayMode } = useMessaging();
+  const isInline = displayMode === 'inline';
 
   if (isLoading) {
     return <LoadingSkeleton />;
@@ -276,6 +287,9 @@ export function ChatArea({
       style={{ flex: 1 }}
       contentContainerStyle={{ padding: 16, gap: 8 }}
     >
+      {/* Scrollable header content (e.g. E2EE banner) */}
+      {stickyHeader}
+
       {/* Date divider */}
       <View style={{ alignItems: 'center', paddingVertical: 8 }}>
         <Text size="xs" style={{ color: themeColors.text.muted }}>Today</Text>
@@ -342,6 +356,150 @@ export function ChatArea({
         }
 
         // ── Regular message group ──
+
+        // Shared per-message renderer (used by both layouts)
+        const renderMessages = (inlineMode: boolean) =>
+          group.map((msg) => {
+            const text = getMessageText(msg);
+            const name = getSenderName(msg.senderDid);
+            const time = formatTime(msg.timestamp);
+            const isOwn = msg.senderDid === myDid;
+
+            // Build reaction chips for Wisp ChatBubble
+            const reactionChips = msg.reactions?.map((r) => ({
+              emoji: r.emoji,
+              count: r.count ?? r.users?.length ?? 0,
+              active: r.reacted ?? r.users?.includes(myDid) ?? false,
+            }));
+
+            // Build replyTo display
+            const replyTo = msg.replyTo ? {
+              sender: msg.replyTo.senderName || getSenderName(msg.replyTo.senderDid),
+              text: msg.replyTo.text,
+            } : undefined;
+
+            const threadCount = msg.threadReplyCount ?? 0;
+
+            return (
+              <View key={msg.id}>
+                <HoverBubble
+                  id={msg.id}
+                  align={inlineMode ? 'incoming' : (isOwn ? 'outgoing' : 'incoming')}
+                  hoveredMessage={hoveredMessage}
+                  onHoverIn={onHoverIn}
+                  onHoverOut={onHoverOut}
+                  actions={makeActions(msg.id, name, text, time)}
+                  contextActions={makeContextActions(msg.id, name, text, time, isOwn)}
+                  themeColors={themeColors}
+                  message={{ id: msg.id, text, conversationId: msg.conversationId, senderDid: msg.senderDid }}
+                >
+                  {inlineMode ? (
+                    <View style={{ paddingVertical: 2 }}>
+                      {replyTo && (
+                        <View
+                          style={{
+                            borderLeftWidth: 2,
+                            borderLeftColor: themeColors.accent.primary,
+                            paddingLeft: 8,
+                            marginBottom: 4,
+                            opacity: 0.7,
+                          }}
+                        >
+                          <RNText style={{ fontSize: 11, color: themeColors.text.muted }}>
+                            {replyTo.sender}: {replyTo.text}
+                          </RNText>
+                        </View>
+                      )}
+                      {msg.content && typeof msg.content === 'object' && msg.content.type === 'file' ? (
+                        <DmFileMessage
+                          fileId={msg.content.fileId}
+                          filename={msg.content.filename}
+                          size={msg.content.size}
+                          mimeType={msg.content.mimeType}
+                          isOutgoing={isOwn}
+                        />
+                      ) : (
+                        <RNText style={{ fontSize: 14, color: themeColors.text.primary, lineHeight: 20 }}>
+                          {text}
+                        </RNText>
+                      )}
+                      {msg.edited && (
+                        <RNText style={{ fontSize: 10, color: themeColors.text.muted }}>(edited)</RNText>
+                      )}
+                    </View>
+                  ) : (
+                    <ChatBubble
+                      align={isOwn ? 'outgoing' : 'incoming'}
+                      reactions={reactionChips}
+                      onReactionClick={(emoji: string) => onToggleReaction?.(msg.id, emoji)}
+                      replyTo={replyTo}
+                      edited={msg.edited}
+                      forwarded={msg.forwarded}
+                    >
+                      {msg.content && typeof msg.content === 'object' && msg.content.type === 'file' ? (
+                        <DmFileMessage
+                          fileId={msg.content.fileId}
+                          filename={msg.content.filename}
+                          size={msg.content.size}
+                          mimeType={msg.content.mimeType}
+                          isOutgoing={isOwn}
+                        />
+                      ) : (
+                        text
+                      )}
+                    </ChatBubble>
+                  )}
+                </HoverBubble>
+                <SlotRenderer
+                  slot="message-decorator"
+                  props={{ message: msg, conversationId: msg.conversationId }}
+                />
+                {threadCount > 0 && (
+                  <Pressable
+                    onPress={() => onOpenThread({ id: msg.id, sender: name, content: text, timestamp: time })}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'flex-start',
+                      alignSelf: 'flex-start',
+                      paddingHorizontal: 8,
+                      paddingVertical: 3,
+                      marginTop: 2,
+                      gap: 4,
+                    }}
+                  >
+                    <ThreadIcon size={12} color={themeColors.accent.primary} />
+                    <RNText style={{
+                      fontSize: 11,
+                      fontWeight: '600',
+                      color: themeColors.accent.primary,
+                    }}>
+                      {threadCount} {threadCount === 1 ? 'reply' : 'replies'}
+                    </RNText>
+                  </Pressable>
+                )}
+              </View>
+            );
+          });
+
+        if (isInline) {
+          // ── Inline layout (Slack/Discord style) ──
+          return (
+            <InlineMsgGroup
+              key={`group-${groupIdx}`}
+              sender={senderName}
+              avatar={<Avatar name={senderName} size="sm" />}
+              timestamp={timeStr}
+              status={isOutgoing ? (firstMsg.status as string) : undefined}
+              senderColor={isGroupChat ? memberColor(senderDid) : undefined}
+              themeColors={themeColors}
+              onAvatarPress={(e: any) => onShowProfile(senderName, e)}
+            >
+              {renderMessages(true)}
+            </InlineMsgGroup>
+          );
+        }
+
+        // ── Bubble layout (default) ──
         return (
           <MsgGroup
             key={`group-${groupIdx}`}
@@ -354,81 +512,7 @@ export function ChatArea({
             themeColors={themeColors}
             onAvatarPress={!isOutgoing ? (e: any) => onShowProfile(senderName, e) : undefined}
           >
-            {group.map((msg) => {
-              const text = getMessageText(msg);
-              const name = getSenderName(msg.senderDid);
-              const time = formatTime(msg.timestamp);
-              const isOwn = msg.senderDid === myDid;
-
-              // Build reaction chips for Wisp ChatBubble
-              const reactionChips = msg.reactions?.map((r) => ({
-                emoji: r.emoji,
-                count: r.count ?? r.users?.length ?? 0,
-                active: r.reacted ?? r.users?.includes(myDid) ?? false,
-              }));
-
-              // Build replyTo display
-              const replyTo = msg.replyTo ? {
-                sender: msg.replyTo.senderName || getSenderName(msg.replyTo.senderDid),
-                text: msg.replyTo.text,
-              } : undefined;
-
-              const threadCount = msg.threadReplyCount ?? 0;
-
-              return (
-                <View key={msg.id}>
-                  <HoverBubble
-                    id={msg.id}
-                    align={isOwn ? 'outgoing' : 'incoming'}
-                    hoveredMessage={hoveredMessage}
-                    onHoverIn={onHoverIn}
-                    onHoverOut={onHoverOut}
-                    actions={makeActions(msg.id, name, text, time)}
-                    contextActions={makeContextActions(msg.id, name, text, time, isOwn)}
-                    themeColors={themeColors}
-                    message={{ id: msg.id, text, conversationId: msg.conversationId, senderDid: msg.senderDid }}
-                  >
-                    <ChatBubble
-                      align={isOwn ? 'outgoing' : 'incoming'}
-                      reactions={reactionChips}
-                      onReactionClick={(emoji: string) => onToggleReaction?.(msg.id, emoji)}
-                      replyTo={replyTo}
-                      edited={msg.edited}
-                      forwarded={msg.forwarded}
-                    >
-                      {text}
-                    </ChatBubble>
-                  </HoverBubble>
-                  <SlotRenderer
-                    slot="message-decorator"
-                    props={{ message: msg, conversationId: msg.conversationId }}
-                  />
-                  {threadCount > 0 && (
-                    <Pressable
-                      onPress={() => onOpenThread({ id: msg.id, sender: name, content: text, timestamp: time })}
-                      style={{
-                        flexDirection: 'row',
-                        alignItems: isOwn ? 'flex-end' : 'flex-start',
-                        alignSelf: isOwn ? 'flex-end' : 'flex-start',
-                        paddingHorizontal: 8,
-                        paddingVertical: 3,
-                        marginTop: 2,
-                        gap: 4,
-                      }}
-                    >
-                      <ThreadIcon size={12} color={themeColors.accent.primary} />
-                      <RNText style={{
-                        fontSize: 11,
-                        fontWeight: '600',
-                        color: themeColors.accent.primary,
-                      }}>
-                        {threadCount} {threadCount === 1 ? 'reply' : 'replies'}
-                      </RNText>
-                    </Pressable>
-                  )}
-                </View>
-              );
-            })}
+            {renderMessages(false)}
           </MsgGroup>
         );
       })}
