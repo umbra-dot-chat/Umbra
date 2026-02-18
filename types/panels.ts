@@ -6,7 +6,7 @@
  */
 
 /** Which right-side panel is currently open, or null if none. */
-export type RightPanel = 'members' | 'pins' | 'thread' | 'search' | null;
+export type RightPanel = 'members' | 'pins' | 'thread' | 'search' | 'files' | null;
 
 /** Width (in dp) of the right-side panel drawer. */
 export const PANEL_WIDTH = 280;

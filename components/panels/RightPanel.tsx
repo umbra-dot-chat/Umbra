@@ -8,6 +8,7 @@ import { PANEL_WIDTH } from '@/types/panels';
 import type { RightPanel as RightPanelType } from '@/types/panels';
 import { useFriends } from '@/hooks/useFriends';
 import { SearchPanel } from './SearchPanel';
+import { DmSharedFilesPanel } from '@/components/messaging/DmSharedFilesPanel';
 
 export interface RightPanelProps {
   panelWidth: Animated.Value;
@@ -87,6 +88,12 @@ export function RightPanel({
             onClose={() => togglePanel('search')}
             conversationId={conversationId}
             onResultClick={onSearchResultClick}
+          />
+        )}
+        {visiblePanel === 'files' && conversationId && (
+          <DmSharedFilesPanel
+            conversationId={conversationId}
+            onClose={() => togglePanel('files')}
           />
         )}
       </View>
