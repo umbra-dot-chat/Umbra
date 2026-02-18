@@ -611,8 +611,11 @@ function StorageSection() {
     cleanupSuggestions,
     isCleaningUp,
     lastCleanupResult,
+    autoCleanupRules,
+    setAutoCleanupRules,
     formatBytes,
   } = useStorageManager();
+  const [showRules, setShowRules] = useState(false);
 
   if (isLoading) {
     return (
@@ -734,6 +737,109 @@ function StorageSection() {
             Last cleanup freed {formatBytes(lastCleanupResult.bytesFreed)}
           </Text>
         )}
+
+        {/* Auto-cleanup rules toggle */}
+        <Pressable
+          onPress={() => setShowRules((prev) => !prev)}
+          style={{ marginTop: 12, paddingVertical: 4 }}
+        >
+          <Text size="xs" weight="medium" style={{ color: theme.colors.accent.primary }}>
+            {showRules ? 'Hide' : 'Show'} Auto-Cleanup Rules
+          </Text>
+        </Pressable>
+
+        {showRules && (
+          <View style={{ marginTop: 8, gap: 8 }}>
+            <AutoCleanupRuleRow
+              label="Max storage"
+              value={autoCleanupRules.maxTotalBytes
+                ? formatBytes(autoCleanupRules.maxTotalBytes)
+                : 'Unlimited'}
+              options={[
+                { label: '1 GB', value: 1 * 1024 * 1024 * 1024 },
+                { label: '2 GB', value: 2 * 1024 * 1024 * 1024 },
+                { label: '5 GB', value: 5 * 1024 * 1024 * 1024 },
+                { label: '10 GB', value: 10 * 1024 * 1024 * 1024 },
+              ]}
+              onSelect={(v) => setAutoCleanupRules({ maxTotalBytes: v })}
+            />
+            <AutoCleanupRuleRow
+              label="Delete old transfers after"
+              value={autoCleanupRules.maxTransferAge
+                ? `${Math.round(autoCleanupRules.maxTransferAge / 86400)} days`
+                : 'Never'}
+              options={[
+                { label: '1 day', value: 86400 },
+                { label: '7 days', value: 604800 },
+                { label: '30 days', value: 2592000 },
+              ]}
+              onSelect={(v) => setAutoCleanupRules({ maxTransferAge: v })}
+            />
+            <AutoCleanupRuleRow
+              label="Clear cache after"
+              value={autoCleanupRules.maxCacheAge
+                ? `${Math.round(autoCleanupRules.maxCacheAge / 3600)} hours`
+                : 'Never'}
+              options={[
+                { label: '1 hour', value: 3600 },
+                { label: '24 hours', value: 86400 },
+                { label: '7 days', value: 604800 },
+              ]}
+              onSelect={(v) => setAutoCleanupRules({ maxCacheAge: v })}
+            />
+          </View>
+        )}
+      </View>
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Auto-Cleanup Rule Row
+// ---------------------------------------------------------------------------
+
+function AutoCleanupRuleRow({
+  label,
+  value,
+  options,
+  onSelect,
+}: {
+  label: string;
+  value: string;
+  options: { label: string; value: number }[];
+  onSelect: (value: number) => void;
+}) {
+  const { theme } = useTheme();
+
+  return (
+    <View>
+      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Text size="xs" style={{ color: theme.colors.text.secondary }}>
+          {label}
+        </Text>
+        <Text size="xs" weight="medium" style={{ color: theme.colors.text.primary }}>
+          {value}
+        </Text>
+      </View>
+      <View style={{ flexDirection: 'row', gap: 4, marginTop: 4 }}>
+        {options.map((opt) => (
+          <Pressable
+            key={opt.value}
+            onPress={() => onSelect(opt.value)}
+            style={({ pressed }) => ({
+              paddingHorizontal: 8,
+              paddingVertical: 3,
+              borderRadius: 4,
+              backgroundColor: pressed
+                ? theme.colors.accent.primary + '30'
+                : theme.colors.background.sunken,
+            })}
+          >
+            <Text size="xs" style={{ color: theme.colors.text.muted }}>
+              {opt.label}
+            </Text>
+          </Pressable>
+        ))}
       </View>
     </View>
   );
