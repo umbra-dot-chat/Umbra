@@ -24,6 +24,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { pickFile } from '@/utils/filePicker';
 import { getFileTypeIcon, formatFileSize } from '@/utils/fileIcons';
 import { canUploadFiles, canManageFiles } from '@/utils/permissions';
+import { LockIcon } from '@/components/icons';
 import type { FileFolderNode } from '@/hooks/useCommunityFiles';
 import type {
   CommunityFileRecord,
@@ -45,6 +46,8 @@ interface FileEntryView {
   downloadCount?: number;
   version?: number;
   folderId?: string | null;
+  isEncrypted?: boolean;
+  encryptionKeyVersion?: number;
 }
 
 interface FileFolderView {
@@ -92,6 +95,8 @@ function toFileEntry(record: CommunityFileRecord): FileEntryView {
     downloadCount: record.downloadCount,
     version: record.version,
     folderId: record.folderId,
+    isEncrypted: record.isEncrypted,
+    encryptionKeyVersion: record.encryptionKeyVersion,
   };
 }
 
@@ -618,9 +623,14 @@ export function FileChannelContent({ channelId, communityId, myRoles = [], isOwn
                         : colors.border.subtle,
                     }}
                   >
-                    <Text size="lg" style={{ marginBottom: 4 }}>
-                      {getFileTypeIcon(file.mimeType).icon}
-                    </Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 4 }}>
+                      <Text size="lg">
+                        {getFileTypeIcon(file.mimeType).icon}
+                      </Text>
+                      {file.isEncrypted && (
+                        <LockIcon size={12} color={colors.accent.primary} />
+                      )}
+                    </View>
                     <Text size="sm" weight="medium" numberOfLines={1} style={{ color: colors.text.primary }}>
                       {file.name}
                     </Text>
@@ -677,6 +687,14 @@ export function FileChannelContent({ channelId, communityId, myRoles = [], isOwn
               <Text size="xs" style={{ color: colors.text.muted }}>
                 Downloads: {detailFile.downloadCount}
               </Text>
+            )}
+            {detailFile.isEncrypted && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 }}>
+                <LockIcon size={12} color={colors.accent.primary} />
+                <Text size="xs" style={{ color: colors.accent.primary }}>
+                  Encrypted (AES-256-GCM){detailFile.encryptionKeyVersion ? ` · Key v${detailFile.encryptionKeyVersion}` : ''}
+                </Text>
+              </View>
             )}
           </View>
           <View style={{ flexDirection: 'row', gap: 12, marginTop: 12 }}>

@@ -13,6 +13,7 @@ import { useTheme, Text } from '@coexist/wisp-react-native';
 import { useDmFiles } from '@/hooks/useDmFiles';
 import type { DmFileFilter } from '@/hooks/useDmFiles';
 import { getFileTypeIcon, formatFileSize } from '@/utils/fileIcons';
+import { LockIcon } from '@/components/icons';
 import type { DmSharedFileRecord } from '@umbra/service';
 
 // ---------------------------------------------------------------------------
@@ -205,9 +206,14 @@ function FileRow({ file }: { file: DmSharedFileRecord }) {
         >
           {file.filename}
         </Text>
-        <Text size="xs" style={{ color: colors.text.muted, marginTop: 1 }}>
-          {formatFileSize(file.fileSize)} · {new Date(file.createdAt).toLocaleDateString()}
-        </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 1 }}>
+          <Text size="xs" style={{ color: colors.text.muted }}>
+            {formatFileSize(file.fileSize)} · {new Date(file.createdAt).toLocaleDateString()}
+          </Text>
+          {file.isEncrypted && (
+            <LockIcon size={10} color={colors.accent.primary} />
+          )}
+        </View>
       </View>
     </View>
   );

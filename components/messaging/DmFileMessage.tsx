@@ -11,7 +11,7 @@ import React from 'react';
 import { View, Image, Pressable } from 'react-native';
 import { Text, useTheme } from '@coexist/wisp-react-native';
 import { getFileTypeIcon, formatFileSize } from '@/utils/fileIcons';
-import { DownloadIcon } from '@/components/icons';
+import { DownloadIcon, LockIcon } from '@/components/icons';
 
 // ---------------------------------------------------------------------------
 // Props
@@ -32,6 +32,8 @@ export interface DmFileMessageProps {
   thumbnail?: string;
   /** Called when the download button is pressed */
   onDownload?: (fileId: string) => void;
+  /** Whether this file is end-to-end encrypted */
+  isEncrypted?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -55,6 +57,7 @@ export function DmFileMessage({
   isOutgoing = false,
   thumbnail,
   onDownload,
+  isEncrypted = false,
 }: DmFileMessageProps) {
   const { theme } = useTheme();
   const colors = theme.colors;
@@ -122,9 +125,14 @@ export function DmFileMessage({
           >
             {filename}
           </Text>
-          <Text size="xs" style={{ color: colors.text.muted, marginTop: 1 }}>
-            {formatFileSize(size)} · {typeIcon.label}
-          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 1 }}>
+            <Text size="xs" style={{ color: colors.text.muted }}>
+              {formatFileSize(size)} · {typeIcon.label}
+            </Text>
+            {isEncrypted && (
+              <LockIcon size={10} color={colors.accent.primary} />
+            )}
+          </View>
         </View>
 
         {/* Download button */}

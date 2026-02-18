@@ -26,6 +26,7 @@ import {
   FileTextIcon,
   DownloadIcon,
   PlusIcon,
+  LockIcon,
 } from '@/components/icons';
 
 // ---------------------------------------------------------------------------
@@ -516,9 +517,14 @@ function FolderDetailView({
                 <Text size="sm" weight="medium" style={{ color: theme.colors.text.primary }} numberOfLines={1}>
                   {file.filename}
                 </Text>
-                <Text size="xs" style={{ color: theme.colors.text.muted }}>
-                  {formatBytes(file.fileSize)} &middot; v{file.version}
-                </Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                  <Text size="xs" style={{ color: theme.colors.text.muted }}>
+                    {formatBytes(file.fileSize)} &middot; v{file.version}
+                  </Text>
+                  {file.isEncrypted && (
+                    <LockIcon size={10} color={theme.colors.accent.primary} />
+                  )}
+                </View>
               </View>
               <DownloadIcon size={16} color={theme.colors.text.muted} />
             </Pressable>

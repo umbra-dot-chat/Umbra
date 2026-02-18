@@ -1005,6 +1005,10 @@ export interface CommunityFileRecord {
   downloadCount: number;
   /** Created timestamp (epoch ms) */
   createdAt: number;
+  /** Whether the file chunks are encrypted (E2EE) */
+  isEncrypted?: boolean;
+  /** Encryption key version (for key rotation tracking) */
+  encryptionKeyVersion?: number;
 }
 
 /** A folder inside a community file channel. */
@@ -1064,6 +1068,10 @@ export interface DmSharedFileRecord {
   encryptedMetadata?: string;
   /** Nonce for metadata encryption (hex) */
   encryptionNonce?: string;
+  /** Whether the file chunks are encrypted (E2EE) */
+  isEncrypted?: boolean;
+  /** Encryption key version (for key rotation tracking) */
+  encryptionKeyVersion?: number;
 }
 
 /**
