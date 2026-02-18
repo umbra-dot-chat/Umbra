@@ -341,6 +341,86 @@ pub fn decrypt_from_sender(
 }
 
 // ============================================================================
+// FILE CHUNK ENCRYPTION
+// ============================================================================
+
+/// Encrypt a single file chunk with AES-256-GCM.
+///
+/// Uses `file_id || chunk_index` as Additional Authenticated Data (AAD) to
+/// prevent chunk reordering and cross-file chunk substitution attacks.
+///
+/// ## Parameters
+///
+/// - `key`: File encryption key (derived via `derive_file_key`)
+/// - `chunk_data`: Raw chunk bytes to encrypt
+/// - `file_id`: Unique file identifier
+/// - `chunk_index`: Zero-based index of this chunk
+///
+/// ## Returns
+///
+/// Tuple of (nonce, encrypted_data) where encrypted_data includes the auth tag.
+pub fn encrypt_chunk(
+    key: &EncryptionKey,
+    chunk_data: &[u8],
+    file_id: &str,
+    chunk_index: u32,
+) -> Result<(Nonce, Vec<u8>)> {
+    // Build AAD: file_id || chunk_index (little-endian)
+    let mut aad = Vec::with_capacity(file_id.len() + 4);
+    aad.extend_from_slice(file_id.as_bytes());
+    aad.extend_from_slice(&chunk_index.to_le_bytes());
+
+    encrypt(key, chunk_data, &aad)
+}
+
+/// Decrypt a single file chunk with AES-256-GCM.
+///
+/// Verifies the AAD binding to ensure the chunk belongs to the correct file
+/// and has the correct position.
+///
+/// ## Parameters
+///
+/// - `key`: File encryption key (same key used for encryption)
+/// - `nonce`: Nonce from encryption
+/// - `encrypted_data`: Ciphertext with authentication tag
+/// - `file_id`: Expected file identifier (must match encryption)
+/// - `chunk_index`: Expected chunk index (must match encryption)
+///
+/// ## Returns
+///
+/// Decrypted chunk data.
+///
+/// ## Errors
+///
+/// Returns `DecryptionFailed` if the chunk was tampered with, belongs to a
+/// different file, or has been reordered.
+pub fn decrypt_chunk(
+    key: &EncryptionKey,
+    nonce: &Nonce,
+    encrypted_data: &[u8],
+    file_id: &str,
+    chunk_index: u32,
+) -> Result<Vec<u8>> {
+    // Reconstruct the same AAD
+    let mut aad = Vec::with_capacity(file_id.len() + 4);
+    aad.extend_from_slice(file_id.as_bytes());
+    aad.extend_from_slice(&chunk_index.to_le_bytes());
+
+    decrypt(key, nonce, encrypted_data, &aad)
+}
+
+/// Metadata about an encrypted chunk, stored alongside the ciphertext.
+#[derive(Clone, Debug)]
+pub struct EncryptedChunkInfo {
+    /// The nonce used for this chunk's encryption
+    pub nonce: [u8; NONCE_SIZE],
+    /// Size of the encrypted data (including auth tag)
+    pub encrypted_size: usize,
+    /// Original chunk index
+    pub chunk_index: u32,
+}
+
+// ============================================================================
 // TESTS
 // ============================================================================
 
@@ -444,5 +524,55 @@ mod tests {
 
         // Random nonces should produce different ciphertexts
         assert_ne!(ct1, ct2);
+    }
+
+    #[test]
+    fn test_chunk_encrypt_decrypt_round_trip() {
+        let key = EncryptionKey::from_bytes([42u8; 32]);
+        let chunk_data = b"Hello, this is chunk data!";
+        let file_id = "file-abc-123";
+        let chunk_index = 0u32;
+
+        let (nonce, encrypted) = encrypt_chunk(&key, chunk_data, file_id, chunk_index).unwrap();
+        let decrypted = decrypt_chunk(&key, &nonce, &encrypted, file_id, chunk_index).unwrap();
+
+        assert_eq!(decrypted, chunk_data);
+    }
+
+    #[test]
+    fn test_chunk_wrong_file_id_fails() {
+        let key = EncryptionKey::from_bytes([42u8; 32]);
+        let chunk_data = b"secret chunk";
+        let file_id = "file-abc";
+        let chunk_index = 0u32;
+
+        let (nonce, encrypted) = encrypt_chunk(&key, chunk_data, file_id, chunk_index).unwrap();
+        // Try to decrypt with wrong file_id — should fail due to AAD mismatch
+        let result = decrypt_chunk(&key, &nonce, &encrypted, "file-wrong", chunk_index);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_chunk_wrong_index_fails() {
+        let key = EncryptionKey::from_bytes([42u8; 32]);
+        let chunk_data = b"secret chunk";
+        let file_id = "file-abc";
+
+        let (nonce, encrypted) = encrypt_chunk(&key, chunk_data, file_id, 0).unwrap();
+        // Try to decrypt with wrong chunk_index — should fail due to AAD mismatch
+        let result = decrypt_chunk(&key, &nonce, &encrypted, file_id, 1);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_chunk_wrong_key_fails() {
+        let key1 = EncryptionKey::from_bytes([42u8; 32]);
+        let key2 = EncryptionKey::from_bytes([99u8; 32]);
+        let chunk_data = b"secret chunk";
+        let file_id = "file-abc";
+
+        let (nonce, encrypted) = encrypt_chunk(&key1, chunk_data, file_id, 0).unwrap();
+        let result = decrypt_chunk(&key2, &nonce, &encrypted, file_id, 0);
+        assert!(result.is_err());
     }
 }

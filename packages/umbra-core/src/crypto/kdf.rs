@@ -130,6 +130,9 @@ pub mod domain {
     /// Domain for storage encryption key derivation
     #[allow(dead_code)]
     pub const STORAGE_ENCRYPTION: &[u8] = b"umbra-storage-encryption-v1";
+
+    /// Domain for per-file encryption key derivation
+    pub const FILE_ENCRYPTION: &[u8] = b"umbra-file-encryption-v1";
 }
 
 /// Keys derived from a master seed
@@ -230,6 +233,40 @@ pub fn derive_storage_key(
     combined.zeroize();
 
     Ok(storage_key)
+}
+
+/// Derive a unique encryption key for a specific file.
+///
+/// Uses HKDF-SHA256 with the shared secret (from ECDH) as input key material,
+/// the file_id as salt, and the file encryption domain string as info.
+///
+/// ## Parameters
+///
+/// - `shared_secret`: The 32-byte ECDH shared secret for the conversation
+/// - `file_id`: Unique file identifier, used as salt for domain separation
+///
+/// ## Returns
+///
+/// 32-byte AES-256-GCM encryption key unique to this file.
+///
+/// ## Security
+///
+/// Each file gets its own encryption key derived from the conversation's shared
+/// secret. This means:
+/// - Compromise of one file key doesn't affect other files
+/// - Both conversation participants independently derive the same key
+/// - Key is bound to both the conversation (via shared_secret) and the file (via file_id)
+pub fn derive_file_key(
+    shared_secret: &[u8; 32],
+    file_id: &[u8],
+) -> Result<[u8; 32]> {
+    let hkdf = Hkdf::<Sha256>::new(Some(file_id), shared_secret);
+
+    let mut key = [0u8; 32];
+    hkdf.expand(domain::FILE_ENCRYPTION, &mut key)
+        .map_err(|_| Error::KeyDerivationFailed("Failed to derive file encryption key".into()))?;
+
+    Ok(key)
 }
 
 /// Derive multiple keys from a shared secret for different purposes
@@ -348,5 +385,38 @@ mod tests {
         let key2 = derive_storage_key(&signing, &encryption).unwrap();
 
         assert_eq!(key1, key2);
+    }
+
+    #[test]
+    fn test_file_key_deterministic() {
+        let shared_secret = [42u8; 32];
+        let file_id = b"file-abc-123";
+
+        let key1 = derive_file_key(&shared_secret, file_id).unwrap();
+        let key2 = derive_file_key(&shared_secret, file_id).unwrap();
+
+        assert_eq!(key1, key2);
+    }
+
+    #[test]
+    fn test_different_files_different_keys() {
+        let shared_secret = [42u8; 32];
+
+        let key1 = derive_file_key(&shared_secret, b"file-1").unwrap();
+        let key2 = derive_file_key(&shared_secret, b"file-2").unwrap();
+
+        assert_ne!(key1, key2);
+    }
+
+    #[test]
+    fn test_different_secrets_different_file_keys() {
+        let secret1 = [1u8; 32];
+        let secret2 = [2u8; 32];
+        let file_id = b"file-abc";
+
+        let key1 = derive_file_key(&secret1, file_id).unwrap();
+        let key2 = derive_file_key(&secret2, file_id).unwrap();
+
+        assert_ne!(key1, key2);
     }
 }

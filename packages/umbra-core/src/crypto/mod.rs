@@ -101,9 +101,9 @@ mod signing;
 mod kdf;
 
 pub use keys::{KeyPair, PublicKey, SigningKeyPair, EncryptionKeyPair};
-pub use encryption::{encrypt, decrypt, encrypt_for_recipient, decrypt_from_sender, SharedSecret, Nonce, EncryptionKey, NONCE_SIZE};
+pub use encryption::{encrypt, decrypt, encrypt_for_recipient, decrypt_from_sender, encrypt_chunk, decrypt_chunk, EncryptedChunkInfo, SharedSecret, Nonce, EncryptionKey, NONCE_SIZE};
 pub use signing::{sign, verify, Signature, SIGNATURE_SIZE};
-pub use kdf::{derive_keys_from_seed, derive_shared_secret, DerivedKeys};
+pub use kdf::{derive_keys_from_seed, derive_shared_secret, derive_file_key, DerivedKeys};
 
 /// Size of encryption keys in bytes (256 bits)
 pub const ENCRYPTION_KEY_SIZE: usize = 32;
