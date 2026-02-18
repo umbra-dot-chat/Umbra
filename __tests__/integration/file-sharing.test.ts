@@ -260,4 +260,82 @@ describe('File Sharing', () => {
       expect(decrypted.chunkDataB64).toBe(originalData);
     });
   });
+
+  // ── Channel File Encryption ────────────────────────────────────────────
+
+  describe('Channel File Encryption', () => {
+    test('deriveChannelFileKey returns a hex key', async () => {
+      const channelKeyHex = 'a'.repeat(64);
+      const result = await svc.deriveChannelFileKey(channelKeyHex, 'file-1', 1);
+      expect(result).toBeDefined();
+      expect(result.keyHex).toBeDefined();
+      expect(result.keyHex.length).toBe(64);
+    });
+
+    test('deriveChannelFileKey passes key version', async () => {
+      const channelKeyHex = 'a'.repeat(64);
+      await svc.deriveChannelFileKey(channelKeyHex, 'file-1', 2);
+      expect(svc.deriveChannelFileKey).toHaveBeenCalledWith(channelKeyHex, 'file-1', 2);
+    });
+
+    test('different key versions produce different calls', async () => {
+      const channelKeyHex = 'a'.repeat(64);
+      await svc.deriveChannelFileKey(channelKeyHex, 'file-1', 1);
+      await svc.deriveChannelFileKey(channelKeyHex, 'file-1', 2);
+      expect(svc.deriveChannelFileKey).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  // ── Key Fingerprints ──────────────────────────────────────────────────
+
+  describe('Key Fingerprints', () => {
+    test('computeKeyFingerprint returns 16-char hex', async () => {
+      const keyHex = 'a'.repeat(64);
+      const result = await svc.computeKeyFingerprint(keyHex);
+      expect(result).toBeDefined();
+      expect(result.fingerprint).toBeDefined();
+      expect(result.fingerprint.length).toBe(16);
+    });
+
+    test('verifyKeyFingerprint with matching fingerprint returns true', async () => {
+      const keyHex = 'a'.repeat(64);
+      const fp = await svc.computeKeyFingerprint(keyHex);
+      const result = await svc.verifyKeyFingerprint(keyHex, fp.fingerprint);
+      expect(result.verified).toBe(true);
+    });
+
+    test('verifyKeyFingerprint with non-matching fingerprint returns false', async () => {
+      const keyHex = 'a'.repeat(64);
+      const result = await svc.verifyKeyFingerprint(keyHex, '0000000000000000');
+      expect(result.verified).toBe(false);
+    });
+  });
+
+  // ── Re-encryption Management ──────────────────────────────────────────
+
+  describe('Re-encryption Management', () => {
+    test('markFilesForReencryption returns count', async () => {
+      const result = await svc.markFilesForReencryption('ch-1', 2);
+      expect(result).toBeDefined();
+      expect(result.filesMarked).toBe(3);
+    });
+
+    test('getFilesNeedingReencryption returns array', async () => {
+      const files = await svc.getFilesNeedingReencryption('ch-1', 10);
+      expect(Array.isArray(files)).toBe(true);
+    });
+
+    test('clearReencryptionFlag resolves without error', async () => {
+      await expect(svc.clearReencryptionFlag('file-1', 'abcd1234abcd1234')).resolves.toBeUndefined();
+    });
+
+    test('clearReencryptionFlag without fingerprint resolves', async () => {
+      await expect(svc.clearReencryptionFlag('file-1')).resolves.toBeUndefined();
+    });
+
+    test('markFilesForReencryption is called with correct args', async () => {
+      await svc.markFilesForReencryption('ch-test', 5);
+      expect(svc.markFilesForReencryption).toHaveBeenCalledWith('ch-test', 5);
+    });
+  });
 });

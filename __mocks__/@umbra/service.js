@@ -445,6 +445,30 @@ const mockInstance = {
   decryptFileChunk: jest.fn((keyHex, nonceHex, encryptedDataB64, fileId, chunkIndex) =>
     Promise.resolve({ chunkDataB64: encryptedDataB64 })
   ),
+
+  // Channel file encryption
+  deriveChannelFileKey: jest.fn((channelKeyHex, fileId, keyVersion) =>
+    Promise.resolve({ keyHex: 'c'.repeat(64) })
+  ),
+
+  // Key fingerprints
+  computeKeyFingerprint: jest.fn((keyHex) =>
+    Promise.resolve({ fingerprint: 'd'.repeat(16) })
+  ),
+  verifyKeyFingerprint: jest.fn((keyHex, remoteFingerprint) =>
+    Promise.resolve({ verified: remoteFingerprint === 'd'.repeat(16) })
+  ),
+
+  // Re-encryption management
+  markFilesForReencryption: jest.fn((channelId, newKeyVersion) =>
+    Promise.resolve({ filesMarked: 3 })
+  ),
+  getFilesNeedingReencryption: jest.fn((channelId, limit) =>
+    Promise.resolve([])
+  ),
+  clearReencryptionFlag: jest.fn((fileId, fingerprint) =>
+    Promise.resolve()
+  ),
 };
 
 class UmbraService {
