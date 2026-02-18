@@ -1099,6 +1099,30 @@ export class UmbraService {
     return fileEncryption.decryptFileChunk(keyHex, nonceHex, encryptedDataB64, fileId, chunkIndex);
   }
 
+  deriveChannelFileKey(channelKeyHex: string, fileId: string, keyVersion: number) {
+    return fileEncryption.deriveChannelFileKey(channelKeyHex, fileId, keyVersion);
+  }
+
+  computeKeyFingerprint(keyHex: string) {
+    return fileEncryption.computeKeyFingerprint(keyHex);
+  }
+
+  verifyKeyFingerprint(keyHex: string, remoteFingerprint: string) {
+    return fileEncryption.verifyKeyFingerprint(keyHex, remoteFingerprint);
+  }
+
+  markFilesForReencryption(channelId: string, newKeyVersion: number) {
+    return fileEncryption.markFilesForReencryption(channelId, newKeyVersion);
+  }
+
+  getFilesNeedingReencryption(channelId: string, limit?: number) {
+    return fileEncryption.getFilesNeedingReencryption(channelId, limit);
+  }
+
+  clearReencryptionFlag(fileId: string, fingerprint?: string) {
+    return fileEncryption.clearReencryptionFlag(fileId, fingerprint);
+  }
+
   // ===========================================================================
   // FILE TRANSFER (delegated to file-transfer module)
   // ===========================================================================

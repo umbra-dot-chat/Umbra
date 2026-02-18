@@ -148,6 +148,12 @@ export interface UmbraWasmModule {
   umbra_wasm_file_derive_key(json: string): string;
   umbra_wasm_file_encrypt_chunk(json: string): string;
   umbra_wasm_file_decrypt_chunk(json: string): string;
+  umbra_wasm_channel_file_derive_key(json: string): string;
+  umbra_wasm_compute_key_fingerprint(json: string): string;
+  umbra_wasm_verify_key_fingerprint(json: string): string;
+  umbra_wasm_mark_files_for_reencryption(json: string): string;
+  umbra_wasm_get_files_needing_reencryption(json: string): string;
+  umbra_wasm_clear_reencryption_flag(json: string): string;
 
   // Community — Core
   umbra_wasm_community_create(json: string): string;
@@ -704,6 +710,18 @@ function buildModule(wasmPkg: any): UmbraWasmModule {
       wasmPkg.umbra_wasm_file_encrypt_chunk(json),
     umbra_wasm_file_decrypt_chunk: (json: string) =>
       wasmPkg.umbra_wasm_file_decrypt_chunk(json),
+    umbra_wasm_channel_file_derive_key: (json: string) =>
+      wasmPkg.umbra_wasm_channel_file_derive_key(json),
+    umbra_wasm_compute_key_fingerprint: (json: string) =>
+      wasmPkg.umbra_wasm_compute_key_fingerprint(json),
+    umbra_wasm_verify_key_fingerprint: (json: string) =>
+      wasmPkg.umbra_wasm_verify_key_fingerprint(json),
+    umbra_wasm_mark_files_for_reencryption: (json: string) =>
+      wasmPkg.umbra_wasm_mark_files_for_reencryption(json),
+    umbra_wasm_get_files_needing_reencryption: (json: string) =>
+      wasmPkg.umbra_wasm_get_files_needing_reencryption(json),
+    umbra_wasm_clear_reencryption_flag: (json: string) =>
+      wasmPkg.umbra_wasm_clear_reencryption_flag(json),
 
     // ── Community (real WASM) ──────────────────────────────────────
     umbra_wasm_community_create: (json: string) =>

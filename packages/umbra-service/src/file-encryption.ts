@@ -46,6 +46,42 @@ export interface DecryptedChunk {
   chunkDataB64: string;
 }
 
+/** Result of deriving a channel file encryption key. */
+export interface DerivedChannelFileKey {
+  /** Hex-encoded 256-bit file encryption key */
+  keyHex: string;
+}
+
+/** Result of computing a key fingerprint. */
+export interface KeyFingerprint {
+  /** 16-character hex fingerprint */
+  fingerprint: string;
+}
+
+/** Result of verifying a key fingerprint. */
+export interface KeyVerificationResult {
+  /** Whether the fingerprints match */
+  verified: boolean;
+}
+
+/** Result of marking files for re-encryption. */
+export interface ReencryptionMarkResult {
+  /** Number of files marked */
+  filesMarked: number;
+}
+
+/** File record needing re-encryption. */
+export interface FileNeedingReencryption {
+  id: string;
+  channelId: string;
+  folderId: string | null;
+  filename: string;
+  fileSize: number;
+  mimeType: string | null;
+  uploadedBy: string;
+  version: number;
+}
+
 // ── Derive File Key ───────────────────────────────────────────────────────
 
 /**
@@ -139,4 +175,134 @@ export async function decryptFileChunk(
   });
   const resultJson = wasm().umbra_wasm_file_decrypt_chunk(json);
   return await parseWasm<DecryptedChunk>(resultJson);
+}
+
+// ── Channel File Key Derivation ──────────────────────────────────────────
+
+/**
+ * Derive a per-file encryption key for a community channel file.
+ *
+ * Uses HKDF(channel_group_key, file_id || key_version) with a channel-specific
+ * domain string. This is separate from DM file keys to provide domain separation.
+ *
+ * @param channelKeyHex - Hex-encoded 256-bit channel group encryption key
+ * @param fileId - Unique file identifier
+ * @param keyVersion - Key version number (for key rotation)
+ * @returns The derived file encryption key
+ */
+export async function deriveChannelFileKey(
+  channelKeyHex: string,
+  fileId: string,
+  keyVersion: number,
+): Promise<DerivedChannelFileKey> {
+  const json = JSON.stringify({
+    channel_key_hex: channelKeyHex,
+    file_id: fileId,
+    key_version: keyVersion,
+  });
+  const resultJson = wasm().umbra_wasm_channel_file_derive_key(json);
+  return await parseWasm<DerivedChannelFileKey>(resultJson);
+}
+
+// ── Key Fingerprints ─────────────────────────────────────────────────────
+
+/**
+ * Compute a fingerprint of an encryption key for verification.
+ *
+ * Used for automatic key verification between peers. Both sides compute
+ * the fingerprint independently and compare — if they match, no MITM
+ * attack occurred.
+ *
+ * @param keyHex - Hex-encoded 256-bit encryption key
+ * @returns A 16-character hex fingerprint
+ */
+export async function computeKeyFingerprint(
+  keyHex: string,
+): Promise<KeyFingerprint> {
+  const json = JSON.stringify({ key_hex: keyHex });
+  const resultJson = wasm().umbra_wasm_compute_key_fingerprint(json);
+  return await parseWasm<KeyFingerprint>(resultJson);
+}
+
+/**
+ * Verify a key fingerprint received from a remote peer.
+ *
+ * @param keyHex - Hex-encoded local encryption key
+ * @param remoteFingerprint - Fingerprint received from the peer
+ * @returns Whether the fingerprints match
+ */
+export async function verifyKeyFingerprint(
+  keyHex: string,
+  remoteFingerprint: string,
+): Promise<KeyVerificationResult> {
+  const json = JSON.stringify({
+    key_hex: keyHex,
+    remote_fingerprint: remoteFingerprint,
+  });
+  const resultJson = wasm().umbra_wasm_verify_key_fingerprint(json);
+  return await parseWasm<KeyVerificationResult>(resultJson);
+}
+
+// ── Re-encryption Management ─────────────────────────────────────────────
+
+/**
+ * Mark all files in a channel for re-encryption after key rotation.
+ *
+ * When a community channel's group key is rotated (e.g., member removed),
+ * all existing files need to be re-encrypted with the new key. This marks
+ * them for lazy on-access re-encryption.
+ *
+ * @param channelId - The channel whose files need re-encryption
+ * @param newKeyVersion - The new key version number
+ * @returns Number of files marked
+ */
+export async function markFilesForReencryption(
+  channelId: string,
+  newKeyVersion: number,
+): Promise<ReencryptionMarkResult> {
+  const json = JSON.stringify({
+    channel_id: channelId,
+    new_key_version: newKeyVersion,
+  });
+  const resultJson = wasm().umbra_wasm_mark_files_for_reencryption(json);
+  return await parseWasm<ReencryptionMarkResult>(resultJson);
+}
+
+/**
+ * Get files that need re-encryption in a channel.
+ *
+ * Used for on-access re-encryption: when a user accesses a file marked
+ * for re-encryption, the app re-encrypts it with the current key version.
+ *
+ * @param channelId - The channel to check
+ * @param limit - Maximum number of files to return (default 10)
+ * @returns Array of file records needing re-encryption
+ */
+export async function getFilesNeedingReencryption(
+  channelId: string,
+  limit?: number,
+): Promise<FileNeedingReencryption[]> {
+  const json = JSON.stringify({
+    channel_id: channelId,
+    limit: limit ?? 10,
+  });
+  const resultJson = wasm().umbra_wasm_get_files_needing_reencryption(json);
+  return await parseWasm<FileNeedingReencryption[]>(resultJson);
+}
+
+/**
+ * Clear the re-encryption flag after a file has been successfully re-encrypted.
+ *
+ * @param fileId - The file that was re-encrypted
+ * @param fingerprint - Optional new encryption fingerprint
+ */
+export async function clearReencryptionFlag(
+  fileId: string,
+  fingerprint?: string,
+): Promise<void> {
+  const json = JSON.stringify({
+    file_id: fileId,
+    ...(fingerprint !== undefined ? { fingerprint } : {}),
+  });
+  wasm().umbra_wasm_clear_reencryption_flag(json);
 }

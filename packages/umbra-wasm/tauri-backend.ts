@@ -829,5 +829,23 @@ export function createTauriBackend(
     umbra_wasm_file_decrypt_chunk: (json: string) => {
       return invoke('file_decrypt_chunk', { json }).then(ensureJsonString) as any;
     },
+    umbra_wasm_channel_file_derive_key: (json: string) => {
+      return invoke('channel_file_derive_key', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_compute_key_fingerprint: (json: string) => {
+      return invoke('compute_key_fingerprint', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_verify_key_fingerprint: (json: string) => {
+      return invoke('verify_key_fingerprint', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_mark_files_for_reencryption: (json: string) => {
+      return invoke('mark_files_for_reencryption', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_get_files_needing_reencryption: (json: string) => {
+      return invoke('get_files_needing_reencryption', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_clear_reencryption_flag: (json: string) => {
+      return invoke('clear_reencryption_flag', { json }).then(ensureJsonString) as any;
+    },
   };
 }

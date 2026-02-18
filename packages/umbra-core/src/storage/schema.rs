@@ -1481,6 +1481,34 @@ ALTER TABLE community_files ADD COLUMN previous_version_id TEXT;
 UPDATE schema_version SET version = 10;
 "#;
 
+/// Migration from v10 to v11.
+///
+/// Adds encryption metadata for on-access re-encryption support.
+/// - `needs_reencryption` flag: marks files that need re-encryption after key rotation
+/// - `key_version` field: tracks which key version was used to encrypt the file
+/// - `encryption_fingerprint`: stores the key fingerprint for verification
+pub const MIGRATE_V10_TO_V11: &str = r#"
+-- Add on-access re-encryption support to community_files
+ALTER TABLE community_files ADD COLUMN needs_reencryption INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE community_files ADD COLUMN key_version INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE community_files ADD COLUMN encryption_fingerprint TEXT;
+
+-- Add encryption metadata to dm_shared_files
+ALTER TABLE dm_shared_files ADD COLUMN needs_reencryption INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE dm_shared_files ADD COLUMN key_version INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE dm_shared_files ADD COLUMN encryption_fingerprint TEXT;
+
+-- Add encryption metadata to file_manifests
+ALTER TABLE file_manifests ADD COLUMN key_version INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE file_manifests ADD COLUMN encryption_fingerprint TEXT;
+
+-- Index for efficient queries of files needing re-encryption
+CREATE INDEX IF NOT EXISTS idx_community_files_reencrypt ON community_files(needs_reencryption) WHERE needs_reencryption = 1;
+CREATE INDEX IF NOT EXISTS idx_dm_shared_files_reencrypt ON dm_shared_files(needs_reencryption) WHERE needs_reencryption = 1;
+
+UPDATE schema_version SET version = 11;
+"#;
+
 /// SQL to drop all tables (for testing/reset)
 #[allow(dead_code)]
 pub const DROP_TABLES: &str = r#"

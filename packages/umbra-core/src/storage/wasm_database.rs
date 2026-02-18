@@ -147,6 +147,11 @@ impl Database {
             sql_bridge_execute_batch(schema::MIGRATE_V9_TO_V10).map_err(js_err)?;
             tracing::info!("Migration v9 → v10 complete");
         }
+        if from_version < 11 {
+            tracing::info!("Running migration v10 → v11 (encryption metadata, re-encryption flags)");
+            sql_bridge_execute_batch(schema::MIGRATE_V10_TO_V11).map_err(js_err)?;
+            tracing::info!("Migration v10 → v11 complete");
+        }
         Ok(())
     }
 
@@ -2358,6 +2363,73 @@ impl Database {
                 row["version"].as_i64().unwrap_or(1) as i32,
             )
         }))
+    }
+
+    // ── File Re-encryption ────────────────────────────────────────────────
+
+    /// Mark all community files in a channel for re-encryption after key rotation.
+    pub fn mark_channel_files_for_reencryption(
+        &self,
+        channel_id: &str,
+        new_key_version: i32,
+    ) -> Result<u32> {
+        let result = self.exec(
+            "UPDATE community_files SET needs_reencryption = 1, key_version = ? WHERE channel_id = ? AND needs_reencryption = 0",
+            json!([new_key_version, channel_id]),
+        )?;
+        Ok(result as u32)
+    }
+
+    /// Get community files that need re-encryption in a channel.
+    pub fn get_files_needing_reencryption(
+        &self,
+        channel_id: &str,
+        limit: usize,
+    ) -> Result<Vec<CommunityFileRecord>> {
+        let rows = self.query(
+            "SELECT id, channel_id, folder_id, filename, description, file_size, mime_type, storage_chunks_json, uploaded_by, version, previous_version_id, download_count, created_at FROM community_files WHERE channel_id = ? AND needs_reencryption = 1 LIMIT ?",
+            json!([channel_id, limit as i64]),
+        )?;
+        Ok(rows.iter().map(|row| CommunityFileRecord {
+            id: row["id"].as_str().unwrap_or("").to_string(),
+            channel_id: row["channel_id"].as_str().unwrap_or("").to_string(),
+            folder_id: row["folder_id"].as_str().map(|s| s.to_string()),
+            filename: row["filename"].as_str().unwrap_or("").to_string(),
+            description: row["description"].as_str().map(|s| s.to_string()),
+            file_size: row["file_size"].as_i64().unwrap_or(0),
+            mime_type: row["mime_type"].as_str().map(|s| s.to_string()),
+            storage_chunks_json: row["storage_chunks_json"].as_str().unwrap_or("[]").to_string(),
+            uploaded_by: row["uploaded_by"].as_str().unwrap_or("").to_string(),
+            version: row["version"].as_i64().unwrap_or(1) as i32,
+            previous_version_id: row["previous_version_id"].as_str().map(|s| s.to_string()),
+            download_count: row["download_count"].as_i64().unwrap_or(0) as i32,
+            created_at: row["created_at"].as_i64().unwrap_or(0),
+        }).collect())
+    }
+
+    /// Clear the re-encryption flag after a file has been re-encrypted.
+    pub fn clear_reencryption_flag(
+        &self,
+        file_id: &str,
+        new_fingerprint: Option<&str>,
+    ) -> Result<()> {
+        self.exec(
+            "UPDATE community_files SET needs_reencryption = 0, encryption_fingerprint = ? WHERE id = ?",
+            json!([new_fingerprint, file_id]),
+        )?;
+        Ok(())
+    }
+
+    /// Update the encryption fingerprint for a file (for key verification).
+    pub fn update_file_encryption_fingerprint(
+        &self,
+        file_id: &str,
+        fingerprint: &str,
+        table: &str,
+    ) -> Result<()> {
+        let sql = format!("UPDATE {} SET encryption_fingerprint = ? WHERE id = ?", table);
+        self.exec(&sql, json!([fingerprint, file_id]))?;
+        Ok(())
     }
 
     // ── Emoji & Stickers ─────────────────────────────────────────────────

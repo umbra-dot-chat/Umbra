@@ -133,6 +133,12 @@ pub mod domain {
 
     /// Domain for per-file encryption key derivation
     pub const FILE_ENCRYPTION: &[u8] = b"umbra-file-encryption-v1";
+
+    /// Domain for community channel file encryption key derivation
+    pub const CHANNEL_FILE_ENCRYPTION: &[u8] = b"umbra-channel-file-encryption-v1";
+
+    /// Domain for key fingerprint derivation
+    pub const KEY_FINGERPRINT: &[u8] = b"umbra-key-fingerprint-v1";
 }
 
 /// Keys derived from a master seed
@@ -267,6 +273,95 @@ pub fn derive_file_key(
         .map_err(|_| Error::KeyDerivationFailed("Failed to derive file encryption key".into()))?;
 
     Ok(key)
+}
+
+/// Derive a unique encryption key for a community channel file.
+///
+/// Uses HKDF-SHA256 with the channel's group key as input key material,
+/// `file_id || key_version` as salt, and the channel file encryption domain
+/// string as info.
+///
+/// ## Parameters
+///
+/// - `channel_key`: The 32-byte group encryption key for the community channel
+/// - `file_id`: Unique file identifier
+/// - `key_version`: Key version number (for key rotation tracking)
+///
+/// ## Returns
+///
+/// 32-byte AES-256-GCM encryption key unique to this file and key version.
+///
+/// ## Security
+///
+/// Each file gets its own key derived from the channel's group key.
+/// The key_version parameter ensures that after key rotation, new file keys
+/// are derived from the new channel key, enabling on-access re-encryption.
+pub fn derive_channel_file_key(
+    channel_key: &[u8; 32],
+    file_id: &[u8],
+    key_version: u32,
+) -> Result<[u8; 32]> {
+    // Build salt: file_id || key_version (little-endian)
+    let mut salt = Vec::with_capacity(file_id.len() + 4);
+    salt.extend_from_slice(file_id);
+    salt.extend_from_slice(&key_version.to_le_bytes());
+
+    let hkdf = Hkdf::<Sha256>::new(Some(&salt), channel_key);
+
+    let mut key = [0u8; 32];
+    hkdf.expand(domain::CHANNEL_FILE_ENCRYPTION, &mut key)
+        .map_err(|_| Error::KeyDerivationFailed("Failed to derive channel file key".into()))?;
+
+    Ok(key)
+}
+
+/// Compute a short fingerprint of an encryption key for verification.
+///
+/// Used for automatic key verification between peers. Both sides independently
+/// derive the file key and compute its fingerprint. If fingerprints match,
+/// they have the same key and no MITM attack occurred.
+///
+/// ## Parameters
+///
+/// - `key`: The encryption key to fingerprint
+///
+/// ## Returns
+///
+/// 8-byte fingerprint as a hex string (16 characters).
+///
+/// ## Security
+///
+/// The fingerprint is intentionally short (64 bits) since it's used for
+/// UI display and comparison, not for security-critical operations.
+/// A 64-bit fingerprint has a collision probability of ~1 in 2^32 per
+/// comparison, which is sufficient for key verification.
+pub fn compute_key_fingerprint(key: &[u8; 32]) -> Result<String> {
+    let hkdf = Hkdf::<Sha256>::new(None, key);
+
+    let mut fingerprint = [0u8; 8];
+    hkdf.expand(domain::KEY_FINGERPRINT, &mut fingerprint)
+        .map_err(|_| Error::KeyDerivationFailed("Failed to compute key fingerprint".into()))?;
+
+    Ok(hex::encode(fingerprint))
+}
+
+/// Verify that two peers derived the same file encryption key by comparing
+/// fingerprints.
+///
+/// ## Parameters
+///
+/// - `local_key`: Our locally derived encryption key
+/// - `remote_fingerprint`: The fingerprint received from the remote peer
+///
+/// ## Returns
+///
+/// `true` if the fingerprints match, `false` if they don't (possible MITM).
+pub fn verify_key_fingerprint(
+    local_key: &[u8; 32],
+    remote_fingerprint: &str,
+) -> Result<bool> {
+    let local_fingerprint = compute_key_fingerprint(local_key)?;
+    Ok(local_fingerprint == remote_fingerprint)
 }
 
 /// Derive multiple keys from a shared secret for different purposes
@@ -418,5 +513,113 @@ mod tests {
         let key2 = derive_file_key(&secret2, file_id).unwrap();
 
         assert_ne!(key1, key2);
+    }
+
+    // ========================================================================
+    // Channel file key tests
+    // ========================================================================
+
+    #[test]
+    fn test_channel_file_key_deterministic() {
+        let channel_key = [42u8; 32];
+        let file_id = b"file-abc-123";
+        let key_version = 1u32;
+
+        let key1 = derive_channel_file_key(&channel_key, file_id, key_version).unwrap();
+        let key2 = derive_channel_file_key(&channel_key, file_id, key_version).unwrap();
+
+        assert_eq!(key1, key2);
+    }
+
+    #[test]
+    fn test_channel_file_key_different_files() {
+        let channel_key = [42u8; 32];
+
+        let key1 = derive_channel_file_key(&channel_key, b"file-1", 1).unwrap();
+        let key2 = derive_channel_file_key(&channel_key, b"file-2", 1).unwrap();
+
+        assert_ne!(key1, key2);
+    }
+
+    #[test]
+    fn test_channel_file_key_different_versions() {
+        let channel_key = [42u8; 32];
+        let file_id = b"file-abc";
+
+        let key1 = derive_channel_file_key(&channel_key, file_id, 1).unwrap();
+        let key2 = derive_channel_file_key(&channel_key, file_id, 2).unwrap();
+
+        // Different key versions produce different file keys (for rotation)
+        assert_ne!(key1, key2);
+    }
+
+    #[test]
+    fn test_channel_file_key_different_channel_keys() {
+        let key1 = derive_channel_file_key(&[1u8; 32], b"file-abc", 1).unwrap();
+        let key2 = derive_channel_file_key(&[2u8; 32], b"file-abc", 1).unwrap();
+
+        assert_ne!(key1, key2);
+    }
+
+    #[test]
+    fn test_channel_vs_dm_file_keys_differ() {
+        // Channel and DM keys should differ even with same input material
+        let key_material = [42u8; 32];
+        let file_id = b"file-abc";
+
+        let channel_key = derive_channel_file_key(&key_material, file_id, 1).unwrap();
+        let dm_key = derive_file_key(&key_material, file_id).unwrap();
+
+        // Different domain strings ensure different keys
+        assert_ne!(channel_key, dm_key);
+    }
+
+    // ========================================================================
+    // Key fingerprint tests
+    // ========================================================================
+
+    #[test]
+    fn test_key_fingerprint_deterministic() {
+        let key = [42u8; 32];
+
+        let fp1 = compute_key_fingerprint(&key).unwrap();
+        let fp2 = compute_key_fingerprint(&key).unwrap();
+
+        assert_eq!(fp1, fp2);
+    }
+
+    #[test]
+    fn test_key_fingerprint_is_hex_16_chars() {
+        let key = [42u8; 32];
+        let fp = compute_key_fingerprint(&key).unwrap();
+
+        assert_eq!(fp.len(), 16); // 8 bytes = 16 hex chars
+        assert!(fp.chars().all(|c| c.is_ascii_hexdigit()));
+    }
+
+    #[test]
+    fn test_different_keys_different_fingerprints() {
+        let key1 = [1u8; 32];
+        let key2 = [2u8; 32];
+
+        let fp1 = compute_key_fingerprint(&key1).unwrap();
+        let fp2 = compute_key_fingerprint(&key2).unwrap();
+
+        assert_ne!(fp1, fp2);
+    }
+
+    #[test]
+    fn test_verify_key_fingerprint_match() {
+        let key = [42u8; 32];
+        let fingerprint = compute_key_fingerprint(&key).unwrap();
+
+        assert!(verify_key_fingerprint(&key, &fingerprint).unwrap());
+    }
+
+    #[test]
+    fn test_verify_key_fingerprint_mismatch() {
+        let key = [42u8; 32];
+
+        assert!(!verify_key_fingerprint(&key, "0000000000000000").unwrap());
     }
 }

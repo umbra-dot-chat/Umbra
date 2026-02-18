@@ -8613,3 +8613,191 @@ pub fn umbra_wasm_file_decrypt_chunk(json: &str) -> Result<JsValue, JsValue> {
 
     Ok(JsValue::from_str(&result.to_string()))
 }
+
+/// Derive a per-file encryption key for a community channel file.
+///
+/// Input JSON: { "channel_key_hex": "64-char hex", "file_id": "file-uuid", "key_version": 1 }
+/// Returns JSON: { "key_hex": "64-char hex string" }
+///
+/// Uses HKDF(channel_group_key, file_id || key_version) for domain separation.
+#[wasm_bindgen]
+pub fn umbra_wasm_channel_file_derive_key(json: &str) -> Result<JsValue, JsValue> {
+    let input: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let channel_key_hex = input["channel_key_hex"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing 'channel_key_hex' field"))?;
+    let file_id = input["file_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing 'file_id' field"))?;
+    let key_version = input["key_version"].as_u64()
+        .ok_or_else(|| JsValue::from_str("Missing 'key_version' field"))? as u32;
+
+    let key_bytes = hex::decode(channel_key_hex)
+        .map_err(|e| JsValue::from_str(&format!("Invalid channel key hex: {}", e)))?;
+    if key_bytes.len() != 32 {
+        return Err(JsValue::from_str("Channel key must be 32 bytes"));
+    }
+    let mut channel_key = [0u8; 32];
+    channel_key.copy_from_slice(&key_bytes);
+
+    let file_key = crate::crypto::derive_channel_file_key(&channel_key, file_id.as_bytes(), key_version)
+        .map_err(|e| JsValue::from_str(&format!("Channel file key derivation failed: {}", e)))?;
+
+    let result = serde_json::json!({
+        "key_hex": hex::encode(&file_key),
+    });
+
+    Ok(JsValue::from_str(&result.to_string()))
+}
+
+/// Compute a key fingerprint for verification between peers.
+///
+/// Input JSON: { "key_hex": "64-char hex" }
+/// Returns JSON: { "fingerprint": "16-char hex string" }
+#[wasm_bindgen]
+pub fn umbra_wasm_compute_key_fingerprint(json: &str) -> Result<JsValue, JsValue> {
+    let input: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let key_hex = input["key_hex"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing 'key_hex' field"))?;
+
+    let key_bytes = hex::decode(key_hex)
+        .map_err(|e| JsValue::from_str(&format!("Invalid key hex: {}", e)))?;
+    if key_bytes.len() != 32 {
+        return Err(JsValue::from_str("Key must be 32 bytes"));
+    }
+    let mut key = [0u8; 32];
+    key.copy_from_slice(&key_bytes);
+
+    let fingerprint = crate::crypto::compute_key_fingerprint(&key)
+        .map_err(|e| JsValue::from_str(&format!("Fingerprint computation failed: {}", e)))?;
+
+    let result = serde_json::json!({
+        "fingerprint": fingerprint,
+    });
+
+    Ok(JsValue::from_str(&result.to_string()))
+}
+
+/// Verify a key fingerprint received from a remote peer.
+///
+/// Input JSON: { "key_hex": "64-char hex", "remote_fingerprint": "16-char hex" }
+/// Returns JSON: { "verified": true/false }
+#[wasm_bindgen]
+pub fn umbra_wasm_verify_key_fingerprint(json: &str) -> Result<JsValue, JsValue> {
+    let input: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let key_hex = input["key_hex"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing 'key_hex' field"))?;
+    let remote_fingerprint = input["remote_fingerprint"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing 'remote_fingerprint' field"))?;
+
+    let key_bytes = hex::decode(key_hex)
+        .map_err(|e| JsValue::from_str(&format!("Invalid key hex: {}", e)))?;
+    if key_bytes.len() != 32 {
+        return Err(JsValue::from_str("Key must be 32 bytes"));
+    }
+    let mut key = [0u8; 32];
+    key.copy_from_slice(&key_bytes);
+
+    let verified = crate::crypto::verify_key_fingerprint(&key, remote_fingerprint)
+        .map_err(|e| JsValue::from_str(&format!("Verification failed: {}", e)))?;
+
+    let result = serde_json::json!({
+        "verified": verified,
+    });
+
+    Ok(JsValue::from_str(&result.to_string()))
+}
+
+/// Mark all files in a channel for re-encryption after key rotation.
+///
+/// Input JSON: { "channel_id": "ch-uuid", "new_key_version": 2 }
+/// Returns JSON: { "files_marked": 5 }
+#[wasm_bindgen]
+pub fn umbra_wasm_mark_files_for_reencryption(json: &str) -> Result<JsValue, JsValue> {
+    let state = get_state()?;
+    let state = state.read();
+    let database = state.database.as_ref()
+        .ok_or_else(|| JsValue::from_str("Database not initialized"))?;
+
+    let input: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let channel_id = input["channel_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing 'channel_id' field"))?;
+    let new_key_version = input["new_key_version"].as_i64()
+        .ok_or_else(|| JsValue::from_str("Missing 'new_key_version' field"))? as i32;
+
+    let count = database.mark_channel_files_for_reencryption(channel_id, new_key_version)
+        .map_err(|e| JsValue::from_str(&format!("Failed to mark files: {}", e)))?;
+
+    let result = serde_json::json!({
+        "files_marked": count,
+    });
+
+    Ok(JsValue::from_str(&result.to_string()))
+}
+
+/// Get files needing re-encryption in a channel (for on-access re-encryption).
+///
+/// Input JSON: { "channel_id": "ch-uuid", "limit": 10 }
+/// Returns JSON: [{ file record }, ...]
+#[wasm_bindgen]
+pub fn umbra_wasm_get_files_needing_reencryption(json: &str) -> Result<JsValue, JsValue> {
+    let state = get_state()?;
+    let state = state.read();
+    let database = state.database.as_ref()
+        .ok_or_else(|| JsValue::from_str("Database not initialized"))?;
+
+    let input: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let channel_id = input["channel_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing 'channel_id' field"))?;
+    let limit = input["limit"].as_u64().unwrap_or(10) as usize;
+
+    let files = database.get_files_needing_reencryption(channel_id, limit)
+        .map_err(|e| JsValue::from_str(&format!("Failed to get files: {}", e)))?;
+
+    let result: Vec<serde_json::Value> = files.iter().map(|f| {
+        serde_json::json!({
+            "id": f.id,
+            "channel_id": f.channel_id,
+            "folder_id": f.folder_id,
+            "filename": f.filename,
+            "file_size": f.file_size,
+            "mime_type": f.mime_type,
+            "uploaded_by": f.uploaded_by,
+            "version": f.version,
+        })
+    }).collect();
+
+    Ok(JsValue::from_str(&serde_json::json!(result).to_string()))
+}
+
+/// Clear the re-encryption flag after a file has been successfully re-encrypted.
+///
+/// Input JSON: { "file_id": "file-uuid", "fingerprint": "optional-16-char-hex" }
+/// Returns JSON: { "ok": true }
+#[wasm_bindgen]
+pub fn umbra_wasm_clear_reencryption_flag(json: &str) -> Result<JsValue, JsValue> {
+    let state = get_state()?;
+    let state = state.read();
+    let database = state.database.as_ref()
+        .ok_or_else(|| JsValue::from_str("Database not initialized"))?;
+
+    let input: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let file_id = input["file_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing 'file_id' field"))?;
+    let fingerprint = input["fingerprint"].as_str();
+
+    database.clear_reencryption_flag(file_id, fingerprint)
+        .map_err(|e| JsValue::from_str(&format!("Failed to clear flag: {}", e)))?;
+
+    Ok(JsValue::from_str(r#"{"ok":true}"#))
+}
