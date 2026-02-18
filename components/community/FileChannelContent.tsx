@@ -6,16 +6,23 @@
  *
  * Handles:
  * - File/folder listing with folder navigation
- * - File upload flow (metadata storage + community event broadcast)
+ * - File upload flow (pick → chunk → store → broadcast)
+ * - Stub download flow (local reassembly or toast)
  * - Context menu actions (download, rename, move, delete)
  * - Detail panel for file inspection
- * - Drag-and-drop (internal moves + OS file drops)
+ * - Folder creation with prompt dialog
+ * - Community event broadcasting after CRUD operations
  */
 
 import React, { useState, useCallback, useMemo } from 'react';
-import { View } from 'react-native';
+import { View, Platform, Alert } from 'react-native';
 import { useTheme, Text } from '@coexist/wisp-react-native';
 import { useCommunityFiles } from '@/hooks/useCommunityFiles';
+import { useCommunitySync } from '@/hooks/useCommunitySync';
+import { useUmbra } from '@/contexts/UmbraContext';
+import { useAuth } from '@/contexts/AuthContext';
+import { pickFile } from '@/utils/filePicker';
+import { getFileTypeIcon, formatFileSize } from '@/utils/fileIcons';
 import type { FileFolderNode } from '@/hooks/useCommunityFiles';
 import type {
   CommunityFileRecord,
@@ -106,12 +113,42 @@ function toFolderTreeView(nodes: FileFolderNode[]): FileFolderView[] {
   }));
 }
 
-/** Format file size to human-readable string. */
-function formatSize(bytes: number): string {
-  if (bytes < 1024) return bytes + ' B';
-  if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
-  if (bytes < 1024 * 1024 * 1024) return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
-  return (bytes / (1024 * 1024 * 1024)).toFixed(2) + ' GB';
+/** Prompt user for folder name — web uses window.prompt, mobile uses Alert.prompt. */
+function promptFolderName(): Promise<string | null> {
+  if (Platform.OS === 'web') {
+    const name = window.prompt('Enter folder name:');
+    return Promise.resolve(name && name.trim() ? name.trim() : null);
+  }
+  return new Promise((resolve) => {
+    Alert.prompt(
+      'New Folder',
+      'Enter folder name:',
+      [
+        { text: 'Cancel', onPress: () => resolve(null), style: 'cancel' },
+        { text: 'Create', onPress: (text?: string) => resolve(text && text.trim() ? text.trim() : null) },
+      ],
+      'plain-text',
+      '',
+    );
+  });
+}
+
+/** Trigger a file download on web via Blob + anchor tag. */
+function triggerWebDownload(base64Data: string, filename: string, mimeType: string) {
+  const binary = atob(base64Data);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  const blob = new Blob([bytes], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 // ---------------------------------------------------------------------------
@@ -121,6 +158,9 @@ function formatSize(bytes: number): string {
 export function FileChannelContent({ channelId, communityId }: FileChannelContentProps) {
   const { theme } = useTheme();
   const colors = theme.colors;
+  const { service } = useUmbra();
+  const { identity } = useAuth();
+  const { syncEvent } = useCommunitySync(communityId);
 
   const {
     files,
@@ -131,6 +171,7 @@ export function FileChannelContent({ channelId, communityId }: FileChannelConten
     currentFolderId,
     navigateToFolder,
     breadcrumbPath,
+    uploadFile,
     createFolder,
     deleteFile,
     deleteFolder,
@@ -146,6 +187,8 @@ export function FileChannelContent({ channelId, communityId }: FileChannelConten
   const [selectedFileIds, setSelectedFileIds] = useState<Set<string>>(new Set());
   const [selectedFolderIds, setSelectedFolderIds] = useState<Set<string>>(new Set());
   const [detailFileId, setDetailFileId] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   // Transform data for display
   const fileEntries = useMemo(() => files.map(toFileEntry), [files]);
@@ -202,11 +245,59 @@ export function FileChannelContent({ channelId, communityId }: FileChannelConten
   );
 
   const handleCreateFolder = useCallback(async () => {
-    // In a real app, show a dialog to get the folder name.
-    // For now we use a simple prompt pattern (React Native Alert or similar).
-    const name = 'New Folder'; // TODO: replace with dialog
-    await createFolder(name);
-  }, [createFolder]);
+    const name = await promptFolderName();
+    if (!name) return;
+    const folder = await createFolder(name);
+    if (folder) {
+      syncEvent({ type: 'folderCreated', channelId, folderId: folder.id });
+    }
+  }, [createFolder, syncEvent, channelId]);
+
+  // ---- Upload handler ----
+
+  const handleUpload = useCallback(async () => {
+    if (!service || isUploading) return;
+    setUploadError(null);
+
+    try {
+      const picked = await pickFile();
+      if (!picked) return; // User cancelled
+
+      setIsUploading(true);
+
+      // 1. Generate a file ID and chunk the file
+      const fileId = crypto.randomUUID();
+      const manifest = await service.chunkFile(
+        fileId,
+        picked.filename,
+        picked.dataBase64,
+      );
+
+      // 2. Store the file record via the hook (includes chunk manifest JSON)
+      const record = await uploadFile(
+        picked.filename,
+        picked.size,
+        picked.mimeType,
+        JSON.stringify(manifest),
+      );
+
+      if (record) {
+        // 3. Broadcast the upload event to other community members
+        syncEvent({
+          type: 'fileUploaded',
+          channelId,
+          fileId: record.id,
+          senderDid: identity?.did ?? '',
+        });
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setUploadError(msg);
+      console.error('[FileChannelContent] Upload failed:', err);
+    } finally {
+      setIsUploading(false);
+    }
+  }, [service, isUploading, uploadFile, syncEvent, channelId, identity?.did]);
 
   const handleFileClick = useCallback((fileId: string) => {
     setDetailFileId((prev) => (prev === fileId ? null : fileId));
@@ -216,27 +307,54 @@ export function FileChannelContent({ channelId, communityId }: FileChannelConten
     async (fileIds: string[]) => {
       for (const id of fileIds) {
         await deleteFile(id);
+        syncEvent({ type: 'fileDeleted', channelId, fileId: id });
       }
       setSelectedFileIds(new Set());
       setDetailFileId(null);
     },
-    [deleteFile],
+    [deleteFile, syncEvent, channelId],
   );
 
   const handleFolderDelete = useCallback(
     async (folderId: string) => {
       await deleteFolder(folderId);
+      syncEvent({ type: 'folderDeleted', channelId, folderId });
       setSelectedFolderIds(new Set());
     },
-    [deleteFolder],
+    [deleteFolder, syncEvent, channelId],
   );
 
   const handleFileDownload = useCallback(
     async (fileId: string) => {
+      if (!service) return;
       await recordDownload(fileId);
-      // TODO: Trigger actual P2P file download
+
+      try {
+        // Try local reassembly from stored chunks
+        const reassembled = await service.reassembleFile(fileId);
+        if (reassembled && reassembled.dataB64) {
+          if (Platform.OS === 'web') {
+            const file = files.find((f) => f.id === fileId);
+            triggerWebDownload(
+              reassembled.dataB64,
+              reassembled.filename,
+              file?.mimeType ?? 'application/octet-stream',
+            );
+          } else {
+            // Mobile: would use expo-file-system or share sheet
+            console.log('[FileChannelContent] Mobile download not yet implemented');
+          }
+        }
+      } catch {
+        // Chunks not available locally — P2P download not yet built
+        if (Platform.OS === 'web') {
+          window.alert('P2P file download coming soon. File chunks are not available locally.');
+        } else {
+          Alert.alert('Download unavailable', 'P2P file download coming soon.');
+        }
+      }
     },
-    [recordDownload],
+    [service, recordDownload, files],
   );
 
   const handleSortChange = useCallback((field: FileSortField, direction: FileSortDirection) => {
@@ -297,7 +415,20 @@ export function FileChannelContent({ channelId, communityId }: FileChannelConten
         </View>
 
         {/* Actions */}
-        <View style={{ flexDirection: 'row', gap: 8 }}>
+        <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+          <Text
+            size="xs"
+            weight="medium"
+            onPress={isUploading ? undefined : handleUpload}
+            style={{
+              color: isUploading ? colors.text.muted : colors.accent.primary,
+              paddingHorizontal: 8,
+              paddingVertical: 4,
+              opacity: isUploading ? 0.6 : 1,
+            }}
+          >
+            {isUploading ? 'Uploading...' : '+ Upload'}
+          </Text>
           <Text
             size="xs"
             weight="medium"
@@ -324,6 +455,32 @@ export function FileChannelContent({ channelId, communityId }: FileChannelConten
           </Text>
         </View>
       </View>
+
+      {/* Upload error banner */}
+      {uploadError && (
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            paddingHorizontal: 16,
+            paddingVertical: 8,
+            backgroundColor: colors.status.danger + '1A',
+          }}
+        >
+          <Text size="xs" style={{ color: colors.status.danger, flex: 1 }}>
+            Upload failed: {uploadError}
+          </Text>
+          <Text
+            size="xs"
+            weight="medium"
+            onPress={() => setUploadError(null)}
+            style={{ color: colors.status.danger, marginLeft: 8 }}
+          >
+            Dismiss
+          </Text>
+        </View>
+      )}
 
       {/* Content */}
       {isLoading ? (
@@ -420,13 +577,13 @@ export function FileChannelContent({ channelId, communityId }: FileChannelConten
                     }}
                   >
                     <Text size="lg" style={{ marginBottom: 4 }}>
-                      {'\uD83D\uDCC4'}
+                      {getFileTypeIcon(file.mimeType).icon}
                     </Text>
                     <Text size="sm" weight="medium" numberOfLines={1} style={{ color: colors.text.primary }}>
                       {file.name}
                     </Text>
                     <Text size="xs" style={{ color: colors.text.muted, marginTop: 2 }}>
-                      {formatSize(file.size)}
+                      {formatFileSize(file.size)}
                     </Text>
                     {file.downloadCount !== undefined && file.downloadCount > 0 && (
                       <Text size="xs" style={{ color: colors.text.muted, marginTop: 1 }}>
@@ -466,7 +623,7 @@ export function FileChannelContent({ channelId, communityId }: FileChannelConten
           </View>
           <View style={{ gap: 4 }}>
             <Text size="xs" style={{ color: colors.text.muted }}>
-              Size: {formatSize(detailFile.size)}
+              Size: {formatFileSize(detailFile.size)}
             </Text>
             <Text size="xs" style={{ color: colors.text.muted }}>
               Type: {detailFile.mimeType}
