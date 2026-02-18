@@ -98,6 +98,16 @@ export {
   buildDmFileEventEnvelope, broadcastDmFileEvent,
 } from './dm-files';
 
+// Storage manager
+export {
+  getStorageUsage, smartCleanup, setAutoCleanupRules, getAutoCleanupRules,
+  getCleanupSuggestions, formatBytes,
+} from './storage-manager';
+export type {
+  StorageUsage, StorageUsageByContext, CleanupResult,
+  CleanupSuggestion, AutoCleanupRules,
+} from './storage-manager';
+
 // Metadata sync
 export { buildMetadataEnvelope, syncMetadataViaRelay } from './metadata';
 
