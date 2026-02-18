@@ -44,6 +44,26 @@ import type {
   RelaySession,
   RelayAcceptResult,
   RelayEvent,
+  Community,
+  CommunityCreateResult,
+  CommunitySpace,
+  CommunityCategory,
+  CommunityChannel,
+  CommunityMember,
+  CommunityRole,
+  CommunityMessage,
+  CommunityInvite,
+  CommunityEvent,
+  CommunityFileRecord,
+  CommunityFileFolderRecord,
+  DmSharedFileRecord,
+  DmSharedFolderRecord,
+  DmFileEventPayload,
+  RelayEnvelope,
+  MetadataEvent,
+  ChunkManifest,
+  FileManifestRecord,
+  ReassembledFile,
 } from './types';
 
 // Import domain modules
@@ -55,6 +75,9 @@ import * as calling from './calling';
 import * as groups from './groups';
 import * as crypto from './crypto';
 import * as relay from './relay';
+import * as communityModule from './community';
+import * as dmFiles from './dm-files';
+import * as chunkingModule from './chunking';
 
 /**
  * Main Umbra Service class
@@ -73,6 +96,9 @@ export class UmbraService {
   private _relayListeners: Array<(event: RelayEvent) => void> = [];
   private _groupListeners: Array<(event: GroupEvent) => void> = [];
   private _callListeners: Array<(event: any) => void> = [];
+  private _communityListeners: Array<(event: CommunityEvent) => void> = [];
+  private _dmFileListeners: Array<(event: DmFileEventPayload) => void> = [];
+  private _metadataListeners: Array<(event: MetadataEvent) => void> = [];
   private _relayWsRef: WebSocket | null = null;
 
   private constructor() {}
@@ -513,6 +539,10 @@ export class UmbraService {
     this._relayWsRef = ws;
   }
 
+  getRelayWs(): WebSocket | null {
+    return this._relayWsRef;
+  }
+
   sendCallSignal(toDid: string, relayMessage: string): void {
     if (this._relayWsRef && this._relayWsRef.readyState === WebSocket.OPEN) {
       this._relayWsRef.send(relayMessage);
@@ -692,6 +722,440 @@ export class UmbraService {
   }
 
   // ===========================================================================
+  // COMMUNITY (delegated to community module)
+  // ===========================================================================
+
+  createCommunity(name: string, ownerDid: string, description?: string, ownerNickname?: string): Promise<CommunityCreateResult> {
+    return communityModule.createCommunity(name, ownerDid, description, ownerNickname);
+  }
+
+  getCommunity(communityId: string): Promise<Community> {
+    return communityModule.getCommunity(communityId);
+  }
+
+  getCommunities(memberDid: string): Promise<Community[]> {
+    return communityModule.getCommunities(memberDid);
+  }
+
+  updateCommunity(id: string, actorDid: string, name?: string, description?: string): Promise<void> {
+    return communityModule.updateCommunity(id, actorDid, name, description);
+  }
+
+  deleteCommunity(id: string, actorDid: string): Promise<void> {
+    return communityModule.deleteCommunity(id, actorDid);
+  }
+
+  // Spaces
+  createSpace(communityId: string, name: string, actorDid: string, position?: number): Promise<CommunitySpace> {
+    return communityModule.createSpace(communityId, name, actorDid, position);
+  }
+
+  getSpaces(communityId: string): Promise<CommunitySpace[]> {
+    return communityModule.getSpaces(communityId);
+  }
+
+  updateSpace(spaceId: string, name: string, actorDid: string): Promise<void> {
+    return communityModule.updateSpace(spaceId, name, actorDid);
+  }
+
+  deleteSpace(spaceId: string, actorDid: string): Promise<void> {
+    return communityModule.deleteSpace(spaceId, actorDid);
+  }
+
+  reorderSpaces(communityId: string, spaceIds: string[]): Promise<void> {
+    return communityModule.reorderSpaces(communityId, spaceIds);
+  }
+
+  // Categories
+  createCategory(communityId: string, spaceId: string, name: string, actorDid: string, position?: number): Promise<CommunityCategory> {
+    return communityModule.createCategory(communityId, spaceId, name, actorDid, position);
+  }
+
+  getCategories(spaceId: string): Promise<CommunityCategory[]> {
+    return communityModule.getCategories(spaceId);
+  }
+
+  getAllCategories(communityId: string): Promise<CommunityCategory[]> {
+    return communityModule.getAllCategories(communityId);
+  }
+
+  updateCategory(categoryId: string, name: string, actorDid: string): Promise<void> {
+    return communityModule.updateCategory(categoryId, name, actorDid);
+  }
+
+  reorderCategories(spaceId: string, categoryIds: string[]): Promise<void> {
+    return communityModule.reorderCategories(spaceId, categoryIds);
+  }
+
+  deleteCategory(categoryId: string, actorDid: string): Promise<void> {
+    return communityModule.deleteCategory(categoryId, actorDid);
+  }
+
+  moveChannelToCategory(channelId: string, categoryId: string | null, actorDid: string): Promise<void> {
+    return communityModule.moveChannelToCategory(channelId, categoryId, actorDid);
+  }
+
+  // Channels
+  createChannel(
+    communityId: string, spaceId: string, name: string, channelType: string,
+    actorDid: string, topic?: string, position?: number, categoryId?: string,
+  ): Promise<CommunityChannel> {
+    return communityModule.createChannel(communityId, spaceId, name, channelType, actorDid, topic, position, categoryId);
+  }
+
+  getChannels(spaceId: string): Promise<CommunityChannel[]> {
+    return communityModule.getChannels(spaceId);
+  }
+
+  getAllChannels(communityId: string): Promise<CommunityChannel[]> {
+    return communityModule.getAllChannels(communityId);
+  }
+
+  getChannel(channelId: string): Promise<CommunityChannel> {
+    return communityModule.getChannel(channelId);
+  }
+
+  updateChannel(channelId: string, actorDid: string, name?: string, topic?: string): Promise<void> {
+    return communityModule.updateChannel(channelId, actorDid, name, topic);
+  }
+
+  deleteChannel(channelId: string, actorDid: string): Promise<void> {
+    return communityModule.deleteChannel(channelId, actorDid);
+  }
+
+  reorderChannels(spaceId: string, channelIds: string[]): Promise<void> {
+    return communityModule.reorderChannels(spaceId, channelIds);
+  }
+
+  setSlowMode(channelId: string, seconds: number, actorDid: string): Promise<void> {
+    return communityModule.setSlowMode(channelId, seconds, actorDid);
+  }
+
+  setChannelE2ee(channelId: string, enabled: boolean, actorDid: string): Promise<void> {
+    return communityModule.setChannelE2ee(channelId, enabled, actorDid);
+  }
+
+  // Members
+  joinCommunity(communityId: string, memberDid: string, nickname?: string): Promise<void> {
+    return communityModule.joinCommunity(communityId, memberDid, nickname);
+  }
+
+  leaveCommunity(communityId: string, memberDid: string): Promise<void> {
+    return communityModule.leaveCommunity(communityId, memberDid);
+  }
+
+  getCommunityMembers(communityId: string): Promise<CommunityMember[]> {
+    return communityModule.getMembers(communityId);
+  }
+
+  getCommunityMember(communityId: string, memberDid: string): Promise<CommunityMember> {
+    return communityModule.getMember(communityId, memberDid);
+  }
+
+  kickCommunityMember(communityId: string, targetDid: string, actorDid: string): Promise<void> {
+    return communityModule.kickMember(communityId, targetDid, actorDid);
+  }
+
+  banCommunityMember(communityId: string, targetDid: string, actorDid: string, reason?: string): Promise<void> {
+    return communityModule.banMember(communityId, targetDid, actorDid, reason);
+  }
+
+  unbanCommunityMember(communityId: string, targetDid: string, actorDid: string): Promise<void> {
+    return communityModule.unbanMember(communityId, targetDid, actorDid);
+  }
+
+  // Roles
+  getCommunityRoles(communityId: string): Promise<CommunityRole[]> {
+    return communityModule.getRoles(communityId);
+  }
+
+  getMemberRoles(communityId: string, memberDid: string): Promise<CommunityRole[]> {
+    return communityModule.getMemberRoles(communityId, memberDid);
+  }
+
+  assignRole(communityId: string, memberDid: string, roleId: string, actorDid: string): Promise<void> {
+    return communityModule.assignRole(communityId, memberDid, roleId, actorDid);
+  }
+
+  unassignRole(communityId: string, memberDid: string, roleId: string, actorDid: string): Promise<void> {
+    return communityModule.unassignRole(communityId, memberDid, roleId, actorDid);
+  }
+
+  createCustomRole(
+    communityId: string,
+    name: string,
+    actorDid: string,
+    color?: string,
+    position?: number,
+    hoisted?: boolean,
+    mentionable?: boolean,
+    permissionsBitfield?: string,
+  ): Promise<CommunityRole> {
+    return communityModule.createCustomRole(communityId, name, actorDid, color, position, hoisted, mentionable, permissionsBitfield);
+  }
+
+  updateRole(
+    roleId: string,
+    actorDid: string,
+    updates: { name?: string; color?: string; hoisted?: boolean; mentionable?: boolean; position?: number },
+  ): Promise<void> {
+    return communityModule.updateRole(roleId, actorDid, updates);
+  }
+
+  updateRolePermissions(roleId: string, permissionsBitfield: string, actorDid: string): Promise<void> {
+    return communityModule.updateRolePermissions(roleId, permissionsBitfield, actorDid);
+  }
+
+  deleteRole(roleId: string, actorDid: string): Promise<void> {
+    return communityModule.deleteRole(roleId, actorDid);
+  }
+
+  // Invites
+  createCommunityInvite(communityId: string, creatorDid: string, maxUses?: number, expiresAt?: number): Promise<CommunityInvite> {
+    return communityModule.createInvite(communityId, creatorDid, maxUses, expiresAt);
+  }
+
+  useCommunityInvite(code: string, memberDid: string, nickname?: string): Promise<string> {
+    return communityModule.useInvite(code, memberDid, nickname);
+  }
+
+  getCommunityInvites(communityId: string): Promise<CommunityInvite[]> {
+    return communityModule.getInvites(communityId);
+  }
+
+  deleteCommunityInvite(inviteId: string, actorDid: string): Promise<void> {
+    return communityModule.deleteInvite(inviteId, actorDid);
+  }
+
+  // Messages
+  sendCommunityMessage(
+    channelId: string, senderDid: string, content: string,
+    replyToId?: string, threadId?: string,
+  ): Promise<CommunityMessage> {
+    return communityModule.sendMessage(channelId, senderDid, content, replyToId, threadId);
+  }
+
+  getCommunityMessages(channelId: string, limit?: number, beforeTimestamp?: number): Promise<CommunityMessage[]> {
+    return communityModule.getMessages(channelId, limit, beforeTimestamp);
+  }
+
+  editCommunityMessage(messageId: string, newContent: string, editorDid: string): Promise<void> {
+    return communityModule.editMessage(messageId, newContent, editorDid);
+  }
+
+  deleteCommunityMessage(messageId: string): Promise<void> {
+    return communityModule.deleteMessage(messageId);
+  }
+
+  // Reactions
+  addCommunityReaction(messageId: string, memberDid: string, emoji: string): Promise<void> {
+    return communityModule.addReaction(messageId, memberDid, emoji);
+  }
+
+  removeCommunityReaction(messageId: string, memberDid: string, emoji: string): Promise<void> {
+    return communityModule.removeReaction(messageId, memberDid, emoji);
+  }
+
+  // Pins
+  pinCommunityMessage(messageId: string, channelId: string, actorDid: string): Promise<void> {
+    return communityModule.pinMessage(messageId, channelId, actorDid);
+  }
+
+  unpinCommunityMessage(messageId: string, channelId: string, actorDid: string): Promise<void> {
+    return communityModule.unpinMessage(messageId, channelId, actorDid);
+  }
+
+  getCommunityPinnedMessages(channelId: string): Promise<CommunityMessage[]> {
+    return communityModule.getPinnedMessages(channelId);
+  }
+
+  // Read Receipts
+  markCommunityRead(channelId: string, memberDid: string, timestamp?: number): Promise<void> {
+    return communityModule.markRead(channelId, memberDid, timestamp);
+  }
+
+  // ── Files ──────────────────────────────────────────────────────────────
+
+  uploadCommunityFile(
+    channelId: string, folderId: string | null, filename: string,
+    description: string | null, fileSize: number, mimeType: string | null,
+    storageChunksJson: string, uploadedBy: string,
+  ): Promise<CommunityFileRecord> {
+    return communityModule.uploadFile(channelId, folderId, filename, description, fileSize, mimeType, storageChunksJson, uploadedBy);
+  }
+
+  getCommunityFiles(channelId: string, folderId: string | null, limit: number, offset: number): Promise<CommunityFileRecord[]> {
+    return communityModule.getFiles(channelId, folderId, limit, offset);
+  }
+
+  getCommunityFile(id: string): Promise<CommunityFileRecord> {
+    return communityModule.getFile(id);
+  }
+
+  deleteCommunityFile(id: string, actorDid: string): Promise<void> {
+    return communityModule.deleteFile(id, actorDid);
+  }
+
+  recordCommunityFileDownload(id: string): Promise<void> {
+    return communityModule.recordFileDownload(id);
+  }
+
+  // ── Folders ────────────────────────────────────────────────────────────
+
+  createCommunityFolder(
+    channelId: string, parentFolderId: string | null, name: string, createdBy: string,
+  ): Promise<CommunityFileFolderRecord> {
+    return communityModule.createFolder(channelId, parentFolderId, name, createdBy);
+  }
+
+  getCommunityFolders(channelId: string, parentFolderId: string | null): Promise<CommunityFileFolderRecord[]> {
+    return communityModule.getFolders(channelId, parentFolderId);
+  }
+
+  deleteCommunityFolder(id: string): Promise<void> {
+    return communityModule.deleteFolder(id);
+  }
+
+  // ── DM Shared Files ──────────────────────────────────────────────────
+
+  uploadDmFile(
+    conversationId: string, folderId: string | null, filename: string,
+    description: string | null, fileSize: number, mimeType: string | null,
+    storageChunksJson: string, uploadedBy: string,
+  ): Promise<DmSharedFileRecord> {
+    return dmFiles.uploadDmFile(conversationId, folderId, filename, description, fileSize, mimeType, storageChunksJson, uploadedBy);
+  }
+
+  getDmFiles(conversationId: string, folderId: string | null, limit: number, offset: number): Promise<DmSharedFileRecord[]> {
+    return dmFiles.getDmFiles(conversationId, folderId, limit, offset);
+  }
+
+  getDmFile(id: string): Promise<DmSharedFileRecord> {
+    return dmFiles.getDmFile(id);
+  }
+
+  deleteDmFile(id: string, actorDid: string): Promise<void> {
+    return dmFiles.deleteDmFile(id, actorDid);
+  }
+
+  recordDmFileDownload(id: string): Promise<void> {
+    return dmFiles.recordDmFileDownload(id);
+  }
+
+  moveDmFile(fileId: string, targetFolderId: string | null): Promise<void> {
+    return dmFiles.moveDmFile(fileId, targetFolderId);
+  }
+
+  // ── DM Shared Folders ────────────────────────────────────────────────
+
+  createDmFolder(conversationId: string, parentFolderId: string | null, name: string, createdBy: string): Promise<DmSharedFolderRecord> {
+    return dmFiles.createDmFolder(conversationId, parentFolderId, name, createdBy);
+  }
+
+  getDmFolders(conversationId: string, parentFolderId: string | null): Promise<DmSharedFolderRecord[]> {
+    return dmFiles.getDmFolders(conversationId, parentFolderId);
+  }
+
+  deleteDmFolder(id: string): Promise<void> {
+    return dmFiles.deleteDmFolder(id);
+  }
+
+  renameDmFolder(folderId: string, newName: string): Promise<void> {
+    return dmFiles.renameDmFolder(folderId, newName);
+  }
+
+  // ── File Chunking ──────────────────────────────────────────────────
+
+  chunkFile(fileId: string, filename: string, dataBase64: string, chunkSize?: number): Promise<ChunkManifest> {
+    return chunkingModule.chunkFile(fileId, filename, dataBase64, chunkSize);
+  }
+
+  reassembleFile(fileId: string): Promise<ReassembledFile> {
+    return chunkingModule.reassembleFile(fileId);
+  }
+
+  getFileManifest(fileId: string): Promise<FileManifestRecord | null> {
+    return chunkingModule.getFileManifest(fileId);
+  }
+
+  // ── DM File Events ──────────────────────────────────────────────────
+
+  buildDmFileEventEnvelope(conversationId: string, senderDid: string, event: DmFileEventPayload['event']): RelayEnvelope {
+    return dmFiles.buildDmFileEventEnvelope(conversationId, senderDid, event);
+  }
+
+  broadcastDmFileEvent(recipientDids: string[], envelope: RelayEnvelope, relayWs: WebSocket | null): Promise<void> {
+    return dmFiles.broadcastDmFileEvent(recipientDids, envelope, relayWs);
+  }
+
+  // Community events
+  onCommunityEvent(callback: (event: CommunityEvent) => void): () => void {
+    this._communityListeners.push(callback);
+    return () => {
+      const index = this._communityListeners.indexOf(callback);
+      if (index !== -1) {
+        this._communityListeners.splice(index, 1);
+      }
+    };
+  }
+
+  dispatchCommunityEvent(event: CommunityEvent): void {
+    for (const listener of this._communityListeners) {
+      try {
+        listener(event);
+      } catch (err) {
+        console.error('[UmbraService] Community listener error:', err);
+      }
+    }
+  }
+
+  broadcastCommunityEvent(communityId: string, event: CommunityEvent, senderDid: string, relayWs: WebSocket | null): Promise<void> {
+    return communityModule.broadcastCommunityEvent(communityId, event, senderDid, relayWs);
+  }
+
+  // DM file events
+  onDmFileEvent(callback: (event: DmFileEventPayload) => void): () => void {
+    this._dmFileListeners.push(callback);
+    return () => {
+      const index = this._dmFileListeners.indexOf(callback);
+      if (index !== -1) {
+        this._dmFileListeners.splice(index, 1);
+      }
+    };
+  }
+
+  dispatchDmFileEvent(event: DmFileEventPayload): void {
+    for (const listener of this._dmFileListeners) {
+      try {
+        listener(event);
+      } catch (err) {
+        console.error('[UmbraService] DM file listener error:', err);
+      }
+    }
+  }
+
+  // Metadata events
+  onMetadataEvent(callback: (event: MetadataEvent) => void): () => void {
+    this._metadataListeners.push(callback);
+    return () => {
+      const index = this._metadataListeners.indexOf(callback);
+      if (index !== -1) {
+        this._metadataListeners.splice(index, 1);
+      }
+    };
+  }
+
+  dispatchMetadataEvent(event: MetadataEvent): void {
+    for (const listener of this._metadataListeners) {
+      try {
+        listener(event);
+      } catch (err) {
+        console.error('[UmbraService] Metadata listener error:', err);
+      }
+    }
+  }
+
+  // ===========================================================================
   // CRYPTO (delegated to crypto module)
   // ===========================================================================
 
@@ -864,6 +1328,16 @@ export class UmbraService {
             listener(camelData as unknown as GroupEvent);
           } catch (err) {
             console.error('[UmbraService] Group listener error:', err);
+          }
+        }
+        break;
+
+      case 'community':
+        for (const listener of this._communityListeners) {
+          try {
+            listener(camelData as unknown as CommunityEvent);
+          } catch (err) {
+            console.error('[UmbraService] Community listener error:', err);
           }
         }
         break;

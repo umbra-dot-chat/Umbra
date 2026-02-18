@@ -68,48 +68,29 @@ export { ErrorCode, UmbraError } from './errors';
 
 // Types
 export type {
-  PublicKeys,
-  PublicIdentity,
-  Identity,
-  ProfileUpdate,
-  CreateIdentityResult,
-  ConnectionInfo,
-  DiscoveryResult,
-  DiscoveryEvent,
-  FriendRequest,
-  Friend,
-  FriendEvent,
-  MessageContent,
-  MessageReaction,
-  ReplyTo,
-  MessageAttachment,
-  MessageStatus,
-  Message,
-  Conversation,
-  Group,
-  GroupMember,
-  MessageEvent,
-  NetworkStatus,
-  RelayStatus,
-  RelaySession,
-  RelayAcceptResult,
-  RelayEvent,
-  RelayEnvelope,
-  FriendRequestPayload,
-  FriendResponsePayload,
-  ChatMessagePayload,
-  GroupInvitePayload,
-  GroupInviteResponsePayload,
-  GroupMessagePayload,
-  GroupKeyRotationPayload,
-  GroupMemberRemovedPayload,
-  FriendAcceptAckPayload,
-  TypingIndicatorPayload,
-  MessageStatusPayload,
-  PendingGroupInvite,
-  GroupEvent,
-  InitConfig,
+  ChatMessagePayload, ConnectionInfo, Conversation, CreateIdentityResult, DiscoveryEvent, DiscoveryResult, Friend, FriendAcceptAckPayload, FriendEvent, FriendRequest, FriendRequestPayload,
+  FriendResponsePayload, Group, GroupEvent, GroupInvitePayload,
+  GroupInviteResponsePayload, GroupKeyRotationPayload, GroupMember, GroupMemberRemovedPayload, GroupMessagePayload, Identity, InitConfig, Message, MessageAttachment, MessageContent, MessageEvent, MessageReaction, MessageStatus, MessageStatusPayload, NetworkStatus, PendingGroupInvite, ProfileUpdate, PublicIdentity, PublicKeys, RelayAcceptResult, RelayEnvelope, RelayEvent, RelaySession, RelayStatus, ReplyTo, TypingIndicatorPayload,
+  Community, CommunityCreateResult, CommunitySpace, CommunityCategory, CommunityChannel, CommunityMember, CommunityRole, CommunityMessage, CommunityInvite, CommunityEvent, CommunityEventPayload,
+  CommunityFileRecord, CommunityFileFolderRecord,
+  DmSharedFileRecord, DmSharedFolderRecord, DmFileEventPayload,
+  ChunkManifest, ChunkRef, FileManifestRecord, ReassembledFile,
+  AccountMetadataPayload,
+  MetadataEvent,
 } from './types';
+
+// File chunking
+export { chunkFile, reassembleFile, getFileManifest } from './chunking';
+
+// DM file sharing
+export {
+  uploadDmFile, getDmFiles, getDmFile, deleteDmFile, recordDmFileDownload, moveDmFile,
+  createDmFolder, getDmFolders, deleteDmFolder, renameDmFolder,
+  buildDmFileEventEnvelope, broadcastDmFileEvent,
+} from './dm-files';
+
+// Metadata sync
+export { buildMetadataEnvelope, syncMetadataViaRelay } from './metadata';
 
 // Main service class
 export { UmbraService } from './service';

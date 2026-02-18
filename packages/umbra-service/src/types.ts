@@ -165,7 +165,26 @@ export type FriendEvent =
 /**
  * Message content
  */
-export type MessageContent = { type: 'text'; text: string };
+export type MessageContent =
+  | { type: 'text'; text: string }
+  | {
+      type: 'file';
+      fileId: string;
+      filename: string;
+      size: number;
+      mimeType: string;
+      /** JSON-encoded P2P chunk references for retrieval */
+      storageChunksJson: string;
+      /** Optional thumbnail data URI for images/videos */
+      thumbnail?: string;
+    }
+  | {
+      type: 'shared_folder';
+      folderId: string;
+      folderName: string;
+      /** How many files are in the folder at time of sharing */
+      fileCount?: number;
+    };
 
 /**
  * A reaction on a message
@@ -342,7 +361,13 @@ export type MessageEvent =
   | { type: 'messagePinned'; messageId: string; pinnedBy: string; pinnedAt: number }
   | { type: 'messageUnpinned'; messageId: string }
   | { type: 'typingStarted'; conversationId: string; did: string }
-  | { type: 'typingStopped'; conversationId: string; did: string };
+  | { type: 'typingStopped'; conversationId: string; did: string }
+  // DM file sharing events
+  | { type: 'fileShared'; conversationId: string; message: Message }
+  | { type: 'sharedFolderCreated'; conversationId: string; folder: DmSharedFolderRecord }
+  | { type: 'sharedFolderDeleted'; conversationId: string; folderId: string }
+  | { type: 'sharedFileUploaded'; conversationId: string; file: DmSharedFileRecord }
+  | { type: 'sharedFileDeleted'; conversationId: string; fileId: string };
 
 /**
  * Network status
@@ -435,7 +460,45 @@ export type RelayEnvelope =
   | { envelope: 'call_answer'; version: 1; payload: any }
   | { envelope: 'call_ice_candidate'; version: 1; payload: any }
   | { envelope: 'call_end'; version: 1; payload: any }
-  | { envelope: 'call_state'; version: 1; payload: any };
+  | { envelope: 'call_state'; version: 1; payload: any }
+  | { envelope: 'community_event'; version: 1; payload: CommunityEventPayload }
+  | { envelope: 'dm_file_event'; version: 1; payload: DmFileEventPayload }
+  | { envelope: 'account_metadata'; version: 1; payload: AccountMetadataPayload };
+
+/**
+ * Payload for account metadata sync across sessions.
+ * Sent to own DID via relay so other sessions receive the update.
+ */
+export interface AccountMetadataPayload {
+  /** Sender's DID (always own DID — self-to-self sync) */
+  senderDid: string;
+  /** The metadata key being synced (e.g. 'message_display_mode') */
+  key: string;
+  /** The metadata value (plain string — encrypted at relay transport level) */
+  value: string;
+  /** Unix timestamp when the metadata was updated */
+  timestamp: number;
+}
+
+/**
+ * Events emitted when account metadata is received via relay sync.
+ */
+export type MetadataEvent =
+  | { type: 'metadataReceived'; key: string; value: string; timestamp: number };
+
+/**
+ * Payload for community event relay broadcast
+ */
+export interface CommunityEventPayload {
+  /** Community this event belongs to */
+  communityId: string;
+  /** The actual community event */
+  event: CommunityEvent;
+  /** DID of the member who triggered the event */
+  senderDid: string;
+  /** Unix timestamp when the event was broadcast */
+  timestamp: number;
+}
 
 /**
  * Payload for friend request envelope
@@ -675,6 +738,420 @@ export type GroupEvent =
   | { type: 'keyRotated'; groupId: string; keyVersion: number }
   | { type: 'groupMessageReceived'; groupId: string; message: Message };
 
+// =============================================================================
+// Community Types
+// =============================================================================
+
+/**
+ * A community (server)
+ */
+export interface Community {
+  /** Unique community ID */
+  id: string;
+  /** Community name */
+  name: string;
+  /** Community description */
+  description?: string;
+  /** Icon URL */
+  iconUrl?: string;
+  /** Banner URL */
+  bannerUrl?: string;
+  /** Splash URL */
+  splashUrl?: string;
+  /** Accent color (hex) */
+  accentColor?: string;
+  /** Custom CSS */
+  customCss?: string;
+  /** Owner's DID */
+  ownerDid: string;
+  /** Vanity URL slug */
+  vanityUrl?: string;
+  /** Created timestamp */
+  createdAt: number;
+  /** Updated timestamp */
+  updatedAt: number;
+}
+
+/**
+ * Result of creating a community
+ */
+export interface CommunityCreateResult {
+  /** Community ID */
+  communityId: string;
+  /** Default space ID */
+  spaceId: string;
+  /** Welcome channel ID */
+  welcomeChannelId: string;
+  /** General channel ID */
+  generalChannelId: string;
+  /** Preset role IDs */
+  roleIds: {
+    owner: string;
+    admin: string;
+    moderator: string;
+    member: string;
+  };
+}
+
+/**
+ * A space within a community (category grouping)
+ */
+export interface CommunitySpace {
+  /** Unique space ID */
+  id: string;
+  /** Parent community ID */
+  communityId: string;
+  /** Space name */
+  name: string;
+  /** Sort position */
+  position: number;
+  /** Created timestamp */
+  createdAt: number;
+  /** Updated timestamp */
+  updatedAt: number;
+}
+
+/**
+ * A category within a space (groups channels)
+ */
+export interface CommunityCategory {
+  /** Unique category ID */
+  id: string;
+  /** Parent community ID */
+  communityId: string;
+  /** Parent space ID */
+  spaceId: string;
+  /** Category name */
+  name: string;
+  /** Sort position */
+  position: number;
+  /** Created timestamp */
+  createdAt: number;
+  /** Updated timestamp */
+  updatedAt: number;
+}
+
+/**
+ * A channel within a community
+ */
+export interface CommunityChannel {
+  /** Unique channel ID */
+  id: string;
+  /** Parent community ID */
+  communityId: string;
+  /** Parent space ID */
+  spaceId: string;
+  /** Category ID (null = uncategorized) */
+  categoryId?: string;
+  /** Channel name */
+  name: string;
+  /** Channel type: text, voice, files, announcement, bulletin, welcome, forum */
+  channelType: string;
+  /** Channel topic/description */
+  topic?: string;
+  /** Sort position */
+  position: number;
+  /** Slow mode cooldown in seconds (0 = disabled) */
+  slowModeSeconds: number;
+  /** Whether E2EE is enabled */
+  e2eeEnabled: boolean;
+  /** Maximum number of pinned messages */
+  pinLimit: number;
+  /** Created timestamp */
+  createdAt: number;
+  /** Updated timestamp */
+  updatedAt: number;
+}
+
+/**
+ * A member of a community
+ */
+export interface CommunityMember {
+  /** Community ID */
+  communityId: string;
+  /** Member's DID */
+  memberDid: string;
+  /** Nickname in this community */
+  nickname?: string;
+  /** Avatar URL override */
+  avatarUrl?: string;
+  /** Bio text */
+  bio?: string;
+  /** When they joined */
+  joinedAt: number;
+}
+
+/**
+ * A role in a community
+ */
+export interface CommunityRole {
+  /** Unique role ID */
+  id: string;
+  /** Community ID */
+  communityId: string;
+  /** Role name */
+  name: string;
+  /** Role color (hex) */
+  color?: string;
+  /** Whether this role is shown separately in member list */
+  hoisted: boolean;
+  /** Position in role hierarchy (higher = more authority) */
+  position: number;
+  /** Permission bitfield (decimal string of a u64) */
+  permissionsBitfield: string;
+  /** Whether this role can be mentioned */
+  mentionable: boolean;
+  /** Whether this is a system-generated preset role (e.g. Owner, Member) */
+  isPreset?: boolean;
+  /** Icon URL */
+  icon?: string;
+  /** Badge */
+  badge?: string;
+  /** Created timestamp */
+  createdAt: number;
+  /** Updated timestamp */
+  updatedAt: number;
+}
+
+/**
+ * A community message
+ */
+export interface CommunityMessage {
+  /** Unique message ID */
+  id: string;
+  /** Channel ID */
+  channelId: string;
+  /** Sender's DID */
+  senderDid: string;
+  /** Message content (plaintext) */
+  content: string;
+  /** Reply-to message ID */
+  replyToId?: string;
+  /** Thread ID (if this is a thread reply) */
+  threadId?: string;
+  /** Content warning text */
+  contentWarning?: string;
+  /** Whether the message has been edited */
+  edited: boolean;
+  /** When edited */
+  editedAt?: number;
+  /** Whether the message is pinned */
+  pinned: boolean;
+  /** Who pinned it */
+  pinnedBy?: string;
+  /** When pinned */
+  pinnedAt?: number;
+  /** Whether this is a system message */
+  systemMessage: boolean;
+  /** Number of thread replies */
+  threadReplyCount: number;
+  /** Created timestamp */
+  createdAt: number;
+  /** Updated timestamp */
+  updatedAt: number;
+}
+
+/**
+ * A community invite
+ */
+export interface CommunityInvite {
+  /** Unique invite ID */
+  id: string;
+  /** Community ID */
+  communityId: string;
+  /** Invite code */
+  code: string;
+  /** Whether this is a vanity invite */
+  vanity: boolean;
+  /** Creator's DID */
+  creatorDid: string;
+  /** Maximum number of uses (null = unlimited) */
+  maxUses?: number;
+  /** Current use count */
+  useCount: number;
+  /** Expiry timestamp (null = never) */
+  expiresAt?: number;
+  /** Created timestamp */
+  createdAt: number;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Community File Records
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** A file stored in a community file channel. */
+export interface CommunityFileRecord {
+  /** Unique file ID */
+  id: string;
+  /** Channel this file belongs to */
+  channelId: string;
+  /** Parent folder ID (null = root) */
+  folderId?: string | null;
+  /** Display filename */
+  filename: string;
+  /** Optional description */
+  description?: string | null;
+  /** File size in bytes */
+  fileSize: number;
+  /** MIME type */
+  mimeType?: string | null;
+  /** JSON-encoded array of chunk references for P2P retrieval */
+  storageChunksJson: string;
+  /** DID of the uploader */
+  uploadedBy: string;
+  /** File version number */
+  version: number;
+  /** Number of times this file has been downloaded */
+  downloadCount: number;
+  /** Created timestamp (epoch ms) */
+  createdAt: number;
+}
+
+/** A folder inside a community file channel. */
+export interface CommunityFileFolderRecord {
+  /** Unique folder ID */
+  id: string;
+  /** Channel this folder belongs to */
+  channelId: string;
+  /** Parent folder ID (null = root) */
+  parentFolderId?: string | null;
+  /** Folder name */
+  name: string;
+  /** DID of the creator */
+  createdBy: string;
+  /** Created timestamp (epoch ms) */
+  createdAt: number;
+}
+
+// ---------------------------------------------------------------------------
+// DM Shared Files & Folders
+// ---------------------------------------------------------------------------
+
+/**
+ * A file shared in a DM or group conversation.
+ * Uses the same P2P chunk storage as community files but scoped to a conversation.
+ */
+export interface DmSharedFileRecord {
+  /** Unique file ID */
+  id: string;
+  /** Conversation this file belongs to (DM or group) */
+  conversationId: string;
+  /** Parent folder ID (null = root / unfiled) */
+  folderId?: string | null;
+  /** Display filename */
+  filename: string;
+  /** Optional description */
+  description?: string | null;
+  /** File size in bytes */
+  fileSize: number;
+  /** MIME type */
+  mimeType?: string | null;
+  /** JSON-encoded array of P2P chunk references */
+  storageChunksJson: string;
+  /** DID of the uploader */
+  uploadedBy: string;
+  /** File version number */
+  version: number;
+  /** Number of times downloaded */
+  downloadCount: number;
+  /** Created timestamp (epoch ms) */
+  createdAt: number;
+  /**
+   * Encrypted metadata blob (Base64).
+   * Contains filename + description encrypted with the conversation's
+   * ECDH-derived key so metadata is private even from relay.
+   */
+  encryptedMetadata?: string;
+  /** Nonce for metadata encryption (hex) */
+  encryptionNonce?: string;
+}
+
+/**
+ * A shared folder in a DM or group conversation.
+ * Both participants can add/remove files and create sub-folders.
+ */
+export interface DmSharedFolderRecord {
+  /** Unique folder ID */
+  id: string;
+  /** Conversation this folder belongs to */
+  conversationId: string;
+  /** Parent folder ID (null = root) */
+  parentFolderId?: string | null;
+  /** Folder name */
+  name: string;
+  /** DID of the creator */
+  createdBy: string;
+  /** Created timestamp (epoch ms) */
+  createdAt: number;
+}
+
+/**
+ * Relay payload for DM file sharing event.
+ * Sent via relay to notify the other party about shared files/folders.
+ */
+export interface DmFileEventPayload {
+  /** Conversation ID */
+  conversationId: string;
+  /** Sender's DID */
+  senderDid: string;
+  /** Unix timestamp */
+  timestamp: number;
+  /** The file event */
+  event:
+    | { type: 'fileUploaded'; file: DmSharedFileRecord }
+    | { type: 'fileDeleted'; fileId: string }
+    | { type: 'fileMoved'; fileId: string; targetFolderId: string | null }
+    | { type: 'folderCreated'; folder: DmSharedFolderRecord }
+    | { type: 'folderDeleted'; folderId: string }
+    | { type: 'folderRenamed'; folderId: string; newName: string };
+}
+
+/**
+ * Community event types
+ */
+export type CommunityEvent =
+  | { type: 'communityCreated'; communityId: string; name: string }
+  | { type: 'communityUpdated'; communityId: string }
+  | { type: 'communityDeleted'; communityId: string }
+  | { type: 'ownershipTransferred'; communityId: string; newOwnerDid: string }
+  | { type: 'spaceCreated'; communityId: string; spaceId: string }
+  | { type: 'spaceUpdated'; communityId: string; spaceId: string }
+  | { type: 'spaceDeleted'; communityId: string; spaceId: string }
+  | { type: 'categoryCreated'; communityId: string; categoryId: string }
+  | { type: 'categoryUpdated'; categoryId: string }
+  | { type: 'categoryDeleted'; categoryId: string }
+  | { type: 'channelCreated'; communityId: string; channelId: string }
+  | { type: 'channelUpdated'; communityId: string; channelId: string }
+  | { type: 'channelDeleted'; communityId: string; channelId: string }
+  | { type: 'memberJoined'; communityId: string; memberDid: string }
+  | { type: 'memberLeft'; communityId: string; memberDid: string }
+  | { type: 'memberKicked'; communityId: string; memberDid: string }
+  | { type: 'memberBanned'; communityId: string; memberDid: string }
+  | { type: 'memberUnbanned'; communityId: string; memberDid: string }
+  | { type: 'roleAssigned'; communityId: string; memberDid: string; roleId: string }
+  | { type: 'roleUnassigned'; communityId: string; memberDid: string; roleId: string }
+  | { type: 'communityMessageSent'; channelId: string; messageId: string; senderDid: string }
+  | { type: 'communityMessageEdited'; channelId: string; messageId: string }
+  | { type: 'communityMessageDeleted'; channelId: string; messageId: string }
+  | { type: 'communityReactionAdded'; messageId: string; emoji: string; memberDid: string }
+  | { type: 'communityReactionRemoved'; messageId: string; emoji: string; memberDid: string }
+  | { type: 'communityMessagePinned'; channelId: string; messageId: string }
+  | { type: 'communityMessageUnpinned'; channelId: string; messageId: string }
+  | { type: 'communityRoleCreated'; communityId: string; roleId: string }
+  | { type: 'communityRoleUpdated'; roleId: string }
+  | { type: 'communityRolePermissionsUpdated'; roleId: string }
+  | { type: 'communityRoleDeleted'; roleId: string }
+  | { type: 'inviteCreated'; communityId: string; inviteId: string }
+  | { type: 'inviteDeleted'; communityId: string; inviteId: string }
+  | { type: 'voiceChannelJoined'; communityId: string; channelId: string; memberDid: string }
+  | { type: 'voiceChannelLeft'; communityId: string; channelId: string; memberDid: string }
+  // File channel events
+  | { type: 'fileUploaded'; channelId: string; fileId: string; senderDid: string }
+  | { type: 'fileDeleted'; channelId: string; fileId: string }
+  | { type: 'folderCreated'; channelId: string; folderId: string }
+  | { type: 'folderDeleted'; channelId: string; folderId: string }
+  | { type: 'fileMoved'; channelId: string; fileId: string; targetFolderId: string | null };
+
 /**
  * Initialization configuration
  */
@@ -688,4 +1165,84 @@ export interface InitConfig {
   /** DID for IndexedDB persistence (web only). When provided, the database
    *  is restored from IndexedDB on init and auto-saved on every write. */
   did?: string;
+}
+
+// =============================================================================
+// FILE CHUNKING
+// =============================================================================
+
+/**
+ * Reference to a single chunk within a file manifest.
+ */
+export interface ChunkRef {
+  /** SHA-256 hash of the chunk data (content-addressed ID) */
+  chunkId: string;
+  /** Zero-based index of this chunk within the file */
+  chunkIndex: number;
+  /** Size of this chunk in bytes */
+  size: number;
+  /** SHA-256 hash for verification */
+  hash: string;
+}
+
+/**
+ * Manifest describing how a file is split into chunks.
+ * Returned by `chunkFile()` after splitting and storing.
+ */
+export interface ChunkManifest {
+  /** Unique file identifier */
+  fileId: string;
+  /** Display filename */
+  filename: string;
+  /** Total file size in bytes */
+  totalSize: number;
+  /** Chunk size used for splitting (bytes) */
+  chunkSize: number;
+  /** Total number of chunks */
+  totalChunks: number;
+  /** Ordered list of chunk references */
+  chunks: ChunkRef[];
+  /** SHA-256 hash of the entire file */
+  fileHash: string;
+}
+
+/**
+ * Stored file manifest record from the database.
+ * Returned by `getFileManifest()`.
+ */
+export interface FileManifestRecord {
+  /** File ID */
+  fileId: string;
+  /** Display filename */
+  filename: string;
+  /** Total size in bytes */
+  totalSize: number;
+  /** Chunk size in bytes */
+  chunkSize: number;
+  /** Number of chunks */
+  totalChunks: number;
+  /** JSON-encoded array of ChunkRef objects */
+  chunksJson: string;
+  /** SHA-256 hash of the complete file */
+  fileHash: string;
+  /** Whether the file is encrypted */
+  encrypted: boolean;
+  /** Encryption key ID (if encrypted) */
+  encryptionKeyId: string | null;
+  /** Created timestamp */
+  createdAt: number;
+}
+
+/**
+ * Result from reassembling a file from its stored chunks.
+ */
+export interface ReassembledFile {
+  /** File contents as base64-encoded string */
+  dataB64: string;
+  /** Original filename */
+  filename: string;
+  /** SHA-256 hash of the reassembled file */
+  fileHash: string;
+  /** Total file size in bytes */
+  totalSize: number;
 }
