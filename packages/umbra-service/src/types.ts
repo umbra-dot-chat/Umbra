@@ -1246,3 +1246,99 @@ export interface ReassembledFile {
   /** Total file size in bytes */
   totalSize: number;
 }
+
+// =============================================================================
+// FILE TRANSFER
+// =============================================================================
+
+/**
+ * Transport type for file transfers
+ */
+export type TransportType = 'webrtc' | 'relay' | 'libp2p';
+
+/**
+ * State of a file transfer session
+ */
+export type TransferState =
+  | 'requesting'
+  | 'negotiating'
+  | 'transferring'
+  | 'paused'
+  | 'completed'
+  | 'failed'
+  | 'cancelled';
+
+/**
+ * Direction of a file transfer
+ */
+export type TransferDirection = 'upload' | 'download';
+
+/**
+ * Progress information for a file transfer
+ */
+export interface TransferProgress {
+  /** Unique transfer session ID */
+  transferId: string;
+  /** File being transferred */
+  fileId: string;
+  /** Display filename */
+  filename: string;
+  /** Upload or download */
+  direction: TransferDirection;
+  /** Current state */
+  state: TransferState;
+  /** Number of chunks completed */
+  chunksCompleted: number;
+  /** Total number of chunks */
+  totalChunks: number;
+  /** Bytes transferred so far */
+  bytesTransferred: number;
+  /** Total bytes to transfer */
+  totalBytes: number;
+  /** Current transfer speed in bytes per second */
+  speedBps: number;
+  /** DID of the peer we're transferring with */
+  peerDid: string;
+  /** When the transfer started (Unix timestamp) */
+  startedAt: number;
+  /** Transport being used */
+  transportType: TransportType;
+  /** Error message if state is 'failed' */
+  error?: string;
+  /** Bitfield of completed chunks (for resume) */
+  chunksBitfield?: string;
+}
+
+/**
+ * An incoming transfer request from a peer
+ */
+export interface IncomingTransferRequest {
+  /** Transfer session ID */
+  transferId: string;
+  /** File ID being offered */
+  fileId: string;
+  /** Display filename */
+  filename: string;
+  /** Total file size in bytes */
+  totalBytes: number;
+  /** Total number of chunks */
+  totalChunks: number;
+  /** DID of the peer sending the file */
+  peerDid: string;
+  /** Manifest JSON for the file */
+  manifestJson: string;
+}
+
+/**
+ * Events emitted by the file transfer system
+ */
+export type FileTransferEvent =
+  | { type: 'transferRequested'; request: IncomingTransferRequest }
+  | { type: 'transferAccepted'; transferId: string }
+  | { type: 'transferRejected'; transferId: string; reason?: string }
+  | { type: 'transferProgress'; progress: TransferProgress }
+  | { type: 'transferCompleted'; transferId: string; fileId: string }
+  | { type: 'transferFailed'; transferId: string; error: string }
+  | { type: 'transferPaused'; transferId: string }
+  | { type: 'transferResumed'; transferId: string }
+  | { type: 'transferCancelled'; transferId: string };

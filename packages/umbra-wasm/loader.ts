@@ -144,6 +144,135 @@ export interface UmbraWasmModule {
   umbra_wasm_crypto_encrypt_for_peer(json: string): string;
   umbra_wasm_crypto_decrypt_from_peer(json: string): string;
 
+  // Community — Core
+  umbra_wasm_community_create(json: string): string;
+  umbra_wasm_community_get(community_id: string): string;
+  umbra_wasm_community_get_mine(member_did: string): string;
+  umbra_wasm_community_update(json: string): string;
+  umbra_wasm_community_delete(json: string): string;
+  umbra_wasm_community_transfer_ownership(json: string): string;
+
+  // Community — Spaces
+  umbra_wasm_community_space_create(json: string): string;
+  umbra_wasm_community_space_list(community_id: string): string;
+  umbra_wasm_community_space_update(json: string): string;
+  umbra_wasm_community_space_reorder(json: string): string;
+  umbra_wasm_community_space_delete(json: string): string;
+
+  // Community — Categories
+  umbra_wasm_community_category_create(json: string): string;
+  umbra_wasm_community_category_list(space_id: string): string;
+  umbra_wasm_community_category_list_all(community_id: string): string;
+  umbra_wasm_community_category_update(json: string): string;
+  umbra_wasm_community_category_reorder(json: string): string;
+  umbra_wasm_community_category_delete(json: string): string;
+  umbra_wasm_community_channel_move_category(json: string): string;
+
+  // Community — Channels
+  umbra_wasm_community_channel_create(json: string): string;
+  umbra_wasm_community_channel_list(space_id: string): string;
+  umbra_wasm_community_channel_list_all(community_id: string): string;
+  umbra_wasm_community_channel_get(channel_id: string): string;
+  umbra_wasm_community_channel_update(json: string): string;
+  umbra_wasm_community_channel_set_slow_mode(json: string): string;
+  umbra_wasm_community_channel_set_e2ee(json: string): string;
+  umbra_wasm_community_channel_delete(json: string): string;
+  umbra_wasm_community_channel_reorder(json: string): string;
+
+  // Community — Members
+  umbra_wasm_community_join(json: string): string;
+  umbra_wasm_community_leave(json: string): string;
+  umbra_wasm_community_kick(json: string): string;
+  umbra_wasm_community_ban(json: string): string;
+  umbra_wasm_community_unban(json: string): string;
+  umbra_wasm_community_member_list(community_id: string): string;
+  umbra_wasm_community_member_get(community_id: string, member_did: string): string;
+  umbra_wasm_community_member_update_profile(json: string): string;
+  umbra_wasm_community_ban_list(community_id: string): string;
+
+  // Community — Roles
+  umbra_wasm_community_role_list(community_id: string): string;
+  umbra_wasm_community_member_roles(community_id: string, member_did: string): string;
+  umbra_wasm_community_role_assign(json: string): string;
+  umbra_wasm_community_role_unassign(json: string): string;
+  umbra_wasm_community_custom_role_create(json: string): string;
+  umbra_wasm_community_role_update(json: string): string;
+  umbra_wasm_community_role_update_permissions(json: string): string;
+  umbra_wasm_community_role_delete(json: string): string;
+
+  // Community — Invites
+  umbra_wasm_community_invite_create(json: string): string;
+  umbra_wasm_community_invite_use(json: string): string;
+  umbra_wasm_community_invite_list(community_id: string): string;
+  umbra_wasm_community_invite_delete(json: string): string;
+  umbra_wasm_community_invite_set_vanity(json: string): string;
+
+  // Community — Messages
+  umbra_wasm_community_message_send(json: string): string;
+  umbra_wasm_community_message_list(json: string): string;
+  umbra_wasm_community_message_get(message_id: string): string;
+  umbra_wasm_community_message_edit(json: string): string;
+  umbra_wasm_community_message_delete(message_id: string): string;
+
+  // Community — Reactions
+  umbra_wasm_community_reaction_add(json: string): string;
+  umbra_wasm_community_reaction_remove(json: string): string;
+  umbra_wasm_community_reaction_list(message_id: string): string;
+
+  // Community — Pins
+  umbra_wasm_community_pin_message(json: string): string;
+  umbra_wasm_community_unpin_message(json: string): string;
+  umbra_wasm_community_pin_list(channel_id: string): string;
+
+  // Community — Threads
+  umbra_wasm_community_thread_create(json: string): string;
+  umbra_wasm_community_thread_get(thread_id: string): string;
+  umbra_wasm_community_thread_list(channel_id: string): string;
+  umbra_wasm_community_thread_messages(json: string): string;
+
+  // Community — Read Receipts
+  umbra_wasm_community_mark_read(json: string): string;
+
+  // Community — Files (real WASM)
+  umbra_wasm_community_upload_file(json: string): string;
+  umbra_wasm_community_get_files(json: string): string;
+  umbra_wasm_community_get_file(json: string): string;
+  umbra_wasm_community_delete_file(json: string): string;
+  umbra_wasm_community_record_file_download(json: string): string;
+  umbra_wasm_community_create_folder(json: string): string;
+  umbra_wasm_community_get_folders(json: string): string;
+  umbra_wasm_community_delete_folder(json: string): string;
+
+  // DM — Files (real WASM)
+  umbra_wasm_dm_upload_file(json: string): string;
+  umbra_wasm_dm_get_files(json: string): string;
+  umbra_wasm_dm_get_file(json: string): string;
+  umbra_wasm_dm_delete_file(json: string): string;
+  umbra_wasm_dm_record_file_download(json: string): string;
+  umbra_wasm_dm_move_file(json: string): string;
+  umbra_wasm_dm_create_folder(json: string): string;
+  umbra_wasm_dm_get_folders(json: string): string;
+  umbra_wasm_dm_delete_folder(json: string): string;
+  umbra_wasm_dm_rename_folder(json: string): string;
+
+  // File Chunking (real WASM)
+  umbra_wasm_chunk_file(json: string): string;
+  umbra_wasm_reassemble_file(json: string): string;
+  umbra_wasm_get_file_manifest(json: string): string;
+
+  // File Transfer Control (real WASM)
+  umbra_wasm_transfer_initiate(json: string): string;
+  umbra_wasm_transfer_accept(json: string): string;
+  umbra_wasm_transfer_pause(transfer_id: string): string;
+  umbra_wasm_transfer_resume(transfer_id: string): string;
+  umbra_wasm_transfer_cancel(json: string): string;
+  umbra_wasm_transfer_on_message(json: string): string;
+  umbra_wasm_transfer_list(): string;
+  umbra_wasm_transfer_get(transfer_id: string): string;
+  umbra_wasm_transfer_get_incomplete(): string;
+  umbra_wasm_transfer_chunks_to_send(transfer_id: string): string;
+  umbra_wasm_transfer_mark_chunk_sent(json: string): string;
+
   // Plugin Storage — KV
   umbra_wasm_plugin_kv_get(plugin_id: string, key: string): string;
   umbra_wasm_plugin_kv_set(plugin_id: string, key: string, value: string): string;
@@ -562,6 +691,232 @@ function buildModule(wasmPkg: any): UmbraWasmModule {
       wasmPkg.umbra_wasm_crypto_encrypt_for_peer(json),
     umbra_wasm_crypto_decrypt_from_peer: (json: string) =>
       wasmPkg.umbra_wasm_crypto_decrypt_from_peer(json),
+
+    // ── Community (real WASM) ──────────────────────────────────────
+    umbra_wasm_community_create: (json: string) =>
+      wasmPkg.umbra_wasm_community_create(json),
+    umbra_wasm_community_get: (communityId: string) =>
+      wasmPkg.umbra_wasm_community_get(communityId),
+    umbra_wasm_community_get_mine: (memberDid: string) =>
+      wasmPkg.umbra_wasm_community_get_mine(memberDid),
+    umbra_wasm_community_update: (json: string) =>
+      wasmPkg.umbra_wasm_community_update(json),
+    umbra_wasm_community_delete: (json: string) =>
+      wasmPkg.umbra_wasm_community_delete(json),
+    umbra_wasm_community_transfer_ownership: (json: string) =>
+      wasmPkg.umbra_wasm_community_transfer_ownership(json),
+
+    // Community — Spaces
+    umbra_wasm_community_space_create: (json: string) =>
+      wasmPkg.umbra_wasm_community_space_create(json),
+    umbra_wasm_community_space_list: (communityId: string) =>
+      wasmPkg.umbra_wasm_community_space_list(communityId),
+    umbra_wasm_community_space_update: (json: string) =>
+      wasmPkg.umbra_wasm_community_space_update(json),
+    umbra_wasm_community_space_reorder: (json: string) =>
+      wasmPkg.umbra_wasm_community_space_reorder(json),
+    umbra_wasm_community_space_delete: (json: string) =>
+      wasmPkg.umbra_wasm_community_space_delete(json),
+
+    // Community — Categories
+    umbra_wasm_community_category_create: (json: string) =>
+      wasmPkg.umbra_wasm_community_category_create(json),
+    umbra_wasm_community_category_list: (spaceId: string) =>
+      wasmPkg.umbra_wasm_community_category_list(spaceId),
+    umbra_wasm_community_category_list_all: (communityId: string) =>
+      wasmPkg.umbra_wasm_community_category_list_all(communityId),
+    umbra_wasm_community_category_update: (json: string) =>
+      wasmPkg.umbra_wasm_community_category_update(json),
+    umbra_wasm_community_category_reorder: (json: string) =>
+      wasmPkg.umbra_wasm_community_category_reorder(json),
+    umbra_wasm_community_category_delete: (json: string) =>
+      wasmPkg.umbra_wasm_community_category_delete(json),
+    umbra_wasm_community_channel_move_category: (json: string) =>
+      wasmPkg.umbra_wasm_community_channel_move_category(json),
+
+    // Community — Channels
+    umbra_wasm_community_channel_create: (json: string) =>
+      wasmPkg.umbra_wasm_community_channel_create(json),
+    umbra_wasm_community_channel_list: (spaceId: string) =>
+      wasmPkg.umbra_wasm_community_channel_list(spaceId),
+    umbra_wasm_community_channel_list_all: (communityId: string) =>
+      wasmPkg.umbra_wasm_community_channel_list_all(communityId),
+    umbra_wasm_community_channel_get: (channelId: string) =>
+      wasmPkg.umbra_wasm_community_channel_get(channelId),
+    umbra_wasm_community_channel_update: (json: string) =>
+      wasmPkg.umbra_wasm_community_channel_update(json),
+    umbra_wasm_community_channel_set_slow_mode: (json: string) =>
+      wasmPkg.umbra_wasm_community_channel_set_slow_mode(json),
+    umbra_wasm_community_channel_set_e2ee: (json: string) =>
+      wasmPkg.umbra_wasm_community_channel_set_e2ee(json),
+    umbra_wasm_community_channel_delete: (json: string) =>
+      wasmPkg.umbra_wasm_community_channel_delete(json),
+    umbra_wasm_community_channel_reorder: (json: string) =>
+      wasmPkg.umbra_wasm_community_channel_reorder(json),
+
+    // Community — Members
+    umbra_wasm_community_join: (json: string) =>
+      wasmPkg.umbra_wasm_community_join(json),
+    umbra_wasm_community_leave: (json: string) =>
+      wasmPkg.umbra_wasm_community_leave(json),
+    umbra_wasm_community_kick: (json: string) =>
+      wasmPkg.umbra_wasm_community_kick(json),
+    umbra_wasm_community_ban: (json: string) =>
+      wasmPkg.umbra_wasm_community_ban(json),
+    umbra_wasm_community_unban: (json: string) =>
+      wasmPkg.umbra_wasm_community_unban(json),
+    umbra_wasm_community_member_list: (communityId: string) =>
+      wasmPkg.umbra_wasm_community_member_list(communityId),
+    umbra_wasm_community_member_get: (communityId: string, memberDid: string) =>
+      wasmPkg.umbra_wasm_community_member_get(communityId, memberDid),
+    umbra_wasm_community_member_update_profile: (json: string) =>
+      wasmPkg.umbra_wasm_community_member_update_profile(json),
+    umbra_wasm_community_ban_list: (communityId: string) =>
+      wasmPkg.umbra_wasm_community_ban_list(communityId),
+
+    // Community — Roles
+    umbra_wasm_community_role_list: (communityId: string) =>
+      wasmPkg.umbra_wasm_community_role_list(communityId),
+    umbra_wasm_community_member_roles: (communityId: string, memberDid: string) =>
+      wasmPkg.umbra_wasm_community_member_roles(communityId, memberDid),
+    umbra_wasm_community_role_assign: (json: string) =>
+      wasmPkg.umbra_wasm_community_role_assign(json),
+    umbra_wasm_community_role_unassign: (json: string) =>
+      wasmPkg.umbra_wasm_community_role_unassign(json),
+    umbra_wasm_community_custom_role_create: (json: string) =>
+      wasmPkg.umbra_wasm_community_custom_role_create(json),
+    umbra_wasm_community_role_update: (json: string) =>
+      wasmPkg.umbra_wasm_community_role_update(json),
+    umbra_wasm_community_role_update_permissions: (json: string) =>
+      wasmPkg.umbra_wasm_community_role_update_permissions(json),
+    umbra_wasm_community_role_delete: (json: string) =>
+      wasmPkg.umbra_wasm_community_role_delete(json),
+
+    // Community — Invites
+    umbra_wasm_community_invite_create: (json: string) =>
+      wasmPkg.umbra_wasm_community_invite_create(json),
+    umbra_wasm_community_invite_use: (json: string) =>
+      wasmPkg.umbra_wasm_community_invite_use(json),
+    umbra_wasm_community_invite_list: (communityId: string) =>
+      wasmPkg.umbra_wasm_community_invite_list(communityId),
+    umbra_wasm_community_invite_delete: (json: string) =>
+      wasmPkg.umbra_wasm_community_invite_delete(json),
+    umbra_wasm_community_invite_set_vanity: (json: string) =>
+      wasmPkg.umbra_wasm_community_invite_set_vanity(json),
+
+    // Community — Messages
+    umbra_wasm_community_message_send: (json: string) =>
+      wasmPkg.umbra_wasm_community_message_send(json),
+    umbra_wasm_community_message_list: (json: string) =>
+      wasmPkg.umbra_wasm_community_message_list(json),
+    umbra_wasm_community_message_get: (messageId: string) =>
+      wasmPkg.umbra_wasm_community_message_get(messageId),
+    umbra_wasm_community_message_edit: (json: string) =>
+      wasmPkg.umbra_wasm_community_message_edit(json),
+    umbra_wasm_community_message_delete: (messageId: string) =>
+      wasmPkg.umbra_wasm_community_message_delete(messageId),
+
+    // Community — Reactions
+    umbra_wasm_community_reaction_add: (json: string) =>
+      wasmPkg.umbra_wasm_community_reaction_add(json),
+    umbra_wasm_community_reaction_remove: (json: string) =>
+      wasmPkg.umbra_wasm_community_reaction_remove(json),
+    umbra_wasm_community_reaction_list: (messageId: string) =>
+      wasmPkg.umbra_wasm_community_reaction_list(messageId),
+
+    // Community — Pins
+    umbra_wasm_community_pin_message: (json: string) =>
+      wasmPkg.umbra_wasm_community_pin_message(json),
+    umbra_wasm_community_unpin_message: (json: string) =>
+      wasmPkg.umbra_wasm_community_unpin_message(json),
+    umbra_wasm_community_pin_list: (channelId: string) =>
+      wasmPkg.umbra_wasm_community_pin_list(channelId),
+
+    // Community — Threads
+    umbra_wasm_community_thread_create: (json: string) =>
+      wasmPkg.umbra_wasm_community_thread_create(json),
+    umbra_wasm_community_thread_get: (threadId: string) =>
+      wasmPkg.umbra_wasm_community_thread_get(threadId),
+    umbra_wasm_community_thread_list: (channelId: string) =>
+      wasmPkg.umbra_wasm_community_thread_list(channelId),
+    umbra_wasm_community_thread_messages: (json: string) =>
+      wasmPkg.umbra_wasm_community_thread_messages(json),
+
+    // Community — Read Receipts
+    umbra_wasm_community_mark_read: (json: string) =>
+      wasmPkg.umbra_wasm_community_mark_read(json),
+
+    // ── Community — Files (real WASM) ──────────────────────────────
+    umbra_wasm_community_upload_file: (json: string) =>
+      wasmPkg.umbra_wasm_community_upload_file(json),
+    umbra_wasm_community_get_files: (json: string) =>
+      wasmPkg.umbra_wasm_community_get_files(json),
+    umbra_wasm_community_get_file: (json: string) =>
+      wasmPkg.umbra_wasm_community_get_file(json),
+    umbra_wasm_community_delete_file: (json: string) =>
+      wasmPkg.umbra_wasm_community_delete_file(json),
+    umbra_wasm_community_record_file_download: (json: string) =>
+      wasmPkg.umbra_wasm_community_record_file_download(json),
+    umbra_wasm_community_create_folder: (json: string) =>
+      wasmPkg.umbra_wasm_community_create_folder(json),
+    umbra_wasm_community_get_folders: (json: string) =>
+      wasmPkg.umbra_wasm_community_get_folders(json),
+    umbra_wasm_community_delete_folder: (json: string) =>
+      wasmPkg.umbra_wasm_community_delete_folder(json),
+
+    // ── DM — Files (real WASM) ──────────────────────────────────────
+    umbra_wasm_dm_upload_file: (json: string) =>
+      wasmPkg.umbra_wasm_dm_upload_file(json),
+    umbra_wasm_dm_get_files: (json: string) =>
+      wasmPkg.umbra_wasm_dm_get_files(json),
+    umbra_wasm_dm_get_file: (json: string) =>
+      wasmPkg.umbra_wasm_dm_get_file(json),
+    umbra_wasm_dm_delete_file: (json: string) =>
+      wasmPkg.umbra_wasm_dm_delete_file(json),
+    umbra_wasm_dm_record_file_download: (json: string) =>
+      wasmPkg.umbra_wasm_dm_record_file_download(json),
+    umbra_wasm_dm_move_file: (json: string) =>
+      wasmPkg.umbra_wasm_dm_move_file(json),
+    umbra_wasm_dm_create_folder: (json: string) =>
+      wasmPkg.umbra_wasm_dm_create_folder(json),
+    umbra_wasm_dm_get_folders: (json: string) =>
+      wasmPkg.umbra_wasm_dm_get_folders(json),
+    umbra_wasm_dm_delete_folder: (json: string) =>
+      wasmPkg.umbra_wasm_dm_delete_folder(json),
+    umbra_wasm_dm_rename_folder: (json: string) =>
+      wasmPkg.umbra_wasm_dm_rename_folder(json),
+
+    // ── File Chunking (real WASM) ───────────────────────────────────
+    umbra_wasm_chunk_file: (json: string) =>
+      wasmPkg.umbra_wasm_chunk_file(json),
+    umbra_wasm_reassemble_file: (json: string) =>
+      wasmPkg.umbra_wasm_reassemble_file(json),
+    umbra_wasm_get_file_manifest: (json: string) =>
+      wasmPkg.umbra_wasm_get_file_manifest(json),
+
+    // ── File Transfer Control (real WASM) ────────────────────────────
+    umbra_wasm_transfer_initiate: (json: string) =>
+      wasmPkg.umbra_wasm_transfer_initiate(json),
+    umbra_wasm_transfer_accept: (json: string) =>
+      wasmPkg.umbra_wasm_transfer_accept(json),
+    umbra_wasm_transfer_pause: (transfer_id: string) =>
+      wasmPkg.umbra_wasm_transfer_pause(transfer_id),
+    umbra_wasm_transfer_resume: (transfer_id: string) =>
+      wasmPkg.umbra_wasm_transfer_resume(transfer_id),
+    umbra_wasm_transfer_cancel: (json: string) =>
+      wasmPkg.umbra_wasm_transfer_cancel(json),
+    umbra_wasm_transfer_on_message: (json: string) =>
+      wasmPkg.umbra_wasm_transfer_on_message(json),
+    umbra_wasm_transfer_list: () =>
+      wasmPkg.umbra_wasm_transfer_list(),
+    umbra_wasm_transfer_get: (transfer_id: string) =>
+      wasmPkg.umbra_wasm_transfer_get(transfer_id),
+    umbra_wasm_transfer_get_incomplete: () =>
+      wasmPkg.umbra_wasm_transfer_get_incomplete(),
+    umbra_wasm_transfer_chunks_to_send: (transfer_id: string) =>
+      wasmPkg.umbra_wasm_transfer_chunks_to_send(transfer_id),
+    umbra_wasm_transfer_mark_chunk_sent: (json: string) =>
+      wasmPkg.umbra_wasm_transfer_mark_chunk_sent(json),
 
     // ── Plugin KV Storage (JS stub — persists via localStorage) ──────
     umbra_wasm_plugin_kv_get: (pluginId: string, key: string): string => {

@@ -64,6 +64,10 @@ import type {
   ChunkManifest,
   FileManifestRecord,
   ReassembledFile,
+  TransferProgress,
+  TransferDirection,
+  TransportType,
+  FileTransferEvent,
 } from './types';
 
 // Import domain modules
@@ -78,6 +82,7 @@ import * as relay from './relay';
 import * as communityModule from './community';
 import * as dmFiles from './dm-files';
 import * as chunkingModule from './chunking';
+import * as fileTransfer from './file-transfer';
 
 /**
  * Main Umbra Service class
@@ -99,6 +104,7 @@ export class UmbraService {
   private _communityListeners: Array<(event: CommunityEvent) => void> = [];
   private _dmFileListeners: Array<(event: DmFileEventPayload) => void> = [];
   private _metadataListeners: Array<(event: MetadataEvent) => void> = [];
+  private _fileTransferListeners: Array<(event: FileTransferEvent) => void> = [];
   private _relayWsRef: WebSocket | null = null;
 
   private constructor() {}
@@ -1078,6 +1084,78 @@ export class UmbraService {
     return chunkingModule.getFileManifest(fileId);
   }
 
+  // ===========================================================================
+  // FILE TRANSFER (delegated to file-transfer module)
+  // ===========================================================================
+
+  initiateTransfer(
+    fileId: string, peerDid: string, manifestJson: string,
+    direction?: TransferDirection, transportType?: TransportType,
+  ): Promise<TransferProgress> {
+    return fileTransfer.initiateTransfer(fileId, peerDid, manifestJson, direction, transportType);
+  }
+
+  acceptTransfer(transferId: string): Promise<TransferProgress> {
+    return fileTransfer.acceptTransfer(transferId);
+  }
+
+  pauseTransfer(transferId: string): Promise<TransferProgress> {
+    return fileTransfer.pauseTransfer(transferId);
+  }
+
+  resumeTransfer(transferId: string): Promise<TransferProgress> {
+    return fileTransfer.resumeTransfer(transferId);
+  }
+
+  cancelTransfer(transferId: string, reason?: string): Promise<TransferProgress> {
+    return fileTransfer.cancelTransfer(transferId, reason);
+  }
+
+  processTransferMessage(messageJson: string): Promise<{ events: Array<Record<string, unknown>> }> {
+    return fileTransfer.processTransferMessage(messageJson);
+  }
+
+  getTransfers(): Promise<TransferProgress[]> {
+    return fileTransfer.getTransfers();
+  }
+
+  getTransfer(transferId: string): Promise<TransferProgress | null> {
+    return fileTransfer.getTransfer(transferId);
+  }
+
+  getIncompleteTransfers(): Promise<TransferProgress[]> {
+    return fileTransfer.getIncompleteTransfers();
+  }
+
+  getChunksToSend(transferId: string): Promise<number[]> {
+    return fileTransfer.getChunksToSend(transferId);
+  }
+
+  markChunkSent(transferId: string, chunkIndex: number): Promise<void> {
+    return fileTransfer.markChunkSent(transferId, chunkIndex);
+  }
+
+  // File transfer events
+  onFileTransferEvent(callback: (event: FileTransferEvent) => void): () => void {
+    this._fileTransferListeners.push(callback);
+    return () => {
+      const index = this._fileTransferListeners.indexOf(callback);
+      if (index !== -1) {
+        this._fileTransferListeners.splice(index, 1);
+      }
+    };
+  }
+
+  dispatchFileTransferEvent(event: FileTransferEvent): void {
+    for (const listener of this._fileTransferListeners) {
+      try {
+        listener(event);
+      } catch (err) {
+        console.error('[UmbraService] File transfer listener error:', err);
+      }
+    }
+  }
+
   // ── DM File Events ──────────────────────────────────────────────────
 
   buildDmFileEventEnvelope(conversationId: string, senderDid: string, event: DmFileEventPayload['event']): RelayEnvelope {
@@ -1338,6 +1416,16 @@ export class UmbraService {
             listener(camelData as unknown as CommunityEvent);
           } catch (err) {
             console.error('[UmbraService] Community listener error:', err);
+          }
+        }
+        break;
+
+      case 'file_transfer':
+        for (const listener of this._fileTransferListeners) {
+          try {
+            listener(camelData as unknown as FileTransferEvent);
+          } catch (err) {
+            console.error('[UmbraService] File transfer listener error:', err);
           }
         }
         break;

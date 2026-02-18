@@ -29,7 +29,7 @@ import type { UmbraWasmModule } from './loader';
 // Types
 // ─────────────────────────────────────────────────────────────────────────
 
-export type EventDomain = 'message' | 'friend' | 'discovery' | 'network' | 'relay' | 'group';
+export type EventDomain = 'message' | 'friend' | 'discovery' | 'network' | 'relay' | 'group' | 'community' | 'file_transfer';
 
 export interface UmbraEvent {
   domain: EventDomain;

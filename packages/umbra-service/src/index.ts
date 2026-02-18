@@ -75,12 +75,21 @@ export type {
   CommunityFileRecord, CommunityFileFolderRecord,
   DmSharedFileRecord, DmSharedFolderRecord, DmFileEventPayload,
   ChunkManifest, ChunkRef, FileManifestRecord, ReassembledFile,
+  TransferProgress, TransferDirection, TransferState, TransportType,
+  IncomingTransferRequest, FileTransferEvent,
   AccountMetadataPayload,
   MetadataEvent,
 } from './types';
 
 // File chunking
 export { chunkFile, reassembleFile, getFileManifest } from './chunking';
+
+// File transfer
+export {
+  initiateTransfer, acceptTransfer, pauseTransfer, resumeTransfer, cancelTransfer,
+  processTransferMessage, getTransfers, getTransfer, getIncompleteTransfers,
+  getChunksToSend, markChunkSent,
+} from './file-transfer';
 
 // DM file sharing
 export {
