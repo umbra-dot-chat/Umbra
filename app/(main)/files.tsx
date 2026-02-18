@@ -210,9 +210,32 @@ function ActiveTransfersSection() {
 // Section: Shared Folders Grid
 // ---------------------------------------------------------------------------
 
-function SharedFoldersSection() {
+function SharedFoldersSection({
+  openFolderId,
+  onOpenFolder,
+  onCloseFolder,
+}: {
+  openFolderId: string | null;
+  onOpenFolder: (folderId: string) => void;
+  onCloseFolder: () => void;
+}) {
   const { theme } = useTheme();
   const { sharedFolders, isLoading, syncFolder } = useSharedFolders();
+
+  // If a folder is open, show the detail view
+  const openFolder = openFolderId
+    ? sharedFolders.find((sf) => sf.folder.id === openFolderId)
+    : null;
+
+  if (openFolder) {
+    return (
+      <FolderDetailView
+        folder={openFolder}
+        onBack={onCloseFolder}
+        onSync={() => syncFolder(openFolder.folder.id)}
+      />
+    );
+  }
 
   return (
     <View style={{ marginBottom: 24 }}>
@@ -259,6 +282,7 @@ function SharedFoldersSection() {
             <SharedFolderCard
               key={sf.folder.id}
               folder={sf}
+              onPress={() => onOpenFolder(sf.folder.id)}
               onSync={() => syncFolder(sf.folder.id)}
             />
           ))}
@@ -270,9 +294,11 @@ function SharedFoldersSection() {
 
 function SharedFolderCard({
   folder,
+  onPress,
   onSync,
 }: {
   folder: ReturnType<typeof useSharedFolders>['sharedFolders'][0];
+  onPress: () => void;
   onSync: () => void;
 }) {
   const { theme } = useTheme();
@@ -289,7 +315,7 @@ function SharedFolderCard({
 
   return (
     <Pressable
-      onPress={onSync}
+      onPress={onPress}
       style={({ pressed }) => ({
         width: 180,
         borderRadius: 12,
@@ -341,6 +367,165 @@ function SharedFolderCard({
         </View>
       )}
     </Pressable>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Folder Detail View — shows files inside a shared folder
+// ---------------------------------------------------------------------------
+
+function FolderDetailView({
+  folder,
+  onBack,
+  onSync,
+}: {
+  folder: ReturnType<typeof useSharedFolders>['sharedFolders'][0];
+  onBack: () => void;
+  onSync: () => void;
+}) {
+  const { theme } = useTheme();
+  const { service } = useUmbra();
+  const { formatBytes } = useStorageManager();
+  const [files, setFiles] = useState<any[]>([]);
+  const [loadingFiles, setLoadingFiles] = useState(true);
+
+  // Load files for this folder
+  React.useEffect(() => {
+    if (!service) return;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        setLoadingFiles(true);
+        const result = await service.getDmFiles(folder.conversationId, folder.folder.id, 1000, 0);
+        if (!cancelled) setFiles(result);
+      } catch (err) {
+        console.error('[FolderDetailView] Failed to load files:', err);
+      } finally {
+        if (!cancelled) setLoadingFiles(false);
+      }
+    })();
+
+    return () => { cancelled = true; };
+  }, [service, folder.conversationId, folder.folder.id]);
+
+  // Stub download handler
+  const handleDownload = useCallback(async (fileId: string, filename: string) => {
+    if (!service) return;
+    try {
+      const result = await service.reassembleFile(fileId);
+      if (result && typeof window !== 'undefined') {
+        // Convert base64 to blob and trigger download
+        const binaryStr = atob(result.dataB64);
+        const bytes = new Uint8Array(binaryStr.length);
+        for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+        const blob = new Blob([bytes], { type: 'application/octet-stream' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+    } catch {
+      if (typeof window !== 'undefined') {
+        window.alert('File not available locally. P2P download coming soon.');
+      }
+    }
+  }, [service]);
+
+  const syncStatusLabel = folder.syncStatus === 'synced' ? 'Synced'
+    : folder.syncStatus === 'syncing' ? 'Syncing...'
+    : folder.syncStatus === 'error' ? 'Sync Error'
+    : folder.syncStatus === 'offline' ? 'Offline'
+    : 'Unknown';
+
+  return (
+    <View style={{ marginBottom: 24 }}>
+      {/* Header with back button */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+        <Button variant="tertiary" size="sm" onPress={onBack}>
+          Back
+        </Button>
+        <FolderIcon size={20} color={theme.colors.text.primary} />
+        <Text size="md" weight="bold" style={{ color: theme.colors.text.primary, flex: 1 }}>
+          {folder.folder.name}
+        </Text>
+        <View
+          style={{
+            paddingHorizontal: 8,
+            paddingVertical: 2,
+            borderRadius: 6,
+            backgroundColor: folder.syncStatus === 'synced' ? '#10b98120' : theme.colors.background.sunken,
+          }}
+        >
+          <Text size="xs" style={{ color: folder.syncStatus === 'synced' ? '#10b981' : theme.colors.text.muted }}>
+            {syncStatusLabel}
+          </Text>
+        </View>
+        <Button variant="secondary" size="xs" onPress={onSync}>
+          Sync Now
+        </Button>
+      </View>
+
+      {/* File list */}
+      {loadingFiles ? (
+        <Text size="sm" style={{ color: theme.colors.text.muted }}>Loading files...</Text>
+      ) : files.length === 0 ? (
+        <View
+          style={{
+            borderRadius: 12,
+            backgroundColor: theme.colors.background.surface,
+            borderWidth: 1,
+            borderColor: theme.colors.border.subtle,
+            padding: 24,
+            alignItems: 'center',
+          }}
+        >
+          <FileTextIcon size={32} color={theme.colors.text.muted} />
+          <Text size="sm" style={{ color: theme.colors.text.muted, marginTop: 8 }}>
+            No files in this folder yet
+          </Text>
+        </View>
+      ) : (
+        <View
+          style={{
+            borderRadius: 12,
+            backgroundColor: theme.colors.background.surface,
+            borderWidth: 1,
+            borderColor: theme.colors.border.subtle,
+            overflow: 'hidden',
+          }}
+        >
+          {files.map((file, index) => (
+            <Pressable
+              key={file.id}
+              onPress={() => handleDownload(file.id, file.filename)}
+              style={({ pressed }) => ({
+                flexDirection: 'row',
+                alignItems: 'center',
+                padding: 12,
+                gap: 12,
+                borderTopWidth: index > 0 ? 1 : 0,
+                borderTopColor: theme.colors.border.subtle,
+                backgroundColor: pressed ? theme.colors.background.sunken : 'transparent',
+              })}
+            >
+              <FileTextIcon size={20} color={theme.colors.text.secondary} />
+              <View style={{ flex: 1 }}>
+                <Text size="sm" weight="medium" style={{ color: theme.colors.text.primary }} numberOfLines={1}>
+                  {file.filename}
+                </Text>
+                <Text size="xs" style={{ color: theme.colors.text.muted }}>
+                  {formatBytes(file.fileSize)} &middot; v{file.version}
+                </Text>
+              </View>
+              <DownloadIcon size={16} color={theme.colors.text.muted} />
+            </Pressable>
+          ))}
+        </View>
+      )}
+    </View>
   );
 }
 
@@ -567,6 +752,7 @@ export default function FilesPage() {
   const { conversations } = useConversations();
   const { friends } = useFriends();
   const { refresh: refreshFolders } = useSharedFolders();
+  const [openFolderId, setOpenFolderId] = useState<string | null>(null);
 
   // Build a friend DID → display name map
   const friendNameMap = useMemo(() => {
@@ -681,8 +867,12 @@ export default function FilesPage() {
         showsVerticalScrollIndicator={false}
       >
         <ActiveTransfersSection />
-        <SharedFoldersSection />
-        <CommunityFilesSection />
+        <SharedFoldersSection
+          openFolderId={openFolderId}
+          onOpenFolder={setOpenFolderId}
+          onCloseFolder={() => setOpenFolderId(null)}
+        />
+        {!openFolderId && <CommunityFilesSection />}
         <StorageSection />
       </ScrollView>
     </View>

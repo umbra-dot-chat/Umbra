@@ -32,6 +32,7 @@ import { CommunityLayoutSidebar } from '@/components/sidebar/CommunityLayoutSide
 import { CommunityCreateDialog } from '@coexist/wisp-react-native';
 import type { Community, Friend, MessageEvent } from '@umbra/service';
 import { useAuth } from '@/contexts/AuthContext';
+import { useUploadProgress } from '@/hooks/useUploadProgress';
 
 // TODO: Remove mock community once real communities exist
 const MOCK_COMMUNITY: Community = {
@@ -85,6 +86,9 @@ function MainLayoutInner() {
 
   // Friend notifications (toast on incoming requests, acceptances)
   useFriendNotifications();
+
+  // Upload progress for nav rail ring indicator
+  const { uploadRingProgress } = useUploadProgress();
 
   // Call state for PiP widget
   const { activeCall, toggleMute, endCall } = useCallContext();
@@ -337,6 +341,7 @@ function MainLayoutInner() {
           onHomePress={handleHomePress}
           isFilesActive={isFilesActive}
           onFilesPress={handleFilesPress}
+          uploadRingProgress={uploadRingProgress}
           communities={communities}
           activeCommunityId={activeCommunityId}
           onCommunityPress={handleCommunityPress}
