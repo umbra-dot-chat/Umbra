@@ -27,7 +27,6 @@ describe('ChatSidebar', () => {
     conversations: TEST_CONVERSATIONS,
     activeId: '1',
     onSelectConversation: jest.fn(),
-    onOpenSettings: jest.fn(),
     onFriendsPress: jest.fn(),
   };
 
@@ -39,20 +38,6 @@ describe('ChatSidebar', () => {
   test('renders search input', () => {
     const { getByTestId } = render(<ChatSidebar {...defaultProps} />);
     expect(getByTestId('SearchInput')).toBeTruthy();
-  });
-
-  test('renders settings button', () => {
-    const { getByLabelText } = render(<ChatSidebar {...defaultProps} />);
-    expect(getByLabelText('Settings')).toBeTruthy();
-  });
-
-  test('settings button calls onOpenSettings', () => {
-    const onOpenSettings = jest.fn();
-    const { getByLabelText } = render(
-      <ChatSidebar {...defaultProps} onOpenSettings={onOpenSettings} />,
-    );
-    fireEvent.press(getByLabelText('Settings'));
-    expect(onOpenSettings).toHaveBeenCalledTimes(1);
   });
 
   test('renders conversation list items', () => {

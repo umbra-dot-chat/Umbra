@@ -54,6 +54,7 @@ import {
   VideoIcon,
   CheckIcon,
   BookOpenIcon,
+  MessageIcon,
 } from '@/components/icons';
 import { useNetwork } from '@/hooks/useNetwork';
 import { useCall } from '@/hooks/useCall';
@@ -67,6 +68,8 @@ import { useUmbra } from '@/contexts/UmbraContext';
 import { usePlugins } from '@/contexts/PluginContext';
 import { useFonts, FONT_REGISTRY } from '@/contexts/FontContext';
 import { useAppTheme } from '@/contexts/ThemeContext';
+import { useMessaging } from '@/contexts/MessagingContext';
+import type { MessageDisplayMode } from '@/contexts/MessagingContext';
 import { SlotRenderer } from '@/components/plugins/SlotRenderer';
 import { clearDatabaseExport, getSqlDatabase } from '@umbra/wasm';
 import { useAppUpdate } from '@/hooks/useAppUpdate';
@@ -85,7 +88,7 @@ const AtSignInputIcon = AtSignIcon as InputIcon;
 // Types
 // ---------------------------------------------------------------------------
 
-export type SettingsSection = 'account' | 'profile' | 'appearance' | 'notifications' | 'privacy' | 'audio-video' | 'network' | 'data' | 'plugins' | 'about';
+export type SettingsSection = 'account' | 'profile' | 'appearance' | 'messaging' | 'notifications' | 'privacy' | 'audio-video' | 'network' | 'data' | 'plugins' | 'about';
 
 export interface SettingsDialogProps {
   open: boolean;
@@ -104,6 +107,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'account', label: 'Account', icon: WalletIcon },
   { id: 'profile', label: 'Profile', icon: UserIcon },
   { id: 'appearance', label: 'Appearance', icon: PaletteIcon },
+  { id: 'messaging', label: 'Messaging', icon: MessageIcon },
   { id: 'notifications', label: 'Notifications', icon: BellIcon },
   { id: 'privacy', label: 'Privacy', icon: ShieldIcon },
   { id: 'audio-video', label: 'Audio & Video', icon: VideoIcon },
@@ -112,6 +116,30 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'plugins', label: 'Plugins', icon: ZapIcon },
   { id: 'about', label: 'About', icon: BookOpenIcon },
 ];
+
+interface SubNavItem { id: string; label: string; }
+
+const SUBCATEGORIES: Partial<Record<SettingsSection, SubNavItem[]>> = {
+  appearance: [
+    { id: 'theme', label: 'Theme' },
+    { id: 'dark-mode', label: 'Dark Mode' },
+    { id: 'colors', label: 'Colors' },
+    { id: 'text-size', label: 'Text Size' },
+    { id: 'font', label: 'Font' },
+  ],
+  'audio-video': [
+    { id: 'calling', label: 'Calling' },
+    { id: 'video', label: 'Video' },
+    { id: 'audio', label: 'Audio' },
+    { id: 'devices', label: 'Devices' },
+  ],
+  network: [
+    { id: 'connection', label: 'Connection' },
+    { id: 'relays', label: 'Relays' },
+    { id: 'peers', label: 'Peers' },
+    { id: 'identity', label: 'Identity' },
+  ],
+};
 
 const ACCENT_PRESETS = [
   '#000000', '#3B82F6', '#8B5CF6', '#EC4899', '#EF4444',
@@ -414,136 +442,139 @@ function AccountSection() {
         description="Your identity and connection details."
       />
 
-      {/* Identity info card */}
-      <Card variant="outlined" padding="lg" style={{ width: '100%' }}>
-        <View style={{ gap: 12 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-            <View
-              style={{
-                width: 48,
-                height: 48,
-                borderRadius: 24,
-                backgroundColor: tc.accent.primary,
-                alignItems: 'center',
-                justifyContent: 'center',
-              }}
-            >
-              <RNText style={{ fontSize: 20, fontWeight: '700', color: tc.text.inverse }}>
-                {identity.displayName.charAt(0).toUpperCase()}
-              </RNText>
-            </View>
-            <View style={{ flex: 1 }}>
-              <RNText style={{ fontSize: 18, fontWeight: '700', color: tc.text.primary }}>
-                {identity.displayName}
-              </RNText>
-              <RNText style={{ fontSize: 12, color: tc.text.muted, marginTop: 2 }}>
-                Member since {memberSince}
-              </RNText>
-            </View>
-          </View>
+      <View nativeID="sub-identity">
+          {/* Identity info card */}
+          <Card variant="outlined" padding="lg" style={{ width: '100%' }}>
+            <View style={{ gap: 12 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                <View
+                  style={{
+                    width: 48,
+                    height: 48,
+                    borderRadius: 24,
+                    backgroundColor: tc.accent.primary,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  <RNText style={{ fontSize: 20, fontWeight: '700', color: tc.text.inverse }}>
+                    {identity.displayName.charAt(0).toUpperCase()}
+                  </RNText>
+                </View>
+                <View style={{ flex: 1 }}>
+                  <RNText style={{ fontSize: 18, fontWeight: '700', color: tc.text.primary }}>
+                    {identity.displayName}
+                  </RNText>
+                  <RNText style={{ fontSize: 12, color: tc.text.muted, marginTop: 2 }}>
+                    Member since {memberSince}
+                  </RNText>
+                </View>
+              </View>
 
-          <Separator spacing="sm" />
+              <Separator spacing="sm" />
 
-          <View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-              <RNText style={{ fontSize: 11, fontWeight: '600', color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                Decentralized ID
-              </RNText>
-              <HelpIndicator
-                id="settings-did"
-                title="Your Decentralized ID"
-                priority={40}
-                size={14}
-              >
-                <HelpText>
-                  Your DID is derived from your cryptographic keys. It's your permanent, verifiable identity on the network.
-                </HelpText>
-                <HelpHighlight icon={<KeyIcon size={22} color={tc.accent.primary} />}>
-                  Unlike usernames, a DID can't be impersonated — it's mathematically tied to your private keys.
-                </HelpHighlight>
-                <HelpListItem>Share it with friends to connect</HelpListItem>
-                <HelpListItem>It never changes unless you create a new wallet</HelpListItem>
-              </HelpIndicator>
+              <View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                  <RNText style={{ fontSize: 11, fontWeight: '600', color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                    Decentralized ID
+                  </RNText>
+                  <HelpIndicator
+                    id="settings-did"
+                    title="Your Decentralized ID"
+                    priority={40}
+                    size={14}
+                  >
+                    <HelpText>
+                      Your DID is derived from your cryptographic keys. It's your permanent, verifiable identity on the network.
+                    </HelpText>
+                    <HelpHighlight icon={<KeyIcon size={22} color={tc.accent.primary} />}>
+                      Unlike usernames, a DID can't be impersonated — it's mathematically tied to your private keys.
+                    </HelpHighlight>
+                    <HelpListItem>Share it with friends to connect</HelpListItem>
+                    <HelpListItem>It never changes unless you create a new wallet</HelpListItem>
+                  </HelpIndicator>
+                </View>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <RNText
+                    style={{
+                      fontSize: 12,
+                      color: tc.text.secondary,
+                      fontFamily: 'monospace',
+                      flex: 1,
+                    }}
+                    numberOfLines={1}
+                  >
+                    {truncatedDid}
+                  </RNText>
+                  <Pressable
+                    onPress={handleCopyDid}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 4,
+                      paddingVertical: 4,
+                      paddingHorizontal: 8,
+                      borderRadius: 6,
+                      backgroundColor: didCopied ? tc.status.successSurface : tc.background.sunken,
+                    }}
+                  >
+                    <CopyIcon size={14} color={didCopied ? tc.status.success : tc.text.secondary} />
+                    <RNText style={{ fontSize: 11, color: didCopied ? tc.status.success : tc.text.secondary, fontWeight: '500' }}>
+                      {didCopied ? 'Copied' : 'Copy'}
+                    </RNText>
+                  </Pressable>
+                </View>
+              </View>
             </View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <RNText
-                style={{
-                  fontSize: 12,
-                  color: tc.text.secondary,
-                  fontFamily: 'monospace',
-                  flex: 1,
-                }}
-                numberOfLines={1}
-              >
-                {truncatedDid}
-              </RNText>
-              <Pressable
-                onPress={handleCopyDid}
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: 4,
-                  paddingVertical: 4,
-                  paddingHorizontal: 8,
-                  borderRadius: 6,
-                  backgroundColor: didCopied ? tc.status.successSurface : tc.background.sunken,
-                }}
-              >
-                <CopyIcon size={14} color={didCopied ? tc.status.success : tc.text.secondary} />
-                <RNText style={{ fontSize: 11, color: didCopied ? tc.status.success : tc.text.secondary, fontWeight: '500' }}>
-                  {didCopied ? 'Copied' : 'Copy'}
-                </RNText>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Card>
-
-      {/* QR Code sharing */}
-      <View style={{ gap: 12 }}>
-        <View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <RNText style={{ fontSize: 15, fontWeight: '600', color: tc.text.primary }}>
-              Share Your Identity
-            </RNText>
-            <HelpIndicator
-              id="settings-qr"
-              title="QR Code Sharing"
-              priority={45}
-              size={14}
-            >
-              <HelpText>
-                Others can scan this QR code with Umbra to instantly add you as a friend.
-              </HelpText>
-              <HelpListItem>The QR code contains your DID</HelpListItem>
-              <HelpListItem>It's safe to share — it only contains your public identity</HelpListItem>
-              <HelpListItem>Scanning initiates a friend request automatically</HelpListItem>
-            </HelpIndicator>
-          </View>
-          <RNText style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
-            Others can scan this code to connect with you.
-          </RNText>
-        </View>
-
-        <Card variant="outlined" padding="lg" style={{ alignItems: 'center' }}>
-          <QRCode
-            value={identity.did}
-            size="md"
-            dotStyle="rounded"
-            eyeFrameStyle="rounded"
-            eyePupilStyle="rounded"
-            darkColor={tc.text.primary}
-            lightColor="transparent"
-            eyeColor={tc.accent.primary}
-          />
-          <RNText style={{ fontSize: 11, color: tc.text.muted, marginTop: 12, textAlign: 'center' }}>
-            {identity.displayName}
-          </RNText>
-        </Card>
+          </Card>
       </View>
 
-      <Separator spacing="sm" />
+      <View nativeID="sub-sharing">
+          {/* QR Code sharing */}
+          <View style={{ gap: 12 }}>
+            <View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <RNText style={{ fontSize: 15, fontWeight: '600', color: tc.text.primary }}>
+                  Share Your Identity
+                </RNText>
+                <HelpIndicator
+                  id="settings-qr"
+                  title="QR Code Sharing"
+                  priority={45}
+                  size={14}
+                >
+                  <HelpText>
+                    Others can scan this QR code with Umbra to instantly add you as a friend.
+                  </HelpText>
+                  <HelpListItem>The QR code contains your DID</HelpListItem>
+                  <HelpListItem>It's safe to share — it only contains your public identity</HelpListItem>
+                  <HelpListItem>Scanning initiates a friend request automatically</HelpListItem>
+                </HelpIndicator>
+              </View>
+              <RNText style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
+                Others can scan this code to connect with you.
+              </RNText>
+            </View>
 
+            <Card variant="outlined" padding="lg" style={{ alignItems: 'center' }}>
+              <QRCode
+                value={identity.did}
+                size="md"
+                dotStyle="rounded"
+                eyeFrameStyle="rounded"
+                eyePupilStyle="rounded"
+                darkColor={tc.text.primary}
+                lightColor="transparent"
+                eyeColor={tc.accent.primary}
+              />
+              <RNText style={{ fontSize: 11, color: tc.text.muted, marginTop: 12, textAlign: 'center' }}>
+                {identity.displayName}
+              </RNText>
+            </Card>
+          </View>
+      </View>
+
+      <View nativeID="sub-danger-zone">
       {/* Danger zone */}
       <View style={{ gap: 12 }}>
         <View>
@@ -608,6 +639,7 @@ function AccountSection() {
           </HStack>
         }
       />
+      </View>
     </View>
   );
 }
@@ -710,59 +742,65 @@ function ProfileSection() {
         description="Manage your public profile information visible to other users."
       />
 
-      <SettingRow label="Avatar" description="Your profile picture. Click to upload a new image." vertical>
-        <HStack gap="md" style={{ alignItems: 'center' }}>
-          <Pressable onPress={handleAvatarPick}>
-            <View
-              style={{
-                width: 64,
-                height: 64,
-                borderRadius: 32,
-                backgroundColor: tc.background.surface,
-                alignItems: 'center',
-                justifyContent: 'center',
-                overflow: 'hidden',
-                borderWidth: 2,
-                borderColor: tc.border.subtle,
-              }}
-            >
-              {avatarPreview ? (
-                <Image
-                  source={{ uri: avatarPreview }}
-                  style={{ width: 64, height: 64, borderRadius: 32 }}
-                />
-              ) : (
-                <UserIcon size={28} color={tc.text.muted} />
-              )}
-            </View>
-          </Pressable>
-          <Button variant="tertiary" size="sm" onPress={handleAvatarPick}>
-            Upload Photo
-          </Button>
-        </HStack>
-      </SettingRow>
+      <View nativeID="sub-avatar">
+        <SettingRow label="Avatar" description="Your profile picture. Click to upload a new image." vertical>
+          <HStack gap="md" style={{ alignItems: 'center' }}>
+            <Pressable onPress={handleAvatarPick}>
+              <View
+                style={{
+                  width: 64,
+                  height: 64,
+                  borderRadius: 32,
+                  backgroundColor: tc.background.surface,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  overflow: 'hidden',
+                  borderWidth: 2,
+                  borderColor: tc.border.subtle,
+                }}
+              >
+                {avatarPreview ? (
+                  <Image
+                    source={{ uri: avatarPreview }}
+                    style={{ width: 64, height: 64, borderRadius: 32 }}
+                  />
+                ) : (
+                  <UserIcon size={28} color={tc.text.muted} />
+                )}
+              </View>
+            </Pressable>
+            <Button variant="tertiary" size="sm" onPress={handleAvatarPick}>
+              Upload Photo
+            </Button>
+          </HStack>
+        </SettingRow>
+      </View>
 
-      <SettingRow label="Display Name" description="How others see you in conversations." vertical>
-        <Input
-          value={displayName}
-          onChangeText={setDisplayName}
-          placeholder="Your display name"
-          icon={UserInputIcon}
-          size="md"
-          fullWidth
-        />
-      </SettingRow>
+      <View nativeID="sub-display-name">
+        <SettingRow label="Display Name" description="How others see you in conversations." vertical>
+          <Input
+            value={displayName}
+            onChangeText={setDisplayName}
+            placeholder="Your display name"
+            icon={UserInputIcon}
+            size="md"
+            fullWidth
+          />
+        </SettingRow>
+      </View>
 
-      <SettingRow label="Status" description="Set your availability status." vertical>
-        <Select
-          options={STATUS_OPTIONS}
-          value={status}
-          onChange={setStatus}
-          placeholder="Select status"
-          size="md"
-          fullWidth
-        />
-      </SettingRow>
+      <View nativeID="sub-status">
+        <SettingRow label="Status" description="Set your availability status." vertical>
+          <Select
+            options={STATUS_OPTIONS}
+            value={status}
+            onChange={setStatus}
+            placeholder="Select status"
+            size="md"
+            fullWidth
+          />
+        </SettingRow>
+      </View>
 
       {hasChanges && (
         <HStack gap="sm" style={{ justifyContent: 'flex-end' }}>
@@ -813,59 +851,63 @@ function AppearanceSection() {
 
   return (
     <View style={{ gap: 20 }}>
-      <SectionHeader
-        title="Appearance"
-        description="Customize the look and feel of the application."
-      />
+      <SectionHeader title="Appearance" description="Customize the look and feel of the application." />
 
-      {/* Theme selector */}
-      <SettingRow label="Theme" description="Choose a color theme for the entire app." vertical>
-        <InlineDropdown
-          options={themeOptions}
-          value={activeTheme?.id ?? 'default'}
-          onChange={(id) => setTheme(id === 'default' ? null : id)}
-          placeholder="Select theme"
-        />
-        {/* Theme preview swatches */}
-        {activeTheme && (
-          <View style={{ flexDirection: 'row', gap: 6, marginTop: 8 }}>
-            {activeTheme.swatches.map((color, i) => (
-              <View
-                key={i}
-                style={{
-                  width: 24,
-                  height: 24,
-                  borderRadius: 12,
-                  backgroundColor: color,
-                  borderWidth: 1,
-                  borderColor: tc.border.subtle,
-                }}
-              />
-            ))}
-          </View>
-        )}
-      </SettingRow>
+      <View nativeID="sub-theme">
+        <SettingRow label="Theme" description="Choose a color theme for the entire app." vertical>
+          <InlineDropdown
+            options={themeOptions}
+            value={activeTheme?.id ?? 'default'}
+            onChange={(id) => setTheme(id === 'default' ? null : id)}
+            placeholder="Select theme"
+          />
+          {activeTheme && (
+            <View style={{ flexDirection: 'row', gap: 6, marginTop: 8 }}>
+              {activeTheme.swatches.map((color, i) => (
+                <View
+                  key={i}
+                  style={{
+                    width: 24,
+                    height: 24,
+                    borderRadius: 12,
+                    backgroundColor: color,
+                    borderWidth: 1,
+                    borderColor: tc.border.subtle,
+                  }}
+                />
+              ))}
+            </View>
+          )}
+        </SettingRow>
+      </View>
 
-      {/* Dark Mode toggle — only shown when no custom theme is active */}
-      {showModeToggle && (
+      <View nativeID="sub-dark-mode">
+        {showModeToggle && (
         <SettingRow label="Dark Mode" description="Switch between light and dark themes.">
           <Toggle checked={mode === 'dark'} onChange={toggleMode} />
         </SettingRow>
-      )}
+        )}
+      </View>
 
-      <SettingRow label="Accent Color" description="Choose a primary color for buttons, links, and highlights." vertical>
-        <ColorPicker
-          value={accentColor ?? theme.colors.accent.primary}
-          onChange={handleAccentChange}
-          presets={ACCENT_PRESETS}
-          size="md"
-          showInput
-        />
-      </SettingRow>
+      <View nativeID="sub-colors">
+        <SettingRow label="Accent Color" description="Choose a primary color for buttons, links, and highlights." vertical>
+          <ColorPicker
+            value={accentColor ?? theme.colors.accent.primary}
+            onChange={handleAccentChange}
+            presets={ACCENT_PRESETS}
+            size="md"
+            showInput
+          />
+        </SettingRow>
+      </View>
 
-      <TextSizeSettingRow value={textSize} onChange={setTextSize} />
+      <View nativeID="sub-text-size">
+        <TextSizeSettingRow value={textSize} onChange={setTextSize} />
+      </View>
 
-      <FontSettingRow />
+      <View nativeID="sub-font">
+        <FontSettingRow />
+      </View>
     </View>
   );
 }
@@ -1041,63 +1083,66 @@ function PrivacySection() {
         description="Manage your visibility and control what others can see."
       />
 
-      <View style={{ gap: 20 }}>
-        <SettingRow
-          label="PIN Lock"
-          description="Require a PIN to unlock the app and access your keys."
-          helpIndicator={
-            <HelpIndicator
-              id="settings-pin"
-              title="PIN Lock"
-              priority={55}
-              size={14}
+      <View nativeID="sub-visibility">
+          <View style={{ gap: 20 }}>
+            <SettingRow
+              label="Read Receipts"
+              description="Let others know when you've seen their messages."
+              helpIndicator={
+                <HelpIndicator
+                  id="settings-read-receipts"
+                  title="Read Receipts"
+                  priority={60}
+                  size={14}
+                >
+                  <HelpText>
+                    When enabled, others can see when you've read their messages (shown as a double checkmark).
+                  </HelpText>
+                  <HelpListItem>This is a two-way setting — you also see when they've read yours</HelpListItem>
+                  <HelpListItem>Disable for more privacy</HelpListItem>
+                </HelpIndicator>
+              }
             >
-              <HelpText>
-                Set a 6-digit PIN to prevent unauthorized access to your messages and keys.
-              </HelpText>
-              <HelpHighlight icon={<LockIcon size={22} color={tc.accent.primary} />}>
-                The PIN is stored locally on your device and required every time you open the app.
-              </HelpHighlight>
-              <HelpListItem>Your private keys stay encrypted behind the PIN</HelpListItem>
-              <HelpListItem>You can change or remove the PIN anytime</HelpListItem>
-            </HelpIndicator>
-          }
-        >
-          <Toggle checked={hasPin} onChange={handlePinToggle} />
-        </SettingRow>
+              <Toggle checked={readReceipts} onChange={() => setReadReceipts((p) => !p)} />
+            </SettingRow>
 
-        <SettingRow
-          label="Read Receipts"
-          description="Let others know when you've seen their messages."
-          helpIndicator={
-            <HelpIndicator
-              id="settings-read-receipts"
-              title="Read Receipts"
-              priority={60}
-              size={14}
-            >
-              <HelpText>
-                When enabled, others can see when you've read their messages (shown as a double checkmark).
-              </HelpText>
-              <HelpListItem>This is a two-way setting — you also see when they've read yours</HelpListItem>
-              <HelpListItem>Disable for more privacy</HelpListItem>
-            </HelpIndicator>
-          }
-        >
-          <Toggle checked={readReceipts} onChange={() => setReadReceipts((p) => !p)} />
-        </SettingRow>
+            <SettingRow label="Typing Indicators" description="Show when you are typing a message to others.">
+              <Toggle checked={typingIndicators} onChange={() => setTypingIndicators((p) => !p)} />
+            </SettingRow>
+          </View>
 
-        <SettingRow label="Typing Indicators" description="Show when you are typing a message to others.">
-          <Toggle checked={typingIndicators} onChange={() => setTypingIndicators((p) => !p)} />
-        </SettingRow>
+          <SettingRow label="Online Status" description="Show your online status to other users.">
+            <Toggle checked={showOnline} onChange={() => setShowOnline((p) => !p)} />
+          </SettingRow>
       </View>
 
-      <SettingRow label="Online Status" description="Show your online status to other users.">
-        <Toggle checked={showOnline} onChange={() => setShowOnline((p) => !p)} />
-      </SettingRow>
+      <View nativeID="sub-security">
+          <SettingRow
+            label="PIN Lock"
+            description="Require a PIN to unlock the app and access your keys."
+            helpIndicator={
+              <HelpIndicator
+                id="settings-pin"
+                title="PIN Lock"
+                priority={55}
+                size={14}
+              >
+                <HelpText>
+                  Set a 6-digit PIN to prevent unauthorized access to your messages and keys.
+                </HelpText>
+                <HelpHighlight icon={<LockIcon size={22} color={tc.accent.primary} />}>
+                  The PIN is stored locally on your device and required every time you open the app.
+                </HelpHighlight>
+                <HelpListItem>Your private keys stay encrypted behind the PIN</HelpListItem>
+                <HelpListItem>You can change or remove the PIN anytime</HelpListItem>
+              </HelpIndicator>
+            }
+          >
+            <Toggle checked={hasPin} onChange={handlePinToggle} />
+          </SettingRow>
 
-      {/* PIN setup / removal dialog */}
-      <Dialog
+          {/* PIN setup / removal dialog */}
+          <Dialog
         open={showPinDialog}
         onClose={resetPinDialog}
         title={
@@ -1159,6 +1204,7 @@ function PrivacySection() {
           )}
         </View>
       </Dialog>
+      </View>
     </View>
   );
 }
@@ -1404,11 +1450,9 @@ function AudioVideoSection() {
 
   return (
     <View style={{ gap: 20 }}>
-      <SectionHeader
-        title="Audio & Video"
-        description="Configure your camera, microphone, and call quality settings."
-      />
+      <SectionHeader title="Audio & Video" description="Configure your camera, microphone, and call quality settings." />
 
+      <View nativeID="sub-calling">
       {/* Calling */}
       <View style={{ gap: 16 }}>
         <View>
@@ -1441,9 +1485,9 @@ function AudioVideoSection() {
           />
         </SettingRow>
       </View>
+      </View>
 
-      <Separator spacing="sm" />
-
+      <View nativeID="sub-video">
       {/* Video Quality */}
       <SettingRow label="Video Quality" description="Set the default video quality for calls." vertical>
         <InlineDropdown
@@ -1669,9 +1713,9 @@ function AudioVideoSection() {
           </View>
         )}
       </View>
+      </View>
 
-      <Separator spacing="sm" />
-
+      <View nativeID="sub-audio">
       {/* Audio Quality Preset */}
       <SettingRow label="Audio Quality" description="Choose an audio codec and quality preset." vertical>
         <InlineDropdown
@@ -1884,9 +1928,9 @@ function AudioVideoSection() {
           />
         </SettingRow>
       </View>
+      </View>
 
-      <Separator spacing="sm" />
-
+      <View nativeID="sub-devices">
       {/* Devices section */}
       <View style={{ gap: 16 }}>
         <View>
@@ -2028,8 +2072,7 @@ function AudioVideoSection() {
           </Button>
         )}
       </View>
-
-      <Separator spacing="sm" />
+      </View>
 
       {/* Audio Processing */}
       <View style={{ gap: 16 }}>
@@ -2299,11 +2342,9 @@ function NetworkSection() {
 
   return (
     <View style={{ gap: 20 }}>
-      <SectionHeader
-        title="Network"
-        description="Manage your peer-to-peer network connection."
-      />
+      <SectionHeader title="Network" description="Manage your peer-to-peer network connection." />
 
+      <View nativeID="sub-connection">
       {/* Connection Status */}
       <Card variant="outlined" padding="lg" style={{ width: '100%' }}>
         <View style={{ gap: 12 }}>
@@ -2351,7 +2392,9 @@ function NetworkSection() {
       >
         <Toggle checked={isConnected} onChange={() => isConnected ? stopNetwork() : startNetwork()} />
       </SettingRow>
+      </View>
 
+      <View nativeID="sub-relays">
       {/* Relay Servers */}
       <View style={{ gap: 12 }}>
         <View>
@@ -2540,7 +2583,9 @@ function NetworkSection() {
           <ExternalLinkIcon size={16} color={tc.text.muted} />
         </Pressable>
       </View>
+      </View>
 
+      <View nativeID="sub-peers">
       {/* Peer ID */}
       {connectionInfo?.peerId && (
         <View style={{ gap: 8 }}>
@@ -2719,9 +2764,9 @@ function NetworkSection() {
           </Button>
         )}
       </View>
+      </View>
 
-      <Separator spacing="sm" />
-
+      <View nativeID="sub-identity">
       {/* Connection Info QR (existing) */}
       {identity && (
         <View style={{ gap: 12 }}>
@@ -2750,6 +2795,7 @@ function NetworkSection() {
           </Card>
         </View>
       )}
+      </View>
     </View>
   );
 }
@@ -2853,50 +2899,51 @@ function DataManagementSection() {
         description="Manage your locally stored data. All data is stored on this device only."
       />
 
-      {/* Info card */}
-      <Card variant="outlined" padding="lg" style={{ width: '100%' }}>
-        <View style={{ gap: 8 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <DatabaseIcon size={18} color={tc.accent.primary} />
-            <RNText style={{ fontSize: 14, fontWeight: '600', color: tc.text.primary }}>
-              Local Storage
-            </RNText>
-          </View>
-          <RNText style={{ fontSize: 12, color: tc.text.secondary, lineHeight: 18 }}>
-            Your messages, friends, and conversations are stored locally using IndexedDB.
-            Data is isolated per identity and persists across page refreshes.
-          </RNText>
-          {identity && (
-            <RNText style={{ fontSize: 11, color: tc.text.muted, fontFamily: 'monospace', marginTop: 4 }}>
-              DID: {identity.did.slice(0, 24)}...
-            </RNText>
+      <View nativeID="sub-storage">
+          {/* Info card */}
+          <Card variant="outlined" padding="lg" style={{ width: '100%' }}>
+            <View style={{ gap: 8 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <DatabaseIcon size={18} color={tc.accent.primary} />
+                <RNText style={{ fontSize: 14, fontWeight: '600', color: tc.text.primary }}>
+                  Local Storage
+                </RNText>
+              </View>
+              <RNText style={{ fontSize: 12, color: tc.text.secondary, lineHeight: 18 }}>
+                Your messages, friends, and conversations are stored locally using IndexedDB.
+                Data is isolated per identity and persists across page refreshes.
+              </RNText>
+              {identity && (
+                <RNText style={{ fontSize: 11, color: tc.text.muted, fontFamily: 'monospace', marginTop: 4 }}>
+                  DID: {identity.did.slice(0, 24)}...
+                </RNText>
+              )}
+            </View>
+          </Card>
+
+          {/* Status message */}
+          {clearStatus && (
+            <Card
+              variant="outlined"
+              padding="md"
+              style={{
+                width: '100%',
+                backgroundColor: clearStatus.includes('Failed') ? tc.status.dangerSurface : tc.status.successSurface,
+              }}
+            >
+              <RNText style={{
+                fontSize: 13,
+                color: clearStatus.includes('Failed') ? tc.status.danger : tc.status.success,
+                fontWeight: '500',
+                textAlign: 'center',
+              }}>
+                {clearStatus}
+              </RNText>
+            </Card>
           )}
-        </View>
-      </Card>
+      </View>
 
-      {/* Status message */}
-      {clearStatus && (
-        <Card
-          variant="outlined"
-          padding="md"
-          style={{
-            width: '100%',
-            backgroundColor: clearStatus.includes('Failed') ? tc.status.dangerSurface : tc.status.successSurface,
-          }}
-        >
-          <RNText style={{
-            fontSize: 13,
-            color: clearStatus.includes('Failed') ? tc.status.danger : tc.status.success,
-            fontWeight: '500',
-            textAlign: 'center',
-          }}>
-            {clearStatus}
-          </RNText>
-        </Card>
-      )}
-
-      <Separator spacing="sm" />
-
+      <View nativeID="sub-danger-zone">
       {/* Selective wipe */}
       <View style={{ gap: 12 }}>
         <View>
@@ -3012,6 +3059,7 @@ function DataManagementSection() {
           </HStack>
         }
       />
+      </View>
     </View>
   );
 }
@@ -3333,7 +3381,7 @@ function AboutSection() {
         )}
 
         <Pressable
-          onPress={() => Linking.openURL('https://chat.deepspaceshipping.co')}
+          onPress={() => Linking.openURL('https://umbra.chat')}
           style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8 }}
         >
           <GlobeIcon size={14} color={tc.text.link} />
@@ -3360,6 +3408,272 @@ function AboutSection() {
 }
 
 // ---------------------------------------------------------------------------
+// MessagingSection
+// ---------------------------------------------------------------------------
+
+const SAMPLE_MESSAGES = [
+  { sender: 'Alice', text: 'Hey, how\'s it going?', isOwn: false },
+  { sender: 'You', text: 'Pretty good!', isOwn: true },
+  { sender: 'Alice', text: 'Great to hear 😊', isOwn: false },
+];
+
+function MessageDisplayPreview({
+  mode,
+  selected,
+  onSelect,
+}: {
+  mode: MessageDisplayMode;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  const { theme } = useTheme();
+  const tc = theme.colors;
+  const isDark = theme.mode === 'dark';
+
+  return (
+    <Pressable
+      onPress={onSelect}
+      style={({ hovered }) => ({
+        flex: 1,
+        borderRadius: 12,
+        borderWidth: 2,
+        borderColor: selected ? tc.accent.primary : tc.border.subtle,
+        backgroundColor: selected
+          ? (isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)')
+          : 'transparent',
+        overflow: 'hidden',
+        opacity: (hovered as boolean) && !selected ? 0.85 : 1,
+      })}
+    >
+      {/* Preview card header */}
+      <View
+        style={{
+          flexDirection: 'row',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          paddingHorizontal: 12,
+          paddingVertical: 8,
+          backgroundColor: isDark ? tc.background.surface : tc.background.sunken,
+          borderBottomWidth: 1,
+          borderBottomColor: tc.border.subtle,
+        }}
+      >
+        <RNText
+          style={{
+            fontSize: 12,
+            fontWeight: '600',
+            color: selected ? tc.accent.primary : tc.text.primary,
+          }}
+        >
+          {mode === 'bubble' ? 'Bubbles' : 'Inline'}
+        </RNText>
+        {selected && (
+          <View
+            style={{
+              width: 18,
+              height: 18,
+              borderRadius: 9,
+              backgroundColor: tc.accent.primary,
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <CheckIcon size={11} color="#fff" />
+          </View>
+        )}
+      </View>
+
+      {/* Preview message area */}
+      <View
+        style={{
+          padding: 10,
+          gap: 8,
+          minHeight: 130,
+          backgroundColor: isDark ? tc.background.canvas : tc.background.canvas,
+        }}
+      >
+        {mode === 'bubble' ? (
+          /* ── Bubble preview ── */
+          <>
+            {SAMPLE_MESSAGES.map((msg, i) => (
+              <View
+                key={i}
+                style={{
+                  flexDirection: msg.isOwn ? 'row-reverse' : 'row',
+                  alignItems: 'flex-end',
+                  gap: 4,
+                }}
+              >
+                {!msg.isOwn && (
+                  <View
+                    style={{
+                      width: 18,
+                      height: 18,
+                      borderRadius: 9,
+                      backgroundColor: tc.accent.primary,
+                      opacity: 0.6,
+                    }}
+                  />
+                )}
+                <View
+                  style={{
+                    paddingHorizontal: 8,
+                    paddingVertical: 5,
+                    borderRadius: 10,
+                    borderBottomLeftRadius: msg.isOwn ? 10 : 2,
+                    borderBottomRightRadius: msg.isOwn ? 2 : 10,
+                    backgroundColor: msg.isOwn
+                      ? tc.accent.primary
+                      : (isDark ? tc.background.raised : tc.background.sunken),
+                    maxWidth: '75%',
+                  }}
+                >
+                  <RNText
+                    style={{
+                      fontSize: 10,
+                      color: msg.isOwn
+                        ? (tc.text.inverse || '#fff')
+                        : tc.text.primary,
+                    }}
+                  >
+                    {msg.text}
+                  </RNText>
+                </View>
+              </View>
+            ))}
+          </>
+        ) : (
+          /* ── Inline preview (Slack/Discord style) ── */
+          <>
+            {SAMPLE_MESSAGES.map((msg, i) => {
+              const showHeader = i === 0 || SAMPLE_MESSAGES[i - 1].sender !== msg.sender;
+              return (
+                <View
+                  key={i}
+                  style={{
+                    flexDirection: 'row',
+                    gap: 6,
+                    alignItems: 'flex-start',
+                  }}
+                >
+                  <View style={{ width: 18 }}>
+                    {showHeader && (
+                      <View
+                        style={{
+                          width: 18,
+                          height: 18,
+                          borderRadius: 9,
+                          backgroundColor: tc.accent.primary,
+                          opacity: 0.6,
+                        }}
+                      />
+                    )}
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    {showHeader && (
+                      <View
+                        style={{
+                          flexDirection: 'row',
+                          alignItems: 'baseline',
+                          gap: 4,
+                          marginBottom: 1,
+                        }}
+                      >
+                        <RNText
+                          style={{
+                            fontSize: 10,
+                            fontWeight: '700',
+                            color: tc.text.primary,
+                          }}
+                        >
+                          {msg.sender}
+                        </RNText>
+                        <RNText
+                          style={{
+                            fontSize: 8,
+                            color: tc.text.muted,
+                          }}
+                        >
+                          2:34 PM
+                        </RNText>
+                      </View>
+                    )}
+                    <RNText
+                      style={{
+                        fontSize: 10,
+                        color: tc.text.secondary,
+                        lineHeight: 14,
+                      }}
+                    >
+                      {msg.text}
+                    </RNText>
+                  </View>
+                </View>
+              );
+            })}
+          </>
+        )}
+      </View>
+    </Pressable>
+  );
+}
+
+function MessagingSection() {
+  const { theme } = useTheme();
+  const tc = theme.colors;
+  const { displayMode, setDisplayMode } = useMessaging();
+
+  return (
+    <View style={{ gap: 20 }}>
+      <SectionHeader
+        title="Messaging"
+        description="Choose how messages are displayed in conversations."
+      />
+
+      <View nativeID="sub-display">
+        <RNText
+          style={{
+            fontSize: 13,
+            fontWeight: '600',
+            color: tc.text.secondary,
+            textTransform: 'uppercase',
+            letterSpacing: 0.5,
+            marginBottom: 10,
+          }}
+        >
+          Display Style
+        </RNText>
+
+        <View style={{ flexDirection: 'row', gap: 12 }}>
+          <MessageDisplayPreview
+            mode="bubble"
+            selected={displayMode === 'bubble'}
+            onSelect={() => setDisplayMode('bubble')}
+          />
+          <MessageDisplayPreview
+            mode="inline"
+            selected={displayMode === 'inline'}
+            onSelect={() => setDisplayMode('inline')}
+          />
+        </View>
+
+        <RNText
+          style={{
+            fontSize: 12,
+            color: tc.text.muted,
+            marginTop: 8,
+          }}
+        >
+          {displayMode === 'bubble'
+            ? 'Messages appear in colored bubbles. Your messages are on the right, theirs on the left.'
+            : 'All messages are left-aligned with sender name and timestamp. Similar to Slack or Discord.'}
+        </RNText>
+      </View>
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // SettingsDialog
 // ---------------------------------------------------------------------------
 
@@ -3368,13 +3682,37 @@ export function SettingsDialog({ open, onClose, onOpenMarketplace, initialSectio
   const tc = theme.colors;
   const isDark = mode === 'dark';
   const [activeSection, setActiveSection] = useState<SettingsSection>('account');
+  const [activeSubsection, setActiveSubsection] = useState<string | null>(
+    SUBCATEGORIES.account ? SUBCATEGORIES.account[0].id : null,
+  );
+
+  const contentScrollRef = useRef<ScrollView>(null);
+
+  const handleSectionChange = useCallback((sectionId: SettingsSection) => {
+    setActiveSection(sectionId);
+    const subs = SUBCATEGORIES[sectionId];
+    setActiveSubsection(subs ? subs[0].id : null);
+  }, []);
+
+  const handleSubsectionClick = useCallback((subId: string) => {
+    setActiveSubsection(subId);
+    // On web, scroll the content area to the nativeID element
+    if (Platform.OS === 'web') {
+      requestAnimationFrame(() => {
+        const el = document.querySelector(`[id="sub-${subId}"]`);
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      });
+    }
+  }, []);
 
   // Jump to requested section when dialog opens with initialSection
   useEffect(() => {
     if (open && initialSection) {
-      setActiveSection(initialSection);
+      handleSectionChange(initialSection);
     }
-  }, [open, initialSection]);
+  }, [open, initialSection, handleSectionChange]);
 
   // -- Styles ----------------------------------------------------------------
 
@@ -3401,12 +3739,14 @@ export function SettingsDialog({ open, onClose, onOpenMarketplace, initialSectio
 
   const sidebarStyle = useMemo<ViewStyle>(
     () => ({
-      width: 200,
+      width: 180,
+      flexGrow: 0,
+      flexShrink: 0,
       backgroundColor: isDark ? tc.background.surface : tc.background.sunken,
       borderRightWidth: 1,
       borderRightColor: tc.border.subtle,
       paddingVertical: 16,
-      paddingHorizontal: 12,
+      paddingHorizontal: 10,
     }),
     [tc, isDark],
   );
@@ -3434,6 +3774,8 @@ export function SettingsDialog({ open, onClose, onOpenMarketplace, initialSectio
         return <ProfileSection />;
       case 'appearance':
         return <AppearanceSection />;
+      case 'messaging':
+        return <MessagingSection />;
       case 'notifications':
         return <NotificationsSection />;
       case 'privacy':
@@ -3463,52 +3805,113 @@ export function SettingsDialog({ open, onClose, onOpenMarketplace, initialSectio
       <HelpPopoverHost />
       <View style={modalStyle}>
         {/* ── Left Sidebar ── */}
-        <View style={sidebarStyle}>
+        <ScrollView style={sidebarStyle} showsVerticalScrollIndicator={false}>
           <RNText style={sidebarTitleStyle}>Settings</RNText>
 
           {NAV_ITEMS.map((item) => {
             const isActive = activeSection === item.id;
             const Icon = item.icon;
+            const subs = SUBCATEGORIES[item.id];
+            const hasSubs = subs && subs.length > 1;
 
             return (
-              <Pressable
-                key={item.id}
-                onPress={() => setActiveSection(item.id)}
-                style={({ pressed }) => ({
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: 10,
-                  paddingVertical: 8,
-                  paddingHorizontal: 10,
-                  borderRadius: 8,
-                  backgroundColor: isActive
-                    ? tc.accent.primary
-                    : pressed
-                      ? tc.accent.highlight
-                      : 'transparent',
-                  marginBottom: 2,
-                })}
-              >
-                <Icon
-                  size={18}
-                  color={isActive ? tc.text.inverse : tc.text.secondary}
-                />
-                <RNText
-                  style={{
-                    fontSize: 14,
-                    fontWeight: isActive ? '600' : '400',
-                    color: isActive ? tc.text.inverse : tc.text.secondary,
-                  }}
+              <View key={item.id}>
+                {/* Top-level nav item */}
+                <Pressable
+                  onPress={() => handleSectionChange(item.id)}
+                  style={({ pressed }) => ({
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 10,
+                    paddingVertical: 8,
+                    paddingHorizontal: 10,
+                    borderRadius: 8,
+                    backgroundColor: isActive
+                      ? tc.accent.primary
+                      : pressed
+                        ? tc.accent.highlight
+                        : 'transparent',
+                    marginBottom: 2,
+                  })}
                 >
-                  {item.label}
-                </RNText>
-              </Pressable>
+                  <Icon
+                    size={18}
+                    color={isActive ? tc.text.inverse : tc.text.secondary}
+                  />
+                  <RNText
+                    style={{
+                      fontSize: 14,
+                      fontWeight: isActive ? '600' : '400',
+                      color: isActive ? tc.text.inverse : tc.text.secondary,
+                    }}
+                  >
+                    {item.label}
+                  </RNText>
+                </Pressable>
+
+                {/* Sub-items: show when section is active and has subcategories */}
+                {isActive && hasSubs && (
+                  <View style={{ marginLeft: 20, marginBottom: 4 }}>
+                    {subs.map((sub) => {
+                      const isSubActive = activeSubsection === sub.id;
+                      return (
+                        <View
+                          key={sub.id}
+                          style={{
+                            flexDirection: 'row',
+                            alignItems: 'stretch',
+                            marginBottom: 1,
+                          }}
+                        >
+                          <View
+                            style={{
+                              width: 2,
+                              borderRadius: 1,
+                              backgroundColor: isSubActive
+                                ? tc.accent.primary
+                                : 'rgba(255,255,255,0.18)',
+                            }}
+                          />
+                          <Pressable
+                            onPress={() => handleSubsectionClick(sub.id)}
+                            style={({ pressed, hovered }) => ({
+                              flex: 1,
+                              paddingVertical: 5,
+                              paddingHorizontal: 10,
+                              borderTopRightRadius: 4,
+                              borderBottomRightRadius: 4,
+                              backgroundColor: isSubActive
+                                ? 'rgba(255,255,255,0.06)'
+                                : (hovered as boolean)
+                                  ? 'rgba(255,255,255,0.04)'
+                                  : 'transparent',
+                            })}
+                          >
+                            <RNText
+                              style={{
+                                fontSize: 13,
+                                fontWeight: isSubActive ? '600' : '400',
+                                color: isSubActive
+                                  ? tc.accent.primary
+                                  : tc.text.secondary,
+                              }}
+                            >
+                              {sub.label}
+                            </RNText>
+                          </Pressable>
+                        </View>
+                      );
+                    })}
+                  </View>
+                )}
+              </View>
             );
           })}
-        </View>
+        </ScrollView>
 
         {/* ── Right Content Area ── */}
         <ScrollView
+          ref={contentScrollRef}
           style={{ flex: 1 }}
           contentContainerStyle={{ padding: 28 }}
           showsVerticalScrollIndicator={false}

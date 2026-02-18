@@ -2,7 +2,7 @@
 //!
 //! Community branding, custom emoji, stickers, and vanity URLs.
 
-use crate::error::{Error, Result};
+use crate::error::Result;
 use crate::storage::{CommunityEmojiRecord, CommunityStickerRecord};
 use super::service::generate_id;
 

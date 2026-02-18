@@ -59,7 +59,7 @@ function getDefaultDownloads(releaseUrl?: string): PlatformDownload[] {
     { platform: 'linux-appimage', label: 'Linux (AppImage)', url, icon: 'linux' },
     { platform: 'ios', label: 'iOS (.ipa)', url, icon: 'apple' },
     { platform: 'android', label: 'Android (.apk)', url, icon: 'android' },
-    { platform: 'web', label: 'Web App', url: 'https://chat.deepspaceshipping.co', icon: 'globe' },
+    { platform: 'web', label: 'Web App', url: 'https://umbra.chat', icon: 'globe' },
   ];
 }
 

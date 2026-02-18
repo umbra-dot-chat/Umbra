@@ -138,7 +138,7 @@ export class ScenarioRunner {
   private options: RunnerOptions;
 
   constructor(relayUrl?: string, options?: Partial<RunnerOptions>) {
-    this.relayUrl = relayUrl ?? 'wss://relay.deepspaceshipping.co/ws';
+    this.relayUrl = relayUrl ?? 'wss://relay.umbra.chat/ws';
     this.options = { ...DEFAULT_RUNNER_OPTIONS, ...options };
   }
 

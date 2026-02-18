@@ -15,9 +15,9 @@
 | 1.1 | **CommunityCreateDialog** | Dialog with name, description, optional icon upload. Calls `community_create`. | ✅ |
 | 1.2 | **CommunitySidebar** | Sidebar showing spaces as collapsible sections, channels within each space. Active channel highlight. | ✅ |
 | 1.3 | **ChannelHeader** | Top bar for active channel — channel name, topic, settings cog icon, E2EE indicator. | ✅ |
-| 1.4 | **MemberListPanel** | Right-side panel listing members grouped by hoisted roles with role colors. Online status dots. | ⬜ |
-| 1.5 | **RoleManagementPanel** | Admin panel to create/edit roles, set colors, drag-to-reorder hierarchy, permission checkbox grid. | ⬜ |
-| 1.6 | **InviteManagement** | Create invite links, copy to clipboard, set expiry/max uses, manage vanity URL. | ⬜ |
+| 1.4 | **MemberListPanel** | Right-side panel listing members grouped by hoisted roles with role colors. Online status dots. | ✅ |
+| 1.5 | **RoleManagementPanel** | Admin panel to create/edit roles, set colors, drag-to-reorder hierarchy, permission checkbox grid. | ✅ |
+| 1.6 | **InviteManagement** | Create invite links, copy to clipboard, set expiry/max uses, manage vanity URL. | ✅ |
 | 1.7 | **CommunitySettingsPage** | Full settings page: name, description, branding fields, danger zone (delete community, transfer ownership). | ⬜ |
 | 1.8 | **BanListManagement** | View banned members, unban, see ban reason/expiry/device fingerprint status. | ⬜ |
 | 1.9 | **AuditLogViewer** | Filterable log of all admin/mod actions. Filter by action type, actor, date range. Paginated. | ⬜ |
@@ -29,12 +29,12 @@
 
 | # | Component | Description | Status |
 |---|-----------|-------------|--------|
-| 2.1 | **MessageInputBar** | Rich text input with emoji picker, file attachment, content warning toggle, slow mode indicator. | ⬜ |
+| 2.1 | **MessageInputBar** | Rich text input with emoji picker, file attachment, content warning toggle, slow mode indicator. | ✅  |
 | 2.2 | **MessageList** | Infinite scroll message list with pagination via `before_timestamp`. Date separators. | ⬜ |
-| 2.3 | **MessageBubble** | Single message: sender avatar, display name (role color), timestamp, content, reactions row, reply preview. | ⬜ |
+| 2.3 | **MessageBubble** | Single message: sender avatar, display name (role color), timestamp, content, reactions row, reply preview. | ✅  |
 | 2.4 | **MessageContextMenu** | Right-click/long-press menu: edit, delete, delete for me, pin, reply, create thread, copy text. | ⬜ |
 | 2.5 | **ReactionPicker** | Emoji grid with standard + community custom emoji. Quick-react row for frequently used. | ⬜ |
-| 2.6 | **PinnedMessagesPanel** | Slide-out drawer listing all pinned messages in channel. Click to jump to message. | ⬜ |
+| 2.6 | **PinnedMessagesPanel** | Slide-out drawer listing all pinned messages in channel. Click to jump to message. | ✅  |
 | 2.7 | **ReadReceiptIndicators** | Typing indicator ("X is typing..."), "seen by" tooltips on messages (5 avatars + count). | ⬜ |
 | 2.8 | **E2EEKeyExchangeUI** | Key rotation notice banner, channel encryption status badge. | ⬜ |
 | 2.9 | **SlowModeCountdown** | Countdown timer shown on message input when slow mode is active. | ⬜ |
@@ -169,8 +169,8 @@
 
 | Phase | Components | Done | Remaining |
 |-------|-----------|------|-----------|
-| Phase 1: Core Infrastructure | 10 | 1 | 9 |
-| Phase 2: Messaging & Channels | 9 | 0 | 9 |
+| Phase 1: Core Infrastructure | 10 | 6 | 4 |
+| Phase 2: Messaging & Channels | 9 | 2 | 7 |
 | Phase 3: Threads & Search | 5 | 0 | 5 |
 | Phase 4: Advanced Roles | 4 | 0 | 4 |
 | Phase 5: Moderation | 5 | 0 | 5 |
@@ -181,7 +181,7 @@
 | Phase 10: Integrations | 4 | 0 | 4 |
 | Phase 11: Boost Nodes | 6 | 0 | 6 |
 | Gap Fill | 9 | 0 | 9 |
-| **Total** | **73** | **1** | **72** |
+| **Total** | **73** | **8** | **65** |
 
 ---
 

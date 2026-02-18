@@ -688,6 +688,28 @@ export function CodeIcon({ size = 16, color }: { size?: number; color?: string }
   );
 }
 
+export function HomeIcon({ size = 18, color }: { size?: number; color?: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color ?? 'currentColor'} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8" />
+      <Path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" />
+    </Svg>
+  );
+}
+
+export function AudioWaveIcon({ size = 16, color }: { size?: number; color?: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color ?? 'currentColor'} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M2 10v4" />
+      <Path d="M6 6v12" />
+      <Path d="M10 3v18" />
+      <Path d="M14 8v8" />
+      <Path d="M18 5v14" />
+      <Path d="M22 10v4" />
+    </Svg>
+  );
+}
+
 export function VolumeMuteIcon({ size = 16, color }: { size?: number; color?: string }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color ?? 'currentColor'} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">

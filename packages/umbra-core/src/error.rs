@@ -301,6 +301,10 @@ pub enum Error {
     #[error("Channel not found.")]
     ChannelNotFound,
 
+    /// Category not found
+    #[error("Category not found.")]
+    CategoryNotFound,
+
     /// Role not found
     #[error("Role not found.")]
     RoleNotFound,
@@ -454,6 +458,7 @@ impl Error {
             Error::BannedFromCommunity => 811,
             Error::InvalidCommunityOperation(_) => 812,
             Error::MemberTimedOut(_) => 813,
+            Error::CategoryNotFound => 815,
             Error::ChannelTypeRestriction(_) => 814,
 
             // Internal (900-999)

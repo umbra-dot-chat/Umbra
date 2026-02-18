@@ -218,24 +218,31 @@ impl super::CommunityService {
 
 /// Generate a random webhook token (32-char hex).
 fn generate_webhook_token() -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    use std::collections::hash_map::RandomState;
-    use std::hash::{BuildHasher, Hasher};
+    let timestamp = crate::time::now_timestamp_millis() as u64;
 
-    let timestamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_nanos();
+    let (hash1, hash2): (u64, u64) = {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            use std::collections::hash_map::RandomState;
+            use std::hash::{BuildHasher, Hasher};
+            let s = RandomState::new();
+            let mut h = s.build_hasher();
+            h.write_u64(timestamp);
+            let h1 = h.finish();
 
-    let s = RandomState::new();
-    let mut h = s.build_hasher();
-    h.write_u128(timestamp);
-    let hash1 = h.finish();
-
-    let s2 = RandomState::new();
-    let mut h2 = s2.build_hasher();
-    h2.write_u128(timestamp.wrapping_add(1));
-    let hash2 = h2.finish();
+            let s2 = RandomState::new();
+            let mut h2 = s2.build_hasher();
+            h2.write_u64(timestamp.wrapping_add(1));
+            let h2_val = h2.finish();
+            (h1, h2_val)
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            let h1 = (js_sys::Math::random() * u64::MAX as f64) as u64;
+            let h2 = (js_sys::Math::random() * u64::MAX as f64) as u64;
+            (h1, h2)
+        }
+    };
 
     format!("{:016x}{:016x}", hash1, hash2)
 }

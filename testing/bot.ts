@@ -69,7 +69,7 @@ function printHelp() {
 
 \x1b[4mBot Options:\x1b[0m
   --name <name>         Bot display name (default: "TestBot")
-  --relay <url>         Relay WebSocket URL (default: wss://relay.deepspaceshipping.co/ws)
+  --relay <url>         Relay WebSocket URL (default: wss://relay.umbra.chat/ws)
   --add <did>           Send friend request to this DID on startup
   --interval <ms>       Send random messages every N ms (default: 0 = off)
   --echo                Echo received messages back to sender

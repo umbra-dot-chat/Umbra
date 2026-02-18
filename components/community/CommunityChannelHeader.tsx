@@ -26,7 +26,7 @@ export interface CommunityChannelHeaderProps {
   type?: ChannelHeaderType;
   /** Channel topic / description text. */
   topic?: string;
-  /** Whether the channel is E2EE enabled. @default true */
+  /** Whether the channel is E2EE enabled. @default false */
   encrypted?: boolean;
   /** Currently active right panel (for toggling active states on action buttons). */
   rightPanel: RightPanel;
@@ -48,7 +48,7 @@ export function CommunityChannelHeader({
   name,
   type = 'text',
   topic,
-  encrypted = true,
+  encrypted = false,
   rightPanel,
   togglePanel,
   onSettingsPress,

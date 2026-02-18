@@ -2,7 +2,7 @@
  * Playwright E2E test configuration for Umbra.
  *
  * Runs tests against the local Expo web dev server.
- * Uses production relay at relay.deepspaceshipping.co.
+ * Uses production relay at relay.umbra.chat.
  */
 
 import { defineConfig, devices } from '@playwright/test';

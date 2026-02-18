@@ -148,7 +148,7 @@ export function useMessages(conversationId: string | null): UseMessagesResult {
         }
         if (msg.conversationId === conversationId) {
           // Don't append messages with empty content (e.g. from decryption failure)
-          const text = typeof msg.content === 'string' ? msg.content : msg.content?.text;
+          const text = typeof msg.content === 'string' ? msg.content : (msg.content?.type === 'text' ? msg.content.text : undefined);
           if (!text) return;
           setMessages((prev) => [...prev, msg]);
         }

@@ -39,6 +39,7 @@ impl CommunityService {
         name: &str,
         description: Option<&str>,
         owner_did: &str,
+        owner_nickname: Option<&str>,
     ) -> Result<CommunityCreateResult> {
         let now = crate::time::now_timestamp();
         let community_id = generate_id();
@@ -62,12 +63,24 @@ impl CommunityService {
             now,
         )?;
 
-        // 3. Create default channels
+        // 3. Create default category
+        let category_id = generate_id();
+        self.db().create_community_category(
+            &category_id,
+            &community_id,
+            &space_id,
+            "General",
+            0,
+            now,
+        )?;
+
+        // 4. Create default channels (assigned to the default category)
         let welcome_channel_id = generate_id();
         self.db().create_community_channel(
             &welcome_channel_id,
             &community_id,
             &space_id,
+            Some(&category_id),
             "welcome",
             "welcome",
             None,
@@ -80,6 +93,7 @@ impl CommunityService {
             &general_channel_id,
             &community_id,
             &space_id,
+            Some(&category_id),
             "general",
             "text",
             None,
@@ -87,14 +101,15 @@ impl CommunityService {
             now,
         )?;
 
-        // 4. Create preset roles
+        // 5. Create preset roles
         let role_ids = super::roles::create_preset_roles(self.db(), &community_id, now)?;
 
-        // 5. Add creator as member with owner role
+        // 6. Add creator as member with owner role
         self.db().add_community_member(
             &community_id,
             owner_did,
             now,
+            owner_nickname,
         )?;
         self.db().assign_community_role(
             &community_id,
@@ -104,7 +119,7 @@ impl CommunityService {
             None,
         )?;
 
-        // 6. Audit log
+        // 7. Audit log
         self.db().insert_audit_log(
             &generate_id(),
             &community_id,
@@ -231,12 +246,8 @@ pub struct CommunityCreateResult {
 
 /// Generate a unique ID (UUID v4 hex).
 pub(crate) fn generate_id() -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
-
-    let timestamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_nanos();
+    // Use the platform-aware time module (js_sys::Date on WASM, chrono on native)
+    let timestamp = crate::time::now_timestamp_millis() as u64;
 
     // Simple unique ID: timestamp + random suffix
     // In production this uses a proper UUID but we avoid adding a dependency
@@ -247,15 +258,15 @@ pub(crate) fn generate_id() -> String {
             use std::hash::{BuildHasher, Hasher};
             let s = RandomState::new();
             let mut h = s.build_hasher();
-            h.write_u128(timestamp);
+            h.write_u64(timestamp);
             h.finish()
         }
         #[cfg(target_arch = "wasm32")]
         {
-            // On WASM, use js_sys for randomness
-            (timestamp & 0xFFFFFFFFFFFFFFFF) as u64
+            // On WASM, use js_sys::Math::random for better uniqueness
+            (js_sys::Math::random() * u64::MAX as f64) as u64
         }
     };
 
-    format!("{:016x}{:016x}", timestamp as u64, random_part)
+    format!("{:016x}{:016x}", timestamp, random_part)
 }

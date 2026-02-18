@@ -1,6 +1,6 @@
 # Umbra — Physical Testing Checklist
 
-Test every feature manually in Chrome. Open two browser tabs (Tab A and Tab B) with different identities to test multi-user flows. Use the production relay at `relay.deepspaceshipping.co`.
+Test every feature manually in Chrome. Open two browser tabs (Tab A and Tab B) with different identities to test multi-user flows. Use the production relay at `relay.umbra.chat`.
 
 ---
 
@@ -536,7 +536,7 @@ Test every feature manually in Chrome. Open two browser tabs (Tab A and Tab B) w
 - **Identity**: Alice (DID: `did:key:z6MkhbPzZDua...`)
 - **Friend**: MattMattMattMatt (DID: `did:key:z6MkwKkAtGBjVkVk...`)
 - **Friend Request DID**: `did:key:z6MkwKkAtGBjVkVks8jkHaPmT72hymeGKxY7SHbtA5sdoyiM`
-- **Relay**: `wss://relay.deepspaceshipping.co/ws` (connected)
+- **Relay**: `wss://relay.umbra.chat/ws` (connected)
 - **Modes Tested**: Dark mode + Light mode with blue (#3B82F6) accent
 
 ---

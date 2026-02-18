@@ -3,8 +3,8 @@
 # Umbra Deployment Script
 #
 # Deploys:
-#   - Frontend to chat.deepspaceshipping.co
-#   - Relay server to relay.deepspaceshipping.co
+#   - Frontend to umbra.chat
+#   - Relay server to relay.umbra.chat
 #
 # Usage:
 #   ./scripts/deploy.sh              # Deploy everything
@@ -60,9 +60,9 @@ Usage:
 
 Commands:
     all             Deploy frontend and all relays (default)
-    frontend        Deploy only the frontend to chat.deepspaceshipping.co
-    relay           Deploy only the primary relay to relay.deepspaceshipping.co
-    relay-seoul     Deploy only the Seoul relay to seoul.relay.deepspaceshipping.co
+    frontend        Deploy only the frontend to chat.umbra.chat
+    relay           Deploy only the primary relay to relay.umbra.chat
+    relay-seoul     Deploy only the Seoul relay to seoul.relay.umbra.chat
     relays          Deploy all relay servers (primary + Seoul)
 
 Options:
@@ -298,7 +298,7 @@ deploy_relay() {
         "" \
         "relay-us-east-1" \
         "wss://${RELAY_HOST}/ws" \
-        "wss://${RELAY_SEOUL_HOST:-seoul.relay.deepspaceshipping.co}/ws"
+        "wss://${RELAY_SEOUL_HOST:-seoul.relay.umbra.chat}/ws"
 }
 
 deploy_relay_seoul() {
@@ -316,7 +316,7 @@ deploy_relay_seoul() {
         "$RELAY_SEOUL_PASSWORD" \
         "relay-ap-seoul-1" \
         "wss://${RELAY_SEOUL_HOST}/ws" \
-        "wss://${RELAY_HOST:-relay.deepspaceshipping.co}/ws"
+        "wss://${RELAY_HOST:-relay.umbra.chat}/ws"
 }
 
 deploy_all_relays() {

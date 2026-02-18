@@ -2,7 +2,7 @@
  * Friends E2E Tests — Friend request flow between two browser contexts.
  *
  * Uses two separate browser contexts to simulate two users.
- * Both connect to the production relay at relay.deepspaceshipping.co.
+ * Both connect to the production relay at relay.umbra.chat.
  */
 
 import { test, expect, type BrowserContext, type Page } from '@playwright/test';

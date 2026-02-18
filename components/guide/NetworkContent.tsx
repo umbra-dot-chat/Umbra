@@ -133,11 +133,11 @@ export default function NetworkContent() {
       <FeatureCard
         icon={<MapPinIcon size={16} color="#EC4899" />}
         title="Relay Regions"
-        description="Two relay servers are deployed across geographic regions: US East (relay.deepspaceshipping.co) and Asia Pacific / Seoul (seoul.relay.deepspaceshipping.co). The client connects to the primary relay by default and falls back to the secondary if the primary is unreachable. Federation mesh connects both regions, so users on different relays communicate seamlessly. Cross-region latency is approximately 150-200ms per hop."
+        description="Two relay servers are deployed across geographic regions: US East (relay.umbra.chat) and Asia Pacific / Seoul (seoul.relay.umbra.chat). The client connects to the primary relay by default and falls back to the secondary if the primary is unreachable. Federation mesh connects both regions, so users on different relays communicate seamlessly. Cross-region latency is approximately 150-200ms per hop."
         status="working"
         howTo={[
-          'Primary: wss://relay.deepspaceshipping.co/ws (US East)',
-          'Secondary: wss://seoul.relay.deepspaceshipping.co/ws (Seoul)',
+          'Primary: wss://relay.umbra.chat/ws (US East)',
+          'Secondary: wss://seoul.relay.umbra.chat/ws (Seoul)',
           'Client selects primary relay by default',
           'Federation routes cross-region messages automatically',
         ]}

@@ -8,7 +8,7 @@ use crate::storage::CommunityChannelRecord;
 use super::service::generate_id;
 
 /// Valid channel types.
-pub const CHANNEL_TYPES: &[&str] = &["text", "voice", "files", "announcement", "bulletin", "welcome"];
+pub const CHANNEL_TYPES: &[&str] = &["text", "voice", "files", "announcement", "bulletin", "welcome", "forum"];
 
 impl super::CommunityService {
     /// Create a new channel in a space.
@@ -21,6 +21,7 @@ impl super::CommunityService {
         topic: Option<&str>,
         position: i32,
         actor_did: &str,
+        category_id: Option<&str>,
     ) -> Result<CommunityChannelRecord> {
         if !CHANNEL_TYPES.contains(&channel_type) {
             return Err(Error::InvalidCommunityOperation(
@@ -35,6 +36,7 @@ impl super::CommunityService {
             &channel_id,
             community_id,
             space_id,
+            category_id,
             name,
             channel_type,
             topic,
@@ -57,6 +59,7 @@ impl super::CommunityService {
             id: channel_id,
             community_id: community_id.to_string(),
             space_id: space_id.to_string(),
+            category_id: category_id.map(|s| s.to_string()),
             name: name.to_string(),
             channel_type: channel_type.to_string(),
             topic: topic.map(|s| s.to_string()),

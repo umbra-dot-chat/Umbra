@@ -24,7 +24,25 @@ import { PluginMarketplace } from '@/components/modals/PluginMarketplace';
 import { InstallBanner } from '@/components/ui/InstallBanner';
 import { useCommandPalette } from '@/hooks/useCommandPalette';
 import { SettingsDialogProvider, useSettingsDialog } from '@/contexts/SettingsDialogContext';
-import type { Friend, MessageEvent } from '@umbra/service';
+import { CommunityProvider } from '@/contexts/CommunityContext';
+import { VoiceChannelProvider } from '@/contexts/VoiceChannelContext';
+import { useCommunities } from '@/hooks/useCommunities';
+import { NavigationRail } from '@/components/navigation/NavigationRail';
+import { CommunityLayoutSidebar } from '@/components/sidebar/CommunityLayoutSidebar';
+import { CommunityCreateDialog } from '@coexist/wisp-react-native';
+import type { Community, Friend, MessageEvent } from '@umbra/service';
+import { useAuth } from '@/contexts/AuthContext';
+
+// TODO: Remove mock community once real communities exist
+const MOCK_COMMUNITY: Community = {
+  id: 'mock-community-1',
+  name: 'Umbra HQ',
+  description: 'The official Umbra community',
+  accentColor: '#5865F2',
+  ownerDid: 'did:key:mock',
+  createdAt: Date.now(),
+  updatedAt: Date.now(),
+};
 
 /** Format a relative time string from a Unix timestamp. */
 function formatRelativeTime(ts?: number): string {
@@ -52,10 +70,18 @@ function MainLayoutInner() {
   const { selectedMember, popoverAnchor, closeProfile } = useProfilePopoverContext();
 
   // Service + data hooks
-  const { service } = useUmbra();
-  const { conversations, refresh: refreshConversations } = useConversations();
+  const { service, isReady } = useUmbra();
+  const { identity } = useAuth();
+  const { conversations, refresh: refreshConversations, isLoading: conversationsLoading } = useConversations();
   const { friends } = useFriends();
   const { groups, pendingInvites, acceptInvite, declineInvite } = useGroups();
+  const { communities: realCommunities, createCommunity, isLoading: communitiesLoading } = useCommunities();
+
+  // Merge mock community with real ones (TODO: remove mock once real communities exist)
+  const communities = useMemo(() => [MOCK_COMMUNITY, ...realCommunities], [realCommunities]);
+
+  // Whether the core service is still initializing (WASM + identity)
+  const coreLoading = !isReady || !identity;
 
   // Friend notifications (toast on incoming requests, acceptances)
   useFriendNotifications();
@@ -126,6 +152,9 @@ function MainLayoutInner() {
   const [createGroupOpen, setCreateGroupOpen] = useState(false);
   const [newDmOpen, setNewDmOpen] = useState(false);
   const [marketplaceOpen, setMarketplaceOpen] = useState(false);
+  const [createCommunityOpen, setCreateCommunityOpen] = useState(false);
+  const [communitySubmitting, setCommunitySubmitting] = useState(false);
+  const [communityError, setCommunityError] = useState<string | undefined>();
   const { open: cmdOpen, setOpen: setCmdOpen } = useCommandPalette();
 
   // Load last messages for all conversations
@@ -138,8 +167,11 @@ function MainLayoutInner() {
         if (lastMessagesLoadedRef.current.has(c.id)) continue;
         try {
           const msgs = await service.getMessages(c.id, { limit: 1 });
-          if (msgs.length > 0 && msgs[0].content.type === 'text') {
-            updates[c.id] = msgs[0].content.text;
+          if (msgs.length > 0) {
+            const content = msgs[0].content;
+            if (content.type === 'text') {
+              updates[c.id] = content.text;
+            }
           }
           lastMessagesLoadedRef.current.add(c.id);
         } catch {
@@ -159,13 +191,15 @@ function MainLayoutInner() {
 
     const unsubscribe = service.onMessageEvent((event: MessageEvent) => {
       if (
-        (event.type === 'messageReceived' || event.type === 'messageSent') &&
-        event.message.content.type === 'text'
+        (event.type === 'messageReceived' || event.type === 'messageSent')
       ) {
-        setLastMessages((prev) => ({
-          ...prev,
-          [event.message.conversationId]: event.message.content.text,
-        }));
+        const content = event.message.content;
+        if (content.type === 'text') {
+          setLastMessages((prev) => ({
+            ...prev,
+            [event.message.conversationId]: content.text,
+          }));
+        }
       }
     });
 
@@ -215,6 +249,53 @@ function MainLayoutInner() {
     }
   }, [service, refreshConversations, pathname, router]);
 
+  // Handle community creation
+  const handleCommunityCreated = useCallback(async (data: { name: string; description: string }) => {
+    setCommunitySubmitting(true);
+    setCommunityError(undefined);
+    try {
+      const result = await createCommunity(data.name, data.description || undefined);
+      if (result) {
+        setCreateCommunityOpen(false);
+        router.push(`/community/${result.communityId}`);
+      } else {
+        setCommunityError('Failed to create community. Please try again.');
+      }
+    } catch (err) {
+      setCommunityError(err instanceof Error ? err.message : 'An unexpected error occurred.');
+    } finally {
+      setCommunitySubmitting(false);
+    }
+  }, [createCommunity, router]);
+
+  // Clear error when dialog closes
+  const handleCloseCommunityDialog = useCallback(() => {
+    setCreateCommunityOpen(false);
+    setCommunityError(undefined);
+    setCommunitySubmitting(false);
+  }, []);
+
+  // Navigate to community page
+  const handleCommunityPress = useCallback((communityId: string) => {
+    router.push(`/community/${communityId}`);
+  }, [router]);
+
+  // Navigate to home (conversations)
+  const handleHomePress = useCallback(() => {
+    if (pathname !== '/' && pathname !== '/friends') {
+      router.push('/');
+    }
+  }, [pathname, router]);
+
+  // Home is active when NOT on a community page
+  const isHomeActive = !pathname.startsWith('/community/');
+
+  // Determine active community from pathname
+  const activeCommunityId = useMemo(() => {
+    const match = pathname.match(/^\/community\/(.+)$/);
+    return match ? match[1] : null;
+  }, [pathname]);
+
   // Derived — search across conversation name, last message preview, and friend names
   const filtered = useMemo(() => {
     if (!search.trim()) return sidebarConversations;
@@ -243,28 +324,42 @@ function MainLayoutInner() {
     <View style={{ flex: 1, backgroundColor: theme.colors.background.canvas }}>
       <InstallBanner />
       <HStack gap={0} style={{ flex: 1 }}>
-        <ChatSidebar
-          search={search}
-          onSearchChange={setSearch}
-          conversations={filtered}
-          activeId={activeId}
-          onSelectConversation={(id) => {
-            setActiveId(id);
-            if (pathname !== '/') {
-              router.push('/');
-            }
-          }}
+        <NavigationRail
+          isHomeActive={isHomeActive}
+          onHomePress={handleHomePress}
+          communities={communities}
+          activeCommunityId={activeCommunityId}
+          onCommunityPress={handleCommunityPress}
+          onCreateCommunity={() => setCreateCommunityOpen(true)}
           onOpenSettings={() => openSettings()}
-          onFriendsPress={() => router.push('/friends')}
-          onNewDm={() => setNewDmOpen(true)}
-          onCreateGroup={() => setCreateGroupOpen(true)}
-          onGuidePress={() => setGuideOpen(true)}
-          onMarketplacePress={() => setMarketplaceOpen(true)}
-          isFriendsActive={isFriendsActive}
-          pendingInvites={pendingInvites}
-          onAcceptInvite={handleAcceptInvite}
-          onDeclineInvite={handleDeclineInvite}
+          loading={coreLoading || communitiesLoading}
         />
+        {activeCommunityId ? (
+          <CommunityLayoutSidebar communityId={activeCommunityId} />
+        ) : (
+          <ChatSidebar
+            search={search}
+            onSearchChange={setSearch}
+            conversations={filtered}
+            activeId={activeId}
+            onSelectConversation={(id) => {
+              setActiveId(id);
+              if (pathname !== '/') {
+                router.push('/');
+              }
+            }}
+            onFriendsPress={() => router.push('/friends')}
+            onNewDm={() => setNewDmOpen(true)}
+            onCreateGroup={() => setCreateGroupOpen(true)}
+            onGuidePress={() => setGuideOpen(true)}
+            onMarketplacePress={() => setMarketplaceOpen(true)}
+            isFriendsActive={isFriendsActive}
+            pendingInvites={pendingInvites}
+            onAcceptInvite={handleAcceptInvite}
+            onDeclineInvite={handleDeclineInvite}
+            loading={coreLoading || conversationsLoading}
+          />
+        )}
 
         <View style={{ flex: 1 }}>
           <Slot />
@@ -302,6 +397,14 @@ function MainLayoutInner() {
         open={newDmOpen}
         onClose={() => setNewDmOpen(false)}
         onSelectFriend={handleDmFriendSelected}
+      />
+
+      <CommunityCreateDialog
+        open={createCommunityOpen}
+        onClose={handleCloseCommunityDialog}
+        onSubmit={handleCommunityCreated}
+        submitting={communitySubmitting}
+        error={communityError}
       />
 
       <CommandPalette
@@ -358,11 +461,15 @@ export default function MainLayout() {
   return (
     <SettingsDialogProvider>
       <ActiveConversationProvider>
-        <CallProvider>
-          <ProfilePopoverProvider>
-            <MainLayoutInner />
-          </ProfilePopoverProvider>
-        </CallProvider>
+        <CommunityProvider>
+          <CallProvider>
+            <VoiceChannelProvider>
+              <ProfilePopoverProvider>
+                <MainLayoutInner />
+              </ProfilePopoverProvider>
+            </VoiceChannelProvider>
+          </CallProvider>
+        </CommunityProvider>
       </ActiveConversationProvider>
     </SettingsDialogProvider>
   );

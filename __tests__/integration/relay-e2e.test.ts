@@ -1,7 +1,7 @@
 /**
  * Relay E2E Integration Tests
  *
- * Tests the live relay server at relay.deepspaceshipping.co to validate:
+ * Tests the live relay server at relay.umbra.chat to validate:
  * - WebSocket connection and registration
  * - Message sending/receiving between two clients
  * - Offline message queuing and delivery
@@ -13,8 +13,8 @@
  * Run with: npx jest __tests__/integration/relay-e2e.test.ts --forceExit
  */
 
-const RELAY_URL = 'wss://relay.deepspaceshipping.co/ws';
-const RELAY_HTTP = 'https://relay.deepspaceshipping.co';
+const RELAY_URL = 'wss://relay.umbra.chat/ws';
+const RELAY_HTTP = 'https://relay.umbra.chat';
 
 // Use ws package for Node.js environment
 const NodeWebSocket = require('ws');

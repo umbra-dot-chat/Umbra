@@ -77,7 +77,7 @@ export default function CallingContent() {
       <FeatureCard
         icon={<ZapIcon size={16} color="#06B6D4" />}
         title="ICE Negotiation"
-        description="Interactive Connectivity Establishment (ICE) discovers the best network path between peers. The browser gathers three types of candidates: 'host' (local IP addresses), 'srflx' (server-reflexive via STUN — discovers your public IP), and 'relay' (TURN server fallback for restrictive NATs). Candidates are paired and tested via STUN binding requests. The best pair (lowest latency, most direct path) is selected. Google's public STUN servers (stun.l.google.com:19302) handle reflexive discovery, while a self-hosted coturn server at turn.deepspaceshipping.co:3478 provides relay fallback over UDP and TCP transports."
+        description="Interactive Connectivity Establishment (ICE) discovers the best network path between peers. The browser gathers three types of candidates: 'host' (local IP addresses), 'srflx' (server-reflexive via STUN — discovers your public IP), and 'relay' (TURN server fallback for restrictive NATs). Candidates are paired and tested via STUN binding requests. The best pair (lowest latency, most direct path) is selected. Google's public STUN servers (stun.l.google.com:19302) handle reflexive discovery, while a self-hosted coturn server at turn.umbra.chat:3478 provides relay fallback over UDP and TCP transports."
         status="working"
         howTo={[
           'ICE gathering is automatic during call setup',

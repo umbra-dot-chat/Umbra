@@ -340,11 +340,11 @@ jobs:
 
             #### Web
             - `umbra-web.zip` - Self-hosted web build
-            - Live: [chat.deepspaceshipping.co](https://chat.deepspaceshipping.co)
+            - Live: [umbra.chat](https://umbra.chat)
 
             ### Relay Servers
-            - US East: `wss://relay.deepspaceshipping.co/ws`
-            - Seoul: `wss://seoul.relay.deepspaceshipping.co/ws`
+            - US East: `wss://relay.umbra.chat/ws`
+            - Seoul: `wss://seoul.relay.umbra.chat/ws`
 
             Or [run your own relay](https://github.com/${{ github.repository }}/releases?q=relay).
         env:

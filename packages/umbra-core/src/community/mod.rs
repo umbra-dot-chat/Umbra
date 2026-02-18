@@ -34,6 +34,7 @@
 mod service;
 mod spaces;
 mod channels;
+mod categories;
 mod permissions;
 mod roles;
 mod members;

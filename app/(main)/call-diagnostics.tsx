@@ -21,8 +21,8 @@ import type { CallStats, TurnTestResult, StunTestResult } from '@/types/call';
 // ─── Relay URLs ──────────────────────────────────────────────────────────────
 
 const RELAYS = [
-  { label: 'US East', url: 'wss://relay.deepspaceshipping.co/ws' },
-  { label: 'Seoul', url: 'wss://seoul.relay.deepspaceshipping.co/ws' },
+  { label: 'US East', url: 'wss://relay.umbra.chat/ws' },
+  { label: 'Seoul', url: 'wss://seoul.relay.umbra.chat/ws' },
 ];
 
 const STUN_SERVERS = [
@@ -31,8 +31,8 @@ const STUN_SERVERS = [
 ];
 
 const TURN_SERVERS = [
-  'turn:turn.deepspaceshipping.co:3478?transport=udp',
-  'turn:turn.deepspaceshipping.co:3478?transport=tcp',
+  'turn:turn.umbra.chat:3478?transport=udp',
+  'turn:turn.umbra.chat:3478?transport=tcp',
 ];
 
 // ─── Types ───────────────────────────────────────────────────────────────────

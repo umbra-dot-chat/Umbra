@@ -495,5 +495,293 @@ export function createTauriBackend(
     umbra_wasm_plugin_bundle_list: () => {
       return invoke('plugin_bundle_list').then(ensureJsonString) as any;
     },
+
+    // ── Community — Core ────────────────────────────────────────────
+    umbra_wasm_community_create: (json: string) => {
+      return invoke('community_create', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_get: (communityId: string) => {
+      return invoke('community_get', { communityId }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_get_mine: (memberDid: string) => {
+      return invoke('community_get_mine', { memberDid }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_update: (json: string) => {
+      return invoke('community_update', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_delete: (json: string) => {
+      return invoke('community_delete', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_transfer_ownership: (json: string) => {
+      return invoke('community_transfer_ownership', { json }).then(ensureJsonString) as any;
+    },
+
+    // ── Community — Spaces ──────────────────────────────────────────
+    umbra_wasm_community_space_create: (json: string) => {
+      return invoke('community_space_create', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_space_list: (communityId: string) => {
+      return invoke('community_space_list', { communityId }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_space_update: (json: string) => {
+      return invoke('community_space_update', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_space_reorder: (json: string) => {
+      return invoke('community_space_reorder', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_space_delete: (json: string) => {
+      return invoke('community_space_delete', { json }).then(ensureJsonString) as any;
+    },
+
+    // ── Community — Categories ──────────────────────────────────────
+    umbra_wasm_community_category_create: (json: string) => {
+      return invoke('community_category_create', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_category_list: (spaceId: string) => {
+      return invoke('community_category_list', { spaceId }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_category_list_all: (communityId: string) => {
+      return invoke('community_category_list_all', { communityId }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_category_update: (json: string) => {
+      return invoke('community_category_update', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_category_reorder: (json: string) => {
+      return invoke('community_category_reorder', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_category_delete: (json: string) => {
+      return invoke('community_category_delete', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_channel_move_category: (json: string) => {
+      return invoke('community_channel_move_category', { json }).then(ensureJsonString) as any;
+    },
+
+    // ── Community — Channels ────────────────────────────────────────
+    umbra_wasm_community_channel_create: (json: string) => {
+      return invoke('community_channel_create', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_channel_list: (spaceId: string) => {
+      return invoke('community_channel_list', { spaceId }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_channel_list_all: (communityId: string) => {
+      return invoke('community_channel_list_all', { communityId }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_channel_get: (channelId: string) => {
+      return invoke('community_channel_get', { channelId }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_channel_update: (json: string) => {
+      return invoke('community_channel_update', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_channel_set_slow_mode: (json: string) => {
+      return invoke('community_channel_set_slow_mode', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_channel_set_e2ee: (json: string) => {
+      return invoke('community_channel_set_e2ee', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_channel_delete: (json: string) => {
+      return invoke('community_channel_delete', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_channel_reorder: (json: string) => {
+      return invoke('community_channel_reorder', { json }).then(ensureJsonString) as any;
+    },
+
+    // ── Community — Members ─────────────────────────────────────────
+    umbra_wasm_community_join: (json: string) => {
+      return invoke('community_join', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_leave: (json: string) => {
+      return invoke('community_leave', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_kick: (json: string) => {
+      return invoke('community_kick', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_ban: (json: string) => {
+      return invoke('community_ban', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_unban: (json: string) => {
+      return invoke('community_unban', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_member_list: (communityId: string) => {
+      return invoke('community_member_list', { communityId }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_member_get: (communityId: string, memberDid: string) => {
+      return invoke('community_member_get', { communityId, memberDid }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_member_update_profile: (json: string) => {
+      return invoke('community_member_update_profile', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_ban_list: (communityId: string) => {
+      return invoke('community_ban_list', { communityId }).then(ensureJsonString) as any;
+    },
+
+    // ── Community — Roles ───────────────────────────────────────────
+    umbra_wasm_community_role_list: (communityId: string) => {
+      return invoke('community_role_list', { communityId }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_member_roles: (communityId: string, memberDid: string) => {
+      return invoke('community_member_roles', { communityId, memberDid }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_role_assign: (json: string) => {
+      return invoke('community_role_assign', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_role_unassign: (json: string) => {
+      return invoke('community_role_unassign', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_custom_role_create: (json: string) => {
+      return invoke('community_custom_role_create', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_role_update: (json: string) => {
+      return invoke('community_role_update', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_role_update_permissions: (json: string) => {
+      return invoke('community_role_update_permissions', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_role_delete: (json: string) => {
+      return invoke('community_role_delete', { json }).then(ensureJsonString) as any;
+    },
+
+    // ── Community — Invites ─────────────────────────────────────────
+    umbra_wasm_community_invite_create: (json: string) => {
+      return invoke('community_invite_create', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_invite_use: (json: string) => {
+      return invoke('community_invite_use', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_invite_list: (communityId: string) => {
+      return invoke('community_invite_list', { communityId }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_invite_delete: (json: string) => {
+      return invoke('community_invite_delete', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_invite_set_vanity: (json: string) => {
+      return invoke('community_invite_set_vanity', { json }).then(ensureJsonString) as any;
+    },
+
+    // ── Community — Messages ────────────────────────────────────────
+    umbra_wasm_community_message_send: (json: string) => {
+      return invoke('community_message_send', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_message_list: (json: string) => {
+      return invoke('community_message_list', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_message_get: (messageId: string) => {
+      return invoke('community_message_get', { messageId }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_message_edit: (json: string) => {
+      return invoke('community_message_edit', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_message_delete: (messageId: string) => {
+      return invoke('community_message_delete', { messageId }).then(ensureJsonString) as any;
+    },
+
+    // ── Community — Reactions ───────────────────────────────────────
+    umbra_wasm_community_reaction_add: (json: string) => {
+      return invoke('community_reaction_add', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_reaction_remove: (json: string) => {
+      return invoke('community_reaction_remove', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_reaction_list: (messageId: string) => {
+      return invoke('community_reaction_list', { messageId }).then(ensureJsonString) as any;
+    },
+
+    // ── Community — Pins ────────────────────────────────────────────
+    umbra_wasm_community_pin_message: (json: string) => {
+      return invoke('community_pin_message', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_unpin_message: (json: string) => {
+      return invoke('community_unpin_message', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_pin_list: (channelId: string) => {
+      return invoke('community_pin_list', { channelId }).then(ensureJsonString) as any;
+    },
+
+    // ── Community — Threads ─────────────────────────────────────────
+    umbra_wasm_community_thread_create: (json: string) => {
+      return invoke('community_thread_create', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_thread_get: (threadId: string) => {
+      return invoke('community_thread_get', { threadId }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_thread_list: (channelId: string) => {
+      return invoke('community_thread_list', { channelId }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_thread_messages: (json: string) => {
+      return invoke('community_thread_messages', { json }).then(ensureJsonString) as any;
+    },
+
+    // ── Community — Read Receipts ───────────────────────────────────
+    umbra_wasm_community_mark_read: (json: string) => {
+      return invoke('community_mark_read', { json }).then(ensureJsonString) as any;
+    },
+
+    // ── Community — Files ──────────────────────────────────────────
+    umbra_wasm_community_upload_file: (json: string) => {
+      return invoke('community_upload_file', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_get_files: (json: string) => {
+      return invoke('community_get_files', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_get_file: (json: string) => {
+      return invoke('community_get_file', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_delete_file: (json: string) => {
+      return invoke('community_delete_file', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_record_file_download: (json: string) => {
+      return invoke('community_record_file_download', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_create_folder: (json: string) => {
+      return invoke('community_create_folder', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_get_folders: (json: string) => {
+      return invoke('community_get_folders', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_delete_folder: (json: string) => {
+      return invoke('community_delete_folder', { json }).then(ensureJsonString) as any;
+    },
+
+    // ── DM — Files ────────────────────────────────────────────────
+    umbra_wasm_dm_upload_file: (json: string) => {
+      return invoke('dm_upload_file', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_dm_get_files: (json: string) => {
+      return invoke('dm_get_files', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_dm_get_file: (json: string) => {
+      return invoke('dm_get_file', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_dm_delete_file: (json: string) => {
+      return invoke('dm_delete_file', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_dm_record_file_download: (json: string) => {
+      return invoke('dm_record_file_download', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_dm_move_file: (json: string) => {
+      return invoke('dm_move_file', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_dm_create_folder: (json: string) => {
+      return invoke('dm_create_folder', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_dm_get_folders: (json: string) => {
+      return invoke('dm_get_folders', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_dm_delete_folder: (json: string) => {
+      return invoke('dm_delete_folder', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_dm_rename_folder: (json: string) => {
+      return invoke('dm_rename_folder', { json }).then(ensureJsonString) as any;
+    },
+
+    // ── File Chunking ─────────────────────────────────────────────
+    umbra_wasm_chunk_file: (json: string) => {
+      return invoke('chunk_file', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_reassemble_file: (json: string) => {
+      return invoke('reassemble_file', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_get_file_manifest: (json: string) => {
+      return invoke('get_file_manifest', { json }).then(ensureJsonString) as any;
+    },
   };
 }

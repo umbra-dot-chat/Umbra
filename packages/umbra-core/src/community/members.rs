@@ -12,6 +12,7 @@ impl super::CommunityService {
         &self,
         community_id: &str,
         member_did: &str,
+        nickname: Option<&str>,
     ) -> Result<()> {
         // Check if banned
         if self.db().is_community_banned(community_id, member_did)? {
@@ -24,7 +25,7 @@ impl super::CommunityService {
         }
 
         let now = crate::time::now_timestamp();
-        self.db().add_community_member(community_id, member_did, now)?;
+        self.db().add_community_member(community_id, member_did, now, nickname)?;
 
         // Assign default member role
         let member_role = self.db().get_member_role(community_id)?;
@@ -46,7 +47,8 @@ impl super::CommunityService {
         // Send welcome message in the welcome channel (if one exists)
         let channels = self.db().get_community_channels(community_id)?;
         if let Some(welcome_channel) = channels.iter().find(|c| c.channel_type == "welcome") {
-            let welcome_content = format!("Welcome to the community, {}!", member_did);
+            let display = nickname.unwrap_or(member_did);
+            let welcome_content = format!("Welcome to the community, {}!", display);
             // Best-effort: don't fail the join if welcome message fails
             let _ = self.send_system_message(&welcome_channel.id, &welcome_content);
         }

@@ -267,8 +267,8 @@ export const DEFAULT_ICE_SERVERS: IceServer[] = [
   { urls: 'stun:stun1.l.google.com:19302' },
   {
     urls: [
-      'turn:turn.deepspaceshipping.co:3478?transport=udp',
-      'turn:turn.deepspaceshipping.co:3478?transport=tcp',
+      'turn:turn.umbra.chat:3478?transport=udp',
+      'turn:turn.umbra.chat:3478?transport=tcp',
     ],
     // Credentials set dynamically via generateTurnCredentials()
   },

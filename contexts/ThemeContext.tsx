@@ -47,6 +47,8 @@ export interface ThemeContextValue {
   setAccentColor: (color: string | null) => void;
   /** Whether the dark/light mode toggle should be visible. */
   showModeToggle: boolean;
+  /** Whether saved preferences have been loaded from the WASM KV store. */
+  preferencesLoaded: boolean;
 }
 
 const ThemeCtx = createContext<ThemeContextValue | null>(null);
@@ -311,8 +313,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       accentColor,
       setAccentColor,
       showModeToggle: activeTheme === null,
+      preferencesLoaded: loaded,
     }),
-    [activeTheme, installedThemeIds, installTheme, uninstallTheme, setTheme, accentColor, setAccentColor],
+    [activeTheme, installedThemeIds, installTheme, uninstallTheme, setTheme, accentColor, setAccentColor, loaded],
   );
 
   return <ThemeCtx.Provider value={value}>{children}</ThemeCtx.Provider>;

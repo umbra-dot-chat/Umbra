@@ -59,6 +59,7 @@ impl super::CommunityService {
         &self,
         code: &str,
         member_did: &str,
+        nickname: Option<&str>,
     ) -> Result<String> {
         let invite = self.db().get_community_invite_by_code(code)?
             .ok_or(Error::InviteNotFound)?;
@@ -80,7 +81,7 @@ impl super::CommunityService {
         }
 
         // Join the community
-        self.join_community(&invite.community_id, member_did)?;
+        self.join_community(&invite.community_id, member_did, nickname)?;
 
         // Increment use count
         self.db().increment_invite_use_count(&invite.id)?;
@@ -156,19 +157,23 @@ impl super::CommunityService {
 
 /// Generate a random invite code (8 alphanumeric chars).
 fn generate_invite_code() -> String {
-    use std::time::{SystemTime, UNIX_EPOCH};
-    use std::collections::hash_map::RandomState;
-    use std::hash::{BuildHasher, Hasher};
+    let timestamp = crate::time::now_timestamp_millis() as u64;
 
-    let timestamp = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap_or_default()
-        .as_nanos();
-
-    let s = RandomState::new();
-    let mut h = s.build_hasher();
-    h.write_u128(timestamp);
-    let hash = h.finish();
+    let hash: u64 = {
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            use std::collections::hash_map::RandomState;
+            use std::hash::{BuildHasher, Hasher};
+            let s = RandomState::new();
+            let mut h = s.build_hasher();
+            h.write_u64(timestamp);
+            h.finish()
+        }
+        #[cfg(target_arch = "wasm32")]
+        {
+            (js_sys::Math::random() * u64::MAX as f64) as u64
+        }
+    };
 
     // Convert to alphanumeric (base36-ish)
     const CHARS: &[u8] = b"abcdefghijklmnopqrstuvwxyz0123456789";

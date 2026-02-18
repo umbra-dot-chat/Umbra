@@ -9,8 +9,8 @@
  * These are tried in order if the primary fails.
  */
 export const DEFAULT_RELAY_SERVERS = [
-  'wss://relay.deepspaceshipping.co/ws',
-  'wss://seoul.relay.deepspaceshipping.co/ws',
+  'wss://relay.umbra.chat/ws',
+  'wss://seoul.relay.umbra.chat/ws',
 ] as const;
 
 /**
@@ -35,8 +35,8 @@ export const ICE_SERVERS: IceServerConfig[] = [
   { urls: 'stun:stun1.l.google.com:19302' },
   {
     urls: [
-      'turn:turn.deepspaceshipping.co:3478?transport=udp',
-      'turn:turn.deepspaceshipping.co:3478?transport=tcp',
+      'turn:turn.umbra.chat:3478?transport=udp',
+      'turn:turn.umbra.chat:3478?transport=tcp',
     ],
     // Credentials are generated dynamically via generateTurnCredentials()
   },

@@ -125,6 +125,8 @@
 //! └─────────────────────────────────────────────────────────────────────────┘
 //! ```
 
+pub mod files;
+
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use parking_lot::RwLock;

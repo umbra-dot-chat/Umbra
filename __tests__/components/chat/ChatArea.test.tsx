@@ -3,6 +3,14 @@ import { render } from '@testing-library/react-native';
 import { ChatArea } from '@/components/chat/ChatArea';
 import type { Message } from '@umbra/service';
 
+jest.mock('@/contexts/MessagingContext', () => ({
+  useMessaging: jest.fn(() => ({
+    displayMode: 'bubble',
+    setDisplayMode: jest.fn(),
+    preferencesLoaded: true,
+  })),
+}));
+
 jest.mock('@/contexts/PluginContext', () => ({
   usePlugins: jest.fn(() => ({
     getSlotComponents: jest.fn(() => []),

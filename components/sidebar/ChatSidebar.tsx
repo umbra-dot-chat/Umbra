@@ -1,8 +1,9 @@
-import { BookOpenIcon, CheckIcon, PlusIcon, SettingsIcon, ShoppingBagIcon, UsersIcon, XIcon } from '@/components/icons';
+import { BookOpenIcon, CheckIcon, PlusIcon, ShoppingBagIcon, UsersIcon, XIcon } from '@/components/icons';
 import {
   Avatar, AvatarGroup, Button,
   SearchInput,
   Sidebar, SidebarSection,
+  Skeleton,
   useTheme,
 } from '@coexist/wisp-react-native';
 import { ConversationListItem } from '@coexist/wisp-react-native/src/components/conversation-list-item';
@@ -19,7 +20,6 @@ export interface ChatSidebarProps {
   conversations: { id: string; name: string; last: string; time: string; unread: number; online?: boolean; pinned?: boolean; status?: string; group?: string[]; isGroup?: boolean }[];
   activeId: string | null;
   onSelectConversation: (id: string) => void;
-  onOpenSettings: () => void;
   onFriendsPress: () => void;
   onNewDm?: () => void;
   onCreateGroup?: () => void;
@@ -32,6 +32,8 @@ export interface ChatSidebarProps {
   onAcceptInvite?: (inviteId: string) => void;
   /** Decline a group invite */
   onDeclineInvite?: (inviteId: string) => void;
+  /** Whether conversations are still loading */
+  loading?: boolean;
 }
 
 export function ChatSidebar(props: ChatSidebarProps) {
@@ -40,9 +42,9 @@ export function ChatSidebar(props: ChatSidebarProps) {
 
 function ChatSidebarInner({
   search, onSearchChange, conversations,
-  activeId, onSelectConversation, onOpenSettings,
+  activeId, onSelectConversation,
   onFriendsPress, onNewDm, onCreateGroup, onGuidePress, onMarketplacePress, isFriendsActive,
-  pendingInvites, onAcceptInvite, onDeclineInvite,
+  pendingInvites, onAcceptInvite, onDeclineInvite, loading,
 }: ChatSidebarProps) {
   const { theme } = useTheme();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -59,25 +61,15 @@ function ChatSidebarInner({
       <Sidebar width="wide" style={{ paddingHorizontal: 8, paddingTop: 20 }}>
         {/* Search bar */}
         <SidebarSection>
-          <View style={{ paddingHorizontal: 6, flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <View style={{ flex: 1 }}>
-              <SearchInput
-                value={search}
-                onValueChange={onSearchChange}
-                placeholder="Search..."
-                size="md"
-                fullWidth
-                onSurface
-                onClear={() => onSearchChange('')}
-              />
-            </View>
-            <Button
-              variant="tertiary"
-              onSurface
+          <View style={{ paddingHorizontal: 6 }}>
+            <SearchInput
+              value={search}
+              onValueChange={onSearchChange}
+              placeholder="Search..."
               size="md"
-              onPress={onOpenSettings}
-              accessibilityLabel="Settings"
-              iconLeft={<SettingsIcon size={16} color={theme.colors.text.onRaisedSecondary} />}
+              fullWidth
+              onSurface
+              onClear={() => onSearchChange('')}
             />
           </View>
         </SidebarSection>
@@ -131,6 +123,7 @@ function ChatSidebarInner({
             </View>
           )}
         </SidebarSection>
+
         {/* Group Invites Section — only shown when there are pending invites */}
         {pendingInvites && pendingInvites.length > 0 && (
           <SidebarSection title={`Group Invites (${pendingInvites.length})`}>
@@ -212,31 +205,55 @@ function ChatSidebarInner({
             )}
           </View>
           <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
-            {conversations.map((c) => (
-              <ConversationListItem
-                key={c.id}
-                name={c.name}
-                lastMessage={c.last}
-                timestamp={c.time}
-                unreadCount={c.unread}
-                online={c.online}
-                pinned={c.pinned}
-                status={c.status as any}
-                active={c.id === activeId}
-                onPress={() => onSelectConversation(c.id)}
-                avatar={
-                  c.group ? (
-                    <AvatarGroup max={2} size="sm" spacing={10} onSurface>
-                      {c.group.map((name) => (
-                        <Avatar key={name} name={name} size="sm" />
-                      ))}
-                    </AvatarGroup>
-                  ) : (
-                    <Avatar name={c.name} size="md" onSurface status={c.online ? 'online' : undefined} />
-                  )
-                }
-              />
-            ))}
+            {loading ? (
+              /* Skeleton conversation list items */
+              <>
+                {[1, 2, 3, 4, 5].map((i) => (
+                  <View
+                    key={i}
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 10,
+                      paddingHorizontal: 12,
+                      paddingVertical: 10,
+                    }}
+                  >
+                    <Skeleton variant="circular" width={36} height={36} />
+                    <View style={{ flex: 1, gap: 6 }}>
+                      <Skeleton variant="rectangular" height={12} radius={4} width="60%" />
+                      <Skeleton variant="rectangular" height={10} radius={4} width="85%" />
+                    </View>
+                  </View>
+                ))}
+              </>
+            ) : (
+              conversations.map((c) => (
+                <ConversationListItem
+                  key={c.id}
+                  name={c.name}
+                  lastMessage={c.last}
+                  timestamp={c.time}
+                  unreadCount={c.unread}
+                  online={c.online}
+                  pinned={c.pinned}
+                  status={c.status as any}
+                  active={c.id === activeId}
+                  onPress={() => onSelectConversation(c.id)}
+                  avatar={
+                    c.group ? (
+                      <AvatarGroup max={2} size="sm" spacing={10} onSurface>
+                        {c.group.map((name) => (
+                          <Avatar key={name} name={name} size="sm" />
+                        ))}
+                      </AvatarGroup>
+                    ) : (
+                      <Avatar name={c.name} size="md" onSurface status={c.online ? 'online' : undefined} />
+                    )
+                  }
+                />
+              ))
+            )}
           </ScrollView>
         </SidebarSection>
       </Sidebar>

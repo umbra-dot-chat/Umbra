@@ -44,6 +44,9 @@ import type {
   GroupMemberRemovedPayload,
   MessageStatusPayload,
   FriendRequest,
+  CommunityEventPayload,
+  DmFileEventPayload,
+  AccountMetadataPayload,
 } from '@umbra/service';
 import { PRIMARY_RELAY_URL, NETWORK_CONFIG } from '@/config';
 
@@ -759,6 +762,26 @@ export function useNetwork(): UseNetworkResult {
                     service.dispatchCallEvent({ type: 'callEnd', payload: envelope.payload as any });
                   } else if (envelope.envelope === 'call_state' && envelope.version === 1) {
                     service.dispatchCallEvent({ type: 'callState', payload: envelope.payload as any });
+                  } else if (envelope.envelope === 'community_event' && envelope.version === 1) {
+                    // Handle incoming community sync event
+                    const communityPayload = envelope.payload as CommunityEventPayload;
+                    console.log('[useNetwork] Community event received:', communityPayload.event.type, 'from', communityPayload.senderDid);
+                    service.dispatchCommunityEvent(communityPayload.event);
+                  } else if (envelope.envelope === 'dm_file_event' && envelope.version === 1) {
+                    // Handle incoming DM file event
+                    const dmFilePayload = envelope.payload as DmFileEventPayload;
+                    console.log('[useNetwork] DM file event received:', dmFilePayload.event.type, 'from', dmFilePayload.senderDid);
+                    service.dispatchDmFileEvent(dmFilePayload);
+                  } else if (envelope.envelope === 'account_metadata' && envelope.version === 1) {
+                    // Handle incoming account metadata sync (from another session)
+                    const metaPayload = envelope.payload as AccountMetadataPayload;
+                    console.log('[useNetwork] Metadata received:', metaPayload.key, 'from', metaPayload.senderDid);
+                    service.dispatchMetadataEvent({
+                      type: 'metadataReceived',
+                      key: metaPayload.key,
+                      value: metaPayload.value,
+                      timestamp: metaPayload.timestamp,
+                    });
                   }
                 } catch (parseErr) {
                   console.log('[useNetwork] Message payload is not a relay envelope:', parseErr);
@@ -959,6 +982,26 @@ export function useNetwork(): UseNetworkResult {
                       } catch (err) {
                         console.warn('[useNetwork] Failed to update offline message status:', err);
                       }
+                    } else if (envelope.envelope === 'community_event' && envelope.version === 1) {
+                      // Handle offline community sync event
+                      const communityPayload = envelope.payload as CommunityEventPayload;
+                      console.log('[useNetwork] Offline community event:', communityPayload.event.type);
+                      service.dispatchCommunityEvent(communityPayload.event);
+                    } else if (envelope.envelope === 'dm_file_event' && envelope.version === 1) {
+                      // Handle offline DM file event
+                      const dmFilePayload = envelope.payload as DmFileEventPayload;
+                      console.log('[useNetwork] Offline DM file event:', dmFilePayload.event.type);
+                      service.dispatchDmFileEvent(dmFilePayload);
+                    } else if (envelope.envelope === 'account_metadata' && envelope.version === 1) {
+                      // Handle offline account metadata sync
+                      const metaPayload = envelope.payload as AccountMetadataPayload;
+                      console.log('[useNetwork] Offline metadata:', metaPayload.key);
+                      service.dispatchMetadataEvent({
+                        type: 'metadataReceived',
+                        key: metaPayload.key,
+                        value: metaPayload.value,
+                        timestamp: metaPayload.timestamp,
+                      });
                     }
                   } catch (parseErr) {
                     console.log('[useNetwork] Offline message parse error:', parseErr);

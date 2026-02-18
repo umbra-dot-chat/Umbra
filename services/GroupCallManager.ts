@@ -21,6 +21,12 @@ interface PeerConnection {
   pendingCandidates: RTCIceCandidateInit[];
 }
 
+interface AudioAnalysis {
+  analyser: AnalyserNode;
+  dataArray: Uint8Array<ArrayBuffer>;
+  source: MediaStreamAudioSourceNode;
+}
+
 export class GroupCallManager {
   private roomId: string | null = null;
   private localStream: MediaStream | null = null;
@@ -29,6 +35,11 @@ export class GroupCallManager {
   private _videoQuality: VideoQuality = 'auto';
   private _audioQuality: AudioQuality = 'opus-voice';
   private _isScreenSharing = false;
+
+  // Audio level monitoring
+  private audioContext: AudioContext | null = null;
+  private localAnalysis: AudioAnalysis | null = null;
+  private peerAnalysis: Map<string, AudioAnalysis> = new Map();
 
   // Callbacks
   onRemoteStream: ((did: string, stream: MediaStream) => void) | null = null;
@@ -69,6 +80,106 @@ export class GroupCallManager {
     }
 
     return servers;
+  }
+
+  /**
+   * Ensure AudioContext exists (lazy init).
+   */
+  private ensureAudioContext(): AudioContext {
+    if (!this.audioContext) {
+      this.audioContext = new AudioContext();
+    }
+    return this.audioContext;
+  }
+
+  /**
+   * Create an AnalyserNode for a media stream. Used for audio level detection.
+   */
+  private createAnalysisForStream(stream: MediaStream): AudioAnalysis | null {
+    try {
+      const ctx = this.ensureAudioContext();
+      const source = ctx.createMediaStreamSource(stream);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 256;
+      analyser.smoothingTimeConstant = 0.5;
+      source.connect(analyser);
+      const dataArray = new Uint8Array(analyser.frequencyBinCount);
+      return { analyser, dataArray, source };
+    } catch {
+      return null;
+    }
+  }
+
+  /**
+   * Set up local audio analysis after getUserMedia.
+   */
+  private setupLocalAudioAnalysis(): void {
+    if (!this.localStream) return;
+    this.localAnalysis = this.createAnalysisForStream(this.localStream);
+  }
+
+  /**
+   * Set up remote audio analysis for a peer stream.
+   */
+  setupPeerAudioAnalysis(did: string, stream: MediaStream): void {
+    // Clean up existing analysis for this peer
+    this.cleanupPeerAnalysis(did);
+    const analysis = this.createAnalysisForStream(stream);
+    if (analysis) {
+      this.peerAnalysis.set(did, analysis);
+    }
+  }
+
+  /**
+   * Clean up audio analysis for a specific peer.
+   */
+  private cleanupPeerAnalysis(did: string): void {
+    const analysis = this.peerAnalysis.get(did);
+    if (analysis) {
+      analysis.source.disconnect();
+      this.peerAnalysis.delete(did);
+    }
+  }
+
+  /**
+   * Get the current audio level (0–1) from an AnalyserNode.
+   */
+  private getLevel(analysis: AudioAnalysis): number {
+    analysis.analyser.getByteFrequencyData(analysis.dataArray);
+    let sum = 0;
+    for (let i = 0; i < analysis.dataArray.length; i++) {
+      sum += analysis.dataArray[i];
+    }
+    return sum / (analysis.dataArray.length * 255);
+  }
+
+  /**
+   * Get the current local audio level (0–1). Returns 0 if not available.
+   */
+  getLocalAudioLevel(): number {
+    if (!this.localAnalysis) return 0;
+    return this.getLevel(this.localAnalysis);
+  }
+
+  /**
+   * Get the current audio level (0–1) for a specific remote peer.
+   */
+  getPeerAudioLevel(did: string): number {
+    const analysis = this.peerAnalysis.get(did);
+    if (!analysis) return 0;
+    return this.getLevel(analysis);
+  }
+
+  /**
+   * Get all current audio levels: 'local' key for self, DID keys for peers.
+   */
+  getAllAudioLevels(): Map<string, number> {
+    const levels = new Map<string, number>();
+    levels.set('local', this.getLocalAudioLevel());
+    for (const [did] of this.peerAnalysis) {
+      levels.set(did, this.getPeerAudioLevel(did));
+    }
+    return levels;
   }
 
   /**
@@ -151,6 +262,7 @@ export class GroupCallManager {
     };
 
     this.localStream = await navigator.mediaDevices.getUserMedia(constraints);
+    this.setupLocalAudioAnalysis();
     return this.localStream;
   }
 
@@ -264,6 +376,7 @@ export class GroupCallManager {
 
     peer.pc.close();
     this.peers.delete(did);
+    this.cleanupPeerAnalysis(did);
     this.onRemoteStreamRemoved?.(did);
   }
 
@@ -475,6 +588,20 @@ export class GroupCallManager {
 
     this._isScreenSharing = false;
     this.roomId = null;
+
+    // Clean up audio analysis
+    if (this.localAnalysis) {
+      this.localAnalysis.source.disconnect();
+      this.localAnalysis = null;
+    }
+    for (const [did] of this.peerAnalysis) {
+      this.cleanupPeerAnalysis(did);
+    }
+    this.peerAnalysis.clear();
+    if (this.audioContext) {
+      this.audioContext.close().catch(() => {});
+      this.audioContext = null;
+    }
 
     // Reset callbacks
     this.onRemoteStream = null;

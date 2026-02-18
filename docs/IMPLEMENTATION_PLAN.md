@@ -59,7 +59,7 @@ This plan covers six major workstreams to bring Umbra from its current state (1:
 | Decision | Choice |
 |----------|--------|
 | E2E approach | **Manual first, then Playwright automation** |
-| Test relay | **Production relay** at `relay.deepspaceshipping.co` (deploy via `scripts/deploy.sh`) |
+| Test relay | **Production relay** at `relay.umbra.chat` (deploy via `scripts/deploy.sh`) |
 | CI setup | **Local only for now** |
 
 ### Guide Decisions
@@ -568,7 +568,7 @@ On web (WASM), the sql.js database is entirely in-memory (`new SQL.Database()` i
 
 ### 5A. Manual Chrome Testing Checklist
 
-Test in Chrome with dev tools open. Use production relay at `relay.deepspaceshipping.co`.
+Test in Chrome with dev tools open. Use production relay at `relay.umbra.chat`.
 
 *(Manual testing checklist — these are test scripts, not code to implement. Check off as tested.)*
 
@@ -631,7 +631,7 @@ Test in Chrome with dev tools open. Use production relay at `relay.deepspaceship
 - [ ] Install Playwright: `npm install -D @playwright/test` **NOT INSTALLED**
 - [ ] Create `__tests__/e2e/playwright.config.ts` with Chromium, base URL `localhost:8081` **NOT CREATED**
 - [ ] Add `test:e2e` script to `package.json` **NOT ADDED**
-- [ ] Use production relay at `relay.deepspaceshipping.co`
+- [ ] Use production relay at `relay.umbra.chat`
 
 **Status: Playwright tests NOT YET IMPLEMENTED. Only relay E2E tests exist (20 tests in `__tests__/integration/relay-e2e.test.ts` — all passing).**
 

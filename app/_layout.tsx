@@ -1,3 +1,4 @@
+import 'react-native-gesture-handler';
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { View } from 'react-native';
 import { Slot, useSegments, useRouter, useNavigationContainerRef } from 'expo-router';
@@ -8,7 +9,8 @@ import { UmbraProvider, useUmbra } from '@/contexts/UmbraContext';
 import { PluginProvider } from '@/contexts/PluginContext';
 import { HelpProvider } from '@/contexts/HelpContext';
 import { FontProvider } from '@/contexts/FontContext';
-import { ThemeProvider } from '@/contexts/ThemeContext';
+import { ThemeProvider, useAppTheme } from '@/contexts/ThemeContext';
+import { MessagingProvider } from '@/contexts/MessagingContext';
 import { HelpPopoverHost } from '@/components/ui/HelpPopoverHost';
 import { PinLockScreen } from '@/components/auth/PinLockScreen';
 import { LoadingScreen } from '@/components/loading/LoadingScreen';
@@ -16,12 +18,13 @@ import type { LoadingStep } from '@/components/loading/LoadingScreen';
 import { useNetwork } from '@/hooks/useNetwork';
 import { PRIMARY_RELAY_URL } from '@/config';
 
-/** Max time (ms) to wait for the relay before dismissing loading screen */
+/** Max time (ms) to wait for the relay before giving up retries */
 const RELAY_TIMEOUT_MS = 5000;
 
 function AuthGate() {
   const { isAuthenticated, hasPin, isPinVerified, identity } = useAuth();
   const { isReady, isLoading, initStage } = useUmbra();
+  const { preferencesLoaded } = useAppTheme();
   const { relayConnected, connectRelay } = useNetwork();
   const segments = useSegments();
   const router = useRouter();
@@ -93,16 +96,17 @@ function AuthGate() {
     }
   }, [relayConnected, relayTimedOut]);
 
-  // Build loading steps based on initialization state.
-  // Uses granular initStage from UmbraContext to show detailed progress,
-  // including IndexedDB database restoration when a persisted identity exists.
+  // ── Loading screen steps ──────────────────────────────────────────────
+  // Only shown for essential init: core, database, identity, preferences.
+  // Relay connection is non-blocking and happens in the background.
+
   const loadingSteps = useMemo<LoadingStep[]>(() => {
     // Core: WASM + sql.js + database schema
     const coreComplete = isReady;
     const coreStatus: LoadingStep['status'] =
       coreComplete ? 'complete' : isLoading ? 'active' : 'pending';
 
-    // Database: IndexedDB persistence restore (only shown when a DID was available at init)
+    // Database: IndexedDB persistence restore
     const dbStatus: LoadingStep['status'] =
       initStage === 'loading-db' ? 'active' :
       coreComplete ? 'complete' :
@@ -117,28 +121,27 @@ function AuthGate() {
       isReady ? (identity ? 'active' : 'complete') :
       'pending';
 
-    // Relay: Connecting to relay server
-    const relayDone = relayConnected || relayTimedOut;
-    const relayStatus: LoadingStep['status'] =
-      relayDone ? 'complete' :
-      (initStage === 'hydrated' || (isReady && !identity)) ? 'active' :
+    // Preferences: Theme, font, accent color loaded from WASM KV
+    const prefsStatus: LoadingStep['status'] =
+      preferencesLoaded ? 'complete' :
+      (initStage === 'hydrated' || initStage === 'loading-data') ? 'active' :
       'pending';
 
     const allDone =
       coreStatus === 'complete' &&
       identityStatus === 'complete' &&
-      relayStatus === 'complete';
+      prefsStatus === 'complete';
 
     return [
       { id: 'core', label: 'Initializing core', status: coreStatus },
       { id: 'db', label: 'Loading database', status: dbStatus },
       { id: 'identity', label: 'Restoring identity', status: identityStatus },
-      { id: 'relay', label: 'Connecting to relay', status: relayStatus },
+      { id: 'prefs', label: 'Loading preferences', status: prefsStatus },
       { id: 'ready', label: 'Ready', status: allDone ? 'complete' : 'pending' },
     ];
-  }, [isReady, isLoading, initStage, identity, relayConnected, relayTimedOut]);
+  }, [isReady, isLoading, initStage, identity, preferencesLoaded]);
 
-  // Show loading screen while authenticated and steps are not all complete
+  // Show loading screen while authenticated and essential steps are not all complete
   const showLoading = isAuthenticated && !loadingDismissed && !loadingSteps.every(s => s.status === 'complete');
 
   const handleLoadingComplete = useCallback(() => {
@@ -167,6 +170,7 @@ export default function RootLayout() {
           <UmbraProvider>
             <FontProvider>
               <ThemeProvider>
+                <MessagingProvider>
                 <PluginProvider>
                   <HelpProvider>
                     <StatusBar style="dark" />
@@ -174,6 +178,7 @@ export default function RootLayout() {
                     <HelpPopoverHost />
                   </HelpProvider>
                 </PluginProvider>
+                </MessagingProvider>
               </ThemeProvider>
             </FontProvider>
           </UmbraProvider>

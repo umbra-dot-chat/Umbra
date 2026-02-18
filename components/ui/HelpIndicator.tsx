@@ -160,7 +160,7 @@ export function HelpIndicator({
       : tc.background.raised;
 
   const borderColor = viewed
-    ? tc.border.default
+    ? tc.border.subtle
     : active
       ? accentColor
       : tc.border.strong;

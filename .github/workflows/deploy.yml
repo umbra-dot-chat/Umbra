@@ -66,15 +66,15 @@ jobs:
             relay_region: "US East"
             relay_location: "New York"
             relay_id: "relay-us-east-1"
-            relay_public_url: "wss://relay.deepspaceshipping.co/ws"
-            relay_peers: "wss://seoul.relay.deepspaceshipping.co/ws"
+            relay_public_url: "wss://relay.umbra.chat/ws"
+            relay_peers: "wss://seoul.relay.umbra.chat/ws"
           - name: Seoul
             host: 158.247.209.160
             relay_region: "Asia Pacific"
             relay_location: "Seoul"
             relay_id: "relay-ap-seoul-1"
-            relay_public_url: "wss://seoul.relay.deepspaceshipping.co/ws"
-            relay_peers: "wss://relay.deepspaceshipping.co/ws"
+            relay_public_url: "wss://seoul.relay.umbra.chat/ws"
+            relay_peers: "wss://relay.umbra.chat/ws"
 
     steps:
       - name: Checkout
@@ -277,7 +277,7 @@ jobs:
         env:
           SSH_USER: ${{ secrets.DEPLOY_SSH_USER }}
           HOST: ${{ secrets.FRONTEND_HOST_IP }}
-          DEPLOY_PATH: /var/www/chat.deepspaceshipping.co
+          DEPLOY_PATH: /var/www/umbra.chat
         run: |
           SSH_OPTS="-i ~/.ssh/deploy_key -o StrictHostKeyChecking=no"
 
@@ -291,7 +291,7 @@ jobs:
       - name: Verify deployment
         run: |
           sleep 5
-          STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://chat.deepspaceshipping.co/) || true
+          STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://umbra.chat/) || true
           if [ "$STATUS" = "200" ]; then
             echo "✓ Frontend is live (HTTP $STATUS)"
           else

@@ -7,7 +7,7 @@ import { TestBot } from './test-bot.js';
 
 const TARGET_DID = process.argv[2] || 'did:key:z6MkhbPzZDuagC6mouD8FDB2Hjc4gDiwLTPZG2MNDGWWbTeT';
 const CALL_TYPE = (process.argv[3] as 'voice' | 'video') || 'voice';
-const RELAY = 'wss://relay.deepspaceshipping.co/ws';
+const RELAY = 'wss://relay.umbra.chat/ws';
 
 async function main() {
   const bot = new TestBot({

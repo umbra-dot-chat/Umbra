@@ -155,7 +155,7 @@ export interface BotConfig {
 }
 
 const DEFAULT_CONFIG: BotConfig = {
-  relayUrl: 'wss://relay.deepspaceshipping.co/ws',
+  relayUrl: 'wss://relay.umbra.chat/ws',
   name: 'TestBot',
   autoAcceptFriends: true,
   autoAcceptCalls: true,

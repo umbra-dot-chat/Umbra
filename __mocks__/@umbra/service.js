@@ -284,6 +284,85 @@ const mockInstance = {
   endCallRecord: jest.fn(() => Promise.resolve({ id: 'call-1', endedAt: Date.now(), durationMs: 60000 })),
   getCallHistory: jest.fn(() => Promise.resolve([])),
   getAllCallHistory: jest.fn(() => Promise.resolve([])),
+
+  // Community
+  createCommunity: jest.fn((name, ownerDid) =>
+    Promise.resolve({ communityId: `community-${Date.now()}`, community: { id: `community-${Date.now()}`, name, ownerDid } })
+  ),
+  getCommunity: jest.fn((id) => Promise.resolve({ id, name: 'Test Community', ownerDid: 'did:key:z6MkTest' })),
+  getCommunities: jest.fn(() => Promise.resolve([])),
+  updateCommunity: jest.fn(() => Promise.resolve()),
+  deleteCommunity: jest.fn(() => Promise.resolve()),
+  createSpace: jest.fn((communityId, name) => Promise.resolve({ id: `space-${Date.now()}`, communityId, name, position: 0 })),
+  getSpaces: jest.fn(() => Promise.resolve([])),
+  updateSpace: jest.fn(() => Promise.resolve()),
+  deleteSpace: jest.fn(() => Promise.resolve()),
+  reorderSpaces: jest.fn(() => Promise.resolve()),
+  createCategory: jest.fn((communityId, spaceId, name) => Promise.resolve({ id: `cat-${Date.now()}`, communityId, spaceId, name, position: 0 })),
+  getCategories: jest.fn(() => Promise.resolve([])),
+  getAllCategories: jest.fn(() => Promise.resolve([])),
+  updateCategory: jest.fn(() => Promise.resolve()),
+  reorderCategories: jest.fn(() => Promise.resolve()),
+  deleteCategory: jest.fn(() => Promise.resolve()),
+  moveChannelToCategory: jest.fn(() => Promise.resolve()),
+  createChannel: jest.fn((communityId, spaceId, name, type) =>
+    Promise.resolve({ id: `ch-${Date.now()}`, communityId, spaceId, name, channelType: type, position: 0 })
+  ),
+  getChannels: jest.fn(() => Promise.resolve([])),
+  getAllChannels: jest.fn(() => Promise.resolve([])),
+  getChannel: jest.fn((id) => Promise.resolve({ id, name: 'general', channelType: 'text' })),
+  updateChannel: jest.fn(() => Promise.resolve()),
+  deleteChannel: jest.fn(() => Promise.resolve()),
+  reorderChannels: jest.fn(() => Promise.resolve()),
+  setSlowMode: jest.fn(() => Promise.resolve()),
+  setChannelE2ee: jest.fn(() => Promise.resolve()),
+  joinCommunity: jest.fn(() => Promise.resolve()),
+  leaveCommunity: jest.fn(() => Promise.resolve()),
+  getCommunityMembers: jest.fn(() => Promise.resolve([])),
+  getCommunityMember: jest.fn((communityId, did) =>
+    Promise.resolve({ communityId, memberDid: did, nickname: 'Test', joinedAt: Date.now() })
+  ),
+  kickCommunityMember: jest.fn(() => Promise.resolve()),
+  banCommunityMember: jest.fn(() => Promise.resolve()),
+  unbanCommunityMember: jest.fn(() => Promise.resolve()),
+  getCommunityRoles: jest.fn(() => Promise.resolve([])),
+  getMemberRoles: jest.fn(() => Promise.resolve([])),
+  assignRole: jest.fn(() => Promise.resolve()),
+  unassignRole: jest.fn(() => Promise.resolve()),
+  createCustomRole: jest.fn((communityId, name) =>
+    Promise.resolve({ id: `role-${Date.now()}`, communityId, name, position: 10, color: null })
+  ),
+  updateRole: jest.fn(() => Promise.resolve()),
+  updateRolePermissions: jest.fn(() => Promise.resolve()),
+  deleteRole: jest.fn(() => Promise.resolve()),
+  createCommunityInvite: jest.fn((communityId) =>
+    Promise.resolve({ id: `invite-${Date.now()}`, communityId, code: 'ABC123', useCount: 0, createdAt: Date.now() })
+  ),
+  useCommunityInvite: jest.fn(() => Promise.resolve('community-123')),
+  getCommunityInvites: jest.fn(() => Promise.resolve([])),
+  deleteCommunityInvite: jest.fn(() => Promise.resolve()),
+  sendCommunityMessage: jest.fn((channelId, senderDid, content) =>
+    Promise.resolve({ id: `cmsg-${Date.now()}`, channelId, senderDid, content, timestamp: Date.now() })
+  ),
+  getCommunityMessages: jest.fn(() => Promise.resolve([])),
+  editCommunityMessage: jest.fn(() => Promise.resolve()),
+  deleteCommunityMessage: jest.fn(() => Promise.resolve()),
+  addCommunityReaction: jest.fn(() => Promise.resolve()),
+  removeCommunityReaction: jest.fn(() => Promise.resolve()),
+  pinCommunityMessage: jest.fn(() => Promise.resolve()),
+  unpinCommunityMessage: jest.fn(() => Promise.resolve()),
+  getCommunityPinnedMessages: jest.fn(() => Promise.resolve([])),
+  markCommunityRead: jest.fn(() => Promise.resolve()),
+  onCommunityEvent: jest.fn(() => jest.fn()),
+  dispatchCommunityEvent: jest.fn(),
+  broadcastCommunityEvent: jest.fn(() => Promise.resolve()),
+  getRelayWs: jest.fn(() => null),
+
+  // Group events
+  onGroupEvent: jest.fn(() => jest.fn()),
+  dispatchGroupEvent: jest.fn(),
+  dispatchFriendEvent: jest.fn(),
+  dispatchMessageEvent: jest.fn(),
 };
 
 class UmbraService {
