@@ -6,7 +6,7 @@ import {
   Text, useTheme,
 } from '@coexist/wisp-react-native';
 import type { RightPanel } from '@/types/panels';
-import { SearchIcon, PinIcon, UsersIcon, PhoneIcon, VideoIcon, PaperclipIcon } from '@/components/icons';
+import { SearchIcon, PinIcon, UsersIcon, PhoneIcon, VideoIcon, PaperclipIcon, FolderIcon } from '@/components/icons';
 
 export interface ChatHeaderProps {
   active: { name: string; online?: boolean; group?: string[]; memberCount?: number } | undefined;
@@ -17,9 +17,11 @@ export interface ChatHeaderProps {
   onVideoCall?: () => void;
   /** Whether to show call buttons */
   showCallButtons?: boolean;
+  /** Create a shared folder for this DM conversation */
+  onCreateSharedFolder?: () => void;
 }
 
-export function ChatHeader({ active, rightPanel, togglePanel, onShowProfile, onVoiceCall, onVideoCall, showCallButtons }: ChatHeaderProps) {
+export function ChatHeader({ active, rightPanel, togglePanel, onShowProfile, onVoiceCall, onVideoCall, showCallButtons, onCreateSharedFolder }: ChatHeaderProps) {
   const { theme } = useTheme();
   const themeColors = theme.colors;
 
@@ -91,6 +93,15 @@ export function ChatHeader({ active, rightPanel, togglePanel, onShowProfile, onV
           accessibilityLabel="Toggle shared files"
           iconLeft={<PaperclipIcon size={18} color={themeColors.text.secondary} />}
         />
+        {onCreateSharedFolder && (
+          <Button
+            variant="tertiary"
+            size="sm"
+            onPress={onCreateSharedFolder}
+            accessibilityLabel="Create shared folder"
+            iconLeft={<FolderIcon size={18} color={themeColors.text.secondary} />}
+          />
+        )}
         <Button
           variant={rightPanel === 'pins' ? 'secondary' : 'tertiary'}
           size="sm"

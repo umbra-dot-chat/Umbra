@@ -288,6 +288,22 @@ export default function ChatPage() {
     }
   }, [service, resolvedConversationId, sendMessage]);
 
+  // Handle creating a shared folder from a DM conversation
+  const handleCreateSharedFolder = useCallback(async () => {
+    if (!service || !resolvedConversationId) return;
+    try {
+      const name = typeof window !== 'undefined'
+        ? window.prompt('Shared folder name:')
+        : null;
+      if (!name?.trim()) return;
+
+      await service.createDmFolder(resolvedConversationId, null, name.trim(), myDid);
+      console.log('[ChatPage] Shared folder created:', name.trim());
+    } catch (err) {
+      console.error('[ChatPage] Failed to create shared folder:', err);
+    }
+  }, [service, resolvedConversationId]);
+
   // Handle thread reply
   const handleThreadReply = useCallback(async (text: string) => {
     if (!threadParent) return;
@@ -383,6 +399,7 @@ export default function ChatPage() {
           showCallButtons={!!resolvedConversationId && (isDm ? !!friendDid : true)}
           onVoiceCall={handleVoiceCall}
           onVideoCall={handleVideoCall}
+          onCreateSharedFolder={isDm && resolvedConversationId ? handleCreateSharedFolder : undefined}
         />
         <SlotRenderer slot="chat-header" props={{ conversationId: resolvedConversationId }} />
         {activeCall && activeCall.status !== 'incoming' && activeCall.conversationId === resolvedConversationId ? (

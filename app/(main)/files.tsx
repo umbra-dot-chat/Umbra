@@ -16,12 +16,16 @@ import { useSharedFolders } from '@/hooks/useSharedFolders';
 import { useStorageManager } from '@/hooks/useStorageManager';
 import { useUploadProgress } from '@/hooks/useUploadProgress';
 import { useCommunities } from '@/hooks/useCommunities';
+import { useConversations } from '@/hooks/useConversations';
+import { useFriends } from '@/hooks/useFriends';
+import { useUmbra } from '@/contexts/UmbraContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'expo-router';
 import {
   FolderIcon,
   FileTextIcon,
   DownloadIcon,
-  SettingsIcon,
+  PlusIcon,
 } from '@/components/icons';
 
 // ---------------------------------------------------------------------------
@@ -556,7 +560,75 @@ function StorageSection() {
 
 export default function FilesPage() {
   const { theme } = useTheme();
+  const { service } = useUmbra();
+  const { identity } = useAuth();
+  const myDid = identity?.did ?? '';
   const { hasActiveUploads, uploadRingProgress } = useUploadProgress();
+  const { conversations } = useConversations();
+  const { friends } = useFriends();
+  const { refresh: refreshFolders } = useSharedFolders();
+
+  // Build a friend DID → display name map
+  const friendNameMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const f of friends) {
+      map[f.did] = f.displayName;
+    }
+    return map;
+  }, [friends]);
+
+  // DM conversations for the "create shared folder" flow
+  const dmConversations = useMemo(
+    () => conversations.filter((c) => c.type !== 'group' && c.friendDid),
+    [conversations],
+  );
+
+  // Create shared folder from the Files page
+  const handleCreateSharedFolder = useCallback(async () => {
+    if (!service) return;
+
+    // Step 1: prompt for folder name
+    const name = typeof window !== 'undefined'
+      ? window.prompt('Shared folder name:')
+      : null;
+    if (!name?.trim()) return;
+
+    // Step 2: select a contact/conversation
+    // For now, use a simple prompt approach. A full dialog would be better.
+    const contactOptions = dmConversations.map(
+      (c) => `${friendNameMap[c.friendDid!] || c.friendDid!.slice(0, 16)} (${c.id.slice(0, 8)}...)`
+    ).join('\n');
+
+    if (dmConversations.length === 0) {
+      if (typeof window !== 'undefined') {
+        window.alert('No DM conversations available. Start a conversation with a friend first.');
+      }
+      return;
+    }
+
+    const indexStr = typeof window !== 'undefined'
+      ? window.prompt(
+          `Select a contact (enter number 1-${dmConversations.length}):\n\n` +
+          dmConversations.map(
+            (c, i) => `${i + 1}. ${friendNameMap[c.friendDid!] || c.friendDid!.slice(0, 16)}`
+          ).join('\n')
+        )
+      : null;
+
+    if (!indexStr) return;
+    const idx = parseInt(indexStr, 10) - 1;
+    if (idx < 0 || idx >= dmConversations.length) return;
+
+    const conv = dmConversations[idx];
+
+    try {
+      await service.createDmFolder(conv.id, null, name.trim(), myDid);
+      await refreshFolders();
+      console.log('[FilesPage] Shared folder created:', name.trim());
+    } catch (err) {
+      console.error('[FilesPage] Failed to create shared folder:', err);
+    }
+  }, [service, myDid, dmConversations, friendNameMap, refreshFolders]);
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.background.canvas }}>
@@ -592,6 +664,14 @@ export default function FilesPage() {
             </View>
           )}
         </View>
+        <Button
+          variant="primary"
+          size="sm"
+          onPress={handleCreateSharedFolder}
+          iconLeft={<PlusIcon size={16} color="#fff" />}
+        >
+          New Shared Folder
+        </Button>
       </View>
 
       {/* Content */}
