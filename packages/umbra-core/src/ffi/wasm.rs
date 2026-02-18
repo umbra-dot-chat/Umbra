@@ -76,6 +76,8 @@ static STATE: OnceCell<Arc<RwLock<WasmState>>> = OnceCell::new();
 // Using thread_local! because js_sys::Function is !Send, and WASM is single-threaded.
 thread_local! {
     static EVENT_CALLBACK: std::cell::RefCell<Option<js_sys::Function>> = std::cell::RefCell::new(None);
+    static TRANSFER_MANAGER: std::cell::RefCell<crate::network::TransferManager> =
+        std::cell::RefCell::new(crate::network::TransferManager::new());
 }
 
 struct WasmState {
@@ -7953,6 +7955,302 @@ pub fn umbra_wasm_get_file_manifest(json: &str) -> Result<JsValue, JsValue> {
         }
         None => Ok(JsValue::from_str("null")),
     }
+}
+
+// ============================================================================
+// FILE TRANSFER WASM EXPORTS (Section 3.4)
+// ============================================================================
+
+/// Initiate a file transfer to a peer.
+///
+/// Takes JSON: { file_id, peer_did, manifest_json }
+/// Returns JSON: { transfer_id, relay_message } — relay_message is the serialized
+/// FileTransferMessage for JS to send via relay/WebRTC.
+#[wasm_bindgen]
+pub fn umbra_wasm_transfer_initiate(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let file_id = data["file_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing file_id"))?;
+    let peer_did = data["peer_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing peer_did"))?;
+    let manifest_json = data["manifest_json"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing manifest_json"))?;
+
+    let manifest: crate::storage::chunking::ChunkManifest = serde_json::from_str(manifest_json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid manifest JSON: {}", e)))?;
+
+    let now = js_sys::Date::now() as i64;
+
+    TRANSFER_MANAGER.with(|mgr| {
+        let mut mgr = mgr.borrow_mut();
+        match mgr.initiate_transfer(file_id.to_string(), peer_did.to_string(), manifest, now) {
+            Ok((transfer_id, msg)) => {
+                let msg_json = serde_json::to_string(&msg)
+                    .map_err(|e| JsValue::from_str(&format!("Serialize error: {}", e)))?;
+
+                // Emit events
+                let events = mgr.drain_events();
+                for event in &events {
+                    emit_event("file_transfer", &serde_json::to_value(event).unwrap_or_default());
+                }
+
+                let result = serde_json::json!({
+                    "transfer_id": transfer_id,
+                    "message": msg_json,
+                });
+                Ok(JsValue::from_str(&result.to_string()))
+            }
+            Err(err) => Err(JsValue::from_str(&err)),
+        }
+    })
+}
+
+/// Accept an incoming transfer request.
+///
+/// Takes JSON: { transfer_id, existing_chunks?: number[] }
+/// Returns JSON: { message } — the TransferAccept message to send back.
+#[wasm_bindgen]
+pub fn umbra_wasm_transfer_accept(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let transfer_id = data["transfer_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing transfer_id"))?;
+    let existing_chunks: Vec<u32> = data["existing_chunks"].as_array()
+        .map(|arr| arr.iter().filter_map(|v| v.as_u64().map(|n| n as u32)).collect())
+        .unwrap_or_default();
+
+    let now = js_sys::Date::now() as i64;
+
+    TRANSFER_MANAGER.with(|mgr| {
+        let mut mgr = mgr.borrow_mut();
+        match mgr.accept_transfer(transfer_id, existing_chunks, now) {
+            Ok(msg) => {
+                let msg_json = serde_json::to_string(&msg)
+                    .map_err(|e| JsValue::from_str(&format!("Serialize error: {}", e)))?;
+
+                let events = mgr.drain_events();
+                for event in &events {
+                    emit_event("file_transfer", &serde_json::to_value(event).unwrap_or_default());
+                }
+
+                let result = serde_json::json!({ "message": msg_json });
+                Ok(JsValue::from_str(&result.to_string()))
+            }
+            Err(err) => Err(JsValue::from_str(&err)),
+        }
+    })
+}
+
+/// Pause a transfer.
+///
+/// Takes: transfer_id (string)
+/// Returns JSON: { message } — the PauseTransfer message to send.
+#[wasm_bindgen]
+pub fn umbra_wasm_transfer_pause(transfer_id: &str) -> Result<JsValue, JsValue> {
+    let now = js_sys::Date::now() as i64;
+    TRANSFER_MANAGER.with(|mgr| {
+        let mut mgr = mgr.borrow_mut();
+        match mgr.pause_transfer(transfer_id, now) {
+            Ok(msg) => {
+                let msg_json = serde_json::to_string(&msg)
+                    .map_err(|e| JsValue::from_str(&format!("Serialize error: {}", e)))?;
+                let events = mgr.drain_events();
+                for event in &events {
+                    emit_event("file_transfer", &serde_json::to_value(event).unwrap_or_default());
+                }
+                let result = serde_json::json!({ "message": msg_json });
+                Ok(JsValue::from_str(&result.to_string()))
+            }
+            Err(err) => Err(JsValue::from_str(&err)),
+        }
+    })
+}
+
+/// Resume a paused transfer.
+///
+/// Takes: transfer_id (string)
+/// Returns JSON: { message } — the ResumeTransfer message to send.
+#[wasm_bindgen]
+pub fn umbra_wasm_transfer_resume(transfer_id: &str) -> Result<JsValue, JsValue> {
+    let now = js_sys::Date::now() as i64;
+    TRANSFER_MANAGER.with(|mgr| {
+        let mut mgr = mgr.borrow_mut();
+        match mgr.resume_transfer(transfer_id, now) {
+            Ok(msg) => {
+                let msg_json = serde_json::to_string(&msg)
+                    .map_err(|e| JsValue::from_str(&format!("Serialize error: {}", e)))?;
+                let events = mgr.drain_events();
+                for event in &events {
+                    emit_event("file_transfer", &serde_json::to_value(event).unwrap_or_default());
+                }
+                let result = serde_json::json!({ "message": msg_json });
+                Ok(JsValue::from_str(&result.to_string()))
+            }
+            Err(err) => Err(JsValue::from_str(&err)),
+        }
+    })
+}
+
+/// Cancel a transfer.
+///
+/// Takes JSON: { transfer_id, reason? }
+/// Returns JSON: { message } — the CancelTransfer message to send.
+#[wasm_bindgen]
+pub fn umbra_wasm_transfer_cancel(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let transfer_id = data["transfer_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing transfer_id"))?;
+    let reason = data["reason"].as_str().map(|s| s.to_string());
+
+    let now = js_sys::Date::now() as i64;
+    TRANSFER_MANAGER.with(|mgr| {
+        let mut mgr = mgr.borrow_mut();
+        match mgr.cancel_transfer(transfer_id, reason, now) {
+            Ok(msg) => {
+                let msg_json = serde_json::to_string(&msg)
+                    .map_err(|e| JsValue::from_str(&format!("Serialize error: {}", e)))?;
+                let events = mgr.drain_events();
+                for event in &events {
+                    emit_event("file_transfer", &serde_json::to_value(event).unwrap_or_default());
+                }
+                let result = serde_json::json!({ "message": msg_json });
+                Ok(JsValue::from_str(&result.to_string()))
+            }
+            Err(err) => Err(JsValue::from_str(&err)),
+        }
+    })
+}
+
+/// Handle an incoming file transfer protocol message.
+///
+/// Takes JSON: { from_did, message } where message is a serialized FileTransferMessage.
+/// Returns JSON: { response_message? } — optional response to send back.
+#[wasm_bindgen]
+pub fn umbra_wasm_transfer_on_message(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let from_did = data["from_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing from_did"))?;
+    let message_str = data["message"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing message"))?;
+
+    let message: crate::network::FileTransferMessage = serde_json::from_str(message_str)
+        .map_err(|e| JsValue::from_str(&format!("Invalid transfer message: {}", e)))?;
+
+    let now = js_sys::Date::now() as i64;
+    TRANSFER_MANAGER.with(|mgr| {
+        let mut mgr = mgr.borrow_mut();
+        match mgr.on_message(from_did, message, now) {
+            Ok(response) => {
+                // Emit all pending events
+                let events = mgr.drain_events();
+                for event in &events {
+                    emit_event("file_transfer", &serde_json::to_value(event).unwrap_or_default());
+                }
+
+                match response {
+                    Some(msg) => {
+                        let msg_json = serde_json::to_string(&msg)
+                            .map_err(|e| JsValue::from_str(&format!("Serialize error: {}", e)))?;
+                        let result = serde_json::json!({ "response_message": msg_json });
+                        Ok(JsValue::from_str(&result.to_string()))
+                    }
+                    None => Ok(JsValue::from_str("{}")),
+                }
+            }
+            Err(err) => Err(JsValue::from_str(&err)),
+        }
+    })
+}
+
+/// List all transfer sessions.
+///
+/// Returns JSON: TransferSession[]
+#[wasm_bindgen]
+pub fn umbra_wasm_transfer_list() -> Result<JsValue, JsValue> {
+    TRANSFER_MANAGER.with(|mgr| {
+        let mgr = mgr.borrow();
+        let sessions: Vec<serde_json::Value> = mgr.all_sessions().iter().map(|s| {
+            serde_json::to_value(s).unwrap_or_default()
+        }).collect();
+        Ok(JsValue::from_str(&serde_json::to_string(&sessions).unwrap_or_default()))
+    })
+}
+
+/// Get a specific transfer session.
+///
+/// Takes: transfer_id (string)
+/// Returns JSON: TransferSession | null
+#[wasm_bindgen]
+pub fn umbra_wasm_transfer_get(transfer_id: &str) -> Result<JsValue, JsValue> {
+    TRANSFER_MANAGER.with(|mgr| {
+        let mgr = mgr.borrow();
+        match mgr.get_session(transfer_id) {
+            Some(session) => {
+                let json = serde_json::to_string(session).unwrap_or_default();
+                Ok(JsValue::from_str(&json))
+            }
+            None => Ok(JsValue::from_str("null")),
+        }
+    })
+}
+
+/// Get incomplete transfer sessions (for resume on restart).
+///
+/// Returns JSON: TransferSession[]
+#[wasm_bindgen]
+pub fn umbra_wasm_transfer_get_incomplete() -> Result<JsValue, JsValue> {
+    TRANSFER_MANAGER.with(|mgr| {
+        let mgr = mgr.borrow();
+        let sessions: Vec<serde_json::Value> = mgr.active_sessions().iter().map(|s| {
+            serde_json::to_value(s).unwrap_or_default()
+        }).collect();
+        Ok(JsValue::from_str(&serde_json::to_string(&sessions).unwrap_or_default()))
+    })
+}
+
+/// Get the next chunks to send for a transfer (respects flow control).
+///
+/// Takes: transfer_id (string)
+/// Returns JSON: { chunks: number[], transfer_id }
+#[wasm_bindgen]
+pub fn umbra_wasm_transfer_chunks_to_send(transfer_id: &str) -> Result<JsValue, JsValue> {
+    TRANSFER_MANAGER.with(|mgr| {
+        let mgr = mgr.borrow();
+        let chunks = mgr.chunks_to_send(transfer_id);
+        let result = serde_json::json!({
+            "transfer_id": transfer_id,
+            "chunks": chunks,
+        });
+        Ok(JsValue::from_str(&result.to_string()))
+    })
+}
+
+/// Mark a chunk as sent (for RTT tracking).
+///
+/// Takes JSON: { transfer_id, chunk_index }
+#[wasm_bindgen]
+pub fn umbra_wasm_transfer_mark_chunk_sent(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let transfer_id = data["transfer_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing transfer_id"))?;
+    let chunk_index = data["chunk_index"].as_u64()
+        .ok_or_else(|| JsValue::from_str("Missing chunk_index"))? as u32;
+
+    let now = js_sys::Date::now() as i64;
+    TRANSFER_MANAGER.with(|mgr| {
+        let mut mgr = mgr.borrow_mut();
+        mgr.mark_chunk_sent(transfer_id, chunk_index, now);
+        Ok(JsValue::from_str("{\"ok\":true}"))
+    })
 }
 
 // ============================================================================
