@@ -53,7 +53,7 @@
 //! ```
 
 /// Current schema version
-pub const SCHEMA_VERSION: i32 = 7;
+pub const SCHEMA_VERSION: i32 = 10;
 
 /// SQL to create all tables
 pub const CREATE_TABLES: &str = r#"
@@ -310,13 +310,28 @@ CREATE TABLE IF NOT EXISTS community_spaces (
 );
 CREATE INDEX IF NOT EXISTS idx_community_spaces_community ON community_spaces(community_id, position);
 
--- Channels within spaces
-CREATE TABLE IF NOT EXISTS community_channels (
+-- Categories within spaces (user-named channel groupings)
+CREATE TABLE IF NOT EXISTS community_categories (
     id TEXT PRIMARY KEY,
     community_id TEXT NOT NULL,
     space_id TEXT NOT NULL,
     name TEXT NOT NULL,
-    type TEXT NOT NULL CHECK(type IN ('text', 'voice', 'files', 'announcement', 'bulletin', 'welcome')),
+    position INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    FOREIGN KEY (community_id) REFERENCES communities(id) ON DELETE CASCADE,
+    FOREIGN KEY (space_id) REFERENCES community_spaces(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_community_categories_space ON community_categories(space_id, position);
+
+-- Channels within spaces (optionally assigned to a category)
+CREATE TABLE IF NOT EXISTS community_channels (
+    id TEXT PRIMARY KEY,
+    community_id TEXT NOT NULL,
+    space_id TEXT NOT NULL,
+    category_id TEXT,
+    name TEXT NOT NULL,
+    type TEXT NOT NULL CHECK(type IN ('text', 'voice', 'files', 'announcement', 'bulletin', 'welcome', 'forum')),
     topic TEXT,
     position INTEGER NOT NULL DEFAULT 0,
     slow_mode_seconds INTEGER DEFAULT 0,
@@ -325,7 +340,8 @@ CREATE TABLE IF NOT EXISTS community_channels (
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
     FOREIGN KEY (community_id) REFERENCES communities(id) ON DELETE CASCADE,
-    FOREIGN KEY (space_id) REFERENCES community_spaces(id) ON DELETE CASCADE
+    FOREIGN KEY (space_id) REFERENCES community_spaces(id) ON DELETE CASCADE,
+    FOREIGN KEY (category_id) REFERENCES community_categories(id) ON DELETE SET NULL
 );
 CREATE INDEX IF NOT EXISTS idx_community_channels_space ON community_channels(space_id, position);
 CREATE INDEX IF NOT EXISTS idx_community_channels_community ON community_channels(community_id);
@@ -677,6 +693,84 @@ CREATE TABLE IF NOT EXISTS community_notification_settings (
     UNIQUE(community_id, member_did, target_type, target_id)
 );
 CREATE INDEX IF NOT EXISTS idx_community_notification_settings_member ON community_notification_settings(community_id, member_did);
+
+-- File chunk storage (local chunks for P2P transfer)
+CREATE TABLE IF NOT EXISTS file_chunks (
+    chunk_id TEXT PRIMARY KEY,
+    file_id TEXT NOT NULL,
+    chunk_index INTEGER NOT NULL,
+    data BLOB NOT NULL,
+    size INTEGER NOT NULL,
+    created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_file_chunks_file ON file_chunks(file_id);
+
+-- File manifests (describe how a file was chunked)
+CREATE TABLE IF NOT EXISTS file_manifests (
+    file_id TEXT PRIMARY KEY,
+    filename TEXT NOT NULL,
+    total_size INTEGER NOT NULL,
+    chunk_size INTEGER NOT NULL,
+    total_chunks INTEGER NOT NULL,
+    chunks_json TEXT NOT NULL,
+    file_hash TEXT NOT NULL,
+    encrypted INTEGER NOT NULL DEFAULT 0,
+    encryption_key_id TEXT,
+    created_at INTEGER NOT NULL
+);
+
+-- DM shared files
+CREATE TABLE IF NOT EXISTS dm_shared_files (
+    id TEXT PRIMARY KEY,
+    conversation_id TEXT NOT NULL,
+    folder_id TEXT,
+    filename TEXT NOT NULL,
+    description TEXT,
+    file_size INTEGER NOT NULL,
+    mime_type TEXT,
+    storage_chunks_json TEXT NOT NULL,
+    uploaded_by TEXT NOT NULL,
+    version INTEGER NOT NULL DEFAULT 1,
+    download_count INTEGER NOT NULL DEFAULT 0,
+    encrypted_metadata TEXT,
+    encryption_nonce TEXT,
+    created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_dm_shared_files_conversation ON dm_shared_files(conversation_id);
+CREATE INDEX IF NOT EXISTS idx_dm_shared_files_folder ON dm_shared_files(folder_id);
+
+-- DM shared folders
+CREATE TABLE IF NOT EXISTS dm_shared_folders (
+    id TEXT PRIMARY KEY,
+    conversation_id TEXT NOT NULL,
+    parent_folder_id TEXT,
+    name TEXT NOT NULL,
+    created_by TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    FOREIGN KEY (parent_folder_id) REFERENCES dm_shared_folders(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_dm_shared_folders_conversation ON dm_shared_folders(conversation_id);
+
+-- Transfer sessions (P2P file transfer state persistence for resume)
+CREATE TABLE IF NOT EXISTS transfer_sessions (
+    transfer_id TEXT PRIMARY KEY,
+    file_id TEXT NOT NULL,
+    manifest_json TEXT NOT NULL,
+    direction TEXT NOT NULL CHECK(direction IN ('upload', 'download')),
+    peer_did TEXT NOT NULL,
+    state TEXT NOT NULL DEFAULT 'requesting',
+    chunks_completed INTEGER NOT NULL DEFAULT 0,
+    total_chunks INTEGER NOT NULL,
+    bytes_transferred INTEGER NOT NULL DEFAULT 0,
+    total_bytes INTEGER NOT NULL,
+    chunks_bitfield TEXT NOT NULL DEFAULT '',
+    transport_type TEXT NOT NULL DEFAULT 'relay',
+    error TEXT,
+    started_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_transfer_sessions_file ON transfer_sessions(file_id);
+CREATE INDEX IF NOT EXISTS idx_transfer_sessions_state ON transfer_sessions(state);
 "#;
 
 /// Migration SQL from schema version 1 → 2
@@ -867,13 +961,28 @@ CREATE TABLE IF NOT EXISTS community_spaces (
 );
 CREATE INDEX IF NOT EXISTS idx_community_spaces_community ON community_spaces(community_id, position);
 
+-- Categories
+CREATE TABLE IF NOT EXISTS community_categories (
+    id TEXT PRIMARY KEY,
+    community_id TEXT NOT NULL,
+    space_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    position INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    FOREIGN KEY (community_id) REFERENCES communities(id) ON DELETE CASCADE,
+    FOREIGN KEY (space_id) REFERENCES community_spaces(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_community_categories_space ON community_categories(space_id, position);
+
 -- Channels
 CREATE TABLE IF NOT EXISTS community_channels (
     id TEXT PRIMARY KEY,
     community_id TEXT NOT NULL,
     space_id TEXT NOT NULL,
+    category_id TEXT,
     name TEXT NOT NULL,
-    type TEXT NOT NULL CHECK(type IN ('text', 'voice', 'files', 'announcement', 'bulletin', 'welcome')),
+    type TEXT NOT NULL CHECK(type IN ('text', 'voice', 'files', 'announcement', 'bulletin', 'welcome', 'forum')),
     topic TEXT,
     position INTEGER NOT NULL DEFAULT 0,
     slow_mode_seconds INTEGER DEFAULT 0,
@@ -882,7 +991,8 @@ CREATE TABLE IF NOT EXISTS community_channels (
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL,
     FOREIGN KEY (community_id) REFERENCES communities(id) ON DELETE CASCADE,
-    FOREIGN KEY (space_id) REFERENCES community_spaces(id) ON DELETE CASCADE
+    FOREIGN KEY (space_id) REFERENCES community_spaces(id) ON DELETE CASCADE,
+    FOREIGN KEY (category_id) REFERENCES community_categories(id) ON DELETE SET NULL
 );
 CREATE INDEX IF NOT EXISTS idx_community_channels_space ON community_channels(space_id, position);
 CREATE INDEX IF NOT EXISTS idx_community_channels_community ON community_channels(community_id);
@@ -1247,9 +1357,138 @@ CREATE INDEX IF NOT EXISTS idx_community_notification_settings_member ON communi
 UPDATE schema_version SET version = 7;
 "#;
 
+/// Migration from v7 to v8.
+///
+/// Adds community categories (user-named channel groupings within spaces)
+/// and adds category_id to channels.
+pub const MIGRATE_V7_TO_V8: &str = r#"
+-- Categories within spaces (user-named channel groupings)
+CREATE TABLE IF NOT EXISTS community_categories (
+    id TEXT PRIMARY KEY,
+    community_id TEXT NOT NULL,
+    space_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    position INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    FOREIGN KEY (community_id) REFERENCES communities(id) ON DELETE CASCADE,
+    FOREIGN KEY (space_id) REFERENCES community_spaces(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_community_categories_space ON community_categories(space_id, position);
+
+-- Add category_id to channels (nullable — uncategorized channels have NULL)
+ALTER TABLE community_channels ADD COLUMN category_id TEXT REFERENCES community_categories(id) ON DELETE SET NULL;
+
+UPDATE schema_version SET version = 8;
+"#;
+
+/// Migration from v8 to v9.
+///
+/// Adds file chunk storage, file manifests, DM shared files, and DM shared folders.
+pub const MIGRATE_V8_TO_V9: &str = r#"
+-- File chunk storage (local chunks for P2P transfer)
+CREATE TABLE IF NOT EXISTS file_chunks (
+    chunk_id TEXT PRIMARY KEY,
+    file_id TEXT NOT NULL,
+    chunk_index INTEGER NOT NULL,
+    data BLOB NOT NULL,
+    size INTEGER NOT NULL,
+    created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_file_chunks_file ON file_chunks(file_id);
+
+-- File manifests (describe how a file was chunked)
+CREATE TABLE IF NOT EXISTS file_manifests (
+    file_id TEXT PRIMARY KEY,
+    filename TEXT NOT NULL,
+    total_size INTEGER NOT NULL,
+    chunk_size INTEGER NOT NULL,
+    total_chunks INTEGER NOT NULL,
+    chunks_json TEXT NOT NULL,
+    file_hash TEXT NOT NULL,
+    encrypted INTEGER NOT NULL DEFAULT 0,
+    encryption_key_id TEXT,
+    created_at INTEGER NOT NULL
+);
+
+-- DM shared files
+CREATE TABLE IF NOT EXISTS dm_shared_files (
+    id TEXT PRIMARY KEY,
+    conversation_id TEXT NOT NULL,
+    folder_id TEXT,
+    filename TEXT NOT NULL,
+    description TEXT,
+    file_size INTEGER NOT NULL,
+    mime_type TEXT,
+    storage_chunks_json TEXT NOT NULL,
+    uploaded_by TEXT NOT NULL,
+    version INTEGER NOT NULL DEFAULT 1,
+    download_count INTEGER NOT NULL DEFAULT 0,
+    encrypted_metadata TEXT,
+    encryption_nonce TEXT,
+    created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_dm_shared_files_conversation ON dm_shared_files(conversation_id);
+CREATE INDEX IF NOT EXISTS idx_dm_shared_files_folder ON dm_shared_files(folder_id);
+
+-- DM shared folders
+CREATE TABLE IF NOT EXISTS dm_shared_folders (
+    id TEXT PRIMARY KEY,
+    conversation_id TEXT NOT NULL,
+    parent_folder_id TEXT,
+    name TEXT NOT NULL,
+    created_by TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    FOREIGN KEY (parent_folder_id) REFERENCES dm_shared_folders(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_dm_shared_folders_conversation ON dm_shared_folders(conversation_id);
+
+UPDATE schema_version SET version = 9;
+"#;
+
+/// Migration from v9 to v10.
+///
+/// Adds transfer_sessions table for P2P file transfer resume,
+/// and adds previous_version_id to file_manifests for auto-versioning.
+pub const MIGRATE_V9_TO_V10: &str = r#"
+-- Transfer sessions (P2P file transfer state persistence for resume)
+CREATE TABLE IF NOT EXISTS transfer_sessions (
+    transfer_id TEXT PRIMARY KEY,
+    file_id TEXT NOT NULL,
+    manifest_json TEXT NOT NULL,
+    direction TEXT NOT NULL CHECK(direction IN ('upload', 'download')),
+    peer_did TEXT NOT NULL,
+    state TEXT NOT NULL DEFAULT 'requesting',
+    chunks_completed INTEGER NOT NULL DEFAULT 0,
+    total_chunks INTEGER NOT NULL,
+    bytes_transferred INTEGER NOT NULL DEFAULT 0,
+    total_bytes INTEGER NOT NULL,
+    chunks_bitfield TEXT NOT NULL DEFAULT '',
+    transport_type TEXT NOT NULL DEFAULT 'relay',
+    error TEXT,
+    started_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_transfer_sessions_file ON transfer_sessions(file_id);
+CREATE INDEX IF NOT EXISTS idx_transfer_sessions_state ON transfer_sessions(state);
+
+-- Add auto-versioning support to file_manifests
+ALTER TABLE file_manifests ADD COLUMN previous_version_id TEXT;
+
+-- Add auto-versioning support to community_files
+ALTER TABLE community_files ADD COLUMN previous_version_id TEXT;
+
+UPDATE schema_version SET version = 10;
+"#;
+
 /// SQL to drop all tables (for testing/reset)
 #[allow(dead_code)]
 pub const DROP_TABLES: &str = r#"
+DROP TABLE IF EXISTS transfer_sessions;
+DROP TABLE IF EXISTS dm_shared_folders;
+DROP TABLE IF EXISTS dm_shared_files;
+DROP TABLE IF EXISTS file_manifests;
+DROP TABLE IF EXISTS file_chunks;
 DROP TABLE IF EXISTS community_notification_settings;
 DROP TABLE IF EXISTS community_member_status;
 DROP TABLE IF EXISTS community_thread_followers;
@@ -1276,6 +1515,7 @@ DROP TABLE IF EXISTS channel_permission_overrides;
 DROP TABLE IF EXISTS community_member_roles;
 DROP TABLE IF EXISTS community_roles;
 DROP TABLE IF EXISTS community_channels;
+DROP TABLE IF EXISTS community_categories;
 DROP TABLE IF EXISTS community_spaces;
 DROP TABLE IF EXISTS communities;
 DROP TABLE IF EXISTS call_history;
@@ -1431,6 +1671,7 @@ mod tests {
              DROP TABLE IF EXISTS community_member_roles;
              DROP TABLE IF EXISTS community_roles;
              DROP TABLE IF EXISTS community_channels;
+             DROP TABLE IF EXISTS community_categories;
              DROP TABLE IF EXISTS community_spaces;
              DROP TABLE IF EXISTS communities;"
         ).unwrap();

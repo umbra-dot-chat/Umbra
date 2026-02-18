@@ -127,6 +127,26 @@ impl Database {
             sql_bridge_execute_batch(schema::MIGRATE_V5_TO_V6).map_err(js_err)?;
             tracing::info!("Migration v5 → v6 complete");
         }
+        if from_version < 7 {
+            tracing::info!("Running migration v6 → v7 (timeouts, thread followers, member status, notification settings)");
+            sql_bridge_execute_batch(schema::MIGRATE_V6_TO_V7).map_err(js_err)?;
+            tracing::info!("Migration v6 → v7 complete");
+        }
+        if from_version < 8 {
+            tracing::info!("Running migration v7 → v8 (categories)");
+            sql_bridge_execute_batch(schema::MIGRATE_V7_TO_V8).map_err(js_err)?;
+            tracing::info!("Migration v7 → v8 complete");
+        }
+        if from_version < 9 {
+            tracing::info!("Running migration v8 → v9 (file chunks, manifests, DM files)");
+            sql_bridge_execute_batch(schema::MIGRATE_V8_TO_V9).map_err(js_err)?;
+            tracing::info!("Migration v8 → v9 complete");
+        }
+        if from_version < 10 {
+            tracing::info!("Running migration v9 → v10 (transfer sessions, auto-versioning)");
+            sql_bridge_execute_batch(schema::MIGRATE_V9_TO_V10).map_err(js_err)?;
+            tracing::info!("Migration v9 → v10 complete");
+        }
         Ok(())
     }
 
@@ -906,9 +926,2021 @@ impl Database {
             PluginBundleRecord {
                 plugin_id: row.get(0).and_then(|v| v.as_str()).unwrap_or_default().to_string(),
                 manifest: row.get(1).and_then(|v| v.as_str()).unwrap_or_default().to_string(),
-                bundle: String::new(), // Don't return full bundle in list (can be large)
+                bundle: String::new(),
                 installed_at: row.get(3).and_then(|v| v.as_i64()).unwrap_or(0),
             }
+        }).collect())
+    }
+
+    // ========================================================================
+    // CALL HISTORY OPERATIONS
+    // ========================================================================
+
+    /// Store a call record
+    #[allow(clippy::too_many_arguments)]
+    pub fn store_call_record(&self, id: &str, conversation_id: &str, call_type: &str, direction: &str, status: &str, participants: &str, started_at: i64) -> Result<()> {
+        let now = crate::time::now_timestamp();
+        self.exec(
+            "INSERT INTO call_history (id, conversation_id, call_type, direction, status, participants_json, started_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            json!([id, conversation_id, call_type, direction, status, participants, started_at, now]),
+        )?;
+        Ok(())
+    }
+
+    /// End a call record
+    pub fn end_call_record(&self, id: &str, status: &str, ended_at: i64, duration_ms: i64) -> Result<bool> {
+        let affected = self.exec(
+            "UPDATE call_history SET status = ?, ended_at = ?, duration_ms = ? WHERE id = ?",
+            json!([status, ended_at, duration_ms, id]),
+        )?;
+        Ok(affected > 0)
+    }
+
+    /// Get call history for a conversation
+    pub fn get_call_history(&self, conversation_id: &str, limit: usize, offset: usize) -> Result<Vec<CallHistoryRecord>> {
+        let rows = self.query(
+            "SELECT id, conversation_id, call_type, direction, status, participants_json, started_at, ended_at, duration_ms, created_at FROM call_history WHERE conversation_id = ? ORDER BY started_at DESC LIMIT ? OFFSET ?",
+            json!([conversation_id, limit as i64, offset as i64]),
+        )?;
+        Ok(rows.iter().map(Self::parse_call_history).collect())
+    }
+
+    /// Get all call history
+    pub fn get_all_call_history(&self, limit: usize, offset: usize) -> Result<Vec<CallHistoryRecord>> {
+        let rows = self.query(
+            "SELECT id, conversation_id, call_type, direction, status, participants_json, started_at, ended_at, duration_ms, created_at FROM call_history ORDER BY started_at DESC LIMIT ? OFFSET ?",
+            json!([limit as i64, offset as i64]),
+        )?;
+        Ok(rows.iter().map(Self::parse_call_history).collect())
+    }
+
+    fn parse_call_history(row: &serde_json::Value) -> CallHistoryRecord {
+        CallHistoryRecord {
+            id: row["id"].as_str().unwrap_or("").to_string(),
+            conversation_id: row["conversation_id"].as_str().unwrap_or("").to_string(),
+            call_type: row["call_type"].as_str().unwrap_or("").to_string(),
+            direction: row["direction"].as_str().unwrap_or("").to_string(),
+            status: row["status"].as_str().unwrap_or("").to_string(),
+            participants: row["participants_json"].as_str().unwrap_or("[]").to_string(),
+            started_at: row["started_at"].as_i64().unwrap_or(0),
+            ended_at: row["ended_at"].as_i64(),
+            duration_ms: row["duration_ms"].as_i64(),
+            created_at: row["created_at"].as_i64().unwrap_or(0),
+        }
+    }
+
+    // ========================================================================
+    // COMMUNITY OPERATIONS
+    // ========================================================================
+
+    // ── Community parse helpers ──────────────────────────────────────────
+
+    fn parse_community(row: &serde_json::Value) -> CommunityRecord {
+        CommunityRecord {
+            id: row["id"].as_str().unwrap_or("").to_string(),
+            name: row["name"].as_str().unwrap_or("").to_string(),
+            description: row["description"].as_str().map(|s| s.to_string()),
+            icon_url: row["icon_url"].as_str().map(|s| s.to_string()),
+            banner_url: row["banner_url"].as_str().map(|s| s.to_string()),
+            splash_url: row["splash_url"].as_str().map(|s| s.to_string()),
+            accent_color: row["accent_color"].as_str().map(|s| s.to_string()),
+            custom_css: row["custom_css"].as_str().map(|s| s.to_string()),
+            owner_did: row["owner_did"].as_str().unwrap_or("").to_string(),
+            vanity_url: row["vanity_url"].as_str().map(|s| s.to_string()),
+            created_at: row["created_at"].as_i64().unwrap_or(0),
+            updated_at: row["updated_at"].as_i64().unwrap_or(0),
+        }
+    }
+
+    fn parse_community_space(row: &serde_json::Value) -> CommunitySpaceRecord {
+        CommunitySpaceRecord {
+            id: row["id"].as_str().unwrap_or("").to_string(),
+            community_id: row["community_id"].as_str().unwrap_or("").to_string(),
+            name: row["name"].as_str().unwrap_or("").to_string(),
+            position: row["position"].as_i64().unwrap_or(0) as i32,
+            created_at: row["created_at"].as_i64().unwrap_or(0),
+            updated_at: row["updated_at"].as_i64().unwrap_or(0),
+        }
+    }
+
+    fn parse_community_category(row: &serde_json::Value) -> CommunityCategoryRecord {
+        CommunityCategoryRecord {
+            id: row["id"].as_str().unwrap_or("").to_string(),
+            community_id: row["community_id"].as_str().unwrap_or("").to_string(),
+            space_id: row["space_id"].as_str().unwrap_or("").to_string(),
+            name: row["name"].as_str().unwrap_or("").to_string(),
+            position: row["position"].as_i64().unwrap_or(0) as i32,
+            created_at: row["created_at"].as_i64().unwrap_or(0),
+            updated_at: row["updated_at"].as_i64().unwrap_or(0),
+        }
+    }
+
+    fn parse_community_channel(row: &serde_json::Value) -> CommunityChannelRecord {
+        CommunityChannelRecord {
+            id: row["id"].as_str().unwrap_or("").to_string(),
+            community_id: row["community_id"].as_str().unwrap_or("").to_string(),
+            space_id: row["space_id"].as_str().unwrap_or("").to_string(),
+            category_id: row["category_id"].as_str().map(|s| s.to_string()),
+            name: row["name"].as_str().unwrap_or("").to_string(),
+            channel_type: row["type"].as_str().unwrap_or("text").to_string(),
+            topic: row["topic"].as_str().map(|s| s.to_string()),
+            position: row["position"].as_i64().unwrap_or(0) as i32,
+            slow_mode_seconds: row["slow_mode_seconds"].as_i64().unwrap_or(0) as i32,
+            e2ee_enabled: row["e2ee_enabled"].as_i64().unwrap_or(0) != 0,
+            pin_limit: row["pin_limit"].as_i64().unwrap_or(50) as i32,
+            created_at: row["created_at"].as_i64().unwrap_or(0),
+            updated_at: row["updated_at"].as_i64().unwrap_or(0),
+        }
+    }
+
+    fn parse_community_role(row: &serde_json::Value) -> CommunityRoleRecord {
+        CommunityRoleRecord {
+            id: row["id"].as_str().unwrap_or("").to_string(),
+            community_id: row["community_id"].as_str().unwrap_or("").to_string(),
+            name: row["name"].as_str().unwrap_or("").to_string(),
+            color: row["color"].as_str().map(|s| s.to_string()),
+            icon: row["icon"].as_str().map(|s| s.to_string()),
+            badge: row["badge"].as_str().map(|s| s.to_string()),
+            position: row["position"].as_i64().unwrap_or(0) as i32,
+            hoisted: row["hoisted"].as_i64().unwrap_or(0) != 0,
+            mentionable: row["mentionable"].as_i64().unwrap_or(0) != 0,
+            is_preset: row["is_preset"].as_i64().unwrap_or(0) != 0,
+            permissions_bitfield: row["permissions_bitfield"].as_str().unwrap_or("0").to_string(),
+            created_at: row["created_at"].as_i64().unwrap_or(0),
+            updated_at: row["updated_at"].as_i64().unwrap_or(0),
+        }
+    }
+
+    fn parse_community_member(row: &serde_json::Value) -> CommunityMemberRecord {
+        CommunityMemberRecord {
+            community_id: row["community_id"].as_str().unwrap_or("").to_string(),
+            member_did: row["member_did"].as_str().unwrap_or("").to_string(),
+            nickname: row["nickname"].as_str().map(|s| s.to_string()),
+            avatar_url: row["avatar_url"].as_str().map(|s| s.to_string()),
+            bio: row["bio"].as_str().map(|s| s.to_string()),
+            joined_at: row["joined_at"].as_i64().unwrap_or(0),
+        }
+    }
+
+    fn parse_community_message(row: &serde_json::Value) -> CommunityMessageRecord {
+        CommunityMessageRecord {
+            id: row["id"].as_str().unwrap_or("").to_string(),
+            channel_id: row["channel_id"].as_str().unwrap_or("").to_string(),
+            sender_did: row["sender_did"].as_str().unwrap_or("").to_string(),
+            content_encrypted: row["content_encrypted"].as_str().map(|s| hex::decode(s).unwrap_or_default()),
+            content_plaintext: row["content_plaintext"].as_str().map(|s| s.to_string()),
+            nonce: row["nonce"].as_str().map(|s| s.to_string()),
+            key_version: row["key_version"].as_i64().map(|v| v as i32),
+            is_e2ee: row["is_e2ee"].as_i64().unwrap_or(0) != 0,
+            reply_to_id: row["reply_to_id"].as_str().map(|s| s.to_string()),
+            thread_id: row["thread_id"].as_str().map(|s| s.to_string()),
+            has_embed: row["has_embed"].as_i64().unwrap_or(0) != 0,
+            has_attachment: row["has_attachment"].as_i64().unwrap_or(0) != 0,
+            content_warning: row["content_warning"].as_str().map(|s| s.to_string()),
+            edited_at: row["edited_at"].as_i64(),
+            deleted_for_everyone: row["deleted_for_everyone"].as_i64().unwrap_or(0) != 0,
+            created_at: row["created_at"].as_i64().unwrap_or(0),
+        }
+    }
+
+    fn parse_community_reaction(row: &serde_json::Value) -> CommunityReactionRecord {
+        CommunityReactionRecord {
+            message_id: row["message_id"].as_str().unwrap_or("").to_string(),
+            member_did: row["member_did"].as_str().unwrap_or("").to_string(),
+            emoji: row["emoji"].as_str().unwrap_or("").to_string(),
+            is_custom: row["is_custom"].as_i64().unwrap_or(0) != 0,
+            created_at: row["created_at"].as_i64().unwrap_or(0),
+        }
+    }
+
+    // ── Communities (Core) ──────────────────────────────────────────────
+
+    /// Create a community record
+    pub fn create_community_record(&self, id: &str, name: &str, description: Option<&str>, owner_did: &str, created_at: i64) -> Result<()> {
+        self.exec(
+            "INSERT INTO communities (id, name, description, owner_did, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+            json!([id, name, description, owner_did, created_at, created_at]),
+        )?;
+        Ok(())
+    }
+
+    /// Get a community by ID
+    pub fn get_community(&self, id: &str) -> Result<Option<CommunityRecord>> {
+        let rows = self.query(
+            "SELECT id, name, description, icon_url, banner_url, splash_url, accent_color, custom_css, owner_did, vanity_url, created_at, updated_at FROM communities WHERE id = ?",
+            json!([id]),
+        )?;
+        Ok(rows.first().map(Self::parse_community))
+    }
+
+    /// Get communities a member belongs to
+    pub fn get_communities_for_member(&self, member_did: &str) -> Result<Vec<CommunityRecord>> {
+        let rows = self.query(
+            "SELECT c.id, c.name, c.description, c.icon_url, c.banner_url, c.splash_url, c.accent_color, c.custom_css, c.owner_did, c.vanity_url, c.created_at, c.updated_at FROM communities c INNER JOIN community_members cm ON c.id = cm.community_id WHERE cm.member_did = ? ORDER BY c.name",
+            json!([member_did]),
+        )?;
+        Ok(rows.iter().map(Self::parse_community).collect())
+    }
+
+    /// Update a community
+    pub fn update_community(&self, id: &str, name: Option<&str>, description: Option<&str>, updated_at: i64) -> Result<()> {
+        if let Some(name) = name {
+            self.exec("UPDATE communities SET name = ?, description = ?, updated_at = ? WHERE id = ?", json!([name, description, updated_at, id]))?;
+        } else {
+            self.exec("UPDATE communities SET description = ?, updated_at = ? WHERE id = ?", json!([description, updated_at, id]))?;
+        }
+        Ok(())
+    }
+
+    /// Update community owner
+    pub fn update_community_owner(&self, id: &str, new_owner_did: &str, updated_at: i64) -> Result<()> {
+        self.exec("UPDATE communities SET owner_did = ?, updated_at = ? WHERE id = ?", json!([new_owner_did, updated_at, id]))?;
+        Ok(())
+    }
+
+    /// Delete a community
+    pub fn delete_community(&self, id: &str) -> Result<()> {
+        self.exec("DELETE FROM communities WHERE id = ?", json!([id]))?;
+        Ok(())
+    }
+
+    /// Update community branding
+    #[allow(clippy::too_many_arguments)]
+    pub fn update_community_branding(&self, id: &str, icon_url: Option<&str>, banner_url: Option<&str>, splash_url: Option<&str>, accent_color: Option<&str>, custom_css: Option<&str>, updated_at: i64) -> Result<()> {
+        self.exec(
+            "UPDATE communities SET icon_url = ?, banner_url = ?, splash_url = ?, accent_color = ?, custom_css = ?, updated_at = ? WHERE id = ?",
+            json!([icon_url, banner_url, splash_url, accent_color, custom_css, updated_at, id]),
+        )?;
+        Ok(())
+    }
+
+    /// Update community vanity URL
+    pub fn update_community_vanity_url(&self, id: &str, vanity_url: &str, updated_at: i64) -> Result<()> {
+        self.exec("UPDATE communities SET vanity_url = ?, updated_at = ? WHERE id = ?", json!([vanity_url, updated_at, id]))?;
+        Ok(())
+    }
+
+    // ── Spaces ───────────────────────────────────────────────────────────
+
+    /// Create a community space
+    pub fn create_community_space(&self, id: &str, community_id: &str, name: &str, position: i32, created_at: i64) -> Result<()> {
+        self.exec(
+            "INSERT INTO community_spaces (id, community_id, name, position, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+            json!([id, community_id, name, position, created_at, created_at]),
+        )?;
+        Ok(())
+    }
+
+    /// Get spaces for a community
+    pub fn get_community_spaces(&self, community_id: &str) -> Result<Vec<CommunitySpaceRecord>> {
+        let rows = self.query(
+            "SELECT id, community_id, name, position, created_at, updated_at FROM community_spaces WHERE community_id = ? ORDER BY position",
+            json!([community_id]),
+        )?;
+        Ok(rows.iter().map(Self::parse_community_space).collect())
+    }
+
+    /// Get a single space by ID
+    pub fn get_community_space(&self, id: &str) -> Result<Option<CommunitySpaceRecord>> {
+        let rows = self.query(
+            "SELECT id, community_id, name, position, created_at, updated_at FROM community_spaces WHERE id = ?",
+            json!([id]),
+        )?;
+        Ok(rows.first().map(Self::parse_community_space))
+    }
+
+    /// Update a space name
+    pub fn update_community_space(&self, id: &str, name: &str, updated_at: i64) -> Result<()> {
+        self.exec("UPDATE community_spaces SET name = ?, updated_at = ? WHERE id = ?", json!([name, updated_at, id]))?;
+        Ok(())
+    }
+
+    /// Update a space position
+    pub fn update_community_space_position(&self, id: &str, position: i32, updated_at: i64) -> Result<()> {
+        self.exec("UPDATE community_spaces SET position = ?, updated_at = ? WHERE id = ?", json!([position, updated_at, id]))?;
+        Ok(())
+    }
+
+    /// Delete a space
+    pub fn delete_community_space(&self, id: &str) -> Result<()> {
+        self.exec("DELETE FROM community_spaces WHERE id = ?", json!([id]))?;
+        Ok(())
+    }
+
+    // ── Category CRUD ────────────────────────────────────────────────
+
+    /// Create a new category
+    pub fn create_community_category(&self, id: &str, community_id: &str, space_id: &str, name: &str, position: i32, created_at: i64) -> Result<()> {
+        self.exec(
+            "INSERT INTO community_categories (id, community_id, space_id, name, position, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            json!([id, community_id, space_id, name, position, created_at, created_at]),
+        )?;
+        Ok(())
+    }
+
+    /// Get categories for a space
+    pub fn get_community_categories(&self, space_id: &str) -> Result<Vec<CommunityCategoryRecord>> {
+        let rows = self.query(
+            "SELECT id, community_id, space_id, name, position, created_at, updated_at FROM community_categories WHERE space_id = ? ORDER BY position",
+            json!([space_id]),
+        )?;
+        Ok(rows.iter().map(Self::parse_community_category).collect())
+    }
+
+    /// Get all categories for a community (across all spaces)
+    pub fn get_community_categories_by_community(&self, community_id: &str) -> Result<Vec<CommunityCategoryRecord>> {
+        let rows = self.query(
+            "SELECT id, community_id, space_id, name, position, created_at, updated_at FROM community_categories WHERE community_id = ? ORDER BY position",
+            json!([community_id]),
+        )?;
+        Ok(rows.iter().map(Self::parse_community_category).collect())
+    }
+
+    /// Get a single category by ID
+    pub fn get_community_category(&self, id: &str) -> Result<Option<CommunityCategoryRecord>> {
+        let rows = self.query(
+            "SELECT id, community_id, space_id, name, position, created_at, updated_at FROM community_categories WHERE id = ?",
+            json!([id]),
+        )?;
+        Ok(rows.first().map(Self::parse_community_category))
+    }
+
+    /// Update a category name
+    pub fn update_community_category(&self, id: &str, name: &str, updated_at: i64) -> Result<()> {
+        self.exec("UPDATE community_categories SET name = ?, updated_at = ? WHERE id = ?", json!([name, updated_at, id]))?;
+        Ok(())
+    }
+
+    /// Update a category position
+    pub fn update_community_category_position(&self, id: &str, position: i32, updated_at: i64) -> Result<()> {
+        self.exec("UPDATE community_categories SET position = ?, updated_at = ? WHERE id = ?", json!([position, updated_at, id]))?;
+        Ok(())
+    }
+
+    /// Delete a category (channels with this category_id will be set to NULL by ON DELETE SET NULL)
+    pub fn delete_community_category(&self, id: &str) -> Result<()> {
+        self.exec("DELETE FROM community_categories WHERE id = ?", json!([id]))?;
+        Ok(())
+    }
+
+    /// Update a channel's category assignment
+    pub fn update_channel_category(&self, channel_id: &str, category_id: Option<&str>, updated_at: i64) -> Result<()> {
+        self.exec(
+            "UPDATE community_channels SET category_id = ?, updated_at = ? WHERE id = ?",
+            json!([category_id, updated_at, channel_id]),
+        )?;
+        Ok(())
+    }
+
+    // ── Channels ─────────────────────────────────────────────────────────
+
+    /// Create a community channel
+    #[allow(clippy::too_many_arguments)]
+    pub fn create_community_channel(&self, id: &str, community_id: &str, space_id: &str, category_id: Option<&str>, name: &str, channel_type: &str, topic: Option<&str>, position: i32, created_at: i64) -> Result<()> {
+        self.exec(
+            "INSERT INTO community_channels (id, community_id, space_id, category_id, name, type, topic, position, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            json!([id, community_id, space_id, category_id, name, channel_type, topic, position, created_at, created_at]),
+        )?;
+        Ok(())
+    }
+
+    /// Get channels for a community
+    pub fn get_community_channels(&self, community_id: &str) -> Result<Vec<CommunityChannelRecord>> {
+        let rows = self.query(
+            "SELECT id, community_id, space_id, category_id, name, type, topic, position, slow_mode_seconds, e2ee_enabled, pin_limit, created_at, updated_at FROM community_channels WHERE community_id = ? ORDER BY position",
+            json!([community_id]),
+        )?;
+        Ok(rows.iter().map(Self::parse_community_channel).collect())
+    }
+
+    /// Get channels by space
+    pub fn get_community_channels_by_space(&self, space_id: &str) -> Result<Vec<CommunityChannelRecord>> {
+        let rows = self.query(
+            "SELECT id, community_id, space_id, category_id, name, type, topic, position, slow_mode_seconds, e2ee_enabled, pin_limit, created_at, updated_at FROM community_channels WHERE space_id = ? ORDER BY position",
+            json!([space_id]),
+        )?;
+        Ok(rows.iter().map(Self::parse_community_channel).collect())
+    }
+
+    /// Get a single channel by ID
+    pub fn get_community_channel(&self, id: &str) -> Result<Option<CommunityChannelRecord>> {
+        let rows = self.query(
+            "SELECT id, community_id, space_id, category_id, name, type, topic, position, slow_mode_seconds, e2ee_enabled, pin_limit, created_at, updated_at FROM community_channels WHERE id = ?",
+            json!([id]),
+        )?;
+        Ok(rows.first().map(Self::parse_community_channel))
+    }
+
+    /// Update a channel
+    pub fn update_community_channel(&self, id: &str, name: Option<&str>, topic: Option<&str>, updated_at: i64) -> Result<()> {
+        if let Some(name) = name {
+            self.exec("UPDATE community_channels SET name = ?, topic = ?, updated_at = ? WHERE id = ?", json!([name, topic, updated_at, id]))?;
+        } else {
+            self.exec("UPDATE community_channels SET topic = ?, updated_at = ? WHERE id = ?", json!([topic, updated_at, id]))?;
+        }
+        Ok(())
+    }
+
+    /// Delete a channel
+    pub fn delete_community_channel(&self, id: &str) -> Result<()> {
+        self.exec("DELETE FROM community_channels WHERE id = ?", json!([id]))?;
+        Ok(())
+    }
+
+    /// Update channel slow mode
+    pub fn update_channel_slow_mode(&self, id: &str, seconds: i32, updated_at: i64) -> Result<()> {
+        self.exec("UPDATE community_channels SET slow_mode_seconds = ?, updated_at = ? WHERE id = ?", json!([seconds, updated_at, id]))?;
+        Ok(())
+    }
+
+    /// Update channel position
+    pub fn update_channel_position(&self, id: &str, position: i32, updated_at: i64) -> Result<()> {
+        self.exec("UPDATE community_channels SET position = ?, updated_at = ? WHERE id = ?", json!([position, updated_at, id]))?;
+        Ok(())
+    }
+
+    /// Update channel E2EE setting
+    pub fn update_channel_e2ee(&self, id: &str, e2ee_enabled: bool, updated_at: i64) -> Result<()> {
+        self.exec("UPDATE community_channels SET e2ee_enabled = ?, updated_at = ? WHERE id = ?", json!([e2ee_enabled as i32, updated_at, id]))?;
+        Ok(())
+    }
+
+    // ── Roles ────────────────────────────────────────────────────────────
+
+    /// Create a community role
+    #[allow(clippy::too_many_arguments)]
+    pub fn create_community_role(&self, id: &str, community_id: &str, name: &str, color: Option<&str>, position: i32, hoisted: bool, mentionable: bool, is_preset: bool, permissions_bitfield: &str, created_at: i64) -> Result<()> {
+        self.exec(
+            "INSERT INTO community_roles (id, community_id, name, color, position, hoisted, mentionable, is_preset, permissions_bitfield, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            json!([id, community_id, name, color, position, hoisted as i32, mentionable as i32, is_preset as i32, permissions_bitfield, created_at, created_at]),
+        )?;
+        Ok(())
+    }
+
+    /// Get roles for a community
+    pub fn get_community_roles(&self, community_id: &str) -> Result<Vec<CommunityRoleRecord>> {
+        let rows = self.query(
+            "SELECT id, community_id, name, color, icon, badge, position, hoisted, mentionable, is_preset, permissions_bitfield, created_at, updated_at FROM community_roles WHERE community_id = ? ORDER BY position",
+            json!([community_id]),
+        )?;
+        Ok(rows.iter().map(Self::parse_community_role).collect())
+    }
+
+    /// Get the owner role for a community
+    pub fn get_owner_role(&self, community_id: &str) -> Result<Option<CommunityRoleRecord>> {
+        let rows = self.query(
+            "SELECT id, community_id, name, color, icon, badge, position, hoisted, mentionable, is_preset, permissions_bitfield, created_at, updated_at FROM community_roles WHERE community_id = ? AND name = 'Owner' AND is_preset = 1",
+            json!([community_id]),
+        )?;
+        Ok(rows.first().map(Self::parse_community_role))
+    }
+
+    /// Get the default member role
+    pub fn get_member_role(&self, community_id: &str) -> Result<Option<CommunityRoleRecord>> {
+        let rows = self.query(
+            "SELECT id, community_id, name, color, icon, badge, position, hoisted, mentionable, is_preset, permissions_bitfield, created_at, updated_at FROM community_roles WHERE community_id = ? AND name = 'Member' AND is_preset = 1",
+            json!([community_id]),
+        )?;
+        Ok(rows.first().map(Self::parse_community_role))
+    }
+
+    /// Update a role's permissions
+    pub fn update_community_role_permissions(&self, role_id: &str, permissions_bitfield: &str, updated_at: i64) -> Result<()> {
+        self.exec("UPDATE community_roles SET permissions_bitfield = ?, updated_at = ? WHERE id = ?", json!([permissions_bitfield, updated_at, role_id]))?;
+        Ok(())
+    }
+
+    /// Update a role
+    #[allow(clippy::too_many_arguments)]
+    pub fn update_community_role(&self, role_id: &str, name: Option<&str>, color: Option<&str>, hoisted: Option<bool>, mentionable: Option<bool>, position: Option<i32>, updated_at: i64) -> Result<()> {
+        // Build dynamic SET clause
+        let mut sets = Vec::new();
+        let mut params: Vec<serde_json::Value> = Vec::new();
+        sets.push("updated_at = ?"); params.push(json!(updated_at));
+        if let Some(v) = name { sets.push("name = ?"); params.push(json!(v)); }
+        if let Some(v) = color { sets.push("color = ?"); params.push(json!(v)); }
+        if let Some(v) = hoisted { sets.push("hoisted = ?"); params.push(json!(v as i32)); }
+        if let Some(v) = mentionable { sets.push("mentionable = ?"); params.push(json!(v as i32)); }
+        if let Some(v) = position { sets.push("position = ?"); params.push(json!(v)); }
+        params.push(json!(role_id));
+        let sql = format!("UPDATE community_roles SET {} WHERE id = ?", sets.join(", "));
+        self.exec(&sql, serde_json::Value::Array(params))?;
+        Ok(())
+    }
+
+    /// Delete a role
+    pub fn delete_community_role(&self, role_id: &str) -> Result<()> {
+        self.exec("DELETE FROM community_roles WHERE id = ?", json!([role_id]))?;
+        Ok(())
+    }
+
+    // ── Role Assignments ─────────────────────────────────────────────────
+
+    /// Assign a role to a member
+    pub fn assign_community_role(&self, community_id: &str, member_did: &str, role_id: &str, assigned_at: i64, assigned_by: Option<&str>) -> Result<()> {
+        self.exec(
+            "INSERT OR IGNORE INTO community_member_roles (community_id, member_did, role_id, assigned_at, assigned_by) VALUES (?, ?, ?, ?, ?)",
+            json!([community_id, member_did, role_id, assigned_at, assigned_by]),
+        )?;
+        Ok(())
+    }
+
+    /// Unassign a role from a member
+    pub fn unassign_community_role(&self, community_id: &str, member_did: &str, role_id: &str) -> Result<()> {
+        self.exec(
+            "DELETE FROM community_member_roles WHERE community_id = ? AND member_did = ? AND role_id = ?",
+            json!([community_id, member_did, role_id]),
+        )?;
+        Ok(())
+    }
+
+    /// Get roles for a specific member in a community
+    pub fn get_member_community_roles(&self, community_id: &str, member_did: &str) -> Result<Vec<CommunityRoleRecord>> {
+        let rows = self.query(
+            "SELECT r.id, r.community_id, r.name, r.color, r.icon, r.badge, r.position, r.hoisted, r.mentionable, r.is_preset, r.permissions_bitfield, r.created_at, r.updated_at FROM community_roles r INNER JOIN community_member_roles mr ON r.id = mr.role_id WHERE mr.community_id = ? AND mr.member_did = ? ORDER BY r.position",
+            json!([community_id, member_did]),
+        )?;
+        Ok(rows.iter().map(Self::parse_community_role).collect())
+    }
+
+    // ── Members ──────────────────────────────────────────────────────────
+
+    /// Add a member to a community
+    pub fn add_community_member(&self, community_id: &str, member_did: &str, joined_at: i64, nickname: Option<&str>) -> Result<()> {
+        self.exec(
+            "INSERT OR IGNORE INTO community_members (community_id, member_did, nickname, joined_at) VALUES (?, ?, ?, ?)",
+            json!([community_id, member_did, nickname, joined_at]),
+        )?;
+        Ok(())
+    }
+
+    /// Remove a member from a community
+    pub fn remove_community_member(&self, community_id: &str, member_did: &str) -> Result<()> {
+        self.exec("DELETE FROM community_member_roles WHERE community_id = ? AND member_did = ?", json!([community_id, member_did]))?;
+        self.exec("DELETE FROM community_members WHERE community_id = ? AND member_did = ?", json!([community_id, member_did]))?;
+        Ok(())
+    }
+
+    /// Get a specific community member
+    pub fn get_community_member(&self, community_id: &str, member_did: &str) -> Result<Option<CommunityMemberRecord>> {
+        let rows = self.query(
+            "SELECT community_id, member_did, nickname, avatar_url, bio, joined_at FROM community_members WHERE community_id = ? AND member_did = ?",
+            json!([community_id, member_did]),
+        )?;
+        Ok(rows.first().map(Self::parse_community_member))
+    }
+
+    /// Get all members of a community
+    pub fn get_community_members(&self, community_id: &str) -> Result<Vec<CommunityMemberRecord>> {
+        let rows = self.query(
+            "SELECT community_id, member_did, nickname, avatar_url, bio, joined_at FROM community_members WHERE community_id = ? ORDER BY joined_at",
+            json!([community_id]),
+        )?;
+        Ok(rows.iter().map(Self::parse_community_member).collect())
+    }
+
+    /// Update a member's community profile
+    pub fn update_community_member_profile(&self, community_id: &str, member_did: &str, nickname: Option<&str>, avatar_url: Option<&str>, bio: Option<&str>) -> Result<()> {
+        self.exec(
+            "UPDATE community_members SET nickname = ?, avatar_url = ?, bio = ? WHERE community_id = ? AND member_did = ?",
+            json!([nickname, avatar_url, bio, community_id, member_did]),
+        )?;
+        Ok(())
+    }
+
+    // ── Messages ─────────────────────────────────────────────────────────
+
+    /// Store a community message
+    #[allow(clippy::too_many_arguments)]
+    pub fn store_community_message(&self, id: &str, channel_id: &str, sender_did: &str, content_encrypted: Option<&[u8]>, content_plaintext: Option<&str>, nonce: Option<&str>, key_version: Option<i32>, is_e2ee: bool, reply_to_id: Option<&str>, thread_id: Option<&str>, has_embed: bool, has_attachment: bool, content_warning: Option<&str>, created_at: i64) -> Result<()> {
+        let ct_hex = content_encrypted.map(hex::encode);
+        self.exec(
+            "INSERT INTO community_messages (id, channel_id, sender_did, content_encrypted, content_plaintext, nonce, key_version, is_e2ee, reply_to_id, thread_id, has_embed, has_attachment, content_warning, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            json!([id, channel_id, sender_did, ct_hex, content_plaintext, nonce, key_version, is_e2ee as i32, reply_to_id, thread_id, has_embed as i32, has_attachment as i32, content_warning, created_at]),
+        )?;
+        Ok(())
+    }
+
+    /// Get community messages for a channel
+    pub fn get_community_messages(&self, channel_id: &str, limit: usize, before_timestamp: Option<i64>) -> Result<Vec<CommunityMessageRecord>> {
+        let rows = if let Some(before) = before_timestamp {
+            self.query(
+                "SELECT id, channel_id, sender_did, content_encrypted, content_plaintext, nonce, key_version, is_e2ee, reply_to_id, thread_id, has_embed, has_attachment, content_warning, edited_at, deleted_for_everyone, created_at FROM community_messages WHERE channel_id = ? AND created_at < ? ORDER BY created_at DESC LIMIT ?",
+                json!([channel_id, before, limit as i64]),
+            )?
+        } else {
+            self.query(
+                "SELECT id, channel_id, sender_did, content_encrypted, content_plaintext, nonce, key_version, is_e2ee, reply_to_id, thread_id, has_embed, has_attachment, content_warning, edited_at, deleted_for_everyone, created_at FROM community_messages WHERE channel_id = ? ORDER BY created_at DESC LIMIT ?",
+                json!([channel_id, limit as i64]),
+            )?
+        };
+        let mut messages: Vec<CommunityMessageRecord> = rows.iter().map(Self::parse_community_message).collect();
+        messages.reverse();
+        Ok(messages)
+    }
+
+    /// Get a single community message
+    pub fn get_community_message(&self, id: &str) -> Result<Option<CommunityMessageRecord>> {
+        let rows = self.query(
+            "SELECT id, channel_id, sender_did, content_encrypted, content_plaintext, nonce, key_version, is_e2ee, reply_to_id, thread_id, has_embed, has_attachment, content_warning, edited_at, deleted_for_everyone, created_at FROM community_messages WHERE id = ?",
+            json!([id]),
+        )?;
+        Ok(rows.first().map(Self::parse_community_message))
+    }
+
+    /// Edit a community message
+    pub fn edit_community_message(&self, id: &str, content_plaintext: Option<&str>, content_encrypted: Option<&[u8]>, nonce: Option<&str>, edited_at: i64) -> Result<()> {
+        let ct_hex = content_encrypted.map(hex::encode);
+        self.exec(
+            "UPDATE community_messages SET content_plaintext = ?, content_encrypted = ?, nonce = ?, edited_at = ? WHERE id = ?",
+            json!([content_plaintext, ct_hex, nonce, edited_at, id]),
+        )?;
+        Ok(())
+    }
+
+    /// Delete a community message for everyone
+    pub fn delete_community_message_for_everyone(&self, id: &str) -> Result<()> {
+        self.exec("UPDATE community_messages SET deleted_for_everyone = 1 WHERE id = ?", json!([id]))?;
+        Ok(())
+    }
+
+    /// Delete a community message for the current user only
+    pub fn delete_community_message_for_me(&self, message_id: &str, member_did: &str, deleted_at: i64) -> Result<()> {
+        self.exec(
+            "INSERT OR IGNORE INTO community_deleted_messages (message_id, member_did, deleted_at) VALUES (?, ?, ?)",
+            json!([message_id, member_did, deleted_at]),
+        )?;
+        Ok(())
+    }
+
+    /// Search community messages in a channel
+    pub fn search_community_messages(&self, channel_id: &str, query: &str, limit: usize) -> Result<Vec<CommunityMessageRecord>> {
+        let like_query = format!("%{}%", query);
+        let rows = self.query(
+            "SELECT id, channel_id, sender_did, content_encrypted, content_plaintext, nonce, key_version, is_e2ee, reply_to_id, thread_id, has_embed, has_attachment, content_warning, edited_at, deleted_for_everyone, created_at FROM community_messages WHERE channel_id = ? AND content_plaintext LIKE ? ORDER BY created_at DESC LIMIT ?",
+            json!([channel_id, like_query, limit as i64]),
+        )?;
+        Ok(rows.iter().map(Self::parse_community_message).collect())
+    }
+
+    /// Advanced community message search (multi-filter across channels)
+    #[allow(clippy::too_many_arguments)]
+    pub fn search_community_messages_advanced(
+        &self,
+        channel_ids: &[String],
+        query: Option<&str>,
+        from_did: Option<&str>,
+        before: Option<i64>,
+        after: Option<i64>,
+        has_file: Option<bool>,
+        has_reaction: Option<bool>,
+        is_pinned: Option<bool>,
+        pinned_message_ids: &[String],
+        limit: usize,
+    ) -> Result<Vec<CommunityMessageRecord>> {
+        // Build dynamic WHERE clause
+        let mut conditions = Vec::new();
+        let mut param_values: Vec<serde_json::Value> = Vec::new();
+
+        if !channel_ids.is_empty() {
+            let placeholders: Vec<&str> = channel_ids.iter().map(|_| "?").collect();
+            conditions.push(format!("channel_id IN ({})", placeholders.join(",")));
+            for cid in channel_ids {
+                param_values.push(json!(cid));
+            }
+        }
+
+        conditions.push("deleted_for_everyone = 0".to_string());
+
+        if let Some(q) = query {
+            conditions.push("content_plaintext LIKE ?".to_string());
+            param_values.push(json!(format!("%{}%", q)));
+        }
+        if let Some(did) = from_did {
+            conditions.push("sender_did = ?".to_string());
+            param_values.push(json!(did));
+        }
+        if let Some(ts) = before {
+            conditions.push("created_at < ?".to_string());
+            param_values.push(json!(ts));
+        }
+        if let Some(ts) = after {
+            conditions.push("created_at > ?".to_string());
+            param_values.push(json!(ts));
+        }
+        if let Some(true) = has_file {
+            conditions.push("has_attachment = 1".to_string());
+        }
+        if let Some(true) = has_reaction {
+            conditions.push("id IN (SELECT DISTINCT message_id FROM community_reactions)".to_string());
+        }
+        if let Some(true) = is_pinned {
+            if !pinned_message_ids.is_empty() {
+                let placeholders: Vec<&str> = pinned_message_ids.iter().map(|_| "?").collect();
+                conditions.push(format!("id IN ({})", placeholders.join(",")));
+                for pid in pinned_message_ids {
+                    param_values.push(json!(pid));
+                }
+            }
+        }
+
+        param_values.push(json!(limit as i64));
+
+        let where_clause = if conditions.is_empty() {
+            String::new()
+        } else {
+            format!("WHERE {}", conditions.join(" AND "))
+        };
+
+        let sql = format!(
+            "SELECT id, channel_id, sender_did, content_encrypted, content_plaintext, nonce, key_version, is_e2ee, reply_to_id, thread_id, has_embed, has_attachment, content_warning, edited_at, deleted_for_everyone, created_at FROM community_messages {} ORDER BY created_at DESC LIMIT ?",
+            where_clause
+        );
+
+        let rows = self.query(&sql, serde_json::Value::Array(param_values))?;
+        Ok(rows.iter().map(Self::parse_community_message).collect())
+    }
+
+    // ── Reactions ────────────────────────────────────────────────────────
+
+    /// Add a community reaction
+    pub fn add_community_reaction(&self, message_id: &str, member_did: &str, emoji: &str, is_custom: bool, created_at: i64) -> Result<()> {
+        self.exec(
+            "INSERT OR IGNORE INTO community_reactions (message_id, member_did, emoji, is_custom, created_at) VALUES (?, ?, ?, ?, ?)",
+            json!([message_id, member_did, emoji, is_custom as i32, created_at]),
+        )?;
+        Ok(())
+    }
+
+    /// Remove a community reaction
+    pub fn remove_community_reaction(&self, message_id: &str, member_did: &str, emoji: &str) -> Result<()> {
+        self.exec(
+            "DELETE FROM community_reactions WHERE message_id = ? AND member_did = ? AND emoji = ?",
+            json!([message_id, member_did, emoji]),
+        )?;
+        Ok(())
+    }
+
+    /// Get reactions for a message
+    pub fn get_community_reactions(&self, message_id: &str) -> Result<Vec<CommunityReactionRecord>> {
+        let rows = self.query(
+            "SELECT message_id, member_did, emoji, is_custom, created_at FROM community_reactions WHERE message_id = ? ORDER BY created_at",
+            json!([message_id]),
+        )?;
+        Ok(rows.iter().map(Self::parse_community_reaction).collect())
+    }
+
+    // ── Read Receipts ────────────────────────────────────────────────────
+
+    /// Update a read receipt
+    pub fn update_read_receipt(&self, channel_id: &str, member_did: &str, last_read_message_id: &str, read_at: i64) -> Result<()> {
+        self.exec(
+            "INSERT OR REPLACE INTO community_read_receipts (channel_id, member_did, last_read_message_id, read_at) VALUES (?, ?, ?, ?)",
+            json!([channel_id, member_did, last_read_message_id, read_at]),
+        )?;
+        Ok(())
+    }
+
+    /// Get read receipts for a channel
+    pub fn get_read_receipts(&self, channel_id: &str) -> Result<Vec<CommunityReadReceiptRecord>> {
+        let rows = self.query(
+            "SELECT channel_id, member_did, last_read_message_id, read_at FROM community_read_receipts WHERE channel_id = ?",
+            json!([channel_id]),
+        )?;
+        Ok(rows.iter().map(|row| CommunityReadReceiptRecord {
+            channel_id: row["channel_id"].as_str().unwrap_or("").to_string(),
+            member_did: row["member_did"].as_str().unwrap_or("").to_string(),
+            last_read_message_id: row["last_read_message_id"].as_str().unwrap_or("").to_string(),
+            read_at: row["read_at"].as_i64().unwrap_or(0),
+        }).collect())
+    }
+
+    // ── Pins ─────────────────────────────────────────────────────────────
+
+    /// Pin a community message
+    pub fn pin_community_message(&self, channel_id: &str, message_id: &str, pinned_by: &str, pinned_at: i64) -> Result<()> {
+        self.exec(
+            "INSERT OR IGNORE INTO community_pins (channel_id, message_id, pinned_by, pinned_at) VALUES (?, ?, ?, ?)",
+            json!([channel_id, message_id, pinned_by, pinned_at]),
+        )?;
+        Ok(())
+    }
+
+    /// Unpin a community message
+    pub fn unpin_community_message(&self, channel_id: &str, message_id: &str) -> Result<()> {
+        self.exec("DELETE FROM community_pins WHERE channel_id = ? AND message_id = ?", json!([channel_id, message_id]))?;
+        Ok(())
+    }
+
+    /// Get pinned messages for a channel
+    pub fn get_community_pins(&self, channel_id: &str) -> Result<Vec<CommunityPinRecord>> {
+        let rows = self.query(
+            "SELECT channel_id, message_id, pinned_by, pinned_at FROM community_pins WHERE channel_id = ? ORDER BY pinned_at DESC",
+            json!([channel_id]),
+        )?;
+        Ok(rows.iter().map(|row| CommunityPinRecord {
+            channel_id: row["channel_id"].as_str().unwrap_or("").to_string(),
+            message_id: row["message_id"].as_str().unwrap_or("").to_string(),
+            pinned_by: row["pinned_by"].as_str().unwrap_or("").to_string(),
+            pinned_at: row["pinned_at"].as_i64().unwrap_or(0),
+        }).collect())
+    }
+
+    /// Get pin count for a channel
+    pub fn get_community_pin_count(&self, channel_id: &str) -> Result<i32> {
+        let count: Option<i64> = self.query_scalar("SELECT COUNT(*) FROM community_pins WHERE channel_id = ?", json!([channel_id]))?;
+        Ok(count.unwrap_or(0) as i32)
+    }
+
+    /// Get pinned message IDs for a channel
+    pub fn get_pinned_message_ids(&self, channel_id: &str) -> Result<Vec<String>> {
+        let rows = self.query("SELECT message_id FROM community_pins WHERE channel_id = ?", json!([channel_id]))?;
+        Ok(rows.iter().filter_map(|r| r["message_id"].as_str().map(|s| s.to_string())).collect())
+    }
+
+    // ── Bans ─────────────────────────────────────────────────────────────
+
+    /// Create a ban record
+    #[allow(clippy::too_many_arguments)]
+    pub fn create_community_ban(&self, community_id: &str, banned_did: &str, reason: Option<&str>, banned_by: &str, device_fingerprint: Option<&str>, expires_at: Option<i64>, created_at: i64) -> Result<()> {
+        self.exec(
+            "INSERT OR REPLACE INTO community_bans (community_id, banned_did, reason, banned_by, device_fingerprint, expires_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            json!([community_id, banned_did, reason, banned_by, device_fingerprint, expires_at, created_at]),
+        )?;
+        Ok(())
+    }
+
+    /// Check if a user is banned
+    pub fn is_community_banned(&self, community_id: &str, did: &str) -> Result<bool> {
+        let count: Option<i64> = self.query_scalar("SELECT COUNT(*) FROM community_bans WHERE community_id = ? AND banned_did = ?", json!([community_id, did]))?;
+        Ok(count.unwrap_or(0) > 0)
+    }
+
+    /// Remove a ban
+    pub fn remove_community_ban(&self, community_id: &str, banned_did: &str) -> Result<()> {
+        self.exec("DELETE FROM community_bans WHERE community_id = ? AND banned_did = ?", json!([community_id, banned_did]))?;
+        Ok(())
+    }
+
+    /// Get all bans for a community
+    pub fn get_community_bans(&self, community_id: &str) -> Result<Vec<CommunityBanRecord>> {
+        let rows = self.query(
+            "SELECT community_id, banned_did, reason, banned_by, device_fingerprint, expires_at, created_at FROM community_bans WHERE community_id = ? ORDER BY created_at DESC",
+            json!([community_id]),
+        )?;
+        Ok(rows.iter().map(|row| CommunityBanRecord {
+            community_id: row["community_id"].as_str().unwrap_or("").to_string(),
+            banned_did: row["banned_did"].as_str().unwrap_or("").to_string(),
+            reason: row["reason"].as_str().map(|s| s.to_string()),
+            banned_by: row["banned_by"].as_str().unwrap_or("").to_string(),
+            device_fingerprint: row["device_fingerprint"].as_str().map(|s| s.to_string()),
+            expires_at: row["expires_at"].as_i64(),
+            created_at: row["created_at"].as_i64().unwrap_or(0),
+        }).collect())
+    }
+
+    // ── Invites ──────────────────────────────────────────────────────────
+
+    /// Create a community invite
+    #[allow(clippy::too_many_arguments)]
+    pub fn create_community_invite(&self, id: &str, community_id: &str, code: &str, vanity: bool, creator_did: &str, max_uses: Option<i32>, expires_at: Option<i64>, created_at: i64) -> Result<()> {
+        self.exec(
+            "INSERT INTO community_invites (id, community_id, code, vanity, creator_did, max_uses, use_count, expires_at, created_at) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)",
+            json!([id, community_id, code, vanity as i32, creator_did, max_uses, expires_at, created_at]),
+        )?;
+        Ok(())
+    }
+
+    /// Get an invite by code
+    pub fn get_community_invite_by_code(&self, code: &str) -> Result<Option<CommunityInviteRecord>> {
+        let rows = self.query(
+            "SELECT id, community_id, code, vanity, creator_did, max_uses, use_count, expires_at, created_at FROM community_invites WHERE code = ?",
+            json!([code]),
+        )?;
+        Ok(rows.first().map(|row| Self::parse_community_invite(row)))
+    }
+
+    /// Get an invite by ID
+    pub fn get_community_invite(&self, id: &str) -> Result<Option<CommunityInviteRecord>> {
+        let rows = self.query(
+            "SELECT id, community_id, code, vanity, creator_did, max_uses, use_count, expires_at, created_at FROM community_invites WHERE id = ?",
+            json!([id]),
+        )?;
+        Ok(rows.first().map(|row| Self::parse_community_invite(row)))
+    }
+
+    /// Get all invites for a community
+    pub fn get_community_invites(&self, community_id: &str) -> Result<Vec<CommunityInviteRecord>> {
+        let rows = self.query(
+            "SELECT id, community_id, code, vanity, creator_did, max_uses, use_count, expires_at, created_at FROM community_invites WHERE community_id = ? ORDER BY created_at DESC",
+            json!([community_id]),
+        )?;
+        Ok(rows.iter().map(|row| Self::parse_community_invite(row)).collect())
+    }
+
+    /// Delete an invite
+    pub fn delete_community_invite(&self, id: &str) -> Result<()> {
+        self.exec("DELETE FROM community_invites WHERE id = ?", json!([id]))?;
+        Ok(())
+    }
+
+    /// Increment invite use count
+    pub fn increment_invite_use_count(&self, id: &str) -> Result<()> {
+        self.exec("UPDATE community_invites SET use_count = use_count + 1 WHERE id = ?", json!([id]))?;
+        Ok(())
+    }
+
+    fn parse_community_invite(row: &serde_json::Value) -> CommunityInviteRecord {
+        CommunityInviteRecord {
+            id: row["id"].as_str().unwrap_or("").to_string(),
+            community_id: row["community_id"].as_str().unwrap_or("").to_string(),
+            code: row["code"].as_str().unwrap_or("").to_string(),
+            vanity: row["vanity"].as_i64().unwrap_or(0) != 0,
+            creator_did: row["creator_did"].as_str().unwrap_or("").to_string(),
+            max_uses: row["max_uses"].as_i64().map(|v| v as i32),
+            use_count: row["use_count"].as_i64().unwrap_or(0) as i32,
+            expires_at: row["expires_at"].as_i64(),
+            created_at: row["created_at"].as_i64().unwrap_or(0),
+        }
+    }
+
+    // ── Warnings ─────────────────────────────────────────────────────────
+
+    /// Create a community warning
+    #[allow(clippy::too_many_arguments)]
+    pub fn create_community_warning(&self, id: &str, community_id: &str, member_did: &str, reason: &str, warned_by: &str, expires_at: Option<i64>, created_at: i64) -> Result<()> {
+        self.exec(
+            "INSERT INTO community_warnings (id, community_id, member_did, reason, warned_by, expires_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            json!([id, community_id, member_did, reason, warned_by, expires_at, created_at]),
+        )?;
+        Ok(())
+    }
+
+    /// Get warnings for a specific member
+    pub fn get_community_member_warnings(&self, community_id: &str, member_did: &str) -> Result<Vec<CommunityWarningRecord>> {
+        let rows = self.query(
+            "SELECT id, community_id, member_did, reason, warned_by, expires_at, created_at FROM community_warnings WHERE community_id = ? AND member_did = ? ORDER BY created_at DESC",
+            json!([community_id, member_did]),
+        )?;
+        Ok(rows.iter().map(|row| CommunityWarningRecord {
+            id: row["id"].as_str().unwrap_or("").to_string(),
+            community_id: row["community_id"].as_str().unwrap_or("").to_string(),
+            member_did: row["member_did"].as_str().unwrap_or("").to_string(),
+            reason: row["reason"].as_str().unwrap_or("").to_string(),
+            warned_by: row["warned_by"].as_str().unwrap_or("").to_string(),
+            expires_at: row["expires_at"].as_i64(),
+            created_at: row["created_at"].as_i64().unwrap_or(0),
+        }).collect())
+    }
+
+    /// Get all warnings for a community
+    pub fn get_community_warnings(&self, community_id: &str, limit: usize, offset: usize) -> Result<Vec<CommunityWarningRecord>> {
+        let rows = self.query(
+            "SELECT id, community_id, member_did, reason, warned_by, expires_at, created_at FROM community_warnings WHERE community_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
+            json!([community_id, limit as i64, offset as i64]),
+        )?;
+        Ok(rows.iter().map(|row| CommunityWarningRecord {
+            id: row["id"].as_str().unwrap_or("").to_string(),
+            community_id: row["community_id"].as_str().unwrap_or("").to_string(),
+            member_did: row["member_did"].as_str().unwrap_or("").to_string(),
+            reason: row["reason"].as_str().unwrap_or("").to_string(),
+            warned_by: row["warned_by"].as_str().unwrap_or("").to_string(),
+            expires_at: row["expires_at"].as_i64(),
+            created_at: row["created_at"].as_i64().unwrap_or(0),
+        }).collect())
+    }
+
+    /// Get active warning count for a member
+    pub fn get_active_warning_count(&self, community_id: &str, member_did: &str, now: i64) -> Result<i32> {
+        let count: Option<i64> = self.query_scalar(
+            "SELECT COUNT(*) FROM community_warnings WHERE community_id = ? AND member_did = ? AND (expires_at IS NULL OR expires_at > ?)",
+            json!([community_id, member_did, now]),
+        )?;
+        Ok(count.unwrap_or(0) as i32)
+    }
+
+    /// Delete a warning
+    pub fn delete_community_warning(&self, id: &str) -> Result<()> {
+        self.exec("DELETE FROM community_warnings WHERE id = ?", json!([id]))?;
+        Ok(())
+    }
+
+    // ── Audit Log ────────────────────────────────────────────────────────
+
+    /// Insert an audit log entry
+    #[allow(clippy::too_many_arguments)]
+    pub fn insert_audit_log(&self, id: &str, community_id: &str, actor_did: &str, action_type: &str, target_type: Option<&str>, target_id: Option<&str>, metadata_json: Option<&str>, created_at: i64) -> Result<()> {
+        self.exec(
+            "INSERT INTO community_audit_log (id, community_id, actor_did, action_type, target_type, target_id, metadata_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            json!([id, community_id, actor_did, action_type, target_type, target_id, metadata_json, created_at]),
+        )?;
+        Ok(())
+    }
+
+    /// Get audit log entries
+    pub fn get_audit_log(&self, community_id: &str, limit: usize, offset: usize) -> Result<Vec<CommunityAuditLogRecord>> {
+        let rows = self.query(
+            "SELECT id, community_id, actor_did, action_type, target_type, target_id, metadata_json, content_detail, created_at FROM community_audit_log WHERE community_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
+            json!([community_id, limit as i64, offset as i64]),
+        )?;
+        Ok(rows.iter().map(|row| CommunityAuditLogRecord {
+            id: row["id"].as_str().unwrap_or("").to_string(),
+            community_id: row["community_id"].as_str().unwrap_or("").to_string(),
+            actor_did: row["actor_did"].as_str().unwrap_or("").to_string(),
+            action_type: row["action_type"].as_str().unwrap_or("").to_string(),
+            target_type: row["target_type"].as_str().map(|s| s.to_string()),
+            target_id: row["target_id"].as_str().map(|s| s.to_string()),
+            metadata_json: row["metadata_json"].as_str().map(|s| s.to_string()),
+            content_detail: row["content_detail"].as_str().map(|s| s.to_string()),
+            created_at: row["created_at"].as_i64().unwrap_or(0),
+        }).collect())
+    }
+
+    // ── Threads ──────────────────────────────────────────────────────────
+
+    /// Create a community thread
+    pub fn create_community_thread(&self, id: &str, channel_id: &str, parent_message_id: &str, name: Option<&str>, created_by: &str, created_at: i64) -> Result<()> {
+        self.exec(
+            "INSERT INTO community_threads (id, channel_id, parent_message_id, name, created_by, message_count, created_at) VALUES (?, ?, ?, ?, ?, 0, ?)",
+            json!([id, channel_id, parent_message_id, name, created_by, created_at]),
+        )?;
+        Ok(())
+    }
+
+    /// Get a thread by ID
+    pub fn get_community_thread(&self, id: &str) -> Result<Option<CommunityThreadRecord>> {
+        let rows = self.query(
+            "SELECT id, channel_id, parent_message_id, name, created_by, message_count, last_message_at, created_at FROM community_threads WHERE id = ?",
+            json!([id]),
+        )?;
+        Ok(rows.first().map(|row| CommunityThreadRecord {
+            id: row["id"].as_str().unwrap_or("").to_string(),
+            channel_id: row["channel_id"].as_str().unwrap_or("").to_string(),
+            parent_message_id: row["parent_message_id"].as_str().unwrap_or("").to_string(),
+            name: row["name"].as_str().map(|s| s.to_string()),
+            created_by: row["created_by"].as_str().unwrap_or("").to_string(),
+            message_count: row["message_count"].as_i64().unwrap_or(0) as i32,
+            last_message_at: row["last_message_at"].as_i64(),
+            created_at: row["created_at"].as_i64().unwrap_or(0),
+        }))
+    }
+
+    /// Get threads for a channel
+    pub fn get_community_threads(&self, channel_id: &str) -> Result<Vec<CommunityThreadRecord>> {
+        let rows = self.query(
+            "SELECT id, channel_id, parent_message_id, name, created_by, message_count, last_message_at, created_at FROM community_threads WHERE channel_id = ? ORDER BY last_message_at DESC",
+            json!([channel_id]),
+        )?;
+        Ok(rows.iter().map(|row| CommunityThreadRecord {
+            id: row["id"].as_str().unwrap_or("").to_string(),
+            channel_id: row["channel_id"].as_str().unwrap_or("").to_string(),
+            parent_message_id: row["parent_message_id"].as_str().unwrap_or("").to_string(),
+            name: row["name"].as_str().map(|s| s.to_string()),
+            created_by: row["created_by"].as_str().unwrap_or("").to_string(),
+            message_count: row["message_count"].as_i64().unwrap_or(0) as i32,
+            last_message_at: row["last_message_at"].as_i64(),
+            created_at: row["created_at"].as_i64().unwrap_or(0),
+        }).collect())
+    }
+
+    /// Increment thread message count
+    pub fn increment_thread_message_count(&self, thread_id: &str, last_message_at: i64) -> Result<()> {
+        self.exec(
+            "UPDATE community_threads SET message_count = message_count + 1, last_message_at = ? WHERE id = ?",
+            json!([last_message_at, thread_id]),
+        )?;
+        Ok(())
+    }
+
+    /// Get thread messages directly (messages with thread_id = given id)
+    pub fn get_thread_messages_direct(&self, thread_id: &str, limit: usize, before_timestamp: Option<i64>) -> Result<Vec<CommunityMessageRecord>> {
+        let rows = if let Some(before) = before_timestamp {
+            self.query(
+                "SELECT id, channel_id, sender_did, content_encrypted, content_plaintext, nonce, key_version, is_e2ee, reply_to_id, thread_id, has_embed, has_attachment, content_warning, edited_at, deleted_for_everyone, created_at FROM community_messages WHERE thread_id = ? AND created_at < ? ORDER BY created_at DESC LIMIT ?",
+                json!([thread_id, before, limit as i64]),
+            )?
+        } else {
+            self.query(
+                "SELECT id, channel_id, sender_did, content_encrypted, content_plaintext, nonce, key_version, is_e2ee, reply_to_id, thread_id, has_embed, has_attachment, content_warning, edited_at, deleted_for_everyone, created_at FROM community_messages WHERE thread_id = ? ORDER BY created_at DESC LIMIT ?",
+                json!([thread_id, limit as i64]),
+            )?
+        };
+        let mut messages: Vec<CommunityMessageRecord> = rows.iter().map(Self::parse_community_message).collect();
+        messages.reverse();
+        Ok(messages)
+    }
+
+    /// Follow a thread
+    pub fn follow_thread(&self, thread_id: &str, member_did: &str, followed_at: i64) -> Result<()> {
+        self.exec(
+            "INSERT OR IGNORE INTO community_thread_followers (thread_id, member_did, followed_at) VALUES (?, ?, ?)",
+            json!([thread_id, member_did, followed_at]),
+        )?;
+        Ok(())
+    }
+
+    /// Unfollow a thread
+    pub fn unfollow_thread(&self, thread_id: &str, member_did: &str) -> Result<()> {
+        self.exec("DELETE FROM community_thread_followers WHERE thread_id = ? AND member_did = ?", json!([thread_id, member_did]))?;
+        Ok(())
+    }
+
+    /// Check if following a thread
+    pub fn is_following_thread(&self, thread_id: &str, member_did: &str) -> Result<bool> {
+        let count: Option<i64> = self.query_scalar(
+            "SELECT COUNT(*) FROM community_thread_followers WHERE thread_id = ? AND member_did = ?",
+            json!([thread_id, member_did]),
+        )?;
+        Ok(count.unwrap_or(0) > 0)
+    }
+
+    /// Get thread followers
+    pub fn get_thread_followers(&self, thread_id: &str) -> Result<Vec<CommunityThreadFollowerRecord>> {
+        let rows = self.query(
+            "SELECT thread_id, member_did, followed_at FROM community_thread_followers WHERE thread_id = ?",
+            json!([thread_id]),
+        )?;
+        Ok(rows.iter().map(|row| CommunityThreadFollowerRecord {
+            thread_id: row["thread_id"].as_str().unwrap_or("").to_string(),
+            member_did: row["member_did"].as_str().unwrap_or("").to_string(),
+            followed_at: row["followed_at"].as_i64().unwrap_or(0),
+        }).collect())
+    }
+
+    // ── Timeouts ─────────────────────────────────────────────────────────
+
+    /// Create a community timeout
+    #[allow(clippy::too_many_arguments)]
+    pub fn create_community_timeout(&self, id: &str, community_id: &str, member_did: &str, reason: Option<&str>, timeout_type: &str, issued_by: &str, expires_at: i64, created_at: i64) -> Result<()> {
+        self.exec(
+            "INSERT INTO community_timeouts (id, community_id, member_did, reason, timeout_type, issued_by, expires_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            json!([id, community_id, member_did, reason, timeout_type, issued_by, expires_at, created_at]),
+        )?;
+        Ok(())
+    }
+
+    /// Get active timeouts for a member
+    pub fn get_active_timeouts(&self, community_id: &str, member_did: &str, now: i64) -> Result<Vec<CommunityTimeoutRecord>> {
+        let rows = self.query(
+            "SELECT id, community_id, member_did, reason, timeout_type, issued_by, expires_at, created_at FROM community_timeouts WHERE community_id = ? AND member_did = ? AND expires_at > ? ORDER BY created_at DESC",
+            json!([community_id, member_did, now]),
+        )?;
+        Ok(rows.iter().map(|row| CommunityTimeoutRecord {
+            id: row["id"].as_str().unwrap_or("").to_string(),
+            community_id: row["community_id"].as_str().unwrap_or("").to_string(),
+            member_did: row["member_did"].as_str().unwrap_or("").to_string(),
+            reason: row["reason"].as_str().map(|s| s.to_string()),
+            timeout_type: row["timeout_type"].as_str().unwrap_or("mute").to_string(),
+            issued_by: row["issued_by"].as_str().unwrap_or("").to_string(),
+            expires_at: row["expires_at"].as_i64().unwrap_or(0),
+            created_at: row["created_at"].as_i64().unwrap_or(0),
+        }).collect())
+    }
+
+    /// Get all timeouts for a community
+    pub fn get_community_timeouts(&self, community_id: &str) -> Result<Vec<CommunityTimeoutRecord>> {
+        let rows = self.query(
+            "SELECT id, community_id, member_did, reason, timeout_type, issued_by, expires_at, created_at FROM community_timeouts WHERE community_id = ? ORDER BY created_at DESC",
+            json!([community_id]),
+        )?;
+        Ok(rows.iter().map(|row| CommunityTimeoutRecord {
+            id: row["id"].as_str().unwrap_or("").to_string(),
+            community_id: row["community_id"].as_str().unwrap_or("").to_string(),
+            member_did: row["member_did"].as_str().unwrap_or("").to_string(),
+            reason: row["reason"].as_str().map(|s| s.to_string()),
+            timeout_type: row["timeout_type"].as_str().unwrap_or("mute").to_string(),
+            issued_by: row["issued_by"].as_str().unwrap_or("").to_string(),
+            expires_at: row["expires_at"].as_i64().unwrap_or(0),
+            created_at: row["created_at"].as_i64().unwrap_or(0),
+        }).collect())
+    }
+
+    /// Remove a timeout
+    pub fn remove_community_timeout(&self, id: &str) -> Result<()> {
+        self.exec("DELETE FROM community_timeouts WHERE id = ?", json!([id]))?;
+        Ok(())
+    }
+
+    /// Check if a member is timed out
+    pub fn is_member_timed_out(&self, community_id: &str, member_did: &str, timeout_type: &str, now: i64) -> Result<bool> {
+        let count: Option<i64> = self.query_scalar(
+            "SELECT COUNT(*) FROM community_timeouts WHERE community_id = ? AND member_did = ? AND timeout_type = ? AND expires_at > ?",
+            json!([community_id, member_did, timeout_type, now]),
+        )?;
+        Ok(count.unwrap_or(0) > 0)
+    }
+
+    // ── Files ────────────────────────────────────────────────────────────
+
+    /// Store a community file
+    #[allow(clippy::too_many_arguments)]
+    pub fn store_community_file(&self, id: &str, channel_id: &str, folder_id: Option<&str>, filename: &str, description: Option<&str>, file_size: i64, mime_type: Option<&str>, storage_chunks_json: &str, uploaded_by: &str, created_at: i64) -> Result<()> {
+        self.exec(
+            "INSERT INTO community_files (id, channel_id, folder_id, filename, description, file_size, mime_type, storage_chunks_json, uploaded_by, version, download_count, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?)",
+            json!([id, channel_id, folder_id, filename, description, file_size, mime_type, storage_chunks_json, uploaded_by, created_at]),
+        )?;
+        Ok(())
+    }
+
+    /// Get files in a channel/folder
+    pub fn get_community_files(&self, channel_id: &str, folder_id: Option<&str>, limit: usize, offset: usize) -> Result<Vec<CommunityFileRecord>> {
+        let rows = if let Some(fid) = folder_id {
+            self.query(
+                "SELECT id, channel_id, folder_id, filename, description, file_size, mime_type, storage_chunks_json, uploaded_by, version, download_count, created_at FROM community_files WHERE channel_id = ? AND folder_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                json!([channel_id, fid, limit as i64, offset as i64]),
+            )?
+        } else {
+            self.query(
+                "SELECT id, channel_id, folder_id, filename, description, file_size, mime_type, storage_chunks_json, uploaded_by, version, download_count, created_at FROM community_files WHERE channel_id = ? AND folder_id IS NULL ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                json!([channel_id, limit as i64, offset as i64]),
+            )?
+        };
+        Ok(rows.iter().map(|row| CommunityFileRecord {
+            id: row["id"].as_str().unwrap_or("").to_string(),
+            channel_id: row["channel_id"].as_str().unwrap_or("").to_string(),
+            folder_id: row["folder_id"].as_str().map(|s| s.to_string()),
+            filename: row["filename"].as_str().unwrap_or("").to_string(),
+            description: row["description"].as_str().map(|s| s.to_string()),
+            file_size: row["file_size"].as_i64().unwrap_or(0),
+            mime_type: row["mime_type"].as_str().map(|s| s.to_string()),
+            storage_chunks_json: row["storage_chunks_json"].as_str().unwrap_or("[]").to_string(),
+            uploaded_by: row["uploaded_by"].as_str().unwrap_or("").to_string(),
+            version: row["version"].as_i64().unwrap_or(1) as i32,
+            download_count: row["download_count"].as_i64().unwrap_or(0) as i32,
+            created_at: row["created_at"].as_i64().unwrap_or(0),
+        }).collect())
+    }
+
+    /// Get a file by ID
+    pub fn get_community_file(&self, id: &str) -> Result<Option<CommunityFileRecord>> {
+        let rows = self.query(
+            "SELECT id, channel_id, folder_id, filename, description, file_size, mime_type, storage_chunks_json, uploaded_by, version, download_count, created_at FROM community_files WHERE id = ?",
+            json!([id]),
+        )?;
+        Ok(rows.first().map(|row| CommunityFileRecord {
+            id: row["id"].as_str().unwrap_or("").to_string(),
+            channel_id: row["channel_id"].as_str().unwrap_or("").to_string(),
+            folder_id: row["folder_id"].as_str().map(|s| s.to_string()),
+            filename: row["filename"].as_str().unwrap_or("").to_string(),
+            description: row["description"].as_str().map(|s| s.to_string()),
+            file_size: row["file_size"].as_i64().unwrap_or(0),
+            mime_type: row["mime_type"].as_str().map(|s| s.to_string()),
+            storage_chunks_json: row["storage_chunks_json"].as_str().unwrap_or("[]").to_string(),
+            uploaded_by: row["uploaded_by"].as_str().unwrap_or("").to_string(),
+            version: row["version"].as_i64().unwrap_or(1) as i32,
+            download_count: row["download_count"].as_i64().unwrap_or(0) as i32,
+            created_at: row["created_at"].as_i64().unwrap_or(0),
+        }))
+    }
+
+    /// Delete a file
+    pub fn delete_community_file(&self, id: &str) -> Result<()> {
+        self.exec("DELETE FROM community_files WHERE id = ?", json!([id]))?;
+        Ok(())
+    }
+
+    /// Increment file download count
+    pub fn increment_file_download_count(&self, id: &str) -> Result<()> {
+        self.exec("UPDATE community_files SET download_count = download_count + 1 WHERE id = ?", json!([id]))?;
+        Ok(())
+    }
+
+    /// Create a file folder
+    pub fn create_community_file_folder(&self, id: &str, channel_id: &str, parent_folder_id: Option<&str>, name: &str, created_by: &str, created_at: i64) -> Result<()> {
+        self.exec(
+            "INSERT INTO community_file_folders (id, channel_id, parent_folder_id, name, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+            json!([id, channel_id, parent_folder_id, name, created_by, created_at]),
+        )?;
+        Ok(())
+    }
+
+    /// Get file folders
+    pub fn get_community_file_folders(&self, channel_id: &str, parent_folder_id: Option<&str>) -> Result<Vec<CommunityFileFolderRecord>> {
+        let rows = if let Some(pid) = parent_folder_id {
+            self.query(
+                "SELECT id, channel_id, parent_folder_id, name, created_by, created_at FROM community_file_folders WHERE channel_id = ? AND parent_folder_id = ? ORDER BY name",
+                json!([channel_id, pid]),
+            )?
+        } else {
+            self.query(
+                "SELECT id, channel_id, parent_folder_id, name, created_by, created_at FROM community_file_folders WHERE channel_id = ? AND parent_folder_id IS NULL ORDER BY name",
+                json!([channel_id]),
+            )?
+        };
+        Ok(rows.iter().map(|row| CommunityFileFolderRecord {
+            id: row["id"].as_str().unwrap_or("").to_string(),
+            channel_id: row["channel_id"].as_str().unwrap_or("").to_string(),
+            parent_folder_id: row["parent_folder_id"].as_str().map(|s| s.to_string()),
+            name: row["name"].as_str().unwrap_or("").to_string(),
+            created_by: row["created_by"].as_str().unwrap_or("").to_string(),
+            created_at: row["created_at"].as_i64().unwrap_or(0),
+        }).collect())
+    }
+
+    /// Delete a file folder
+    pub fn delete_community_file_folder(&self, id: &str) -> Result<()> {
+        self.exec("DELETE FROM community_file_folders WHERE id = ?", json!([id]))?;
+        Ok(())
+    }
+
+    // ── Emoji & Stickers ─────────────────────────────────────────────────
+
+    /// Create a custom emoji
+    #[allow(clippy::too_many_arguments)]
+    pub fn create_community_emoji(&self, id: &str, community_id: &str, name: &str, image_url: &str, animated: bool, uploaded_by: &str, created_at: i64) -> Result<()> {
+        self.exec(
+            "INSERT INTO community_emoji (id, community_id, name, image_url, animated, uploaded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            json!([id, community_id, name, image_url, animated as i32, uploaded_by, created_at]),
+        )?;
+        Ok(())
+    }
+
+    /// Get all emoji for a community
+    pub fn get_community_emoji(&self, community_id: &str) -> Result<Vec<CommunityEmojiRecord>> {
+        let rows = self.query(
+            "SELECT id, community_id, name, image_url, animated, uploaded_by, created_at FROM community_emoji WHERE community_id = ? ORDER BY name",
+            json!([community_id]),
+        )?;
+        Ok(rows.iter().map(|row| CommunityEmojiRecord {
+            id: row["id"].as_str().unwrap_or("").to_string(),
+            community_id: row["community_id"].as_str().unwrap_or("").to_string(),
+            name: row["name"].as_str().unwrap_or("").to_string(),
+            image_url: row["image_url"].as_str().unwrap_or("").to_string(),
+            animated: row["animated"].as_i64().unwrap_or(0) != 0,
+            uploaded_by: row["uploaded_by"].as_str().unwrap_or("").to_string(),
+            created_at: row["created_at"].as_i64().unwrap_or(0),
+        }).collect())
+    }
+
+    /// Delete a custom emoji
+    pub fn delete_community_emoji(&self, id: &str) -> Result<()> {
+        self.exec("DELETE FROM community_emoji WHERE id = ?", json!([id]))?;
+        Ok(())
+    }
+
+    /// Create a custom sticker
+    #[allow(clippy::too_many_arguments)]
+    pub fn create_community_sticker(&self, id: &str, community_id: &str, pack_id: Option<&str>, name: &str, image_url: &str, animated: bool, uploaded_by: &str, created_at: i64) -> Result<()> {
+        self.exec(
+            "INSERT INTO community_stickers (id, community_id, pack_id, name, image_url, animated, uploaded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            json!([id, community_id, pack_id, name, image_url, animated as i32, uploaded_by, created_at]),
+        )?;
+        Ok(())
+    }
+
+    /// Get all stickers for a community
+    pub fn get_community_stickers(&self, community_id: &str) -> Result<Vec<CommunityStickerRecord>> {
+        let rows = self.query(
+            "SELECT id, community_id, pack_id, name, image_url, animated, uploaded_by, created_at FROM community_stickers WHERE community_id = ? ORDER BY name",
+            json!([community_id]),
+        )?;
+        Ok(rows.iter().map(|row| CommunityStickerRecord {
+            id: row["id"].as_str().unwrap_or("").to_string(),
+            community_id: row["community_id"].as_str().unwrap_or("").to_string(),
+            pack_id: row["pack_id"].as_str().map(|s| s.to_string()),
+            name: row["name"].as_str().unwrap_or("").to_string(),
+            image_url: row["image_url"].as_str().unwrap_or("").to_string(),
+            animated: row["animated"].as_i64().unwrap_or(0) != 0,
+            uploaded_by: row["uploaded_by"].as_str().unwrap_or("").to_string(),
+            created_at: row["created_at"].as_i64().unwrap_or(0),
+        }).collect())
+    }
+
+    /// Delete a sticker
+    pub fn delete_community_sticker(&self, id: &str) -> Result<()> {
+        self.exec("DELETE FROM community_stickers WHERE id = ?", json!([id]))?;
+        Ok(())
+    }
+
+    // ── Webhooks ─────────────────────────────────────────────────────────
+
+    /// Create a webhook
+    #[allow(clippy::too_many_arguments)]
+    pub fn create_community_webhook(&self, id: &str, channel_id: &str, name: &str, avatar_url: Option<&str>, token: &str, creator_did: &str, created_at: i64) -> Result<()> {
+        self.exec(
+            "INSERT INTO community_webhooks (id, channel_id, name, avatar_url, token, creator_did, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            json!([id, channel_id, name, avatar_url, token, creator_did, created_at]),
+        )?;
+        Ok(())
+    }
+
+    /// Get webhooks for a channel
+    pub fn get_community_webhooks(&self, channel_id: &str) -> Result<Vec<CommunityWebhookRecord>> {
+        let rows = self.query(
+            "SELECT id, channel_id, name, avatar_url, token, creator_did, created_at FROM community_webhooks WHERE channel_id = ? ORDER BY created_at",
+            json!([channel_id]),
+        )?;
+        Ok(rows.iter().map(|row| CommunityWebhookRecord {
+            id: row["id"].as_str().unwrap_or("").to_string(),
+            channel_id: row["channel_id"].as_str().unwrap_or("").to_string(),
+            name: row["name"].as_str().unwrap_or("").to_string(),
+            avatar_url: row["avatar_url"].as_str().map(|s| s.to_string()),
+            token: row["token"].as_str().unwrap_or("").to_string(),
+            creator_did: row["creator_did"].as_str().unwrap_or("").to_string(),
+            created_at: row["created_at"].as_i64().unwrap_or(0),
+        }).collect())
+    }
+
+    /// Get a webhook by ID
+    pub fn get_community_webhook(&self, id: &str) -> Result<Option<CommunityWebhookRecord>> {
+        let rows = self.query(
+            "SELECT id, channel_id, name, avatar_url, token, creator_did, created_at FROM community_webhooks WHERE id = ?",
+            json!([id]),
+        )?;
+        Ok(rows.first().map(|row| CommunityWebhookRecord {
+            id: row["id"].as_str().unwrap_or("").to_string(),
+            channel_id: row["channel_id"].as_str().unwrap_or("").to_string(),
+            name: row["name"].as_str().unwrap_or("").to_string(),
+            avatar_url: row["avatar_url"].as_str().map(|s| s.to_string()),
+            token: row["token"].as_str().unwrap_or("").to_string(),
+            creator_did: row["creator_did"].as_str().unwrap_or("").to_string(),
+            created_at: row["created_at"].as_i64().unwrap_or(0),
+        }))
+    }
+
+    /// Update a webhook
+    pub fn update_community_webhook(&self, id: &str, name: Option<&str>, avatar_url: Option<&str>) -> Result<()> {
+        self.exec(
+            "UPDATE community_webhooks SET name = COALESCE(?, name), avatar_url = ? WHERE id = ?",
+            json!([name, avatar_url, id]),
+        )?;
+        Ok(())
+    }
+
+    /// Delete a webhook
+    pub fn delete_community_webhook(&self, id: &str) -> Result<()> {
+        self.exec("DELETE FROM community_webhooks WHERE id = ?", json!([id]))?;
+        Ok(())
+    }
+
+    // ── Channel Keys (E2EE) ──────────────────────────────────────────────
+
+    /// Store a channel encryption key
+    pub fn store_channel_key(&self, channel_id: &str, key_version: i32, encrypted_key: &[u8], created_at: i64) -> Result<()> {
+        self.exec(
+            "INSERT OR REPLACE INTO community_channel_keys (channel_id, key_version, encrypted_key, created_at) VALUES (?, ?, ?, ?)",
+            json!([channel_id, key_version, hex::encode(encrypted_key), created_at]),
+        )?;
+        Ok(())
+    }
+
+    /// Get the latest channel key
+    pub fn get_latest_channel_key(&self, channel_id: &str) -> Result<Option<ChannelKeyRecord>> {
+        let rows = self.query(
+            "SELECT channel_id, key_version, encrypted_key, created_at FROM community_channel_keys WHERE channel_id = ? ORDER BY key_version DESC LIMIT 1",
+            json!([channel_id]),
+        )?;
+        Ok(rows.first().map(|row| ChannelKeyRecord {
+            channel_id: row["channel_id"].as_str().unwrap_or("").to_string(),
+            key_version: row["key_version"].as_i64().unwrap_or(0) as i32,
+            encrypted_key: row["encrypted_key"].as_str().map(|s| hex::decode(s).unwrap_or_default()).unwrap_or_default(),
+            created_at: row["created_at"].as_i64().unwrap_or(0),
+        }))
+    }
+
+    // ── Channel Permission Overrides ─────────────────────────────────────
+
+    /// Set a channel permission override
+    pub fn set_channel_permission_override(&self, id: &str, channel_id: &str, target_type: &str, target_id: &str, allow_bitfield: &str, deny_bitfield: &str) -> Result<()> {
+        self.exec(
+            "INSERT OR REPLACE INTO channel_permission_overrides (id, channel_id, target_type, target_id, allow_bitfield, deny_bitfield) VALUES (?, ?, ?, ?, ?, ?)",
+            json!([id, channel_id, target_type, target_id, allow_bitfield, deny_bitfield]),
+        )?;
+        Ok(())
+    }
+
+    /// Remove a channel permission override
+    pub fn remove_channel_permission_override(&self, id: &str) -> Result<()> {
+        self.exec("DELETE FROM channel_permission_overrides WHERE id = ?", json!([id]))?;
+        Ok(())
+    }
+
+    /// Get channel permission overrides
+    pub fn get_channel_permission_overrides(&self, channel_id: &str) -> Result<Vec<ChannelPermissionOverrideRecord>> {
+        let rows = self.query(
+            "SELECT id, channel_id, target_type, target_id, allow_bitfield, deny_bitfield FROM channel_permission_overrides WHERE channel_id = ?",
+            json!([channel_id]),
+        )?;
+        Ok(rows.iter().map(|row| ChannelPermissionOverrideRecord {
+            id: row["id"].as_str().unwrap_or("").to_string(),
+            channel_id: row["channel_id"].as_str().unwrap_or("").to_string(),
+            target_type: row["target_type"].as_str().unwrap_or("").to_string(),
+            target_id: row["target_id"].as_str().unwrap_or("").to_string(),
+            allow_bitfield: row["allow_bitfield"].as_str().unwrap_or("0").to_string(),
+            deny_bitfield: row["deny_bitfield"].as_str().unwrap_or("0").to_string(),
+        }).collect())
+    }
+
+    // ── Member Status ────────────────────────────────────────────────────
+
+    /// Set a member's custom status
+    pub fn set_member_status(&self, community_id: &str, member_did: &str, status_text: Option<&str>, status_emoji: Option<&str>, expires_at: Option<i64>, updated_at: i64) -> Result<()> {
+        self.exec(
+            "INSERT OR REPLACE INTO community_member_status (community_id, member_did, status_text, status_emoji, expires_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+            json!([community_id, member_did, status_text, status_emoji, expires_at, updated_at]),
+        )?;
+        Ok(())
+    }
+
+    /// Get a member's status
+    pub fn get_member_status(&self, community_id: &str, member_did: &str) -> Result<Option<CommunityMemberStatusRecord>> {
+        let rows = self.query(
+            "SELECT community_id, member_did, status_text, status_emoji, expires_at, updated_at FROM community_member_status WHERE community_id = ? AND member_did = ?",
+            json!([community_id, member_did]),
+        )?;
+        Ok(rows.first().map(|row| CommunityMemberStatusRecord {
+            community_id: row["community_id"].as_str().unwrap_or("").to_string(),
+            member_did: row["member_did"].as_str().unwrap_or("").to_string(),
+            status_text: row["status_text"].as_str().map(|s| s.to_string()),
+            status_emoji: row["status_emoji"].as_str().map(|s| s.to_string()),
+            expires_at: row["expires_at"].as_i64(),
+            updated_at: row["updated_at"].as_i64().unwrap_or(0),
+        }))
+    }
+
+    /// Clear a member's status
+    pub fn clear_member_status(&self, community_id: &str, member_did: &str) -> Result<()> {
+        self.exec("DELETE FROM community_member_status WHERE community_id = ? AND member_did = ?", json!([community_id, member_did]))?;
+        Ok(())
+    }
+
+    // ── Notification Settings ────────────────────────────────────────────
+
+    /// Upsert a notification setting
+    #[allow(clippy::too_many_arguments)]
+    pub fn upsert_notification_setting(&self, id: &str, community_id: &str, member_did: &str, target_type: &str, target_id: &str, mute_until: Option<i64>, suppress_everyone: bool, suppress_roles: bool, level: &str, updated_at: i64) -> Result<()> {
+        self.exec(
+            "INSERT OR REPLACE INTO community_notification_settings (id, community_id, member_did, target_type, target_id, mute_until, suppress_everyone, suppress_roles, level, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            json!([id, community_id, member_did, target_type, target_id, mute_until, suppress_everyone as i32, suppress_roles as i32, level, updated_at]),
+        )?;
+        Ok(())
+    }
+
+    /// Delete a notification setting
+    pub fn delete_notification_setting(&self, id: &str) -> Result<()> {
+        self.exec("DELETE FROM community_notification_settings WHERE id = ?", json!([id]))?;
+        Ok(())
+    }
+
+    /// Get notification settings for a member in a community
+    pub fn get_notification_settings(&self, community_id: &str, member_did: &str) -> Result<Vec<CommunityNotificationSettingRecord>> {
+        let rows = self.query(
+            "SELECT id, community_id, member_did, target_type, target_id, mute_until, suppress_everyone, suppress_roles, level, updated_at FROM community_notification_settings WHERE community_id = ? AND member_did = ?",
+            json!([community_id, member_did]),
+        )?;
+        Ok(rows.iter().map(|row| CommunityNotificationSettingRecord {
+            id: row["id"].as_str().unwrap_or("").to_string(),
+            community_id: row["community_id"].as_str().unwrap_or("").to_string(),
+            member_did: row["member_did"].as_str().unwrap_or("").to_string(),
+            target_type: row["target_type"].as_str().unwrap_or("").to_string(),
+            target_id: row["target_id"].as_str().unwrap_or("").to_string(),
+            mute_until: row["mute_until"].as_i64(),
+            suppress_everyone: row["suppress_everyone"].as_i64().unwrap_or(0) != 0,
+            suppress_roles: row["suppress_roles"].as_i64().unwrap_or(0) != 0,
+            level: row["level"].as_str().unwrap_or("all").to_string(),
+            updated_at: row["updated_at"].as_i64().unwrap_or(0),
+        }).collect())
+    }
+
+    // ── Boost Nodes ──────────────────────────────────────────────────────
+
+    /// Upsert a boost node
+    #[allow(clippy::too_many_arguments)]
+    pub fn upsert_boost_node(&self, id: &str, owner_did: &str, node_type: &str, node_public_key: &str, name: &str, enabled: bool, max_storage_bytes: i64, max_bandwidth_mbps: i32, auto_start: bool, prioritized_communities: Option<&str>, pairing_token: Option<&str>, remote_address: Option<&str>, created_at: i64, updated_at: i64) -> Result<()> {
+        self.exec(
+            "INSERT OR REPLACE INTO boost_nodes (id, owner_did, node_type, node_public_key, name, enabled, max_storage_bytes, max_bandwidth_mbps, auto_start, prioritized_communities, pairing_token, remote_address, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            json!([id, owner_did, node_type, node_public_key, name, enabled as i32, max_storage_bytes, max_bandwidth_mbps, auto_start as i32, prioritized_communities, pairing_token, remote_address, created_at, updated_at]),
+        )?;
+        Ok(())
+    }
+
+    /// Get a boost node by ID
+    pub fn get_boost_node(&self, id: &str) -> Result<Option<BoostNodeRecord>> {
+        let rows = self.query(
+            "SELECT id, owner_did, node_type, node_public_key, name, enabled, max_storage_bytes, max_bandwidth_mbps, auto_start, prioritized_communities, pairing_token, remote_address, last_seen_at, created_at, updated_at FROM boost_nodes WHERE id = ?",
+            json!([id]),
+        )?;
+        Ok(rows.first().map(Self::parse_boost_node))
+    }
+
+    /// Get all boost nodes for an owner
+    pub fn get_boost_nodes(&self, owner_did: &str) -> Result<Vec<BoostNodeRecord>> {
+        let rows = self.query(
+            "SELECT id, owner_did, node_type, node_public_key, name, enabled, max_storage_bytes, max_bandwidth_mbps, auto_start, prioritized_communities, pairing_token, remote_address, last_seen_at, created_at, updated_at FROM boost_nodes WHERE owner_did = ? ORDER BY created_at",
+            json!([owner_did]),
+        )?;
+        Ok(rows.iter().map(Self::parse_boost_node).collect())
+    }
+
+    /// Delete a boost node
+    pub fn delete_boost_node(&self, id: &str) -> Result<()> {
+        self.exec("DELETE FROM boost_nodes WHERE id = ?", json!([id]))?;
+        Ok(())
+    }
+
+    /// Update boost node last seen
+    pub fn update_boost_node_last_seen(&self, id: &str, last_seen_at: i64) -> Result<()> {
+        self.exec("UPDATE boost_nodes SET last_seen_at = ?, updated_at = ? WHERE id = ?", json!([last_seen_at, last_seen_at, id]))?;
+        Ok(())
+    }
+
+    /// Update boost node config
+    #[allow(clippy::too_many_arguments)]
+    pub fn update_boost_node_config(&self, id: &str, name: Option<&str>, enabled: Option<bool>, max_storage_bytes: Option<i64>, max_bandwidth_mbps: Option<i32>, auto_start: Option<bool>, prioritized_communities: Option<&str>, updated_at: i64) -> Result<()> {
+        let mut sets = Vec::new();
+        let mut params: Vec<serde_json::Value> = Vec::new();
+        if let Some(v) = name { sets.push("name = ?"); params.push(json!(v)); }
+        if let Some(v) = enabled { sets.push("enabled = ?"); params.push(json!(v as i32)); }
+        if let Some(v) = max_storage_bytes { sets.push("max_storage_bytes = ?"); params.push(json!(v)); }
+        if let Some(v) = max_bandwidth_mbps { sets.push("max_bandwidth_mbps = ?"); params.push(json!(v)); }
+        if let Some(v) = auto_start { sets.push("auto_start = ?"); params.push(json!(v as i32)); }
+        if let Some(v) = prioritized_communities { sets.push("prioritized_communities = ?"); params.push(json!(v)); }
+        sets.push("updated_at = ?"); params.push(json!(updated_at));
+        params.push(json!(id));
+        if !sets.is_empty() {
+            let sql = format!("UPDATE boost_nodes SET {} WHERE id = ?", sets.join(", "));
+            self.exec(&sql, serde_json::Value::Array(params))?;
+        }
+        Ok(())
+    }
+
+    fn parse_boost_node(row: &serde_json::Value) -> BoostNodeRecord {
+        BoostNodeRecord {
+            id: row["id"].as_str().unwrap_or("").to_string(),
+            owner_did: row["owner_did"].as_str().unwrap_or("").to_string(),
+            node_type: row["node_type"].as_str().unwrap_or("").to_string(),
+            node_public_key: row["node_public_key"].as_str().unwrap_or("").to_string(),
+            name: row["name"].as_str().unwrap_or("").to_string(),
+            enabled: row["enabled"].as_i64().unwrap_or(0) != 0,
+            max_storage_bytes: row["max_storage_bytes"].as_i64().unwrap_or(0),
+            max_bandwidth_mbps: row["max_bandwidth_mbps"].as_i64().unwrap_or(0) as i32,
+            auto_start: row["auto_start"].as_i64().unwrap_or(0) != 0,
+            prioritized_communities: row["prioritized_communities"].as_str().map(|s| s.to_string()),
+            pairing_token: row["pairing_token"].as_str().map(|s| s.to_string()),
+            remote_address: row["remote_address"].as_str().map(|s| s.to_string()),
+            last_seen_at: row["last_seen_at"].as_i64(),
+            created_at: row["created_at"].as_i64().unwrap_or(0),
+            updated_at: row["updated_at"].as_i64().unwrap_or(0),
+        }
+    }
+
+    // ── File Chunk Storage ───────────────────────────────────────────────
+
+    /// Store a file chunk (data stored as base64 text in WASM)
+    pub fn store_chunk(&self, chunk_id: &str, file_id: &str, chunk_index: i32, data: &[u8], size: i64, created_at: i64) -> Result<()> {
+        use base64::Engine as _;
+        let data_b64 = base64::engine::general_purpose::STANDARD.encode(data);
+        self.exec(
+            "INSERT OR REPLACE INTO file_chunks (chunk_id, file_id, chunk_index, data, size, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+            json!([chunk_id, file_id, chunk_index, data_b64, size, created_at]),
+        )?;
+        Ok(())
+    }
+
+    /// Get a file chunk by ID
+    pub fn get_chunk(&self, chunk_id: &str) -> Result<Option<FileChunkRecord>> {
+        use base64::Engine as _;
+        let rows = self.query(
+            "SELECT chunk_id, file_id, chunk_index, data, size, created_at FROM file_chunks WHERE chunk_id = ?",
+            json!([chunk_id]),
+        )?;
+        Ok(rows.first().map(|row| {
+            let data_b64 = row["data"].as_str().unwrap_or("");
+            let data = base64::engine::general_purpose::STANDARD.decode(data_b64).unwrap_or_default();
+            FileChunkRecord {
+                chunk_id: row["chunk_id"].as_str().unwrap_or("").to_string(),
+                file_id: row["file_id"].as_str().unwrap_or("").to_string(),
+                chunk_index: row["chunk_index"].as_i64().unwrap_or(0) as i32,
+                data,
+                size: row["size"].as_i64().unwrap_or(0),
+                created_at: row["created_at"].as_i64().unwrap_or(0),
+            }
+        }))
+    }
+
+    /// Get all chunks for a file
+    pub fn get_chunks_for_file(&self, file_id: &str) -> Result<Vec<FileChunkRecord>> {
+        use base64::Engine as _;
+        let rows = self.query(
+            "SELECT chunk_id, file_id, chunk_index, data, size, created_at FROM file_chunks WHERE file_id = ? ORDER BY chunk_index",
+            json!([file_id]),
+        )?;
+        Ok(rows.iter().map(|row| {
+            let data_b64 = row["data"].as_str().unwrap_or("");
+            let data = base64::engine::general_purpose::STANDARD.decode(data_b64).unwrap_or_default();
+            FileChunkRecord {
+                chunk_id: row["chunk_id"].as_str().unwrap_or("").to_string(),
+                file_id: row["file_id"].as_str().unwrap_or("").to_string(),
+                chunk_index: row["chunk_index"].as_i64().unwrap_or(0) as i32,
+                data,
+                size: row["size"].as_i64().unwrap_or(0),
+                created_at: row["created_at"].as_i64().unwrap_or(0),
+            }
+        }).collect())
+    }
+
+    /// Delete all chunks for a file
+    pub fn delete_chunks_for_file(&self, file_id: &str) -> Result<()> {
+        self.exec("DELETE FROM file_chunks WHERE file_id = ?", json!([file_id]))?;
+        Ok(())
+    }
+
+    /// Store a file manifest
+    #[allow(clippy::too_many_arguments)]
+    pub fn store_manifest(&self, file_id: &str, filename: &str, total_size: i64, chunk_size: i64, total_chunks: i32, chunks_json: &str, file_hash: &str, encrypted: bool, encryption_key_id: Option<&str>, created_at: i64) -> Result<()> {
+        self.exec(
+            "INSERT OR REPLACE INTO file_manifests (file_id, filename, total_size, chunk_size, total_chunks, chunks_json, file_hash, encrypted, encryption_key_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            json!([file_id, filename, total_size, chunk_size, total_chunks, chunks_json, file_hash, encrypted as i32, encryption_key_id, created_at]),
+        )?;
+        Ok(())
+    }
+
+    /// Get a file manifest by file_id
+    pub fn get_manifest(&self, file_id: &str) -> Result<Option<FileManifestRecord>> {
+        let rows = self.query(
+            "SELECT file_id, filename, total_size, chunk_size, total_chunks, chunks_json, file_hash, encrypted, encryption_key_id, created_at FROM file_manifests WHERE file_id = ?",
+            json!([file_id]),
+        )?;
+        Ok(rows.first().map(|row| FileManifestRecord {
+            file_id: row["file_id"].as_str().unwrap_or("").to_string(),
+            filename: row["filename"].as_str().unwrap_or("").to_string(),
+            total_size: row["total_size"].as_i64().unwrap_or(0),
+            chunk_size: row["chunk_size"].as_i64().unwrap_or(0),
+            total_chunks: row["total_chunks"].as_i64().unwrap_or(0) as i32,
+            chunks_json: row["chunks_json"].as_str().unwrap_or("[]").to_string(),
+            file_hash: row["file_hash"].as_str().unwrap_or("").to_string(),
+            encrypted: row["encrypted"].as_i64().unwrap_or(0) != 0,
+            encryption_key_id: row["encryption_key_id"].as_str().map(|s| s.to_string()),
+            created_at: row["created_at"].as_i64().unwrap_or(0),
+        }))
+    }
+
+    /// Delete a file manifest
+    pub fn delete_manifest(&self, file_id: &str) -> Result<()> {
+        self.exec("DELETE FROM file_manifests WHERE file_id = ?", json!([file_id]))?;
+        Ok(())
+    }
+
+    // ── DM Shared Files ──────────────────────────────────────────────────
+
+    /// Store a DM shared file
+    #[allow(clippy::too_many_arguments)]
+    pub fn store_dm_shared_file(&self, id: &str, conversation_id: &str, folder_id: Option<&str>, filename: &str, description: Option<&str>, file_size: i64, mime_type: Option<&str>, storage_chunks_json: &str, uploaded_by: &str, encrypted_metadata: Option<&str>, encryption_nonce: Option<&str>, created_at: i64) -> Result<()> {
+        self.exec(
+            "INSERT INTO dm_shared_files (id, conversation_id, folder_id, filename, description, file_size, mime_type, storage_chunks_json, uploaded_by, version, download_count, encrypted_metadata, encryption_nonce, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?, ?, ?)",
+            json!([id, conversation_id, folder_id, filename, description, file_size, mime_type, storage_chunks_json, uploaded_by, encrypted_metadata, encryption_nonce, created_at]),
+        )?;
+        Ok(())
+    }
+
+    /// Get DM shared files in a conversation (optionally within a folder)
+    pub fn get_dm_shared_files(&self, conversation_id: &str, folder_id: Option<&str>, limit: usize, offset: usize) -> Result<Vec<DmSharedFileRecord>> {
+        let rows = if let Some(fid) = folder_id {
+            self.query(
+                "SELECT id, conversation_id, folder_id, filename, description, file_size, mime_type, storage_chunks_json, uploaded_by, version, download_count, encrypted_metadata, encryption_nonce, created_at FROM dm_shared_files WHERE conversation_id = ? AND folder_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                json!([conversation_id, fid, limit as i64, offset as i64]),
+            )?
+        } else {
+            self.query(
+                "SELECT id, conversation_id, folder_id, filename, description, file_size, mime_type, storage_chunks_json, uploaded_by, version, download_count, encrypted_metadata, encryption_nonce, created_at FROM dm_shared_files WHERE conversation_id = ? AND folder_id IS NULL ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                json!([conversation_id, limit as i64, offset as i64]),
+            )?
+        };
+        Ok(rows.iter().map(|row| DmSharedFileRecord {
+            id: row["id"].as_str().unwrap_or("").to_string(),
+            conversation_id: row["conversation_id"].as_str().unwrap_or("").to_string(),
+            folder_id: row["folder_id"].as_str().map(|s| s.to_string()),
+            filename: row["filename"].as_str().unwrap_or("").to_string(),
+            description: row["description"].as_str().map(|s| s.to_string()),
+            file_size: row["file_size"].as_i64().unwrap_or(0),
+            mime_type: row["mime_type"].as_str().map(|s| s.to_string()),
+            storage_chunks_json: row["storage_chunks_json"].as_str().unwrap_or("[]").to_string(),
+            uploaded_by: row["uploaded_by"].as_str().unwrap_or("").to_string(),
+            version: row["version"].as_i64().unwrap_or(1) as i32,
+            download_count: row["download_count"].as_i64().unwrap_or(0) as i32,
+            encrypted_metadata: row["encrypted_metadata"].as_str().map(|s| s.to_string()),
+            encryption_nonce: row["encryption_nonce"].as_str().map(|s| s.to_string()),
+            created_at: row["created_at"].as_i64().unwrap_or(0),
+        }).collect())
+    }
+
+    /// Get a single DM shared file by ID
+    pub fn get_dm_shared_file(&self, id: &str) -> Result<Option<DmSharedFileRecord>> {
+        let rows = self.query(
+            "SELECT id, conversation_id, folder_id, filename, description, file_size, mime_type, storage_chunks_json, uploaded_by, version, download_count, encrypted_metadata, encryption_nonce, created_at FROM dm_shared_files WHERE id = ?",
+            json!([id]),
+        )?;
+        Ok(rows.first().map(|row| DmSharedFileRecord {
+            id: row["id"].as_str().unwrap_or("").to_string(),
+            conversation_id: row["conversation_id"].as_str().unwrap_or("").to_string(),
+            folder_id: row["folder_id"].as_str().map(|s| s.to_string()),
+            filename: row["filename"].as_str().unwrap_or("").to_string(),
+            description: row["description"].as_str().map(|s| s.to_string()),
+            file_size: row["file_size"].as_i64().unwrap_or(0),
+            mime_type: row["mime_type"].as_str().map(|s| s.to_string()),
+            storage_chunks_json: row["storage_chunks_json"].as_str().unwrap_or("[]").to_string(),
+            uploaded_by: row["uploaded_by"].as_str().unwrap_or("").to_string(),
+            version: row["version"].as_i64().unwrap_or(1) as i32,
+            download_count: row["download_count"].as_i64().unwrap_or(0) as i32,
+            encrypted_metadata: row["encrypted_metadata"].as_str().map(|s| s.to_string()),
+            encryption_nonce: row["encryption_nonce"].as_str().map(|s| s.to_string()),
+            created_at: row["created_at"].as_i64().unwrap_or(0),
+        }))
+    }
+
+    /// Increment download count for a DM shared file
+    pub fn increment_dm_file_download_count(&self, id: &str) -> Result<()> {
+        self.exec("UPDATE dm_shared_files SET download_count = download_count + 1 WHERE id = ?", json!([id]))?;
+        Ok(())
+    }
+
+    /// Delete a DM shared file
+    pub fn delete_dm_shared_file(&self, id: &str) -> Result<()> {
+        self.exec("DELETE FROM dm_shared_files WHERE id = ?", json!([id]))?;
+        Ok(())
+    }
+
+    /// Move a DM shared file to a different folder
+    pub fn move_dm_shared_file(&self, id: &str, target_folder_id: Option<&str>) -> Result<()> {
+        self.exec("UPDATE dm_shared_files SET folder_id = ? WHERE id = ?", json!([target_folder_id, id]))?;
+        Ok(())
+    }
+
+    // ── DM Shared Folders ────────────────────────────────────────────────
+
+    /// Create a DM shared folder
+    pub fn create_dm_shared_folder(&self, id: &str, conversation_id: &str, parent_folder_id: Option<&str>, name: &str, created_by: &str, created_at: i64) -> Result<()> {
+        self.exec(
+            "INSERT INTO dm_shared_folders (id, conversation_id, parent_folder_id, name, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+            json!([id, conversation_id, parent_folder_id, name, created_by, created_at]),
+        )?;
+        Ok(())
+    }
+
+    /// Get DM shared folders
+    pub fn get_dm_shared_folders(&self, conversation_id: &str, parent_folder_id: Option<&str>) -> Result<Vec<DmSharedFolderRecord>> {
+        let rows = if let Some(pid) = parent_folder_id {
+            self.query(
+                "SELECT id, conversation_id, parent_folder_id, name, created_by, created_at FROM dm_shared_folders WHERE conversation_id = ? AND parent_folder_id = ? ORDER BY name",
+                json!([conversation_id, pid]),
+            )?
+        } else {
+            self.query(
+                "SELECT id, conversation_id, parent_folder_id, name, created_by, created_at FROM dm_shared_folders WHERE conversation_id = ? AND parent_folder_id IS NULL ORDER BY name",
+                json!([conversation_id]),
+            )?
+        };
+        Ok(rows.iter().map(|row| DmSharedFolderRecord {
+            id: row["id"].as_str().unwrap_or("").to_string(),
+            conversation_id: row["conversation_id"].as_str().unwrap_or("").to_string(),
+            parent_folder_id: row["parent_folder_id"].as_str().map(|s| s.to_string()),
+            name: row["name"].as_str().unwrap_or("").to_string(),
+            created_by: row["created_by"].as_str().unwrap_or("").to_string(),
+            created_at: row["created_at"].as_i64().unwrap_or(0),
+        }).collect())
+    }
+
+    /// Delete a DM shared folder
+    pub fn delete_dm_shared_folder(&self, id: &str) -> Result<()> {
+        self.exec("DELETE FROM dm_shared_folders WHERE id = ?", json!([id]))?;
+        Ok(())
+    }
+
+    /// Rename a DM shared folder
+    pub fn rename_dm_shared_folder(&self, id: &str, name: &str) -> Result<()> {
+        self.exec("UPDATE dm_shared_folders SET name = ? WHERE id = ?", json!([name, id]))?;
+        Ok(())
+    }
+
+    // ========================================================================
+    // TRANSFER SESSION METHODS (P2P file transfer state persistence)
+    // ========================================================================
+
+    /// Store a new transfer session
+    pub fn store_transfer_session(
+        &self,
+        transfer_id: &str,
+        file_id: &str,
+        manifest_json: &str,
+        direction: &str,
+        peer_did: &str,
+        total_chunks: i32,
+        total_bytes: i64,
+        transport_type: &str,
+    ) -> Result<()> {
+        let now = js_sys::Date::now() as i64;
+        self.exec(
+            "INSERT INTO transfer_sessions (transfer_id, file_id, manifest_json, direction, peer_did, state, chunks_completed, total_chunks, bytes_transferred, total_bytes, chunks_bitfield, transport_type, started_at, updated_at) VALUES (?, ?, ?, ?, ?, 'requesting', 0, ?, 0, ?, '', ?, ?, ?)",
+            json!([transfer_id, file_id, manifest_json, direction, peer_did, total_chunks, total_bytes, transport_type, now, now]),
+        )?;
+        Ok(())
+    }
+
+    /// Get a transfer session by ID
+    pub fn get_transfer_session(&self, transfer_id: &str) -> Result<Option<TransferSessionRecord>> {
+        let rows = self.query(
+            "SELECT transfer_id, file_id, manifest_json, direction, peer_did, state, chunks_completed, total_chunks, bytes_transferred, total_bytes, chunks_bitfield, transport_type, error, started_at, updated_at FROM transfer_sessions WHERE transfer_id = ?",
+            json!([transfer_id]),
+        )?;
+        Ok(rows.first().map(|row| TransferSessionRecord {
+            transfer_id: row["transfer_id"].as_str().unwrap_or("").to_string(),
+            file_id: row["file_id"].as_str().unwrap_or("").to_string(),
+            manifest_json: row["manifest_json"].as_str().unwrap_or("").to_string(),
+            direction: row["direction"].as_str().unwrap_or("").to_string(),
+            peer_did: row["peer_did"].as_str().unwrap_or("").to_string(),
+            state: row["state"].as_str().unwrap_or("").to_string(),
+            chunks_completed: row["chunks_completed"].as_i64().unwrap_or(0) as i32,
+            total_chunks: row["total_chunks"].as_i64().unwrap_or(0) as i32,
+            bytes_transferred: row["bytes_transferred"].as_i64().unwrap_or(0),
+            total_bytes: row["total_bytes"].as_i64().unwrap_or(0),
+            chunks_bitfield: row["chunks_bitfield"].as_str().unwrap_or("").to_string(),
+            transport_type: row["transport_type"].as_str().unwrap_or("").to_string(),
+            error: row["error"].as_str().map(|s| s.to_string()),
+            started_at: row["started_at"].as_i64().unwrap_or(0),
+            updated_at: row["updated_at"].as_i64().unwrap_or(0),
+        }))
+    }
+
+    /// Get all incomplete (non-terminal) transfer sessions
+    pub fn get_incomplete_transfers(&self) -> Result<Vec<TransferSessionRecord>> {
+        let rows = self.query(
+            "SELECT transfer_id, file_id, manifest_json, direction, peer_did, state, chunks_completed, total_chunks, bytes_transferred, total_bytes, chunks_bitfield, transport_type, error, started_at, updated_at FROM transfer_sessions WHERE state NOT IN ('completed', 'failed', 'cancelled') ORDER BY updated_at DESC",
+            json!([]),
+        )?;
+        Ok(rows.iter().map(|row| TransferSessionRecord {
+            transfer_id: row["transfer_id"].as_str().unwrap_or("").to_string(),
+            file_id: row["file_id"].as_str().unwrap_or("").to_string(),
+            manifest_json: row["manifest_json"].as_str().unwrap_or("").to_string(),
+            direction: row["direction"].as_str().unwrap_or("").to_string(),
+            peer_did: row["peer_did"].as_str().unwrap_or("").to_string(),
+            state: row["state"].as_str().unwrap_or("").to_string(),
+            chunks_completed: row["chunks_completed"].as_i64().unwrap_or(0) as i32,
+            total_chunks: row["total_chunks"].as_i64().unwrap_or(0) as i32,
+            bytes_transferred: row["bytes_transferred"].as_i64().unwrap_or(0),
+            total_bytes: row["total_bytes"].as_i64().unwrap_or(0),
+            chunks_bitfield: row["chunks_bitfield"].as_str().unwrap_or("").to_string(),
+            transport_type: row["transport_type"].as_str().unwrap_or("").to_string(),
+            error: row["error"].as_str().map(|s| s.to_string()),
+            started_at: row["started_at"].as_i64().unwrap_or(0),
+            updated_at: row["updated_at"].as_i64().unwrap_or(0),
+        }).collect())
+    }
+
+    /// Update transfer session progress (chunk received/sent)
+    pub fn update_transfer_progress(
+        &self,
+        transfer_id: &str,
+        state: &str,
+        chunks_completed: i32,
+        bytes_transferred: i64,
+        chunks_bitfield: &str,
+    ) -> Result<()> {
+        let now = js_sys::Date::now() as i64;
+        self.exec(
+            "UPDATE transfer_sessions SET state = ?, chunks_completed = ?, bytes_transferred = ?, chunks_bitfield = ?, updated_at = ? WHERE transfer_id = ?",
+            json!([state, chunks_completed, bytes_transferred, chunks_bitfield, now, transfer_id]),
+        )?;
+        Ok(())
+    }
+
+    /// Update transfer session state with optional error
+    pub fn update_transfer_state(&self, transfer_id: &str, state: &str, error: Option<&str>) -> Result<()> {
+        let now = js_sys::Date::now() as i64;
+        self.exec(
+            "UPDATE transfer_sessions SET state = ?, error = ?, updated_at = ? WHERE transfer_id = ?",
+            json!([state, error, now, transfer_id]),
+        )?;
+        Ok(())
+    }
+
+    /// Delete a transfer session
+    pub fn delete_transfer_session(&self, transfer_id: &str) -> Result<()> {
+        self.exec("DELETE FROM transfer_sessions WHERE transfer_id = ?", json!([transfer_id]))?;
+        Ok(())
+    }
+
+    /// Get transfer sessions for a specific file
+    pub fn get_transfers_for_file(&self, file_id: &str) -> Result<Vec<TransferSessionRecord>> {
+        let rows = self.query(
+            "SELECT transfer_id, file_id, manifest_json, direction, peer_did, state, chunks_completed, total_chunks, bytes_transferred, total_bytes, chunks_bitfield, transport_type, error, started_at, updated_at FROM transfer_sessions WHERE file_id = ? ORDER BY started_at DESC",
+            json!([file_id]),
+        )?;
+        Ok(rows.iter().map(|row| TransferSessionRecord {
+            transfer_id: row["transfer_id"].as_str().unwrap_or("").to_string(),
+            file_id: row["file_id"].as_str().unwrap_or("").to_string(),
+            manifest_json: row["manifest_json"].as_str().unwrap_or("").to_string(),
+            direction: row["direction"].as_str().unwrap_or("").to_string(),
+            peer_did: row["peer_did"].as_str().unwrap_or("").to_string(),
+            state: row["state"].as_str().unwrap_or("").to_string(),
+            chunks_completed: row["chunks_completed"].as_i64().unwrap_or(0) as i32,
+            total_chunks: row["total_chunks"].as_i64().unwrap_or(0) as i32,
+            bytes_transferred: row["bytes_transferred"].as_i64().unwrap_or(0),
+            total_bytes: row["total_bytes"].as_i64().unwrap_or(0),
+            chunks_bitfield: row["chunks_bitfield"].as_str().unwrap_or("").to_string(),
+            transport_type: row["transport_type"].as_str().unwrap_or("").to_string(),
+            error: row["error"].as_str().map(|s| s.to_string()),
+            started_at: row["started_at"].as_i64().unwrap_or(0),
+            updated_at: row["updated_at"].as_i64().unwrap_or(0),
         }).collect())
     }
 }
@@ -1126,6 +3158,25 @@ pub struct PluginBundleRecord {
 }
 
 // ============================================================================
+// CALL HISTORY RECORD TYPE
+// ============================================================================
+
+/// A call history record from the database
+#[derive(Debug, Clone)]
+pub struct CallHistoryRecord {
+    pub id: String,
+    pub conversation_id: String,
+    pub call_type: String,
+    pub direction: String,
+    pub status: String,
+    pub participants: String,
+    pub started_at: i64,
+    pub ended_at: Option<i64>,
+    pub duration_ms: Option<i64>,
+    pub created_at: i64,
+}
+
+// ============================================================================
 // COMMUNITY RECORD TYPES
 // ============================================================================
 
@@ -1157,12 +3208,25 @@ pub struct CommunitySpaceRecord {
     pub updated_at: i64,
 }
 
+/// A community category record (channel grouping within a space)
+#[derive(Debug, Clone)]
+pub struct CommunityCategoryRecord {
+    pub id: String,
+    pub community_id: String,
+    pub space_id: String,
+    pub name: String,
+    pub position: i32,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
 /// A community channel record
 #[derive(Debug, Clone)]
 pub struct CommunityChannelRecord {
     pub id: String,
     pub community_id: String,
     pub space_id: String,
+    pub category_id: Option<String>,
     pub name: String,
     pub channel_type: String,
     pub topic: Option<String>,
@@ -1337,5 +3401,232 @@ pub struct BoostNodeRecord {
     pub remote_address: Option<String>,
     pub last_seen_at: Option<i64>,
     pub created_at: i64,
+    pub updated_at: i64,
+}
+
+// ============================================================================
+// PHASE 2-11 RECORD TYPES (previously missing from WASM build)
+// ============================================================================
+
+/// A community read receipt record
+#[derive(Debug, Clone)]
+pub struct CommunityReadReceiptRecord {
+    pub channel_id: String,
+    pub member_did: String,
+    pub last_read_message_id: String,
+    pub read_at: i64,
+}
+
+/// A community pin record
+#[derive(Debug, Clone)]
+pub struct CommunityPinRecord {
+    pub channel_id: String,
+    pub message_id: String,
+    pub pinned_by: String,
+    pub pinned_at: i64,
+}
+
+/// A community file record
+#[derive(Debug, Clone)]
+pub struct CommunityFileRecord {
+    pub id: String,
+    pub channel_id: String,
+    pub folder_id: Option<String>,
+    pub filename: String,
+    pub description: Option<String>,
+    pub file_size: i64,
+    pub mime_type: Option<String>,
+    pub storage_chunks_json: String,
+    pub uploaded_by: String,
+    pub version: i32,
+    pub download_count: i32,
+    pub created_at: i64,
+}
+
+/// A community file folder record
+#[derive(Debug, Clone)]
+pub struct CommunityFileFolderRecord {
+    pub id: String,
+    pub channel_id: String,
+    pub parent_folder_id: Option<String>,
+    pub name: String,
+    pub created_by: String,
+    pub created_at: i64,
+}
+
+/// A community emoji record
+#[derive(Debug, Clone)]
+pub struct CommunityEmojiRecord {
+    pub id: String,
+    pub community_id: String,
+    pub name: String,
+    pub image_url: String,
+    pub animated: bool,
+    pub uploaded_by: String,
+    pub created_at: i64,
+}
+
+/// A community sticker record
+#[derive(Debug, Clone)]
+pub struct CommunityStickerRecord {
+    pub id: String,
+    pub community_id: String,
+    pub pack_id: Option<String>,
+    pub name: String,
+    pub image_url: String,
+    pub animated: bool,
+    pub uploaded_by: String,
+    pub created_at: i64,
+}
+
+/// A community webhook record
+#[derive(Debug, Clone)]
+pub struct CommunityWebhookRecord {
+    pub id: String,
+    pub channel_id: String,
+    pub name: String,
+    pub avatar_url: Option<String>,
+    pub token: String,
+    pub creator_did: String,
+    pub created_at: i64,
+}
+
+/// A channel key record (E2EE)
+#[derive(Debug, Clone)]
+pub struct ChannelKeyRecord {
+    pub channel_id: String,
+    pub key_version: i32,
+    pub encrypted_key: Vec<u8>,
+    pub created_at: i64,
+}
+
+/// A community deleted message record
+#[derive(Debug, Clone)]
+pub struct CommunityDeletedMessageRecord {
+    pub message_id: String,
+    pub member_did: String,
+    pub deleted_at: i64,
+}
+
+/// A community timeout record
+#[derive(Debug, Clone)]
+pub struct CommunityTimeoutRecord {
+    pub id: String,
+    pub community_id: String,
+    pub member_did: String,
+    pub reason: Option<String>,
+    pub timeout_type: String,
+    pub issued_by: String,
+    pub expires_at: i64,
+    pub created_at: i64,
+}
+
+/// A community thread follower record
+#[derive(Debug, Clone)]
+pub struct CommunityThreadFollowerRecord {
+    pub thread_id: String,
+    pub member_did: String,
+    pub followed_at: i64,
+}
+
+/// A community member status record
+#[derive(Debug, Clone)]
+pub struct CommunityMemberStatusRecord {
+    pub community_id: String,
+    pub member_did: String,
+    pub status_text: Option<String>,
+    pub status_emoji: Option<String>,
+    pub expires_at: Option<i64>,
+    pub updated_at: i64,
+}
+
+/// A community notification setting record
+#[derive(Debug, Clone)]
+pub struct CommunityNotificationSettingRecord {
+    pub id: String,
+    pub community_id: String,
+    pub member_did: String,
+    pub target_type: String,
+    pub target_id: String,
+    pub mute_until: Option<i64>,
+    pub suppress_everyone: bool,
+    pub suppress_roles: bool,
+    pub level: String,
+    pub updated_at: i64,
+}
+
+/// A file chunk record (local chunk storage for P2P transfer)
+#[derive(Debug, Clone)]
+pub struct FileChunkRecord {
+    pub chunk_id: String,
+    pub file_id: String,
+    pub chunk_index: i32,
+    pub data: Vec<u8>,
+    pub size: i64,
+    pub created_at: i64,
+}
+
+/// A file manifest record (describes how a file was chunked)
+#[derive(Debug, Clone)]
+pub struct FileManifestRecord {
+    pub file_id: String,
+    pub filename: String,
+    pub total_size: i64,
+    pub chunk_size: i64,
+    pub total_chunks: i32,
+    pub chunks_json: String,
+    pub file_hash: String,
+    pub encrypted: bool,
+    pub encryption_key_id: Option<String>,
+    pub created_at: i64,
+}
+
+/// A DM shared file record
+#[derive(Debug, Clone)]
+pub struct DmSharedFileRecord {
+    pub id: String,
+    pub conversation_id: String,
+    pub folder_id: Option<String>,
+    pub filename: String,
+    pub description: Option<String>,
+    pub file_size: i64,
+    pub mime_type: Option<String>,
+    pub storage_chunks_json: String,
+    pub uploaded_by: String,
+    pub version: i32,
+    pub download_count: i32,
+    pub encrypted_metadata: Option<String>,
+    pub encryption_nonce: Option<String>,
+    pub created_at: i64,
+}
+
+/// A DM shared folder record
+#[derive(Debug, Clone)]
+pub struct DmSharedFolderRecord {
+    pub id: String,
+    pub conversation_id: String,
+    pub parent_folder_id: Option<String>,
+    pub name: String,
+    pub created_by: String,
+    pub created_at: i64,
+}
+
+/// A transfer session record (P2P file transfer state for resume support)
+#[derive(Debug, Clone)]
+pub struct TransferSessionRecord {
+    pub transfer_id: String,
+    pub file_id: String,
+    pub manifest_json: String,
+    pub direction: String,
+    pub peer_did: String,
+    pub state: String,
+    pub chunks_completed: i32,
+    pub total_chunks: i32,
+    pub bytes_transferred: i64,
+    pub total_bytes: i64,
+    pub chunks_bitfield: String,
+    pub transport_type: String,
+    pub error: Option<String>,
+    pub started_at: i64,
     pub updated_at: i64,
 }
