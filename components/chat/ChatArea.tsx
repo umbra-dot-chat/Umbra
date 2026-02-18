@@ -110,6 +110,7 @@ function tryParseFileMessage(message: Message): {
   filename: string;
   size: number;
   mimeType: string;
+  thumbnail?: string;
 } | null {
   // Check native file content type first
   if (message.content && typeof message.content === 'object' && message.content.type === 'file') {
@@ -118,6 +119,7 @@ function tryParseFileMessage(message: Message): {
       filename: message.content.filename,
       size: message.content.size,
       mimeType: message.content.mimeType,
+      thumbnail: message.content.thumbnail,
     };
   }
   // Check for JSON-encoded file marker in text content
@@ -132,6 +134,7 @@ function tryParseFileMessage(message: Message): {
             filename: parsed.filename,
             size: parsed.size ?? 0,
             mimeType: parsed.mimeType ?? 'application/octet-stream',
+            thumbnail: parsed.thumbnail,
           };
         }
       } catch {
@@ -455,6 +458,7 @@ export function ChatArea({
                           filename={fileInfo.filename}
                           size={fileInfo.size}
                           mimeType={fileInfo.mimeType}
+                          thumbnail={fileInfo.thumbnail}
                           isOutgoing={isOwn}
                         />
                       ) : (
@@ -481,6 +485,7 @@ export function ChatArea({
                           filename={fileInfo.filename}
                           size={fileInfo.size}
                           mimeType={fileInfo.mimeType}
+                          thumbnail={fileInfo.thumbnail}
                           isOutgoing={isOwn}
                         />
                       ) : (
