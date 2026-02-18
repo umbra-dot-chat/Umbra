@@ -110,6 +110,9 @@ export {
   buildDmFileEventEnvelope, broadcastDmFileEvent,
 } from './dm-files';
 
+// OPFS bridge (web chunk storage)
+export { initOpfsBridge, isOpfsBridgeReady } from './opfs-bridge';
+
 // Storage manager
 export {
   getStorageUsage, smartCleanup, setAutoCleanupRules, getAutoCleanupRules,
@@ -122,6 +125,33 @@ export type {
 
 // Metadata sync
 export { buildMetadataEnvelope, syncMetadataViaRelay } from './metadata';
+
+// Discovery service
+export {
+  // Types
+  type Platform as DiscoveryPlatform,
+  type LinkedAccountInfo,
+  type DiscoveryStatus,
+  type HashedLookup,
+  type LookupResult,
+  type FriendSuggestion,
+  type DiscoveryServiceEvent,
+  // API
+  setRelayUrl as setDiscoveryRelayUrl,
+  getRelayUrl as getDiscoveryRelayUrl,
+  startAuth,
+  getStatus as getDiscoveryStatus,
+  updateSettings as updateDiscoverySettings,
+  batchLookup,
+  unlinkAccount,
+  createHash,
+  batchCreateHashes,
+  // Hooks
+  useLinkedAccounts,
+  useDiscovery,
+  useFriendSuggestions,
+  useDiscoveryService,
+} from './discovery';
 
 // Main service class
 export { UmbraService } from './service';

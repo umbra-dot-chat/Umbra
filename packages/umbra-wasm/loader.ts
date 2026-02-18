@@ -22,6 +22,7 @@
  */
 
 import { initSqlBridge, initSqlBridgeWithPersistence, enablePersistence } from './sql-bridge';
+import { initOpfsBridge } from '../umbra-service/src/opfs-bridge';
 
 // ─────────────────────────────────────────────────────────────────────────
 // Types
@@ -448,6 +449,10 @@ async function doInitWasm(did?: string): Promise<UmbraWasmModule> {
     console.log('[umbra-wasm] Loading sql.js (in-memory, no persistence)...');
     await initSqlBridge();
   }
+
+  // Step 1.5: Initialize OPFS bridge (sets globalThis.__umbra_opfs for Rust WASM)
+  const opfsReady = initOpfsBridge();
+  console.log(`[umbra-wasm] OPFS bridge: ${opfsReady ? 'initialized' : 'not available (non-web or unsupported)'}`);
 
   // Step 2: Load the real compiled WASM module
   //
