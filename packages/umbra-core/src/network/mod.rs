@@ -94,8 +94,9 @@ pub use behaviour::UmbraBehaviour;
 pub use codec::{UmbraCodec, UmbraRequest, UmbraResponse};
 pub use events::NetworkEvent;
 pub use file_transfer::{
-    FileTransferMessage, FlowControl, TransferDirection, TransferEvent,
-    TransferLimits, TransferSession, TransferState, TransportType,
+    FileTransferMessage, FlowControl, SpeedTracker, TransferDirection,
+    TransferEvent, TransferLimits, TransferManager, TransferSession,
+    TransferState, TransportType,
 };
 pub use peer::{PeerInfo, PeerState};
 

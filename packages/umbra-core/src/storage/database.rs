@@ -148,6 +148,16 @@ impl Database {
                     conn.execute_batch(schema::MIGRATE_V6_TO_V7)
                         .map_err(|e| Error::DatabaseError(format!("Migration v6→v7 failed: {}", e)))?;
                 }
+                if v < 8 {
+                    tracing::info!("Running migration v7 → v8 (categories)");
+                    conn.execute_batch(schema::MIGRATE_V7_TO_V8)
+                        .map_err(|e| Error::DatabaseError(format!("Migration v7→v8 failed: {}", e)))?;
+                }
+                if v < 9 {
+                    tracing::info!("Running migration v8 → v9 (file chunks, manifests, DM files)");
+                    conn.execute_batch(schema::MIGRATE_V8_TO_V9)
+                        .map_err(|e| Error::DatabaseError(format!("Migration v8→v9 failed: {}", e)))?;
+                }
 
                 tracing::info!("All migrations complete (now at version {})", schema::SCHEMA_VERSION);
             }
@@ -2032,11 +2042,11 @@ impl Database {
     // ── Members ──────────────────────────────────────────────────────────
 
     /// Add a member to a community
-    pub fn add_community_member(&self, community_id: &str, member_did: &str, joined_at: i64) -> Result<()> {
+    pub fn add_community_member(&self, community_id: &str, member_did: &str, joined_at: i64, nickname: Option<&str>) -> Result<()> {
         let conn = self.conn.lock();
         conn.execute(
-            "INSERT OR IGNORE INTO community_members (community_id, member_did, joined_at) VALUES (?, ?, ?)",
-            params![community_id, member_did, joined_at],
+            "INSERT OR IGNORE INTO community_members (community_id, member_did, nickname, joined_at) VALUES (?, ?, ?, ?)",
+            params![community_id, member_did, nickname, joined_at],
         ).map_err(|e| Error::DatabaseError(format!("Failed to add member: {}", e)))?;
         Ok(())
     }
@@ -2753,7 +2763,7 @@ impl Database {
             id: row.get(0)?, channel_id: row.get(1)?, folder_id: row.get(2)?,
             filename: row.get(3)?, description: row.get(4)?, file_size: row.get(5)?,
             mime_type: row.get(6)?, storage_chunks_json: row.get(7)?, uploaded_by: row.get(8)?,
-            version: row.get(9)?, download_count: row.get(10)?, created_at: row.get(11)?,
+            version: row.get(9)?, previous_version_id: None, download_count: row.get(10)?, created_at: row.get(11)?,
         })).map_err(|e| Error::DatabaseError(e.to_string()))?;
 
         let mut files = Vec::new();
@@ -2771,7 +2781,7 @@ impl Database {
                 id: row.get(0)?, channel_id: row.get(1)?, folder_id: row.get(2)?,
                 filename: row.get(3)?, description: row.get(4)?, file_size: row.get(5)?,
                 mime_type: row.get(6)?, storage_chunks_json: row.get(7)?, uploaded_by: row.get(8)?,
-                version: row.get(9)?, download_count: row.get(10)?, created_at: row.get(11)?,
+                version: row.get(9)?, previous_version_id: None, download_count: row.get(10)?, created_at: row.get(11)?,
             }),
         );
         match result {
@@ -3549,6 +3559,291 @@ impl Database {
         }
         Ok(results)
     }
+
+    // ========================================================================
+    // FILE CHUNK STORAGE
+    // ========================================================================
+
+    /// Store a file chunk
+    pub fn store_chunk(&self, chunk_id: &str, file_id: &str, chunk_index: i32, data: &[u8], size: i64, created_at: i64) -> Result<()> {
+        let conn = self.conn.lock();
+        conn.execute(
+            "INSERT OR REPLACE INTO file_chunks (chunk_id, file_id, chunk_index, data, size, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+            params![chunk_id, file_id, chunk_index, data, size, created_at],
+        ).map_err(|e| Error::DatabaseError(format!("Failed to store chunk: {}", e)))?;
+        Ok(())
+    }
+
+    /// Get a file chunk by ID
+    pub fn get_chunk(&self, chunk_id: &str) -> Result<Option<FileChunkRecord>> {
+        let conn = self.conn.lock();
+        let mut stmt = conn.prepare(
+            "SELECT chunk_id, file_id, chunk_index, data, size, created_at FROM file_chunks WHERE chunk_id = ?",
+        ).map_err(|e| Error::DatabaseError(e.to_string()))?;
+
+        let result = stmt.query_row(params![chunk_id], |row| {
+            Ok(FileChunkRecord {
+                chunk_id: row.get(0)?,
+                file_id: row.get(1)?,
+                chunk_index: row.get(2)?,
+                data: row.get(3)?,
+                size: row.get(4)?,
+                created_at: row.get(5)?,
+            })
+        });
+
+        match result {
+            Ok(record) => Ok(Some(record)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(Error::DatabaseError(e.to_string())),
+        }
+    }
+
+    /// Get all chunks for a file, ordered by chunk_index
+    pub fn get_chunks_for_file(&self, file_id: &str) -> Result<Vec<FileChunkRecord>> {
+        let conn = self.conn.lock();
+        let mut stmt = conn.prepare(
+            "SELECT chunk_id, file_id, chunk_index, data, size, created_at FROM file_chunks WHERE file_id = ? ORDER BY chunk_index",
+        ).map_err(|e| Error::DatabaseError(e.to_string()))?;
+
+        let rows = stmt.query_map(params![file_id], |row| {
+            Ok(FileChunkRecord {
+                chunk_id: row.get(0)?,
+                file_id: row.get(1)?,
+                chunk_index: row.get(2)?,
+                data: row.get(3)?,
+                size: row.get(4)?,
+                created_at: row.get(5)?,
+            })
+        }).map_err(|e| Error::DatabaseError(e.to_string()))?;
+
+        let mut chunks = Vec::new();
+        for row in rows { chunks.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?); }
+        Ok(chunks)
+    }
+
+    /// Delete all chunks for a file
+    pub fn delete_chunks_for_file(&self, file_id: &str) -> Result<()> {
+        let conn = self.conn.lock();
+        conn.execute("DELETE FROM file_chunks WHERE file_id = ?", params![file_id])
+            .map_err(|e| Error::DatabaseError(e.to_string()))?;
+        Ok(())
+    }
+
+    /// Store a file manifest
+    pub fn store_manifest(&self, file_id: &str, filename: &str, total_size: i64, chunk_size: i64, total_chunks: i32, chunks_json: &str, file_hash: &str, encrypted: bool, encryption_key_id: Option<&str>, created_at: i64) -> Result<()> {
+        let conn = self.conn.lock();
+        conn.execute(
+            "INSERT OR REPLACE INTO file_manifests (file_id, filename, total_size, chunk_size, total_chunks, chunks_json, file_hash, encrypted, encryption_key_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            params![file_id, filename, total_size, chunk_size, total_chunks, chunks_json, file_hash, encrypted as i32, encryption_key_id, created_at],
+        ).map_err(|e| Error::DatabaseError(format!("Failed to store manifest: {}", e)))?;
+        Ok(())
+    }
+
+    /// Get a file manifest by file_id
+    pub fn get_manifest(&self, file_id: &str) -> Result<Option<FileManifestRecord>> {
+        let conn = self.conn.lock();
+        let mut stmt = conn.prepare(
+            "SELECT file_id, filename, total_size, chunk_size, total_chunks, chunks_json, file_hash, encrypted, encryption_key_id, created_at FROM file_manifests WHERE file_id = ?",
+        ).map_err(|e| Error::DatabaseError(e.to_string()))?;
+
+        let result = stmt.query_row(params![file_id], |row| {
+            Ok(FileManifestRecord {
+                file_id: row.get(0)?,
+                filename: row.get(1)?,
+                total_size: row.get(2)?,
+                chunk_size: row.get(3)?,
+                total_chunks: row.get(4)?,
+                chunks_json: row.get(5)?,
+                file_hash: row.get(6)?,
+                encrypted: row.get::<_, i32>(7)? != 0,
+                encryption_key_id: row.get(8)?,
+                created_at: row.get(9)?,
+            })
+        });
+
+        match result {
+            Ok(record) => Ok(Some(record)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(Error::DatabaseError(e.to_string())),
+        }
+    }
+
+    /// Delete a file manifest
+    pub fn delete_manifest(&self, file_id: &str) -> Result<()> {
+        let conn = self.conn.lock();
+        conn.execute("DELETE FROM file_manifests WHERE file_id = ?", params![file_id])
+            .map_err(|e| Error::DatabaseError(e.to_string()))?;
+        Ok(())
+    }
+
+    // ========================================================================
+    // DM SHARED FILES
+    // ========================================================================
+
+    /// Store a DM shared file
+    #[allow(clippy::too_many_arguments)]
+    pub fn store_dm_shared_file(&self, id: &str, conversation_id: &str, folder_id: Option<&str>, filename: &str, description: Option<&str>, file_size: i64, mime_type: Option<&str>, storage_chunks_json: &str, uploaded_by: &str, encrypted_metadata: Option<&str>, encryption_nonce: Option<&str>, created_at: i64) -> Result<()> {
+        let conn = self.conn.lock();
+        conn.execute(
+            "INSERT INTO dm_shared_files (id, conversation_id, folder_id, filename, description, file_size, mime_type, storage_chunks_json, uploaded_by, encrypted_metadata, encryption_nonce, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            params![id, conversation_id, folder_id, filename, description, file_size, mime_type, storage_chunks_json, uploaded_by, encrypted_metadata, encryption_nonce, created_at],
+        ).map_err(|e| Error::DatabaseError(format!("Failed to store DM file: {}", e)))?;
+        Ok(())
+    }
+
+    /// Get DM shared files in a conversation (optionally within a folder)
+    pub fn get_dm_shared_files(&self, conversation_id: &str, folder_id: Option<&str>, limit: usize, offset: usize) -> Result<Vec<DmSharedFileRecord>> {
+        let conn = self.conn.lock();
+        let (sql, params_vec): (&str, Vec<Box<dyn rusqlite::types::ToSql>>) =
+            if let Some(fid) = folder_id {
+                ("SELECT id, conversation_id, folder_id, filename, description, file_size, mime_type, storage_chunks_json, uploaded_by, version, download_count, encrypted_metadata, encryption_nonce, created_at FROM dm_shared_files WHERE conversation_id = ? AND folder_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                 vec![Box::new(conversation_id.to_string()), Box::new(fid.to_string()), Box::new(limit as i64), Box::new(offset as i64)])
+            } else {
+                ("SELECT id, conversation_id, folder_id, filename, description, file_size, mime_type, storage_chunks_json, uploaded_by, version, download_count, encrypted_metadata, encryption_nonce, created_at FROM dm_shared_files WHERE conversation_id = ? AND folder_id IS NULL ORDER BY created_at DESC LIMIT ? OFFSET ?",
+                 vec![Box::new(conversation_id.to_string()), Box::new(limit as i64), Box::new(offset as i64)])
+            };
+
+        let mut stmt = conn.prepare(sql).map_err(|e| Error::DatabaseError(e.to_string()))?;
+        let params_refs: Vec<&dyn rusqlite::types::ToSql> = params_vec.iter().map(|p| p.as_ref()).collect();
+        let rows = stmt.query_map(params_refs.as_slice(), |row| {
+            Ok(DmSharedFileRecord {
+                id: row.get(0)?,
+                conversation_id: row.get(1)?,
+                folder_id: row.get(2)?,
+                filename: row.get(3)?,
+                description: row.get(4)?,
+                file_size: row.get(5)?,
+                mime_type: row.get(6)?,
+                storage_chunks_json: row.get(7)?,
+                uploaded_by: row.get(8)?,
+                version: row.get(9)?,
+                download_count: row.get(10)?,
+                encrypted_metadata: row.get(11)?,
+                encryption_nonce: row.get(12)?,
+                created_at: row.get(13)?,
+            })
+        }).map_err(|e| Error::DatabaseError(e.to_string()))?;
+
+        let mut files = Vec::new();
+        for row in rows { files.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?); }
+        Ok(files)
+    }
+
+    /// Get a single DM shared file by ID
+    pub fn get_dm_shared_file(&self, id: &str) -> Result<Option<DmSharedFileRecord>> {
+        let conn = self.conn.lock();
+        let mut stmt = conn.prepare(
+            "SELECT id, conversation_id, folder_id, filename, description, file_size, mime_type, storage_chunks_json, uploaded_by, version, download_count, encrypted_metadata, encryption_nonce, created_at FROM dm_shared_files WHERE id = ?",
+        ).map_err(|e| Error::DatabaseError(e.to_string()))?;
+
+        let result = stmt.query_row(params![id], |row| {
+            Ok(DmSharedFileRecord {
+                id: row.get(0)?,
+                conversation_id: row.get(1)?,
+                folder_id: row.get(2)?,
+                filename: row.get(3)?,
+                description: row.get(4)?,
+                file_size: row.get(5)?,
+                mime_type: row.get(6)?,
+                storage_chunks_json: row.get(7)?,
+                uploaded_by: row.get(8)?,
+                version: row.get(9)?,
+                download_count: row.get(10)?,
+                encrypted_metadata: row.get(11)?,
+                encryption_nonce: row.get(12)?,
+                created_at: row.get(13)?,
+            })
+        });
+
+        match result {
+            Ok(record) => Ok(Some(record)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(Error::DatabaseError(e.to_string())),
+        }
+    }
+
+    /// Increment download count for a DM shared file
+    pub fn increment_dm_file_download_count(&self, id: &str) -> Result<()> {
+        let conn = self.conn.lock();
+        conn.execute("UPDATE dm_shared_files SET download_count = download_count + 1 WHERE id = ?", params![id])
+            .map_err(|e| Error::DatabaseError(e.to_string()))?;
+        Ok(())
+    }
+
+    /// Delete a DM shared file
+    pub fn delete_dm_shared_file(&self, id: &str) -> Result<()> {
+        let conn = self.conn.lock();
+        conn.execute("DELETE FROM dm_shared_files WHERE id = ?", params![id])
+            .map_err(|e| Error::DatabaseError(e.to_string()))?;
+        Ok(())
+    }
+
+    /// Move a DM shared file to a different folder
+    pub fn move_dm_shared_file(&self, id: &str, target_folder_id: Option<&str>) -> Result<()> {
+        let conn = self.conn.lock();
+        conn.execute("UPDATE dm_shared_files SET folder_id = ? WHERE id = ?", params![target_folder_id, id])
+            .map_err(|e| Error::DatabaseError(e.to_string()))?;
+        Ok(())
+    }
+
+    // ── DM Shared Folders ────────────────────────────────────────────────
+
+    /// Create a DM shared folder
+    pub fn create_dm_shared_folder(&self, id: &str, conversation_id: &str, parent_folder_id: Option<&str>, name: &str, created_by: &str, created_at: i64) -> Result<()> {
+        let conn = self.conn.lock();
+        conn.execute(
+            "INSERT INTO dm_shared_folders (id, conversation_id, parent_folder_id, name, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+            params![id, conversation_id, parent_folder_id, name, created_by, created_at],
+        ).map_err(|e| Error::DatabaseError(format!("Failed to create DM folder: {}", e)))?;
+        Ok(())
+    }
+
+    /// Get DM shared folders in a conversation (optionally within a parent folder)
+    pub fn get_dm_shared_folders(&self, conversation_id: &str, parent_folder_id: Option<&str>) -> Result<Vec<DmSharedFolderRecord>> {
+        let conn = self.conn.lock();
+        let (sql, params_vec): (&str, Vec<Box<dyn rusqlite::types::ToSql>>) =
+            if let Some(pid) = parent_folder_id {
+                ("SELECT id, conversation_id, parent_folder_id, name, created_by, created_at FROM dm_shared_folders WHERE conversation_id = ? AND parent_folder_id = ? ORDER BY name",
+                 vec![Box::new(conversation_id.to_string()), Box::new(pid.to_string())])
+            } else {
+                ("SELECT id, conversation_id, parent_folder_id, name, created_by, created_at FROM dm_shared_folders WHERE conversation_id = ? AND parent_folder_id IS NULL ORDER BY name",
+                 vec![Box::new(conversation_id.to_string())])
+            };
+
+        let mut stmt = conn.prepare(sql).map_err(|e| Error::DatabaseError(e.to_string()))?;
+        let params_refs: Vec<&dyn rusqlite::types::ToSql> = params_vec.iter().map(|p| p.as_ref()).collect();
+        let rows = stmt.query_map(params_refs.as_slice(), |row| {
+            Ok(DmSharedFolderRecord {
+                id: row.get(0)?,
+                conversation_id: row.get(1)?,
+                parent_folder_id: row.get(2)?,
+                name: row.get(3)?,
+                created_by: row.get(4)?,
+                created_at: row.get(5)?,
+            })
+        }).map_err(|e| Error::DatabaseError(e.to_string()))?;
+
+        let mut folders = Vec::new();
+        for row in rows { folders.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?); }
+        Ok(folders)
+    }
+
+    /// Delete a DM shared folder
+    pub fn delete_dm_shared_folder(&self, id: &str) -> Result<()> {
+        let conn = self.conn.lock();
+        conn.execute("DELETE FROM dm_shared_folders WHERE id = ?", params![id])
+            .map_err(|e| Error::DatabaseError(e.to_string()))?;
+        Ok(())
+    }
+
+    /// Rename a DM shared folder
+    pub fn rename_dm_shared_folder(&self, id: &str, name: &str) -> Result<()> {
+        let conn = self.conn.lock();
+        conn.execute("UPDATE dm_shared_folders SET name = ? WHERE id = ?", params![name, id])
+            .map_err(|e| Error::DatabaseError(e.to_string()))?;
+        Ok(())
+    }
 }
 
 // ============================================================================
@@ -3990,6 +4285,7 @@ pub struct CommunityFileRecord {
     pub storage_chunks_json: String,
     pub uploaded_by: String,
     pub version: i32,
+    pub previous_version_id: Option<String>,
     pub download_count: i32,
     pub created_at: i64,
 }
@@ -4123,6 +4419,82 @@ pub struct CommunityNotificationSettingRecord {
     pub suppress_everyone: bool,
     pub suppress_roles: bool,
     pub level: String,
+    pub updated_at: i64,
+}
+
+/// A file chunk record (local chunk storage for P2P transfer)
+#[derive(Debug, Clone)]
+pub struct FileChunkRecord {
+    pub chunk_id: String,
+    pub file_id: String,
+    pub chunk_index: i32,
+    pub data: Vec<u8>,
+    pub size: i64,
+    pub created_at: i64,
+}
+
+/// A file manifest record (describes how a file was chunked)
+#[derive(Debug, Clone)]
+pub struct FileManifestRecord {
+    pub file_id: String,
+    pub filename: String,
+    pub total_size: i64,
+    pub chunk_size: i64,
+    pub total_chunks: i32,
+    pub chunks_json: String,
+    pub file_hash: String,
+    pub encrypted: bool,
+    pub encryption_key_id: Option<String>,
+    pub created_at: i64,
+}
+
+/// A DM shared file record
+#[derive(Debug, Clone)]
+pub struct DmSharedFileRecord {
+    pub id: String,
+    pub conversation_id: String,
+    pub folder_id: Option<String>,
+    pub filename: String,
+    pub description: Option<String>,
+    pub file_size: i64,
+    pub mime_type: Option<String>,
+    pub storage_chunks_json: String,
+    pub uploaded_by: String,
+    pub version: i32,
+    pub download_count: i32,
+    pub encrypted_metadata: Option<String>,
+    pub encryption_nonce: Option<String>,
+    pub created_at: i64,
+}
+
+/// A DM shared folder record
+#[derive(Debug, Clone)]
+pub struct DmSharedFolderRecord {
+    pub id: String,
+    pub conversation_id: String,
+    pub parent_folder_id: Option<String>,
+    pub name: String,
+    pub created_by: String,
+    pub created_at: i64,
+}
+
+/// A transfer session record (P2P file transfer state for resume support)
+#[derive(Debug, Clone)]
+pub struct TransferSessionRecord {
+    pub transfer_id: String,
+    pub file_id: String,
+    pub manifest_json: String,
+    pub direction: String,
+    pub peer_did: String,
+    pub state: String,
+    pub chunks_completed: i32,
+    pub total_chunks: i32,
+    pub bytes_transferred: i64,
+    pub total_bytes: i64,
+    pub chunks_bitfield: String,
+    pub transport_type: String,
+    pub error: Option<String>,
+    pub started_at: i64,
     pub updated_at: i64,
 }
 
