@@ -14,8 +14,9 @@
 
 import React from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
+import Svg, { Circle } from 'react-native-svg';
 import { Text, Skeleton, useTheme } from '@coexist/wisp-react-native';
-import { HomeIcon, PlusIcon, SettingsIcon } from '@/components/icons';
+import { HomeIcon, FolderIcon, PlusIcon, SettingsIcon } from '@/components/icons';
 import type { Community } from '@umbra/service';
 
 // ---------------------------------------------------------------------------
@@ -36,6 +37,12 @@ export interface NavigationRailProps {
   isHomeActive: boolean;
   /** Navigate to home (conversations) */
   onHomePress: () => void;
+  /** Whether the Files page is active */
+  isFilesActive?: boolean;
+  /** Navigate to the Files page */
+  onFilesPress?: () => void;
+  /** Upload progress ring value (0-100) */
+  uploadRingProgress?: number;
   /** User's communities */
   communities: Community[];
   /** Currently active community ID */
@@ -57,6 +64,9 @@ export interface NavigationRailProps {
 export function NavigationRail({
   isHomeActive,
   onHomePress,
+  isFilesActive,
+  onFilesPress,
+  uploadRingProgress,
   communities,
   activeCommunityId,
   onCommunityPress,
@@ -90,6 +100,22 @@ export function NavigationRail({
           color={isHomeActive ? theme.colors.text.inverse : theme.colors.text.secondary}
         />
       </RailItem>
+
+      {/* Files button — between Home and Communities */}
+      {onFilesPress && (
+        <RailItem
+          active={!!isFilesActive}
+          onPress={onFilesPress}
+          accentColor={theme.colors.accent.primary}
+          theme={theme}
+          ringProgress={uploadRingProgress}
+        >
+          <FolderIcon
+            size={22}
+            color={isFilesActive ? theme.colors.text.inverse : theme.colors.text.secondary}
+          />
+        </RailItem>
+      )}
 
       {/* Divider */}
       <View
@@ -202,9 +228,13 @@ interface RailItemProps {
   accentColor?: string;
   theme: any;
   children: React.ReactNode;
+  /** Optional ring progress (0-100) rendered around the icon */
+  ringProgress?: number;
 }
 
-function RailItem({ active, onPress, accentColor, theme, children }: RailItemProps) {
+function RailItem({ active, onPress, accentColor, theme, children, ringProgress }: RailItemProps) {
+  const showRing = ringProgress != null && ringProgress > 0 && ringProgress < 100;
+
   return (
     <View style={{ width: '100%', alignItems: 'center', marginBottom: 4, position: 'relative' }}>
       {/* Active indicator pill on the left edge */}
@@ -222,6 +252,44 @@ function RailItem({ active, onPress, accentColor, theme, children }: RailItemPro
             backgroundColor: theme.colors.text.primary,
           }}
         />
+      )}
+
+      {/* Upload progress ring overlay */}
+      {showRing && (
+        <View
+          style={{
+            position: 'absolute',
+            width: ICON_SIZE + 6,
+            height: ICON_SIZE + 6,
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1,
+          }}
+        >
+          <Svg width={ICON_SIZE + 6} height={ICON_SIZE + 6}>
+            <Circle
+              cx={(ICON_SIZE + 6) / 2}
+              cy={(ICON_SIZE + 6) / 2}
+              r={(ICON_SIZE + 2) / 2}
+              stroke={theme.colors.border.subtle}
+              strokeWidth={2}
+              fill="none"
+            />
+            <Circle
+              cx={(ICON_SIZE + 6) / 2}
+              cy={(ICON_SIZE + 6) / 2}
+              r={(ICON_SIZE + 2) / 2}
+              stroke={theme.colors.accent.primary}
+              strokeWidth={2}
+              fill="none"
+              strokeDasharray={`${Math.PI * (ICON_SIZE + 2)}`}
+              strokeDashoffset={`${Math.PI * (ICON_SIZE + 2) * (1 - (ringProgress ?? 0) / 100)}`}
+              strokeLinecap="round"
+              rotation={-90}
+              origin={`${(ICON_SIZE + 6) / 2}, ${(ICON_SIZE + 6) / 2}`}
+            />
+          </Svg>
+        </View>
       )}
 
       <Pressable

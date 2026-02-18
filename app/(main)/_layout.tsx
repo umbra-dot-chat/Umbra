@@ -287,8 +287,16 @@ function MainLayoutInner() {
     }
   }, [pathname, router]);
 
-  // Home is active when NOT on a community page
-  const isHomeActive = !pathname.startsWith('/community/');
+  // Home is active when NOT on a community page and NOT on files page
+  const isHomeActive = !pathname.startsWith('/community/') && pathname !== '/files';
+
+  // Whether the files page is active
+  const isFilesActive = pathname === '/files';
+
+  // Navigate to files page
+  const handleFilesPress = useCallback(() => {
+    router.push('/files');
+  }, [router]);
 
   // Determine active community from pathname
   const activeCommunityId = useMemo(() => {
@@ -327,6 +335,8 @@ function MainLayoutInner() {
         <NavigationRail
           isHomeActive={isHomeActive}
           onHomePress={handleHomePress}
+          isFilesActive={isFilesActive}
+          onFilesPress={handleFilesPress}
           communities={communities}
           activeCommunityId={activeCommunityId}
           onCommunityPress={handleCommunityPress}
