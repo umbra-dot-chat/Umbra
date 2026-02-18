@@ -83,6 +83,7 @@
 mod behaviour;
 pub mod codec;
 mod events;
+pub mod file_transfer;
 mod peer;
 pub mod protocols;
 pub mod relay_client;
@@ -92,6 +93,10 @@ pub mod webrtc_transport;
 pub use behaviour::UmbraBehaviour;
 pub use codec::{UmbraCodec, UmbraRequest, UmbraResponse};
 pub use events::NetworkEvent;
+pub use file_transfer::{
+    FileTransferMessage, FlowControl, TransferDirection, TransferEvent,
+    TransferLimits, TransferSession, TransferState, TransportType,
+};
 pub use peer::{PeerInfo, PeerState};
 
 mod event_loop;
