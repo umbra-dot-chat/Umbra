@@ -338,4 +338,77 @@ describe('File Sharing', () => {
       expect(svc.markFilesForReencryption).toHaveBeenCalledWith('ch-test', 5);
     });
   });
+
+  // ── Storage Manager ──────────────────────────────────────────────────
+
+  describe('Storage Manager', () => {
+    const {
+      getStorageUsage,
+      smartCleanup,
+      setAutoCleanupRules,
+      getAutoCleanupRules,
+      getCleanupSuggestions,
+      formatBytes,
+    } = require('@umbra/service');
+
+    test('getStorageUsage returns usage breakdown', async () => {
+      const usage = await getStorageUsage();
+      expect(usage).toBeDefined();
+      expect(usage.total).toBeGreaterThan(0);
+      expect(usage.byContext).toBeDefined();
+      expect(typeof usage.byContext.community).toBe('number');
+      expect(typeof usage.byContext.dm).toBe('number');
+      expect(typeof usage.byContext.sharedFolders).toBe('number');
+      expect(typeof usage.byContext.cache).toBe('number');
+      expect(typeof usage.activeTransfers).toBe('number');
+    });
+
+    test('smartCleanup returns cleanup result', async () => {
+      const result = await smartCleanup();
+      expect(result).toBeDefined();
+      expect(typeof result.bytesFreed).toBe('number');
+      expect(typeof result.chunksRemoved).toBe('number');
+      expect(typeof result.transfersCleaned).toBe('number');
+    });
+
+    test('setAutoCleanupRules accepts rules', () => {
+      expect(() => setAutoCleanupRules({ maxTotalBytes: 1024 })).not.toThrow();
+    });
+
+    test('getAutoCleanupRules returns current rules', () => {
+      const rules = getAutoCleanupRules();
+      expect(rules).toBeDefined();
+      expect(typeof rules.maxTotalBytes).toBe('number');
+      expect(typeof rules.maxTransferAge).toBe('number');
+      expect(typeof rules.maxCacheAge).toBe('number');
+      expect(typeof rules.removeOrphanedChunks).toBe('boolean');
+    });
+
+    test('getCleanupSuggestions returns array', async () => {
+      const suggestions = await getCleanupSuggestions();
+      expect(Array.isArray(suggestions)).toBe(true);
+    });
+
+    test('formatBytes formats correctly', () => {
+      expect(formatBytes(0)).toBe('0 B');
+      expect(formatBytes(1024)).toBe('1.0 KB');
+      expect(formatBytes(1048576)).toBe('1.0 MB');
+      expect(formatBytes(1073741824)).toBe('1.0 GB');
+    });
+  });
+
+  // ── OPFS Bridge ──────────────────────────────────────────────────────
+
+  describe('OPFS Bridge', () => {
+    const { initOpfsBridge, isOpfsBridgeReady } = require('@umbra/service');
+
+    test('initOpfsBridge returns false in test environment', () => {
+      const result = initOpfsBridge();
+      expect(result).toBe(false);
+    });
+
+    test('isOpfsBridgeReady returns false in test environment', () => {
+      expect(isOpfsBridgeReady()).toBe(false);
+    });
+  });
 });

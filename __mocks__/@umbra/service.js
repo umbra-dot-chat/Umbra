@@ -502,9 +502,52 @@ class UmbraService {
   static suggestRecoveryWords = jest.fn(() => []);
 }
 
+// Storage manager
+const getStorageUsage = jest.fn(() =>
+  Promise.resolve({
+    total: 1048576,
+    byContext: { community: 524288, dm: 262144, sharedFolders: 131072, cache: 131072 },
+    manifestCount: 5,
+    chunkCount: 20,
+    activeTransfers: 0,
+  })
+);
+const smartCleanup = jest.fn(() =>
+  Promise.resolve({ bytesFreed: 0, chunksRemoved: 0, manifestsRemoved: 0, transfersCleaned: 0 })
+);
+const setAutoCleanupRules = jest.fn();
+const getAutoCleanupRules = jest.fn(() => ({
+  maxTotalBytes: 2 * 1024 * 1024 * 1024,
+  maxTransferAge: 604800,
+  maxCacheAge: 86400,
+  removeOrphanedChunks: true,
+}));
+const getCleanupSuggestions = jest.fn(() => Promise.resolve([]));
+const formatBytes = jest.fn((bytes) => {
+  if (bytes === 0) return '0 B';
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(1024));
+  const value = bytes / Math.pow(1024, i);
+  return `${value.toFixed(i === 0 ? 0 : 1)} ${units[i]}`;
+});
+
+// OPFS bridge
+const initOpfsBridge = jest.fn(() => false); // false in test env (no OPFS)
+const isOpfsBridgeReady = jest.fn(() => false);
+
 module.exports = {
   UmbraService,
   ErrorCode,
   UmbraError,
   default: UmbraService,
+  // Storage manager
+  getStorageUsage,
+  smartCleanup,
+  setAutoCleanupRules,
+  getAutoCleanupRules,
+  getCleanupSuggestions,
+  formatBytes,
+  // OPFS bridge
+  initOpfsBridge,
+  isOpfsBridgeReady,
 };
