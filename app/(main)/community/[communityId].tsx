@@ -276,12 +276,17 @@ export default function CommunityPage() {
 
   // Community data (channels, members, roles for this page's needs)
   const {
+    community,
     channels: realChannels,
     members,
     roles,
     memberRolesMap,
     refresh: refreshCommunity,
   } = useCommunity(communityId ?? null);
+
+  // Permission context for file channels
+  const myRoles = memberRolesMap[myDid] ?? [];
+  const isOwner = community?.ownerDid === myDid;
 
   // Use mock channels as fallback when no real channels are available
   const channels = isMock && realChannels.length === 0 ? MOCK_CHANNELS : realChannels;
@@ -657,6 +662,8 @@ export default function CommunityPage() {
             <FileChannelContent
               channelId={activeChannelId!}
               communityId={communityId!}
+              myRoles={myRoles}
+              isOwner={isOwner}
             />
           </>
         ) : activeChannel ? (

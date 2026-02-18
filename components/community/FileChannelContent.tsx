@@ -23,10 +23,12 @@ import { useUmbra } from '@/contexts/UmbraContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { pickFile } from '@/utils/filePicker';
 import { getFileTypeIcon, formatFileSize } from '@/utils/fileIcons';
+import { canUploadFiles, canManageFiles } from '@/utils/permissions';
 import type { FileFolderNode } from '@/hooks/useCommunityFiles';
 import type {
   CommunityFileRecord,
   CommunityFileFolderRecord,
+  CommunityRole,
 } from '@umbra/service';
 
 // ---------------------------------------------------------------------------
@@ -68,6 +70,10 @@ export interface FileChannelContentProps {
   channelId: string;
   /** The community ID (for broadcasting events). */
   communityId: string;
+  /** Roles assigned to the current user in this community. */
+  myRoles?: CommunityRole[];
+  /** Whether the current user is the community owner. */
+  isOwner?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -155,12 +161,16 @@ function triggerWebDownload(base64Data: string, filename: string, mimeType: stri
 // Component
 // ---------------------------------------------------------------------------
 
-export function FileChannelContent({ channelId, communityId }: FileChannelContentProps) {
+export function FileChannelContent({ channelId, communityId, myRoles = [], isOwner = false }: FileChannelContentProps) {
   const { theme } = useTheme();
   const colors = theme.colors;
   const { service } = useUmbra();
   const { identity } = useAuth();
   const { syncEvent } = useCommunitySync(communityId);
+
+  // Permission checks
+  const allowUpload = canUploadFiles(myRoles, isOwner);
+  const allowManage = canManageFiles(myRoles, isOwner);
 
   const {
     files,
@@ -416,31 +426,35 @@ export function FileChannelContent({ channelId, communityId }: FileChannelConten
 
         {/* Actions */}
         <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-          <Text
-            size="xs"
-            weight="medium"
-            onPress={isUploading ? undefined : handleUpload}
-            style={{
-              color: isUploading ? colors.text.muted : colors.accent.primary,
-              paddingHorizontal: 8,
-              paddingVertical: 4,
-              opacity: isUploading ? 0.6 : 1,
-            }}
-          >
-            {isUploading ? 'Uploading...' : '+ Upload'}
-          </Text>
-          <Text
-            size="xs"
-            weight="medium"
-            onPress={handleCreateFolder}
-            style={{
-              color: colors.accent.primary,
-              paddingHorizontal: 8,
-              paddingVertical: 4,
-            }}
-          >
-            + Folder
-          </Text>
+          {allowUpload && (
+            <Text
+              size="xs"
+              weight="medium"
+              onPress={isUploading ? undefined : handleUpload}
+              style={{
+                color: isUploading ? colors.text.muted : colors.accent.primary,
+                paddingHorizontal: 8,
+                paddingVertical: 4,
+                opacity: isUploading ? 0.6 : 1,
+              }}
+            >
+              {isUploading ? 'Uploading...' : '+ Upload'}
+            </Text>
+          )}
+          {allowUpload && (
+            <Text
+              size="xs"
+              weight="medium"
+              onPress={handleCreateFolder}
+              style={{
+                color: colors.accent.primary,
+                paddingHorizontal: 8,
+                paddingVertical: 4,
+              }}
+            >
+              + Folder
+            </Text>
+          )}
           <Text
             size="xs"
             weight="medium"
@@ -646,14 +660,16 @@ export function FileChannelContent({ channelId, communityId }: FileChannelConten
             >
               Download
             </Text>
-            <Text
-              size="sm"
-              weight="medium"
-              onPress={() => handleFileDelete([detailFile.id])}
-              style={{ color: colors.status.danger }}
-            >
-              Delete
-            </Text>
+            {(allowManage || detailFile.uploadedBy === identity?.did) && (
+              <Text
+                size="sm"
+                weight="medium"
+                onPress={() => handleFileDelete([detailFile.id])}
+                style={{ color: colors.status.danger }}
+              >
+                Delete
+              </Text>
+            )}
           </View>
         </View>
       )}
