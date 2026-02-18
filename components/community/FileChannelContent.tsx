@@ -48,6 +48,8 @@ interface FileEntryView {
   folderId?: string | null;
   isEncrypted?: boolean;
   encryptionKeyVersion?: number;
+  encryptionFingerprint?: string;
+  needsReencryption?: boolean;
 }
 
 interface FileFolderView {
@@ -689,11 +691,23 @@ export function FileChannelContent({ channelId, communityId, myRoles = [], isOwn
               </Text>
             )}
             {detailFile.isEncrypted && (
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 }}>
-                <LockIcon size={12} color={colors.accent.primary} />
-                <Text size="xs" style={{ color: colors.accent.primary }}>
-                  Encrypted (AES-256-GCM){detailFile.encryptionKeyVersion ? ` · Key v${detailFile.encryptionKeyVersion}` : ''}
-                </Text>
+              <View style={{ marginTop: 4, gap: 2 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                  <LockIcon size={12} color={colors.accent.primary} />
+                  <Text size="xs" style={{ color: colors.accent.primary }}>
+                    Encrypted (AES-256-GCM){detailFile.encryptionKeyVersion ? ` · Key v${detailFile.encryptionKeyVersion}` : ''}
+                  </Text>
+                </View>
+                {detailFile.encryptionFingerprint && (
+                  <Text size="xs" style={{ color: colors.text.muted, fontFamily: 'monospace' }}>
+                    Fingerprint: {detailFile.encryptionFingerprint}
+                  </Text>
+                )}
+                {detailFile.needsReencryption && (
+                  <Text size="xs" style={{ color: colors.status?.warning ?? '#f59e0b' }}>
+                    Pending re-encryption (key rotated)
+                  </Text>
+                )}
               </View>
             )}
           </View>
