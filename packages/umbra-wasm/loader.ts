@@ -144,6 +144,11 @@ export interface UmbraWasmModule {
   umbra_wasm_crypto_encrypt_for_peer(json: string): string;
   umbra_wasm_crypto_decrypt_from_peer(json: string): string;
 
+  // File Encryption (E2EE)
+  umbra_wasm_file_derive_key(json: string): string;
+  umbra_wasm_file_encrypt_chunk(json: string): string;
+  umbra_wasm_file_decrypt_chunk(json: string): string;
+
   // Community — Core
   umbra_wasm_community_create(json: string): string;
   umbra_wasm_community_get(community_id: string): string;
@@ -691,6 +696,14 @@ function buildModule(wasmPkg: any): UmbraWasmModule {
       wasmPkg.umbra_wasm_crypto_encrypt_for_peer(json),
     umbra_wasm_crypto_decrypt_from_peer: (json: string) =>
       wasmPkg.umbra_wasm_crypto_decrypt_from_peer(json),
+
+    // ── File Encryption (E2EE) ──────────────────────────────────────
+    umbra_wasm_file_derive_key: (json: string) =>
+      wasmPkg.umbra_wasm_file_derive_key(json),
+    umbra_wasm_file_encrypt_chunk: (json: string) =>
+      wasmPkg.umbra_wasm_file_encrypt_chunk(json),
+    umbra_wasm_file_decrypt_chunk: (json: string) =>
+      wasmPkg.umbra_wasm_file_decrypt_chunk(json),
 
     // ── Community (real WASM) ──────────────────────────────────────
     umbra_wasm_community_create: (json: string) =>

@@ -783,5 +783,51 @@ export function createTauriBackend(
     umbra_wasm_get_file_manifest: (json: string) => {
       return invoke('get_file_manifest', { json }).then(ensureJsonString) as any;
     },
+
+    // ── File Transfer ───────────────────────────────────────────────
+    umbra_wasm_transfer_initiate: (json: string) => {
+      return invoke('transfer_initiate', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_transfer_accept: (json: string) => {
+      return invoke('transfer_accept', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_transfer_pause: (transfer_id: string) => {
+      return invoke('transfer_pause', { transfer_id }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_transfer_resume: (transfer_id: string) => {
+      return invoke('transfer_resume', { transfer_id }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_transfer_cancel: (json: string) => {
+      return invoke('transfer_cancel', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_transfer_on_message: (json: string) => {
+      return invoke('transfer_on_message', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_transfer_list: () => {
+      return invoke('transfer_list').then(ensureJsonString) as any;
+    },
+    umbra_wasm_transfer_get: (transfer_id: string) => {
+      return invoke('transfer_get', { transfer_id }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_transfer_get_incomplete: () => {
+      return invoke('transfer_get_incomplete').then(ensureJsonString) as any;
+    },
+    umbra_wasm_transfer_chunks_to_send: (transfer_id: string) => {
+      return invoke('transfer_chunks_to_send', { transfer_id }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_transfer_mark_chunk_sent: (json: string) => {
+      return invoke('transfer_mark_chunk_sent', { json }).then(ensureJsonString) as any;
+    },
+
+    // ── File Encryption (E2EE) ────────────────────────────────────────
+    umbra_wasm_file_derive_key: (json: string) => {
+      return invoke('file_derive_key', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_file_encrypt_chunk: (json: string) => {
+      return invoke('file_encrypt_chunk', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_file_decrypt_chunk: (json: string) => {
+      return invoke('file_decrypt_chunk', { json }).then(ensureJsonString) as any;
+    },
   };
 }

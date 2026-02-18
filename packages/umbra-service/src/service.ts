@@ -83,6 +83,7 @@ import * as communityModule from './community';
 import * as dmFiles from './dm-files';
 import * as chunkingModule from './chunking';
 import * as fileTransfer from './file-transfer';
+import * as fileEncryption from './file-encryption';
 
 /**
  * Main Umbra Service class
@@ -1082,6 +1083,20 @@ export class UmbraService {
 
   getFileManifest(fileId: string): Promise<FileManifestRecord | null> {
     return chunkingModule.getFileManifest(fileId);
+  }
+
+  // ── File Encryption (E2EE) ──────────────────────────────────────────
+
+  deriveFileKey(peerDid: string, fileId: string, context?: string) {
+    return fileEncryption.deriveFileKey(peerDid, fileId, context);
+  }
+
+  encryptFileChunk(keyHex: string, chunkDataB64: string, fileId: string, chunkIndex: number) {
+    return fileEncryption.encryptFileChunk(keyHex, chunkDataB64, fileId, chunkIndex);
+  }
+
+  decryptFileChunk(keyHex: string, nonceHex: string, encryptedDataB64: string, fileId: string, chunkIndex: number) {
+    return fileEncryption.decryptFileChunk(keyHex, nonceHex, encryptedDataB64, fileId, chunkIndex);
   }
 
   // ===========================================================================

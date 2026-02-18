@@ -84,6 +84,10 @@ export type {
 // File chunking
 export { chunkFile, reassembleFile, getFileManifest } from './chunking';
 
+// File encryption (E2EE)
+export { deriveFileKey, encryptFileChunk, decryptFileChunk } from './file-encryption';
+export type { DerivedFileKey, EncryptedChunk, DecryptedChunk } from './file-encryption';
+
 // File transfer
 export {
   initiateTransfer, acceptTransfer, pauseTransfer, resumeTransfer, cancelTransfer,

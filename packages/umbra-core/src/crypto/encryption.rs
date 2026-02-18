@@ -199,6 +199,11 @@ impl EncryptionKey {
     pub fn from_bytes(bytes: [u8; KEY_SIZE]) -> Self {
         Self(bytes)
     }
+
+    /// Get the raw key bytes (for key derivation chains)
+    pub fn as_inner(&self) -> [u8; KEY_SIZE] {
+        self.0
+    }
 }
 
 /// Encrypt a message using AES-256-GCM

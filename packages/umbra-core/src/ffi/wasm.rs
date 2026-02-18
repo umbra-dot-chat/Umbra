@@ -8457,3 +8457,159 @@ fn boost_node_to_json(n: &crate::storage::BoostNodeRecord) -> serde_json::Value 
         "updated_at": n.updated_at,
     })
 }
+
+// ============================================================================
+// FILE ENCRYPTION (E2EE)
+// ============================================================================
+
+/// Derive a per-file encryption key from a conversation's shared secret.
+///
+/// Input JSON: { "peer_did": "did:key:...", "file_id": "file-uuid", "context": "optional" }
+/// Returns JSON: { "key_hex": "64-char hex string" }
+///
+/// Both conversation participants independently derive the same key.
+#[wasm_bindgen]
+pub fn umbra_wasm_file_derive_key(json: &str) -> Result<JsValue, JsValue> {
+    let state = get_state()?;
+    let state = state.read();
+
+    let identity = state.identity.as_ref()
+        .ok_or_else(|| JsValue::from_str("No identity loaded"))?;
+
+    let database = state.database.as_ref()
+        .ok_or_else(|| JsValue::from_str("Database not initialized"))?;
+
+    let input: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let peer_did = input["peer_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing 'peer_did' field"))?;
+
+    let file_id = input["file_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing 'file_id' field"))?;
+
+    let context = input["context"].as_str().unwrap_or("");
+
+    // Look up peer's encryption key
+    let friend_record = database.get_friend(peer_did)
+        .map_err(|e| JsValue::from_str(&format!("Failed to get friend: {}", e)))?
+        .ok_or_else(|| JsValue::from_str("Friend not found"))?;
+
+    let friend_enc_key_bytes = hex::decode(&friend_record.encryption_key)
+        .map_err(|e| JsValue::from_str(&format!("Invalid friend encryption key: {}", e)))?;
+    let mut friend_enc_key = [0u8; 32];
+    if friend_enc_key_bytes.len() != 32 {
+        return Err(JsValue::from_str("Friend encryption key must be 32 bytes"));
+    }
+    friend_enc_key.copy_from_slice(&friend_enc_key_bytes);
+
+    // Compute ECDH shared secret
+    let dh_output = identity.keypair().encryption.diffie_hellman(&friend_enc_key);
+    let shared_secret = crate::crypto::SharedSecret::from_bytes(dh_output);
+
+    // Derive conversation key first, then file key
+    let conv_key = shared_secret.derive_key(context.as_bytes())
+        .map_err(|e| JsValue::from_str(&format!("Key derivation failed: {}", e)))?;
+
+    // Use the conversation key bytes as the shared secret for file key derivation
+    let file_key = crate::crypto::derive_file_key(&conv_key.as_inner(), file_id.as_bytes())
+        .map_err(|e| JsValue::from_str(&format!("File key derivation failed: {}", e)))?;
+
+    let result = serde_json::json!({
+        "key_hex": hex::encode(&file_key),
+    });
+
+    Ok(JsValue::from_str(&result.to_string()))
+}
+
+/// Encrypt a file chunk with a previously derived file key.
+///
+/// Input JSON: { "key_hex": "...", "chunk_data_b64": "...", "file_id": "...", "chunk_index": 0 }
+/// Returns JSON: { "nonce_hex": "...", "encrypted_data_b64": "..." }
+#[wasm_bindgen]
+pub fn umbra_wasm_file_encrypt_chunk(json: &str) -> Result<JsValue, JsValue> {
+    let input: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let key_hex = input["key_hex"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing 'key_hex' field"))?;
+    let chunk_data_b64 = input["chunk_data_b64"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing 'chunk_data_b64' field"))?;
+    let file_id = input["file_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing 'file_id' field"))?;
+    let chunk_index = input["chunk_index"].as_u64()
+        .ok_or_else(|| JsValue::from_str("Missing 'chunk_index' field"))? as u32;
+
+    let key_bytes = hex::decode(key_hex)
+        .map_err(|e| JsValue::from_str(&format!("Invalid key hex: {}", e)))?;
+    if key_bytes.len() != 32 {
+        return Err(JsValue::from_str("Key must be 32 bytes"));
+    }
+    let mut key_arr = [0u8; 32];
+    key_arr.copy_from_slice(&key_bytes);
+    let key = crate::crypto::EncryptionKey::from_bytes(key_arr);
+
+    let chunk_data = base64::engine::general_purpose::STANDARD.decode(chunk_data_b64)
+        .map_err(|e| JsValue::from_str(&format!("Invalid base64 chunk data: {}", e)))?;
+
+    let (nonce, encrypted) = crate::crypto::encrypt_chunk(&key, &chunk_data, file_id, chunk_index)
+        .map_err(|e| JsValue::from_str(&format!("Chunk encryption failed: {}", e)))?;
+
+    let result = serde_json::json!({
+        "nonce_hex": hex::encode(&nonce.0),
+        "encrypted_data_b64": base64::engine::general_purpose::STANDARD.encode(&encrypted),
+    });
+
+    Ok(JsValue::from_str(&result.to_string()))
+}
+
+/// Decrypt a file chunk with a previously derived file key.
+///
+/// Input JSON: { "key_hex": "...", "nonce_hex": "...", "encrypted_data_b64": "...", "file_id": "...", "chunk_index": 0 }
+/// Returns JSON: { "chunk_data_b64": "..." }
+#[wasm_bindgen]
+pub fn umbra_wasm_file_decrypt_chunk(json: &str) -> Result<JsValue, JsValue> {
+    let input: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let key_hex = input["key_hex"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing 'key_hex' field"))?;
+    let nonce_hex = input["nonce_hex"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing 'nonce_hex' field"))?;
+    let encrypted_data_b64 = input["encrypted_data_b64"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing 'encrypted_data_b64' field"))?;
+    let file_id = input["file_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing 'file_id' field"))?;
+    let chunk_index = input["chunk_index"].as_u64()
+        .ok_or_else(|| JsValue::from_str("Missing 'chunk_index' field"))? as u32;
+
+    let key_bytes = hex::decode(key_hex)
+        .map_err(|e| JsValue::from_str(&format!("Invalid key hex: {}", e)))?;
+    if key_bytes.len() != 32 {
+        return Err(JsValue::from_str("Key must be 32 bytes"));
+    }
+    let mut key_arr = [0u8; 32];
+    key_arr.copy_from_slice(&key_bytes);
+    let key = crate::crypto::EncryptionKey::from_bytes(key_arr);
+
+    let nonce_bytes = hex::decode(nonce_hex)
+        .map_err(|e| JsValue::from_str(&format!("Invalid nonce hex: {}", e)))?;
+    if nonce_bytes.len() != 12 {
+        return Err(JsValue::from_str("Nonce must be 12 bytes"));
+    }
+    let mut nonce_arr = [0u8; 12];
+    nonce_arr.copy_from_slice(&nonce_bytes);
+    let nonce = crate::crypto::Nonce::from_bytes(nonce_arr);
+
+    let encrypted_data = base64::engine::general_purpose::STANDARD.decode(encrypted_data_b64)
+        .map_err(|e| JsValue::from_str(&format!("Invalid base64 encrypted data: {}", e)))?;
+
+    let decrypted = crate::crypto::decrypt_chunk(&key, &nonce, &encrypted_data, file_id, chunk_index)
+        .map_err(|e| JsValue::from_str(&format!("Chunk decryption failed: {}", e)))?;
+
+    let result = serde_json::json!({
+        "chunk_data_b64": base64::engine::general_purpose::STANDARD.encode(&decrypted),
+    });
+
+    Ok(JsValue::from_str(&result.to_string()))
+}
