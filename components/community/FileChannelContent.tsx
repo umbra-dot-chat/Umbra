@@ -15,7 +15,7 @@
  */
 
 import React, { useState, useCallback, useMemo } from 'react';
-import { View, Platform, Alert } from 'react-native';
+import { View, Platform, Alert, TextInput } from 'react-native';
 import { useTheme, Text } from '@coexist/wisp-react-native';
 import { useCommunityFiles } from '@/hooks/useCommunityFiles';
 import { useCommunitySync } from '@/hooks/useCommunitySync';
@@ -199,10 +199,18 @@ export function FileChannelContent({ channelId, communityId, myRoles = [], isOwn
   const [detailFileId, setDetailFileId] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
 
-  // Transform data for display
-  const fileEntries = useMemo(() => files.map(toFileEntry), [files]);
-  const subfolderEntries = useMemo(() => folders.map(toFolderView), [folders]);
+  // Transform data for display, filtered by search query
+  const query = searchQuery.trim().toLowerCase();
+  const fileEntries = useMemo(() => {
+    const entries = files.map(toFileEntry);
+    return query ? entries.filter((f) => f.name.toLowerCase().includes(query)) : entries;
+  }, [files, query]);
+  const subfolderEntries = useMemo(() => {
+    const entries = folders.map(toFolderView);
+    return query ? entries.filter((f) => f.name.toLowerCase().includes(query)) : entries;
+  }, [folders, query]);
   const detailFile = useMemo(
     () => (detailFileId ? fileEntries.find((f) => f.id === detailFileId) ?? null : null),
     [detailFileId, fileEntries],
@@ -423,6 +431,26 @@ export function FileChannelContent({ channelId, communityId, myRoles = [], isOwn
             </React.Fragment>
           ))}
         </View>
+
+        {/* Search */}
+        <TextInput
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          placeholder="Search files..."
+          placeholderTextColor={colors.text.muted}
+          style={{
+            fontSize: 13,
+            color: colors.text.primary,
+            backgroundColor: colors.background.raised,
+            borderRadius: 6,
+            paddingHorizontal: 10,
+            paddingVertical: 4,
+            minWidth: 140,
+            maxWidth: 200,
+            borderWidth: 1,
+            borderColor: colors.border.subtle,
+          }}
+        />
 
         {/* Actions */}
         <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
