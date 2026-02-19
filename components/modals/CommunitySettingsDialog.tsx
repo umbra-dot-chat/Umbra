@@ -10,7 +10,7 @@
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { View, Pressable, ScrollView, Text as RNText, ActivityIndicator } from 'react-native';
 import type { ViewStyle, TextStyle } from 'react-native';
-import { Overlay, Button, Text, useTheme } from '@coexist/wisp-react-native';
+import { Overlay, Button, Toggle, Text, useTheme } from '@coexist/wisp-react-native';
 import type { RoleMember, InviteCreateOptions } from '@coexist/wisp-react-native';
 import { defaultSpacing, defaultRadii } from '@coexist/wisp-core/theme/create-theme';
 import Svg, { Path, Circle, Line, Polyline } from 'react-native-svg';
@@ -116,6 +116,15 @@ function AlertTriangleIcon({ size, color }: { size?: number; color?: string }) {
   );
 }
 
+function BridgeIcon({ size, color }: { size?: number; color?: string }) {
+  return (
+    <Svg width={size || 18} height={size || 18} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+      <Path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+    </Svg>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -126,6 +135,7 @@ export type CommunitySettingsSection =
   | 'members'
   | 'seats'
   | 'invites'
+  | 'bridge'
   | 'moderation'
   | 'audit-log'
   | 'danger';
@@ -213,6 +223,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'members', label: 'Members', icon: UsersIcon },
   { id: 'seats', label: 'Seats', icon: GhostIcon },
   { id: 'invites', label: 'Invites', icon: LinkIcon },
+  { id: 'bridge', label: 'Bridge', icon: BridgeIcon },
   { id: 'moderation', label: 'Moderation', icon: BanIcon },
   { id: 'audit-log', label: 'Audit Log', icon: FileTextIcon },
   { id: 'danger', label: 'Danger', icon: AlertTriangleIcon },
@@ -277,12 +288,33 @@ export function CommunitySettingsDialog({
   const [seatsLoading, setSeatsLoading] = useState(false);
   const [seatsLoaded, setSeatsLoaded] = useState(false);
 
+  // Bridge state (loaded lazily when bridge tab is selected)
+  interface BridgeConfigData {
+    communityId: string;
+    guildId: string;
+    enabled: boolean;
+    channels: { discordChannelId: string; umbraChannelId: string; name: string }[];
+    seats: { discordUserId: string; discordUsername: string; avatarUrl: string | null; seatDid: string | null }[];
+    memberDids: string[];
+    createdAt: number;
+    updatedAt: number;
+  }
+  const [bridgeConfig, setBridgeConfig] = useState<BridgeConfigData | null>(null);
+  const [bridgeLoading, setBridgeLoading] = useState(false);
+  const [bridgeLoaded, setBridgeLoaded] = useState(false);
+  const [bridgeToggling, setBridgeToggling] = useState(false);
+
   // Reset when dialog opens
   useEffect(() => {
     if (open) {
       setActiveSection(initialSection || 'overview');
       setSeatsLoaded(false);
       setSeats([]);
+      setBridgeLoaded(false);
+      setBridgeConfig(null);
+      setBridgeSetupStatus('idle');
+      setBridgeSetupError(null);
+      setBridgeWarnings([]);
     }
   }, [open, initialSection]);
 
@@ -302,6 +334,309 @@ export function CommunitySettingsDialog({
         .finally(() => setSeatsLoading(false));
     }
   }, [activeSection, seatsLoaded, service, communityId]);
+
+  // Load bridge config when the bridge tab is activated
+  const RELAY = process.env.EXPO_PUBLIC_RELAY_URL || 'https://relay.umbra.chat';
+  useEffect(() => {
+    if (activeSection === 'bridge' && !bridgeLoaded && communityId) {
+      setBridgeLoading(true);
+      fetch(`${RELAY}/api/bridge/${encodeURIComponent(communityId)}`)
+        .then(async (res) => {
+          if (res.ok) {
+            const data = await res.json();
+            if (data.ok && data.data) {
+              setBridgeConfig(data.data);
+              // If bridge has a bridgeDid, ensure the bot is a member in local DB
+              // so Umbra → Discord messages get delivered to the bridge bot
+              if (data.data.bridgeDid && service && communityId) {
+                try {
+                  await service.joinCommunity(communityId, data.data.bridgeDid, 'Bridge Bot');
+                  console.log(`[bridge] Ensured bridge bot DID is community member: ${data.data.bridgeDid}`);
+                } catch {
+                  // May already be a member — safe to ignore
+                }
+              }
+            }
+          }
+          setBridgeLoaded(true);
+        })
+        .catch(() => {
+          setBridgeConfig(null);
+          setBridgeLoaded(true);
+        })
+        .finally(() => setBridgeLoading(false));
+    }
+  }, [activeSection, bridgeLoaded, communityId, RELAY, service]);
+
+  const handleBridgeToggle = useCallback(async () => {
+    if (!bridgeConfig || bridgeToggling) return;
+    const newEnabled = !bridgeConfig.enabled;
+    setBridgeToggling(true);
+    try {
+      const res = await fetch(
+        `${RELAY}/api/bridge/${encodeURIComponent(bridgeConfig.communityId)}/enabled`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled: newEnabled }),
+        },
+      );
+      if (res.ok) {
+        const data = await res.json();
+        if (data.ok && data.data) {
+          setBridgeConfig(data.data);
+        } else {
+          setBridgeConfig((prev) => prev ? { ...prev, enabled: newEnabled } : null);
+        }
+      }
+    } catch {
+      // Revert on failure (already unchanged)
+    } finally {
+      setBridgeToggling(false);
+    }
+  }, [bridgeConfig, bridgeToggling, RELAY]);
+
+  // Bridge setup flow — connect Discord and register bridge for existing community
+  const [bridgeSetupStatus, setBridgeSetupStatus] = useState<'idle' | 'connecting' | 'registering' | 'error'>('idle');
+  const [bridgeSetupError, setBridgeSetupError] = useState<string | null>(null);
+  // Bridge warnings (rate limits, partial failures during setup)
+  const [bridgeWarnings, setBridgeWarnings] = useState<string[]>([]);
+  const bridgePopupRef = useRef<Window | null>(null);
+  const bridgeAuthRef = useRef(false);
+
+  const handleBridgeSetup = useCallback(() => {
+    if (bridgeSetupStatus === 'connecting' || bridgeSetupStatus === 'registering') return;
+    if (!service || !communityId) return;
+
+    setBridgeSetupStatus('connecting');
+    setBridgeSetupError(null);
+
+    // Open popup immediately (user gesture context)
+    const w = 500, h = 700;
+    const left = window.screenX + (window.innerWidth - w) / 2;
+    const top = window.screenY + (window.innerHeight - h) / 2;
+    bridgePopupRef.current = window.open(
+      'about:blank', 'discord_bridge_setup',
+      `width=${w},height=${h},left=${left},top=${top},menubar=no,toolbar=no,status=no`
+    );
+
+    if (!bridgePopupRef.current) {
+      setBridgeSetupStatus('error');
+      setBridgeSetupError('Failed to open popup. Please allow popups for this site.');
+      return;
+    }
+
+    // Listen for OAuth callback
+    bridgeAuthRef.current = false;
+    const handleMessage = async (event: MessageEvent) => {
+      if (event.data?.type !== 'UMBRA_COMMUNITY_IMPORT' || !event.data.success || !event.data.token) return;
+      bridgeAuthRef.current = true;
+      window.removeEventListener('message', handleMessage);
+
+      const token = event.data.token;
+      setBridgeSetupStatus('registering');
+
+      try {
+        // 1. Fetch guilds
+        const guildsRes = await fetch(`${RELAY}/community/import/discord/guilds?token=${encodeURIComponent(token)}`);
+        if (!guildsRes.ok) throw new Error('Failed to fetch Discord servers');
+        const guildsData = await guildsRes.json();
+        const guilds: Array<{ id: string; name: string }> = guildsData.guilds || [];
+
+        // 2. Find the guild that matches this community (name match, then fallback to first with bot)
+        let targetGuild: { id: string; name: string } | null = null;
+        let fallbackGuild: { id: string; name: string } | null = null;
+        const communityName = community?.name?.toLowerCase().trim();
+
+        for (const guild of guilds) {
+          try {
+            const botRes = await fetch(`${RELAY}/community/import/discord/bot-status?guild_id=${encodeURIComponent(guild.id)}`);
+            if (botRes.ok) {
+              const botData = await botRes.json();
+              if (botData.bot_enabled && botData.in_guild) {
+                if (communityName && guild.name.toLowerCase().trim() === communityName) {
+                  targetGuild = guild;
+                  break;
+                }
+                if (!fallbackGuild) fallbackGuild = guild;
+              }
+            }
+          } catch { /* skip */ }
+        }
+        if (!targetGuild) targetGuild = fallbackGuild;
+
+        if (!targetGuild) {
+          throw new Error(
+            guilds.length === 0
+              ? 'No Discord servers found. Make sure you have Manage Server permission.'
+              : 'No Discord server found with the Umbra bot. Please invite the bot first.'
+          );
+        }
+
+        console.log(`[bridge-setup] Matched guild: "${targetGuild.name}" (${targetGuild.id})`);
+
+        // 3. Fetch guild structure to get Discord channel IDs
+        // Brief delay to avoid Discord rate limits (structure endpoint re-verifies guild access)
+        const warnings: string[] = [];
+        await new Promise((r) => setTimeout(r, 1500));
+
+        let structData: any = null;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          const structRes = await fetch(
+            `${RELAY}/community/import/discord/guild/${targetGuild.id}/structure?token=${encodeURIComponent(token)}`
+          );
+          if (!structRes.ok) {
+            if (attempt < 2) {
+              warnings.push(`Discord rate limit hit (attempt ${attempt + 1}/3), retrying...`);
+              await new Promise((r) => setTimeout(r, 2000));
+              continue;
+            }
+            throw new Error('Failed to fetch server structure');
+          }
+          structData = await structRes.json();
+          if (structData.success) break;
+          // Retry on rate-limit related failures
+          if (attempt < 2 && structData.error?.includes('verify guild access')) {
+            warnings.push(`Discord rate limit: "${structData.error}" (attempt ${attempt + 1}/3)`);
+            console.log(`[bridge-setup] Rate limited, retrying in 2s (attempt ${attempt + 1}/3)`);
+            await new Promise((r) => setTimeout(r, 2000));
+            continue;
+          }
+          throw new Error(structData.error || 'Failed to fetch structure');
+        }
+        if (!structData?.success) throw new Error('Failed to fetch server structure after retries');
+
+        const discordChannels: Array<{ id: string; name: string; channelType: string; parentId?: string }> =
+          structData.structure?.channels || [];
+
+        // 4. Get existing Umbra channels for this community
+        const umbraChannels = await service.getAllChannels(communityId);
+
+        // 5. Match Discord channels to Umbra channels by name
+        const channelMapping = discordChannels
+          .filter((dc) => dc.channelType === 'text' || dc.channelType === 'announcement' || dc.channelType === 'forum')
+          .map((dc) => {
+            const match = umbraChannels.find(
+              (uc) => uc.name.toLowerCase().trim() === dc.name.toLowerCase().trim()
+            );
+            if (!match) return null;
+            return {
+              discordChannelId: dc.id,
+              umbraChannelId: match.id,
+              name: dc.name,
+            };
+          })
+          .filter(Boolean) as { discordChannelId: string; umbraChannelId: string; name: string }[];
+
+        console.log(`[bridge-setup] Discord channels: ${discordChannels.length}, Umbra channels: ${umbraChannels.length}, Matched: ${channelMapping.length}`);
+
+        if (channelMapping.length === 0) {
+          throw new Error('No matching channels found between Discord and this community.');
+        }
+
+        // 6. Get community member DIDs from the service (not the stale members prop)
+        let memberDids: string[] = [];
+        try {
+          const freshMembers = await service.getCommunityMembers(communityId);
+          memberDids = freshMembers.map((m: any) => m.memberDid);
+          console.log(`[bridge-setup] Fetched ${memberDids.length} community member DIDs`);
+        } catch (err) {
+          console.warn('[bridge-setup] Failed to fetch members from service, falling back to props');
+          const communityMembers = members || [];
+          memberDids = communityMembers.map((m) => m.memberDid);
+        }
+
+        // 7. Fetch Discord members for seat list
+        let seatList: { discordUserId: string; discordUsername: string; avatarUrl: string | null; seatDid: null }[] = [];
+        try {
+          const membersRes = await fetch(
+            `${RELAY}/community/import/discord/guild/${targetGuild.id}/members?token=${encodeURIComponent(token)}`
+          );
+          if (membersRes.ok) {
+            const membersData = await membersRes.json();
+            if (membersData.hasMembersIntent && membersData.members?.length) {
+              seatList = membersData.members
+                .filter((m: any) => !m.bot)
+                .map((m: any) => ({
+                  discordUserId: m.userId,
+                  discordUsername: m.username,
+                  avatarUrl: m.avatar
+                    ? `https://cdn.discordapp.com/avatars/${m.userId}/${m.avatar}.png`
+                    : null,
+                  seatDid: null,
+                }));
+            }
+          }
+        } catch {
+          warnings.push('Could not fetch Discord member list for seat data (non-critical)');
+        }
+
+        // 8. Register bridge with relay
+        const registerRes = await fetch(`${RELAY}/api/bridge/register`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            communityId,
+            guildId: targetGuild.id,
+            channels: channelMapping,
+            seats: seatList,
+            memberDids,
+          }),
+        });
+
+        if (!registerRes.ok) throw new Error('Failed to register bridge with relay');
+        const registerData = await registerRes.json();
+        if (registerData.ok && registerData.data) {
+          setBridgeConfig(registerData.data);
+          // Add bridge bot DID as community member if available
+          if (registerData.data.bridgeDid && service) {
+            try {
+              await service.joinCommunity(communityId, registerData.data.bridgeDid, 'Bridge Bot');
+              console.log(`[bridge-setup] Added bridge bot as community member: ${registerData.data.bridgeDid}`);
+            } catch { /* may already be member */ }
+          }
+        }
+
+        // Surface any warnings from the setup process
+        if (warnings.length > 0) {
+          setBridgeWarnings(warnings);
+        }
+        setBridgeSetupStatus('idle');
+      } catch (err: any) {
+        setBridgeSetupStatus('error');
+        setBridgeSetupError(err.message || 'Bridge setup failed');
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+
+    // Start OAuth flow
+    fetch(`${RELAY}/community/import/discord/start`, { method: 'POST' })
+      .then(async (res) => {
+        if (!res.ok) throw new Error('Failed to start Discord auth');
+        const data = await res.json();
+        if (bridgePopupRef.current && !bridgePopupRef.current.closed) {
+          bridgePopupRef.current.location.href = data.redirect_url;
+        }
+      })
+      .catch((err) => {
+        bridgePopupRef.current?.close();
+        setBridgeSetupStatus('error');
+        setBridgeSetupError(err.message || 'Failed to start authentication');
+        window.removeEventListener('message', handleMessage);
+      });
+
+    // Poll for popup close
+    const pollTimer = setInterval(() => {
+      if (bridgePopupRef.current?.closed) {
+        clearInterval(pollTimer);
+        if (!bridgeAuthRef.current) {
+          setBridgeSetupStatus((prev) => prev === 'connecting' ? 'idle' : prev);
+          window.removeEventListener('message', handleMessage);
+        }
+      }
+    }, 500);
+  }, [bridgeSetupStatus, service, communityId, community, members, RELAY]);
 
   const handleDeleteSeat = useCallback(async (seatId: string) => {
     if (!service || !identity?.did) return;
@@ -675,6 +1010,292 @@ export function CommunitySettingsDialog({
             loading={invitesLoading}
             title="Invites"
           />
+        );
+
+      case 'bridge':
+        return (
+          <View style={{ flex: 1, padding: defaultSpacing.md, gap: defaultSpacing.lg }}>
+            {/* Section header */}
+            <View>
+              <Text size="lg" weight="semibold" style={{ color: tc.text.primary, marginBottom: 4 }}>
+                Discord Bridge
+              </Text>
+              <Text size="sm" style={{ color: tc.text.muted }}>
+                Bidirectional message sync between Discord and Umbra.
+              </Text>
+            </View>
+
+            {/* Warning/error banner */}
+            {bridgeWarnings.length > 0 && (
+              <View
+                style={{
+                  padding: defaultSpacing.md,
+                  backgroundColor: '#f59e0b20',
+                  borderRadius: defaultRadii.md,
+                  borderWidth: 1,
+                  borderColor: '#f59e0b40',
+                  gap: defaultSpacing.xs,
+                }}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: defaultSpacing.sm }}>
+                  <AlertTriangleIcon size={16} color="#f59e0b" />
+                  <Text size="sm" weight="semibold" style={{ color: '#f59e0b', flex: 1 }}>
+                    Setup completed with warnings
+                  </Text>
+                  <Pressable onPress={() => setBridgeWarnings([])}>
+                    <XIcon size={14} color={tc.text.muted} />
+                  </Pressable>
+                </View>
+                {bridgeWarnings.map((w, i) => (
+                  <Text key={i} size="xs" style={{ color: tc.text.secondary, paddingLeft: 24 }}>
+                    {w}
+                  </Text>
+                ))}
+              </View>
+            )}
+
+            {bridgeLoading ? (
+              <View style={{ alignItems: 'center', paddingVertical: defaultSpacing.xl }}>
+                <ActivityIndicator color={tc.accent.primary} />
+              </View>
+            ) : !bridgeConfig ? (
+              /* No bridge configured — offer setup */
+              <View
+                style={{
+                  padding: defaultSpacing.lg,
+                  backgroundColor: tc.background.sunken,
+                  borderRadius: defaultRadii.md,
+                  alignItems: 'center',
+                  gap: defaultSpacing.md,
+                }}
+              >
+                <BridgeIcon size={32} color={tc.text.muted} />
+                <Text size="sm" weight="medium" style={{ color: tc.text.primary, textAlign: 'center' }}>
+                  No bridge configured
+                </Text>
+                <Text size="sm" style={{ color: tc.text.muted, textAlign: 'center' }}>
+                  Connect your Discord server to sync messages between Discord and Umbra in real-time. The Umbra bot must be in your server.
+                </Text>
+                {bridgeSetupError && (
+                  <Text size="xs" style={{ color: tc.status.danger, textAlign: 'center' }}>
+                    {bridgeSetupError}
+                  </Text>
+                )}
+                <Button
+                  onPress={handleBridgeSetup}
+                  isLoading={bridgeSetupStatus === 'connecting' || bridgeSetupStatus === 'registering'}
+                >
+                  {bridgeSetupStatus === 'registering' ? 'Setting up bridge...' : 'Connect Discord'}
+                </Button>
+              </View>
+            ) : (
+              <>
+                {/* Enable/Disable toggle */}
+                <View
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    padding: defaultSpacing.md,
+                    backgroundColor: bridgeConfig.enabled
+                      ? tc.accent.primary + '10'
+                      : tc.background.sunken,
+                    borderRadius: defaultRadii.md,
+                    borderWidth: 1,
+                    borderColor: bridgeConfig.enabled
+                      ? tc.accent.primary + '30'
+                      : tc.border.subtle,
+                  }}
+                >
+                  <BridgeIcon
+                    size={20}
+                    color={bridgeConfig.enabled ? tc.accent.primary : tc.text.muted}
+                  />
+                  <View style={{ flex: 1, marginLeft: defaultSpacing.sm }}>
+                    <Text size="sm" weight="semibold" style={{ color: tc.text.primary }}>
+                      {bridgeConfig.enabled ? 'Bridge Active' : 'Bridge Disabled'}
+                    </Text>
+                    <Text size="xs" style={{ color: tc.text.muted }}>
+                      {bridgeConfig.enabled
+                        ? 'Messages are syncing between Discord and Umbra in real-time'
+                        : 'Enable to resume message syncing with Discord'}
+                    </Text>
+                  </View>
+                  <Toggle
+                    checked={bridgeConfig.enabled}
+                    onChange={handleBridgeToggle}
+                    size="sm"
+                    disabled={bridgeToggling}
+                  />
+                </View>
+
+                {/* Bridge info cards */}
+                <View style={{ gap: defaultSpacing.md }}>
+                  <Text size="sm" weight="medium" style={{ color: tc.text.secondary }}>
+                    Configuration
+                  </Text>
+
+                  {/* Stats row */}
+                  <View style={{ flexDirection: 'row', gap: defaultSpacing.md }}>
+                    <View
+                      style={{
+                        flex: 1,
+                        padding: defaultSpacing.md,
+                        backgroundColor: tc.background.sunken,
+                        borderRadius: defaultRadii.md,
+                        gap: 4,
+                      }}
+                    >
+                      <Text size="xs" style={{ color: tc.text.muted }}>
+                        Channels
+                      </Text>
+                      <Text size="lg" weight="bold" style={{ color: tc.text.primary }}>
+                        {bridgeConfig.channels.length}
+                      </Text>
+                    </View>
+                    <View
+                      style={{
+                        flex: 1,
+                        padding: defaultSpacing.md,
+                        backgroundColor: tc.background.sunken,
+                        borderRadius: defaultRadii.md,
+                        gap: 4,
+                      }}
+                    >
+                      <Text size="xs" style={{ color: tc.text.muted }}>
+                        Seats
+                      </Text>
+                      <Text size="lg" weight="bold" style={{ color: tc.text.primary }}>
+                        {bridgeConfig.seats.length}
+                      </Text>
+                    </View>
+                    <View
+                      style={{
+                        flex: 1,
+                        padding: defaultSpacing.md,
+                        backgroundColor: tc.background.sunken,
+                        borderRadius: defaultRadii.md,
+                        gap: 4,
+                      }}
+                    >
+                      <Text size="xs" style={{ color: tc.text.muted }}>
+                        Members
+                      </Text>
+                      <Text size="lg" weight="bold" style={{ color: tc.text.primary }}>
+                        {bridgeConfig.memberDids.length}
+                      </Text>
+                    </View>
+                  </View>
+
+                  {/* Guild ID */}
+                  <View
+                    style={{
+                      padding: defaultSpacing.md,
+                      backgroundColor: tc.background.sunken,
+                      borderRadius: defaultRadii.md,
+                      gap: 4,
+                    }}
+                  >
+                    <Text size="xs" style={{ color: tc.text.muted }}>
+                      Discord Guild ID
+                    </Text>
+                    <Text size="sm" weight="medium" style={{ color: tc.text.primary }}>
+                      {bridgeConfig.guildId}
+                    </Text>
+                  </View>
+
+                  {/* Bridged channels list */}
+                  {bridgeConfig.channels.length > 0 && (
+                    <View
+                      style={{
+                        padding: defaultSpacing.md,
+                        backgroundColor: tc.background.sunken,
+                        borderRadius: defaultRadii.md,
+                        gap: defaultSpacing.sm,
+                      }}
+                    >
+                      <Text size="xs" style={{ color: tc.text.muted }}>
+                        Bridged Channels
+                      </Text>
+                      {bridgeConfig.channels.map((ch) => (
+                        <View
+                          key={ch.discordChannelId}
+                          style={{
+                            flexDirection: 'row',
+                            alignItems: 'center',
+                            gap: defaultSpacing.sm,
+                          }}
+                        >
+                          <Text size="sm" style={{ color: tc.text.secondary }}>
+                            #
+                          </Text>
+                          <Text size="sm" style={{ color: tc.text.primary }}>
+                            {ch.name}
+                          </Text>
+                        </View>
+                      ))}
+                    </View>
+                  )}
+
+                  {/* Member sync warning */}
+                  {bridgeConfig.memberDids.length === 0 && (
+                    <View
+                      style={{
+                        padding: defaultSpacing.md,
+                        backgroundColor: tc.status.danger + '15',
+                        borderRadius: defaultRadii.md,
+                        borderWidth: 1,
+                        borderColor: tc.status.danger + '30',
+                        gap: defaultSpacing.sm,
+                      }}
+                    >
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: defaultSpacing.sm }}>
+                        <AlertTriangleIcon size={16} color={tc.status.danger} />
+                        <Text size="sm" weight="semibold" style={{ color: tc.status.danger }}>
+                          No members synced
+                        </Text>
+                      </View>
+                      <Text size="xs" style={{ color: tc.text.secondary }}>
+                        The bridge has no community member DIDs. Discord messages won't be delivered to Umbra users. Click "Re-sync Members" to fix this.
+                      </Text>
+                      <Button
+                        size="sm"
+                        onPress={async () => {
+                          if (!service || !communityId || !bridgeConfig) return;
+                          try {
+                            const freshMembers = await service.getCommunityMembers(communityId);
+                            const memberDids = freshMembers.map((m: any) => m.memberDid);
+                            const res = await fetch(
+                              `${RELAY}/api/bridge/${encodeURIComponent(bridgeConfig.communityId)}/members`,
+                              {
+                                method: 'PUT',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ memberDids }),
+                              },
+                            );
+                            if (res.ok) {
+                              const data = await res.json();
+                              if (data.ok && data.data) {
+                                setBridgeConfig(data.data);
+                              }
+                            }
+                          } catch (err) {
+                            console.error('[bridge] Failed to re-sync members:', err);
+                          }
+                        }}
+                      >
+                        Re-sync Members
+                      </Button>
+                    </View>
+                  )}
+
+                  {/* Last updated */}
+                  <Text size="xs" style={{ color: tc.text.muted }}>
+                    Last updated {new Date(bridgeConfig.updatedAt).toLocaleString()}
+                  </Text>
+                </View>
+              </>
+            )}
+          </View>
         );
 
       case 'moderation':

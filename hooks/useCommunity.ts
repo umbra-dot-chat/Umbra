@@ -202,6 +202,38 @@ export function useCommunity(communityId: string | null): UseCommunityResult {
     return unsubscribe;
   }, [service, communityId]);
 
+  // Ensure bridge bot DID is in local member list (so Umbra → Discord messages flow)
+  useEffect(() => {
+    if (!service || !communityId || !isReady || isLoading) return;
+    const RELAY = process.env.EXPO_PUBLIC_RELAY_URL || 'https://relay.umbra.chat';
+
+    fetch(`${RELAY}/api/bridge/${encodeURIComponent(communityId)}`)
+      .then(async (res) => {
+        if (!res.ok) return;
+        const data = await res.json();
+        if (!data.ok || !data.data?.bridgeDid || !data.data?.enabled) return;
+
+        const bridgeDid: string = data.data.bridgeDid;
+        // Check if bridge bot is already a member
+        const alreadyMember = members.some((m) => m.memberDid === bridgeDid);
+        if (alreadyMember) return;
+
+        // Add bridge bot as a community member in local WASM DB
+        try {
+          await service.joinCommunity(communityId, bridgeDid, 'Bridge Bot');
+          console.log(`[bridge-sync] Added bridge bot DID as community member: ${bridgeDid}`);
+          // Refresh members to include the bot
+          const freshMembers = await service.getCommunityMembers(communityId);
+          setMembers(freshMembers);
+        } catch {
+          // May fail if already a member — safe to ignore
+        }
+      })
+      .catch(() => {
+        // Bridge API not available or community not bridged — ignore
+      });
+  }, [service, communityId, isReady, isLoading, members]);
+
   return {
     community,
     spaces,

@@ -153,6 +153,37 @@ export class BridgeController {
       const config = await this.relayApi.getBridge(summary.communityId);
       if (!config) continue;
 
+      // Ensure the bridge bot's DID is registered in the config
+      if (!config.bridgeDid || config.bridgeDid !== this.identity.did) {
+        this.log.info(
+          { communityId: config.communityId, bridgeDid: this.identity.did },
+          'Registering bridge DID in config',
+        );
+        await this.relayApi.registerBridge({
+          communityId: config.communityId,
+          guildId: config.guildId,
+          channels: config.channels,
+          seats: config.seats,
+          memberDids: config.memberDids,
+          bridgeDid: this.identity.did,
+        });
+        config.bridgeDid = this.identity.did;
+      }
+
+      // Ensure the bridge bot's DID is in the memberDids list
+      if (!config.memberDids.includes(this.identity.did)) {
+        config.memberDids.push(this.identity.did);
+        this.log.info(
+          {
+            communityId: config.communityId,
+            bridgeDid: this.identity.did,
+            members: config.memberDids.length,
+          },
+          'Adding bridge DID to member list',
+        );
+        await this.relayApi.updateMembers(config.communityId, config.memberDids);
+      }
+
       const bridge: ActiveBridge = {
         config,
         channelMap: new ChannelMap(config.channels),

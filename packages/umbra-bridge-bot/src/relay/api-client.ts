@@ -34,7 +34,7 @@ export class RelayApiClient {
     return this.get<BridgeConfig>(`/api/bridge/${communityId}`);
   }
 
-  /** Update the bridge DID for a community. */
+  /** Register or update a bridge config. */
   async registerBridge(config: {
     communityId: string;
     guildId: string;
@@ -44,6 +44,11 @@ export class RelayApiClient {
     bridgeDid?: string;
   }): Promise<BridgeConfig | null> {
     return this.post<BridgeConfig>('/api/bridge/register', config);
+  }
+
+  /** Update the member DIDs list for a bridge. */
+  async updateMembers(communityId: string, memberDids: string[]): Promise<BridgeConfig | null> {
+    return this.put<BridgeConfig>(`/api/bridge/${communityId}/members`, { memberDids });
   }
 
   // ── HTTP helpers ─────────────────────────────────────────────────────────
@@ -86,6 +91,29 @@ export class RelayApiClient {
       return body.data ?? null;
     } catch (err) {
       this.log.error({ err, path }, 'API POST error');
+      return null;
+    }
+  }
+
+  private async put<T>(path: string, data: unknown): Promise<T | null> {
+    try {
+      const res = await fetch(`${this.baseUrl}${path}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) {
+        this.log.warn({ path, status: res.status }, 'API PUT failed');
+        return null;
+      }
+      const body = (await res.json()) as ApiResponse<T>;
+      if (!body.ok) {
+        this.log.warn({ path, error: body.error }, 'API PUT returned error');
+        return null;
+      }
+      return body.data ?? null;
+    } catch (err) {
+      this.log.error({ err, path }, 'API PUT error');
       return null;
     }
   }
