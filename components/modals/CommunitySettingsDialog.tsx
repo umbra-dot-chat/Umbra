@@ -293,6 +293,7 @@ export function CommunitySettingsDialog({
     communityId: string;
     guildId: string;
     enabled: boolean;
+    bridgeDid: string | null;
     channels: { discordChannelId: string; umbraChannelId: string; name: string }[];
     seats: { discordUserId: string; discordUsername: string; avatarUrl: string | null; seatDid: string | null }[];
     memberDids: string[];
@@ -1236,8 +1237,8 @@ export function CommunitySettingsDialog({
                     </View>
                   )}
 
-                  {/* Member sync warning */}
-                  {bridgeConfig.memberDids.length === 0 && (
+                  {/* Member sync warning — show when memberDids count seems too low */}
+                  {bridgeConfig.memberDids.length <= 1 && (
                     <View
                       style={{
                         padding: defaultSpacing.md,
@@ -1251,42 +1252,52 @@ export function CommunitySettingsDialog({
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: defaultSpacing.sm }}>
                         <AlertTriangleIcon size={16} color={tc.status.danger} />
                         <Text size="sm" weight="semibold" style={{ color: tc.status.danger }}>
-                          No members synced
+                          {bridgeConfig.memberDids.length === 0 ? 'No members synced' : 'Members not synced'}
                         </Text>
                       </View>
                       <Text size="xs" style={{ color: tc.text.secondary }}>
-                        The bridge has no community member DIDs. Discord messages won't be delivered to Umbra users. Click "Re-sync Members" to fix this.
+                        {bridgeConfig.memberDids.length === 0
+                          ? 'The bridge has no community member DIDs. Discord messages won\'t be delivered to Umbra users.'
+                          : 'The bridge only has the bot\'s DID. Community members need to be synced for Discord messages to reach Umbra users.'}
+                        {' '}Click "Re-sync Members" to fix this.
                       </Text>
-                      <Button
-                        size="sm"
-                        onPress={async () => {
-                          if (!service || !communityId || !bridgeConfig) return;
-                          try {
-                            const freshMembers = await service.getCommunityMembers(communityId);
-                            const memberDids = freshMembers.map((m: any) => m.memberDid);
-                            const res = await fetch(
-                              `${RELAY}/api/bridge/${encodeURIComponent(bridgeConfig.communityId)}/members`,
-                              {
-                                method: 'PUT',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ memberDids }),
-                              },
-                            );
-                            if (res.ok) {
-                              const data = await res.json();
-                              if (data.ok && data.data) {
-                                setBridgeConfig(data.data);
-                              }
-                            }
-                          } catch (err) {
-                            console.error('[bridge] Failed to re-sync members:', err);
-                          }
-                        }}
-                      >
-                        Re-sync Members
-                      </Button>
                     </View>
                   )}
+
+                  {/* Re-sync Members button — always visible */}
+                  <Button
+                    size="sm"
+                    variant={bridgeConfig.memberDids.length <= 1 ? 'primary' : 'secondary'}
+                    onPress={async () => {
+                      if (!service || !communityId || !bridgeConfig) return;
+                      try {
+                        const freshMembers = await service.getCommunityMembers(communityId);
+                        const memberDids = freshMembers.map((m: any) => m.memberDid);
+                        // Also include the bridge bot DID if it exists
+                        if (bridgeConfig.bridgeDid && !memberDids.includes(bridgeConfig.bridgeDid)) {
+                          memberDids.push(bridgeConfig.bridgeDid);
+                        }
+                        const res = await fetch(
+                          `${RELAY}/api/bridge/${encodeURIComponent(bridgeConfig.communityId)}/members`,
+                          {
+                            method: 'PUT',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ memberDids }),
+                          },
+                        );
+                        if (res.ok) {
+                          const data = await res.json();
+                          if (data.ok && data.data) {
+                            setBridgeConfig(data.data);
+                          }
+                        }
+                      } catch (err) {
+                        console.error('[bridge] Failed to re-sync members:', err);
+                      }
+                    }}
+                  >
+                    Re-sync Members ({bridgeConfig.memberDids.length} synced)
+                  </Button>
 
                   {/* Last updated */}
                   <Text size="xs" style={{ color: tc.text.muted }}>
