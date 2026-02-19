@@ -270,7 +270,7 @@ export class BridgeController {
     // Generate message ID
     const messageId = uuidv4();
 
-    // Build community event envelope
+    // Build community event envelope (include Discord user ID for ghost seat lookup)
     const envelope = buildCommunityMessageEnvelope({
       communityId: bridge.config.communityId,
       channelId: umbraChannelId,
@@ -279,6 +279,8 @@ export class BridgeController {
       senderDisplayName: seat.displayName,
       senderAvatarUrl: seat.avatarUrl,
       messageId,
+      platformUserId: msg.discordUserId,
+      platform: 'discord',
     });
 
     const payload = serializeEnvelope(envelope);

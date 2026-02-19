@@ -132,6 +132,9 @@ export function useCommunityMessages(channelId: string | null): UseCommunityMess
                 // Bridge messages carry sender display name & avatar from Discord
                 senderDisplayName: event.senderDisplayName,
                 senderAvatarUrl: event.senderAvatarUrl,
+                // Platform identity for ghost seat lookup
+                platformUserId: event.platformUserId,
+                platform: event.platform,
               };
               setMessages((prev) => {
                 if (prev.some((m) => m.id === bridgeMsg.id)) return prev;

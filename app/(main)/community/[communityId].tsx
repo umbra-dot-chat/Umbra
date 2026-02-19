@@ -278,6 +278,7 @@ export default function CommunityPage() {
     channels: realChannels,
     members,
     roles,
+    seats,
     memberRolesMap,
     refresh: refreshCommunity,
   } = useCommunity(communityId ?? null);
@@ -460,6 +461,17 @@ export default function CommunityPage() {
     return map;
   }, [effectiveMembers, myDid, identity]);
 
+  // Build a platformUserId → CommunitySeat lookup for ghost seat rendering
+  const seatByPlatformUserId = useMemo(() => {
+    const map = new Map<string, typeof seats[0]>();
+    for (const seat of seats) {
+      if (seat.platformUserId) {
+        map.set(seat.platformUserId, seat);
+      }
+    }
+    return map;
+  }, [seats]);
+
   // Build pinned messages for the right panel
   const pinnedForPanel = useMemo(() =>
     (pinnedMessages || []).map((m) => ({
@@ -491,16 +503,47 @@ export default function CommunityPage() {
         lastDate = dateStr;
       }
 
-      // Prefer bridge display name (ghost seat Discord username), then member nickname, then truncated DID
-      const senderName = msg.senderDisplayName
+      // Ghost seat lookup: if message has a platformUserId, look up the seat
+      const seat = msg.platformUserId ? seatByPlatformUserId.get(msg.platformUserId) : undefined;
+      const isGhostSeat = seat && !seat.claimedByDid;
+
+      // Prefer seat username (from import), then bridge display name, then member nickname, then truncated DID
+      const senderName = (seat ? seat.platformUsername : undefined)
+        || msg.senderDisplayName
         || (msg.senderDid ? (memberNameMap.get(msg.senderDid) ?? msg.senderDid.slice(0, 16) + '...') : 'Unknown');
 
-      // Bridge messages from Discord include avatar URLs — render as an Image element
-      const avatarElement = msg.senderAvatarUrl
+      // Avatar: prefer seat avatar, then bridge avatar URL
+      const avatarUrl = seat?.avatarUrl || msg.senderAvatarUrl;
+      const avatarElement = avatarUrl
         ? React.createElement(Image, {
-            source: { uri: msg.senderAvatarUrl },
-            style: { width: 32, height: 32, borderRadius: 16 },
+            source: { uri: avatarUrl },
+            style: { width: 32, height: 32, borderRadius: 16, opacity: isGhostSeat ? 0.7 : 1 },
           })
+        : undefined;
+
+      // Ghost seat badge: show a subtle "via Discord" indicator for unclaimed seats
+      const ghostBadge = isGhostSeat
+        ? React.createElement(
+            View,
+            {
+              style: {
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 4,
+                marginTop: 2,
+                paddingHorizontal: 6,
+                paddingVertical: 2,
+                backgroundColor: theme.colors.background.raised,
+                borderRadius: 4,
+                alignSelf: 'flex-start',
+              },
+            },
+            React.createElement(
+              Text,
+              { size: 'xs', style: { color: theme.colors.text.muted, fontSize: 10 } },
+              '\uD83D\uDC7B via Discord \u2022 unclaimed seat',
+            ),
+          )
         : undefined;
 
       entries.push({
@@ -511,13 +554,16 @@ export default function CommunityPage() {
         timestamp: new Date(msg.createdAt < 1000000000000 ? msg.createdAt * 1000 : msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         isOwn: msg.senderDid === myDid,
         edited: msg.edited,
+        // Ghost seats get a muted sender color to visually distinguish them
+        ...(isGhostSeat ? { senderColor: theme.colors.text.muted } : {}),
         ...(avatarElement ? { avatar: avatarElement } : {}),
+        ...(ghostBadge ? { media: ghostBadge } : {}),
         ...(msg.threadReplyCount > 0 ? { threadInfo: { replyCount: msg.threadReplyCount } } : {}),
       });
     }
 
     return entries;
-  }, [messages, myDid, memberNameMap]);
+  }, [messages, myDid, memberNameMap, seatByPlatformUserId, theme]);
 
   // ---------------------------------------------------------------------------
   // Handlers

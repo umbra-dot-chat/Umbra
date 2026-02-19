@@ -21,6 +21,7 @@ import type {
   CommunityMember,
   CommunityRole,
   CommunityEvent,
+  CommunitySeat,
 } from '@umbra/service';
 
 /** Map of member DID → their assigned role IDs */
@@ -39,6 +40,8 @@ export interface UseCommunityResult {
   members: CommunityMember[];
   /** All roles */
   roles: CommunityRole[];
+  /** Imported seats (ghost + claimed) for this community */
+  seats: CommunitySeat[];
   /** Map of member DID → their assigned roles */
   memberRolesMap: MemberRolesMap;
   /** Whether the initial load is in progress */
@@ -57,6 +60,7 @@ export function useCommunity(communityId: string | null): UseCommunityResult {
   const [channels, setChannels] = useState<CommunityChannel[]>([]);
   const [members, setMembers] = useState<CommunityMember[]>([]);
   const [roles, setRoles] = useState<CommunityRole[]>([]);
+  const [seats, setSeats] = useState<CommunitySeat[]>([]);
   const [memberRolesMap, setMemberRolesMap] = useState<MemberRolesMap>({});
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
@@ -65,13 +69,14 @@ export function useCommunity(communityId: string | null): UseCommunityResult {
     if (!service || !communityId) return;
     try {
       setIsLoading(true);
-      const [communityData, spacesData, categoriesData, channelsData, membersData, rolesData] = await Promise.all([
+      const [communityData, spacesData, categoriesData, channelsData, membersData, rolesData, seatsData] = await Promise.all([
         service.getCommunity(communityId),
         service.getSpaces(communityId),
         service.getAllCategories(communityId),
         service.getAllChannels(communityId),
         service.getCommunityMembers(communityId),
         service.getCommunityRoles(communityId),
+        service.getSeats(communityId).catch(() => [] as CommunitySeat[]),
       ]);
 
       setCommunity(communityData);
@@ -80,6 +85,7 @@ export function useCommunity(communityId: string | null): UseCommunityResult {
       setChannels(channelsData);
       setMembers(membersData);
       setRoles(rolesData);
+      setSeats(seatsData);
 
       // Fetch per-member role assignments
       const rolesMapResult: MemberRolesMap = {};
@@ -119,6 +125,7 @@ export function useCommunity(communityId: string | null): UseCommunityResult {
       setChannels([]);
       setMembers([]);
       setRoles([]);
+      setSeats([]);
       setMemberRolesMap({});
       setIsLoading(false);
     }
@@ -250,6 +257,7 @@ export function useCommunity(communityId: string | null): UseCommunityResult {
     channels,
     members,
     roles,
+    seats,
     memberRolesMap,
     isLoading,
     error,

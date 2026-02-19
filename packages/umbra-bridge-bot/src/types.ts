@@ -91,6 +91,10 @@ export interface CommunityMessageSentEvent {
   senderDisplayName?: string;
   /** Avatar URL of sender (for bridge identity). */
   senderAvatarUrl?: string;
+  /** Platform user ID (e.g. Discord user ID) for ghost seat lookup on the client. */
+  platformUserId?: string;
+  /** Platform identifier (e.g. "discord") for ghost seat lookup. */
+  platform?: string;
 }
 
 // ── Bridge Bot Identity ──────────────────────────────────────────────────────

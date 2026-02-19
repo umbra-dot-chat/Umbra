@@ -989,6 +989,10 @@ export interface CommunityMessage {
   senderDisplayName?: string;
   /** Bridge message: sender avatar URL (from Discord) */
   senderAvatarUrl?: string;
+  /** Bridge message: platform user ID (e.g. Discord user ID) for ghost seat lookup */
+  platformUserId?: string;
+  /** Bridge message: platform identifier (e.g. "discord") for ghost seat lookup */
+  platform?: string;
 }
 
 /**
@@ -1178,7 +1182,7 @@ export type CommunityEvent =
   | { type: 'memberUnbanned'; communityId: string; memberDid: string }
   | { type: 'roleAssigned'; communityId: string; memberDid: string; roleId: string }
   | { type: 'roleUnassigned'; communityId: string; memberDid: string; roleId: string }
-  | { type: 'communityMessageSent'; channelId: string; messageId: string; senderDid: string; content?: string; senderDisplayName?: string; senderAvatarUrl?: string }
+  | { type: 'communityMessageSent'; channelId: string; messageId: string; senderDid: string; content?: string; senderDisplayName?: string; senderAvatarUrl?: string; platformUserId?: string; platform?: string }
   | { type: 'communityMessageEdited'; channelId: string; messageId: string }
   | { type: 'communityMessageDeleted'; channelId: string; messageId: string }
   | { type: 'communityReactionAdded'; messageId: string; emoji: string; memberDid: string }

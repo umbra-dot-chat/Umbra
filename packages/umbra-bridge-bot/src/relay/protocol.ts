@@ -23,6 +23,10 @@ export function buildCommunityMessageEnvelope(opts: {
   senderDisplayName: string;
   senderAvatarUrl: string | null;
   messageId?: string;
+  /** Platform user ID (e.g. Discord user ID) for ghost seat lookup. */
+  platformUserId?: string;
+  /** Platform identifier (e.g. "discord"). */
+  platform?: string;
 }): CommunityEventEnvelope {
   const messageId = opts.messageId ?? uuidv4();
 
@@ -34,6 +38,8 @@ export function buildCommunityMessageEnvelope(opts: {
     content: opts.content,
     senderDisplayName: opts.senderDisplayName,
     senderAvatarUrl: opts.senderAvatarUrl ?? undefined,
+    platformUserId: opts.platformUserId,
+    platform: opts.platform,
   };
 
   return {
