@@ -8,10 +8,18 @@
 set -euo pipefail
 
 UMBRA_DIR="$(cd "$(dirname "$0")/.." && pwd)"
-WISP_DIR="$UMBRA_DIR/../Wisp"
 
-# If Wisp repo isn't present (CI), fix .mjs references in published packages
-if [ ! -d "$WISP_DIR/packages" ]; then
+# Check for Wisp in sibling directory (local dev) or .wisp (CI)
+if [ -d "$UMBRA_DIR/../Wisp/packages" ]; then
+  WISP_DIR="$UMBRA_DIR/../Wisp"
+elif [ -d "$UMBRA_DIR/.wisp/packages" ]; then
+  WISP_DIR="$UMBRA_DIR/.wisp"
+else
+  WISP_DIR=""
+fi
+
+# If Wisp repo isn't present, fix .mjs references in published packages
+if [ -z "$WISP_DIR" ]; then
   echo "Wisp repo not found — running CI fixup for published packages."
 
   CORE_DEST="$UMBRA_DIR/node_modules/@coexist/wisp-core"
