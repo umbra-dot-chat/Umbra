@@ -63,7 +63,10 @@ impl<T: Serialize> ApiResponse<T> {
     }
 }
 
-fn error_response<T: Serialize>(status: StatusCode, msg: &str) -> (StatusCode, Json<ApiResponse<T>>) {
+fn error_response<T: Serialize>(
+    status: StatusCode,
+    msg: &str,
+) -> (StatusCode, Json<ApiResponse<T>>) {
     (
         status,
         Json(ApiResponse {
@@ -127,9 +130,7 @@ pub async fn register_bridge(
 ///
 /// Used by the bridge bot on startup to discover which communities
 /// to bridge, and by the client for settings UI.
-pub async fn list_bridges(
-    State(store): State<BridgeStore>,
-) -> impl IntoResponse {
+pub async fn list_bridges(State(store): State<BridgeStore>) -> impl IntoResponse {
     let bridges = store.list();
     ApiResponse::success(bridges)
 }
@@ -143,11 +144,14 @@ pub async fn get_bridge(
     Path(id): Path<String>,
 ) -> impl IntoResponse {
     match store.get(&id) {
-        Some(config) => (StatusCode::OK, Json(ApiResponse {
-            ok: true,
-            data: Some(config),
-            error: None,
-        })),
+        Some(config) => (
+            StatusCode::OK,
+            Json(ApiResponse {
+                ok: true,
+                data: Some(config),
+                error: None,
+            }),
+        ),
         None => error_response(StatusCode::NOT_FOUND, "Bridge config not found"),
     }
 }
@@ -160,11 +164,14 @@ pub async fn delete_bridge(
     Path(id): Path<String>,
 ) -> impl IntoResponse {
     if store.delete(&id) {
-        (StatusCode::OK, Json(ApiResponse::<()> {
-            ok: true,
-            data: None,
-            error: None,
-        }))
+        (
+            StatusCode::OK,
+            Json(ApiResponse::<()> {
+                ok: true,
+                data: None,
+                error: None,
+            }),
+        )
     } else {
         error_response(StatusCode::NOT_FOUND, "Bridge config not found")
     }
@@ -181,11 +188,14 @@ pub async fn update_members(
 ) -> impl IntoResponse {
     if store.update_members(&id, req.member_dids) {
         let config = store.get(&id);
-        (StatusCode::OK, Json(ApiResponse {
-            ok: true,
-            data: config,
-            error: None,
-        }))
+        (
+            StatusCode::OK,
+            Json(ApiResponse {
+                ok: true,
+                data: config,
+                error: None,
+            }),
+        )
     } else {
         error_response(StatusCode::NOT_FOUND, "Bridge config not found")
     }
@@ -201,11 +211,14 @@ pub async fn set_enabled(
 ) -> impl IntoResponse {
     if store.set_enabled(&id, req.enabled) {
         let config = store.get(&id);
-        (StatusCode::OK, Json(ApiResponse {
-            ok: true,
-            data: config,
-            error: None,
-        }))
+        (
+            StatusCode::OK,
+            Json(ApiResponse {
+                ok: true,
+                data: config,
+                error: None,
+            }),
+        )
     } else {
         error_response(StatusCode::NOT_FOUND, "Bridge config not found")
     }
