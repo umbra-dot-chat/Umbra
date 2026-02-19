@@ -564,6 +564,9 @@ pub async fn get_discord_guilds(
                     id: g.id,
                     name: g.name,
                     icon: g.icon,
+                    banner: None,
+                    splash: None,
+                    description: None,
                     owner: g.owner,
                     permissions,
                     can_manage: true,
@@ -1239,7 +1242,7 @@ pub async fn get_discord_guild_members(
 pub async fn get_discord_channel_pins(
     State((_, config)): State<(DiscoveryStore, DiscoveryConfig)>,
     Path(channel_id): Path<String>,
-    Query(query): Query<GuildStructureQuery>,
+    Query(_query): Query<GuildStructureQuery>,
 ) -> impl IntoResponse {
     let bot_token = match &config.discord_bot_token {
         Some(token) => token,
