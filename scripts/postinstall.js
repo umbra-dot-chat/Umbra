@@ -11,7 +11,12 @@ const path = require('path');
 const { execSync } = require('child_process');
 
 const UMBRA_DIR = path.resolve(__dirname, '..');
-const WISP_DIR = path.resolve(UMBRA_DIR, '..', 'Wisp');
+// Look for Wisp in sibling directory (local dev) or inside workspace (CI)
+const WISP_DIR_LOCAL = path.resolve(UMBRA_DIR, '..', 'Wisp');
+const WISP_DIR_CI = path.resolve(UMBRA_DIR, '.wisp');
+const WISP_DIR = fs.existsSync(path.join(WISP_DIR_CI, 'packages'))
+  ? WISP_DIR_CI
+  : WISP_DIR_LOCAL;
 
 const CORE_DEST = path.join(UMBRA_DIR, 'node_modules', '@coexist', 'wisp-core');
 const RN_DEST = path.join(UMBRA_DIR, 'node_modules', '@coexist', 'wisp-react-native');

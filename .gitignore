@@ -71,3 +71,4 @@ playwright-report/
 src-tauri/target/
 *.dmg
 packages/umbra-relay/.env
+.wisp/
