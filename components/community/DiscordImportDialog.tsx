@@ -6,9 +6,10 @@
  * structure preview, and import confirmation.
  */
 
-import React, { useCallback } from 'react';
+import React, { useCallback, useEffect } from 'react';
 import { View, ScrollView, Pressable, ActivityIndicator } from 'react-native';
 import { Dialog, Button, Text, useTheme } from '@coexist/wisp-react-native';
+import { useSound } from '@/contexts/SoundContext';
 import { defaultSpacing, defaultRadii } from '@coexist/wisp-core/theme/create-theme';
 import Svg, { Path, Circle, Rect, Line, Polyline } from 'react-native-svg';
 
@@ -18,6 +19,7 @@ import type {
   DiscordImportedMember,
   MappedCommunityStructure,
   CommunityImportResult,
+  CommunityImportProgress,
 } from '@umbra/service';
 import { getGuildIconUrl } from '@umbra/service';
 
@@ -386,6 +388,15 @@ function UsersIcon({ size, color }: { size: number; color: string }) {
 /**
  * Structure preview screen.
  */
+function PinIcon({ size, color }: { size: number; color: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Line x1="12" y1="17" x2="12" y2="22" />
+      <Path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a2 2 0 0 0 0-4H8a2 2 0 0 0 0 4h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24Z" />
+    </Svg>
+  );
+}
+
 function PreviewScreen({
   structure,
   validationIssues,
@@ -396,6 +407,12 @@ function PreviewScreen({
   membersAvailable,
   importMembers,
   onToggleMemberImport,
+  importPins,
+  onTogglePinImport,
+  pinCount,
+  pinsAvailable,
+  membersLoading,
+  pinsLoading,
   botStatus,
   onInviteBot,
 }: {
@@ -408,6 +425,12 @@ function PreviewScreen({
   membersAvailable: boolean;
   importMembers: boolean;
   onToggleMemberImport: () => void;
+  importPins: boolean;
+  onTogglePinImport: () => void;
+  pinCount: number;
+  pinsAvailable: boolean;
+  membersLoading: boolean;
+  pinsLoading: boolean;
   botStatus: BotStatus;
   onInviteBot: () => void;
 }) {
@@ -533,7 +556,28 @@ function PreviewScreen({
       {botStatus === 'in_guild' ? (
         <>
           {/* Bot connected — show feature toggles */}
-          {memberCount > 0 && (
+          {membersLoading ? (
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: defaultSpacing.md,
+                padding: defaultSpacing.md,
+                backgroundColor: tc.background.sunken,
+                borderRadius: defaultRadii.md,
+              }}
+            >
+              <ActivityIndicator size="small" color={tc.text.muted} />
+              <View style={{ flex: 1 }}>
+                <Text size="sm" weight="medium" style={{ color: tc.text.primary }}>
+                  Fetching members...
+                </Text>
+                <Text size="xs" style={{ color: tc.text.muted }}>
+                  This may take a moment for large servers
+                </Text>
+              </View>
+            </View>
+          ) : memberCount > 0 ? (
             <View
               style={{
                 flexDirection: 'row',
@@ -555,8 +599,7 @@ function PreviewScreen({
               </View>
               <ToggleSwitch value={importMembers} onToggle={onToggleMemberImport} />
             </View>
-          )}
-          {!membersAvailable && memberCount === 0 && (
+          ) : !membersAvailable && (
             <View
               style={{
                 flexDirection: 'row',
@@ -568,10 +611,56 @@ function PreviewScreen({
             >
               <UsersIcon size={14} color={tc.text.muted} />
               <Text size="xs" style={{ color: tc.text.muted, flex: 1 }}>
-                Member import requires the Server Members Intent on the bot in the Discord Developer Portal.
+                Unable to fetch members. Ensure the Server Members Intent is enabled in the Discord Developer Portal and the bot has been re-added to the server after enabling it.
               </Text>
             </View>
           )}
+
+          {/* Pin import toggle */}
+          {pinsLoading ? (
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: defaultSpacing.md,
+                padding: defaultSpacing.md,
+                backgroundColor: tc.background.sunken,
+                borderRadius: defaultRadii.md,
+              }}
+            >
+              <ActivityIndicator size="small" color={tc.text.muted} />
+              <View style={{ flex: 1 }}>
+                <Text size="sm" weight="medium" style={{ color: tc.text.primary }}>
+                  Fetching pinned messages...
+                </Text>
+                <Text size="xs" style={{ color: tc.text.muted }}>
+                  Scanning channels for pins
+                </Text>
+              </View>
+            </View>
+          ) : pinCount > 0 ? (
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: defaultSpacing.md,
+                padding: defaultSpacing.md,
+                backgroundColor: tc.background.sunken,
+                borderRadius: defaultRadii.md,
+              }}
+            >
+              <PinIcon size={18} color={tc.text.muted} />
+              <View style={{ flex: 1 }}>
+                <Text size="sm" weight="medium" style={{ color: tc.text.primary }}>
+                  Import pinned messages
+                </Text>
+                <Text size="xs" style={{ color: tc.text.muted }}>
+                  {pinCount.toLocaleString()} pinned message{pinCount !== 1 ? 's' : ''} across channels
+                </Text>
+              </View>
+              <ToggleSwitch value={importPins} onToggle={onTogglePinImport} />
+            </View>
+          ) : null}
         </>
       ) : (
         /* Bot not connected — show connect banner */
@@ -624,6 +713,12 @@ function PreviewScreen({
               <ShieldIcon size={12} color={tc.text.muted} />
               <Text size="xs" style={{ color: tc.text.muted }}>
                 Full permissions — import role permission settings
+              </Text>
+            </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: defaultSpacing.xs }}>
+              <PinIcon size={12} color={tc.text.muted} />
+              <Text size="xs" style={{ color: tc.text.muted }}>
+                Pinned messages — import pinned messages from channels
               </Text>
             </View>
           </View>
@@ -730,9 +825,8 @@ function PreviewScreen({
 
       <Text size="xs" style={{ color: tc.text.muted, textAlign: 'center' }}>
         This will create a new Umbra community with the same structure.
-        {importMembers && memberCount > 0
-          ? ' Members will be imported as claimable ghost seats.'
-          : ' No messages will be imported.'}
+        {importMembers && memberCount > 0 ? ' Members will be imported as claimable ghost seats.' : ''}
+        {importPins && pinCount > 0 ? ` ${pinCount.toLocaleString()} pinned messages will be imported.` : ''}
       </Text>
     </View>
   );
@@ -879,6 +973,76 @@ function BotInviteScreen({
 /**
  * Import complete screen.
  */
+// ---------------------------------------------------------------------------
+// ImportingScreen — shows live progress during community import
+// ---------------------------------------------------------------------------
+
+const PHASE_LABELS: Record<string, string> = {
+  creating_community: 'Creating community…',
+  creating_categories: 'Creating categories…',
+  creating_channels: 'Creating channels…',
+  creating_roles: 'Creating roles…',
+  creating_seats: 'Importing members…',
+  importing_pins: 'Importing pinned messages…',
+  complete: 'Finishing up…',
+};
+
+function ImportingScreen({ progress }: { progress: CommunityImportProgress | null }) {
+  const { theme } = useTheme();
+  const tc = theme.colors;
+
+  const label = progress ? (PHASE_LABELS[progress.phase] || 'Working…') : 'Starting import…';
+  const pct = progress?.percent ?? 0;
+  const detail = progress?.currentItem ?? null;
+
+  return (
+    <View style={{ padding: 40, alignItems: 'center', gap: 20 }}>
+      <ActivityIndicator size="large" color={tc.accent.primary} />
+
+      <Text size="lg" weight="semibold" style={{ color: tc.text.primary }}>
+        {label}
+      </Text>
+
+      {/* Progress bar */}
+      <View
+        style={{
+          width: '100%',
+          maxWidth: 320,
+          height: 6,
+          borderRadius: 3,
+          backgroundColor: tc.background.sunken,
+          overflow: 'hidden',
+        }}
+      >
+        <View
+          style={{
+            width: `${Math.max(pct, 2)}%`,
+            height: '100%',
+            borderRadius: 3,
+            backgroundColor: tc.accent.primary,
+          }}
+        />
+      </View>
+
+      {/* Detail text (e.g. "1,250 / 9,900 members") */}
+      <Text size="sm" style={{ color: tc.text.muted }}>
+        {detail || `${pct}%`}
+      </Text>
+
+      {/* Item counts when available */}
+      {progress?.totalItems != null && progress.completedItems != null && (
+        <Text size="xs" style={{ color: tc.text.muted }}>
+          {progress.completedItems.toLocaleString()} / {progress.totalItems.toLocaleString()}
+        </Text>
+      )}
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// CompleteScreen
+// ---------------------------------------------------------------------------
+
 function CompleteScreen({
   result,
   onClose,
@@ -888,6 +1052,12 @@ function CompleteScreen({
 }) {
   const { theme } = useTheme();
   const tc = theme.colors;
+  const { playSound } = useSound();
+
+  // Play success sound on mount
+  useEffect(() => {
+    playSound(result.warnings.length > 0 ? 'notification' : 'success');
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <View style={{ alignItems: 'center', gap: defaultSpacing.lg, paddingVertical: defaultSpacing.lg }}>
@@ -942,37 +1112,51 @@ function CompleteScreen({
         {result.seatsCreated > 0 && (
           <View style={{ alignItems: 'center' }}>
             <Text size="xl" weight="bold" style={{ color: tc.accent.primary }}>
-              {result.seatsCreated}
+              {result.seatsCreated.toLocaleString()}
             </Text>
             <Text size="xs" style={{ color: tc.text.muted }}>
               Seats
             </Text>
           </View>
         )}
+        {result.pinsImported > 0 && (
+          <View style={{ alignItems: 'center' }}>
+            <Text size="xl" weight="bold" style={{ color: tc.accent.primary }}>
+              {result.pinsImported.toLocaleString()}
+            </Text>
+            <Text size="xs" style={{ color: tc.text.muted }}>
+              Pins
+            </Text>
+          </View>
+        )}
       </View>
 
-      {/* Warnings */}
+      {/* Warnings — compact, truncated to avoid overwhelming the screen */}
       {result.warnings.length > 0 && (
         <View
           style={{
             width: '100%',
-            padding: defaultSpacing.md,
-            backgroundColor: tc.status.warning + '15',
+            padding: defaultSpacing.sm,
+            backgroundColor: tc.status.warning + '10',
             borderRadius: defaultRadii.md,
-            gap: defaultSpacing.xs,
+            gap: 2,
           }}
         >
           <Text size="xs" weight="medium" style={{ color: tc.status.warning }}>
-            Some items had issues:
+            {result.warnings.length} warning{result.warnings.length > 1 ? 's' : ''} during import
           </Text>
-          {result.warnings.slice(0, 3).map((warning, i) => (
-            <Text key={i} size="xs" style={{ color: tc.text.muted }}>
-              • {warning}
-            </Text>
-          ))}
-          {result.warnings.length > 3 && (
+          {result.warnings.slice(0, 2).map((warning, i) => {
+            // Truncate long error messages (e.g. stack traces) to first line
+            const short = warning.split('\n')[0].slice(0, 120);
+            return (
+              <Text key={i} size="xs" style={{ color: tc.text.muted }} numberOfLines={1}>
+                • {short}{warning.length > 120 ? '…' : ''}
+              </Text>
+            );
+          })}
+          {result.warnings.length > 2 && (
             <Text size="xs" style={{ color: tc.text.muted }}>
-              ...and {result.warnings.length - 3} more
+              +{result.warnings.length - 2} more
             </Text>
           )}
         </View>
@@ -1008,6 +1192,13 @@ export function DiscordImportDialog({
     importedMembers,
     membersAvailable,
     importMembers,
+    importPins,
+    pinnedMessages,
+    pinsAvailable,
+    pinCount,
+    membersLoading,
+    pinsLoading,
+    progress,
     startAuth,
     refreshGuilds,
     selectGuild,
@@ -1016,6 +1207,7 @@ export function DiscordImportDialog({
     inviteBot,
     refetchStructure,
     toggleMemberImport,
+    togglePinImport,
     reset,
   } = useDiscordCommunityImport();
 
@@ -1114,18 +1306,19 @@ export function DiscordImportDialog({
             membersAvailable={membersAvailable}
             importMembers={importMembers}
             onToggleMemberImport={toggleMemberImport}
+            importPins={importPins}
+            onTogglePinImport={togglePinImport}
+            pinCount={pinCount}
+            pinsAvailable={pinsAvailable}
+            membersLoading={membersLoading}
+            pinsLoading={pinsLoading}
             botStatus={botStatus}
             onInviteBot={inviteBot}
           />
         ) : null;
 
       case 'importing':
-        return (
-          <View style={{ padding: 40, alignItems: 'center', gap: 16 }}>
-            <ActivityIndicator size="large" />
-            <Text>Creating your community...</Text>
-          </View>
-        );
+        return <ImportingScreen progress={progress} />;
 
       case 'complete':
         return result ? <CompleteScreen result={result} onClose={handleComplete} /> : null;

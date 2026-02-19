@@ -40,6 +40,7 @@ export function SearchPanel({ query, onQueryChange, onClose, conversationId, onR
   }, [friends]);
 
   const resolveDisplayName = useCallback((senderDid: string) => {
+    if (!senderDid) return 'Unknown';
     if (senderDid === myDid) return 'You';
     return friendNames[senderDid] || senderDid.slice(0, 16);
   }, [myDid, friendNames]);

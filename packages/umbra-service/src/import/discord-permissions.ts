@@ -64,44 +64,58 @@ export const DISCORD_PERMISSIONS = {
 
 /**
  * Umbra permission bit flags.
- * These should match the Rust implementation in umbra-core.
+ * These MUST match the Rust `Permission` enum in umbra-core/src/community/permissions.rs.
  */
 export const UMBRA_PERMISSIONS = {
-  // Basic permissions
+  // ── General ──────────────────────────────────────────────────────────
   VIEW_CHANNELS: 1n << 0n,
-  SEND_MESSAGES: 1n << 1n,
-  READ_MESSAGE_HISTORY: 1n << 2n,
-  ADD_REACTIONS: 1n << 3n,
-  ATTACH_FILES: 1n << 4n,
-  EMBED_LINKS: 1n << 5n,
-  MENTION_EVERYONE: 1n << 6n,
+  MANAGE_COMMUNITY: 1n << 1n,
+  MANAGE_CHANNELS: 1n << 2n,
+  MANAGE_ROLES: 1n << 3n,
+  CREATE_INVITES: 1n << 4n,
+  MANAGE_INVITES: 1n << 5n,
 
-  // Channel management
-  MANAGE_CHANNELS: 1n << 10n,
-  MANAGE_MESSAGES: 1n << 11n,
-  CREATE_THREADS: 1n << 12n,
-  MANAGE_THREADS: 1n << 13n,
+  // ── Members ──────────────────────────────────────────────────────────
+  KICK_MEMBERS: 1n << 6n,
+  BAN_MEMBERS: 1n << 7n,
+  MODERATE_MEMBERS: 1n << 8n,
+  CHANGE_NICKNAME: 1n << 9n,
+  MANAGE_NICKNAMES: 1n << 10n,
 
-  // Voice permissions
-  VOICE_CONNECT: 1n << 20n,
-  VOICE_SPEAK: 1n << 21n,
-  VOICE_MUTE_OTHERS: 1n << 22n,
-  VOICE_DEAFEN_OTHERS: 1n << 23n,
-  VOICE_MOVE_OTHERS: 1n << 24n,
+  // ── Messages ─────────────────────────────────────────────────────────
+  SEND_MESSAGES: 1n << 11n,
+  EMBED_LINKS: 1n << 12n,
+  ATTACH_FILES: 1n << 13n,
+  ADD_REACTIONS: 1n << 14n,
+  USE_EXTERNAL_EMOJI: 1n << 15n,
+  MENTION_EVERYONE: 1n << 16n,
+  MANAGE_MESSAGES: 1n << 17n,
+  READ_MESSAGE_HISTORY: 1n << 18n,
 
-  // Moderation
-  KICK_MEMBERS: 1n << 30n,
-  BAN_MEMBERS: 1n << 31n,
-  MODERATE_MEMBERS: 1n << 32n,
-  MANAGE_NICKNAMES: 1n << 33n,
+  // ── Threads ──────────────────────────────────────────────────────────
+  CREATE_THREADS: 1n << 19n,
+  SEND_THREAD_MESSAGES: 1n << 20n,
+  MANAGE_THREADS: 1n << 21n,
 
-  // Administration
-  MANAGE_ROLES: 1n << 40n,
-  MANAGE_COMMUNITY: 1n << 41n,
-  VIEW_AUDIT_LOG: 1n << 42n,
-  MANAGE_INVITES: 1n << 43n,
+  // ── Voice ────────────────────────────────────────────────────────────
+  VOICE_CONNECT: 1n << 22n,
+  VOICE_SPEAK: 1n << 23n,
+  VOICE_STREAM: 1n << 24n,
+  VOICE_MUTE_OTHERS: 1n << 25n,
+  VOICE_DEAFEN_OTHERS: 1n << 26n,
+  VOICE_MOVE_OTHERS: 1n << 27n,
 
-  // Super admin
+  // ── Moderation ───────────────────────────────────────────────────────
+  VIEW_AUDIT_LOG: 1n << 28n,
+  MANAGE_WEBHOOKS: 1n << 29n,
+  MANAGE_EMOJI: 1n << 30n,
+  MANAGE_BRANDING: 1n << 31n,
+
+  // ── Files ────────────────────────────────────────────────────────────
+  UPLOAD_FILES: 1n << 32n,
+  MANAGE_FILES: 1n << 33n,
+
+  // ── Administrator ────────────────────────────────────────────────────
   ADMINISTRATOR: 1n << 63n,
 } as const;
 
@@ -111,7 +125,7 @@ export const UMBRA_PERMISSIONS = {
  */
 const PERMISSION_MAP: Record<keyof typeof DISCORD_PERMISSIONS, bigint | null> = {
   // Direct mappings
-  CREATE_INSTANT_INVITE: UMBRA_PERMISSIONS.MANAGE_INVITES,
+  CREATE_INSTANT_INVITE: UMBRA_PERMISSIONS.CREATE_INVITES,
   KICK_MEMBERS: UMBRA_PERMISSIONS.KICK_MEMBERS,
   BAN_MEMBERS: UMBRA_PERMISSIONS.BAN_MEMBERS,
   ADMINISTRATOR: UMBRA_PERMISSIONS.ADMINISTRATOR,
@@ -120,7 +134,7 @@ const PERMISSION_MAP: Record<keyof typeof DISCORD_PERMISSIONS, bigint | null> = 
   ADD_REACTIONS: UMBRA_PERMISSIONS.ADD_REACTIONS,
   VIEW_AUDIT_LOG: UMBRA_PERMISSIONS.VIEW_AUDIT_LOG,
   PRIORITY_SPEAKER: null, // No direct equivalent
-  STREAM: UMBRA_PERMISSIONS.VOICE_SPEAK, // Map to speak
+  STREAM: UMBRA_PERMISSIONS.VOICE_STREAM,
   VIEW_CHANNEL: UMBRA_PERMISSIONS.VIEW_CHANNELS,
   SEND_MESSAGES: UMBRA_PERMISSIONS.SEND_MESSAGES,
   SEND_TTS_MESSAGES: UMBRA_PERMISSIONS.SEND_MESSAGES, // Map to regular send
@@ -129,7 +143,7 @@ const PERMISSION_MAP: Record<keyof typeof DISCORD_PERMISSIONS, bigint | null> = 
   ATTACH_FILES: UMBRA_PERMISSIONS.ATTACH_FILES,
   READ_MESSAGE_HISTORY: UMBRA_PERMISSIONS.READ_MESSAGE_HISTORY,
   MENTION_EVERYONE: UMBRA_PERMISSIONS.MENTION_EVERYONE,
-  USE_EXTERNAL_EMOJIS: null, // No direct equivalent
+  USE_EXTERNAL_EMOJIS: UMBRA_PERMISSIONS.USE_EXTERNAL_EMOJI,
   VIEW_GUILD_INSIGHTS: null, // No direct equivalent
   CONNECT: UMBRA_PERMISSIONS.VOICE_CONNECT,
   SPEAK: UMBRA_PERMISSIONS.VOICE_SPEAK,
@@ -137,24 +151,24 @@ const PERMISSION_MAP: Record<keyof typeof DISCORD_PERMISSIONS, bigint | null> = 
   DEAFEN_MEMBERS: UMBRA_PERMISSIONS.VOICE_DEAFEN_OTHERS,
   MOVE_MEMBERS: UMBRA_PERMISSIONS.VOICE_MOVE_OTHERS,
   USE_VAD: UMBRA_PERMISSIONS.VOICE_SPEAK, // Voice activity = speak
-  CHANGE_NICKNAME: null, // Users can always change their own nickname
+  CHANGE_NICKNAME: UMBRA_PERMISSIONS.CHANGE_NICKNAME,
   MANAGE_NICKNAMES: UMBRA_PERMISSIONS.MANAGE_NICKNAMES,
   MANAGE_ROLES: UMBRA_PERMISSIONS.MANAGE_ROLES,
-  MANAGE_WEBHOOKS: null, // No webhook support yet
-  MANAGE_GUILD_EXPRESSIONS: null, // No emoji management yet
+  MANAGE_WEBHOOKS: UMBRA_PERMISSIONS.MANAGE_WEBHOOKS,
+  MANAGE_GUILD_EXPRESSIONS: UMBRA_PERMISSIONS.MANAGE_EMOJI,
   USE_APPLICATION_COMMANDS: UMBRA_PERMISSIONS.SEND_MESSAGES, // Map to send
   REQUEST_TO_SPEAK: UMBRA_PERMISSIONS.VOICE_SPEAK,
   MANAGE_EVENTS: null, // No events yet
   MANAGE_THREADS: UMBRA_PERMISSIONS.MANAGE_THREADS,
   CREATE_PUBLIC_THREADS: UMBRA_PERMISSIONS.CREATE_THREADS,
   CREATE_PRIVATE_THREADS: UMBRA_PERMISSIONS.CREATE_THREADS,
-  USE_EXTERNAL_STICKERS: null, // No sticker support
-  SEND_MESSAGES_IN_THREADS: UMBRA_PERMISSIONS.SEND_MESSAGES,
+  USE_EXTERNAL_STICKERS: UMBRA_PERMISSIONS.USE_EXTERNAL_EMOJI,
+  SEND_MESSAGES_IN_THREADS: UMBRA_PERMISSIONS.SEND_THREAD_MESSAGES,
   USE_EMBEDDED_ACTIVITIES: null, // No activities
   MODERATE_MEMBERS: UMBRA_PERMISSIONS.MODERATE_MEMBERS,
   VIEW_CREATOR_MONETIZATION_ANALYTICS: null, // No monetization
   USE_SOUNDBOARD: null, // No soundboard
-  CREATE_GUILD_EXPRESSIONS: null, // No emoji creation
+  CREATE_GUILD_EXPRESSIONS: UMBRA_PERMISSIONS.MANAGE_EMOJI,
   CREATE_EVENTS: null, // No events
   USE_EXTERNAL_SOUNDS: null, // No external sounds
   SEND_VOICE_MESSAGES: UMBRA_PERMISSIONS.SEND_MESSAGES,
@@ -243,6 +257,7 @@ export function hasPermission(permissions: bigint, permission: bigint): boolean 
 
 /**
  * Get the default member permissions (what @everyone gets).
+ * Matches Rust `Permissions::default_everyone()`.
  */
 export function getDefaultMemberPermissions(): bigint {
   return (
@@ -250,41 +265,54 @@ export function getDefaultMemberPermissions(): bigint {
     UMBRA_PERMISSIONS.SEND_MESSAGES |
     UMBRA_PERMISSIONS.READ_MESSAGE_HISTORY |
     UMBRA_PERMISSIONS.ADD_REACTIONS |
-    UMBRA_PERMISSIONS.ATTACH_FILES |
     UMBRA_PERMISSIONS.EMBED_LINKS |
+    UMBRA_PERMISSIONS.ATTACH_FILES |
+    UMBRA_PERMISSIONS.USE_EXTERNAL_EMOJI |
+    UMBRA_PERMISSIONS.CHANGE_NICKNAME |
+    UMBRA_PERMISSIONS.CREATE_THREADS |
+    UMBRA_PERMISSIONS.SEND_THREAD_MESSAGES |
     UMBRA_PERMISSIONS.VOICE_CONNECT |
-    UMBRA_PERMISSIONS.VOICE_SPEAK
+    UMBRA_PERMISSIONS.VOICE_SPEAK |
+    UMBRA_PERMISSIONS.VOICE_STREAM |
+    UMBRA_PERMISSIONS.UPLOAD_FILES
   );
 }
 
 /**
  * Get moderator permissions preset.
+ * Matches Rust `Permissions::moderator()`.
  */
 export function getModeratorPermissions(): bigint {
   return (
     getDefaultMemberPermissions() |
-    UMBRA_PERMISSIONS.MANAGE_MESSAGES |
-    UMBRA_PERMISSIONS.MANAGE_THREADS |
     UMBRA_PERMISSIONS.KICK_MEMBERS |
     UMBRA_PERMISSIONS.MODERATE_MEMBERS |
+    UMBRA_PERMISSIONS.MANAGE_MESSAGES |
+    UMBRA_PERMISSIONS.MANAGE_THREADS |
+    UMBRA_PERMISSIONS.MENTION_EVERYONE |
     UMBRA_PERMISSIONS.MANAGE_NICKNAMES |
-    UMBRA_PERMISSIONS.VOICE_MUTE_OTHERS |
-    UMBRA_PERMISSIONS.VOICE_MOVE_OTHERS |
     UMBRA_PERMISSIONS.VIEW_AUDIT_LOG
   );
 }
 
 /**
  * Get admin permissions preset (everything except Administrator flag).
+ * Matches Rust `Permissions::admin()`.
  */
 export function getAdminPermissions(): bigint {
-  let bits = 0n;
-  for (const bit of Object.values(UMBRA_PERMISSIONS)) {
-    if (bit !== UMBRA_PERMISSIONS.ADMINISTRATOR) {
-      bits |= bit;
-    }
-  }
-  return bits;
+  return (
+    getModeratorPermissions() |
+    UMBRA_PERMISSIONS.MANAGE_COMMUNITY |
+    UMBRA_PERMISSIONS.MANAGE_CHANNELS |
+    UMBRA_PERMISSIONS.MANAGE_ROLES |
+    UMBRA_PERMISSIONS.CREATE_INVITES |
+    UMBRA_PERMISSIONS.MANAGE_INVITES |
+    UMBRA_PERMISSIONS.BAN_MEMBERS |
+    UMBRA_PERMISSIONS.MANAGE_WEBHOOKS |
+    UMBRA_PERMISSIONS.MANAGE_EMOJI |
+    UMBRA_PERMISSIONS.MANAGE_BRANDING |
+    UMBRA_PERMISSIONS.MANAGE_FILES
+  );
 }
 
 /**

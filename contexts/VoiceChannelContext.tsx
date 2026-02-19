@@ -19,6 +19,7 @@ import React, {
 import { GroupCallManager } from '@/services/GroupCallManager';
 import { useUmbra } from '@/contexts/UmbraContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { useSound } from '@/contexts/SoundContext';
 import type { CommunityEvent } from '@umbra/service';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -64,6 +65,7 @@ const VoiceChannelContext = createContext<VoiceChannelContextValue | null>(null)
 export function VoiceChannelProvider({ children }: { children: React.ReactNode }) {
   const { service } = useUmbra();
   const { identity } = useAuth();
+  const { playSound } = useSound();
   const myDid = identity?.did ?? '';
 
   // State
@@ -206,6 +208,10 @@ export function VoiceChannelProvider({ children }: { children: React.ReactNode }
           next.set(event.channelId, channelSet);
           return next;
         });
+        // Play sound when someone else joins (not self — self plays in joinVoiceChannel)
+        if (event.memberDid !== myDid) {
+          playSound('user_join_voice');
+        }
       } else if (event.type === 'voiceChannelLeft') {
         setVoiceParticipants((prev) => {
           const next = new Map(prev);
@@ -218,12 +224,16 @@ export function VoiceChannelProvider({ children }: { children: React.ReactNode }
           }
           return next;
         });
+        // Play sound when someone else leaves (not self — self plays in leaveVoiceChannel)
+        if (event.memberDid !== myDid) {
+          playSound('user_leave_voice');
+        }
       }
     });
 
     unsubCommunityRef.current = unsub;
     return unsub;
-  }, [service]);
+  }, [service, myDid, playSound]);
 
   // ── ICE candidate forwarding callback ──────────────────────────────────────
 
@@ -373,7 +383,9 @@ export function VoiceChannelProvider({ children }: { children: React.ReactNode }
       channelId,
       memberDid: myDid,
     });
-  }, [service, myDid, activeChannelId, startSpeakingDetection]);
+
+    playSound('call_join');
+  }, [service, myDid, activeChannelId, startSpeakingDetection, playSound]);
 
   // ── Leave voice channel (internal, no dependency on leaveVoiceChannel) ─────
 
@@ -447,7 +459,8 @@ export function VoiceChannelProvider({ children }: { children: React.ReactNode }
 
   const leaveVoiceChannel = useCallback(() => {
     leaveVoiceChannelInternal();
-  }, [leaveVoiceChannelInternal]);
+    playSound('call_leave');
+  }, [leaveVoiceChannelInternal, playSound]);
 
   // ── Setup manager callbacks when roomId becomes available ──────────────────
 

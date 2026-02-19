@@ -18,11 +18,13 @@
 import { useEffect, useRef } from 'react';
 import { useUmbra } from '@/contexts/UmbraContext';
 import { useToast } from '@coexist/wisp-react-native';
+import { useSound } from '@/contexts/SoundContext';
 import type { FriendEvent } from '@umbra/service';
 
 export function useFriendNotifications(): void {
   const { service, isReady } = useUmbra();
   const { toast } = useToast();
+  const { playSound } = useSound();
   const mountedAtRef = useRef<number>(0);
 
   useEffect(() => {
@@ -44,6 +46,7 @@ export function useFriendNotifications(): void {
       switch (event.type) {
         case 'requestReceived': {
           const senderName = event.request.fromDisplayName || event.request.fromDid.slice(0, 16) + '...';
+          playSound('friend_request');
           toast({
             title: 'Friend Request',
             description: `${senderName} wants to be your friend`,
@@ -55,6 +58,7 @@ export function useFriendNotifications(): void {
 
         case 'requestAccepted': {
           const friendDid = event.did.slice(0, 16) + '...';
+          playSound('friend_accept');
           toast({
             title: 'Request Accepted',
             description: `You are now friends with ${friendDid}`,
@@ -65,6 +69,7 @@ export function useFriendNotifications(): void {
         }
 
         case 'requestRejected': {
+          playSound('notification');
           toast({
             title: 'Request Declined',
             description: 'Your friend request was declined',
@@ -93,5 +98,5 @@ export function useFriendNotifications(): void {
     });
 
     return unsubscribe;
-  }, [service, isReady, toast]);
+  }, [service, isReady, toast, playSound]);
 }

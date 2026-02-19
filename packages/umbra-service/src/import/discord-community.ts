@@ -145,6 +145,8 @@ export interface MappedCommunityStructure {
   name: string;
   /** Community description. */
   description: string;
+  /** Source Discord guild ID (for later re-sync / fetch-users). */
+  sourceGuildId?: string;
   /** Categories to create. */
   categories: MappedCategory[];
   /** Channels to create (sorted by position within categories). */
@@ -420,6 +422,7 @@ export function mapDiscordToUmbra(structure: DiscordImportedStructure): MappedCo
   return {
     name: structure.guild.name,
     description: `Imported from Discord server "${structure.guild.name}"`,
+    sourceGuildId: structure.guild.id,
     categories,
     channels,
     roles,

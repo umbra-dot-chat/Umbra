@@ -82,26 +82,73 @@ async function loadSqlJs(): Promise<SqlJsStatic> {
 }
 
 // ─────────────────────────────────────────────────────────────────────────
-// Persistence — async fire-and-forget save after each write
+// Persistence — debounced save after writes
 // ─────────────────────────────────────────────────────────────────────────
 
+/** Timer ID for debounced saves. */
+let saveTimer: ReturnType<typeof setTimeout> | null = null;
+
+/** Whether a save is currently in-flight. */
+let saveInFlight = false;
+
+/** Whether another save was requested while one was in-flight. */
+let savePending = false;
+
 /**
- * Schedule an async save of the database to IndexedDB.
+ * Schedule a debounced save of the database to IndexedDB.
  *
- * This is fire-and-forget: it exports the database to a Uint8Array and
- * stores it in IndexedDB without blocking the caller.
+ * During bulk operations (e.g. importing 10k seats), hundreds of writes
+ * happen in quick succession. Instead of exporting + saving on every
+ * single write (which allocates a full-size Uint8Array each time and
+ * causes OOM), we debounce: wait 500ms after the last write, then save
+ * once. For isolated writes the delay is imperceptible.
  */
 function scheduleSave(): void {
   if (!persistenceEnabled || !currentDid || !db) return;
 
-  // Capture values synchronously so they're consistent
-  const did = currentDid;
-  const data = db.export();
+  // Clear any existing timer — restart the debounce window
+  if (saveTimer !== null) {
+    clearTimeout(saveTimer);
+  }
 
-  // Fire-and-forget — no await, no blocking
-  saveDatabaseExport(did, data).catch((err) => {
-    console.warn('[sql-bridge] Failed to persist database:', err);
-  });
+  saveTimer = setTimeout(() => {
+    saveTimer = null;
+    doSave();
+  }, 500);
+}
+
+/** Actually export and persist the database. */
+function doSave(): void {
+  if (!persistenceEnabled || !currentDid || !db) return;
+  if (saveInFlight) {
+    // A save is already running — flag that we need another one after it finishes
+    savePending = true;
+    return;
+  }
+
+  saveInFlight = true;
+  savePending = false;
+
+  try {
+    const did = currentDid;
+    const data = db.export();
+
+    saveDatabaseExport(did, data)
+      .catch((err) => {
+        console.warn('[sql-bridge] Failed to persist database:', err);
+      })
+      .finally(() => {
+        saveInFlight = false;
+        // If more writes came in while we were saving, save again
+        if (savePending) {
+          savePending = false;
+          doSave();
+        }
+      });
+  } catch (err) {
+    saveInFlight = false;
+    console.warn('[sql-bridge] Failed to export database:', err);
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────

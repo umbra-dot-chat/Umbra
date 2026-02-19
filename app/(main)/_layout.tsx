@@ -36,6 +36,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useUploadProgress } from '@/hooks/useUploadProgress';
 import { CommunityCreateOptionsDialog } from '@/components/community/CommunityCreateOptionsDialog';
 import { DiscordImportDialog } from '@/components/community/DiscordImportDialog';
+import { useSound } from '@/contexts/SoundContext';
 
 // TODO: Remove mock community once real communities exist
 const MOCK_COMMUNITY: Community = {
@@ -72,6 +73,7 @@ function MainLayoutInner() {
   const router = useRouter();
   const pathname = usePathname();
   const { selectedMember, popoverAnchor, closeProfile } = useProfilePopoverContext();
+  const { playSound } = useSound();
 
   // Service + data hooks
   const { service, isReady } = useUmbra();
@@ -265,12 +267,15 @@ function MainLayoutInner() {
     try {
       const result = await createCommunity(data.name, data.description || undefined);
       if (result) {
+        playSound('success');
         setCreateCommunityOpen(false);
         router.push(`/community/${result.communityId}`);
       } else {
+        playSound('error');
         setCommunityError('Failed to create community. Please try again.');
       }
     } catch (err) {
+      playSound('error');
       setCommunityError(err instanceof Error ? err.message : 'An unexpected error occurred.');
     } finally {
       setCommunitySubmitting(false);
@@ -335,15 +340,17 @@ function MainLayoutInner() {
 
   // Navigate to community page
   const handleCommunityPress = useCallback((communityId: string) => {
+    playSound('tab_switch');
     router.push(`/community/${communityId}`);
-  }, [router]);
+  }, [router, playSound]);
 
   // Navigate to home (conversations)
   const handleHomePress = useCallback(() => {
     if (pathname !== '/' && pathname !== '/friends') {
+      playSound('tab_switch');
       router.push('/');
     }
-  }, [pathname, router]);
+  }, [pathname, router, playSound]);
 
   // Home is active when NOT on a community page and NOT on files page
   const isHomeActive = !pathname.startsWith('/community/') && pathname !== '/files';
@@ -353,8 +360,9 @@ function MainLayoutInner() {
 
   // Navigate to files page
   const handleFilesPress = useCallback(() => {
+    playSound('tab_switch');
     router.push('/files');
-  }, [router]);
+  }, [router, playSound]);
 
   // Determine active community from pathname
   const activeCommunityId = useMemo(() => {
@@ -399,8 +407,8 @@ function MainLayoutInner() {
           communities={communities}
           activeCommunityId={activeCommunityId}
           onCommunityPress={handleCommunityPress}
-          onCreateCommunity={() => setCreateCommunityOptionsOpen(true)}
-          onOpenSettings={() => openSettings()}
+          onCreateCommunity={() => { playSound('dialog_open'); setCreateCommunityOptionsOpen(true); }}
+          onOpenSettings={() => { playSound('dialog_open'); openSettings(); }}
           loading={coreLoading || communitiesLoading}
         />
         {activeCommunityId ? (
@@ -418,10 +426,10 @@ function MainLayoutInner() {
               }
             }}
             onFriendsPress={() => router.push('/friends')}
-            onNewDm={() => setNewDmOpen(true)}
-            onCreateGroup={() => setCreateGroupOpen(true)}
-            onGuidePress={() => setGuideOpen(true)}
-            onMarketplacePress={() => setMarketplaceOpen(true)}
+            onNewDm={() => { playSound('dialog_open'); setNewDmOpen(true); }}
+            onCreateGroup={() => { playSound('dialog_open'); setCreateGroupOpen(true); }}
+            onGuidePress={() => { playSound('dialog_open'); setGuideOpen(true); }}
+            onMarketplacePress={() => { playSound('dialog_open'); setMarketplaceOpen(true); }}
             isFriendsActive={isFriendsActive}
             pendingInvites={pendingInvites}
             onAcceptInvite={handleAcceptInvite}
@@ -443,34 +451,35 @@ function MainLayoutInner() {
 
       <SettingsDialog
         open={settingsOpen}
-        onClose={() => closeSettings()}
+        onClose={() => { playSound('dialog_close'); closeSettings(); }}
         initialSection={settingsInitialSection}
         onOpenMarketplace={() => {
           closeSettings();
+          playSound('dialog_open');
           setMarketplaceOpen(true);
         }}
       />
 
       <GuideDialog
         open={guideOpen}
-        onClose={() => setGuideOpen(false)}
+        onClose={() => { playSound('dialog_close'); setGuideOpen(false); }}
       />
 
       <CreateGroupDialog
         open={createGroupOpen}
-        onClose={() => setCreateGroupOpen(false)}
+        onClose={() => { playSound('dialog_close'); setCreateGroupOpen(false); }}
         onCreated={handleGroupCreated}
       />
 
       <NewDmDialog
         open={newDmOpen}
-        onClose={() => setNewDmOpen(false)}
+        onClose={() => { playSound('dialog_close'); setNewDmOpen(false); }}
         onSelectFriend={handleDmFriendSelected}
       />
 
       <CommunityCreateOptionsDialog
         open={createCommunityOptionsOpen}
-        onClose={() => setCreateCommunityOptionsOpen(false)}
+        onClose={() => { playSound('dialog_close'); setCreateCommunityOptionsOpen(false); }}
         onSelectScratch={handleSelectScratch}
         onSelectDiscord={handleSelectDiscord}
       />
@@ -485,7 +494,7 @@ function MainLayoutInner() {
 
       <DiscordImportDialog
         open={discordImportOpen}
-        onClose={() => setDiscordImportOpen(false)}
+        onClose={() => { playSound('dialog_close'); setDiscordImportOpen(false); }}
         onImportComplete={handleDiscordImportComplete}
         onCreateCommunity={handleDiscordCreateCommunity}
       />
@@ -495,10 +504,12 @@ function MainLayoutInner() {
         onOpenChange={setCmdOpen}
         onOpenSettings={() => {
           setCmdOpen(false);
+          playSound('dialog_open');
           openSettings();
         }}
         onOpenMarketplace={() => {
           setCmdOpen(false);
+          playSound('dialog_open');
           setMarketplaceOpen(true);
         }}
         onSearchMessages={() => {
@@ -513,7 +524,7 @@ function MainLayoutInner() {
 
       <PluginMarketplace
         open={marketplaceOpen}
-        onClose={() => setMarketplaceOpen(false)}
+        onClose={() => { playSound('dialog_close'); setMarketplaceOpen(false); }}
       />
 
       {/* PiP widget: show when active call and user is on a different conversation */}

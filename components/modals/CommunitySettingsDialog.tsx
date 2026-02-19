@@ -321,7 +321,7 @@ export function CommunitySettingsDialog({
     // Listen for OAuth callback
     fetchAuthRef.current = false;
     const handleMessage = async (event: MessageEvent) => {
-      if (event.data?.type !== 'discord-oauth-callback' || !event.data.success || !event.data.token) return;
+      if (event.data?.type !== 'UMBRA_COMMUNITY_IMPORT' || !event.data.success || !event.data.token) return;
       fetchAuthRef.current = true;
       window.removeEventListener('message', handleMessage);
 
@@ -340,20 +340,33 @@ export function CommunitySettingsDialog({
           return;
         }
 
-        // Step 2: Find a guild where the bot is present
+        // Step 2: Find the guild that matches this community.
+        // First try to match by community name (imported communities keep the guild name).
+        // Fall back to first guild where the bot is present.
         let targetGuild: { id: string; name: string } | null = null;
+        let fallbackGuild: { id: string; name: string } | null = null;
+        const communityName = community?.name?.toLowerCase().trim();
+
         for (const guild of guilds) {
           try {
             const botRes = await fetch(`${RELAY}/community/import/discord/bot-status?guild_id=${encodeURIComponent(guild.id)}`);
             if (botRes.ok) {
               const botData = await botRes.json();
               if (botData.bot_enabled && botData.in_guild) {
-                targetGuild = guild;
-                break;
+                // Check if this guild's name matches the community name
+                if (communityName && guild.name.toLowerCase().trim() === communityName) {
+                  targetGuild = guild;
+                  break; // Exact match — use this one
+                }
+                // Otherwise remember it as a fallback
+                if (!fallbackGuild) fallbackGuild = guild;
               }
             }
           } catch { /* skip */ }
         }
+
+        // Use name-matched guild, otherwise fall back to first guild with bot
+        if (!targetGuild) targetGuild = fallbackGuild;
 
         if (!targetGuild) {
           console.warn('[fetch-users] No guild found with bot. Guilds:', guilds.map(g => g.name));
@@ -380,7 +393,7 @@ export function CommunitySettingsDialog({
         const humanMembers = membersData.members.filter((m: any) => !m.bot);
         console.log(`[fetch-users] Got ${humanMembers.length} human members`);
 
-        // Step 4: Create seats
+        // Step 4: Create seats in chunks to avoid blocking the UI
         const seatData = humanMembers.map((m: any) => ({
           platform: 'discord',
           platform_user_id: m.userId,
@@ -392,8 +405,19 @@ export function CommunitySettingsDialog({
           role_ids: [], // No role mapping for quick fetch
         }));
 
-        const created = await service.createSeatsBatch(communityId, seatData);
-        console.log(`[fetch-users] Created ${created} seats`);
+        const CHUNK_SIZE = 100;
+        let totalCreated = 0;
+        for (let i = 0; i < seatData.length; i += CHUNK_SIZE) {
+          const chunk = seatData.slice(i, i + CHUNK_SIZE);
+          const created = await service.createSeatsBatch(communityId, chunk);
+          totalCreated += created;
+          console.log(`[fetch-users] Chunk ${Math.floor(i / CHUNK_SIZE) + 1}: created ${created} seats (${totalCreated} / ${seatData.length})`);
+          // Yield to event loop
+          if (i + CHUNK_SIZE < seatData.length) {
+            await new Promise((r) => setTimeout(r, 0));
+          }
+        }
+        console.log(`[fetch-users] Created ${totalCreated} seats total`);
 
         // Reload seats
         setSeatsLoaded(false);

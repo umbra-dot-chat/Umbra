@@ -10,6 +10,7 @@ import { PluginProvider } from '@/contexts/PluginContext';
 import { HelpProvider } from '@/contexts/HelpContext';
 import { FontProvider } from '@/contexts/FontContext';
 import { ThemeProvider, useAppTheme } from '@/contexts/ThemeContext';
+import { SoundProvider } from '@/contexts/SoundContext';
 import { MessagingProvider } from '@/contexts/MessagingContext';
 import { HelpPopoverHost } from '@/components/ui/HelpPopoverHost';
 import { PinLockScreen } from '@/components/auth/PinLockScreen';
@@ -164,12 +165,13 @@ function AuthGate() {
 
 export default function RootLayout() {
   return (
-    <WispProvider mode="light">
+    <WispProvider mode="dark">
       <ToastProvider maxToasts={3}>
         <AuthProvider>
           <UmbraProvider>
             <FontProvider>
               <ThemeProvider>
+                <SoundProvider>
                 <MessagingProvider>
                 <PluginProvider>
                   <HelpProvider>
@@ -179,6 +181,7 @@ export default function RootLayout() {
                   </HelpProvider>
                 </PluginProvider>
                 </MessagingProvider>
+                </SoundProvider>
               </ThemeProvider>
             </FontProvider>
           </UmbraProvider>

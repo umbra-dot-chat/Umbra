@@ -25,7 +25,7 @@ import type { GestureResponderEvent } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import {
   useTheme, Text, EmojiPicker,
-  MemberList, MessageInput, MessageList, E2EEKeyExchangeUI,
+  MemberList, MessageInput, MessageList, E2EEKeyExchangeUI, PinnedMessages,
   type MemberListSection, type MemberListMember, type MessageListEntry,
 } from '@coexist/wisp-react-native';
 
@@ -294,6 +294,8 @@ export default function CommunityPage() {
     messages,
     isLoading: msgsLoading,
     sendMessage,
+    pinnedMessages,
+    unpinMessage,
   } = useCommunityMessages(isMock ? null : activeChannelId);
 
   // Right panel
@@ -458,6 +460,24 @@ export default function CommunityPage() {
     return map;
   }, [effectiveMembers, myDid, identity]);
 
+  // Build pinned messages for the right panel
+  const pinnedForPanel = useMemo(() =>
+    (pinnedMessages || []).map((m) => ({
+      id: m.id,
+      sender: m.senderDid
+        ? (memberNameMap.get(m.senderDid) || (m.senderDid === myDid ? 'You' : m.senderDid.slice(0, 16)))
+        : 'Unknown',
+      content: m.content ?? '',
+      timestamp: m.createdAt
+        ? new Date(m.createdAt < 1000000000000 ? m.createdAt * 1000 : m.createdAt)
+            .toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+        : '',
+      pinnedBy: m.pinnedBy
+        ? (memberNameMap.get(m.pinnedBy) || m.pinnedBy.slice(0, 16))
+        : undefined,
+    })),
+  [pinnedMessages, memberNameMap, myDid]);
+
   const messageEntries = useMemo<MessageListEntry[]>(() => {
     const sorted = [...messages].reverse();
     const entries: MessageListEntry[] = [];
@@ -472,7 +492,9 @@ export default function CommunityPage() {
         lastDate = dateStr;
       }
 
-      const senderName = memberNameMap.get(msg.senderDid) ?? msg.senderDid.slice(0, 16) + '...';
+      const senderName = msg.senderDid
+        ? (memberNameMap.get(msg.senderDid) ?? msg.senderDid.slice(0, 16) + '...')
+        : 'Unknown';
 
       entries.push({
         type: 'message',
@@ -730,7 +752,7 @@ export default function CommunityPage() {
         )}
       </View>
 
-      {/* Right column: Members panel (animated) */}
+      {/* Right column: Members / Pins panel (animated) */}
       <Animated.View style={{ width: panelWidth, overflow: 'hidden' }}>
         <View style={{ width: PANEL_WIDTH, height: '100%', borderLeftWidth: 1, borderLeftColor: theme.colors.border.subtle }}>
           {visiblePanel === 'members' && (
@@ -739,6 +761,14 @@ export default function CommunityPage() {
               title={`Members — ${effectiveMembers.length}`}
               onClose={() => togglePanel('members')}
               onMemberLongPress={handleMemberLongPress}
+            />
+          )}
+          {visiblePanel === 'pins' && (
+            <PinnedMessages
+              messages={pinnedForPanel}
+              onClose={() => togglePanel('pins')}
+              onMessageClick={() => {}}
+              onUnpin={(msg) => unpinMessage(msg.id)}
             />
           )}
         </View>

@@ -24,6 +24,7 @@ import { HelpText, HelpHighlight, HelpListItem } from '@/components/ui/HelpConte
 import { FriendSuggestionCard } from '@/components/discovery/FriendSuggestionCard';
 import { searchByUsername, searchUsernames, lookupUsername } from '@umbra/service';
 import type { Friend, FriendRequest, DiscoverySearchResult, UsernameSearchResult } from '@umbra/service';
+import { useSound } from '@/contexts/SoundContext';
 
 // ---------------------------------------------------------------------------
 // Search Platform Selector
@@ -90,6 +91,7 @@ function formatRelativeTime(timestamp: number): string {
 export default function FriendsPage() {
   const { theme } = useTheme();
   const router = useRouter();
+  const { playSound } = useSound();
   const {
     friends,
     incomingRequests,
@@ -102,6 +104,10 @@ export default function FriendsPage() {
   } = useFriends();
 
   const [activeTab, setActiveTab] = useState('all');
+  const handleTabChange = useCallback((tab: string) => {
+    setActiveTab(tab);
+    playSound('tab_switch');
+  }, [playSound]);
   const [addFriendValue, setAddFriendValue] = useState('');
   const [addFriendFeedback, setAddFriendFeedback] = useState<{
     state: 'idle' | 'loading' | 'success' | 'error';
@@ -230,6 +236,7 @@ export default function FriendsPage() {
       // Remove from results to indicate success
       setPlatformResults((prev) => prev.filter((r) => r.did !== did));
       setUsernameResults((prev) => prev.filter((r) => r.did !== did));
+      playSound('friend_request');
       setAddFriendFeedback({
         state: 'success',
         message: 'Friend request sent!',
@@ -237,12 +244,13 @@ export default function FriendsPage() {
       setTimeout(() => setAddFriendFeedback({ state: 'idle' }), 3000);
     } catch (err) {
       const msg = err instanceof Error ? err.message : 'Failed to send request';
+      playSound('error');
       setAddFriendFeedback({ state: 'error', message: msg });
       setTimeout(() => setAddFriendFeedback({ state: 'idle' }), 3000);
     } finally {
       setAddingDid(null);
     }
-  }, [sendRequest]);
+  }, [sendRequest, playSound]);
 
   // Group friends by status
   const onlineFriends = friends.filter((f) => f.online);
@@ -254,6 +262,7 @@ export default function FriendsPage() {
 
   const handleAcceptRequest = async (id: string) => {
     await acceptRequest(id);
+    playSound('friend_accept');
   };
 
   const handleDeclineRequest = async (id: string) => {
@@ -387,7 +396,7 @@ export default function FriendsPage() {
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.background.canvas }}>
-      <Tabs value={activeTab} onChange={setActiveTab}>
+      <Tabs value={activeTab} onChange={handleTabChange}>
         {/* Header bar with title + tabs */}
         <View
           style={{

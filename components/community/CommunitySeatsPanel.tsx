@@ -3,16 +3,19 @@
  * @description Ghost member seats panel for the CommunitySettingsDialog.
  *
  * Displays imported member seats from platforms like Discord, showing
- * claimed vs unclaimed status. Admins can delete seats.
+ * claimed vs unclaimed status with rich detail (avatars, roles, timestamps).
+ * Paginated at 50 per page with search.
  */
 
 import React, { useState, useCallback, useEffect, useMemo } from 'react';
-import { View, ScrollView, Pressable, ActivityIndicator } from 'react-native';
-import { Input, Button, Text, Tag, useTheme } from '@coexist/wisp-react-native';
+import { View, ScrollView, Pressable, ActivityIndicator, Image } from 'react-native';
+import { Input, Text, useTheme } from '@coexist/wisp-react-native';
 import { defaultSpacing, defaultRadii } from '@coexist/wisp-core/theme/create-theme';
 import Svg, { Path, Circle, Line, Polyline } from 'react-native-svg';
 
 import type { CommunitySeat, CommunityRole } from '@umbra/service';
+
+const PAGE_SIZE = 50;
 
 // ---------------------------------------------------------------------------
 // Icons
@@ -39,6 +42,22 @@ function TrashIcon({ size, color }: { size: number; color: string }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
       <Path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+    </Svg>
+  );
+}
+
+function ChevronLeftIcon({ size, color }: { size: number; color: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M15 18l-6-6 6-6" />
+    </Svg>
+  );
+}
+
+function ChevronRightIcon({ size, color }: { size: number; color: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M9 18l6-6-6-6" />
     </Svg>
   );
 }
@@ -75,6 +94,20 @@ function PlatformBadge({ platform, size = 14 }: { platform: string; size?: numbe
 }
 
 // ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+function formatTimestamp(ts: number): string {
+  // Handle both seconds and milliseconds timestamps
+  const ms = ts < 1000000000000 ? ts * 1000 : ts;
+  return new Date(ms).toLocaleDateString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
@@ -102,7 +135,7 @@ export interface CommunitySeatsPanelProps {
 }
 
 // ---------------------------------------------------------------------------
-// Component
+// Icons (action bar)
 // ---------------------------------------------------------------------------
 
 function RefreshIcon({ size, color }: { size: number; color: string }) {
@@ -124,6 +157,10 @@ function DownloadIcon({ size, color }: { size: number; color: string }) {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Main Component
+// ---------------------------------------------------------------------------
+
 export function CommunitySeatsPanel({
   communityId,
   seats,
@@ -140,6 +177,7 @@ export function CommunitySeatsPanel({
   const tc = theme.colors;
 
   const [searchQuery, setSearchQuery] = useState('');
+  const [currentPage, setCurrentPage] = useState(0);
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   // Build role lookup map
@@ -151,21 +189,52 @@ export function CommunitySeatsPanel({
     return map;
   }, [roles]);
 
-  // Filter seats by search query
+  // Filter seats by search query (username, nickname, platform, or role name)
   const filteredSeats = useMemo(() => {
     if (!searchQuery.trim()) return seats;
     const q = searchQuery.toLowerCase();
-    return seats.filter(
-      (s) =>
-        s.platformUsername.toLowerCase().includes(q) ||
-        (s.nickname && s.nickname.toLowerCase().includes(q)) ||
-        s.platform.toLowerCase().includes(q)
-    );
-  }, [seats, searchQuery]);
+    return seats.filter((s) => {
+      if (s.platformUsername.toLowerCase().includes(q)) return true;
+      if (s.nickname && s.nickname.toLowerCase().includes(q)) return true;
+      if (s.platform.toLowerCase().includes(q)) return true;
+      // Search by role name
+      for (const roleId of s.roleIds) {
+        const role = roleMap[roleId];
+        if (role && role.name.toLowerCase().includes(q)) return true;
+      }
+      return false;
+    });
+  }, [seats, searchQuery, roleMap]);
 
-  // Separate claimed vs unclaimed
-  const unclaimedSeats = useMemo(() => filteredSeats.filter((s) => !s.claimedByDid), [filteredSeats]);
-  const claimedSeats = useMemo(() => filteredSeats.filter((s) => s.claimedByDid), [filteredSeats]);
+  // Sort: unclaimed first, then claimed
+  const sortedSeats = useMemo(() => {
+    return [...filteredSeats].sort((a, b) => {
+      const aClaimed = a.claimedByDid ? 1 : 0;
+      const bClaimed = b.claimedByDid ? 1 : 0;
+      if (aClaimed !== bClaimed) return aClaimed - bClaimed;
+      // Within same group, sort by username
+      return a.platformUsername.localeCompare(b.platformUsername);
+    });
+  }, [filteredSeats]);
+
+  // Pagination
+  const totalPages = Math.max(1, Math.ceil(sortedSeats.length / PAGE_SIZE));
+  const pagedSeats = useMemo(
+    () => sortedSeats.slice(currentPage * PAGE_SIZE, (currentPage + 1) * PAGE_SIZE),
+    [sortedSeats, currentPage]
+  );
+
+  // Reset to page 0 when search changes
+  useEffect(() => {
+    setCurrentPage(0);
+  }, [searchQuery]);
+
+  // Clamp page when data shrinks
+  useEffect(() => {
+    if (currentPage >= totalPages) {
+      setCurrentPage(Math.max(0, totalPages - 1));
+    }
+  }, [totalPages, currentPage]);
 
   const totalCount = seats.length;
   const unclaimedCount = seats.filter((s) => !s.claimedByDid).length;
@@ -239,7 +308,7 @@ export function CommunitySeatsPanel({
             Member Seats
           </Text>
           <Text size="sm" style={{ color: tc.text.muted }}>
-            {totalCount} total &middot; {unclaimedCount} unclaimed &middot; {totalCount - unclaimedCount} claimed
+            {totalCount.toLocaleString()} total &middot; {unclaimedCount.toLocaleString()} unclaimed &middot; {(totalCount - unclaimedCount).toLocaleString()} claimed
           </Text>
         </View>
         <View style={{ flexDirection: 'row', gap: 8 }}>
@@ -304,55 +373,84 @@ export function CommunitySeatsPanel({
       <Input
         value={searchQuery}
         onChangeText={setSearchQuery}
-        placeholder="Search by username or platform..."
+        placeholder="Search by username, role, or platform..."
       />
 
-      <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
-        {/* Unclaimed seats */}
-        {unclaimedSeats.length > 0 && (
-          <View style={{ gap: defaultSpacing.sm, marginBottom: defaultSpacing.lg }}>
-            <Text size="xs" weight="semibold" style={{ color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-              Unclaimed ({unclaimedSeats.length})
-            </Text>
-            {unclaimedSeats.map((seat) => (
-              <SeatRow
-                key={seat.id}
-                seat={seat}
-                roleMap={roleMap}
-                onDelete={() => handleDelete(seat.id)}
-                deleting={deletingId === seat.id}
-              />
-            ))}
-          </View>
-        )}
+      {/* Filtered count when searching */}
+      {searchQuery.trim() && (
+        <Text size="xs" style={{ color: tc.text.muted }}>
+          {sortedSeats.length.toLocaleString()} result{sortedSeats.length !== 1 ? 's' : ''} found
+        </Text>
+      )}
 
-        {/* Claimed seats */}
-        {claimedSeats.length > 0 && (
-          <View style={{ gap: defaultSpacing.sm }}>
-            <Text size="xs" weight="semibold" style={{ color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-              Claimed ({claimedSeats.length})
-            </Text>
-            {claimedSeats.map((seat) => (
-              <SeatRow
-                key={seat.id}
-                seat={seat}
-                roleMap={roleMap}
-                onDelete={() => handleDelete(seat.id)}
-                deleting={deletingId === seat.id}
-              />
-            ))}
-          </View>
-        )}
+      {/* Paginated seat list */}
+      <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+        <View style={{ gap: defaultSpacing.xs }}>
+          {pagedSeats.map((seat) => (
+            <SeatRow
+              key={seat.id}
+              seat={seat}
+              roleMap={roleMap}
+              onDelete={() => handleDelete(seat.id)}
+              deleting={deletingId === seat.id}
+            />
+          ))}
+        </View>
       </ScrollView>
+
+      {/* Pagination controls */}
+      {totalPages > 1 && (
+        <View
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: defaultSpacing.md,
+            paddingVertical: defaultSpacing.sm,
+            borderTopWidth: 1,
+            borderTopColor: tc.border.subtle,
+          }}
+        >
+          <Pressable
+            onPress={() => setCurrentPage((p) => Math.max(0, p - 1))}
+            disabled={currentPage === 0}
+            style={({ pressed }) => ({
+              padding: 8,
+              borderRadius: 6,
+              backgroundColor: pressed ? tc.background.sunken : 'transparent',
+              opacity: currentPage === 0 ? 0.3 : 1,
+            })}
+          >
+            <ChevronLeftIcon size={18} color={tc.text.primary} />
+          </Pressable>
+
+          <Text size="sm" style={{ color: tc.text.muted }}>
+            Page {currentPage + 1} of {totalPages.toLocaleString()}
+          </Text>
+
+          <Pressable
+            onPress={() => setCurrentPage((p) => Math.min(totalPages - 1, p + 1))}
+            disabled={currentPage >= totalPages - 1}
+            style={({ pressed }) => ({
+              padding: 8,
+              borderRadius: 6,
+              backgroundColor: pressed ? tc.background.sunken : 'transparent',
+              opacity: currentPage >= totalPages - 1 ? 0.3 : 1,
+            })}
+          >
+            <ChevronRightIcon size={18} color={tc.text.primary} />
+          </Pressable>
+        </View>
+      )}
     </View>
   );
 }
 
 // ---------------------------------------------------------------------------
-// SeatRow sub-component
+// SeatRow — enriched row with avatar, roles, timestamps
 // ---------------------------------------------------------------------------
 
-function SeatRow({
+const SeatRow = React.memo(function SeatRow({
   seat,
   roleMap,
   onDelete,
@@ -366,12 +464,24 @@ function SeatRow({
   const { theme } = useTheme();
   const tc = theme.colors;
   const isClaimed = !!seat.claimedByDid;
+  const [imgError, setImgError] = useState(false);
+
+  // Get first letter for avatar fallback
+  const initial = (seat.nickname || seat.platformUsername || '?').charAt(0).toUpperCase();
+
+  // Resolve roles
+  const resolvedRoles = useMemo(() => {
+    return seat.roleIds
+      .map((id) => roleMap[id])
+      .filter((r): r is CommunityRole => r != null)
+      .sort((a, b) => b.position - a.position);
+  }, [seat.roleIds, roleMap]);
 
   return (
     <View
       style={{
         flexDirection: 'row',
-        alignItems: 'center',
+        alignItems: 'flex-start',
         gap: defaultSpacing.md,
         padding: defaultSpacing.sm,
         paddingHorizontal: defaultSpacing.md,
@@ -379,67 +489,108 @@ function SeatRow({
         borderRadius: defaultRadii.md,
         borderWidth: 1,
         borderColor: tc.border.subtle,
-        opacity: isClaimed ? 1 : 0.75,
       }}
     >
-      {/* Avatar placeholder */}
+      {/* Avatar */}
       <View
         style={{
-          width: 36,
-          height: 36,
-          borderRadius: 18,
-          backgroundColor: isClaimed ? tc.accent.primary + '20' : tc.background.sunken,
+          width: 40,
+          height: 40,
+          borderRadius: 20,
+          backgroundColor: tc.background.sunken,
           alignItems: 'center',
           justifyContent: 'center',
+          overflow: 'hidden',
         }}
       >
-        {isClaimed ? (
-          <CheckCircleIcon size={18} color={tc.status.success} />
+        {seat.avatarUrl && !imgError ? (
+          <Image
+            source={{ uri: seat.avatarUrl }}
+            style={{ width: 40, height: 40 }}
+            onError={() => setImgError(true)}
+          />
         ) : (
-          <GhostIcon size={18} color={tc.text.muted} />
+          <Text size="sm" weight="bold" style={{ color: tc.text.muted }}>
+            {initial}
+          </Text>
         )}
       </View>
 
       {/* Info */}
-      <View style={{ flex: 1, minWidth: 0 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: defaultSpacing.xs }}>
-          <Text size="sm" weight="medium" style={{ color: tc.text.primary }} numberOfLines={1}>
+      <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+        {/* Row 1: Name + platform badge + claimed badge */}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: defaultSpacing.xs, flexWrap: 'wrap' }}>
+          <Text size="sm" weight="semibold" style={{ color: tc.text.primary }} numberOfLines={1}>
             {seat.nickname || seat.platformUsername}
           </Text>
           <PlatformBadge platform={seat.platform} />
+          {isClaimed && (
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 3,
+                backgroundColor: tc.status.success + '20',
+                borderRadius: 4,
+                paddingHorizontal: 5,
+                paddingVertical: 1,
+              }}
+            >
+              <CheckCircleIcon size={10} color={tc.status.success} />
+              <Text size="xs" style={{ color: tc.status.success, fontSize: 10, fontWeight: '600' }}>
+                Claimed
+              </Text>
+            </View>
+          )}
         </View>
+
+        {/* Row 2: Username + platform ID */}
         <Text size="xs" style={{ color: tc.text.muted }} numberOfLines={1}>
-          {seat.platformUsername}
-          {isClaimed && seat.claimedByDid && ` \u2014 claimed`}
+          {seat.nickname ? seat.platformUsername : ''}{seat.nickname ? ' \u00B7 ' : ''}ID: {seat.platformUserId}
         </Text>
 
-        {/* Role tags */}
-        {seat.roleIds.length > 0 && (
+        {/* Row 3: Timestamps */}
+        <View style={{ flexDirection: 'row', gap: defaultSpacing.sm, marginTop: 1 }}>
+          <Text size="xs" style={{ color: tc.text.muted, fontSize: 10 }}>
+            Imported {formatTimestamp(seat.createdAt)}
+          </Text>
+          {isClaimed && seat.claimedAt && (
+            <Text size="xs" style={{ color: tc.status.success, fontSize: 10 }}>
+              Claimed {formatTimestamp(seat.claimedAt)}
+            </Text>
+          )}
+        </View>
+
+        {/* Row 4: Roles */}
+        {resolvedRoles.length > 0 && (
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, marginTop: 4 }}>
-            {seat.roleIds.slice(0, 5).map((roleId) => {
-              const role = roleMap[roleId];
-              if (!role) return null;
-              return (
+            {resolvedRoles.map((role) => (
+              <View
+                key={role.id}
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  gap: 4,
+                  backgroundColor: role.color ? role.color + '18' : tc.background.sunken,
+                  borderRadius: 4,
+                  paddingHorizontal: 6,
+                  paddingVertical: 2,
+                }}
+              >
+                {/* Color dot */}
                 <View
-                  key={roleId}
                   style={{
-                    backgroundColor: role.color ? role.color + '20' : tc.background.sunken,
+                    width: 8,
+                    height: 8,
                     borderRadius: 4,
-                    paddingHorizontal: 6,
-                    paddingVertical: 1,
+                    backgroundColor: role.color || tc.text.muted,
                   }}
-                >
-                  <Text size="xs" style={{ color: role.color || tc.text.muted, fontSize: 10 }}>
-                    {role.name}
-                  </Text>
-                </View>
-              );
-            })}
-            {seat.roleIds.length > 5 && (
-              <Text size="xs" style={{ color: tc.text.muted, fontSize: 10 }}>
-                +{seat.roleIds.length - 5} more
-              </Text>
-            )}
+                />
+                <Text size="xs" style={{ color: role.color || tc.text.muted, fontSize: 10 }}>
+                  {role.name}
+                </Text>
+              </View>
+            ))}
           </View>
         )}
       </View>
@@ -453,6 +604,7 @@ function SeatRow({
           borderRadius: 6,
           backgroundColor: pressed ? tc.status.danger + '20' : 'transparent',
           opacity: deleting ? 0.4 : 1,
+          marginTop: 2,
         })}
       >
         {deleting ? (
@@ -463,4 +615,4 @@ function SeatRow({
       </Pressable>
     </View>
   );
-}
+});

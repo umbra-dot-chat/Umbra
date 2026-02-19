@@ -175,7 +175,7 @@ export default function ChatPage() {
     setThreadReplies(
       replies.map((r) => ({
         id: r.id,
-        sender: friendNames[r.senderDid] || (r.senderDid === myDid ? 'You' : r.senderDid.slice(0, 16)),
+        sender: r.senderDid ? (friendNames[r.senderDid] || (r.senderDid === myDid ? 'You' : r.senderDid.slice(0, 16))) : 'Unknown',
         content: r.content.type === 'text' ? r.content.text : '',
         timestamp: new Date(r.timestamp).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
         isOwn: r.senderDid === myDid,
@@ -335,9 +335,11 @@ export default function ChatPage() {
         setThreadParent((current) => {
           if (current && current.id === event.parentId) {
             const msg = event.message;
-            const senderName = msg.senderDid === myDid
-              ? 'You'
-              : (friendNames[msg.senderDid] || msg.senderDid.slice(0, 16));
+            const senderName = !msg.senderDid
+              ? 'Unknown'
+              : msg.senderDid === myDid
+                ? 'You'
+                : (friendNames[msg.senderDid] || msg.senderDid.slice(0, 16));
             setThreadReplies((prev) => {
               // Avoid duplicates
               if (prev.some((r) => r.id === msg.id)) return prev;
@@ -362,7 +364,7 @@ export default function ChatPage() {
   const pinnedForPanel = useMemo(() =>
     (pinnedMessages || []).map((m) => ({
       id: m.id,
-      sender: friendNames[m.senderDid] || (m.senderDid === myDid ? 'You' : m.senderDid.slice(0, 16)),
+      sender: m.senderDid ? (friendNames[m.senderDid] || (m.senderDid === myDid ? 'You' : m.senderDid.slice(0, 16))) : 'Unknown',
       content: m.content.type === 'text' ? m.content.text : '',
       timestamp: new Date(m.timestamp).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
     })),

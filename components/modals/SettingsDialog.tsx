@@ -55,6 +55,8 @@ import {
   CheckIcon,
   BookOpenIcon,
   MessageIcon,
+  VolumeIcon,
+  MusicIcon,
 } from '@/components/icons';
 import { useNetwork } from '@/hooks/useNetwork';
 import { useCall } from '@/hooks/useCall';
@@ -68,6 +70,14 @@ import { useUmbra } from '@/contexts/UmbraContext';
 import { usePlugins } from '@/contexts/PluginContext';
 import { useFonts, FONT_REGISTRY } from '@/contexts/FontContext';
 import { useAppTheme } from '@/contexts/ThemeContext';
+import { useSound } from '@/contexts/SoundContext';
+import {
+  SOUND_THEMES,
+  SOUND_CATEGORIES,
+  CATEGORY_LABELS,
+  SoundEngine,
+  type SoundThemeId,
+} from '@/services/SoundEngine';
 import { useMessaging } from '@/contexts/MessagingContext';
 import type { MessageDisplayMode } from '@/contexts/MessagingContext';
 import { SlotRenderer } from '@/components/plugins/SlotRenderer';
@@ -400,6 +410,22 @@ function SectionHeader({ title, description }: { title: string; description: str
       </RNText>
     </View>
   );
+}
+
+/**
+ * Toggle wrapper that plays a sound on change.
+ * Drop-in replacement for <Toggle> that adds audio feedback.
+ */
+function SoundToggle({ checked, onChange, ...rest }: React.ComponentProps<typeof Toggle>) {
+  const { playSound } = useSound();
+  const handleChange = useCallback(
+    (v: boolean) => {
+      playSound(v ? 'toggle_on' : 'toggle_off');
+      onChange?.(v);
+    },
+    [onChange, playSound],
+  );
+  return <Toggle checked={checked} onChange={handleChange} {...rest} />;
 }
 
 // ---------------------------------------------------------------------------
@@ -916,7 +942,7 @@ function AppearanceSection() {
       <View nativeID="sub-dark-mode">
         {showModeToggle && (
         <SettingRow label="Dark Mode" description="Switch between light and dark themes.">
-          <Toggle checked={mode === 'dark'} onChange={toggleMode} />
+          <SoundToggle checked={mode === 'dark'} onChange={toggleMode} />
         </SettingRow>
         )}
       </View>
@@ -1009,9 +1035,28 @@ function FontSettingRow() {
 }
 
 function NotificationsSection() {
+  const { theme } = useTheme();
+  const tc = theme.colors;
+  const {
+    playSound,
+    masterVolume,
+    setMasterVolume,
+    muted,
+    setMuted,
+    categoryVolumes,
+    setCategoryVolume,
+    activeTheme,
+    setActiveTheme,
+  } = useSound();
   const [pushEnabled, setPushEnabled] = useState(true);
-  const [soundEnabled, setSoundEnabled] = useState(true);
   const [messagePreview, setMessagePreview] = useState(true);
+
+  const themeOptions = useMemo(
+    () => SOUND_THEMES.map((t) => ({ value: t.id, label: `${t.name}${t.type === 'audio' ? ' (Pack)' : ''}` })),
+    [],
+  );
+
+  const masterPct = Math.round(masterVolume * 100);
 
   return (
     <View style={{ gap: 20 }}>
@@ -1021,16 +1066,103 @@ function NotificationsSection() {
       />
 
       <SettingRow label="Push Notifications" description="Receive push notifications for new messages and mentions.">
-        <Toggle checked={pushEnabled} onChange={() => setPushEnabled((p) => !p)} />
-      </SettingRow>
-
-      <SettingRow label="Sound Effects" description="Play sounds for incoming messages and notifications.">
-        <Toggle checked={soundEnabled} onChange={() => setSoundEnabled((p) => !p)} />
+        <SoundToggle checked={pushEnabled} onChange={() => setPushEnabled((p) => !p)} />
       </SettingRow>
 
       <SettingRow label="Message Preview" description="Show message content in notification banners.">
-        <Toggle checked={messagePreview} onChange={() => setMessagePreview((p) => !p)} />
+        <SoundToggle checked={messagePreview} onChange={() => setMessagePreview((p) => !p)} />
       </SettingRow>
+
+      <Separator />
+
+      {/* ── Sound Settings ─────────────────────────────────────────────── */}
+
+      <SectionHeader
+        title="Sound Effects"
+        description="Choose a sound theme and adjust volumes for different categories."
+      />
+
+      <SettingRow label="Enable Sounds" description="Play UI sounds for actions and events.">
+        <SoundToggle checked={!muted} onChange={() => setMuted(!muted)} />
+      </SettingRow>
+
+      {!muted && (
+        <>
+          <SettingRow label="Sound Theme" description="Choose the style of sounds." vertical>
+            <Select
+              options={themeOptions}
+              value={activeTheme}
+              onChange={(v) => setActiveTheme(v as SoundThemeId)}
+              placeholder="Select theme"
+              size="md"
+              fullWidth
+            />
+            {/* Theme description */}
+            {(() => {
+              const meta = SOUND_THEMES.find((t) => t.id === activeTheme);
+              return meta ? (
+                <RNText style={{ fontSize: 12, color: tc.text.muted, marginTop: 4 }}>
+                  {meta.description}
+                </RNText>
+              ) : null;
+            })()}
+          </SettingRow>
+
+          <SettingRow label="Master Volume" description={`${masterPct}%`} vertical>
+            <Slider
+              value={masterPct}
+              min={0}
+              max={100}
+              step={5}
+              onChange={(v) => setMasterVolume(v / 100)}
+            />
+          </SettingRow>
+
+          {/* ── Per-category volumes ──────────────────────────────── */}
+
+          <View style={{ gap: 12 }}>
+            <RNText style={{ fontSize: 13, fontWeight: '600', color: tc.text.primary }}>
+              Category Volumes
+            </RNText>
+
+            {SOUND_CATEGORIES.map((cat) => {
+              const pct = Math.round((categoryVolumes[cat] ?? 1) * 100);
+              return (
+                <View key={cat} style={{ gap: 4 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <RNText style={{ fontSize: 13, color: tc.text.secondary }}>
+                      {CATEGORY_LABELS[cat]}
+                    </RNText>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <RNText style={{ fontSize: 12, color: tc.text.muted, minWidth: 32, textAlign: 'right' }}>
+                        {pct}%
+                      </RNText>
+                      <Pressable
+                        onPress={() => playSound(SoundEngine.getSampleSound(cat))}
+                        style={{
+                          paddingHorizontal: 8,
+                          paddingVertical: 4,
+                          borderRadius: 6,
+                          backgroundColor: tc.background.secondary,
+                        }}
+                      >
+                        <VolumeIcon size={14} color={tc.accent.primary} />
+                      </Pressable>
+                    </View>
+                  </View>
+                  <Slider
+                    value={pct}
+                    min={0}
+                    max={100}
+                    step={5}
+                    onChange={(v) => setCategoryVolume(cat, v / 100)}
+                  />
+                </View>
+              );
+            })}
+          </View>
+        </>
+      )}
     </View>
   );
 }
@@ -1139,16 +1271,16 @@ function PrivacySection() {
                 </HelpIndicator>
               }
             >
-              <Toggle checked={readReceipts} onChange={() => setReadReceipts((p) => !p)} />
+              <SoundToggle checked={readReceipts} onChange={() => setReadReceipts((p) => !p)} />
             </SettingRow>
 
             <SettingRow label="Typing Indicators" description="Show when you are typing a message to others.">
-              <Toggle checked={typingIndicators} onChange={() => setTypingIndicators((p) => !p)} />
+              <SoundToggle checked={typingIndicators} onChange={() => setTypingIndicators((p) => !p)} />
             </SettingRow>
           </View>
 
           <SettingRow label="Online Status" description="Show your online status to other users.">
-            <Toggle checked={showOnline} onChange={() => setShowOnline((p) => !p)} />
+            <SoundToggle checked={showOnline} onChange={() => setShowOnline((p) => !p)} />
           </SettingRow>
       </View>
 
@@ -1174,7 +1306,7 @@ function PrivacySection() {
               </HelpIndicator>
             }
           >
-            <Toggle checked={hasPin} onChange={handlePinToggle} />
+            <SoundToggle checked={hasPin} onChange={handlePinToggle} />
           </SettingRow>
 
           {/* PIN setup / removal dialog */}
@@ -2122,13 +2254,13 @@ function AudioVideoSection() {
         </View>
 
         <SettingRow label="Noise Suppression" description="Reduce background noise from your microphone.">
-          <Toggle checked={noiseSuppression} onChange={setNoiseSuppression} />
+          <SoundToggle checked={noiseSuppression} onChange={setNoiseSuppression} />
         </SettingRow>
         <SettingRow label="Echo Cancellation" description="Prevent audio feedback loops.">
-          <Toggle checked={echoCancellation} onChange={setEchoCancellation} />
+          <SoundToggle checked={echoCancellation} onChange={setEchoCancellation} />
         </SettingRow>
         <SettingRow label="Auto Gain Control" description="Automatically adjust microphone volume.">
-          <Toggle checked={autoGainControl} onChange={setAutoGainControl} />
+          <SoundToggle checked={autoGainControl} onChange={setAutoGainControl} />
         </SettingRow>
       </View>
 
@@ -2426,7 +2558,7 @@ function NetworkSection() {
           </HelpIndicator>
         }
       >
-        <Toggle checked={isConnected} onChange={() => isConnected ? stopNetwork() : startNetwork()} />
+        <SoundToggle checked={isConnected} onChange={() => isConnected ? stopNetwork() : startNetwork()} />
       </SettingRow>
       </View>
 

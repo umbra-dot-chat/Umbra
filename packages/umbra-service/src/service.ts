@@ -1007,8 +1007,8 @@ export class UmbraService {
     return communityModule.pinMessage(messageId, channelId, actorDid);
   }
 
-  unpinCommunityMessage(messageId: string, channelId: string, actorDid: string): Promise<void> {
-    return communityModule.unpinMessage(messageId, channelId, actorDid);
+  unpinCommunityMessage(messageId: string, channelId: string, _actorDid?: string): Promise<void> {
+    return communityModule.unpinMessage(messageId, channelId);
   }
 
   getCommunityPinnedMessages(channelId: string): Promise<CommunityMessage[]> {

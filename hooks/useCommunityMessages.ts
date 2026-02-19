@@ -45,12 +45,17 @@ export interface UseCommunityMessagesResult {
   removeReaction: (messageId: string, emoji: string) => Promise<void>;
   /** Manually refresh messages */
   refresh: () => Promise<void>;
+  /** Pinned messages for this channel */
+  pinnedMessages: CommunityMessage[];
+  /** Refresh the pinned messages list */
+  refreshPinned: () => Promise<void>;
 }
 
 export function useCommunityMessages(channelId: string | null): UseCommunityMessagesResult {
   const { service, isReady } = useUmbra();
   const { identity } = useAuth();
   const [messages, setMessages] = useState<CommunityMessage[]>([]);
+  const [pinnedMessages, setPinnedMessages] = useState<CommunityMessage[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [hasMore, setHasMore] = useState(true);
   const [error, setError] = useState<Error | null>(null);
@@ -71,17 +76,29 @@ export function useCommunityMessages(channelId: string | null): UseCommunityMess
     }
   }, [service, channelId]);
 
+  const fetchPinned = useCallback(async () => {
+    if (!service || !channelId) return;
+    try {
+      const pinned = await service.getCommunityPinnedMessages(channelId);
+      setPinnedMessages(pinned);
+    } catch (err) {
+      console.warn('[useCommunityMessages] Failed to fetch pinned:', err);
+    }
+  }, [service, channelId]);
+
   // Initial fetch
   useEffect(() => {
     if (isReady && service && channelId) {
       fetchMessages();
+      fetchPinned();
     }
-  }, [isReady, service, channelId, fetchMessages]);
+  }, [isReady, service, channelId, fetchMessages, fetchPinned]);
 
   // Reset state when channel changes
   useEffect(() => {
     if (!channelId) {
       setMessages([]);
+      setPinnedMessages([]);
       setIsLoading(false);
       setHasMore(true);
     }
@@ -129,6 +146,8 @@ export function useCommunityMessages(channelId: string | null): UseCommunityMess
         case 'communityMessageUnpinned':
           if (event.channelId === channelId) {
             service.getCommunityMessages(channelId, PAGE_SIZE).then(setMessages).catch(() => {});
+            // Refresh the pinned messages list
+            service.getCommunityPinnedMessages(channelId).then(setPinnedMessages).catch(() => {});
           }
           break;
       }
@@ -277,5 +296,7 @@ export function useCommunityMessages(channelId: string | null): UseCommunityMess
     addReaction,
     removeReaction,
     refresh: fetchMessages,
+    pinnedMessages,
+    refreshPinned: fetchPinned,
   };
 }

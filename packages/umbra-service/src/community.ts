@@ -783,7 +783,7 @@ export async function pinMessage(
   const json = JSON.stringify({
     message_id: messageId,
     channel_id: channelId,
-    actor_did: actorDid,
+    pinned_by: actorDid,
   });
   wasm().umbra_wasm_community_pin_message(json);
 }
@@ -794,12 +794,10 @@ export async function pinMessage(
 export async function unpinMessage(
   messageId: string,
   channelId: string,
-  actorDid: string,
 ): Promise<void> {
   const json = JSON.stringify({
     message_id: messageId,
     channel_id: channelId,
-    actor_did: actorDid,
   });
   wasm().umbra_wasm_community_unpin_message(json);
 }
@@ -1125,7 +1123,9 @@ export async function createCommunityFromDiscordImport(
       }
     }
 
-    // Phase 3: Create channels
+    // Phase 3: Create channels (and build Discord→Umbra channel ID map for pins)
+    const channelIdMap = new Map<string, string>(); // Discord channel ID → Umbra channel ID
+
     onProgress?.({
       phase: 'creating_channels',
       percent: 40,
@@ -1141,7 +1141,7 @@ export async function createCommunityFromDiscordImport(
           ? categoryIdMap.get(ch.categoryDiscordId)
           : undefined;
 
-        await createChannel(
+        const createdChannel = await createChannel(
           createResult.communityId,
           defaultSpace.id,
           ch.name,
@@ -1151,6 +1151,7 @@ export async function createCommunityFromDiscordImport(
           ch.position,
           categoryId,
         );
+        channelIdMap.set(ch.discordId, createdChannel.id);
         channelsCreated++;
 
         onProgress?.({
@@ -1205,13 +1206,17 @@ export async function createCommunityFromDiscordImport(
       }
     }
 
-    // Phase 5: Create seats (ghost members)
+    // Phase 5: Create seats (ghost members) — chunked to avoid blocking the UI
     if (structure.seats && structure.seats.length > 0) {
+      const SEAT_CHUNK_SIZE = 100;
+      const totalSeats = structure.seats.length;
+
       onProgress?.({
         phase: 'creating_seats',
         percent: 85,
-        totalItems: structure.seats.length,
+        totalItems: totalSeats,
         completedItems: 0,
+        currentItem: `0 / ${totalSeats} members`,
       });
 
       try {
@@ -1227,22 +1232,96 @@ export async function createCommunityFromDiscordImport(
             .filter((id): id is string => id !== undefined),
         }));
 
-        seatsCreated = await createSeatsBatch(createResult.communityId, seatData);
+        // Process in chunks to keep the UI responsive
+        for (let i = 0; i < seatData.length; i += SEAT_CHUNK_SIZE) {
+          const chunk = seatData.slice(i, i + SEAT_CHUNK_SIZE);
+          const created = await createSeatsBatch(createResult.communityId, chunk);
+          seatsCreated += created;
 
-        onProgress?.({
-          phase: 'creating_seats',
-          percent: 92,
-          totalItems: structure.seats.length,
-          completedItems: seatsCreated,
-        });
+          const pct = 85 + Math.round((seatsCreated / totalSeats) * 12); // 85% → 97%
+          onProgress?.({
+            phase: 'creating_seats',
+            percent: Math.min(pct, 97),
+            totalItems: totalSeats,
+            completedItems: seatsCreated,
+            currentItem: `${seatsCreated} / ${totalSeats} members`,
+          });
+
+          // Yield to the event loop so React can re-render progress
+          if (i + SEAT_CHUNK_SIZE < seatData.length) {
+            await new Promise((r) => setTimeout(r, 0));
+          }
+        }
       } catch (err) {
         const msg = `Failed to create seats: ${err instanceof Error ? err.message : String(err)}`;
         warnings.push(msg);
       }
     }
 
-    // Phase 6: Import pinned messages (future — requires pin data from relay)
-    // Pins will be imported when the relay endpoint is connected in Phase 3
+    // Phase 6: Import pinned messages
+    if (structure.pinnedMessages && Object.keys(structure.pinnedMessages).length > 0) {
+      const allPinEntries = Object.entries(structure.pinnedMessages);
+      let totalPinCount = 0;
+      for (const [, pins] of allPinEntries) {
+        totalPinCount += pins.length;
+      }
+
+      onProgress?.({
+        phase: 'importing_pins',
+        percent: 97,
+        totalItems: totalPinCount,
+        completedItems: 0,
+        currentItem: `0 / ${totalPinCount} pins`,
+      });
+
+      const PIN_CHUNK_SIZE = 20;
+      let pinsDone = 0;
+
+      for (const [sourceChannelId, pins] of allPinEntries) {
+        const umbraChannelId = channelIdMap.get(sourceChannelId);
+        if (!umbraChannelId) {
+          warnings.push(`No Umbra channel found for source channel ${sourceChannelId} — skipping ${pins.length} pins`);
+          continue;
+        }
+
+        for (let i = 0; i < pins.length; i++) {
+          const pin = pins[i];
+          try {
+            // Create the message in the channel (owned by the community owner)
+            const message = await sendMessage(
+              umbraChannelId,
+              ownerDid,
+              pin.content || '[empty pinned message]',
+            );
+
+            // Pin the message
+            await pinMessage(message.id, umbraChannelId, ownerDid);
+
+            pinsImported++;
+          } catch (err) {
+            const msg = `Failed to import pin in channel ${sourceChannelId}: ${err instanceof Error ? err.message : String(err)}`;
+            warnings.push(msg);
+          }
+
+          pinsDone++;
+
+          // Report progress every chunk
+          if (pinsDone % PIN_CHUNK_SIZE === 0 || pinsDone === totalPinCount) {
+            const pct = 97 + Math.round((pinsDone / totalPinCount) * 2); // 97% → 99%
+            onProgress?.({
+              phase: 'importing_pins',
+              percent: Math.min(pct, 99),
+              totalItems: totalPinCount,
+              completedItems: pinsDone,
+              currentItem: `${pinsDone} / ${totalPinCount} pins`,
+            });
+
+            // Yield to the event loop
+            await new Promise((r) => setTimeout(r, 0));
+          }
+        }
+      }
+    }
 
     // Complete
     onProgress?.({

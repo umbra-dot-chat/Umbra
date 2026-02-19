@@ -13,10 +13,12 @@ import type {
   DiscordImportedStructure,
   MappedCommunityStructure,
   MappedSeat,
+  MappedPinnedMessage,
   CommunityImportProgress,
   CommunityImportResult,
   DiscordImportedMember,
   DiscordGuildMembersResponse,
+  DiscordChannelPinsResponse,
 } from '@umbra/service';
 import { mapDiscordToUmbra, validateImportStructure } from '@umbra/service';
 
@@ -78,6 +80,18 @@ export interface UseDiscordCommunityImportState {
   membersAvailable: boolean;
   /** Whether to import members as seats. */
   importMembers: boolean;
+  /** Whether to import pinned messages. */
+  importPins: boolean;
+  /** Fetched pinned messages keyed by source (Discord) channel ID. */
+  pinnedMessages: Record<string, MappedPinnedMessage[]> | null;
+  /** Whether pinned messages are available (bot is in guild). */
+  pinsAvailable: boolean;
+  /** Total count of fetched pinned messages across all channels. */
+  pinCount: number;
+  /** Whether members are currently being fetched. */
+  membersLoading: boolean;
+  /** Whether pinned messages are currently being fetched. */
+  pinsLoading: boolean;
 }
 
 /**
@@ -100,6 +114,8 @@ export interface UseDiscordCommunityImportActions {
   refetchStructure: () => Promise<void>;
   /** Toggle whether to import members as seats. */
   toggleMemberImport: () => void;
+  /** Toggle whether to import pinned messages. */
+  togglePinImport: () => void;
   /** Reset to initial state. */
   reset: () => void;
 }
@@ -124,11 +140,22 @@ export function useDiscordCommunityImport(): UseDiscordCommunityImportState & Us
   const [importedMembers, setImportedMembers] = useState<DiscordImportedMember[] | null>(null);
   const [membersAvailable, setMembersAvailable] = useState(false);
   const [importMembers, setImportMembers] = useState(true);
+  const [importPins, setImportPins] = useState(true);
+  const [pinnedMessages, setPinnedMessages] = useState<Record<string, MappedPinnedMessage[]> | null>(null);
+  const [pinsAvailable, setPinsAvailable] = useState(false);
+  const [membersLoading, setMembersLoading] = useState(false);
+  const [pinsLoading, setPinsLoading] = useState(false);
 
   // Refs
   const popupRef = useRef<Window | null>(null);
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const authSucceededRef = useRef(false);
+  const accessTokenRef = useRef<string | null>(null);
+
+  // Keep accessTokenRef in sync with state (avoids stale closures in setInterval callbacks)
+  useEffect(() => {
+    accessTokenRef.current = accessToken;
+  }, [accessToken]);
 
   // Cleanup polling on unmount
   useEffect(() => {
@@ -176,14 +203,15 @@ export function useDiscordCommunityImport(): UseDiscordCommunityImportState & Us
    * Fetch the list of guilds the user can manage.
    */
   const fetchGuilds = useCallback(async () => {
-    if (!accessToken) return;
+    const token = accessTokenRef.current;
+    if (!token) return;
 
     setIsLoading(true);
     setError(null);
 
     try {
       const response = await fetch(
-        `${RELAY_BASE_URL}/community/import/discord/guilds?token=${encodeURIComponent(accessToken)}`
+        `${RELAY_BASE_URL}/community/import/discord/guilds?token=${encodeURIComponent(token)}`
       );
 
       if (!response.ok) {
@@ -199,18 +227,20 @@ export function useDiscordCommunityImport(): UseDiscordCommunityImportState & Us
     } finally {
       setIsLoading(false);
     }
-  }, [accessToken]);
+  }, []);
 
   /**
    * Fetch guild structure from the relay.
    * Returns the mapped structure, or null on failure.
+   * Uses `accessTokenRef` to avoid stale closures in setInterval callbacks.
    */
   const fetchStructure = useCallback(
     async (guildId: string): Promise<MappedCommunityStructure | null> => {
-      if (!accessToken) return null;
+      const token = accessTokenRef.current;
+      if (!token) return null;
 
       const response = await fetch(
-        `${RELAY_BASE_URL}/community/import/discord/guild/${guildId}/structure?token=${encodeURIComponent(accessToken)}`
+        `${RELAY_BASE_URL}/community/import/discord/guild/${guildId}/structure?token=${encodeURIComponent(token)}`
       );
 
       if (!response.ok) {
@@ -235,7 +265,7 @@ export function useDiscordCommunityImport(): UseDiscordCommunityImportState & Us
 
       return mapped;
     },
-    [accessToken]
+    []
   );
 
   /**
@@ -272,46 +302,67 @@ export function useDiscordCommunityImport(): UseDiscordCommunityImportState & Us
 
   /**
    * Fetch guild members from the relay (requires bot with GUILD_MEMBERS intent).
+   *
+   * Uses `accessTokenRef` instead of the `accessToken` closure to avoid stale
+   * values when called from inside `inviteBot`'s setInterval callback.
    */
   const fetchMembers = useCallback(
     async (guildId: string) => {
-      if (!accessToken) return;
+      const token = accessTokenRef.current;
+      console.log('[fetchMembers] called for guild', guildId, 'accessToken?', !!token);
+      if (!token) {
+        console.warn('[fetchMembers] No accessToken — skipping');
+        return;
+      }
 
+      setMembersLoading(true);
       try {
-        const response = await fetch(
-          `${RELAY_BASE_URL}/community/import/discord/guild/${guildId}/members?token=${encodeURIComponent(accessToken)}`
-        );
+        const url = `${RELAY_BASE_URL}/community/import/discord/guild/${guildId}/members?token=${encodeURIComponent(token)}`;
+        console.log('[fetchMembers] Fetching:', url.replace(/token=[^&]+/, 'token=***'));
+        const response = await fetch(url);
+        console.log('[fetchMembers] Response status:', response.status);
 
         if (!response.ok) {
           // 403 likely means the bot doesn't have GUILD_MEMBERS intent
           if (response.status === 403) {
+            console.warn('[fetchMembers] 403 — bot likely lacks GUILD_MEMBERS intent');
             setMembersAvailable(false);
             setImportedMembers(null);
             return;
           }
           // Other errors — silently fail (members are optional)
+          console.warn('[fetchMembers] Non-OK response:', response.status);
           setMembersAvailable(false);
           setImportedMembers(null);
           return;
         }
 
         const data: DiscordGuildMembersResponse = await response.json();
+        console.log('[fetchMembers] Response data:', {
+          hasMembersIntent: data.hasMembersIntent,
+          memberCount: data.members?.length ?? 0,
+          error: (data as any).error,
+        });
         setMembersAvailable(data.hasMembersIntent);
 
         if (data.hasMembersIntent && data.members.length > 0) {
           // Filter out bots
           const humanMembers = data.members.filter((m) => !m.bot);
+          console.log('[fetchMembers] Human members:', humanMembers.length);
           setImportedMembers(humanMembers);
         } else {
           setImportedMembers(null);
         }
-      } catch {
+      } catch (err) {
         // Network error — members are optional, don't fail the flow
+        console.error('[fetchMembers] Error:', err);
         setMembersAvailable(false);
         setImportedMembers(null);
+      } finally {
+        setMembersLoading(false);
       }
     },
-    [accessToken]
+    [] // No dependency on accessToken — uses ref instead
   );
 
   /**
@@ -329,6 +380,70 @@ export function useDiscordCommunityImport(): UseDiscordCommunityImportState & Us
           : undefined,
         sourceRoleIds: m.roleIds,
       }));
+    },
+    []
+  );
+
+  /**
+   * Fetch pinned messages for all text/announcement channels in the mapped structure.
+   * Requires the bot to be in the guild (uses bot token via relay).
+   */
+  const fetchPins = useCallback(
+    async (channels: MappedCommunityStructure['channels']) => {
+      const token = accessTokenRef.current;
+      if (!token) return;
+
+      // Only fetch pins for text and announcement channels
+      const textChannels = channels.filter((c) => c.type === 'text' || c.type === 'announcement');
+      if (textChannels.length === 0) {
+        setPinnedMessages(null);
+        setPinsAvailable(false);
+        return;
+      }
+
+      setPinsLoading(true);
+      console.log('[fetchPins] Fetching pins for', textChannels.length, 'channels');
+      const allPins: Record<string, MappedPinnedMessage[]> = {};
+      let totalPins = 0;
+
+      for (const ch of textChannels) {
+        try {
+          const response = await fetch(
+            `${RELAY_BASE_URL}/community/import/discord/channel/${ch.discordId}/pins?token=${encodeURIComponent(token)}`
+          );
+
+          if (!response.ok) {
+            console.warn(`[fetchPins] Failed to fetch pins for channel ${ch.name}:`, response.status);
+            continue;
+          }
+
+          const data: DiscordChannelPinsResponse = await response.json();
+
+          if (data.pins && data.pins.length > 0) {
+            allPins[ch.discordId] = data.pins.map((pin) => ({
+              authorPlatformUserId: pin.authorId,
+              authorUsername: pin.authorUsername,
+              content: pin.content,
+              originalTimestamp: new Date(pin.timestamp).getTime(),
+              sourceChannelId: ch.discordId,
+            }));
+            totalPins += data.pins.length;
+          }
+        } catch (err) {
+          console.warn(`[fetchPins] Error fetching pins for channel ${ch.name}:`, err);
+        }
+      }
+
+      console.log('[fetchPins] Total pins fetched:', totalPins, 'across', Object.keys(allPins).length, 'channels');
+
+      if (totalPins > 0) {
+        setPinnedMessages(allPins);
+        setPinsAvailable(true);
+      } else {
+        setPinnedMessages(null);
+        setPinsAvailable(false);
+      }
+      setPinsLoading(false);
     },
     []
   );
@@ -402,12 +517,12 @@ export function useDiscordCommunityImport(): UseDiscordCommunityImportState & Us
    * Refresh the list of guilds.
    */
   const refreshGuilds = useCallback(async () => {
-    if (!accessToken) {
+    if (!accessTokenRef.current) {
       setError('Not authenticated');
       return;
     }
     await fetchGuilds();
-  }, [accessToken, fetchGuilds]);
+  }, [fetchGuilds]);
 
   /**
    * Select a guild and load its structure.
@@ -415,7 +530,7 @@ export function useDiscordCommunityImport(): UseDiscordCommunityImportState & Us
    */
   const selectGuild = useCallback(
     async (guild: DiscordGuildInfo) => {
-      if (!accessToken) {
+      if (!accessTokenRef.current) {
         setError('Not authenticated');
         return;
       }
@@ -450,6 +565,7 @@ export function useDiscordCommunityImport(): UseDiscordCommunityImportState & Us
             // Bot is in guild but structure is still empty — unusual, show preview
             // Try to fetch members anyway (they may be available even with empty structure)
             fetchMembers(guild.id);
+            if (mapped) fetchPins(mapped.channels);
             setPhase('previewing');
           } else {
             setBotStatus('not_in_guild');
@@ -459,15 +575,20 @@ export function useDiscordCommunityImport(): UseDiscordCommunityImportState & Us
         } else {
           // Structure loaded via OAuth — check if bot is also in guild for enhanced features
           const { botEnabled, inGuild } = await checkBotStatusForGuild(guild.id);
+          console.log('[selectGuild] Bot status:', { botEnabled, inGuild, guildId: guild.id });
           if (botEnabled && inGuild) {
             setBotStatus('in_guild');
-            // Bot is in guild — fetch members in background
+            // Bot is in guild — fetch members and pins in background
+            console.log('[selectGuild] Calling fetchMembers + fetchPins for guild', guild.id);
             fetchMembers(guild.id);
+            if (mapped) fetchPins(mapped.channels);
           } else if (botEnabled) {
             setBotStatus('not_in_guild');
+            console.log('[selectGuild] Bot enabled but NOT in guild — skipping fetchMembers');
             // Bot exists but not in this guild — preview will show "Connect Bot" banner
           } else {
             setBotStatus('disabled');
+            console.log('[selectGuild] Bot disabled on relay');
             // Bot not configured on relay
           }
           setPhase('previewing');
@@ -479,7 +600,7 @@ export function useDiscordCommunityImport(): UseDiscordCommunityImportState & Us
         setIsLoading(false);
       }
     },
-    [accessToken, fetchStructure, checkBotStatusForGuild, fetchMembers]
+    [fetchStructure, checkBotStatusForGuild, fetchMembers, fetchPins]
   );
 
   /**
@@ -499,6 +620,11 @@ export function useDiscordCommunityImport(): UseDiscordCommunityImportState & Us
     setImportedMembers(null);
     setMembersAvailable(false);
     setImportMembers(true);
+    setMembersLoading(false);
+    setPinnedMessages(null);
+    setPinsAvailable(false);
+    setImportPins(true);
+    setPinsLoading(false);
     setPhase('selecting_server');
   }, []);
 
@@ -583,8 +709,9 @@ export function useDiscordCommunityImport(): UseDiscordCommunityImportState & Us
             setIsLoading(true);
             try {
               const mapped = await fetchStructure(selectedGuild.id);
-              // Also fetch members now that bot is in guild
+              // Also fetch members and pins now that bot is in guild
               fetchMembers(selectedGuild.id);
+              if (mapped) fetchPins(mapped.channels);
               if (mapped && !isStructureEmpty(mapped)) {
                 setPhase('previewing');
               } else {
@@ -614,9 +741,10 @@ export function useDiscordCommunityImport(): UseDiscordCommunityImportState & Us
             setBotStatus('in_guild');
             setIsLoading(true);
             try {
-              await fetchStructure(selectedGuild.id);
-              // Also fetch members now that bot is in guild
+              const mapped = await fetchStructure(selectedGuild.id);
+              // Also fetch members and pins now that bot is in guild
               fetchMembers(selectedGuild.id);
+              if (mapped) fetchPins(mapped.channels);
             } catch {
               // ignore
             } finally {
@@ -635,14 +763,14 @@ export function useDiscordCommunityImport(): UseDiscordCommunityImportState & Us
       setError(err.message || 'Failed to invite bot');
       setBotStatus('not_in_guild');
     }
-  }, [selectedGuild, fetchStructure, fetchMembers, checkBotStatusForGuild]);
+  }, [selectedGuild, fetchStructure, fetchMembers, fetchPins, checkBotStatusForGuild]);
 
   /**
    * Re-fetch the guild structure for the currently selected guild.
    * Always transitions to 'previewing' — used both after bot joins and for skip.
    */
   const refetchStructure = useCallback(async () => {
-    if (!selectedGuild || !accessToken) {
+    if (!selectedGuild || !accessTokenRef.current) {
       // If called as a skip (no structure change expected), just go to preview
       setPhase('previewing');
       return;
@@ -652,16 +780,17 @@ export function useDiscordCommunityImport(): UseDiscordCommunityImportState & Us
     setError(null);
 
     try {
-      await fetchStructure(selectedGuild.id);
-      // Also re-fetch members in background
+      const mapped = await fetchStructure(selectedGuild.id);
+      // Also re-fetch members and pins in background
       fetchMembers(selectedGuild.id);
+      if (mapped) fetchPins(mapped.channels);
     } catch (err: any) {
       setError(err.message || 'Failed to refresh structure');
     } finally {
       setIsLoading(false);
       setPhase('previewing');
     }
-  }, [selectedGuild, accessToken, fetchStructure, fetchMembers]);
+  }, [selectedGuild, fetchStructure, fetchMembers, fetchPins]);
 
   /**
    * Start the import process.
@@ -692,6 +821,11 @@ export function useDiscordCommunityImport(): UseDiscordCommunityImportState & Us
           finalStructure.seats = mapMembersToSeats(importedMembers);
         }
 
+        // Inject pinned messages if pin import is enabled
+        if (importPins && pinnedMessages) {
+          finalStructure.pinnedMessages = pinnedMessages;
+        }
+
         const importResult = await onCreateCommunity(finalStructure);
         setResult(importResult);
 
@@ -709,7 +843,7 @@ export function useDiscordCommunityImport(): UseDiscordCommunityImportState & Us
         setProgress(null);
       }
     },
-    [mappedStructure, importMembers, importedMembers, mapMembersToSeats]
+    [mappedStructure, importMembers, importedMembers, mapMembersToSeats, importPins, pinnedMessages]
   );
 
   /**
@@ -720,6 +854,13 @@ export function useDiscordCommunityImport(): UseDiscordCommunityImportState & Us
    */
   const toggleMemberImport = useCallback(() => {
     setImportMembers((prev) => !prev);
+  }, []);
+
+  /**
+   * Toggle pin import on/off.
+   */
+  const togglePinImport = useCallback(() => {
+    setImportPins((prev) => !prev);
   }, []);
 
   /**
@@ -746,7 +887,17 @@ export function useDiscordCommunityImport(): UseDiscordCommunityImportState & Us
     setImportedMembers(null);
     setMembersAvailable(false);
     setImportMembers(true);
+    setMembersLoading(false);
+    setPinnedMessages(null);
+    setPinsAvailable(false);
+    setImportPins(true);
+    setPinsLoading(false);
   }, []);
+
+  // Compute total pin count
+  const pinCount = pinnedMessages
+    ? Object.values(pinnedMessages).reduce((sum, arr) => sum + arr.length, 0)
+    : 0;
 
   return {
     // State
@@ -765,6 +916,12 @@ export function useDiscordCommunityImport(): UseDiscordCommunityImportState & Us
     importedMembers,
     membersAvailable,
     importMembers,
+    importPins,
+    pinnedMessages,
+    pinsAvailable,
+    pinCount,
+    membersLoading,
+    pinsLoading,
 
     // Actions
     startAuth,
@@ -775,6 +932,7 @@ export function useDiscordCommunityImport(): UseDiscordCommunityImportState & Us
     inviteBot,
     refetchStructure,
     toggleMemberImport,
+    togglePinImport,
     reset,
   };
 }

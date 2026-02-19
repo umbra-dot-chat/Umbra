@@ -26,7 +26,7 @@ import {
   type ManagedRole, type RolePermissionCategory,
 } from '@coexist/wisp-react-native';
 
-import { SettingsIcon, FileTextIcon, ShieldIcon, UserPlusIcon, BellIcon, LogOutIcon, PlusIcon } from '@/components/icons';
+import { SettingsIcon, FileTextIcon, ShieldIcon, UserPlusIcon, BellIcon, LogOutIcon, PlusIcon, VolumeIcon } from '@/components/icons';
 import { VoiceChannelBar } from '@/components/community/VoiceChannelBar';
 import { VoiceChannelUsers } from '@/components/community/VoiceChannelUsers';
 import { useVoiceChannel } from '@/contexts/VoiceChannelContext';
@@ -428,6 +428,17 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
       );
     },
     [voiceParticipants, members, myDid, identity?.displayName, speakingDids],
+  );
+
+  // Show green speaker icon on voice channels with active participants
+  const renderChannelIcon = useCallback(
+    (channel: ChannelItem, defaultIcon: React.ReactNode) => {
+      if (channel.type !== 'voice') return defaultIcon;
+      const participantDids = voiceParticipants.get(channel.id);
+      if (!participantDids || participantDids.size === 0) return defaultIcon;
+      return <VolumeIcon size={18} color="#43b581" />;
+    },
+    [voiceParticipants],
   );
 
   const handleCategoryToggle = useCallback((categoryId: string) => {
@@ -1380,6 +1391,7 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
           onCategoryLongPress={!isMock ? handleCategoryLongPress : undefined}
           onCommunityClick={handleCommunityClick}
           renderChannelExtra={renderChannelExtra}
+          renderChannelIcon={renderChannelIcon}
           draggable={!isMock}
           onChannelReorder={!isMock ? handleChannelReorder : undefined}
           onCategoryReorder={!isMock ? handleCategoryReorder : undefined}

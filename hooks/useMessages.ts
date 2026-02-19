@@ -20,6 +20,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useUmbra } from '@/contexts/UmbraContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { useSound } from '@/contexts/SoundContext';
 import { useNetwork, pushPendingRelayAck } from '@/hooks/useNetwork';
 import type { Message, MessageEvent } from '@umbra/service';
 
@@ -69,6 +70,7 @@ export interface UseMessagesResult {
 export function useMessages(conversationId: string | null): UseMessagesResult {
   const { service, isReady } = useUmbra();
   const { identity } = useAuth();
+  const { playSound } = useSound();
   const { getRelayWs } = useNetwork();
   const myDid = identity?.did ?? '';
   const [messages, setMessages] = useState<Message[]>([]);
@@ -150,6 +152,10 @@ export function useMessages(conversationId: string | null): UseMessagesResult {
           // Don't append messages with empty content (e.g. from decryption failure)
           const text = typeof msg.content === 'string' ? msg.content : (msg.content?.type === 'text' ? msg.content.text : undefined);
           if (!text) return;
+          // Play receive sound for messages from others
+          if (event.type === 'messageReceived' && msg.senderDid !== myDid) {
+            playSound('message_receive');
+          }
           setMessages((prev) => [...prev, msg]);
         }
       } else if (event.type === 'threadReplyReceived') {
@@ -206,7 +212,7 @@ export function useMessages(conversationId: string | null): UseMessagesResult {
     });
 
     return unsubscribe;
-  }, [service, conversationId, fetchMessages, fetchPinned]);
+  }, [service, conversationId, fetchMessages, fetchPinned, playSound, myDid]);
 
   const loadMore = useCallback(async () => {
     if (!service || !conversationId || !hasMore) return;
@@ -237,6 +243,7 @@ export function useMessages(conversationId: string | null): UseMessagesResult {
         if (message.status === 'sending') {
           pushPendingRelayAck(message.id);
         }
+        playSound('message_send');
         // The event listener will add it to the messages list
         return message;
       } catch (err) {
@@ -244,7 +251,7 @@ export function useMessages(conversationId: string | null): UseMessagesResult {
         return null;
       }
     },
-    [service, conversationId, getRelayWs]
+    [service, conversationId, getRelayWs, playSound]
   );
 
   const markAsRead = useCallback(async () => {
@@ -284,10 +291,11 @@ export function useMessages(conversationId: string | null): UseMessagesResult {
     if (!service) return;
     try {
       await service.deleteMessage(messageId);
+      playSound('message_delete');
     } catch (err) {
       setError(err instanceof Error ? err : new Error(String(err)));
     }
-  }, [service]);
+  }, [service, playSound]);
 
   const pinMessage = useCallback(async (messageId: string) => {
     if (!service) return;

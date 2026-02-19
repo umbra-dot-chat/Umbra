@@ -27,6 +27,7 @@ import { DEFAULT_OPUS_CONFIG } from '@/types/call';
 import type { EncryptedCallPayload } from '@/types/call';
 import { useUmbra } from '@/contexts/UmbraContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { useSound } from '@/contexts/SoundContext';
 import { encryptSignal, decryptSignal, isSignalEncryptionAvailable } from '@/services/callCrypto';
 
 // ─── Context Value ───────────────────────────────────────────────────────────
@@ -101,6 +102,7 @@ const RING_TIMEOUT_MS = 45_000;
 export function CallProvider({ children }: { children: React.ReactNode }) {
   const { service } = useUmbra();
   const { identity } = useAuth();
+  const { playSound } = useSound();
   const myDid = identity?.did ?? '';
   const myName = identity?.displayName ?? '';
 
@@ -393,8 +395,9 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       reason,
     };
     sendSignal(activeCall.remoteDid, JSON.stringify(endPayload), 'call_end');
+    playSound('call_leave');
     cleanup();
-  }, [activeCall, myDid, sendSignal, cleanup]);
+  }, [activeCall, myDid, sendSignal, cleanup, playSound]);
 
   // ── Toggle Mute ──────────────────────────────────────────────────────────
 
@@ -404,6 +407,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
 
     const isMuted = manager.toggleMute();
     setActiveCall((prev) => prev ? { ...prev, isMuted } : prev);
+    playSound(isMuted ? 'call_mute' : 'call_unmute');
 
     // Notify remote peer
     if (activeCall) {
@@ -414,7 +418,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       };
       sendSignal(activeCall.remoteDid, JSON.stringify(statePayload), 'call_state');
     }
-  }, [activeCall, myDid, sendSignal]);
+  }, [activeCall, myDid, sendSignal, playSound]);
 
   // ── Toggle Camera ────────────────────────────────────────────────────────
 
@@ -896,6 +900,21 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       cleanup();
     };
   }, [cleanup]);
+
+  // ── Sound on call connect / incoming ring ────────────────────────────────
+
+  const prevCallStatusRef = useRef<CallStatus | null>(null);
+  useEffect(() => {
+    const prevStatus = prevCallStatusRef.current;
+    const status = activeCall?.status ?? null;
+    prevCallStatusRef.current = status;
+
+    if (status === 'connected' && prevStatus !== 'connected') {
+      playSound('call_join');
+    } else if (status === 'incoming' && prevStatus !== 'incoming') {
+      playSound('call_ringing');
+    }
+  }, [activeCall?.status, playSound]);
 
   // ── Context Value ────────────────────────────────────────────────────────
 
