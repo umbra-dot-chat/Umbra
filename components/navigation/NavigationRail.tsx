@@ -13,7 +13,7 @@
  */
 
 import React from 'react';
-import { Pressable, ScrollView, View } from 'react-native';
+import { Image, Pressable, ScrollView, View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 import { Text, Skeleton, useTheme } from '@coexist/wisp-react-native';
 import { HomeIcon, FolderIcon, PlusIcon, SettingsIcon } from '@/components/icons';
@@ -159,6 +159,7 @@ export function NavigationRail({
                   onPress={() => onCommunityPress(community.id)}
                   accentColor={community.accentColor}
                   theme={theme}
+                  iconUrl={community.iconUrl}
                 >
                   <Text
                     size="sm"
@@ -230,9 +231,11 @@ interface RailItemProps {
   children: React.ReactNode;
   /** Optional ring progress (0-100) rendered around the icon */
   ringProgress?: number;
+  /** Optional icon image URL (e.g. Discord guild icon) */
+  iconUrl?: string;
 }
 
-function RailItem({ active, onPress, accentColor, theme, children, ringProgress }: RailItemProps) {
+function RailItem({ active, onPress, accentColor, theme, children, ringProgress, iconUrl }: RailItemProps) {
   const showRing = ringProgress != null && ringProgress > 0 && ringProgress < 100;
 
   return (
@@ -308,7 +311,15 @@ function RailItem({ active, onPress, accentColor, theme, children, ringProgress 
           overflow: 'hidden',
         })}
       >
-        {children}
+        {iconUrl ? (
+          <Image
+            source={{ uri: iconUrl }}
+            style={{ width: ICON_SIZE, height: ICON_SIZE }}
+            resizeMode="cover"
+          />
+        ) : (
+          children
+        )}
       </Pressable>
     </View>
   );

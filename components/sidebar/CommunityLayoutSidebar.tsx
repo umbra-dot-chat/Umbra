@@ -14,7 +14,7 @@
  */
 
 import React, { useMemo, useState, useCallback, useEffect, useRef } from 'react';
-import { View, Pressable, Text as RNText } from 'react-native';
+import { View, Image, Pressable, Text as RNText } from 'react-native';
 import type { LayoutRectangle, GestureResponderEvent } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
@@ -316,8 +316,15 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
     return {
       name: community?.name ?? 'Loading...',
       subtitle: `${members.length} member${members.length !== 1 ? 's' : ''}`,
+      icon: community?.iconUrl ? (
+        <Image
+          source={{ uri: community.iconUrl }}
+          style={{ width: 24, height: 24, borderRadius: 6 }}
+          resizeMode="cover"
+        />
+      ) : undefined,
     };
-  }, [isMock, community?.name, members.length]);
+  }, [isMock, community?.name, community?.iconUrl, members.length]);
 
   const wispSpaces = useMemo<WispCommunitySpace[]>(() => {
     if (isMock) return MOCK_SPACES;
@@ -1406,6 +1413,18 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
             </View>
           </View>
         </View>
+      )}
+
+      {/* Community banner — shown above channel list when available */}
+      {!isMock && community?.bannerUrl && (
+        <Image
+          source={{ uri: community.bannerUrl }}
+          style={{
+            width: '100%',
+            height: 120,
+          }}
+          resizeMode="cover"
+        />
       )}
 
       <View style={{ flex: 1, minHeight: 0 }}>
