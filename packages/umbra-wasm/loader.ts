@@ -225,6 +225,7 @@ export interface UmbraWasmModule {
 
   // Community — Messages
   umbra_wasm_community_message_send(json: string): string;
+  umbra_wasm_community_message_store_received(json: string): string;
   umbra_wasm_community_message_list(json: string): string;
   umbra_wasm_community_message_get(message_id: string): string;
   umbra_wasm_community_message_edit(json: string): string;
@@ -885,6 +886,8 @@ function buildModule(wasmPkg: any): UmbraWasmModule {
     // Community — Messages
     umbra_wasm_community_message_send: (json: string) =>
       wasmPkg.umbra_wasm_community_message_send(json),
+    umbra_wasm_community_message_store_received: (json: string) =>
+      wasmPkg.umbra_wasm_community_message_store_received(json),
     umbra_wasm_community_message_list: (json: string) =>
       wasmPkg.umbra_wasm_community_message_list(json),
     umbra_wasm_community_message_get: (messageId: string) =>

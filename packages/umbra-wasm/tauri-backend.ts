@@ -676,6 +676,9 @@ export function createTauriBackend(
     umbra_wasm_community_message_send: (json: string) => {
       return invoke('community_message_send', { json }).then(ensureJsonString) as any;
     },
+    umbra_wasm_community_message_store_received: (json: string) => {
+      return invoke('community_message_store_received', { json }).then(ensureJsonString) as any;
+    },
     umbra_wasm_community_message_list: (json: string) => {
       return invoke('community_message_list', { json }).then(ensureJsonString) as any;
     },
