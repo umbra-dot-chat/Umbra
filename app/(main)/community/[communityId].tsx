@@ -23,12 +23,11 @@ import React, { useMemo, useCallback, useState, useRef } from 'react';
 import { View, Animated, Pressable } from 'react-native';
 import type { GestureResponderEvent } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
-import { useTheme, Text, EmojiPicker } from '@coexist/wisp-react-native';
-import { MemberList } from '@coexist/wisp-react-native/src/components/member-list';
-import type { MemberListSection, MemberListMember } from '@coexist/wisp-react-native/src/components/member-list';
-import { MessageInput } from '@coexist/wisp-react-native/src/components/message-input';
-import { MessageList } from '@coexist/wisp-react-native/src/components/message-list';
-import type { MessageListEntry } from '@coexist/wisp-react-native/src/components/message-list';
+import {
+  useTheme, Text, EmojiPicker,
+  MemberList, MessageInput, MessageList,
+  type MemberListSection, type MemberListMember, type MessageListEntry,
+} from '@coexist/wisp-react-native';
 import { E2EEKeyExchangeUI } from '@coexist/wisp-react-native/src/components/e2ee-key-exchange-ui';
 
 import { useAuth } from '@/contexts/AuthContext';

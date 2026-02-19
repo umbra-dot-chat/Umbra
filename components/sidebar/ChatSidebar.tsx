@@ -5,8 +5,8 @@ import {
   Sidebar, SidebarSection,
   Skeleton,
   useTheme,
+  ConversationListItem,
 } from '@coexist/wisp-react-native';
-import { ConversationListItem } from '@coexist/wisp-react-native/src/components/conversation-list-item';
 import type { PendingGroupInvite } from '@umbra/service';
 import React, { useCallback, useState } from 'react';
 import { ScrollView, View } from 'react-native';

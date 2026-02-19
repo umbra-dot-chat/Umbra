@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Platform, View } from 'react-native';
-import { Avatar, EmojiPicker, MessageInput, useTheme } from '@coexist/wisp-react-native';
-import { MentionAutocomplete } from '@coexist/wisp-react-native/src/components/mention-autocomplete';
+import { Avatar, EmojiPicker, MessageInput, useTheme, MentionAutocomplete } from '@coexist/wisp-react-native';
 import { useFriends } from '@/hooks/useFriends';
 import { useMention } from '@/hooks/useMention';
 

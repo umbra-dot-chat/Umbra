@@ -12,7 +12,7 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
-} from '@coexist/wisp-react-native/src/components/dropdown-menu';
+} from '@coexist/wisp-react-native';
 
 // ---------------------------------------------------------------------------
 // Types

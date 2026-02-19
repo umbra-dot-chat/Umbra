@@ -7,8 +7,7 @@
 import React from 'react';
 import { Pressable, View, Dimensions, Platform } from 'react-native';
 import type { ViewStyle } from 'react-native';
-import { Avatar, useTheme } from '@coexist/wisp-react-native';
-import { UserProfileCard } from '@coexist/wisp-react-native/src/components/user-profile-card';
+import { Avatar, useTheme, UserProfileCard } from '@coexist/wisp-react-native';
 import type { ProfileMember } from '@/hooks/useProfilePopover';
 
 export interface ProfilePopoverProps {

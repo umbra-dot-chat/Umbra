@@ -1,7 +1,6 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { Pressable, View, useWindowDimensions, Platform } from 'react-native';
-import { Text, useTheme } from '@coexist/wisp-react-native';
-import { MessageActionBar } from '@coexist/wisp-react-native/src/components/message-action-bar';
+import { Text, useTheme, MessageActionBar } from '@coexist/wisp-react-native';
 import { ReplyIcon, ThreadIcon, CopyIcon, ForwardIcon, PinIcon, TrashIcon, EditIcon } from '@/components/icons';
 import { SlotRenderer } from '@/components/plugins/SlotRenderer';
 

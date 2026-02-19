@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { Platform, View } from 'react-native';
 import { Text, useTheme } from '@coexist/wisp-react-native';
+import { E2EEKeyExchangeUI } from '@coexist/wisp-react-native/src/components/e2ee-key-exchange-ui';
 import { useHoverMessage } from '@/hooks/useHoverMessage';
 import { useRightPanel } from '@/hooks/useRightPanel';
 import { useProfilePopoverContext } from '@/contexts/ProfilePopoverContext';
@@ -26,7 +27,6 @@ import { useCall } from '@/hooks/useCall';
 import { pickFile } from '@/utils/filePicker';
 import { InputDialog } from '@/components/community/InputDialog';
 import { useSettingsDialog } from '@/contexts/SettingsDialogContext';
-import { E2EEKeyExchangeUI } from '@coexist/wisp-react-native/src/components/e2ee-key-exchange-ui';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Empty conversation state

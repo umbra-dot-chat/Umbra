@@ -17,12 +17,14 @@ import React, { useMemo, useState, useCallback, useEffect, useRef } from 'react'
 import { View, Pressable, Text as RNText } from 'react-native';
 import type { LayoutRectangle, GestureResponderEvent } from 'react-native';
 import { useRouter } from 'expo-router';
-import { useTheme } from '@coexist/wisp-react-native';
-import { CommunitySidebar } from '@coexist/wisp-react-native/src/components/community-sidebar';
-import type { CommunityInfo, CommunitySpace as WispCommunitySpace } from '@coexist/wisp-react-native/src/components/community-sidebar';
-import type { ChannelCategory, ChannelItem, ChannelType } from '@coexist/wisp-react-native/src/components/channel-list';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from '@coexist/wisp-react-native/src/components/dropdown-menu';
-import type { ManagedRole, RolePermissionCategory } from '@coexist/wisp-react-native/src/components/role-management-panel';
+import {
+  useTheme,
+  CommunitySidebar,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator,
+  type CommunityInfo, type CommunitySpace as WispCommunitySpace,
+  type ChannelCategory, type ChannelItem, type ChannelType,
+  type ManagedRole, type RolePermissionCategory,
+} from '@coexist/wisp-react-native';
 
 import { SettingsIcon, FileTextIcon, ShieldIcon, UserPlusIcon, BellIcon, LogOutIcon, PlusIcon } from '@/components/icons';
 import { VoiceChannelBar } from '@/components/community/VoiceChannelBar';

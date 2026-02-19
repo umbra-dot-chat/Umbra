@@ -3,18 +3,8 @@ import { render } from '@testing-library/react-native';
 import { View } from 'react-native';
 import { SearchPanel } from '@/components/panels/SearchPanel';
 
-// Mock the deep import for MessageSearch (not covered by the top-level wisp-react-native mock)
-jest.mock('@coexist/wisp-react-native/src/components/message-search', () => {
-  const { forwardRef, createElement } = require('react');
-  const { View } = require('react-native');
-  const MockMessageSearch = forwardRef((props: any, ref: any) =>
-    createElement(View, { ...props, ref, testID: 'MessageSearch' }, props.children)
-  );
-  MockMessageSearch.displayName = 'MessageSearch';
-  return {
-    MessageSearch: MockMessageSearch,
-  };
-});
+// MessageSearch is now imported from the main @coexist/wisp-react-native package
+// which is mocked in jest.setup.js, so no additional mock is needed here
 
 jest.mock('@/contexts/UmbraContext', () => ({
   useUmbra: () => ({

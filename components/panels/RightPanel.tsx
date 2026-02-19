@@ -1,9 +1,6 @@
 import React, { useMemo } from 'react';
 import { Animated, View } from 'react-native';
-import { useTheme } from '@coexist/wisp-react-native';
-import { MemberList } from '@coexist/wisp-react-native/src/components/member-list';
-import { PinnedMessages } from '@coexist/wisp-react-native/src/components/pinned-messages';
-import { ThreadPanel } from '@coexist/wisp-react-native/src/components/thread-panel';
+import { useTheme, MemberList, PinnedMessages, ThreadPanel } from '@coexist/wisp-react-native';
 import { PANEL_WIDTH } from '@/types/panels';
 import type { RightPanel as RightPanelType } from '@/types/panels';
 import { useFriends } from '@/hooks/useFriends';

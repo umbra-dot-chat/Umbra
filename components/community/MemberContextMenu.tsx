@@ -12,13 +12,10 @@
 import React, { useCallback } from 'react';
 import { View, Pressable } from 'react-native';
 import type { ViewStyle, TextStyle } from 'react-native';
-import { useTheme, Text } from '@coexist/wisp-react-native';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-} from '@coexist/wisp-react-native/src/components/dropdown-menu';
+  useTheme, Text,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator,
+} from '@coexist/wisp-react-native';
 import { defaultSpacing, defaultRadii, defaultTypography } from '@coexist/wisp-core/theme/create-theme';
 import Svg, { Polyline, Line } from 'react-native-svg';
 
