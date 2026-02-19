@@ -20,7 +20,7 @@
  */
 
 import React, { useMemo, useCallback, useState, useRef } from 'react';
-import { View, Animated, Pressable } from 'react-native';
+import { View, Image, Animated, Pressable } from 'react-native';
 import type { GestureResponderEvent } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import {
@@ -464,9 +464,8 @@ export default function CommunityPage() {
   const pinnedForPanel = useMemo(() =>
     (pinnedMessages || []).map((m) => ({
       id: m.id,
-      sender: m.senderDid
-        ? (memberNameMap.get(m.senderDid) || (m.senderDid === myDid ? 'You' : m.senderDid.slice(0, 16)))
-        : 'Unknown',
+      sender: m.senderDisplayName
+        || (m.senderDid ? (memberNameMap.get(m.senderDid) || (m.senderDid === myDid ? 'You' : m.senderDid.slice(0, 16))) : 'Unknown'),
       content: m.content ?? '',
       timestamp: m.createdAt
         ? new Date(m.createdAt < 1000000000000 ? m.createdAt * 1000 : m.createdAt)
@@ -492,9 +491,17 @@ export default function CommunityPage() {
         lastDate = dateStr;
       }
 
-      const senderName = msg.senderDid
-        ? (memberNameMap.get(msg.senderDid) ?? msg.senderDid.slice(0, 16) + '...')
-        : 'Unknown';
+      // Prefer bridge display name (ghost seat Discord username), then member nickname, then truncated DID
+      const senderName = msg.senderDisplayName
+        || (msg.senderDid ? (memberNameMap.get(msg.senderDid) ?? msg.senderDid.slice(0, 16) + '...') : 'Unknown');
+
+      // Bridge messages from Discord include avatar URLs — render as an Image element
+      const avatarElement = msg.senderAvatarUrl
+        ? React.createElement(Image, {
+            source: { uri: msg.senderAvatarUrl },
+            style: { width: 32, height: 32, borderRadius: 16 },
+          })
+        : undefined;
 
       entries.push({
         type: 'message',
@@ -504,6 +511,7 @@ export default function CommunityPage() {
         timestamp: new Date(msg.createdAt < 1000000000000 ? msg.createdAt * 1000 : msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         isOwn: msg.senderDid === myDid,
         edited: msg.edited,
+        ...(avatarElement ? { avatar: avatarElement } : {}),
         ...(msg.threadReplyCount > 0 ? { threadInfo: { replyCount: msg.threadReplyCount } } : {}),
       });
     }

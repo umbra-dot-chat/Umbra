@@ -129,6 +129,9 @@ export function useCommunityMessages(channelId: string | null): UseCommunityMess
                 threadReplyCount: 0,
                 createdAt: Date.now(),
                 updatedAt: Date.now(),
+                // Bridge messages carry sender display name & avatar from Discord
+                senderDisplayName: event.senderDisplayName,
+                senderAvatarUrl: event.senderAvatarUrl,
               };
               setMessages((prev) => {
                 if (prev.some((m) => m.id === bridgeMsg.id)) return prev;

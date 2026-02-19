@@ -985,6 +985,10 @@ export interface CommunityMessage {
   createdAt: number;
   /** Updated timestamp */
   updatedAt: number;
+  /** Bridge message: sender display name (from Discord) */
+  senderDisplayName?: string;
+  /** Bridge message: sender avatar URL (from Discord) */
+  senderAvatarUrl?: string;
 }
 
 /**

@@ -11,7 +11,7 @@
  * ```
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useUmbra } from '@/contexts/UmbraContext';
 import type {
   Community,
@@ -202,9 +202,18 @@ export function useCommunity(communityId: string | null): UseCommunityResult {
     return unsubscribe;
   }, [service, communityId]);
 
-  // Ensure bridge bot DID is in local member list (so Umbra → Discord messages flow)
+  // Ensure bridge bot DID is in local member list (so Umbra → Discord messages flow).
+  // Runs once after initial data load completes for this community.
+  const bridgeSyncedRef = useRef(false);
   useEffect(() => {
-    if (!service || !communityId || !isReady || isLoading) return;
+    // Reset when community changes
+    bridgeSyncedRef.current = false;
+  }, [communityId]);
+
+  useEffect(() => {
+    if (!service || !communityId || !isReady || isLoading || bridgeSyncedRef.current) return;
+    bridgeSyncedRef.current = true;
+
     const RELAY = process.env.EXPO_PUBLIC_RELAY_URL || 'https://relay.umbra.chat';
 
     fetch(`${RELAY}/api/bridge/${encodeURIComponent(communityId)}`)
@@ -214,7 +223,7 @@ export function useCommunity(communityId: string | null): UseCommunityResult {
         if (!data.ok || !data.data?.bridgeDid || !data.data?.enabled) return;
 
         const bridgeDid: string = data.data.bridgeDid;
-        // Check if bridge bot is already a member
+        // Check if bridge bot is already a member locally
         const alreadyMember = members.some((m) => m.memberDid === bridgeDid);
         if (alreadyMember) return;
 
