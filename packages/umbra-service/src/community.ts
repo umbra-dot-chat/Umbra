@@ -18,8 +18,13 @@ import type {
   CommunityEvent,
   CommunityFileRecord,
   CommunityFileFolderRecord,
-  RelayEnvelope,
+  CommunitySeat,
 } from './types';
+import type {
+  MappedCommunityStructure,
+  CommunityImportResult,
+  CommunityImportProgress,
+} from './import/discord-community';
 
 // =============================================================================
 // COMMUNITY CRUD
@@ -1010,24 +1015,349 @@ export async function broadcastCommunityEvent(
 ): Promise<void> {
   if (!relayWs || relayWs.readyState !== WebSocket.OPEN) return;
 
-  // Get all community members
-  const members = await getMembers(communityId);
+  // Build relay batch in Rust (resolves members, excludes sender, builds envelope)
+  const json = JSON.stringify({
+    community_id: communityId,
+    event,
+    sender_did: senderDid,
+  });
+  const resultJson = wasm().umbra_wasm_community_build_event_relay_batch(json);
+  const relayMessages = await parseWasm<Array<{ toDid: string; payload: string }>>(resultJson);
 
-  const envelope: RelayEnvelope = {
-    envelope: 'community_event',
-    version: 1,
-    payload: { communityId, event, senderDid, timestamp: Date.now() },
-  };
-  const payloadStr = JSON.stringify(envelope);
-
-  // Fan-out to all members except sender
-  for (const member of members) {
-    if (member.memberDid === senderDid) continue;
-    const relayMessage = JSON.stringify({
-      type: 'send',
-      to_did: member.memberDid,
-      payload: payloadStr,
-    });
-    relayWs.send(relayMessage);
+  for (const rm of relayMessages) {
+    relayWs.send(JSON.stringify({ type: 'send', to_did: rm.toDid, payload: rm.payload }));
   }
+}
+
+// =============================================================================
+// DISCORD IMPORT
+// =============================================================================
+
+/**
+ * Create a community from an imported Discord structure.
+ *
+ * This creates:
+ * 1. The community itself
+ * 2. A default space
+ * 3. All categories from the Discord server
+ * 4. All channels (placed in their respective categories)
+ * 5. All custom roles with translated permissions
+ *
+ * @param structure - The mapped Discord structure to import
+ * @param ownerDid - The DID of the user creating the community
+ * @param ownerNickname - Optional nickname for the owner
+ * @param onProgress - Optional progress callback
+ * @returns The import result with the created community ID
+ */
+export async function createCommunityFromDiscordImport(
+  structure: MappedCommunityStructure,
+  ownerDid: string,
+  ownerNickname?: string,
+  onProgress?: (progress: CommunityImportProgress) => void,
+): Promise<CommunityImportResult> {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+  let categoriesCreated = 0;
+  let channelsCreated = 0;
+  let rolesCreated = 0;
+  let seatsCreated = 0;
+  let pinsImported = 0;
+  let communityId: string | undefined;
+
+  try {
+    // Phase 1: Create the community
+    onProgress?.({
+      phase: 'creating_community',
+      percent: 0,
+      currentItem: structure.name,
+    });
+
+    const createResult = await createCommunity(
+      structure.name,
+      ownerDid,
+      structure.description,
+      ownerNickname,
+    );
+    communityId = createResult.communityId;
+
+    // Get the default space that was created with the community
+    const spaces = await getSpaces(createResult.communityId);
+    const defaultSpace = spaces[0]; // First space is created automatically
+
+    if (!defaultSpace) {
+      throw new Error('No default space found after community creation');
+    }
+
+    // Phase 2: Create categories
+    onProgress?.({
+      phase: 'creating_categories',
+      percent: 10,
+      totalItems: structure.categories.length,
+      completedItems: 0,
+    });
+
+    // Map Discord category IDs to Umbra category IDs
+    const categoryIdMap = new Map<string, string>();
+
+    for (let i = 0; i < structure.categories.length; i++) {
+      const cat = structure.categories[i];
+      try {
+        const category = await createCategory(
+          createResult.communityId,
+          defaultSpace.id,
+          cat.name,
+          ownerDid,
+          cat.position,
+        );
+        categoryIdMap.set(cat.discordId, category.id);
+        categoriesCreated++;
+
+        onProgress?.({
+          phase: 'creating_categories',
+          percent: 10 + Math.round((i / structure.categories.length) * 30),
+          totalItems: structure.categories.length,
+          completedItems: i + 1,
+          currentItem: cat.name,
+        });
+      } catch (err) {
+        const msg = `Failed to create category "${cat.name}": ${err instanceof Error ? err.message : String(err)}`;
+        warnings.push(msg);
+      }
+    }
+
+    // Phase 3: Create channels
+    onProgress?.({
+      phase: 'creating_channels',
+      percent: 40,
+      totalItems: structure.channels.length,
+      completedItems: 0,
+    });
+
+    for (let i = 0; i < structure.channels.length; i++) {
+      const ch = structure.channels[i];
+      try {
+        // Resolve the Umbra category ID (if any)
+        const categoryId = ch.categoryDiscordId
+          ? categoryIdMap.get(ch.categoryDiscordId)
+          : undefined;
+
+        await createChannel(
+          createResult.communityId,
+          defaultSpace.id,
+          ch.name,
+          ch.type,
+          ownerDid,
+          ch.topic ?? undefined,
+          ch.position,
+          categoryId,
+        );
+        channelsCreated++;
+
+        onProgress?.({
+          phase: 'creating_channels',
+          percent: 40 + Math.round((i / structure.channels.length) * 40),
+          totalItems: structure.channels.length,
+          completedItems: i + 1,
+          currentItem: ch.name,
+        });
+      } catch (err) {
+        const msg = `Failed to create channel "${ch.name}": ${err instanceof Error ? err.message : String(err)}`;
+        warnings.push(msg);
+      }
+    }
+
+    // Phase 4: Create roles (and build Discord→Umbra role ID map for seats)
+    const roleIdMap = new Map<string, string>(); // Discord role ID → Umbra role ID
+
+    onProgress?.({
+      phase: 'creating_roles',
+      percent: 70,
+      totalItems: structure.roles.length,
+      completedItems: 0,
+    });
+
+    for (let i = 0; i < structure.roles.length; i++) {
+      const role = structure.roles[i];
+      try {
+        const createdRole = await createCustomRole(
+          createResult.communityId,
+          role.name,
+          ownerDid,
+          role.color,
+          role.position,
+          role.hoist,
+          role.mentionable,
+          role.permissions,
+        );
+        roleIdMap.set(role.discordId, createdRole.id);
+        rolesCreated++;
+
+        onProgress?.({
+          phase: 'creating_roles',
+          percent: 70 + Math.round((i / structure.roles.length) * 15),
+          totalItems: structure.roles.length,
+          completedItems: i + 1,
+          currentItem: role.name,
+        });
+      } catch (err) {
+        const msg = `Failed to create role "${role.name}": ${err instanceof Error ? err.message : String(err)}`;
+        warnings.push(msg);
+      }
+    }
+
+    // Phase 5: Create seats (ghost members)
+    if (structure.seats && structure.seats.length > 0) {
+      onProgress?.({
+        phase: 'creating_seats',
+        percent: 85,
+        totalItems: structure.seats.length,
+        completedItems: 0,
+      });
+
+      try {
+        // Map source role IDs to Umbra role IDs
+        const seatData = structure.seats.map((seat) => ({
+          platform: seat.platform,
+          platform_user_id: seat.platformUserId,
+          platform_username: seat.platformUsername,
+          nickname: seat.nickname,
+          avatar_url: seat.avatarUrl,
+          role_ids: seat.sourceRoleIds
+            .map((srcId) => roleIdMap.get(srcId))
+            .filter((id): id is string => id !== undefined),
+        }));
+
+        seatsCreated = await createSeatsBatch(createResult.communityId, seatData);
+
+        onProgress?.({
+          phase: 'creating_seats',
+          percent: 92,
+          totalItems: structure.seats.length,
+          completedItems: seatsCreated,
+        });
+      } catch (err) {
+        const msg = `Failed to create seats: ${err instanceof Error ? err.message : String(err)}`;
+        warnings.push(msg);
+      }
+    }
+
+    // Phase 6: Import pinned messages (future — requires pin data from relay)
+    // Pins will be imported when the relay endpoint is connected in Phase 3
+
+    // Complete
+    onProgress?.({
+      phase: 'complete',
+      percent: 100,
+    });
+
+    return {
+      success: true,
+      communityId,
+      categoriesCreated,
+      channelsCreated,
+      rolesCreated,
+      seatsCreated,
+      pinsImported,
+      errors,
+      warnings,
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    errors.push(msg);
+
+    return {
+      success: false,
+      communityId,
+      categoriesCreated,
+      channelsCreated,
+      rolesCreated,
+      seatsCreated,
+      pinsImported,
+      errors,
+      warnings,
+    };
+  }
+}
+
+// =============================================================================
+// COMMUNITY SEATS (Ghost Member Placeholders)
+// =============================================================================
+
+/**
+ * Get all seats for a community.
+ */
+export async function getSeats(communityId: string): Promise<CommunitySeat[]> {
+  const resultJson = wasm().umbra_wasm_community_seat_list(communityId);
+  return await parseWasm<CommunitySeat[]>(resultJson);
+}
+
+/**
+ * Get unclaimed (ghost) seats for a community.
+ */
+export async function getUnclaimedSeats(communityId: string): Promise<CommunitySeat[]> {
+  const resultJson = wasm().umbra_wasm_community_seat_list_unclaimed(communityId);
+  return await parseWasm<CommunitySeat[]>(resultJson);
+}
+
+/**
+ * Find a seat matching a platform account.
+ */
+export async function findMatchingSeat(
+  communityId: string,
+  platform: string,
+  platformUserId: string
+): Promise<CommunitySeat | null> {
+  const resultJson = wasm().umbra_wasm_community_seat_find_match(
+    JSON.stringify({ community_id: communityId, platform, platform_user_id: platformUserId })
+  );
+  const parsed = await parseWasm<CommunitySeat | null>(resultJson);
+  return parsed;
+}
+
+/**
+ * Claim a seat (auto-join + assign roles).
+ */
+export async function claimSeat(seatId: string, claimerDid: string): Promise<CommunitySeat> {
+  const resultJson = wasm().umbra_wasm_community_seat_claim(
+    JSON.stringify({ seat_id: seatId, claimer_did: claimerDid })
+  );
+  return await parseWasm<CommunitySeat>(resultJson);
+}
+
+/**
+ * Delete a seat (admin action).
+ */
+export async function deleteSeat(seatId: string, actorDid: string): Promise<void> {
+  wasm().umbra_wasm_community_seat_delete(
+    JSON.stringify({ seat_id: seatId, actor_did: actorDid })
+  );
+}
+
+/**
+ * Create seats in batch (for import).
+ */
+export async function createSeatsBatch(
+  communityId: string,
+  seats: Array<{
+    platform: string;
+    platform_user_id: string;
+    platform_username: string;
+    nickname?: string;
+    avatar_url?: string;
+    role_ids: string[];
+  }>
+): Promise<number> {
+  const resultJson = wasm().umbra_wasm_community_seat_create_batch(
+    JSON.stringify({ community_id: communityId, seats })
+  );
+  const result = await parseWasm<{ created: number }>(resultJson);
+  return result.created;
+}
+
+/**
+ * Count seats for a community.
+ */
+export async function countSeats(communityId: string): Promise<{ total: number; unclaimed: number }> {
+  const resultJson = wasm().umbra_wasm_community_seat_count(communityId);
+  return await parseWasm<{ total: number; unclaimed: number }>(resultJson);
 }

@@ -52,6 +52,9 @@ pub mod protocol_ids {
 
     /// Presence protocol (online/offline status)
     pub const PRESENCE: &str = "/umbra/presence/1.0.0";
+
+    /// File transfer protocol (chunk-based P2P file sharing)
+    pub const FILE_TRANSFER: &str = "/umbra/file-transfer/1.0.0";
 }
 
 // ============================================================================
@@ -373,6 +376,7 @@ mod tests {
         assert_eq!(protocol_ids::MESSAGING, "/umbra/messaging/1.0.0");
         assert_eq!(protocol_ids::FRIENDS, "/umbra/friends/1.0.0");
         assert_eq!(protocol_ids::PRESENCE, "/umbra/presence/1.0.0");
+        assert_eq!(protocol_ids::FILE_TRANSFER, "/umbra/file-transfer/1.0.0");
     }
 
     #[test]

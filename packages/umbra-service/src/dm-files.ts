@@ -15,7 +15,6 @@ import type {
   DmSharedFileRecord,
   DmSharedFolderRecord,
   DmFileEventPayload,
-  RelayEnvelope,
 } from './types';
 
 // ── Files ──────────────────────────────────────────────────────────────────
@@ -175,21 +174,19 @@ export async function renameDmFolder(
  * Send a DM file event to the other party via relay.
  * Used for real-time notifications about shared file changes.
  */
-export function buildDmFileEventEnvelope(
+export async function buildDmFileEventEnvelope(
   conversationId: string,
   senderDid: string,
   event: DmFileEventPayload['event'],
-): RelayEnvelope {
-  return {
-    envelope: 'dm_file_event',
-    version: 1,
-    payload: {
-      conversationId,
-      senderDid,
-      timestamp: Date.now(),
-      event,
-    },
-  };
+): Promise<{ payload: string }> {
+  // Build envelope in Rust
+  const json = JSON.stringify({
+    conversation_id: conversationId,
+    sender_did: senderDid,
+    event,
+  });
+  const resultJson = wasm().umbra_wasm_build_dm_file_event_envelope(json);
+  return await parseWasm<{ payload: string }>(resultJson);
 }
 
 /**
@@ -200,19 +197,12 @@ export function buildDmFileEventEnvelope(
  */
 export async function broadcastDmFileEvent(
   recipientDids: string[],
-  envelope: RelayEnvelope,
+  envelope: { payload: string },
   relayWs: WebSocket | null,
 ): Promise<void> {
   if (!relayWs || relayWs.readyState !== WebSocket.OPEN) return;
 
-  const payloadStr = JSON.stringify(envelope);
-
   for (const did of recipientDids) {
-    const relayMessage = JSON.stringify({
-      type: 'send',
-      to_did: did,
-      payload: payloadStr,
-    });
-    relayWs.send(relayMessage);
+    relayWs.send(JSON.stringify({ type: 'send', to_did: did, payload: envelope.payload }));
   }
 }

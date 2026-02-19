@@ -78,6 +78,7 @@ import { HelpIndicator } from '@/components/ui/HelpIndicator';
 import { HelpPopoverHost } from '@/components/ui/HelpPopoverHost';
 import { HelpText, HelpHighlight, HelpListItem } from '@/components/ui/HelpContent';
 import { PRIMARY_RELAY_URL, DEFAULT_RELAY_SERVERS } from '@/config';
+import { LinkedAccountsPanel, FriendDiscoveryPanel } from '@/components/discovery';
 
 // Cast icons for Wisp Input compatibility (accepts strokeWidth prop)
 type InputIcon = React.ComponentType<{ size?: number | string; color?: string; strokeWidth?: number }>;
@@ -120,12 +121,22 @@ const NAV_ITEMS: NavItem[] = [
 interface SubNavItem { id: string; label: string; }
 
 const SUBCATEGORIES: Partial<Record<SettingsSection, SubNavItem[]>> = {
+  account: [
+    { id: 'identity', label: 'Identity' },
+    { id: 'sharing', label: 'Sharing' },
+    { id: 'danger', label: 'Danger Zone' },
+  ],
   appearance: [
     { id: 'theme', label: 'Theme' },
     { id: 'dark-mode', label: 'Dark Mode' },
     { id: 'colors', label: 'Colors' },
     { id: 'text-size', label: 'Text Size' },
     { id: 'font', label: 'Font' },
+  ],
+  privacy: [
+    { id: 'discovery', label: 'Friend Discovery' },
+    { id: 'visibility', label: 'Visibility' },
+    { id: 'security', label: 'Security' },
   ],
   'audio-video': [
     { id: 'calling', label: 'Calling' },
@@ -455,11 +466,19 @@ function AccountSection() {
                     backgroundColor: tc.accent.primary,
                     alignItems: 'center',
                     justifyContent: 'center',
+                    overflow: 'hidden',
                   }}
                 >
-                  <RNText style={{ fontSize: 20, fontWeight: '700', color: tc.text.inverse }}>
-                    {identity.displayName.charAt(0).toUpperCase()}
-                  </RNText>
+                  {identity.avatar ? (
+                    <Image
+                      source={{ uri: identity.avatar }}
+                      style={{ width: 48, height: 48 }}
+                    />
+                  ) : (
+                    <RNText style={{ fontSize: 20, fontWeight: '700', color: tc.text.inverse }}>
+                      {identity.displayName.charAt(0).toUpperCase()}
+                    </RNText>
+                  )}
                 </View>
                 <View style={{ flex: 1 }}>
                   <RNText style={{ fontSize: 18, fontWeight: '700', color: tc.text.primary }}>
@@ -527,6 +546,19 @@ function AccountSection() {
               </View>
             </View>
           </Card>
+
+          {/* Linked Accounts */}
+          <View style={{ marginTop: 20 }}>
+            <View style={{ marginBottom: 12 }}>
+              <RNText style={{ fontSize: 15, fontWeight: '600', color: tc.text.primary }}>
+                Linked Accounts
+              </RNText>
+              <RNText style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
+                Connect accounts from other platforms.
+              </RNText>
+            </View>
+            <LinkedAccountsPanel did={identity?.did ?? null} />
+          </View>
       </View>
 
       <View nativeID="sub-sharing">
@@ -574,7 +606,7 @@ function AccountSection() {
           </View>
       </View>
 
-      <View nativeID="sub-danger-zone">
+      <View nativeID="sub-danger">
       {/* Danger zone */}
       <View style={{ gap: 12 }}>
         <View>
@@ -1006,7 +1038,7 @@ function NotificationsSection() {
 function PrivacySection() {
   const { theme } = useTheme();
   const tc = theme.colors;
-  const { hasPin, setPin, verifyPin } = useAuth();
+  const { identity, hasPin, setPin, verifyPin } = useAuth();
   const [readReceipts, setReadReceipts] = useState(true);
   const [typingIndicators, setTypingIndicators] = useState(true);
   const [showOnline, setShowOnline] = useState(true);
@@ -1082,6 +1114,10 @@ function PrivacySection() {
         title="Privacy"
         description="Manage your visibility and control what others can see."
       />
+
+      <View nativeID="sub-discovery">
+        <FriendDiscoveryPanel did={identity?.did ?? null} />
+      </View>
 
       <View nativeID="sub-visibility">
           <View style={{ gap: 20 }}>

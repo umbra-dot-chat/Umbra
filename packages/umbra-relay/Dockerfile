@@ -6,7 +6,7 @@
 # ============================================================================
 
 # Build stage
-FROM rust:1.82-bookworm AS builder
+FROM rust:1.84-bookworm AS builder
 
 WORKDIR /app
 
@@ -31,6 +31,9 @@ RUN useradd --create-home --shell /bin/bash relay
 
 COPY --from=builder /app/target/release/umbra-relay /usr/local/bin/umbra-relay
 
+# Create data directory for discovery persistence
+RUN mkdir -p /data && chown relay:relay /data
+
 USER relay
 
 EXPOSE 8080
@@ -50,5 +53,7 @@ ENV RELAY_PEERS=""
 ENV RELAY_PUBLIC_URL=""
 ENV RELAY_ID=""
 ENV PRESENCE_HEARTBEAT_SECS=30
+# Discovery persistence
+ENV DATA_DIR=/data
 
 CMD ["umbra-relay"]

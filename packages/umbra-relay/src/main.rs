@@ -15,6 +15,7 @@
 //! **Privacy**: The relay never sees plaintext content. All E2E encryption
 //! happens client-side — the relay only handles opaque encrypted blobs.
 
+mod discovery;
 mod federation;
 mod handler;
 mod protocol;
@@ -26,7 +27,7 @@ use axum::{
     extract::{State, WebSocketUpgrade},
     http::Method,
     response::IntoResponse,
-    routing::get,
+    routing::{delete, get, post},
     Json, Router,
 };
 use clap::Parser;
@@ -34,6 +35,7 @@ use serde_json::json;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
 
+use discovery::{DiscoveryConfig, DiscoveryStore};
 use federation::Federation;
 use state::{RelayConfig, RelayState};
 
@@ -195,10 +197,97 @@ async fn main() {
         }
     });
 
-    // Build router
+    // ── Discovery Service Setup ─────────────────────────────────────────────
+    let discovery_config = DiscoveryConfig::from_env();
+    let discovery_store = DiscoveryStore::new(discovery_config.clone());
+
+    // Load persisted discovery data from disk
+    let loaded = discovery_store.load_from_disk();
+    if loaded > 0 {
+        tracing::info!(entries = loaded, "Loaded discovery data from disk");
+    }
+
+    // Log discovery service status
+    if discovery_config.discord_enabled() {
+        tracing::info!("Discord OAuth enabled");
+    }
+    if discovery_config.github_enabled() {
+        tracing::info!("GitHub OAuth enabled");
+    }
+    if discovery_config.steam_enabled() {
+        tracing::info!("Steam OpenID enabled");
+    }
+    tracing::info!("Bluesky handle verification enabled (public API)");
+    if discovery_config.xbox_enabled() {
+        tracing::info!("Xbox OAuth enabled");
+    }
+
+    // Spawn discovery cleanup task
+    let discovery_cleanup = discovery_store.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(60));
+        loop {
+            interval.tick().await;
+            discovery_cleanup.cleanup_expired_states();
+        }
+    });
+
+    // Build discovery router with its own state
+    let discovery_router = Router::new()
+        // OAuth routes (account linking)
+        .route("/auth/discord/start", get(discovery::oauth::discord::start))
+        .route("/auth/discord/callback", get(discovery::oauth::discord::callback))
+        .route("/auth/github/start", get(discovery::oauth::github::start))
+        .route("/auth/github/callback", get(discovery::oauth::github::callback))
+        .route("/auth/steam/start", get(discovery::oauth::steam::start))
+        .route("/auth/steam/callback", get(discovery::oauth::steam::callback))
+        .route("/auth/bluesky/start", get(discovery::oauth::bluesky::start))
+        .route("/auth/bluesky/callback", get(discovery::oauth::bluesky::callback))
+        .route("/auth/xbox/start", get(discovery::oauth::xbox::start))
+        .route("/auth/xbox/callback", get(discovery::oauth::xbox::callback))
+        // Profile import OAuth routes (returns JSON with profile data)
+        .route("/profile/import/discord/start", post(discovery::oauth::profile_import::start_discord))
+        .route("/profile/import/discord/callback", get(discovery::oauth::profile_import::callback_discord))
+        .route("/profile/import/github/start", post(discovery::oauth::profile_import::start_github))
+        .route("/profile/import/github/callback", get(discovery::oauth::profile_import::callback_github))
+        .route("/profile/import/steam/start", post(discovery::oauth::profile_import::start_steam))
+        .route("/profile/import/steam/callback", get(discovery::oauth::profile_import::callback_steam))
+        .route("/profile/import/bluesky/start", post(discovery::oauth::profile_import::start_bluesky))
+        .route("/profile/import/bluesky/verify", get(discovery::oauth::profile_import::verify_bluesky_page))
+        .route("/profile/import/bluesky/callback", get(discovery::oauth::profile_import::callback_bluesky))
+        .route("/profile/import/xbox/start", post(discovery::oauth::profile_import::start_xbox))
+        .route("/profile/import/xbox/callback", get(discovery::oauth::profile_import::callback_xbox))
+        // Community import OAuth routes (for importing Discord server structure)
+        .route("/community/import/discord/start", post(discovery::oauth::community_import::start_discord_community_import))
+        .route("/community/import/discord/callback", get(discovery::oauth::community_import::callback_discord_community_import))
+        .route("/community/import/discord/guilds", get(discovery::oauth::community_import::get_discord_guilds))
+        .route("/community/import/discord/guild/:id/structure", get(discovery::oauth::community_import::get_discord_guild_structure))
+        .route("/community/import/discord/bot-invite", get(discovery::oauth::community_import::get_bot_invite_url))
+        .route("/community/import/discord/bot-status", get(discovery::oauth::community_import::check_bot_in_guild))
+        .route("/community/import/discord/guild/:id/members", get(discovery::oauth::community_import::get_discord_guild_members))
+        .route("/community/import/discord/channel/:id/pins", get(discovery::oauth::community_import::get_discord_channel_pins))
+        // API routes
+        .route("/discovery/status", get(discovery::api::get_status))
+        .route("/discovery/settings", post(discovery::api::update_settings))
+        .route("/discovery/lookup", post(discovery::api::batch_lookup))
+        .route("/discovery/link", post(discovery::api::link_account))
+        .route("/discovery/unlink", delete(discovery::api::unlink))
+        .route("/discovery/stats", get(discovery::api::stats))
+        .route("/discovery/hash", get(discovery::api::create_hash))
+        .route("/discovery/search", get(discovery::api::search_by_username))
+        // Username routes
+        .route("/discovery/username", get(discovery::api::get_username))
+        .route("/discovery/username/register", post(discovery::api::register_username))
+        .route("/discovery/username/lookup", get(discovery::api::lookup_username))
+        .route("/discovery/username/search", get(discovery::api::search_usernames))
+        .route("/discovery/username/change", post(discovery::api::change_username))
+        .route("/discovery/username/release", delete(discovery::api::release_username))
+        .with_state((discovery_store, discovery_config));
+
+    // Build main router
     let cors = CorsLayer::new()
         .allow_origin(Any)
-        .allow_methods([Method::GET, Method::POST])
+        .allow_methods([Method::GET, Method::POST, Method::DELETE])
         .allow_headers(Any);
 
     let app = Router::new()
@@ -207,9 +296,10 @@ async fn main() {
         .route("/health", get(health_handler))
         .route("/stats", get(stats_handler))
         .route("/info", get(info_handler))
+        .with_state(state)
+        .merge(discovery_router)
         .layer(cors)
-        .layer(TraceLayer::new_for_http())
-        .with_state(state);
+        .layer(TraceLayer::new_for_http());
 
     let addr = format!("0.0.0.0:{}", args.port);
     tracing::info!("Umbra relay server starting on {}", addr);

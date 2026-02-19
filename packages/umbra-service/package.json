@@ -23,16 +23,21 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@umbra/wasm": "file:../umbra-wasm"
+    "@umbra/wasm": "file:../umbra-wasm",
+    "jszip": "^3.10.1"
   },
   "devDependencies": {
     "typescript": "^5.0.0",
     "tsup": "^8.0.0"
   },
   "peerDependencies": {
+    "react": ">=18.0.0",
     "react-native": ">=0.70.0"
   },
   "peerDependenciesMeta": {
+    "react": {
+      "optional": true
+    },
     "react-native": {
       "optional": true
     }

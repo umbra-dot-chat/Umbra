@@ -1,31 +1,52 @@
 /**
  * File type icon mapping utility.
  *
- * Maps MIME types to display icons (emoji for now) and accent colors.
+ * Maps MIME types to Lucide icon components and accent colors.
  * Used in file cards, message bubbles, and file panels.
  *
  * @packageDocumentation
  */
 
+import React from 'react';
+import {
+  ImageIcon,
+  FilePdfIcon,
+  FileTextIcon,
+  FileSpreadsheetIcon,
+  PresentationIcon,
+  FileCodeIcon,
+  PackageIcon,
+  MusicIcon,
+  FilmIcon,
+  FileIcon,
+} from '@/components/icons';
+
 export interface FileTypeIcon {
-  /** Emoji icon for the file type */
-  icon: string;
+  /** React component for the file type icon */
+  IconComponent: React.ComponentType<{ size?: number; color?: string }>;
   /** Display label for the file type */
   label: string;
   /** Accent color hex for the file type */
   color: string;
+  /** @deprecated Emoji icon — use IconComponent instead */
+  icon: string;
 }
 
 const TYPE_MAP: Array<{ prefixes: string[]; icon: FileTypeIcon }> = [
+  // SVG (must be before generic image/)
+  {
+    prefixes: ['image/svg+xml'],
+    icon: { IconComponent: ImageIcon, label: 'SVG', color: '#F59E0B', icon: '' },
+  },
   // Images
   {
     prefixes: ['image/'],
-    icon: { icon: '\uD83D\uDDBC\uFE0F', label: 'Image', color: '#10B981' },
+    icon: { IconComponent: ImageIcon, label: 'Image', color: '#10B981', icon: '' },
   },
   // PDF
   {
     prefixes: ['application/pdf'],
-    icon: { icon: '\uD83D\uDCC4', label: 'PDF', color: '#EF4444' },
+    icon: { IconComponent: FilePdfIcon, label: 'PDF', color: '#EF4444', icon: '' },
   },
   // Documents (Word, OpenDoc, etc.)
   {
@@ -34,7 +55,7 @@ const TYPE_MAP: Array<{ prefixes: string[]; icon: FileTypeIcon }> = [
       'application/vnd.openxmlformats-officedocument.wordprocessingml',
       'application/vnd.oasis.opendocument.text',
     ],
-    icon: { icon: '\uD83D\uDCC3', label: 'Document', color: '#3B82F6' },
+    icon: { IconComponent: FileTextIcon, label: 'Document', color: '#3B82F6', icon: '' },
   },
   // Spreadsheets
   {
@@ -44,7 +65,7 @@ const TYPE_MAP: Array<{ prefixes: string[]; icon: FileTypeIcon }> = [
       'application/vnd.oasis.opendocument.spreadsheet',
       'text/csv',
     ],
-    icon: { icon: '\uD83D\uDCCA', label: 'Spreadsheet', color: '#22C55E' },
+    icon: { IconComponent: FileSpreadsheetIcon, label: 'Spreadsheet', color: '#22C55E', icon: '' },
   },
   // Presentations
   {
@@ -52,7 +73,7 @@ const TYPE_MAP: Array<{ prefixes: string[]; icon: FileTypeIcon }> = [
       'application/vnd.ms-powerpoint',
       'application/vnd.openxmlformats-officedocument.presentationml',
     ],
-    icon: { icon: '\uD83D\uDCCA', label: 'Presentation', color: '#F97316' },
+    icon: { IconComponent: PresentationIcon, label: 'Presentation', color: '#F97316', icon: '' },
   },
   // Code / text
   {
@@ -72,7 +93,7 @@ const TYPE_MAP: Array<{ prefixes: string[]; icon: FileTypeIcon }> = [
       'application/x-ruby',
       'application/x-rust',
     ],
-    icon: { icon: '\uD83D\uDCDD', label: 'Text', color: '#8B5CF6' },
+    icon: { IconComponent: FileCodeIcon, label: 'Text', color: '#8B5CF6', icon: '' },
   },
   // Archives
   {
@@ -84,33 +105,29 @@ const TYPE_MAP: Array<{ prefixes: string[]; icon: FileTypeIcon }> = [
       'application/x-tar',
       'application/x-bzip2',
     ],
-    icon: { icon: '\uD83D\uDCE6', label: 'Archive', color: '#F59E0B' },
+    icon: { IconComponent: PackageIcon, label: 'Archive', color: '#F59E0B', icon: '' },
   },
   // Audio
   {
     prefixes: ['audio/'],
-    icon: { icon: '\uD83C\uDFB5', label: 'Audio', color: '#EC4899' },
+    icon: { IconComponent: MusicIcon, label: 'Audio', color: '#EC4899', icon: '' },
   },
   // Video
   {
     prefixes: ['video/'],
-    icon: { icon: '\uD83C\uDFA5', label: 'Video', color: '#6366F1' },
-  },
-  // SVG (specific image type with different icon)
-  {
-    prefixes: ['image/svg+xml'],
-    icon: { icon: '\uD83C\uDFA8', label: 'SVG', color: '#F59E0B' },
+    icon: { IconComponent: FilmIcon, label: 'Video', color: '#6366F1', icon: '' },
   },
 ];
 
 const DEFAULT_ICON: FileTypeIcon = {
-  icon: '\uD83D\uDCC4',
+  IconComponent: FileIcon,
   label: 'File',
   color: '#6B7280',
+  icon: '',
 };
 
 /**
- * Get the display icon and color for a given MIME type.
+ * Get the display icon component and color for a given MIME type.
  */
 export function getFileTypeIcon(mimeType: string): FileTypeIcon {
   const mime = mimeType.toLowerCase();

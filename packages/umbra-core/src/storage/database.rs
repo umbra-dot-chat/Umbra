@@ -158,6 +158,21 @@ impl Database {
                     conn.execute_batch(schema::MIGRATE_V8_TO_V9)
                         .map_err(|e| Error::DatabaseError(format!("Migration v8→v9 failed: {}", e)))?;
                 }
+                if v < 10 {
+                    tracing::info!("Running migration v9 → v10 (transfer sessions, file versioning)");
+                    conn.execute_batch(schema::MIGRATE_V9_TO_V10)
+                        .map_err(|e| Error::DatabaseError(format!("Migration v9→v10 failed: {}", e)))?;
+                }
+                if v < 11 {
+                    tracing::info!("Running migration v10 → v11 (encryption metadata, re-encryption)");
+                    conn.execute_batch(schema::MIGRATE_V10_TO_V11)
+                        .map_err(|e| Error::DatabaseError(format!("Migration v10→v11 failed: {}", e)))?;
+                }
+                if v < 12 {
+                    tracing::info!("Running migration v11 → v12 (community seats)");
+                    conn.execute_batch(schema::MIGRATE_V11_TO_V12)
+                        .map_err(|e| Error::DatabaseError(format!("Migration v11→v12 failed: {}", e)))?;
+                }
 
                 tracing::info!("All migrations complete (now at version {})", schema::SCHEMA_VERSION);
             }
@@ -1782,19 +1797,118 @@ impl Database {
         Ok(())
     }
 
+    // ── Categories ──────────────────────────────────────────────────────
+
+    /// Create a new category
+    #[allow(clippy::too_many_arguments)]
+    pub fn create_community_category(&self, id: &str, community_id: &str, space_id: &str, name: &str, position: i32, created_at: i64) -> Result<()> {
+        let conn = self.conn.lock();
+        conn.execute(
+            "INSERT INTO community_categories (id, community_id, space_id, name, position, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            params![id, community_id, space_id, name, position, created_at, created_at],
+        ).map_err(|e| Error::DatabaseError(format!("Failed to create category: {}", e)))?;
+        Ok(())
+    }
+
+    /// Get categories for a space
+    pub fn get_community_categories(&self, space_id: &str) -> Result<Vec<CommunityCategoryRecord>> {
+        let conn = self.conn.lock();
+        let mut stmt = conn.prepare(
+            "SELECT id, community_id, space_id, name, position, created_at, updated_at FROM community_categories WHERE space_id = ? ORDER BY position",
+        ).map_err(|e| Error::DatabaseError(e.to_string()))?;
+
+        let rows = stmt.query_map(params![space_id], |row| Ok(CommunityCategoryRecord {
+            id: row.get(0)?, community_id: row.get(1)?, space_id: row.get(2)?,
+            name: row.get(3)?, position: row.get(4)?, created_at: row.get(5)?, updated_at: row.get(6)?,
+        })).map_err(|e| Error::DatabaseError(e.to_string()))?;
+
+        let mut categories = Vec::new();
+        for row in rows { categories.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?); }
+        Ok(categories)
+    }
+
+    /// Get all categories for a community (across all spaces)
+    pub fn get_community_categories_by_community(&self, community_id: &str) -> Result<Vec<CommunityCategoryRecord>> {
+        let conn = self.conn.lock();
+        let mut stmt = conn.prepare(
+            "SELECT id, community_id, space_id, name, position, created_at, updated_at FROM community_categories WHERE community_id = ? ORDER BY position",
+        ).map_err(|e| Error::DatabaseError(e.to_string()))?;
+
+        let rows = stmt.query_map(params![community_id], |row| Ok(CommunityCategoryRecord {
+            id: row.get(0)?, community_id: row.get(1)?, space_id: row.get(2)?,
+            name: row.get(3)?, position: row.get(4)?, created_at: row.get(5)?, updated_at: row.get(6)?,
+        })).map_err(|e| Error::DatabaseError(e.to_string()))?;
+
+        let mut categories = Vec::new();
+        for row in rows { categories.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?); }
+        Ok(categories)
+    }
+
+    /// Get a single category by ID
+    pub fn get_community_category(&self, id: &str) -> Result<Option<CommunityCategoryRecord>> {
+        let conn = self.conn.lock();
+        let result = conn.query_row(
+            "SELECT id, community_id, space_id, name, position, created_at, updated_at FROM community_categories WHERE id = ?",
+            params![id],
+            |row| Ok(CommunityCategoryRecord {
+                id: row.get(0)?, community_id: row.get(1)?, space_id: row.get(2)?,
+                name: row.get(3)?, position: row.get(4)?, created_at: row.get(5)?, updated_at: row.get(6)?,
+            }),
+        );
+        match result {
+            Ok(r) => Ok(Some(r)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(Error::DatabaseError(e.to_string())),
+        }
+    }
+
+    /// Update a category name
+    pub fn update_community_category(&self, id: &str, name: &str, updated_at: i64) -> Result<()> {
+        let conn = self.conn.lock();
+        conn.execute("UPDATE community_categories SET name = ?, updated_at = ? WHERE id = ?", params![name, updated_at, id])
+            .map_err(|e| Error::DatabaseError(e.to_string()))?;
+        Ok(())
+    }
+
+    /// Update a category position
+    pub fn update_community_category_position(&self, id: &str, position: i32, updated_at: i64) -> Result<()> {
+        let conn = self.conn.lock();
+        conn.execute("UPDATE community_categories SET position = ?, updated_at = ? WHERE id = ?", params![position, updated_at, id])
+            .map_err(|e| Error::DatabaseError(e.to_string()))?;
+        Ok(())
+    }
+
+    /// Delete a category (channels with this category_id will be set to NULL by ON DELETE SET NULL)
+    pub fn delete_community_category(&self, id: &str) -> Result<()> {
+        let conn = self.conn.lock();
+        conn.execute("DELETE FROM community_categories WHERE id = ?", params![id])
+            .map_err(|e| Error::DatabaseError(e.to_string()))?;
+        Ok(())
+    }
+
+    /// Update a channel's category assignment
+    pub fn update_channel_category(&self, channel_id: &str, category_id: Option<&str>, updated_at: i64) -> Result<()> {
+        let conn = self.conn.lock();
+        conn.execute(
+            "UPDATE community_channels SET category_id = ?, updated_at = ? WHERE id = ?",
+            params![category_id, updated_at, channel_id],
+        ).map_err(|e| Error::DatabaseError(e.to_string()))?;
+        Ok(())
+    }
+
     // ── Channels ─────────────────────────────────────────────────────────
 
     /// Create a community channel
     #[allow(clippy::too_many_arguments)]
     pub fn create_community_channel(
-        &self, id: &str, community_id: &str, space_id: &str, name: &str,
+        &self, id: &str, community_id: &str, space_id: &str, category_id: Option<&str>, name: &str,
         channel_type: &str, topic: Option<&str>, position: i32, created_at: i64,
     ) -> Result<()> {
         let conn = self.conn.lock();
         conn.execute(
-            "INSERT INTO community_channels (id, community_id, space_id, name, type, topic, position, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            params![id, community_id, space_id, name, channel_type, topic, position, created_at, created_at],
+            "INSERT INTO community_channels (id, community_id, space_id, category_id, name, type, topic, position, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            params![id, community_id, space_id, category_id, name, channel_type, topic, position, created_at, created_at],
         ).map_err(|e| Error::DatabaseError(format!("Failed to create channel: {}", e)))?;
         Ok(())
     }
@@ -1803,16 +1917,17 @@ impl Database {
     pub fn get_community_channels(&self, community_id: &str) -> Result<Vec<CommunityChannelRecord>> {
         let conn = self.conn.lock();
         let mut stmt = conn.prepare(
-            "SELECT id, community_id, space_id, name, type, topic, position, slow_mode_seconds, e2ee_enabled, pin_limit, created_at, updated_at
+            "SELECT id, community_id, space_id, category_id, name, type, topic, position, slow_mode_seconds, e2ee_enabled, pin_limit, created_at, updated_at
              FROM community_channels WHERE community_id = ? ORDER BY position",
         ).map_err(|e| Error::DatabaseError(e.to_string()))?;
 
         let rows = stmt.query_map(params![community_id], |row| Ok(CommunityChannelRecord {
             id: row.get(0)?, community_id: row.get(1)?, space_id: row.get(2)?,
-            name: row.get(3)?, channel_type: row.get(4)?, topic: row.get(5)?,
-            position: row.get(6)?, slow_mode_seconds: row.get(7)?,
-            e2ee_enabled: row.get::<_, i32>(8)? != 0, pin_limit: row.get(9)?,
-            created_at: row.get(10)?, updated_at: row.get(11)?,
+            category_id: row.get(3)?,
+            name: row.get(4)?, channel_type: row.get(5)?, topic: row.get(6)?,
+            position: row.get(7)?, slow_mode_seconds: row.get(8)?,
+            e2ee_enabled: row.get::<_, i32>(9)? != 0, pin_limit: row.get(10)?,
+            created_at: row.get(11)?, updated_at: row.get(12)?,
         })).map_err(|e| Error::DatabaseError(e.to_string()))?;
 
         let mut channels = Vec::new();
@@ -1824,16 +1939,17 @@ impl Database {
     pub fn get_community_channels_by_space(&self, space_id: &str) -> Result<Vec<CommunityChannelRecord>> {
         let conn = self.conn.lock();
         let mut stmt = conn.prepare(
-            "SELECT id, community_id, space_id, name, type, topic, position, slow_mode_seconds, e2ee_enabled, pin_limit, created_at, updated_at
+            "SELECT id, community_id, space_id, category_id, name, type, topic, position, slow_mode_seconds, e2ee_enabled, pin_limit, created_at, updated_at
              FROM community_channels WHERE space_id = ? ORDER BY position",
         ).map_err(|e| Error::DatabaseError(e.to_string()))?;
 
         let rows = stmt.query_map(params![space_id], |row| Ok(CommunityChannelRecord {
             id: row.get(0)?, community_id: row.get(1)?, space_id: row.get(2)?,
-            name: row.get(3)?, channel_type: row.get(4)?, topic: row.get(5)?,
-            position: row.get(6)?, slow_mode_seconds: row.get(7)?,
-            e2ee_enabled: row.get::<_, i32>(8)? != 0, pin_limit: row.get(9)?,
-            created_at: row.get(10)?, updated_at: row.get(11)?,
+            category_id: row.get(3)?,
+            name: row.get(4)?, channel_type: row.get(5)?, topic: row.get(6)?,
+            position: row.get(7)?, slow_mode_seconds: row.get(8)?,
+            e2ee_enabled: row.get::<_, i32>(9)? != 0, pin_limit: row.get(10)?,
+            created_at: row.get(11)?, updated_at: row.get(12)?,
         })).map_err(|e| Error::DatabaseError(e.to_string()))?;
 
         let mut channels = Vec::new();
@@ -1845,15 +1961,16 @@ impl Database {
     pub fn get_community_channel(&self, id: &str) -> Result<Option<CommunityChannelRecord>> {
         let conn = self.conn.lock();
         let result = conn.query_row(
-            "SELECT id, community_id, space_id, name, type, topic, position, slow_mode_seconds, e2ee_enabled, pin_limit, created_at, updated_at
+            "SELECT id, community_id, space_id, category_id, name, type, topic, position, slow_mode_seconds, e2ee_enabled, pin_limit, created_at, updated_at
              FROM community_channels WHERE id = ?",
             params![id],
             |row| Ok(CommunityChannelRecord {
                 id: row.get(0)?, community_id: row.get(1)?, space_id: row.get(2)?,
-                name: row.get(3)?, channel_type: row.get(4)?, topic: row.get(5)?,
-                position: row.get(6)?, slow_mode_seconds: row.get(7)?,
-                e2ee_enabled: row.get::<_, i32>(8)? != 0, pin_limit: row.get(9)?,
-                created_at: row.get(10)?, updated_at: row.get(11)?,
+                category_id: row.get(3)?,
+                name: row.get(4)?, channel_type: row.get(5)?, topic: row.get(6)?,
+                position: row.get(7)?, slow_mode_seconds: row.get(8)?,
+                e2ee_enabled: row.get::<_, i32>(9)? != 0, pin_limit: row.get(10)?,
+                created_at: row.get(11)?, updated_at: row.get(12)?,
             }),
         );
         match result {
@@ -2744,6 +2861,68 @@ impl Database {
             params![id, channel_id, folder_id, filename, description, file_size, mime_type, storage_chunks_json, uploaded_by, created_at],
         ).map_err(|e| Error::DatabaseError(format!("Failed to store file: {}", e)))?;
         Ok(())
+    }
+
+    /// Find an existing community file by name in the same channel/folder (for auto-versioning)
+    pub fn find_existing_community_file(
+        &self,
+        channel_id: &str,
+        folder_id: Option<&str>,
+        filename: &str,
+    ) -> Result<Option<(String, i32)>> {
+        let conn = self.conn.lock();
+        let result = if let Some(fid) = folder_id {
+            conn.query_row(
+                "SELECT id, version FROM community_files WHERE channel_id = ? AND folder_id = ? AND filename = ? ORDER BY version DESC LIMIT 1",
+                params![channel_id, fid, filename],
+                |row| Ok((row.get::<_, String>(0)?, row.get::<_, i32>(1)?)),
+            )
+        } else {
+            conn.query_row(
+                "SELECT id, version FROM community_files WHERE channel_id = ? AND folder_id IS NULL AND filename = ? ORDER BY version DESC LIMIT 1",
+                params![channel_id, filename],
+                |row| Ok((row.get::<_, String>(0)?, row.get::<_, i32>(1)?)),
+            )
+        };
+        match result {
+            Ok(r) => Ok(Some(r)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(Error::DatabaseError(e.to_string())),
+        }
+    }
+
+    /// Store a community file with auto-versioning.
+    /// If a file with the same name exists in the same channel/folder, increments the version.
+    #[allow(clippy::too_many_arguments)]
+    pub fn store_community_file_versioned(
+        &self,
+        id: &str,
+        channel_id: &str,
+        folder_id: Option<&str>,
+        filename: &str,
+        description: Option<&str>,
+        file_size: i64,
+        mime_type: Option<&str>,
+        storage_chunks_json: &str,
+        uploaded_by: &str,
+        created_at: i64,
+    ) -> Result<i32> {
+        // Check for existing file with same name
+        let (version, prev_id) = if let Some((existing_id, existing_version)) =
+            self.find_existing_community_file(channel_id, folder_id, filename)?
+        {
+            (existing_version + 1, Some(existing_id))
+        } else {
+            (1, None)
+        };
+
+        let conn = self.conn.lock();
+        conn.execute(
+            "INSERT INTO community_files (id, channel_id, folder_id, filename, description, file_size, mime_type, storage_chunks_json, uploaded_by, version, previous_version_id, download_count, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)",
+            params![id, channel_id, folder_id, filename, description, file_size, mime_type, storage_chunks_json, uploaded_by, version, prev_id, created_at],
+        ).map_err(|e| Error::DatabaseError(format!("Failed to store file: {}", e)))?;
+
+        Ok(version)
     }
 
     /// Get files in a channel
@@ -3844,6 +4023,180 @@ impl Database {
             .map_err(|e| Error::DatabaseError(e.to_string()))?;
         Ok(())
     }
+
+    // ========================================================================
+    // COMMUNITY SEAT OPERATIONS
+    // ========================================================================
+
+    /// Create a single community seat
+    pub fn create_community_seat(
+        &self,
+        id: &str,
+        community_id: &str,
+        platform: &str,
+        platform_user_id: &str,
+        platform_username: &str,
+        nickname: Option<&str>,
+        avatar_url: Option<&str>,
+        role_ids_json: &str,
+        created_at: i64,
+    ) -> Result<()> {
+        let conn = self.conn.lock();
+        conn.execute(
+            "INSERT OR IGNORE INTO community_seats (id, community_id, platform, platform_user_id, platform_username, nickname, avatar_url, role_ids_json, created_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            params![id, community_id, platform, platform_user_id, platform_username, nickname, avatar_url, role_ids_json, created_at],
+        ).map_err(|e| Error::DatabaseError(format!("Failed to create community seat: {}", e)))?;
+        Ok(())
+    }
+
+    /// Bulk create community seats (for import)
+    pub fn create_community_seats_batch(&self, seats: &[CommunitySeatRecord]) -> Result<usize> {
+        let conn = self.conn.lock();
+        let mut count = 0usize;
+        for seat in seats {
+            let result = conn.execute(
+                "INSERT OR IGNORE INTO community_seats (id, community_id, platform, platform_user_id, platform_username, nickname, avatar_url, role_ids_json, created_at)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                params![
+                    seat.id, seat.community_id, seat.platform, seat.platform_user_id,
+                    seat.platform_username, seat.nickname, seat.avatar_url,
+                    seat.role_ids_json, seat.created_at
+                ],
+            ).map_err(|e| Error::DatabaseError(format!("Failed to create seat batch: {}", e)))?;
+            count += result;
+        }
+        Ok(count)
+    }
+
+    /// Get all seats for a community
+    pub fn get_community_seats(&self, community_id: &str) -> Result<Vec<CommunitySeatRecord>> {
+        let conn = self.conn.lock();
+        let mut stmt = conn.prepare(
+            "SELECT id, community_id, platform, platform_user_id, platform_username, nickname, avatar_url, role_ids_json, claimed_by_did, claimed_at, created_at
+             FROM community_seats WHERE community_id = ? ORDER BY platform_username",
+        ).map_err(|e| Error::DatabaseError(e.to_string()))?;
+
+        let rows = stmt.query_map(params![community_id], |row| Ok(CommunitySeatRecord {
+            id: row.get(0)?, community_id: row.get(1)?, platform: row.get(2)?,
+            platform_user_id: row.get(3)?, platform_username: row.get(4)?,
+            nickname: row.get(5)?, avatar_url: row.get(6)?, role_ids_json: row.get(7)?,
+            claimed_by_did: row.get(8)?, claimed_at: row.get(9)?, created_at: row.get(10)?,
+        })).map_err(|e| Error::DatabaseError(e.to_string()))?;
+
+        let mut seats = Vec::new();
+        for row in rows { seats.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?); }
+        Ok(seats)
+    }
+
+    /// Get unclaimed seats for a community
+    pub fn get_unclaimed_community_seats(&self, community_id: &str) -> Result<Vec<CommunitySeatRecord>> {
+        let conn = self.conn.lock();
+        let mut stmt = conn.prepare(
+            "SELECT id, community_id, platform, platform_user_id, platform_username, nickname, avatar_url, role_ids_json, claimed_by_did, claimed_at, created_at
+             FROM community_seats WHERE community_id = ? AND claimed_by_did IS NULL ORDER BY platform_username",
+        ).map_err(|e| Error::DatabaseError(e.to_string()))?;
+
+        let rows = stmt.query_map(params![community_id], |row| Ok(CommunitySeatRecord {
+            id: row.get(0)?, community_id: row.get(1)?, platform: row.get(2)?,
+            platform_user_id: row.get(3)?, platform_username: row.get(4)?,
+            nickname: row.get(5)?, avatar_url: row.get(6)?, role_ids_json: row.get(7)?,
+            claimed_by_did: row.get(8)?, claimed_at: row.get(9)?, created_at: row.get(10)?,
+        })).map_err(|e| Error::DatabaseError(e.to_string()))?;
+
+        let mut seats = Vec::new();
+        for row in rows { seats.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?); }
+        Ok(seats)
+    }
+
+    /// Find a seat by platform and platform user ID
+    pub fn find_community_seat_by_platform(
+        &self,
+        community_id: &str,
+        platform: &str,
+        platform_user_id: &str,
+    ) -> Result<Option<CommunitySeatRecord>> {
+        let conn = self.conn.lock();
+        let result = conn.query_row(
+            "SELECT id, community_id, platform, platform_user_id, platform_username, nickname, avatar_url, role_ids_json, claimed_by_did, claimed_at, created_at
+             FROM community_seats WHERE community_id = ? AND platform = ? AND platform_user_id = ?",
+            params![community_id, platform, platform_user_id],
+            |row| Ok(CommunitySeatRecord {
+                id: row.get(0)?, community_id: row.get(1)?, platform: row.get(2)?,
+                platform_user_id: row.get(3)?, platform_username: row.get(4)?,
+                nickname: row.get(5)?, avatar_url: row.get(6)?, role_ids_json: row.get(7)?,
+                claimed_by_did: row.get(8)?, claimed_at: row.get(9)?, created_at: row.get(10)?,
+            }),
+        );
+
+        match result {
+            Ok(record) => Ok(Some(record)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(Error::DatabaseError(format!("Failed to find seat: {}", e))),
+        }
+    }
+
+    /// Get a seat by ID
+    pub fn get_community_seat(&self, seat_id: &str) -> Result<Option<CommunitySeatRecord>> {
+        let conn = self.conn.lock();
+        let result = conn.query_row(
+            "SELECT id, community_id, platform, platform_user_id, platform_username, nickname, avatar_url, role_ids_json, claimed_by_did, claimed_at, created_at
+             FROM community_seats WHERE id = ?",
+            params![seat_id],
+            |row| Ok(CommunitySeatRecord {
+                id: row.get(0)?, community_id: row.get(1)?, platform: row.get(2)?,
+                platform_user_id: row.get(3)?, platform_username: row.get(4)?,
+                nickname: row.get(5)?, avatar_url: row.get(6)?, role_ids_json: row.get(7)?,
+                claimed_by_did: row.get(8)?, claimed_at: row.get(9)?, created_at: row.get(10)?,
+            }),
+        );
+
+        match result {
+            Ok(record) => Ok(Some(record)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
+            Err(e) => Err(Error::DatabaseError(format!("Failed to get seat: {}", e))),
+        }
+    }
+
+    /// Claim a seat (set claimed_by_did and claimed_at)
+    pub fn claim_community_seat(&self, seat_id: &str, claimed_by_did: &str, claimed_at: i64) -> Result<()> {
+        let conn = self.conn.lock();
+        let updated = conn.execute(
+            "UPDATE community_seats SET claimed_by_did = ?, claimed_at = ? WHERE id = ? AND claimed_by_did IS NULL",
+            params![claimed_by_did, claimed_at, seat_id],
+        ).map_err(|e| Error::DatabaseError(format!("Failed to claim seat: {}", e)))?;
+
+        if updated == 0 {
+            return Err(Error::DatabaseError("Seat not found or already claimed".to_string()));
+        }
+        Ok(())
+    }
+
+    /// Delete a community seat
+    pub fn delete_community_seat(&self, seat_id: &str) -> Result<()> {
+        let conn = self.conn.lock();
+        conn.execute("DELETE FROM community_seats WHERE id = ?", params![seat_id])
+            .map_err(|e| Error::DatabaseError(format!("Failed to delete seat: {}", e)))?;
+        Ok(())
+    }
+
+    /// Count seats for a community (total and unclaimed)
+    pub fn count_community_seats(&self, community_id: &str) -> Result<(i64, i64)> {
+        let conn = self.conn.lock();
+        let total: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM community_seats WHERE community_id = ?",
+            params![community_id],
+            |row| row.get(0),
+        ).map_err(|e| Error::DatabaseError(e.to_string()))?;
+
+        let unclaimed: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM community_seats WHERE community_id = ? AND claimed_by_did IS NULL",
+            params![community_id],
+            |row| row.get(0),
+        ).map_err(|e| Error::DatabaseError(e.to_string()))?;
+
+        Ok((total, unclaimed))
+    }
 }
 
 // ============================================================================
@@ -4091,12 +4444,25 @@ pub struct CommunitySpaceRecord {
     pub updated_at: i64,
 }
 
+/// A community category record (channel grouping within a space)
+#[derive(Debug, Clone)]
+pub struct CommunityCategoryRecord {
+    pub id: String,
+    pub community_id: String,
+    pub space_id: String,
+    pub name: String,
+    pub position: i32,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
 /// A community channel record
 #[derive(Debug, Clone)]
 pub struct CommunityChannelRecord {
     pub id: String,
     pub community_id: String,
     pub space_id: String,
+    pub category_id: Option<String>,
     pub name: String,
     pub channel_type: String,
     pub topic: Option<String>,
@@ -4498,6 +4864,22 @@ pub struct TransferSessionRecord {
     pub updated_at: i64,
 }
 
+/// A community seat record (ghost member placeholder from platform import)
+#[derive(Debug, Clone)]
+pub struct CommunitySeatRecord {
+    pub id: String,
+    pub community_id: String,
+    pub platform: String,
+    pub platform_user_id: String,
+    pub platform_username: String,
+    pub nickname: Option<String>,
+    pub avatar_url: Option<String>,
+    pub role_ids_json: String,
+    pub claimed_by_did: Option<String>,
+    pub claimed_at: Option<i64>,
+    pub created_at: i64,
+}
+
 // ============================================================================
 // TESTS
 // ============================================================================
@@ -4791,5 +5173,319 @@ mod tests {
         assert_eq!(conv1_history.len(), 2);
         let conv2_history = db.get_call_history("conv-2", 10, 0).unwrap();
         assert_eq!(conv2_history.len(), 1);
+    }
+
+    // -----------------------------------------------------------------------
+    // File chunk CRUD tests
+    // -----------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn test_chunk_store_and_retrieve() {
+        let db = Database::open(None).await.unwrap();
+        let data = b"chunk data bytes here";
+        let now = 1700000000i64;
+
+        db.store_chunk("chunk-1", "file-1", 0, data, data.len() as i64, now)
+            .unwrap();
+
+        let chunk = db.get_chunk("chunk-1").unwrap().unwrap();
+        assert_eq!(chunk.chunk_id, "chunk-1");
+        assert_eq!(chunk.file_id, "file-1");
+        assert_eq!(chunk.chunk_index, 0);
+        assert_eq!(chunk.data, data.to_vec());
+        assert_eq!(chunk.size, data.len() as i64);
+    }
+
+    #[tokio::test]
+    async fn test_get_nonexistent_chunk() {
+        let db = Database::open(None).await.unwrap();
+        let chunk = db.get_chunk("does-not-exist").unwrap();
+        assert!(chunk.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_get_chunks_for_file() {
+        let db = Database::open(None).await.unwrap();
+        let now = 1700000000i64;
+
+        db.store_chunk("c0", "file-A", 0, b"part-0", 6, now).unwrap();
+        db.store_chunk("c1", "file-A", 1, b"part-1", 6, now).unwrap();
+        db.store_chunk("c2", "file-A", 2, b"part-2", 6, now).unwrap();
+        // Different file
+        db.store_chunk("c3", "file-B", 0, b"other", 5, now).unwrap();
+
+        let chunks = db.get_chunks_for_file("file-A").unwrap();
+        assert_eq!(chunks.len(), 3);
+        assert_eq!(chunks[0].chunk_index, 0);
+        assert_eq!(chunks[1].chunk_index, 1);
+        assert_eq!(chunks[2].chunk_index, 2);
+
+        let other = db.get_chunks_for_file("file-B").unwrap();
+        assert_eq!(other.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_delete_chunks_for_file() {
+        let db = Database::open(None).await.unwrap();
+        let now = 1700000000i64;
+
+        db.store_chunk("c0", "file-del", 0, b"data0", 5, now).unwrap();
+        db.store_chunk("c1", "file-del", 1, b"data1", 5, now).unwrap();
+        db.store_chunk("c2", "file-keep", 0, b"keep", 4, now).unwrap();
+
+        db.delete_chunks_for_file("file-del").unwrap();
+
+        let deleted = db.get_chunks_for_file("file-del").unwrap();
+        assert!(deleted.is_empty());
+
+        let kept = db.get_chunks_for_file("file-keep").unwrap();
+        assert_eq!(kept.len(), 1);
+    }
+
+    // -----------------------------------------------------------------------
+    // File manifest CRUD tests
+    // -----------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn test_manifest_store_and_retrieve() {
+        let db = Database::open(None).await.unwrap();
+        let now = 1700000000i64;
+        let chunks_json = r#"[{"chunk_id":"c0","index":0,"size":256,"hash":"abc"}]"#;
+
+        db.store_manifest(
+            "file-m1", "report.pdf", 1024, 256, 1,
+            chunks_json, "filehash123", false, None, now,
+        ).unwrap();
+
+        let manifest = db.get_manifest("file-m1").unwrap().unwrap();
+        assert_eq!(manifest.file_id, "file-m1");
+        assert_eq!(manifest.filename, "report.pdf");
+        assert_eq!(manifest.total_size, 1024);
+        assert_eq!(manifest.chunk_size, 256);
+        assert_eq!(manifest.total_chunks, 1);
+        assert_eq!(manifest.file_hash, "filehash123");
+        assert!(!manifest.encrypted);
+        assert!(manifest.encryption_key_id.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_manifest_with_encryption() {
+        let db = Database::open(None).await.unwrap();
+        let now = 1700000000i64;
+
+        db.store_manifest(
+            "file-enc", "secret.dat", 2048, 256, 8,
+            "[]", "hash456", true, Some("key-v3"), now,
+        ).unwrap();
+
+        let manifest = db.get_manifest("file-enc").unwrap().unwrap();
+        assert!(manifest.encrypted);
+        assert_eq!(manifest.encryption_key_id, Some("key-v3".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_manifest_delete() {
+        let db = Database::open(None).await.unwrap();
+        let now = 1700000000i64;
+
+        db.store_manifest(
+            "file-del-m", "temp.txt", 100, 100, 1,
+            "[]", "hash", false, None, now,
+        ).unwrap();
+
+        assert!(db.get_manifest("file-del-m").unwrap().is_some());
+        db.delete_manifest("file-del-m").unwrap();
+        assert!(db.get_manifest("file-del-m").unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn test_get_nonexistent_manifest() {
+        let db = Database::open(None).await.unwrap();
+        let manifest = db.get_manifest("ghost").unwrap();
+        assert!(manifest.is_none());
+    }
+
+    // -----------------------------------------------------------------------
+    // DM shared file CRUD tests
+    // -----------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn test_dm_shared_file_store_and_retrieve() {
+        let db = Database::open(None).await.unwrap();
+        let now = 1700000000i64;
+
+        db.store_dm_shared_file(
+            "sf-1", "conv-1", None, "photo.jpg",
+            Some("vacation photo"), 2048000, Some("image/jpeg"),
+            r#"{"chunks":[]}"#, "did:key:alice",
+            None, None, now,
+        ).unwrap();
+
+        let file = db.get_dm_shared_file("sf-1").unwrap().unwrap();
+        assert_eq!(file.id, "sf-1");
+        assert_eq!(file.conversation_id, "conv-1");
+        assert_eq!(file.filename, "photo.jpg");
+        assert_eq!(file.file_size, 2048000);
+        assert_eq!(file.uploaded_by, "did:key:alice");
+    }
+
+    #[tokio::test]
+    async fn test_dm_shared_file_in_folder() {
+        let db = Database::open(None).await.unwrap();
+        let now = 1700000000i64;
+
+        // Create a folder first
+        db.create_dm_shared_folder(
+            "folder-1", "conv-1", None, "Documents",
+            "did:key:alice", now,
+        ).unwrap();
+
+        // Store file in folder
+        db.store_dm_shared_file(
+            "sf-2", "conv-1", Some("folder-1"), "doc.pdf",
+            None, 1024, Some("application/pdf"),
+            "{}", "did:key:alice", None, None, now,
+        ).unwrap();
+
+        // List files in folder
+        let files = db.get_dm_shared_files("conv-1", Some("folder-1"), 100, 0).unwrap();
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0].filename, "doc.pdf");
+
+        // Root should be empty
+        let root = db.get_dm_shared_files("conv-1", None, 100, 0).unwrap();
+        assert!(root.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_dm_shared_file_download_count() {
+        let db = Database::open(None).await.unwrap();
+        let now = 1700000000i64;
+
+        db.store_dm_shared_file(
+            "sf-dl", "conv-1", None, "file.zip",
+            None, 5000, None, "{}", "did:key:bob",
+            None, None, now,
+        ).unwrap();
+
+        // Initial download count should be 0
+        let file = db.get_dm_shared_file("sf-dl").unwrap().unwrap();
+        assert_eq!(file.download_count, 0);
+
+        // Increment
+        db.increment_dm_file_download_count("sf-dl").unwrap();
+        db.increment_dm_file_download_count("sf-dl").unwrap();
+        db.increment_dm_file_download_count("sf-dl").unwrap();
+
+        let file = db.get_dm_shared_file("sf-dl").unwrap().unwrap();
+        assert_eq!(file.download_count, 3);
+    }
+
+    #[tokio::test]
+    async fn test_dm_shared_file_delete() {
+        let db = Database::open(None).await.unwrap();
+        let now = 1700000000i64;
+
+        db.store_dm_shared_file(
+            "sf-del", "conv-1", None, "temp.txt",
+            None, 100, None, "{}", "did:key:alice",
+            None, None, now,
+        ).unwrap();
+
+        assert!(db.get_dm_shared_file("sf-del").unwrap().is_some());
+        db.delete_dm_shared_file("sf-del").unwrap();
+        assert!(db.get_dm_shared_file("sf-del").unwrap().is_none());
+    }
+
+    #[tokio::test]
+    async fn test_dm_shared_file_move() {
+        let db = Database::open(None).await.unwrap();
+        let now = 1700000000i64;
+
+        db.create_dm_shared_folder("folder-a", "conv-1", None, "Folder A", "alice", now).unwrap();
+        db.create_dm_shared_folder("folder-b", "conv-1", None, "Folder B", "alice", now).unwrap();
+
+        db.store_dm_shared_file(
+            "sf-mv", "conv-1", Some("folder-a"), "moveme.txt",
+            None, 50, None, "{}", "alice", None, None, now,
+        ).unwrap();
+
+        // Move to folder-b
+        db.move_dm_shared_file("sf-mv", Some("folder-b")).unwrap();
+
+        let files_a = db.get_dm_shared_files("conv-1", Some("folder-a"), 100, 0).unwrap();
+        assert!(files_a.is_empty());
+
+        let files_b = db.get_dm_shared_files("conv-1", Some("folder-b"), 100, 0).unwrap();
+        assert_eq!(files_b.len(), 1);
+        assert_eq!(files_b[0].id, "sf-mv");
+    }
+
+    // -----------------------------------------------------------------------
+    // DM shared folder CRUD tests
+    // -----------------------------------------------------------------------
+
+    #[tokio::test]
+    async fn test_dm_shared_folder_create_and_list() {
+        let db = Database::open(None).await.unwrap();
+        let now = 1700000000i64;
+
+        db.create_dm_shared_folder("f-1", "conv-1", None, "Photos", "alice", now).unwrap();
+        db.create_dm_shared_folder("f-2", "conv-1", None, "Documents", "alice", now).unwrap();
+        db.create_dm_shared_folder("f-3", "conv-1", Some("f-1"), "Vacation", "alice", now).unwrap();
+
+        let root = db.get_dm_shared_folders("conv-1", None).unwrap();
+        assert_eq!(root.len(), 2);
+
+        let sub = db.get_dm_shared_folders("conv-1", Some("f-1")).unwrap();
+        assert_eq!(sub.len(), 1);
+        assert_eq!(sub[0].name, "Vacation");
+    }
+
+    #[tokio::test]
+    async fn test_dm_shared_folder_rename() {
+        let db = Database::open(None).await.unwrap();
+        let now = 1700000000i64;
+
+        db.create_dm_shared_folder("f-ren", "conv-1", None, "Old Name", "alice", now).unwrap();
+        db.rename_dm_shared_folder("f-ren", "New Name").unwrap();
+
+        let folders = db.get_dm_shared_folders("conv-1", None).unwrap();
+        assert_eq!(folders[0].name, "New Name");
+    }
+
+    #[tokio::test]
+    async fn test_dm_shared_folder_delete() {
+        let db = Database::open(None).await.unwrap();
+        let now = 1700000000i64;
+
+        db.create_dm_shared_folder("f-del", "conv-1", None, "Temp", "alice", now).unwrap();
+        assert_eq!(db.get_dm_shared_folders("conv-1", None).unwrap().len(), 1);
+
+        db.delete_dm_shared_folder("f-del").unwrap();
+        assert!(db.get_dm_shared_folders("conv-1", None).unwrap().is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_dm_shared_files_pagination() {
+        let db = Database::open(None).await.unwrap();
+        let now = 1700000000i64;
+
+        for i in 0..10 {
+            db.store_dm_shared_file(
+                &format!("sf-page-{}", i), "conv-page", None,
+                &format!("file-{}.txt", i), None, (i * 100) as i64,
+                None, "{}", "alice", None, None, now + i as i64,
+            ).unwrap();
+        }
+
+        let page1 = db.get_dm_shared_files("conv-page", None, 3, 0).unwrap();
+        assert_eq!(page1.len(), 3);
+
+        let page2 = db.get_dm_shared_files("conv-page", None, 3, 3).unwrap();
+        assert_eq!(page2.len(), 3);
+
+        let all = db.get_dm_shared_files("conv-page", None, 100, 0).unwrap();
+        assert_eq!(all.len(), 10);
     }
 }

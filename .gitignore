@@ -69,3 +69,5 @@ playwright-report/
 
 # Tauri
 src-tauri/target/
+*.dmg
+packages/umbra-relay/.env

@@ -33,6 +33,23 @@ services:
       - OFFLINE_TTL_DAYS=${OFFLINE_TTL_DAYS:-7}
       - SESSION_TTL_SECS=${SESSION_TTL_SECS:-3600}
       - CLEANUP_INTERVAL_SECS=${CLEANUP_INTERVAL_SECS:-300}
+      # OAuth2 Discovery Configuration
+      - RELAY_BASE_URL=${RELAY_BASE_URL:-https://relay.umbra.chat}
+      - DISCORD_CLIENT_ID=${DISCORD_CLIENT_ID:-}
+      - DISCORD_CLIENT_SECRET=${DISCORD_CLIENT_SECRET:-}
+      - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN:-}
+      - GITHUB_CLIENT_ID=${GITHUB_CLIENT_ID:-}
+      - GITHUB_CLIENT_SECRET=${GITHUB_CLIENT_SECRET:-}
+      - STEAM_API_KEY=${STEAM_API_KEY:-}
+      - BLUESKY_CLIENT_ID=${BLUESKY_CLIENT_ID:-}
+      - BLUESKY_CLIENT_SECRET=${BLUESKY_CLIENT_SECRET:-}
+      - XBOX_CLIENT_ID=${XBOX_CLIENT_ID:-}
+      - XBOX_CLIENT_SECRET=${XBOX_CLIENT_SECRET:-}
+      - DISCOVERY_SALT=${DISCOVERY_SALT:-}
+      # Discovery persistence
+      - DATA_DIR=/data
+    volumes:
+      - relay_data:/data
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
@@ -48,3 +65,6 @@ services:
         reservations:
           memory: 64M
           cpus: '0.1'
+
+volumes:
+  relay_data:

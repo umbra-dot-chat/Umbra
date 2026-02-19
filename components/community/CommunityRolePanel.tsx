@@ -9,6 +9,7 @@
  */
 
 import React, { useMemo, useCallback } from 'react';
+import type { ViewStyle } from 'react-native';
 import { RoleManagementPanel } from '@coexist/wisp-react-native';
 import type {
   ManagedRole,
@@ -84,6 +85,8 @@ export interface CommunityRolePanelProps {
   onMemberAdd?: (roleId: string, memberId: string) => void;
   /** Called to remove a member from the selected role. */
   onMemberRemove?: (roleId: string, memberId: string) => void;
+  /** Optional style overrides for the underlying RoleManagementPanel container. */
+  style?: ViewStyle;
 }
 
 // ---------------------------------------------------------------------------
@@ -239,6 +242,7 @@ export function CommunityRolePanel({
   allMembers,
   onMemberAdd,
   onMemberRemove,
+  style,
 }: CommunityRolePanelProps) {
   const managedRoles = useMemo(
     () => toManagedRoles(roles, memberCounts),
@@ -284,6 +288,7 @@ export function CommunityRolePanel({
       allMembers={allMembers}
       onMemberAdd={onMemberAdd}
       onMemberRemove={onMemberRemove}
+      style={style}
     />
   );
 }

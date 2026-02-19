@@ -8,35 +8,7 @@
  * @packageDocumentation
  */
 
-import type {
-  RelayEnvelope,
-  AccountMetadataPayload,
-} from './types';
-
-/**
- * Build a relay envelope for an account metadata update.
- *
- * @param senderDid - Own DID
- * @param key - Metadata key (e.g. 'message_display_mode')
- * @param value - Metadata value (plain string)
- * @returns A typed RelayEnvelope ready for transport
- */
-export function buildMetadataEnvelope(
-  senderDid: string,
-  key: string,
-  value: string,
-): RelayEnvelope {
-  return {
-    envelope: 'account_metadata',
-    version: 1,
-    payload: {
-      senderDid,
-      key,
-      value,
-      timestamp: Date.now(),
-    },
-  };
-}
+import { wasm, parseWasm } from './helpers';
 
 /**
  * Send an account metadata update via relay to own DID.
@@ -51,27 +23,24 @@ export function buildMetadataEnvelope(
  * @param key - Metadata key
  * @param value - Metadata value
  */
-export function syncMetadataViaRelay(
+export async function syncMetadataViaRelay(
   relayWs: WebSocket,
   ownDid: string,
   key: string,
   value: string,
-): void {
+): Promise<void> {
   if (!relayWs || relayWs.readyState !== WebSocket.OPEN) {
     console.warn('[metadata] Relay not connected, skipping metadata sync');
     return;
   }
 
-  const envelope = buildMetadataEnvelope(ownDid, key, value);
-
-  const relayMessage = JSON.stringify({
-    type: 'send',
-    to_did: ownDid,
-    payload: JSON.stringify(envelope),
-  });
+  // Build envelope in Rust
+  const json = JSON.stringify({ sender_did: ownDid, key, value });
+  const resultJson = wasm().umbra_wasm_build_metadata_envelope(json);
+  const rm = await parseWasm<{ toDid: string; payload: string }>(resultJson);
 
   try {
-    relayWs.send(relayMessage);
+    relayWs.send(JSON.stringify({ type: 'send', to_did: rm.toDid, payload: rm.payload }));
   } catch (err) {
     console.warn('[metadata] Failed to send metadata via relay:', err);
   }

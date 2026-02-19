@@ -14,7 +14,7 @@
  */
 
 import React, { useMemo, useState, useCallback, useEffect, useRef } from 'react';
-import { View, Modal, Pressable } from 'react-native';
+import { View, Pressable, Text as RNText } from 'react-native';
 import type { LayoutRectangle, GestureResponderEvent } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useTheme } from '@coexist/wisp-react-native';
@@ -22,7 +22,6 @@ import { CommunitySidebar } from '@coexist/wisp-react-native/src/components/comm
 import type { CommunityInfo, CommunitySpace as WispCommunitySpace } from '@coexist/wisp-react-native/src/components/community-sidebar';
 import type { ChannelCategory, ChannelItem, ChannelType } from '@coexist/wisp-react-native/src/components/channel-list';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator } from '@coexist/wisp-react-native/src/components/dropdown-menu';
-import { RoleManagementPanel } from '@coexist/wisp-react-native/src/components/role-management-panel';
 import type { ManagedRole, RolePermissionCategory } from '@coexist/wisp-react-native/src/components/role-management-panel';
 
 import { SettingsIcon, FileTextIcon, ShieldIcon, UserPlusIcon, BellIcon, LogOutIcon, PlusIcon } from '@/components/icons';
@@ -35,8 +34,9 @@ import { useCommunity } from '@/hooks/useCommunity';
 import { useCommunitySync } from '@/hooks/useCommunitySync';
 import { useCommunityInvites } from '@/hooks/useCommunityInvites';
 import { useCommunityContext } from '@/contexts/CommunityContext';
-import { CommunityInvitePanel } from '@/components/community/CommunityInvitePanel';
-import { CommunityRolePanel } from '@/components/community/CommunityRolePanel';
+import { useSeatClaim } from '@/hooks/useSeatClaim';
+import { CommunitySettingsDialog } from '@/components/modals/CommunitySettingsDialog';
+import type { CommunitySettingsSection } from '@/components/modals/CommunitySettingsDialog';
 import type { CommunityRole as CommunityRolePanelType } from '@/components/community/CommunityRolePanel';
 import type { CommunityRole as ServiceCommunityRole } from '@umbra/service';
 import type { CommunityCategory as ServiceCommunityCategory } from '@umbra/service';
@@ -218,6 +218,7 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
     roles: realRoles,
     memberRolesMap,
     isLoading: communityLoading,
+    refresh: refreshCommunity,
   } = useCommunity(isMock ? null : communityId);
 
   // Community sync — dispatch + relay broadcast
@@ -232,6 +233,13 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
     creating: inviteCreating,
   } = useCommunityInvites(isMock ? null : communityId);
 
+  // Seat claim detection
+  const {
+    matchingSeats,
+    claimSeat: handleClaimSeat,
+    dismissSeat: handleDismissSeat,
+  } = useSeatClaim(isMock ? null : communityId, myDid || null);
+
   // Collapsed categories (local UI state)
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
 
@@ -240,13 +248,11 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
   const [headerLayout, setHeaderLayout] = useState<LayoutRectangle | null>(null);
   const headerAnchorRef = useRef<View>(null);
 
-  // Role manager dialog
-  const [roleManagerOpen, setRoleManagerOpen] = useState(false);
+  // Settings dialog (consolidates roles, invites, and all server settings)
+  const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
+  const [settingsInitialSection, setSettingsInitialSection] = useState<CommunitySettingsSection | undefined>(undefined);
   const [mockRoles, setMockRoles] = useState<ManagedRole[]>(MOCK_ROLES);
   const [selectedRoleId, setSelectedRoleId] = useState<string | undefined>(undefined);
-
-  // Invite panel dialog
-  const [invitePanelOpen, setInvitePanelOpen] = useState(false);
 
   // Channel context menu state
   const [channelMenuOpen, setChannelMenuOpen] = useState(false);
@@ -366,9 +372,11 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
       collapsed: collapsedCategories.has(cat.id),
     }));
 
-    // Also show uncategorized channels (those without a category_id)
+    // Also show uncategorized channels (those without a category_id, or
+    // whose category_id doesn't match any real category in this space)
+    const spaceCategoryIds = new Set(spaceCategories.map((c) => c.id));
     const uncategorized = channels
-      .filter((ch) => ch.spaceId === activeSpaceId && !ch.categoryId)
+      .filter((ch) => ch.spaceId === activeSpaceId && (!ch.categoryId || !spaceCategoryIds.has(ch.categoryId)))
       .sort((a, b) => a.position - b.position);
 
     if (uncategorized.length > 0) {
@@ -444,8 +452,9 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
     } else {
       const spaceChannels = channels.filter((c) => c.spaceId === spaceId);
       const firstText = spaceChannels.find((c) => c.channelType === 'text');
-      if (firstText) {
-        setActiveChannelId(firstText.id);
+      const firstChannel = firstText ?? spaceChannels[0];
+      if (firstChannel) {
+        setActiveChannelId(firstChannel.id);
       }
     }
   }, [isMock, channels, setActiveSpaceId, setActiveChannelId]);
@@ -1301,6 +1310,58 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
         pointerEvents="none"
       />
 
+      {/* Seat claim banner */}
+      {matchingSeats.length > 0 && (
+        <View
+          style={{
+            padding: 10,
+            backgroundColor: theme.colors.accent.primary + '15',
+            borderBottomWidth: 1,
+            borderBottomColor: theme.colors.accent.primary + '30',
+          }}
+        >
+          <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
+            <View style={{ flex: 1 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                <RNText style={{ fontSize: 14, fontWeight: '600', color: theme.colors.text.primary }}>
+                  Claim your seat
+                </RNText>
+              </View>
+              <RNText style={{ fontSize: 12, color: theme.colors.text.muted, marginBottom: 8 }}>
+                We found your {matchingSeats[0].platform} account "{matchingSeats[0].platformUsername}" in this community. Claim to get your original roles.
+              </RNText>
+              <View style={{ flexDirection: 'row', gap: 8 }}>
+                <Pressable
+                  onPress={() => handleClaimSeat(matchingSeats[0].id)}
+                  style={{
+                    paddingHorizontal: 12,
+                    paddingVertical: 6,
+                    backgroundColor: theme.colors.accent.primary,
+                    borderRadius: 6,
+                  }}
+                >
+                  <RNText style={{ fontSize: 12, fontWeight: '600', color: theme.colors.text.inverse }}>
+                    Claim Seat
+                  </RNText>
+                </Pressable>
+                <Pressable
+                  onPress={() => handleDismissSeat(matchingSeats[0].id)}
+                  style={{
+                    paddingHorizontal: 12,
+                    paddingVertical: 6,
+                    borderRadius: 6,
+                  }}
+                >
+                  <RNText style={{ fontSize: 12, color: theme.colors.text.muted }}>
+                    Dismiss
+                  </RNText>
+                </Pressable>
+              </View>
+            </View>
+          </View>
+        </View>
+      )}
+
       <View style={{ flex: 1, minHeight: 0 }}>
         <CommunitySidebar
           community={communityInfo}
@@ -1332,7 +1393,7 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
       {/* Community header dropdown — positioned via anchorLayout */}
       <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen} anchorLayout={headerLayout}>
         <DropdownMenuContent>
-          <DropdownMenuItem icon={<SettingsIcon size={16} color={iconColor} />} onSelect={() => {}}>
+          <DropdownMenuItem icon={<SettingsIcon size={16} color={iconColor} />} onSelect={() => { setSettingsInitialSection(undefined); setSettingsDialogOpen(true); }}>
             Server Settings
           </DropdownMenuItem>
           <DropdownMenuItem icon={<FileTextIcon size={16} color={iconColor} />} onSelect={() => {}}>
@@ -1340,13 +1401,13 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
           </DropdownMenuItem>
           <DropdownMenuItem
             icon={<ShieldIcon size={16} color={iconColor} />}
-            onSelect={() => setRoleManagerOpen(true)}
+            onSelect={() => { setSettingsInitialSection('roles'); setSettingsDialogOpen(true); }}
           >
             Manage Roles
           </DropdownMenuItem>
           <DropdownMenuItem
             icon={<UserPlusIcon size={16} color={iconColor} />}
-            onSelect={() => setInvitePanelOpen(true)}
+            onSelect={() => { setSettingsInitialSection('invites'); setSettingsDialogOpen(true); }}
           >
             Create Invite
           </DropdownMenuItem>
@@ -1365,113 +1426,42 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
         </DropdownMenuContent>
       </DropdownMenu>
 
-      {/* Role Management Dialog */}
-      <Modal
-        visible={roleManagerOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setRoleManagerOpen(false)}
-        statusBarTranslucent
-      >
-        <Pressable
-          style={{
-            flex: 1,
-            backgroundColor: 'rgba(0,0,0,0.6)',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-          onPress={() => setRoleManagerOpen(false)}
-        >
-          <Pressable
-            onPress={(e) => e.stopPropagation()}
-            style={{
-              width: '90%',
-              maxWidth: 800,
-              height: '80%',
-              borderRadius: 12,
-              overflow: 'hidden',
-              backgroundColor: theme.colors.background.surface,
-            }}
-          >
-            {isMock ? (
-              /* Mock community — local state role management */
-              <RoleManagementPanel
-                roles={mockRoles}
-                permissionCategories={MOCK_PERMISSION_CATEGORIES}
-                selectedRoleId={selectedRoleId}
-                onRoleSelect={setSelectedRoleId}
-                onRoleUpdate={handleMockRoleUpdate}
-                onRoleCreate={handleMockRoleCreate}
-                onRoleDelete={handleMockRoleDelete}
-                onPermissionToggle={handleMockPermissionToggle}
-                onRoleReorder={handleMockRoleReorder}
-                title="Roles"
-              />
-            ) : (
-              /* Real community — uses CommunityRolePanel wrapper with WASM data */
-              <CommunityRolePanel
-                communityId={communityId}
-                roles={rolePanelRoles}
-                memberCounts={roleMemberCounts}
-                selectedRoleId={selectedRoleId}
-                onRoleSelect={setSelectedRoleId}
-                onRoleCreate={handleRoleCreate}
-                onRoleUpdate={handleRoleUpdate}
-                onRoleDelete={handleRoleDelete}
-                onPermissionToggle={handlePermissionToggle}
-                onRoleReorder={handleRoleReorder}
-                roleMembers={roleMembersForRolePanel}
-                allMembers={allMembersForRolePanel}
-                onMemberAdd={handleMemberAdd}
-                onMemberRemove={handleMemberRemove}
-                title="Roles"
-              />
-            )}
-          </Pressable>
-        </Pressable>
-      </Modal>
+      {/* Community Settings Dialog */}
+      <CommunitySettingsDialog
+        open={settingsDialogOpen}
+        onClose={() => setSettingsDialogOpen(false)}
+        communityId={communityId}
+        community={community}
+        members={members}
+        roles={realRoles}
+        loading={communityLoading}
+        onRefresh={refreshCommunity}
+        initialSection={settingsInitialSection}
+        // Role management
+        selectedRoleId={selectedRoleId}
+        onRoleSelect={setSelectedRoleId}
+        onRoleCreate={handleRoleCreate}
+        onRoleUpdate={handleRoleUpdate}
+        onRoleDelete={handleRoleDelete}
+        onPermissionToggle={handlePermissionToggle}
+        onRoleReorder={handleRoleReorder}
+        roleMemberCounts={roleMemberCounts}
+        roleMembers={roleMembersForRolePanel}
+        allMembersForRoles={allMembersForRolePanel}
+        onMemberAdd={handleMemberAdd}
+        onMemberRemove={handleMemberRemove}
+        // Invite management
+        invites={invitePanelInvites}
+        onCreateInvite={handleCreateInvite}
+        onDeleteInvite={handleDeleteInvite}
+        inviteCreating={inviteCreating}
+        invitesLoading={invitesLoading}
+        // Seats re-scan (TODO: requires storing source guild ID + relay bot token endpoint)
+        // onRescanSeats={handleRescanSeats}
+        // rescanningSeats={rescanningSeats}
+      />
 
-      {/* Invite Management Dialog */}
-      <Modal
-        visible={invitePanelOpen}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setInvitePanelOpen(false)}
-        statusBarTranslucent
-      >
-        <Pressable
-          style={{
-            flex: 1,
-            backgroundColor: 'rgba(0,0,0,0.6)',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-          onPress={() => setInvitePanelOpen(false)}
-        >
-          <Pressable
-            onPress={(e) => e.stopPropagation()}
-            style={{
-              width: '90%',
-              maxWidth: 560,
-              maxHeight: '80%',
-              borderRadius: 12,
-              overflow: 'hidden',
-              backgroundColor: theme.colors.background.surface,
-            }}
-          >
-            <CommunityInvitePanel
-              communityId={communityId}
-              invites={invitePanelInvites}
-              onCreateInvite={handleCreateInvite}
-              onDeleteInvite={handleDeleteInvite}
-              creating={inviteCreating}
-              onClose={() => setInvitePanelOpen(false)}
-              loading={invitesLoading}
-              title="Invite People"
-            />
-          </Pressable>
-        </Pressable>
-      </Modal>
+
 
       {/* Channel context menu (long-press on channel) */}
       <ChannelContextMenu
@@ -1492,7 +1482,7 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
         space={spaceMenuTarget}
         onEdit={handleSpaceEdit}
         onDelete={handleSpaceDelete}
-        onCreateChannel={handleChannelCreate}
+        onCreateChannel={() => handleChannelCreate('__uncategorized__')}
         onCreateCategory={handleCategoryCreate}
       />
 

@@ -28,6 +28,7 @@ import {
   PlusIcon,
   LockIcon,
 } from '@/components/icons';
+import { InputDialog } from '@/components/community/InputDialog';
 
 // ---------------------------------------------------------------------------
 // Section: Active Transfers Bar
@@ -389,6 +390,7 @@ function FolderDetailView({
   const { formatBytes } = useStorageManager();
   const [files, setFiles] = useState<any[]>([]);
   const [loadingFiles, setLoadingFiles] = useState(true);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Load files for this folder
   React.useEffect(() => {
@@ -429,9 +431,7 @@ function FolderDetailView({
         URL.revokeObjectURL(url);
       }
     } catch {
-      if (typeof window !== 'undefined') {
-        window.alert('File not available locally. P2P download coming soon.');
-      }
+      setToastMessage('File not available locally. P2P download coming soon.');
     }
   }, [service]);
 
@@ -529,6 +529,32 @@ function FolderDetailView({
               <DownloadIcon size={16} color={theme.colors.text.muted} />
             </Pressable>
           ))}
+        </View>
+      )}
+
+      {/* Toast notification */}
+      {toastMessage && (
+        <View
+          style={{
+            position: 'absolute' as any,
+            bottom: 24,
+            left: '50%' as any,
+            transform: [{ translateX: -200 }] as any,
+            backgroundColor: '#1a1a2e',
+            padding: 12,
+            paddingHorizontal: 24,
+            borderRadius: 8,
+            borderWidth: 1,
+            borderColor: '#333',
+            maxWidth: 400,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 12,
+            zIndex: 10000,
+          }}
+        >
+          <Text size="sm" style={{ color: '#e0e0e0', flex: 1 }}>{toastMessage}</Text>
+          <Text size="sm" onPress={() => setToastMessage(null)} style={{ color: '#888', padding: 4 }}>✕</Text>
         </View>
       )}
     </View>
@@ -865,6 +891,11 @@ export default function FilesPage() {
   const { friends } = useFriends();
   const { refresh: refreshFolders } = useSharedFolders();
   const [openFolderId, setOpenFolderId] = useState<string | null>(null);
+  const [sharedFolderDialogOpen, setSharedFolderDialogOpen] = useState(false);
+  const [sharedFolderDialogSubmitting, setSharedFolderDialogSubmitting] = useState(false);
+  const [contactPickerOpen, setContactPickerOpen] = useState(false);
+  const [pendingFolderName, setPendingFolderName] = useState<string>('');
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Build a friend DID → display name map
   const friendNameMap = useMemo(() => {
@@ -881,52 +912,50 @@ export default function FilesPage() {
     [conversations],
   );
 
-  // Create shared folder from the Files page
-  const handleCreateSharedFolder = useCallback(async () => {
+  // Create shared folder from the Files page — Step 1: open folder name dialog
+  const handleCreateSharedFolder = useCallback(() => {
     if (!service) return;
-
-    // Step 1: prompt for folder name
-    const name = typeof window !== 'undefined'
-      ? window.prompt('Shared folder name:')
-      : null;
-    if (!name?.trim()) return;
-
-    // Step 2: select a contact/conversation
-    // For now, use a simple prompt approach. A full dialog would be better.
-    const contactOptions = dmConversations.map(
-      (c) => `${friendNameMap[c.friendDid!] || c.friendDid!.slice(0, 16)} (${c.id.slice(0, 8)}...)`
-    ).join('\n');
-
     if (dmConversations.length === 0) {
-      if (typeof window !== 'undefined') {
-        window.alert('No DM conversations available. Start a conversation with a friend first.');
-      }
+      setToastMessage('No DM conversations available. Start a conversation with a friend first.');
       return;
     }
+    setSharedFolderDialogOpen(true);
+  }, [service, dmConversations]);
 
-    const indexStr = typeof window !== 'undefined'
-      ? window.prompt(
-          `Select a contact (enter number 1-${dmConversations.length}):\n\n` +
-          dmConversations.map(
-            (c, i) => `${i + 1}. ${friendNameMap[c.friendDid!] || c.friendDid!.slice(0, 16)}`
-          ).join('\n')
-        )
-      : null;
+  // Step 2: after folder name entered, show contact picker (or auto-select if only one)
+  const handleFolderNameSubmit = useCallback(async (name: string) => {
+    if (!name?.trim()) return;
+    setPendingFolderName(name.trim());
+    setSharedFolderDialogOpen(false);
 
-    if (!indexStr) return;
-    const idx = parseInt(indexStr, 10) - 1;
-    if (idx < 0 || idx >= dmConversations.length) return;
+    if (dmConversations.length === 1) {
+      // Auto-select the only available conversation
+      const conv = dmConversations[0];
+      try {
+        await service?.createDmFolder(conv.id, null, name.trim(), myDid);
+        await refreshFolders();
+        console.log('[FilesPage] Shared folder created:', name.trim());
+      } catch (err) {
+        console.error('[FilesPage] Failed to create shared folder:', err);
+      }
+    } else {
+      setContactPickerOpen(true);
+    }
+  }, [dmConversations, service, myDid, refreshFolders]);
 
-    const conv = dmConversations[idx];
-
+  // Step 3: user selects a contact from the picker
+  const handleContactSelect = useCallback(async (convId: string) => {
+    setContactPickerOpen(false);
+    if (!service || !pendingFolderName) return;
     try {
-      await service.createDmFolder(conv.id, null, name.trim(), myDid);
+      await service.createDmFolder(convId, null, pendingFolderName, myDid);
       await refreshFolders();
-      console.log('[FilesPage] Shared folder created:', name.trim());
+      console.log('[FilesPage] Shared folder created:', pendingFolderName);
     } catch (err) {
       console.error('[FilesPage] Failed to create shared folder:', err);
     }
-  }, [service, myDid, dmConversations, friendNameMap, refreshFolders]);
+    setPendingFolderName('');
+  }, [service, myDid, pendingFolderName, refreshFolders]);
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.background.canvas }}>
@@ -987,6 +1016,107 @@ export default function FilesPage() {
         {!openFolderId && <CommunityFilesSection />}
         <StorageSection />
       </ScrollView>
+
+      {/* Shared folder name dialog */}
+      <InputDialog
+        open={sharedFolderDialogOpen}
+        onClose={() => setSharedFolderDialogOpen(false)}
+        title="Create Shared Folder"
+        label="Folder Name"
+        placeholder="e.g. Project Files, Photos..."
+        submitLabel="Next"
+        submitting={sharedFolderDialogSubmitting}
+        onSubmit={handleFolderNameSubmit}
+      />
+
+      {/* Contact picker modal */}
+      {contactPickerOpen && (
+        <View
+          style={{
+            position: 'absolute' as any,
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 9999,
+          }}
+        >
+          <View
+            style={{
+              backgroundColor: theme.colors.background.surface,
+              borderRadius: 12,
+              padding: 24,
+              maxWidth: 380,
+              width: '90%' as any,
+              borderWidth: 1,
+              borderColor: theme.colors.border.subtle,
+            }}
+          >
+            <Text size="md" weight="bold" style={{ color: theme.colors.text.primary, marginBottom: 4 }}>
+              Select Contact
+            </Text>
+            <Text size="sm" style={{ color: theme.colors.text.muted, marginBottom: 16 }}>
+              Share &quot;{pendingFolderName}&quot; with:
+            </Text>
+            {dmConversations.map((conv) => (
+              <Pressable
+                key={conv.id}
+                onPress={() => handleContactSelect(conv.id)}
+                style={({ pressed }) => ({
+                  paddingVertical: 10,
+                  paddingHorizontal: 12,
+                  borderRadius: 8,
+                  backgroundColor: pressed
+                    ? theme.colors.accent.primary + '20'
+                    : 'transparent',
+                  marginBottom: 4,
+                })}
+              >
+                <Text size="sm" weight="medium" style={{ color: theme.colors.text.primary }}>
+                  {friendNameMap[conv.friendDid!] || conv.friendDid!.slice(0, 16)}
+                </Text>
+              </Pressable>
+            ))}
+            <Pressable
+              onPress={() => { setContactPickerOpen(false); setPendingFolderName(''); }}
+              style={{ marginTop: 12, alignItems: 'center', paddingVertical: 8 }}
+            >
+              <Text size="sm" weight="medium" style={{ color: theme.colors.text.muted }}>
+                Cancel
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+      )}
+
+      {/* Toast notification */}
+      {toastMessage && (
+        <View
+          style={{
+            position: 'absolute' as any,
+            bottom: 24,
+            left: '50%' as any,
+            transform: [{ translateX: -200 }] as any,
+            backgroundColor: '#1a1a2e',
+            padding: 12,
+            paddingHorizontal: 24,
+            borderRadius: 8,
+            borderWidth: 1,
+            borderColor: '#333',
+            maxWidth: 400,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 12,
+            zIndex: 10000,
+          }}
+        >
+          <Text size="sm" style={{ color: '#e0e0e0', flex: 1 }}>{toastMessage}</Text>
+          <Text size="sm" onPress={() => setToastMessage(null)} style={{ color: '#888', padding: 4 }}>✕</Text>
+        </View>
+      )}
     </View>
   );
 }

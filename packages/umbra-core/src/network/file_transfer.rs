@@ -511,6 +511,54 @@ impl Default for TransferLimits {
 }
 
 // ============================================================================
+// TRANSPORT CONFIG — Transport selection and fallback
+// ============================================================================
+
+/// Configuration for transport selection and fallback behavior.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TransportConfig {
+    /// Timeout in milliseconds to wait for direct WebRTC connection before
+    /// falling back to relay. Default: 2000ms.
+    pub webrtc_timeout_ms: u64,
+    /// Whether to prefer direct connections over relay when available.
+    /// Default: true.
+    pub prefer_direct: bool,
+}
+
+impl Default for TransportConfig {
+    fn default() -> Self {
+        Self {
+            webrtc_timeout_ms: 2000,
+            prefer_direct: true,
+        }
+    }
+}
+
+impl TransportConfig {
+    /// Select the best transport type for a given peer.
+    ///
+    /// Decision logic:
+    /// - If `prefer_direct` is true and peer has an active libp2p connection, use `Libp2p`
+    /// - On native platforms with direct connectivity, use `Libp2p`
+    /// - On WASM/browser with WebRTC available, use `WebRtcDirect`
+    /// - Otherwise fall back to `Relay`
+    ///
+    /// The `is_peer_directly_reachable` parameter should be `true` if the
+    /// swarm currently has an established connection to the peer.
+    pub fn select_transport(&self, is_peer_directly_reachable: bool, is_wasm: bool) -> TransportType {
+        if self.prefer_direct && is_peer_directly_reachable {
+            if is_wasm {
+                TransportType::WebRtcDirect
+            } else {
+                TransportType::Libp2p
+            }
+        } else {
+            TransportType::Relay
+        }
+    }
+}
+
+// ============================================================================
 // SPEED TRACKER (rolling average over last N chunks)
 // ============================================================================
 
@@ -585,6 +633,8 @@ pub struct TransferManager {
     in_flight: std::collections::HashMap<String, std::collections::HashMap<u32, i64>>,
     /// Concurrent transfer limits.
     limits: TransferLimits,
+    /// Transport selection configuration.
+    transport_config: TransportConfig,
     /// Queue of pending transfers waiting for a slot (transfer_id, priority).
     /// Lower priority number = higher priority. Smaller files get priority.
     queue: Vec<(String, u64)>,
@@ -601,6 +651,7 @@ impl TransferManager {
             speed_trackers: std::collections::HashMap::new(),
             in_flight: std::collections::HashMap::new(),
             limits: TransferLimits::default(),
+            transport_config: TransportConfig::default(),
             queue: Vec::new(),
             pending_events: Vec::new(),
         }
@@ -612,6 +663,26 @@ impl TransferManager {
             limits,
             ..Self::new()
         }
+    }
+
+    /// Set the transport configuration.
+    pub fn set_transport_config(&mut self, config: TransportConfig) {
+        self.transport_config = config;
+    }
+
+    /// Get the current transport configuration.
+    pub fn transport_config(&self) -> &TransportConfig {
+        &self.transport_config
+    }
+
+    /// Select the best transport for a peer based on connectivity status.
+    ///
+    /// This checks the current `TransportConfig` and whether the peer is
+    /// directly reachable to determine if we should use direct libp2p/WebRTC
+    /// or fall back to relay.
+    pub fn select_transport(&self, is_peer_directly_reachable: bool) -> TransportType {
+        let is_wasm = cfg!(target_arch = "wasm32");
+        self.transport_config.select_transport(is_peer_directly_reachable, is_wasm)
     }
 
     /// Get a reference to a transfer session by ID.
@@ -2115,5 +2186,99 @@ mod tests {
 
         let session = mgr.get_session("tx-300").unwrap();
         assert_eq!(session.state, TransferState::Cancelled);
+    }
+
+    // ── TransportConfig Tests ─────────────────────────────────────────────
+
+    #[test]
+    fn test_transport_config_defaults() {
+        let config = TransportConfig::default();
+        assert_eq!(config.webrtc_timeout_ms, 2000);
+        assert!(config.prefer_direct);
+    }
+
+    #[test]
+    fn test_transport_selection_direct_peer_native() {
+        let config = TransportConfig::default();
+        // On native (is_wasm = false), directly reachable peer → Libp2p
+        let transport = config.select_transport(true, false);
+        assert_eq!(transport, TransportType::Libp2p);
+    }
+
+    #[test]
+    fn test_transport_selection_direct_peer_wasm() {
+        let config = TransportConfig::default();
+        // On WASM (is_wasm = true), directly reachable peer → WebRtcDirect
+        let transport = config.select_transport(true, true);
+        assert_eq!(transport, TransportType::WebRtcDirect);
+    }
+
+    #[test]
+    fn test_transport_selection_unreachable_peer() {
+        let config = TransportConfig::default();
+        // Peer not directly reachable → Relay (regardless of platform)
+        let transport = config.select_transport(false, false);
+        assert_eq!(transport, TransportType::Relay);
+
+        let transport = config.select_transport(false, true);
+        assert_eq!(transport, TransportType::Relay);
+    }
+
+    #[test]
+    fn test_transport_selection_prefer_relay() {
+        let config = TransportConfig {
+            webrtc_timeout_ms: 2000,
+            prefer_direct: false,
+        };
+        // When prefer_direct is false, always use Relay
+        let transport = config.select_transport(true, false);
+        assert_eq!(transport, TransportType::Relay);
+
+        let transport = config.select_transport(true, true);
+        assert_eq!(transport, TransportType::Relay);
+    }
+
+    #[test]
+    fn test_manager_select_transport() {
+        let mgr = TransferManager::new();
+        // Default config prefers direct
+        let transport = mgr.select_transport(true);
+        // On native test runner, should be Libp2p (not wasm32)
+        assert_eq!(transport, TransportType::Libp2p);
+
+        let transport = mgr.select_transport(false);
+        assert_eq!(transport, TransportType::Relay);
+    }
+
+    #[test]
+    fn test_manager_set_transport_config() {
+        let mut mgr = TransferManager::new();
+        assert!(mgr.transport_config().prefer_direct);
+
+        mgr.set_transport_config(TransportConfig {
+            webrtc_timeout_ms: 5000,
+            prefer_direct: false,
+        });
+
+        assert!(!mgr.transport_config().prefer_direct);
+        assert_eq!(mgr.transport_config().webrtc_timeout_ms, 5000);
+
+        // With prefer_direct=false, always relay
+        let transport = mgr.select_transport(true);
+        assert_eq!(transport, TransportType::Relay);
+    }
+
+    #[test]
+    fn test_transport_config_serialization() {
+        let config = TransportConfig {
+            webrtc_timeout_ms: 3000,
+            prefer_direct: true,
+        };
+
+        let json = serde_json::to_string(&config).unwrap();
+        let restored: TransportConfig = serde_json::from_str(&json).unwrap();
+
+        assert_eq!(restored.webrtc_timeout_ms, 3000);
+        assert!(restored.prefer_direct);
     }
 }

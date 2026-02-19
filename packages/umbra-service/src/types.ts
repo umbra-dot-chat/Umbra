@@ -914,6 +914,42 @@ export interface CommunityRole {
 }
 
 /**
+ * A community seat (ghost member placeholder from platform import).
+ *
+ * Seats represent imported members from external platforms (Discord, GitHub, etc.)
+ * that real users can claim by linking their platform account. Claiming a seat
+ * auto-joins the community and assigns the original roles.
+ *
+ * **Platform-agnostic**: the `platform` field is a generic string.
+ * Adding a new platform (e.g., Steam) requires no changes to the seat
+ * system — only a new import adapter producing `MappedSeat[]` objects.
+ */
+export interface CommunitySeat {
+  /** Unique seat ID */
+  id: string;
+  /** Community ID */
+  communityId: string;
+  /** Source platform (platform-agnostic) */
+  platform: string;
+  /** User ID on the source platform */
+  platformUserId: string;
+  /** Username on the source platform */
+  platformUsername: string;
+  /** Nickname from the source platform */
+  nickname?: string;
+  /** Avatar URL from the source platform */
+  avatarUrl?: string;
+  /** Umbra role IDs assigned to this seat */
+  roleIds: string[];
+  /** DID of the user who claimed this seat (null = ghost/unclaimed) */
+  claimedByDid?: string;
+  /** When the seat was claimed */
+  claimedAt?: number;
+  /** When the seat was created */
+  createdAt: number;
+}
+
+/**
  * A community message
  */
 export interface CommunityMessage {

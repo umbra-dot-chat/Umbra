@@ -9,7 +9,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { View } from 'react-native';
+import { View, Image } from 'react-native';
 import {
   Text,
   Button,
@@ -22,6 +22,7 @@ import {
   Card,
   Presence,
   Dialog,
+  Separator,
 } from '@coexist/wisp-react-native';
 import type { ProgressStep } from '@coexist/wisp-react-native';
 import { useAuth } from '@/contexts/AuthContext';
@@ -29,6 +30,10 @@ import { useWalletFlow } from '@/hooks/useWalletFlow';
 import { WalletFlowLayout } from './WalletFlowLayout';
 import { SeedPhraseGrid } from './SeedPhraseGrid';
 import { PinSetupStep } from './PinSetupStep';
+import { ProfileImportSelector, type NormalizedProfile } from './ProfileImportSelector';
+import { linkAccountDirect, updateSettings, registerUsername } from '@/packages/umbra-service/src/discovery/api';
+import { DiscoveryOptInDialog } from '@/components/discovery/DiscoveryOptInDialog';
+import type { UsernameResponse } from '@/packages/umbra-service/src/discovery/types';
 import {
   UserIcon,
   ArrowLeftIcon,
@@ -49,6 +54,7 @@ const STEPS: ProgressStep[] = [
   { id: 'seed', label: 'Recovery Phrase' },
   { id: 'confirm', label: 'Confirm Backup' },
   { id: 'pin', label: 'Security PIN' },
+  { id: 'username', label: 'Username' },
   { id: 'complete', label: 'Complete' },
 ];
 
@@ -78,12 +84,25 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
   const [error, setError] = useState<string | null>(null);
   const [rememberMe, setRememberMe] = useState(true);
 
+  // Username step state
+  const [usernameInput, setUsernameInput] = useState('');
+  const [usernameResult, setUsernameResult] = useState<UsernameResponse | null>(null);
+  const [usernameError, setUsernameError] = useState<string | null>(null);
+  const [usernameLoading, setUsernameLoading] = useState(false);
+
+  // Profile import state
+  const [importedProfile, setImportedProfile] = useState<NormalizedProfile | null>(null);
+
+  // Discovery opt-in state (shown after profile import + auto-link)
+  const [showDiscoveryOptIn, setShowDiscoveryOptIn] = useState(false);
+  const [accountLinkedDuringCreation, setAccountLinkedDuringCreation] = useState(false);
+
   // Identity switch dialog state
   const [showSwitchDialog, setShowSwitchDialog] = useState(false);
   const [oldDids, setOldDids] = useState<string[]>([]);
 
   const { currentStep, goNext, goBack, isFirstStep, reset } = useWalletFlow({
-    totalSteps: 5,
+    totalSteps: 6,
   });
 
   // Reset state when flow is closed
@@ -97,9 +116,30 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
       setRememberMe(true);
       setIsLoading(false);
       setError(null);
+      setImportedProfile(null);
+      setUsernameInput('');
+      setUsernameResult(null);
+      setUsernameError(null);
+      setUsernameLoading(false);
+      setShowDiscoveryOptIn(false);
+      setAccountLinkedDuringCreation(false);
       reset();
     }
   }, [open, reset]);
+
+  // Handle profile import from OAuth
+  const handleProfileImported = useCallback((profile: NormalizedProfile) => {
+    setImportedProfile(profile);
+    // Pre-fill display name from imported profile
+    if (profile.displayName) {
+      setDisplayName(profile.displayName);
+    }
+  }, []);
+
+  // Clear imported profile
+  const handleClearImport = useCallback(() => {
+    setImportedProfile(null);
+  }, []);
 
   // Create identity when entering step 1
   useEffect(() => {
@@ -118,13 +158,46 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
       }
       const result = await UmbraService.instance.createIdentity(displayName.trim());
       setSeedPhrase(result.recoveryPhrase);
-      setIdentity(result.identity);
+
+      // If we have an imported profile with an avatar, set it
+      let finalIdentity = result.identity;
+      if (importedProfile?.avatarBase64) {
+        const avatarDataUrl = `data:${importedProfile.avatarMime || 'image/png'};base64,${importedProfile.avatarBase64}`;
+        console.log('[CreateWalletFlow] Setting avatar, size:', avatarDataUrl.length);
+        try {
+          await UmbraService.instance.updateProfile({ type: 'avatar', value: avatarDataUrl });
+          // Update the identity with the avatar
+          finalIdentity = { ...result.identity, avatar: avatarDataUrl };
+          console.log('[CreateWalletFlow] Avatar saved successfully');
+        } catch (avatarErr: any) {
+          console.error('[CreateWalletFlow] Failed to save avatar:', avatarErr);
+        }
+      }
+
+      // Auto-link the imported platform account for friend discovery
+      if (importedProfile?.platformId) {
+        try {
+          await linkAccountDirect(
+            result.identity.did,
+            importedProfile.platform,
+            importedProfile.platformId,
+            importedProfile.displayName || importedProfile.username
+          );
+          setAccountLinkedDuringCreation(true);
+          console.log('[CreateWalletFlow] Platform account auto-linked:', importedProfile.platform);
+        } catch (linkErr: any) {
+          // Non-fatal — account linking is optional
+          console.warn('[CreateWalletFlow] Failed to auto-link account:', linkErr);
+        }
+      }
+
+      setIdentity(finalIdentity);
     } catch (err: any) {
       setError(err.message ?? 'Failed to create wallet');
     } finally {
       setIsLoading(false);
     }
-  }, [displayName]);
+  }, [displayName, importedProfile]);
 
   const handlePinComplete = useCallback(
     (pin: string | null) => {
@@ -133,6 +206,26 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
     },
     [goNext],
   );
+
+  // Register username
+  const handleRegisterUsername = useCallback(async () => {
+    if (!identity || !usernameInput.trim()) return;
+    setUsernameLoading(true);
+    setUsernameError(null);
+    try {
+      const result = await registerUsername(identity.did, usernameInput.trim());
+      setUsernameResult(result);
+    } catch (err: any) {
+      setUsernameError(err.message ?? 'Failed to register username');
+    } finally {
+      setUsernameLoading(false);
+    }
+  }, [identity, usernameInput]);
+
+  // Skip username step
+  const handleSkipUsername = useCallback(() => {
+    goNext();
+  }, [goNext]);
 
   // Finalize login after identity switch decision (or when no old data exists)
   const doLogin = useCallback(() => {
@@ -157,7 +250,8 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
     login(identity);
   }, [identity, login, chosenPin, setPin, rememberMe, setAuthRememberMe, seedPhrase, setRecoveryPhrase]);
 
-  const handleComplete = useCallback(async () => {
+  // Called after discovery opt-in decision (or skip) to finish login
+  const finishLogin = useCallback(async () => {
     if (!identity) return;
     // Check if there's old IndexedDB data from a different identity
     try {
@@ -173,6 +267,37 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
     }
     doLogin();
   }, [identity, doLogin]);
+
+  const handleComplete = useCallback(async () => {
+    if (!identity) return;
+
+    // If a platform was linked during creation, show the discovery opt-in first
+    if (accountLinkedDuringCreation && importedProfile) {
+      setShowDiscoveryOptIn(true);
+      return; // Wait for opt-in decision
+    }
+
+    finishLogin();
+  }, [identity, accountLinkedDuringCreation, importedProfile, finishLogin]);
+
+  // Handle discovery opt-in from the dialog
+  const handleEnableDiscovery = useCallback(async () => {
+    if (!identity) return false;
+    try {
+      await updateSettings(identity.did, true);
+      console.log('[CreateWalletFlow] Friend discovery enabled during signup');
+      return true;
+    } catch (err: any) {
+      console.error('[CreateWalletFlow] Failed to enable discovery:', err);
+      return false;
+    }
+  }, [identity]);
+
+  // Called when the discovery opt-in dialog closes (either choice)
+  const handleDiscoveryOptInClose = useCallback(() => {
+    setShowDiscoveryOptIn(false);
+    finishLogin();
+  }, [finishLogin]);
 
   // Identity switch dialog: keep old data
   const handleKeepOldData = useCallback(() => {
@@ -223,6 +348,59 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
               fullWidth
               autoFocus
             />
+
+            <Separator spacing="lg" />
+
+            {/* Profile import section */}
+            {!importedProfile ? (
+              <ProfileImportSelector
+                onProfileImported={handleProfileImported}
+                compact
+              />
+            ) : (
+              <VStack gap="md">
+                <HStack style={{ justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Text size="sm" weight="semibold" color="secondary">
+                    Profile Imported
+                  </Text>
+                  <Button variant="tertiary" size="sm" onPress={handleClearImport}>
+                    Change
+                  </Button>
+                </HStack>
+
+                <Card variant="filled" padding="md">
+                  <HStack gap="md" style={{ alignItems: 'center' }}>
+                    <View style={{ width: 48, height: 48, borderRadius: 24, overflow: 'hidden' }}>
+                      {importedProfile.avatarBase64 ? (
+                        <Image
+                          source={{ uri: `data:${importedProfile.avatarMime || 'image/png'};base64,${importedProfile.avatarBase64}` }}
+                          style={{ width: 48, height: 48 }}
+                        />
+                      ) : importedProfile.avatarUrl ? (
+                        <Image
+                          source={{ uri: importedProfile.avatarUrl }}
+                          style={{ width: 48, height: 48 }}
+                        />
+                      ) : (
+                        <View style={{ width: 48, height: 48, backgroundColor: '#5865F2', alignItems: 'center', justifyContent: 'center' }}>
+                          <Text size="lg" weight="bold" style={{ color: 'white' }}>
+                            {importedProfile.displayName.charAt(0).toUpperCase()}
+                          </Text>
+                        </View>
+                      )}
+                    </View>
+                    <VStack gap="xs" style={{ flex: 1 }}>
+                      <Text size="md" weight="semibold">
+                        {importedProfile.displayName}
+                      </Text>
+                      <Text size="xs" color="muted" style={{ textTransform: 'capitalize' }}>
+                        from {importedProfile.platform}
+                      </Text>
+                    </VStack>
+                  </HStack>
+                </Card>
+              </VStack>
+            )}
           </VStack>
         );
 
@@ -293,6 +471,72 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
 
       case 4:
         return (
+          <VStack gap="lg">
+            <VStack gap="xs">
+              <Text size="xl" weight="bold">
+                Choose a Username
+              </Text>
+              <Text size="sm" color="secondary">
+                Pick a unique username so friends can find you easily. A numeric tag will be assigned automatically (e.g., Matt#01283).
+              </Text>
+            </VStack>
+
+            {!usernameResult ? (
+              <VStack gap="md">
+                <Input
+                  icon={UserIcon}
+                  label="Username"
+                  placeholder="e.g., Matt"
+                  value={usernameInput}
+                  onChangeText={(text: string) => {
+                    setUsernameInput(text);
+                    setUsernameError(null);
+                  }}
+                  fullWidth
+                  autoFocus
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+
+                <Text size="xs" color="muted">
+                  1-32 characters. Letters, numbers, underscores, and hyphens only.
+                </Text>
+
+                {usernameError && (
+                  <Alert variant="danger" title="Error" description={usernameError} />
+                )}
+
+                {usernameLoading && (
+                  <View style={{ alignItems: 'center', paddingVertical: 8 }}>
+                    <Spinner />
+                  </View>
+                )}
+              </VStack>
+            ) : (
+              <VStack gap="md" style={{ alignItems: 'center' }}>
+                <Presence visible animation="scaleIn">
+                  <CheckCircleIcon size={48} color="#22c55e" />
+                </Presence>
+
+                <VStack gap="xs" style={{ alignItems: 'center' }}>
+                  <Text size="sm" color="secondary">Your username is</Text>
+                  <Text size="xl" weight="bold">
+                    {usernameResult.username}
+                  </Text>
+                </VStack>
+
+                <Card variant="filled" padding="sm" style={{ width: '100%' }}>
+                  <Text size="xs" color="muted" align="center">
+                    Share this with friends so they can find and add you on Umbra.
+                  </Text>
+                </Card>
+              </VStack>
+            )}
+          </VStack>
+        );
+
+      case 5:
+        return (
           <VStack gap="lg" style={{ alignItems: 'center', paddingVertical: 16 }}>
             <Presence visible animation="scaleIn">
               <CheckCircleIcon size={64} color="#22c55e" />
@@ -317,6 +561,12 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
                       <Text size="sm" color="muted">Name:</Text>
                       <Text size="sm" weight="semibold">{identity.displayName}</Text>
                     </HStack>
+                    {usernameResult?.username && (
+                      <HStack gap="sm" style={{ alignItems: 'center' }}>
+                        <Text size="sm" color="muted">Username:</Text>
+                        <Text size="sm" weight="semibold">{usernameResult.username}</Text>
+                      </HStack>
+                    )}
                     <HStack gap="sm" style={{ alignItems: 'center' }}>
                       <Text size="sm" color="muted">DID:</Text>
                       <Text size="xs" color="secondary" style={{ flex: 1 }}>
@@ -415,7 +665,38 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
       case 3:
         return null;
 
+      // Step 4 (Username)
       case 4:
+        return (
+          <HStack gap="md" style={{ justifyContent: 'space-between' }}>
+            {!usernameResult ? (
+              <>
+                <Button variant="tertiary" onPress={handleSkipUsername}>
+                  Skip for now
+                </Button>
+                <Button
+                  variant="primary"
+                  onPress={handleRegisterUsername}
+                  disabled={!usernameInput.trim() || usernameLoading}
+                  iconRight={<ArrowRightIcon size={16} color="#FFFFFF" />}
+                >
+                  Claim Username
+                </Button>
+              </>
+            ) : (
+              <Button
+                variant="primary"
+                onPress={goNext}
+                fullWidth
+                iconRight={<ArrowRightIcon size={16} color="#FFFFFF" />}
+              >
+                Continue
+              </Button>
+            )}
+          </HStack>
+        );
+
+      case 5:
         return (
           <HStack gap="md" style={{ justifyContent: 'flex-end' }}>
             <Button
@@ -446,6 +727,16 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
       >
         {renderStepContent()}
       </WalletFlowLayout>
+
+      {/* Discovery Opt-In Dialog — shown after profile import + auto-link */}
+      {importedProfile && (
+        <DiscoveryOptInDialog
+          open={showDiscoveryOptIn}
+          onClose={handleDiscoveryOptInClose}
+          platform={importedProfile.platform}
+          onEnableDiscovery={handleEnableDiscovery}
+        />
+      )}
 
       {/* Identity Switch Dialog — shown when creating a new identity over existing data */}
       <Dialog

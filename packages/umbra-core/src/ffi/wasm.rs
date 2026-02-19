@@ -407,6 +407,21 @@ pub fn umbra_wasm_friends_send_request(
         }
     }
 
+    // Build relay envelope for friend request delivery
+    let relay_envelope = serde_json::json!({
+        "envelope": "friend_request",
+        "version": 1,
+        "payload": {
+            "id": request.id,
+            "fromDid": request.from.did,
+            "fromDisplayName": request.from.display_name,
+            "fromSigningKey": hex::encode(&request.from.public_keys.signing),
+            "fromEncryptionKey": hex::encode(&request.from.public_keys.encryption),
+            "message": request.message,
+            "createdAt": request.created_at,
+        }
+    });
+
     let json = serde_json::json!({
         "id": request.id,
         "to_did": request.to_did,
@@ -416,6 +431,10 @@ pub fn umbra_wasm_friends_send_request(
         "from_display_name": request.from.display_name,
         "message": request.message,
         "created_at": request.created_at,
+        "relay_messages": [{
+            "to_did": request.to_did,
+            "payload": relay_envelope.to_string(),
+        }],
     });
     Ok(JsValue::from_str(&json.to_string()))
 }
@@ -645,13 +664,65 @@ pub fn umbra_wasm_friends_accept_request(request_id: &str) -> Result<JsValue, Js
         }
     }));
 
+    // Build relay envelope for friend acceptance delivery
+    let our_signing_key_hex = hex::encode(&identity.keypair().signing.public_bytes());
+    let our_encryption_key_hex = hex::encode(&identity.keypair().encryption.public_bytes());
+    let relay_envelope = serde_json::json!({
+        "envelope": "friend_response",
+        "version": 1,
+        "payload": {
+            "requestId": request_id,
+            "fromDid": our_did,
+            "fromDisplayName": identity.profile().display_name,
+            "fromSigningKey": our_signing_key_hex,
+            "fromEncryptionKey": our_encryption_key_hex,
+            "accepted": true,
+            "timestamp": crate::time::now_timestamp_millis(),
+        }
+    });
+
     let json = serde_json::json!({
         "request_id": request_id,
         "status": "accepted",
         "conversation_id": conversation_id,
         "friend_did": friend_did,
+        "relay_messages": [{
+            "to_did": friend_did,
+            "payload": relay_envelope.to_string(),
+        }],
     });
     Ok(JsValue::from_str(&json.to_string()))
+}
+
+/// Build a friend_accept_ack relay envelope.
+///
+/// Pure data construction — sends back to the accepter to confirm the handshake.
+/// Takes JSON: { "accepter_did": "...", "my_did": "..." }
+/// Returns JSON: { "to_did", "payload": "<stringified envelope>" }
+#[wasm_bindgen]
+pub fn umbra_wasm_friends_build_accept_ack(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let accepter_did = data["accepter_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing accepter_did"))?;
+    let my_did = data["my_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing my_did"))?;
+
+    let envelope = serde_json::json!({
+        "envelope": "friend_accept_ack",
+        "version": 1,
+        "payload": {
+            "senderDid": my_did,
+            "timestamp": crate::time::now_timestamp_millis(),
+        }
+    });
+
+    let result = serde_json::json!({
+        "to_did": accepter_did,
+        "payload": envelope.to_string(),
+    });
+    Ok(JsValue::from_str(&result.to_string()))
 }
 
 /// Reject a friend request
@@ -876,7 +947,7 @@ pub fn umbra_wasm_messaging_get_messages(
                     "id": m.id,
                     "conversation_id": m.conversation_id,
                     "sender_did": m.sender_did,
-                    "content_encrypted": m.content_encrypted,
+                    "content_encrypted": hex_to_base64_safe(&m.content_encrypted),
                     "nonce": m.nonce,
                     "timestamp": m.timestamp,
                     "delivered": m.delivered,
@@ -990,7 +1061,8 @@ pub fn umbra_wasm_messaging_send(
             "id": message_id,
             "conversation_id": conversation_id,
             "sender_did": sender_did,
-            "content": content,
+            "content": { "type": "text", "text": content },
+            "status": "sent",
             "timestamp": timestamp,
             "delivered": false,
             "read": false,
@@ -1000,6 +1072,20 @@ pub fn umbra_wasm_messaging_send(
     // Encode ciphertext and nonce for relay forwarding
     let ciphertext_b64 = base64::engine::general_purpose::STANDARD.encode(&ciphertext);
     let nonce_hex = hex::encode(&nonce.0);
+
+    // Build relay envelope so TS only has to call ws.send()
+    let relay_envelope = serde_json::json!({
+        "envelope": "chat_message",
+        "version": 1,
+        "payload": {
+            "messageId": message_id,
+            "conversationId": conversation_id,
+            "senderDid": sender_did,
+            "contentEncrypted": ciphertext_b64,
+            "nonce": nonce_hex,
+            "timestamp": timestamp,
+        }
+    });
 
     let json = serde_json::json!({
         "id": message_id,
@@ -1011,9 +1097,92 @@ pub fn umbra_wasm_messaging_send(
         "read": false,
         "content_encrypted": ciphertext_b64,
         "nonce": nonce_hex,
+        "relay_messages": [{
+            "to_did": friend_did,
+            "payload": relay_envelope.to_string(),
+        }],
     });
 
     Ok(JsValue::from_str(&json.to_string()))
+}
+
+/// Build a typing indicator relay envelope.
+///
+/// Pure data construction — does not touch the database.
+/// Takes JSON: { "conversation_id", "recipient_did", "sender_did", "sender_name", "is_typing" }
+/// Returns JSON: { "to_did", "payload": "<stringified envelope>" }
+#[wasm_bindgen]
+pub fn umbra_wasm_messaging_build_typing_envelope(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let conversation_id = data["conversation_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing conversation_id"))?;
+    let recipient_did = data["recipient_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing recipient_did"))?;
+    let sender_did = data["sender_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing sender_did"))?;
+    let sender_name = data["sender_name"].as_str().unwrap_or("");
+    let is_typing = data["is_typing"].as_bool().unwrap_or(true);
+
+    let timestamp = crate::time::now_timestamp_millis();
+
+    let envelope = serde_json::json!({
+        "envelope": "typing_indicator",
+        "version": 1,
+        "payload": {
+            "conversationId": conversation_id,
+            "senderDid": sender_did,
+            "senderName": sender_name,
+            "isTyping": is_typing,
+            "timestamp": timestamp,
+        }
+    });
+
+    let result = serde_json::json!({
+        "to_did": recipient_did,
+        "payload": envelope.to_string(),
+    });
+    Ok(JsValue::from_str(&result.to_string()))
+}
+
+/// Build a delivery receipt relay envelope.
+///
+/// Pure data construction — does not touch the database.
+/// Takes JSON: { "message_id", "conversation_id", "sender_did", "status" }
+/// Returns JSON: { "to_did", "payload": "<stringified envelope>" }
+#[wasm_bindgen]
+pub fn umbra_wasm_messaging_build_receipt_envelope(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let message_id = data["message_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing message_id"))?;
+    let conversation_id = data["conversation_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing conversation_id"))?;
+    let sender_did = data["sender_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing sender_did"))?;
+    let status = data["status"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing status"))?;
+
+    let timestamp = crate::time::now_timestamp_millis();
+
+    let envelope = serde_json::json!({
+        "envelope": "message_status",
+        "version": 1,
+        "payload": {
+            "messageId": message_id,
+            "conversationId": conversation_id,
+            "status": status,
+            "timestamp": timestamp,
+        }
+    });
+
+    let result = serde_json::json!({
+        "to_did": sender_did,
+        "payload": envelope.to_string(),
+    });
+    Ok(JsValue::from_str(&result.to_string()))
 }
 
 /// Mark all messages in a conversation as read
@@ -1050,8 +1219,9 @@ pub fn umbra_wasm_messaging_decrypt(
     content_encrypted_b64: &str,
     nonce_hex: &str,
     sender_did: &str,
-    timestamp: i64,
+    timestamp: f64,
 ) -> Result<JsValue, JsValue> {
+    let timestamp = timestamp as i64;
     let state = get_state()?;
     let state = state.read();
 
@@ -1211,6 +1381,7 @@ pub fn umbra_wasm_messaging_store_incoming(json: &str) -> Result<(), JsValue> {
             "id": message_id,
             "conversation_id": actual_conversation_id,
             "sender_did": sender_did,
+            "status": "delivered",
             "timestamp": timestamp,
         }
     });
@@ -1650,6 +1821,7 @@ pub fn umbra_wasm_messaging_forward(json: &str) -> Result<JsValue, JsValue> {
             "id": new_msg_id,
             "conversation_id": target_conversation_id,
             "sender_did": our_did,
+            "status": "sent",
             "timestamp": timestamp,
             "forwarded_from": message_id,
         }
@@ -1690,7 +1862,7 @@ pub fn umbra_wasm_messaging_get_thread(json: &str) -> Result<JsValue, JsValue> {
             "id": m.id,
             "conversation_id": m.conversation_id,
             "sender_did": m.sender_did,
-            "content_encrypted": m.content_encrypted,
+            "content_encrypted": hex_to_base64_safe(&m.content_encrypted),
             "nonce": m.nonce,
             "timestamp": m.timestamp,
             "delivered": m.delivered,
@@ -1783,7 +1955,8 @@ pub fn umbra_wasm_messaging_reply_thread(json: &str) -> Result<JsValue, JsValue>
             "id": message_id,
             "conversation_id": conversation_id,
             "sender_did": our_did,
-            "content": text,
+            "content": { "type": "text", "text": text },
+            "status": "sent",
             "timestamp": timestamp,
             "thread_id": parent_id,
             "reply_to_id": parent_id,
@@ -1792,6 +1965,21 @@ pub fn umbra_wasm_messaging_reply_thread(json: &str) -> Result<JsValue, JsValue>
 
     let ct_b64 = base64::engine::general_purpose::STANDARD.encode(&ciphertext);
     let nonce_hex = hex::encode(&nonce.0);
+
+    // Build relay envelope so TS only has to call ws.send()
+    let relay_envelope = serde_json::json!({
+        "envelope": "chat_message",
+        "version": 1,
+        "payload": {
+            "messageId": message_id,
+            "conversationId": conversation_id,
+            "senderDid": our_did,
+            "contentEncrypted": ct_b64,
+            "nonce": nonce_hex,
+            "timestamp": timestamp,
+            "threadId": parent_id,
+        }
+    });
 
     let result = serde_json::json!({
         "id": message_id,
@@ -1802,6 +1990,10 @@ pub fn umbra_wasm_messaging_reply_thread(json: &str) -> Result<JsValue, JsValue>
         "thread_id": parent_id,
         "content_encrypted": ct_b64,
         "nonce": nonce_hex,
+        "relay_messages": [{
+            "to_did": friend_did,
+            "payload": relay_envelope.to_string(),
+        }],
     });
     Ok(JsValue::from_str(&result.to_string()))
 }
@@ -1832,7 +2024,7 @@ pub fn umbra_wasm_messaging_get_pinned(json: &str) -> Result<JsValue, JsValue> {
             "id": m.id,
             "conversation_id": m.conversation_id,
             "sender_did": m.sender_did,
-            "content_encrypted": m.content_encrypted,
+            "content_encrypted": hex_to_base64_safe(&m.content_encrypted),
             "nonce": m.nonce,
             "timestamp": m.timestamp,
             "pinned": true,
@@ -2680,8 +2872,598 @@ pub fn umbra_wasm_messaging_update_status(json: &str) -> Result<(), JsValue> {
 }
 
 // ============================================================================
+// RELAY ENVELOPE BUILDERS (pure data — no DB/crypto)
+// ============================================================================
+
+/// Build a community_event relay envelope batch for all members except the sender.
+///
+/// Takes JSON: { "community_id", "event" (any JSON), "sender_did" }
+/// Returns JSON: [{ "to_did", "payload": "<stringified envelope>" }, ...]
+#[wasm_bindgen]
+pub fn umbra_wasm_community_build_event_relay_batch(json: &str) -> Result<JsValue, JsValue> {
+    let state = get_state()?;
+    let state = state.read();
+
+    let database = state.database.as_ref()
+        .ok_or_else(|| JsValue::from_str("Database not initialized"))?;
+
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let community_id = data["community_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing community_id"))?;
+    let event = &data["event"];
+    let sender_did = data["sender_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing sender_did"))?;
+
+    let timestamp = crate::time::now_timestamp_millis();
+
+    let envelope = serde_json::json!({
+        "envelope": "community_event",
+        "version": 1,
+        "payload": {
+            "communityId": community_id,
+            "event": event,
+            "senderDid": sender_did,
+            "timestamp": timestamp,
+        }
+    });
+    let envelope_str = envelope.to_string();
+
+    // Get community members from database
+    let members = database.get_community_members(community_id)
+        .map_err(|e| JsValue::from_str(&format!("DB error: {}", e)))?;
+
+    let relay_messages: Vec<serde_json::Value> = members.iter()
+        .filter(|m| m.member_did != sender_did)
+        .map(|m| serde_json::json!({
+            "to_did": m.member_did,
+            "payload": envelope_str,
+        }))
+        .collect();
+
+    Ok(JsValue::from_str(&serde_json::to_string(&relay_messages).unwrap_or_default()))
+}
+
+/// Build a dm_file_event relay envelope.
+///
+/// Pure data construction — no DB or crypto.
+/// Takes JSON: { "conversation_id", "sender_did", "event" (any JSON) }
+/// Returns JSON: { "payload": "<stringified envelope>" }
+#[wasm_bindgen]
+pub fn umbra_wasm_build_dm_file_event_envelope(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let conversation_id = data["conversation_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing conversation_id"))?;
+    let sender_did = data["sender_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing sender_did"))?;
+    let event = &data["event"];
+
+    let timestamp = crate::time::now_timestamp_millis();
+
+    let envelope = serde_json::json!({
+        "envelope": "dm_file_event",
+        "version": 1,
+        "payload": {
+            "conversationId": conversation_id,
+            "senderDid": sender_did,
+            "timestamp": timestamp,
+            "event": event,
+        }
+    });
+
+    let result = serde_json::json!({
+        "payload": envelope.to_string(),
+    });
+    Ok(JsValue::from_str(&result.to_string()))
+}
+
+/// Build an account_metadata relay envelope.
+///
+/// Pure data construction — no DB or crypto.
+/// Takes JSON: { "sender_did", "key", "value" }
+/// Returns JSON: { "to_did" (= sender_did), "payload": "<stringified envelope>" }
+#[wasm_bindgen]
+pub fn umbra_wasm_build_metadata_envelope(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let sender_did = data["sender_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing sender_did"))?;
+    let key = data["key"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing key"))?;
+    let value = data["value"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing value"))?;
+
+    let timestamp = crate::time::now_timestamp_millis();
+
+    let envelope = serde_json::json!({
+        "envelope": "account_metadata",
+        "version": 1,
+        "payload": {
+            "senderDid": sender_did,
+            "key": key,
+            "value": value,
+            "timestamp": timestamp,
+        }
+    });
+
+    let result = serde_json::json!({
+        "to_did": sender_did,
+        "payload": envelope.to_string(),
+    });
+    Ok(JsValue::from_str(&result.to_string()))
+}
+
+// ============================================================================
+// GROUP RELAY ENVELOPE BUILDERS (orchestrate DB + crypto + envelope)
+// ============================================================================
+
+/// Send a group invitation: encrypt group key for invitee, build `group_invite` envelope.
+///
+/// Orchestrates: get group info, get profile, encrypt key for member, get members list,
+/// generate UUID, and build the relay envelope.
+///
+/// Takes JSON: { "group_id", "member_did" }
+/// Returns JSON: { "relay_messages": [{ "to_did", "payload" }] }
+#[wasm_bindgen]
+pub fn umbra_wasm_groups_send_invite(json: &str) -> Result<JsValue, JsValue> {
+    let state = get_state()?;
+    let state = state.read();
+
+    let identity = state.identity.as_ref()
+        .ok_or_else(|| JsValue::from_str("No identity loaded"))?;
+    let database = state.database.as_ref()
+        .ok_or_else(|| JsValue::from_str("Database not initialized"))?;
+
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let group_id = data["group_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing group_id"))?;
+    let member_did = data["member_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing member_did"))?;
+
+    let our_did = identity.did_string();
+    let display_name = identity.profile().display_name.clone();
+    let now = crate::time::now_timestamp_millis();
+    let invite_id = uuid::Uuid::new_v4().to_string();
+
+    // Get group info
+    let group = database.get_group(group_id)
+        .map_err(|e| JsValue::from_str(&format!("DB error: {}", e)))?
+        .ok_or_else(|| JsValue::from_str("Group not found"))?;
+
+    // Get latest key and decrypt it
+    let key_record = database.get_latest_group_key(group_id)
+        .map_err(|e| JsValue::from_str(&format!("DB error: {}", e)))?
+        .ok_or_else(|| JsValue::from_str("No group key found"))?;
+    let raw_key = decrypt_stored_group_key(identity, &key_record, group_id)?;
+
+    // Encrypt group key for the invitee via ECDH
+    let (enc_key_hex, nonce_hex) = encrypt_group_key_for_member_internal(
+        identity, database, group_id, member_did, &raw_key, key_record.key_version,
+    )?;
+
+    // Get members list
+    let members = database.get_group_members(group_id)
+        .map_err(|e| JsValue::from_str(&format!("DB error: {}", e)))?;
+    let members_json_arr: Vec<serde_json::Value> = members.iter().map(|m| {
+        serde_json::json!({
+            "did": m.member_did,
+            "display_name": m.display_name,
+            "role": m.role,
+        })
+    }).collect();
+    let members_json_str = serde_json::to_string(&members_json_arr).unwrap_or_default();
+
+    // Build relay envelope
+    let envelope = serde_json::json!({
+        "envelope": "group_invite",
+        "version": 1,
+        "payload": {
+            "inviteId": invite_id,
+            "groupId": group_id,
+            "groupName": group.name,
+            "description": group.description,
+            "inviterDid": our_did,
+            "inviterName": display_name,
+            "encryptedGroupKey": enc_key_hex,
+            "nonce": nonce_hex,
+            "membersJson": members_json_str,
+            "timestamp": now,
+        }
+    });
+
+    let result = serde_json::json!({
+        "relay_messages": [{
+            "to_did": member_did,
+            "payload": envelope.to_string(),
+        }],
+    });
+    Ok(JsValue::from_str(&result.to_string()))
+}
+
+/// Build a `group_invite_accept` relay envelope.
+///
+/// Takes JSON: { "invite_id", "group_id" }
+/// Returns JSON: { "relay_messages": [{ "to_did", "payload" }] }
+#[wasm_bindgen]
+pub fn umbra_wasm_groups_build_invite_accept_envelope(json: &str) -> Result<JsValue, JsValue> {
+    let state = get_state()?;
+    let state = state.read();
+
+    let identity = state.identity.as_ref()
+        .ok_or_else(|| JsValue::from_str("No identity loaded"))?;
+    let database = state.database.as_ref()
+        .ok_or_else(|| JsValue::from_str("Database not initialized"))?;
+
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let invite_id = data["invite_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing invite_id"))?;
+    let group_id = data["group_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing group_id"))?;
+
+    let our_did = identity.did_string();
+    let display_name = identity.profile().display_name.clone();
+    let now = crate::time::now_timestamp_millis();
+
+    // Get the invite to find the inviter
+    let invite = database.get_group_invite(invite_id)
+        .map_err(|e| JsValue::from_str(&format!("DB error: {}", e)))?
+        .ok_or_else(|| JsValue::from_str("Invite not found"))?;
+
+    let envelope = serde_json::json!({
+        "envelope": "group_invite_accept",
+        "version": 1,
+        "payload": {
+            "inviteId": invite_id,
+            "groupId": group_id,
+            "fromDid": our_did,
+            "fromDisplayName": display_name,
+            "timestamp": now,
+        }
+    });
+
+    let result = serde_json::json!({
+        "relay_messages": [{
+            "to_did": invite.inviter_did,
+            "payload": envelope.to_string(),
+        }],
+    });
+    Ok(JsValue::from_str(&result.to_string()))
+}
+
+/// Build a `group_invite_decline` relay envelope.
+///
+/// Takes JSON: { "invite_id" }
+/// Returns JSON: { "relay_messages": [{ "to_did", "payload" }] }
+#[wasm_bindgen]
+pub fn umbra_wasm_groups_build_invite_decline_envelope(json: &str) -> Result<JsValue, JsValue> {
+    let state = get_state()?;
+    let state = state.read();
+
+    let identity = state.identity.as_ref()
+        .ok_or_else(|| JsValue::from_str("No identity loaded"))?;
+    let database = state.database.as_ref()
+        .ok_or_else(|| JsValue::from_str("Database not initialized"))?;
+
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let invite_id = data["invite_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing invite_id"))?;
+
+    let our_did = identity.did_string();
+    let display_name = identity.profile().display_name.clone();
+    let now = crate::time::now_timestamp_millis();
+
+    // Get the invite to find the inviter
+    let invite = database.get_group_invite(invite_id)
+        .map_err(|e| JsValue::from_str(&format!("DB error: {}", e)))?
+        .ok_or_else(|| JsValue::from_str("Invite not found"))?;
+
+    let envelope = serde_json::json!({
+        "envelope": "group_invite_decline",
+        "version": 1,
+        "payload": {
+            "inviteId": invite_id,
+            "groupId": invite.group_id,
+            "fromDid": our_did,
+            "fromDisplayName": display_name,
+            "timestamp": now,
+        }
+    });
+
+    let result = serde_json::json!({
+        "relay_messages": [{
+            "to_did": invite.inviter_did,
+            "payload": envelope.to_string(),
+        }],
+    });
+    Ok(JsValue::from_str(&result.to_string()))
+}
+
+/// Send a group message: encrypt, store locally, build `group_message` envelopes for all members.
+///
+/// Takes JSON: { "group_id", "conversation_id", "text" }
+/// Returns JSON: { "message": { id, conversationId, senderDid, timestamp },
+///                  "relay_messages": [{ "to_did", "payload" }, ...] }
+#[wasm_bindgen]
+pub fn umbra_wasm_groups_send_message(json: &str) -> Result<JsValue, JsValue> {
+    let state = get_state()?;
+    let state = state.read();
+
+    let identity = state.identity.as_ref()
+        .ok_or_else(|| JsValue::from_str("No identity loaded"))?;
+    let database = state.database.as_ref()
+        .ok_or_else(|| JsValue::from_str("Database not initialized"))?;
+
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let group_id = data["group_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing group_id"))?;
+    let conversation_id = data["conversation_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing conversation_id"))?;
+    let text = data["text"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing text"))?;
+
+    let our_did = identity.did_string();
+    let display_name = identity.profile().display_name.clone();
+    let message_id = uuid::Uuid::new_v4().to_string();
+    let now = crate::time::now_timestamp_millis();
+
+    // Encrypt with group key
+    let key_record = database.get_latest_group_key(group_id)
+        .map_err(|e| JsValue::from_str(&format!("DB error: {}", e)))?
+        .ok_or_else(|| JsValue::from_str("No group key found"))?;
+    let raw_key = decrypt_stored_group_key(identity, &key_record, group_id)?;
+    let enc_key = crate::crypto::EncryptionKey::from_bytes(raw_key);
+    let aad = format!("group-msg:{}:{}:{}", group_id, our_did, now);
+    let (nonce, ciphertext) = crate::crypto::encrypt(&enc_key, text.as_bytes(), aad.as_bytes())
+        .map_err(|e| JsValue::from_str(&format!("Encryption failed: {}", e)))?;
+
+    let ciphertext_hex = hex::encode(&ciphertext);
+    let nonce_hex = hex::encode(&nonce.0);
+
+    // Store locally
+    database.store_message(&message_id, conversation_id, &our_did,
+        &ciphertext, &nonce.0, now)
+        .map_err(|e| JsValue::from_str(&format!("DB error: {}", e)))?;
+
+    // Build relay envelopes for all members except self
+    let members = database.get_group_members(group_id)
+        .map_err(|e| JsValue::from_str(&format!("DB error: {}", e)))?;
+
+    let envelope = serde_json::json!({
+        "envelope": "group_message",
+        "version": 1,
+        "payload": {
+            "messageId": message_id,
+            "groupId": group_id,
+            "conversationId": conversation_id,
+            "senderDid": our_did,
+            "senderName": display_name,
+            "ciphertext": ciphertext_hex,
+            "nonce": nonce_hex,
+            "keyVersion": key_record.key_version,
+            "timestamp": now,
+        }
+    });
+    let envelope_str = envelope.to_string();
+
+    let relay_messages: Vec<serde_json::Value> = members.iter()
+        .filter(|m| m.member_did != our_did)
+        .map(|m| serde_json::json!({
+            "to_did": m.member_did,
+            "payload": envelope_str,
+        }))
+        .collect();
+
+    // Emit event
+    emit_event("message", &serde_json::json!({
+        "type": "messageSent",
+        "conversationId": conversation_id,
+        "message": {
+            "id": message_id,
+            "conversationId": conversation_id,
+            "senderDid": our_did,
+            "content": { "type": "text", "text": text },
+            "timestamp": now,
+            "status": "sent",
+        }
+    }));
+
+    let result = serde_json::json!({
+        "message": {
+            "id": message_id,
+            "conversationId": conversation_id,
+            "senderDid": our_did,
+            "timestamp": now,
+        },
+        "relay_messages": relay_messages,
+    });
+    Ok(JsValue::from_str(&result.to_string()))
+}
+
+/// Remove a member with key rotation: remove, rotate key, encrypt new key per remaining member,
+/// build `group_key_rotation` + `group_member_removed` envelopes.
+///
+/// Takes JSON: { "group_id", "member_did" }
+/// Returns JSON: { "key_version": number, "relay_messages": [{ "to_did", "payload" }, ...] }
+#[wasm_bindgen]
+pub fn umbra_wasm_groups_remove_member_with_rotation(json: &str) -> Result<JsValue, JsValue> {
+    let state = get_state()?;
+    let state = state.read();
+
+    let identity = state.identity.as_ref()
+        .ok_or_else(|| JsValue::from_str("No identity loaded"))?;
+    let database = state.database.as_ref()
+        .ok_or_else(|| JsValue::from_str("Database not initialized"))?;
+
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let group_id = data["group_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing group_id"))?;
+    let member_did = data["member_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing member_did"))?;
+
+    let our_did = identity.did_string();
+    let now = crate::time::now_timestamp_millis();
+
+    // 1. Remove member
+    database.remove_group_member(group_id, member_did)
+        .map_err(|e| JsValue::from_str(&format!("DB error: {}", e)))?;
+
+    // 2. Rotate key (generate new random key, store encrypted)
+    let current = database.get_latest_group_key(group_id)
+        .map_err(|e| JsValue::from_str(&format!("DB error: {}", e)))?;
+    let new_version = current.map(|k| k.key_version + 1).unwrap_or(1);
+
+    let mut new_raw_key = [0u8; 32];
+    rand::RngCore::fill_bytes(&mut rand::rngs::OsRng, &mut new_raw_key);
+
+    let wrapping_key = derive_key_wrapping_key(identity);
+    let wrap_enc_key = crate::crypto::EncryptionKey::from_bytes(wrapping_key);
+    let aad = format!("group-key:{}:{}", group_id, new_version);
+    let (wrap_nonce, encrypted_key) = crate::crypto::encrypt(&wrap_enc_key, &new_raw_key, aad.as_bytes())
+        .map_err(|e| JsValue::from_str(&format!("Failed to encrypt group key: {}", e)))?;
+
+    let mut stored = Vec::with_capacity(12 + encrypted_key.len());
+    stored.extend_from_slice(&wrap_nonce.0);
+    stored.extend_from_slice(&encrypted_key);
+    database.store_group_key(group_id, new_version, &stored, now)
+        .map_err(|e| JsValue::from_str(&format!("Failed to store group key: {}", e)))?;
+
+    // 3. Get remaining members and build envelopes
+    let members = database.get_group_members(group_id)
+        .map_err(|e| JsValue::from_str(&format!("DB error: {}", e)))?;
+
+    let mut relay_messages: Vec<serde_json::Value> = Vec::new();
+
+    // Build group_member_removed envelope (same for all)
+    let remove_envelope = serde_json::json!({
+        "envelope": "group_member_removed",
+        "version": 1,
+        "payload": {
+            "groupId": group_id,
+            "removedDid": member_did,
+            "removedBy": our_did,
+            "timestamp": now,
+        }
+    });
+    let remove_envelope_str = remove_envelope.to_string();
+
+    for m in &members {
+        if m.member_did == our_did { continue; }
+
+        // Encrypt new key for this member via ECDH
+        match encrypt_group_key_for_member_internal(
+            identity, database, group_id, &m.member_did, &new_raw_key, new_version,
+        ) {
+            Ok((enc_key_hex, enc_nonce_hex)) => {
+                // Key rotation envelope (per-member unique ECDH payload)
+                let key_envelope = serde_json::json!({
+                    "envelope": "group_key_rotation",
+                    "version": 1,
+                    "payload": {
+                        "groupId": group_id,
+                        "encryptedKey": enc_key_hex,
+                        "nonce": enc_nonce_hex,
+                        "senderDid": our_did,
+                        "keyVersion": new_version,
+                        "timestamp": now,
+                    }
+                });
+                relay_messages.push(serde_json::json!({
+                    "to_did": m.member_did,
+                    "payload": key_envelope.to_string(),
+                }));
+            }
+            Err(e) => {
+                // Log but don't fail the whole operation
+                web_sys::console::warn_1(&JsValue::from_str(
+                    &format!("[groups] Failed to encrypt rotated key for {}: {:?}", m.member_did, e)
+                ));
+            }
+        }
+
+        // Member removed envelope
+        relay_messages.push(serde_json::json!({
+            "to_did": m.member_did,
+            "payload": remove_envelope_str,
+        }));
+    }
+
+    emit_event("group", &serde_json::json!({
+        "type": "groupMemberRemoved",
+        "group_id": group_id,
+        "member_did": member_did,
+        "key_version": new_version,
+    }));
+
+    let result = serde_json::json!({
+        "key_version": new_version,
+        "relay_messages": relay_messages,
+    });
+    Ok(JsValue::from_str(&result.to_string()))
+}
+
+// ============================================================================
 // HELPER FUNCTIONS
 // ============================================================================
+
+/// Encrypt a group key for a specific member using ECDH (internal helper).
+///
+/// Looks up the member's encryption public key from friends table and encrypts
+/// the raw group key using ECDH shared secret.
+fn encrypt_group_key_for_member_internal(
+    identity: &crate::identity::Identity,
+    database: &crate::storage::Database,
+    group_id: &str,
+    member_did: &str,
+    raw_key: &[u8; 32],
+    key_version: i32,
+) -> std::result::Result<(String, String), JsValue> {
+    let member = database.get_friend(member_did)
+        .map_err(|e| JsValue::from_str(&format!("DB error: {}", e)))?
+        .ok_or_else(|| JsValue::from_str(&format!("Member {} not found in friends", member_did)))?;
+
+    let member_enc_bytes = hex::decode(&member.encryption_key)
+        .map_err(|e| JsValue::from_str(&format!("Invalid key: {}", e)))?;
+    if member_enc_bytes.len() != 32 {
+        return Err(JsValue::from_str("Member encryption key must be 32 bytes"));
+    }
+    let mut member_enc_key = [0u8; 32];
+    member_enc_key.copy_from_slice(&member_enc_bytes);
+
+    let aad = format!("group-key-transfer:{}:{}", group_id, key_version);
+    let (nonce, ciphertext) = crate::crypto::encrypt_for_recipient(
+        &identity.keypair().encryption,
+        &member_enc_key,
+        group_id.as_bytes(),
+        raw_key,
+        aad.as_bytes(),
+    ).map_err(|e| JsValue::from_str(&format!("Encryption failed: {}", e)))?;
+
+    Ok((hex::encode(&ciphertext), hex::encode(&nonce.0)))
+}
+
+/// Convert hex-encoded ciphertext to base64 for the decrypt API.
+/// The WASM database stores ciphertext as hex, but `umbra_wasm_messaging_decrypt`
+/// expects base64. Falls back to passthrough if not valid hex (e.g. already base64).
+fn hex_to_base64_safe(hex_str: &str) -> String {
+    match hex::decode(hex_str) {
+        Ok(bytes) => base64::engine::general_purpose::STANDARD.encode(&bytes),
+        Err(_) => hex_str.to_string(),
+    }
+}
 
 /// Derive a key-wrapping key from the identity.
 ///
@@ -2850,6 +3632,7 @@ fn handle_network_event(
                     UmbraRequest::Message(msg) => handle_inbound_message(msg, state),
                     UmbraRequest::Friend(fr) => handle_inbound_friend_request(fr, state),
                     UmbraRequest::Presence(_) => {} // Handled elsewhere
+                    UmbraRequest::FileTransfer(_) => {} // Handled by event loop's TransferManager
                 }
             }
         }
@@ -2957,7 +3740,8 @@ fn handle_inbound_message(
                         "id": msg.message_id,
                         "conversation_id": conversation.id,
                         "sender_did": friend_record.did,
-                        "content": content,
+                        "content": { "type": "text", "text": content },
+                        "status": "delivered",
                         "timestamp": msg.timestamp,
                         "delivered": true,
                         "read": false,
@@ -8254,6 +9038,100 @@ pub fn umbra_wasm_transfer_mark_chunk_sent(json: &str) -> Result<JsValue, JsValu
 }
 
 // ============================================================================
+// DHT — CONTENT DISCOVERY
+// ============================================================================
+
+/// Announce that we have a file available in the DHT.
+///
+/// Takes JSON: { "file_id": "..." }
+/// Returns JSON: { "ok": true }
+#[wasm_bindgen]
+pub fn umbra_wasm_dht_start_providing(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let file_id = data["file_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing file_id"))?
+        .to_string();
+
+    let state = get_state()?;
+    let state_read = state.read();
+    let network = state_read.network.as_ref()
+        .ok_or_else(|| JsValue::from_str("Network not started"))?;
+
+    // Clone the network Arc so we can use it in the async block
+    let network = network.clone();
+
+    wasm_bindgen_futures::spawn_local(async move {
+        if let Err(e) = network.start_providing(file_id.clone()).await {
+            tracing::warn!("DHT start_providing failed for {}: {}", file_id, e);
+        }
+    });
+
+    Ok(JsValue::from_str("{\"ok\":true}"))
+}
+
+/// Discover peers that have a specific file via DHT.
+///
+/// Takes JSON: { "file_id": "..." }
+/// Results arrive asynchronously as "file_transfer" domain events
+/// with a "FileProviders" sub-type.
+/// Returns JSON: { "ok": true }
+#[wasm_bindgen]
+pub fn umbra_wasm_dht_get_providers(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let file_id = data["file_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing file_id"))?
+        .to_string();
+
+    let state = get_state()?;
+    let state_read = state.read();
+    let network = state_read.network.as_ref()
+        .ok_or_else(|| JsValue::from_str("Network not started"))?;
+
+    let network = network.clone();
+
+    wasm_bindgen_futures::spawn_local(async move {
+        if let Err(e) = network.get_providers(file_id.clone()).await {
+            tracing::warn!("DHT get_providers failed for {}: {}", file_id, e);
+        }
+    });
+
+    Ok(JsValue::from_str("{\"ok\":true}"))
+}
+
+/// Stop announcing a file in the DHT.
+///
+/// Takes JSON: { "file_id": "..." }
+/// Returns JSON: { "ok": true }
+#[wasm_bindgen]
+pub fn umbra_wasm_dht_stop_providing(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let file_id = data["file_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing file_id"))?
+        .to_string();
+
+    let state = get_state()?;
+    let state_read = state.read();
+    let network = state_read.network.as_ref()
+        .ok_or_else(|| JsValue::from_str("Network not started"))?;
+
+    let network = network.clone();
+
+    wasm_bindgen_futures::spawn_local(async move {
+        if let Err(e) = network.stop_providing(file_id.clone()).await {
+            tracing::warn!("DHT stop_providing failed for {}: {}", file_id, e);
+        }
+    });
+
+    Ok(JsValue::from_str("{\"ok\":true}"))
+}
+
+// ============================================================================
 // COMMUNITY — JSON HELPERS (Phase 2-11)
 // ============================================================================
 
@@ -8800,4 +9678,230 @@ pub fn umbra_wasm_clear_reencryption_flag(json: &str) -> Result<JsValue, JsValue
         .map_err(|e| JsValue::from_str(&format!("Failed to clear flag: {}", e)))?;
 
     Ok(JsValue::from_str(r#"{"ok":true}"#))
+}
+
+// ============================================================================
+// COMMUNITY SEATS (Ghost Member Placeholders)
+// ============================================================================
+
+/// Get all seats for a community.
+///
+/// Returns JSON: CommunitySeat[]
+#[wasm_bindgen]
+pub fn umbra_wasm_community_seat_list(community_id: &str) -> Result<JsValue, JsValue> {
+    let svc = community_service()?;
+    let seats = svc.get_community_seats(community_id)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let arr: Vec<serde_json::Value> = seats.iter().map(|s| {
+        serde_json::json!({
+            "id": s.id,
+            "communityId": s.community_id,
+            "platform": s.platform,
+            "platformUserId": s.platform_user_id,
+            "platformUsername": s.platform_username,
+            "nickname": s.nickname,
+            "avatarUrl": s.avatar_url,
+            "roleIds": serde_json::from_str::<Vec<String>>(&s.role_ids_json).unwrap_or_default(),
+            "claimedByDid": s.claimed_by_did,
+            "claimedAt": s.claimed_at,
+            "createdAt": s.created_at,
+        })
+    }).collect();
+
+    Ok(JsValue::from_str(&serde_json::to_string(&arr).unwrap_or_default()))
+}
+
+/// Get unclaimed seats for a community.
+///
+/// Returns JSON: CommunitySeat[]
+#[wasm_bindgen]
+pub fn umbra_wasm_community_seat_list_unclaimed(community_id: &str) -> Result<JsValue, JsValue> {
+    let svc = community_service()?;
+    let seats = svc.get_unclaimed_seats(community_id)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let arr: Vec<serde_json::Value> = seats.iter().map(|s| {
+        serde_json::json!({
+            "id": s.id,
+            "communityId": s.community_id,
+            "platform": s.platform,
+            "platformUserId": s.platform_user_id,
+            "platformUsername": s.platform_username,
+            "nickname": s.nickname,
+            "avatarUrl": s.avatar_url,
+            "roleIds": serde_json::from_str::<Vec<String>>(&s.role_ids_json).unwrap_or_default(),
+            "claimedByDid": s.claimed_by_did,
+            "claimedAt": s.claimed_at,
+            "createdAt": s.created_at,
+        })
+    }).collect();
+
+    Ok(JsValue::from_str(&serde_json::to_string(&arr).unwrap_or_default()))
+}
+
+/// Find a seat matching a platform account.
+///
+/// Takes JSON: { "community_id": "...", "platform": "discord", "platform_user_id": "..." }
+/// Returns JSON: CommunitySeat | null
+#[wasm_bindgen]
+pub fn umbra_wasm_community_seat_find_match(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let community_id = data["community_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing community_id"))?;
+    let platform = data["platform"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing platform"))?;
+    let platform_user_id = data["platform_user_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing platform_user_id"))?;
+
+    let svc = community_service()?;
+    let seat = svc.find_seat_by_platform(community_id, platform, platform_user_id)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    match seat {
+        Some(s) => {
+            let result = serde_json::json!({
+                "id": s.id,
+                "communityId": s.community_id,
+                "platform": s.platform,
+                "platformUserId": s.platform_user_id,
+                "platformUsername": s.platform_username,
+                "nickname": s.nickname,
+                "avatarUrl": s.avatar_url,
+                "roleIds": serde_json::from_str::<Vec<String>>(&s.role_ids_json).unwrap_or_default(),
+                "claimedByDid": s.claimed_by_did,
+                "claimedAt": s.claimed_at,
+                "createdAt": s.created_at,
+            });
+            Ok(JsValue::from_str(&result.to_string()))
+        }
+        None => Ok(JsValue::from_str("null")),
+    }
+}
+
+/// Claim a seat (auto-join + assign roles).
+///
+/// Takes JSON: { "seat_id": "...", "claimer_did": "..." }
+/// Returns JSON: CommunitySeat (updated)
+#[wasm_bindgen]
+pub fn umbra_wasm_community_seat_claim(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let seat_id = data["seat_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing seat_id"))?;
+    let claimer_did = data["claimer_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing claimer_did"))?;
+
+    let svc = community_service()?;
+    let seat = svc.claim_seat(seat_id, claimer_did)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    emit_event("community", &serde_json::json!({
+        "type": "seatClaimed",
+        "community_id": seat.community_id,
+        "seat_id": seat.id,
+        "claimer_did": claimer_did,
+        "platform": seat.platform,
+    }));
+
+    let result = serde_json::json!({
+        "id": seat.id,
+        "communityId": seat.community_id,
+        "platform": seat.platform,
+        "platformUserId": seat.platform_user_id,
+        "platformUsername": seat.platform_username,
+        "nickname": seat.nickname,
+        "avatarUrl": seat.avatar_url,
+        "roleIds": serde_json::from_str::<Vec<String>>(&seat.role_ids_json).unwrap_or_default(),
+        "claimedByDid": seat.claimed_by_did,
+        "claimedAt": seat.claimed_at,
+        "createdAt": seat.created_at,
+    });
+
+    Ok(JsValue::from_str(&result.to_string()))
+}
+
+/// Delete a seat (admin action).
+///
+/// Takes JSON: { "seat_id": "...", "actor_did": "..." }
+/// Returns JSON: { "success": true }
+#[wasm_bindgen]
+pub fn umbra_wasm_community_seat_delete(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let seat_id = data["seat_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing seat_id"))?;
+    let actor_did = data["actor_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing actor_did"))?;
+
+    let svc = community_service()?;
+    svc.delete_seat(seat_id, actor_did)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    emit_event("community", &serde_json::json!({
+        "type": "seatDeleted",
+        "seat_id": seat_id,
+    }));
+
+    Ok(JsValue::from_str(&serde_json::json!({"success": true}).to_string()))
+}
+
+/// Create seats in batch (for import).
+///
+/// Takes JSON: { "community_id": "...", "seats": [{ "platform", "platform_user_id", "platform_username", "nickname"?, "avatar_url"?, "role_ids": string[] }] }
+/// Returns JSON: { "created": number }
+#[wasm_bindgen]
+pub fn umbra_wasm_community_seat_create_batch(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let community_id = data["community_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing community_id"))?;
+
+    let seats_json = data["seats"].as_array()
+        .ok_or_else(|| JsValue::from_str("Missing seats array"))?;
+
+    let seat_inputs: Vec<crate::community::SeatInput> = seats_json.iter().map(|s| {
+        crate::community::SeatInput {
+            platform: s["platform"].as_str().unwrap_or("unknown").to_string(),
+            platform_user_id: s["platform_user_id"].as_str().unwrap_or("").to_string(),
+            platform_username: s["platform_username"].as_str().unwrap_or("").to_string(),
+            nickname: s["nickname"].as_str().map(|v| v.to_string()),
+            avatar_url: s["avatar_url"].as_str().map(|v| v.to_string()),
+            role_ids: s["role_ids"].as_array()
+                .map(|arr| arr.iter().filter_map(|v| v.as_str().map(|s| s.to_string())).collect())
+                .unwrap_or_default(),
+        }
+    }).collect();
+
+    let svc = community_service()?;
+    let created = svc.create_seats_batch(community_id, seat_inputs)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    emit_event("community", &serde_json::json!({
+        "type": "seatsCreated",
+        "community_id": community_id,
+        "count": created,
+    }));
+
+    Ok(JsValue::from_str(&serde_json::json!({"created": created}).to_string()))
+}
+
+/// Count seats for a community.
+///
+/// Returns JSON: { "total": number, "unclaimed": number }
+#[wasm_bindgen]
+pub fn umbra_wasm_community_seat_count(community_id: &str) -> Result<JsValue, JsValue> {
+    let svc = community_service()?;
+    let (total, unclaimed) = svc.count_seats(community_id)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    Ok(JsValue::from_str(&serde_json::json!({
+        "total": total,
+        "unclaimed": unclaimed,
+    }).to_string()))
 }

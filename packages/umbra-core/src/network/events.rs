@@ -4,6 +4,8 @@
 
 use libp2p::{PeerId, Multiaddr};
 
+use super::file_transfer::TransferEvent;
+
 /// Events emitted by the network service
 #[derive(Debug, Clone)]
 pub enum NetworkEvent {
@@ -88,6 +90,17 @@ pub enum NetworkEvent {
         /// Their addresses
         addresses: Vec<Multiaddr>,
     },
+
+    /// A file transfer event from the TransferManager
+    FileTransferEvent(TransferEvent),
+
+    /// DHT provider query result: peers that have a specific file
+    FileProviders {
+        /// The file ID that was queried
+        file_id: String,
+        /// Peers that hold the file
+        providers: Vec<PeerId>,
+    },
 }
 
 impl NetworkEvent {
@@ -102,7 +115,10 @@ impl NetworkEvent {
             Self::MessageFailed { peer_id, .. } => Some(*peer_id),
             Self::PeerIdentified { peer_id, .. } => Some(*peer_id),
             Self::PeerDiscovered { peer_id, .. } => Some(*peer_id),
-            _ => None,
+            Self::Listening { .. }
+                | Self::DhtUpdated { .. }
+                | Self::FileTransferEvent(_)
+                | Self::FileProviders { .. } => None,
         }
     }
 
@@ -123,6 +139,14 @@ impl NetworkEvent {
             Self::MessageReceived { .. }
                 | Self::MessageDelivered { .. }
                 | Self::MessageFailed { .. }
+        )
+    }
+
+    /// Check if this is a file-transfer-related event
+    pub fn is_file_transfer_event(&self) -> bool {
+        matches!(
+            self,
+            Self::FileTransferEvent(_) | Self::FileProviders { .. }
         )
     }
 }
@@ -283,6 +307,38 @@ mod tests {
     #[test]
     fn test_dht_updated_has_no_peer_id() {
         let event = NetworkEvent::DhtUpdated { peer_count: 42 };
+        assert_eq!(event.peer_id(), None);
+    }
+
+    #[test]
+    fn test_file_transfer_event_categorization() {
+        let event = NetworkEvent::FileTransferEvent(TransferEvent::Progress {
+            transfer_id: "tx-1".to_string(),
+            chunks_completed: 5,
+            total_chunks: 10,
+            bytes_transferred: 1280,
+            total_bytes: 2560,
+            speed_bps: 128000,
+            transport_type: super::super::file_transfer::TransportType::Relay,
+        });
+
+        assert!(event.is_file_transfer_event());
+        assert!(!event.is_connection_event());
+        assert!(!event.is_message_event());
+        assert_eq!(event.peer_id(), None);
+    }
+
+    #[test]
+    fn test_file_providers_event() {
+        let peer_id = PeerId::random();
+        let event = NetworkEvent::FileProviders {
+            file_id: "file-abc".to_string(),
+            providers: vec![peer_id],
+        };
+
+        assert!(event.is_file_transfer_event());
+        assert!(!event.is_connection_event());
+        assert!(!event.is_message_event());
         assert_eq!(event.peer_id(), None);
     }
 }

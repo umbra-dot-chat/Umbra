@@ -433,4 +433,50 @@ mod tests {
         assert_eq!(deserialized.total_size, manifest.total_size);
         assert_eq!(deserialized.chunks.len(), manifest.chunks.len());
     }
+
+    #[test]
+    fn test_file_size_limit_web_accepts_small() {
+        assert!(check_file_size_limit(1024 * 1024, true).is_ok()); // 1 MB
+        assert!(check_file_size_limit(WEB_FILE_SIZE_LIMIT, true).is_ok()); // exactly at limit
+    }
+
+    #[test]
+    fn test_file_size_limit_web_rejects_over() {
+        let over = WEB_FILE_SIZE_LIMIT + 1;
+        assert!(check_file_size_limit(over, true).is_err());
+    }
+
+    #[test]
+    fn test_file_size_limit_native_no_limit() {
+        // Native (non-web) should accept any size
+        let huge = WEB_FILE_SIZE_LIMIT * 10;
+        assert!(check_file_size_limit(huge, false).is_ok());
+    }
+
+    #[test]
+    fn test_is_near_web_size_limit() {
+        assert!(!is_near_web_size_limit(1024 * 1024)); // 1 MB — not near
+        assert!(is_near_web_size_limit(WEB_FILE_SIZE_WARNING)); // exactly at warning
+        assert!(is_near_web_size_limit(WEB_FILE_SIZE_LIMIT)); // over warning
+    }
+
+    #[test]
+    fn test_chunk_manifest_has_correct_file_hash() {
+        let data = b"hash me please";
+        let expected_hash = hex::encode(Sha256::digest(data));
+        let (manifest, _) = chunk_file("hash-test", "hash.bin", data, DEFAULT_CHUNK_SIZE).unwrap();
+        assert_eq!(manifest.file_hash, expected_hash);
+    }
+
+    #[test]
+    fn test_many_small_chunks() {
+        // 100 bytes with 1-byte chunks → 100 chunks
+        let data = vec![0x55u8; 100];
+        let (manifest, chunks) = chunk_file("many", "many.bin", &data, 1).unwrap();
+        assert_eq!(manifest.total_chunks, 100);
+        assert_eq!(chunks.len(), 100);
+
+        let reassembled = reassemble_file(&manifest, &chunks).unwrap();
+        assert_eq!(reassembled, data);
+    }
 }

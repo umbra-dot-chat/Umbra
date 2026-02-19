@@ -47,8 +47,10 @@ mod customization;
 mod integrations;
 mod boost_nodes;
 mod member_experience;
+mod seats;
 
 pub use service::CommunityService;
+pub use seats::SeatInput;
 pub use permissions::{Permission, Permissions};
 pub use roles::RolePreset;
 pub use messaging::{MentionType, parse_mentions};

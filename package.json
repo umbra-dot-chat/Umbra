@@ -1,7 +1,7 @@
 {
   "name": "umbra",
   "main": "expo-router/entry",
-  "version": "1.1.1",
+  "version": "1.2.0",
   "scripts": {
     "postinstall": "node scripts/postinstall.js",
     "patch": "./scripts/patch-wisp.sh",
@@ -48,6 +48,7 @@
     "expo-splash-screen": "~31.0.13",
     "expo-status-bar": "~3.0.9",
     "expo-web-browser": "~15.0.10",
+    "jszip": "^3.10.1",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-native": "0.81.5",

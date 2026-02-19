@@ -71,7 +71,7 @@ export type {
   ChatMessagePayload, ConnectionInfo, Conversation, CreateIdentityResult, DiscoveryEvent, DiscoveryResult, Friend, FriendAcceptAckPayload, FriendEvent, FriendRequest, FriendRequestPayload,
   FriendResponsePayload, Group, GroupEvent, GroupInvitePayload,
   GroupInviteResponsePayload, GroupKeyRotationPayload, GroupMember, GroupMemberRemovedPayload, GroupMessagePayload, Identity, InitConfig, Message, MessageAttachment, MessageContent, MessageEvent, MessageReaction, MessageStatus, MessageStatusPayload, NetworkStatus, PendingGroupInvite, ProfileUpdate, PublicIdentity, PublicKeys, RelayAcceptResult, RelayEnvelope, RelayEvent, RelaySession, RelayStatus, ReplyTo, TypingIndicatorPayload,
-  Community, CommunityCreateResult, CommunitySpace, CommunityCategory, CommunityChannel, CommunityMember, CommunityRole, CommunityMessage, CommunityInvite, CommunityEvent, CommunityEventPayload,
+  Community, CommunityCreateResult, CommunitySpace, CommunityCategory, CommunityChannel, CommunityMember, CommunityRole, CommunitySeat, CommunityMessage, CommunityInvite, CommunityEvent, CommunityEventPayload,
   CommunityFileRecord, CommunityFileFolderRecord,
   DmSharedFileRecord, DmSharedFolderRecord, DmFileEventPayload,
   ChunkManifest, ChunkRef, FileManifestRecord, ReassembledFile,
@@ -124,7 +124,7 @@ export type {
 } from './storage-manager';
 
 // Metadata sync
-export { buildMetadataEnvelope, syncMetadataViaRelay } from './metadata';
+export { syncMetadataViaRelay } from './metadata';
 
 // Discovery service
 export {
@@ -135,7 +135,11 @@ export {
   type HashedLookup,
   type LookupResult,
   type FriendSuggestion,
+  type SearchResult as DiscoverySearchResult,
   type DiscoveryServiceEvent,
+  type UsernameResponse,
+  type UsernameLookupResult,
+  type UsernameSearchResult,
   // API
   setRelayUrl as setDiscoveryRelayUrl,
   getRelayUrl as getDiscoveryRelayUrl,
@@ -146,12 +150,93 @@ export {
   unlinkAccount,
   createHash,
   batchCreateHashes,
+  searchByUsername,
+  registerUsername,
+  getUsername,
+  lookupUsername,
+  searchUsernames,
+  changeUsername,
+  releaseUsername,
   // Hooks
   useLinkedAccounts,
   useDiscovery,
   useFriendSuggestions,
+  useUsername,
+  useUsernameSearch,
   useDiscoveryService,
 } from './discovery';
+
+// Chat import service
+export {
+  // Types
+  type ImportSource,
+  type ImportSourceInfo,
+  type ImportedMessage,
+  type ImportedAttachment,
+  type ImportedReaction,
+  type ImportedConversation,
+  type ImportedParticipant,
+  type ImportParseResult,
+  type ImportProgress,
+  type ImportProgressCallback,
+  type ImportOptions,
+  type ImportResult,
+  type ImportServiceEvent,
+  type UseImportState,
+  // API
+  getImportSources,
+  getImportSourceInfo,
+  parseImportFile,
+  detectImportSource,
+  importChatData,
+  getImportPreview,
+  // Hooks
+  useImportSources,
+  useImport,
+  useImportSourceInfo,
+  // Discord community import types
+  type DiscordGuildInfo,
+  type DiscordChannelType,
+  type DiscordPermissionOverwrite,
+  type DiscordImportedChannel,
+  type DiscordImportedRole,
+  type DiscordImportedStructure,
+  type DiscordGuildsResponse,
+  type DiscordGuildStructureResponse,
+  type MappedCommunityStructure,
+  type MappedCategory,
+  type MappedChannel,
+  type MappedRole,
+  type MappedSeat,
+  type MappedPinnedMessage,
+  type DiscordImportedMember,
+  type DiscordGuildMembersResponse,
+  type DiscordPinnedMessage,
+  type DiscordChannelPinsResponse,
+  type CommunityImportProgress,
+  type CommunityImportResult,
+  // Discord community import functions
+  discordColorToHex,
+  getGuildIconUrl,
+  mapChannelType,
+  mapDiscordToUmbra,
+  validateImportStructure,
+  // Discord permissions
+  DISCORD_PERMISSIONS,
+  UMBRA_PERMISSIONS,
+  translateDiscordPermissions,
+  permissionsToNames,
+  namesToPermissions,
+  hasPermission,
+  getDefaultMemberPermissions,
+  getModeratorPermissions,
+  getAdminPermissions,
+  permissionsToString,
+  permissionsFromString,
+} from './import';
+
+// Community import from Discord
+export { createCommunityFromDiscordImport } from './community';
 
 // Main service class
 export { UmbraService } from './service';

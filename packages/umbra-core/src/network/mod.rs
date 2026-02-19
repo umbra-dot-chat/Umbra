@@ -96,7 +96,7 @@ pub use events::NetworkEvent;
 pub use file_transfer::{
     FileTransferMessage, FlowControl, SpeedTracker, TransferDirection,
     TransferEvent, TransferLimits, TransferManager, TransferSession,
-    TransferState, TransportType,
+    TransferState, TransportConfig, TransportType,
 };
 pub use peer::{PeerInfo, PeerState};
 
@@ -207,6 +207,28 @@ pub enum NetworkCommand {
         /// The address to add
         addr: Multiaddr,
     },
+    /// Send a file transfer protocol message to a peer
+    SendFileTransferMessage {
+        /// Target peer ID
+        peer_id: PeerId,
+        /// The file transfer message
+        message: FileTransferMessage,
+    },
+    /// Announce file availability on the DHT
+    StartProviding {
+        /// The file ID to announce
+        file_id: String,
+    },
+    /// Query the DHT for peers that have a specific file
+    GetProviders {
+        /// The file ID to look up
+        file_id: String,
+    },
+    /// Stop announcing file availability
+    StopProviding {
+        /// The file ID to stop announcing
+        file_id: String,
+    },
     /// Shutdown the service
     Shutdown,
 }
@@ -230,6 +252,23 @@ impl std::fmt::Debug for NetworkCommand {
                 .debug_struct("AddPeerAddress")
                 .field("peer_id", peer_id)
                 .field("addr", addr)
+                .finish(),
+            Self::SendFileTransferMessage { peer_id, message } => f
+                .debug_struct("SendFileTransferMessage")
+                .field("peer_id", peer_id)
+                .field("transfer_id", &message.transfer_id())
+                .finish(),
+            Self::StartProviding { file_id } => f
+                .debug_struct("StartProviding")
+                .field("file_id", file_id)
+                .finish(),
+            Self::GetProviders { file_id } => f
+                .debug_struct("GetProviders")
+                .field("file_id", file_id)
+                .finish(),
+            Self::StopProviding { file_id } => f
+                .debug_struct("StopProviding")
+                .field("file_id", file_id)
                 .finish(),
             Self::Shutdown => write!(f, "Shutdown"),
         }
@@ -607,6 +646,48 @@ impl NetworkService {
             .send(NetworkCommand::AddPeerAddress { peer_id, addr })
             .await
             .map_err(|_| Error::ProtocolError("Failed to send add peer address command".into()))?;
+        Ok(())
+    }
+
+    // ── File Transfer ────────────────────────────────────────────────────
+
+    /// Send a file transfer protocol message to a peer
+    pub async fn send_file_transfer_message(
+        &self,
+        peer_id: PeerId,
+        message: FileTransferMessage,
+    ) -> Result<()> {
+        self.command_tx
+            .send(NetworkCommand::SendFileTransferMessage { peer_id, message })
+            .await
+            .map_err(|_| Error::ProtocolError("Failed to send file transfer command".into()))?;
+        Ok(())
+    }
+
+    /// Announce that this peer has a file available (DHT provider record)
+    pub async fn start_providing(&self, file_id: String) -> Result<()> {
+        self.command_tx
+            .send(NetworkCommand::StartProviding { file_id })
+            .await
+            .map_err(|_| Error::ProtocolError("Failed to send start providing command".into()))?;
+        Ok(())
+    }
+
+    /// Query the DHT for peers that hold a specific file
+    pub async fn get_providers(&self, file_id: String) -> Result<()> {
+        self.command_tx
+            .send(NetworkCommand::GetProviders { file_id })
+            .await
+            .map_err(|_| Error::ProtocolError("Failed to send get providers command".into()))?;
+        Ok(())
+    }
+
+    /// Stop announcing file availability on the DHT
+    pub async fn stop_providing(&self, file_id: String) -> Result<()> {
+        self.command_tx
+            .send(NetworkCommand::StopProviding { file_id })
+            .await
+            .map_err(|_| Error::ProtocolError("Failed to send stop providing command".into()))?;
         Ok(())
     }
 }

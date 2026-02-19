@@ -262,6 +262,12 @@ deploy_relay_to_host() {
     rsync -avz --delete -e "$local_rsync_ssh" "$PROJECT_ROOT/packages/umbra-relay/Cargo.toml" "$SSH_USER@$ssh_target:$path/"
     rsync -avz --delete -e "$local_rsync_ssh" "$PROJECT_ROOT/packages/umbra-relay/Cargo.lock" "$SSH_USER@$ssh_target:$path/"
 
+    # Copy .env file if it exists (contains OAuth credentials)
+    if [[ -f "$PROJECT_ROOT/packages/umbra-relay/.env" ]]; then
+        rsync -avz -e "$local_rsync_ssh" "$PROJECT_ROOT/packages/umbra-relay/.env" "$SSH_USER@$ssh_target:$path/"
+        log_info "OAuth credentials (.env) copied to server"
+    fi
+
     # Copy src directory
     rsync -avz --delete -e "$local_rsync_ssh" "$PROJECT_ROOT/packages/umbra-relay/src/" "$SSH_USER@$ssh_target:$path/src/"
 

@@ -81,6 +81,14 @@ pub enum RelayClientMessage {
         /// The signaling payload (SDP, ICE candidates, etc.).
         payload: String,
     },
+    /// Forward a file transfer protocol message to a peer via the relay.
+    /// The payload is a JSON-serialized `FileTransferMessage`.
+    FileTransfer {
+        /// The recipient's DID.
+        to_did: String,
+        /// JSON-serialized FileTransferMessage payload.
+        payload: String,
+    },
 }
 
 /// Messages received from the relay server.
@@ -177,6 +185,13 @@ pub enum RelayServerMessage {
         /// The sender's DID.
         from_did: String,
         /// The signaling payload.
+        payload: String,
+    },
+    /// A forwarded file transfer protocol message from another peer.
+    FileTransferMessage {
+        /// The sender's DID.
+        from_did: String,
+        /// JSON-serialized FileTransferMessage payload.
         payload: String,
     },
 }

@@ -728,3 +728,113 @@ export function VolumeMuteIcon({ size = 16, color }: { size?: number; color?: st
   );
 }
 
+// ─── File Type Icons ─────────────────────────────────────────────────────────
+
+export function FileIcon({ size = 16, color }: { size?: number; color?: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color ?? 'currentColor'} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
+      <Path d="M14 2v4a2 2 0 0 0 2 2h4" />
+    </Svg>
+  );
+}
+
+export function ImageIcon({ size = 16, color }: { size?: number; color?: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color ?? 'currentColor'} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Rect width={18} height={18} x={3} y={3} rx={2} ry={2} />
+      <Circle cx={9} cy={9} r={2} />
+      <Path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
+    </Svg>
+  );
+}
+
+export function FileCodeIcon({ size = 16, color }: { size?: number; color?: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color ?? 'currentColor'} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
+      <Path d="M14 2v4a2 2 0 0 0 2 2h4" />
+      <Path d="m10 13-2 2 2 2" />
+      <Path d="m14 17 2-2-2-2" />
+    </Svg>
+  );
+}
+
+export function MusicIcon({ size = 16, color }: { size?: number; color?: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color ?? 'currentColor'} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M9 18V5l12-2v13" />
+      <Circle cx={6} cy={18} r={3} />
+      <Circle cx={18} cy={16} r={3} />
+    </Svg>
+  );
+}
+
+export function FilmIcon({ size = 16, color }: { size?: number; color?: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color ?? 'currentColor'} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Rect width={18} height={18} x={3} y={3} rx={2} />
+      <Path d="M7 3v18" />
+      <Path d="M3 7.5h4" />
+      <Path d="M3 12h18" />
+      <Path d="M3 16.5h4" />
+      <Path d="M17 3v18" />
+      <Path d="M17 7.5h4" />
+      <Path d="M17 16.5h4" />
+    </Svg>
+  );
+}
+
+export function PackageIcon({ size = 16, color }: { size?: number; color?: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color ?? 'currentColor'} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="m7.5 4.27 9 5.15" />
+      <Path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z" />
+      <Path d="m3.3 7 8.7 5 8.7-5" />
+      <Path d="M12 22V12" />
+    </Svg>
+  );
+}
+
+export function FileSpreadsheetIcon({ size = 16, color }: { size?: number; color?: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color ?? 'currentColor'} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
+      <Path d="M14 2v4a2 2 0 0 0 2 2h4" />
+      <Path d="M8 13h2" />
+      <Path d="M14 13h2" />
+      <Path d="M8 17h2" />
+      <Path d="M14 17h2" />
+    </Svg>
+  );
+}
+
+export function PresentationIcon({ size = 16, color }: { size?: number; color?: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color ?? 'currentColor'} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M2 3h20" />
+      <Path d="M21 3v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V3" />
+      <Path d="m7 21 5-5 5 5" />
+    </Svg>
+  );
+}
+
+export function FolderOpenIcon({ size = 18, color }: { size?: number; color?: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color ?? 'currentColor'} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="m6 14 1.5-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.54 6a2 2 0 0 1-1.95 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2" />
+    </Svg>
+  );
+}
+
+export function FilePdfIcon({ size = 16, color }: { size?: number; color?: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color ?? 'currentColor'} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z" />
+      <Path d="M14 2v4a2 2 0 0 0 2 2h4" />
+      <Path d="M10 12h4" />
+      <Path d="M10 16h4" />
+    </Svg>
+  );
+}
+

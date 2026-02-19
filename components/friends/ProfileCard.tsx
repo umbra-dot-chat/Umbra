@@ -1,9 +1,10 @@
 import React, { useState, useCallback } from 'react';
-import { View, Pressable, Text as RNText } from 'react-native';
+import { View, Pressable, Text as RNText, Image } from 'react-native';
 import type { ViewStyle } from 'react-native';
 import { Card, Separator, useTheme } from '@coexist/wisp-react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNetwork } from '@/hooks/useNetwork';
+import { useUsername } from '@/packages/umbra-service/src/discovery/hooks';
 import { PRIMARY_RELAY_URL } from '@/config';
 import { CopyIcon, RadioIcon, KeyIcon } from '@/components/icons';
 import { HelpIndicator } from '@/components/ui/HelpIndicator';
@@ -22,7 +23,9 @@ export function ProfileCard({ style }: ProfileCardProps) {
   const { theme } = useTheme();
   const tc = theme.colors;
   const [didCopied, setDidCopied] = useState(false);
+  const [usernameCopied, setUsernameCopied] = useState(false);
   const { relayConnected, connectRelay } = useNetwork();
+  const { username } = useUsername(identity?.did ?? null);
 
   const handleCopyDid = useCallback(() => {
     if (!identity) return;
@@ -34,6 +37,17 @@ export function ProfileCard({ style }: ProfileCardProps) {
       // Clipboard API not available
     }
   }, [identity]);
+
+  const handleCopyUsername = useCallback(() => {
+    if (!username) return;
+    try {
+      navigator.clipboard.writeText(username);
+      setUsernameCopied(true);
+      setTimeout(() => setUsernameCopied(false), 2000);
+    } catch {
+      // Clipboard API not available
+    }
+  }, [username]);
 
   const handleReconnect = useCallback(async () => {
     try {
@@ -71,16 +85,38 @@ export function ProfileCard({ style }: ProfileCardProps) {
               backgroundColor: tc.accent.primary,
               alignItems: 'center',
               justifyContent: 'center',
+              overflow: 'hidden',
             }}
           >
-            <RNText style={{ fontSize: 17, fontWeight: '700', color: tc.text.inverse }}>
-              {identity.displayName.charAt(0).toUpperCase()}
-            </RNText>
+            {identity.avatar ? (
+              <Image
+                source={{ uri: identity.avatar }}
+                style={{ width: 40, height: 40 }}
+              />
+            ) : (
+              <RNText style={{ fontSize: 17, fontWeight: '700', color: tc.text.inverse }}>
+                {identity.displayName.charAt(0).toUpperCase()}
+              </RNText>
+            )}
           </View>
           <View style={{ flex: 1 }}>
             <RNText style={{ fontSize: 16, fontWeight: '700', color: tc.text.primary }}>
               {identity.displayName}
             </RNText>
+            {username && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 1 }}>
+                <RNText style={{ fontSize: 12, color: tc.text.secondary, fontWeight: '500' }}>
+                  {username}
+                </RNText>
+                <Pressable
+                  onPress={handleCopyUsername}
+                  hitSlop={6}
+                  style={{ padding: 2 }}
+                >
+                  <CopyIcon size={11} color={usernameCopied ? tc.status.success : tc.text.muted} />
+                </Pressable>
+              </View>
+            )}
             <RNText style={{ fontSize: 11, color: tc.text.muted, marginTop: 2 }}>
               Member since {memberSince}
             </RNText>

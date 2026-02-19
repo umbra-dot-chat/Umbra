@@ -9,8 +9,6 @@ import type {
   FriendRequest,
   Friend,
   FriendEvent,
-  RelayEnvelope,
-  FriendAcceptAckPayload,
 } from './types';
 
 /**
@@ -28,58 +26,24 @@ export async function sendFriendRequest(
   toDid: string,
   message?: string,
   relayWs?: WebSocket | null,
-  fromIdentity?: { did: string; displayName: string } | null
+  _fromIdentity?: { did: string; displayName: string } | null
 ): Promise<FriendRequest & { relayDelivered?: boolean }> {
-  // Create the request locally
+  // Create the request locally — Rust now includes relay_messages in the return
   const resultJson = wasm().umbra_wasm_friends_send_request(toDid, message);
-  const request = await parseWasm<FriendRequest>(resultJson);
+  const request = await parseWasm<FriendRequest & {
+    relayMessages?: Array<{ toDid: string; payload: string }>;
+  }>(resultJson);
 
-  // If relay WebSocket is provided and connected, send via relay
+  // Send relay envelopes (built in Rust)
   let relayDelivered = false;
-  if (relayWs && relayWs.readyState === WebSocket.OPEN) {
-    try {
-      // Get our identity info for the envelope.
-      // Prefer the frontend identity (fromIdentity) because on Tauri the
-      // backend may have a different DID than the one stored in localStorage.
-      let profile: { did: string; displayName: string };
-      if (fromIdentity) {
-        profile = fromIdentity;
-      } else {
-        const profileJson = wasm().umbra_wasm_identity_get_profile();
-        profile = await parseWasm<{
-          did: string;
-          displayName: string;
-        }>(profileJson);
+  if (relayWs && relayWs.readyState === WebSocket.OPEN && request.relayMessages) {
+    for (const rm of request.relayMessages) {
+      try {
+        relayWs.send(JSON.stringify({ type: 'send', to_did: rm.toDid, payload: rm.payload }));
+        relayDelivered = true;
+      } catch (err) {
+        console.error('[UmbraService] Failed to send friend request via relay:', err);
       }
-
-      // Create the envelope payload
-      const envelope: RelayEnvelope = {
-        envelope: 'friend_request',
-        version: 1,
-        payload: {
-          id: request.id,
-          fromDid: profile.did,
-          fromDisplayName: profile.displayName,
-          fromSigningKey: request.fromSigningKey,
-          fromEncryptionKey: request.fromEncryptionKey,
-          message: request.message,
-          createdAt: request.createdAt,
-        },
-      };
-
-      // Create the relay send message (lowercase — matches Rust serde rename_all = "snake_case")
-      const relayMessage = JSON.stringify({
-        type: 'send',
-        to_did: toDid,
-        payload: JSON.stringify(envelope),
-      });
-
-      console.log('[UmbraService] Sending friend request via relay to', toDid);
-      relayWs.send(relayMessage);
-      relayDelivered = true;
-      console.log('[UmbraService] Friend request sent via relay to', toDid);
-    } catch (err) {
-      console.error('[UmbraService] Failed to send friend request via relay:', err);
     }
   }
 
@@ -115,63 +79,26 @@ export async function getOutgoingRequests(): Promise<FriendRequest[]> {
 export async function acceptFriendRequest(
   requestId: string,
   relayWs?: WebSocket | null,
-  fromIdentity?: { did: string; displayName: string } | null
+  _fromIdentity?: { did: string; displayName: string } | null
 ): Promise<{ requestId: string; status: string; relayDelivered?: boolean }> {
-  // First get the request to find the sender's DID
-  const incomingJson = wasm().umbra_wasm_friends_pending_requests('incoming');
-  const incoming = await parseWasm<FriendRequest[]>(incomingJson);
-  const request = incoming.find((r) => r.id === requestId);
-
-  // Accept locally
+  // Accept locally — Rust now includes relay_messages with our keys in the return
   const resultJson = wasm().umbra_wasm_friends_accept_request(requestId);
-  const result = await parseWasm<{ requestId: string; status: string }>(resultJson);
+  const result = await parseWasm<{
+    requestId: string;
+    status: string;
+    relayMessages?: Array<{ toDid: string; payload: string }>;
+  }>(resultJson);
 
-  // If relay WebSocket is provided and we found the request, send response via relay
+  // Send relay envelopes (built in Rust)
   let relayDelivered = false;
-  if (relayWs && relayWs.readyState === WebSocket.OPEN && request) {
-    try {
-      // Get our full profile (including keys) for the response.
-      // The requester needs our signing & encryption keys to add us as a friend.
-      const profileJson = wasm().umbra_wasm_identity_get_profile();
-      const fullProfile = await parseWasm<{
-        did: string;
-        displayName: string;
-        signingKey: string;
-        encryptionKey: string;
-      }>(profileJson);
-
-      // Prefer the frontend identity DID/name (Tauri may have a different DID)
-      const did = fromIdentity?.did ?? fullProfile.did;
-      const displayName = fromIdentity?.displayName ?? fullProfile.displayName;
-
-      // Create the response envelope with keys so requester can add us
-      const envelope: RelayEnvelope = {
-        envelope: 'friend_response',
-        version: 1,
-        payload: {
-          requestId: request.id,
-          fromDid: did,
-          fromDisplayName: displayName,
-          fromSigningKey: fullProfile.signingKey,
-          fromEncryptionKey: fullProfile.encryptionKey,
-          accepted: true,
-          timestamp: Date.now(),
-        },
-      };
-
-      // Create the relay send message (lowercase — matches Rust serde rename_all = "snake_case")
-      const relayMessage = JSON.stringify({
-        type: 'send',
-        to_did: request.fromDid,
-        payload: JSON.stringify(envelope),
-      });
-
-      console.log('[UmbraService] Sending friend acceptance via relay to', request.fromDid);
-      relayWs.send(relayMessage);
-      relayDelivered = true;
-      console.log('[UmbraService] Friend acceptance sent via relay to', request.fromDid);
-    } catch (err) {
-      console.error('[UmbraService] Failed to send friend acceptance via relay:', err);
+  if (relayWs && relayWs.readyState === WebSocket.OPEN && result.relayMessages) {
+    for (const rm of result.relayMessages) {
+      try {
+        relayWs.send(JSON.stringify({ type: 'send', to_did: rm.toDid, payload: rm.payload }));
+        relayDelivered = true;
+      } catch (err) {
+        console.error('[UmbraService] Failed to send friend acceptance via relay:', err);
+      }
     }
   }
 
@@ -289,23 +216,11 @@ export async function sendFriendAcceptAck(
 ): Promise<void> {
   if (!relayWs || relayWs.readyState !== WebSocket.OPEN) return;
 
-  const envelope: RelayEnvelope = {
-    envelope: 'friend_accept_ack',
-    version: 1,
-    payload: {
-      senderDid: myDid,
-      timestamp: Date.now(),
-    } as FriendAcceptAckPayload,
-  };
-
-  const relayMessage = JSON.stringify({
-    type: 'send',
-    to_did: accepterDid,
-    payload: JSON.stringify(envelope),
-  });
-
-  console.log('[UmbraService] Sending friend_accept_ack to', accepterDid);
-  relayWs.send(relayMessage);
+  // Build envelope in Rust, TS just sends it
+  const json = JSON.stringify({ accepter_did: accepterDid, my_did: myDid });
+  const resultJson = wasm().umbra_wasm_friends_build_accept_ack(json);
+  const rm = await parseWasm<{ toDid: string; payload: string }>(resultJson);
+  relayWs.send(JSON.stringify({ type: 'send', to_did: rm.toDid, payload: rm.payload }));
 }
 
 /**

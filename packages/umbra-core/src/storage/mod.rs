@@ -103,6 +103,8 @@ pub use database::{
     FileChunkRecord, FileManifestRecord, DmSharedFileRecord, DmSharedFolderRecord,
     // Transfer session record type
     TransferSessionRecord,
+    // Community seat record type (ghost member placeholders)
+    CommunitySeatRecord,
 };
 pub use secure_store::SecureStore;
 

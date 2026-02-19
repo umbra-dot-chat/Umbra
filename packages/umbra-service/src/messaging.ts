@@ -11,9 +11,6 @@ import type {
   MessageReaction,
   MessageEvent,
   ChatMessagePayload,
-  RelayEnvelope,
-  TypingIndicatorPayload,
-  MessageStatusPayload,
 } from './types';
 
 /**
@@ -64,51 +61,21 @@ export async function sendMessage(
     timestamp: number;
     delivered: boolean;
     read: boolean;
-    contentEncrypted?: string;
-    nonce?: string;
-    friendDid?: string;
+    relayMessages?: Array<{ toDid: string; payload: string }>;
   }>(resultJson);
 
-  // Send via relay for offline/non-P2P delivery
-  if (
-    relayWs &&
-    relayWs.readyState === WebSocket.OPEN &&
-    raw.contentEncrypted &&
-    raw.nonce &&
-    raw.friendDid
-  ) {
-    try {
-      const envelope: RelayEnvelope = {
-        envelope: 'chat_message',
-        version: 1,
-        payload: {
-          messageId: raw.id,
-          conversationId: raw.conversationId,
-          senderDid: raw.senderDid,
-          contentEncrypted: raw.contentEncrypted,
-          nonce: raw.nonce,
-          timestamp: raw.timestamp,
-        },
-      };
-
-      const relayMessage = JSON.stringify({
-        type: 'send',
-        to_did: raw.friendDid,
-        payload: JSON.stringify(envelope),
-      });
-
-      relayWs.send(relayMessage);
-      console.log('[UmbraService] Message sent via relay to', raw.friendDid);
-    } catch (err) {
-      console.warn('[UmbraService] Failed to send message via relay:', err);
+  // Send relay envelopes (built in Rust) for offline/non-P2P delivery
+  let relaySent = false;
+  if (relayWs && relayWs.readyState === WebSocket.OPEN && raw.relayMessages) {
+    for (const rm of raw.relayMessages) {
+      try {
+        relayWs.send(JSON.stringify({ type: 'send', to_did: rm.toDid, payload: rm.payload }));
+        relaySent = true;
+      } catch (err) {
+        console.warn('[UmbraService] Failed to send relay message:', err);
+      }
     }
   }
-
-  // Return with 'sending' status initially. The relay will send back an
-  // ack message confirming receipt, at which point the status transitions
-  // to 'sent'. If the relay send failed, status stays 'sending' in the UI
-  // (a visual indicator that delivery is uncertain).
-  const relaySent = relayWs && relayWs.readyState === WebSocket.OPEN && raw.contentEncrypted;
 
   return {
     id: raw.id,
@@ -160,27 +127,13 @@ export async function getMessages(
   return await Promise.all(mainMessages.map(async (m) => {
     let text = '';
     try {
-      // DB stores ciphertext as hex, but the WASM decrypt function expects base64.
-      // Convert hex → bytes → base64 before calling decrypt.
-      let contentForDecrypt = m.contentEncrypted;
-      if (/^[0-9a-fA-F]+$/.test(contentForDecrypt) && contentForDecrypt.length > 0) {
-        const hexPairs = contentForDecrypt.match(/.{2}/g) || [];
-        const hexBytes = new Uint8Array(hexPairs.map((b: string) => parseInt(b, 16)));
-        // Use chunked approach to avoid max call stack with spread on large arrays
-        let binary = '';
-        for (let i = 0; i < hexBytes.length; i++) {
-          binary += String.fromCharCode(hexBytes[i]);
-        }
-        contentForDecrypt = btoa(binary);
-      }
-
-      // WASM expects i64 (BigInt) for timestamp, but DB returns JS number
+      // Rust now returns content_encrypted as base64 (converted from hex in WASM)
       const decryptedJson = wasm().umbra_wasm_messaging_decrypt(
         m.conversationId,
-        contentForDecrypt,
+        m.contentEncrypted,
         m.nonce,
         m.senderDid,
-        BigInt(m.timestamp)
+        m.timestamp
       );
       text = await parseWasm<string>(decryptedJson);
     } catch (err) {
@@ -286,20 +239,13 @@ export async function getThreadReplies(parentId: string): Promise<Message[]> {
   return await Promise.all(raw.map(async (m) => {
     let text = '';
     try {
-      let contentForDecrypt = m.contentEncrypted || '';
-      if (/^[0-9a-fA-F]+$/.test(contentForDecrypt) && contentForDecrypt.length > 0) {
-        const hexPairs = contentForDecrypt.match(/.{2}/g) || [];
-        const hexBytes = new Uint8Array(hexPairs.map((b: string) => parseInt(b, 16)));
-        let binary = '';
-        for (let i = 0; i < hexBytes.length; i++) binary += String.fromCharCode(hexBytes[i]);
-        contentForDecrypt = btoa(binary);
-      }
+      // Rust now returns content_encrypted as base64 (converted from hex in WASM)
       const decryptedJson = wasm().umbra_wasm_messaging_decrypt(
         m.conversationId,
-        contentForDecrypt,
+        m.contentEncrypted || '',
         m.nonce || '',
         m.senderDid,
-        BigInt(m.timestamp)
+        m.timestamp
       );
       text = await parseWasm<string>(decryptedJson);
     } catch {
@@ -333,50 +279,23 @@ export async function sendThreadReply(
     id: string;
     conversationId: string;
     senderDid: string;
-    friendDid?: string;
     timestamp: number;
     threadId?: string;
-    contentEncrypted?: string;
-    nonce?: string;
+    relayMessages?: Array<{ toDid: string; payload: string }>;
   }>(resultJson);
 
-  // Send via relay for offline/non-P2P delivery
-  if (
-    relayWs &&
-    relayWs.readyState === WebSocket.OPEN &&
-    raw.contentEncrypted &&
-    raw.nonce &&
-    raw.friendDid
-  ) {
-    try {
-      const envelope: RelayEnvelope = {
-        envelope: 'chat_message',
-        version: 1,
-        payload: {
-          messageId: raw.id,
-          conversationId: raw.conversationId,
-          senderDid: raw.senderDid,
-          contentEncrypted: raw.contentEncrypted,
-          nonce: raw.nonce,
-          timestamp: raw.timestamp,
-          threadId: parentId,
-        },
-      };
-
-      const relayMessage = JSON.stringify({
-        type: 'send',
-        to_did: raw.friendDid,
-        payload: JSON.stringify(envelope),
-      });
-
-      relayWs.send(relayMessage);
-      console.log('[UmbraService] Thread reply sent via relay to', raw.friendDid);
-    } catch (err) {
-      console.warn('[UmbraService] Failed to send thread reply via relay:', err);
+  // Send relay envelopes (built in Rust) for offline/non-P2P delivery
+  let relaySent = false;
+  if (relayWs && relayWs.readyState === WebSocket.OPEN && raw.relayMessages) {
+    for (const rm of raw.relayMessages) {
+      try {
+        relayWs.send(JSON.stringify({ type: 'send', to_did: rm.toDid, payload: rm.payload }));
+        relaySent = true;
+      } catch (err) {
+        console.warn('[UmbraService] Failed to send relay message:', err);
+      }
     }
   }
-
-  const relaySent = relayWs && relayWs.readyState === WebSocket.OPEN && raw.contentEncrypted;
 
   return {
     id: raw.id,
@@ -401,20 +320,13 @@ export async function getPinnedMessages(conversationId: string): Promise<Message
   return await Promise.all(raw.map(async (m) => {
     let text = '';
     try {
-      let contentForDecrypt = m.contentEncrypted || '';
-      if (/^[0-9a-fA-F]+$/.test(contentForDecrypt) && contentForDecrypt.length > 0) {
-        const hexPairs = contentForDecrypt.match(/.{2}/g) || [];
-        const hexBytes = new Uint8Array(hexPairs.map((b: string) => parseInt(b, 16)));
-        let binary = '';
-        for (let i = 0; i < hexBytes.length; i++) binary += String.fromCharCode(hexBytes[i]);
-        contentForDecrypt = btoa(binary);
-      }
+      // Rust now returns content_encrypted as base64 (converted from hex in WASM)
       const decryptedJson = wasm().umbra_wasm_messaging_decrypt(
         m.conversationId,
-        contentForDecrypt,
+        m.contentEncrypted || '',
         m.nonce || '',
         m.senderDid,
-        BigInt(m.timestamp)
+        m.timestamp
       );
       text = await parseWasm<string>(decryptedJson);
     } catch {
@@ -456,25 +368,17 @@ export async function sendTypingIndicator(
 ): Promise<void> {
   if (!relayWs || relayWs.readyState !== WebSocket.OPEN) return;
 
-  const envelope: RelayEnvelope = {
-    envelope: 'typing_indicator',
-    version: 1,
-    payload: {
-      conversationId,
-      senderDid,
-      senderName,
-      isTyping,
-      timestamp: Date.now(),
-    } as TypingIndicatorPayload,
-  };
-
-  const relayMessage = JSON.stringify({
-    type: 'send',
-    to_did: recipientDid,
-    payload: JSON.stringify(envelope),
+  // Build envelope in Rust, TS just sends it
+  const json = JSON.stringify({
+    conversation_id: conversationId,
+    recipient_did: recipientDid,
+    sender_did: senderDid,
+    sender_name: senderName,
+    is_typing: isTyping,
   });
-
-  relayWs.send(relayMessage);
+  const resultJson = wasm().umbra_wasm_messaging_build_typing_envelope(json);
+  const rm = await parseWasm<{ toDid: string; payload: string }>(resultJson);
+  relayWs.send(JSON.stringify({ type: 'send', to_did: rm.toDid, payload: rm.payload }));
 }
 
 /**
@@ -508,13 +412,13 @@ export async function storeIncomingMessage(payload: ChatMessagePayload): Promise
  */
 export async function decryptIncomingMessage(payload: ChatMessagePayload): Promise<string | null> {
   try {
-    // WASM expects i64 (BigInt) for timestamp
+    // Rust now accepts f64 for timestamp (no BigInt needed)
     const decryptedJson = wasm().umbra_wasm_messaging_decrypt(
       payload.conversationId,
       payload.contentEncrypted,
       payload.nonce,
       payload.senderDid,
-      BigInt(payload.timestamp)
+      payload.timestamp
     );
     const text = await parseWasm<string>(decryptedJson);
     // Guard against empty string from WASM (shouldn't happen, but be safe)
@@ -567,24 +471,16 @@ export async function sendDeliveryReceipt(
 ): Promise<void> {
   if (!relayWs || relayWs.readyState !== WebSocket.OPEN) return;
 
-  const envelope: RelayEnvelope = {
-    envelope: 'message_status',
-    version: 1,
-    payload: {
-      messageId,
-      conversationId,
-      status,
-      timestamp: Date.now(),
-    } as MessageStatusPayload,
-  };
-
-  const relayMessage = JSON.stringify({
-    type: 'send',
-    to_did: senderDid,
-    payload: JSON.stringify(envelope),
+  // Build envelope in Rust, TS just sends it
+  const json = JSON.stringify({
+    message_id: messageId,
+    conversation_id: conversationId,
+    sender_did: senderDid,
+    status,
   });
-
-  relayWs.send(relayMessage);
+  const resultJson = wasm().umbra_wasm_messaging_build_receipt_envelope(json);
+  const rm = await parseWasm<{ toDid: string; payload: string }>(resultJson);
+  relayWs.send(JSON.stringify({ type: 'send', to_did: rm.toDid, payload: rm.payload }));
 }
 
 /**

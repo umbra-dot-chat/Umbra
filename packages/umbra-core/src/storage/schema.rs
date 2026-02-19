@@ -53,7 +53,7 @@
 //! ```
 
 /// Current schema version
-pub const SCHEMA_VERSION: i32 = 10;
+pub const SCHEMA_VERSION: i32 = 12;
 
 /// SQL to create all tables
 pub const CREATE_TABLES: &str = r#"
@@ -570,12 +570,17 @@ CREATE TABLE IF NOT EXISTS community_files (
     storage_chunks_json TEXT NOT NULL,
     uploaded_by TEXT NOT NULL,
     version INTEGER NOT NULL DEFAULT 1,
+    previous_version_id TEXT,
     download_count INTEGER NOT NULL DEFAULT 0,
+    needs_reencryption INTEGER NOT NULL DEFAULT 0,
+    key_version INTEGER NOT NULL DEFAULT 1,
+    encryption_fingerprint TEXT,
     created_at INTEGER NOT NULL,
     FOREIGN KEY (channel_id) REFERENCES community_channels(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_community_files_channel ON community_files(channel_id);
 CREATE INDEX IF NOT EXISTS idx_community_files_folder ON community_files(folder_id);
+CREATE INDEX IF NOT EXISTS idx_community_files_reencrypt ON community_files(needs_reencryption) WHERE needs_reencryption = 1;
 
 -- File folders
 CREATE TABLE IF NOT EXISTS community_file_folders (
@@ -716,6 +721,9 @@ CREATE TABLE IF NOT EXISTS file_manifests (
     file_hash TEXT NOT NULL,
     encrypted INTEGER NOT NULL DEFAULT 0,
     encryption_key_id TEXT,
+    previous_version_id TEXT,
+    key_version INTEGER NOT NULL DEFAULT 1,
+    encryption_fingerprint TEXT,
     created_at INTEGER NOT NULL
 );
 
@@ -734,6 +742,9 @@ CREATE TABLE IF NOT EXISTS dm_shared_files (
     download_count INTEGER NOT NULL DEFAULT 0,
     encrypted_metadata TEXT,
     encryption_nonce TEXT,
+    needs_reencryption INTEGER NOT NULL DEFAULT 0,
+    key_version INTEGER NOT NULL DEFAULT 1,
+    encryption_fingerprint TEXT,
     created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_dm_shared_files_conversation ON dm_shared_files(conversation_id);
@@ -771,6 +782,26 @@ CREATE TABLE IF NOT EXISTS transfer_sessions (
 );
 CREATE INDEX IF NOT EXISTS idx_transfer_sessions_file ON transfer_sessions(file_id);
 CREATE INDEX IF NOT EXISTS idx_transfer_sessions_state ON transfer_sessions(state);
+
+-- Community seats (ghost member placeholders from platform imports)
+CREATE TABLE IF NOT EXISTS community_seats (
+    id TEXT PRIMARY KEY,
+    community_id TEXT NOT NULL,
+    platform TEXT NOT NULL,
+    platform_user_id TEXT NOT NULL,
+    platform_username TEXT NOT NULL,
+    nickname TEXT,
+    avatar_url TEXT,
+    role_ids_json TEXT NOT NULL DEFAULT '[]',
+    claimed_by_did TEXT,
+    claimed_at INTEGER,
+    created_at INTEGER NOT NULL,
+    FOREIGN KEY (community_id) REFERENCES communities(id) ON DELETE CASCADE,
+    UNIQUE(community_id, platform, platform_user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_community_seats_community ON community_seats(community_id);
+CREATE INDEX IF NOT EXISTS idx_community_seats_unclaimed ON community_seats(community_id, claimed_by_did) WHERE claimed_by_did IS NULL;
+CREATE INDEX IF NOT EXISTS idx_community_seats_platform ON community_seats(platform, platform_user_id);
 "#;
 
 /// Migration SQL from schema version 1 → 2
@@ -1221,12 +1252,17 @@ CREATE TABLE IF NOT EXISTS community_files (
     storage_chunks_json TEXT NOT NULL,
     uploaded_by TEXT NOT NULL,
     version INTEGER NOT NULL DEFAULT 1,
+    previous_version_id TEXT,
     download_count INTEGER NOT NULL DEFAULT 0,
+    needs_reencryption INTEGER NOT NULL DEFAULT 0,
+    key_version INTEGER NOT NULL DEFAULT 1,
+    encryption_fingerprint TEXT,
     created_at INTEGER NOT NULL,
     FOREIGN KEY (channel_id) REFERENCES community_channels(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_community_files_channel ON community_files(channel_id);
 CREATE INDEX IF NOT EXISTS idx_community_files_folder ON community_files(folder_id);
+CREATE INDEX IF NOT EXISTS idx_community_files_reencrypt ON community_files(needs_reencryption) WHERE needs_reencryption = 1;
 
 -- File folders
 CREATE TABLE IF NOT EXISTS community_file_folders (
@@ -1408,6 +1444,9 @@ CREATE TABLE IF NOT EXISTS file_manifests (
     file_hash TEXT NOT NULL,
     encrypted INTEGER NOT NULL DEFAULT 0,
     encryption_key_id TEXT,
+    previous_version_id TEXT,
+    key_version INTEGER NOT NULL DEFAULT 1,
+    encryption_fingerprint TEXT,
     created_at INTEGER NOT NULL
 );
 
@@ -1426,6 +1465,9 @@ CREATE TABLE IF NOT EXISTS dm_shared_files (
     download_count INTEGER NOT NULL DEFAULT 0,
     encrypted_metadata TEXT,
     encryption_nonce TEXT,
+    needs_reencryption INTEGER NOT NULL DEFAULT 0,
+    key_version INTEGER NOT NULL DEFAULT 1,
+    encryption_fingerprint TEXT,
     created_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_dm_shared_files_conversation ON dm_shared_files(conversation_id);
@@ -1509,9 +1551,38 @@ CREATE INDEX IF NOT EXISTS idx_dm_shared_files_reencrypt ON dm_shared_files(need
 UPDATE schema_version SET version = 11;
 "#;
 
+/// Migration from v11 to v12.
+///
+/// Adds community_seats table for ghost member placeholders from platform imports.
+/// Seats represent imported members that real users can claim by linking their platform account.
+pub const MIGRATE_V11_TO_V12: &str = r#"
+-- Community seats (ghost member placeholders from platform imports)
+CREATE TABLE IF NOT EXISTS community_seats (
+    id TEXT PRIMARY KEY,
+    community_id TEXT NOT NULL,
+    platform TEXT NOT NULL,
+    platform_user_id TEXT NOT NULL,
+    platform_username TEXT NOT NULL,
+    nickname TEXT,
+    avatar_url TEXT,
+    role_ids_json TEXT NOT NULL DEFAULT '[]',
+    claimed_by_did TEXT,
+    claimed_at INTEGER,
+    created_at INTEGER NOT NULL,
+    FOREIGN KEY (community_id) REFERENCES communities(id) ON DELETE CASCADE,
+    UNIQUE(community_id, platform, platform_user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_community_seats_community ON community_seats(community_id);
+CREATE INDEX IF NOT EXISTS idx_community_seats_unclaimed ON community_seats(community_id, claimed_by_did) WHERE claimed_by_did IS NULL;
+CREATE INDEX IF NOT EXISTS idx_community_seats_platform ON community_seats(platform, platform_user_id);
+
+UPDATE schema_version SET version = 12;
+"#;
+
 /// SQL to drop all tables (for testing/reset)
 #[allow(dead_code)]
 pub const DROP_TABLES: &str = r#"
+DROP TABLE IF EXISTS community_seats;
 DROP TABLE IF EXISTS transfer_sessions;
 DROP TABLE IF EXISTS dm_shared_folders;
 DROP TABLE IF EXISTS dm_shared_files;

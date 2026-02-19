@@ -24,6 +24,7 @@ import { ActiveCallBar } from '@/components/call/ActiveCallBar';
 import { ActiveCallPanel } from '@/components/call/ActiveCallPanel';
 import { useCall } from '@/hooks/useCall';
 import { pickFile } from '@/utils/filePicker';
+import { InputDialog } from '@/components/community/InputDialog';
 import { useSettingsDialog } from '@/contexts/SettingsDialogContext';
 import { E2EEKeyExchangeUI } from '@coexist/wisp-react-native/src/components/e2ee-key-exchange-ui';
 
@@ -162,6 +163,8 @@ export default function ChatPage() {
 
   const [threadParent, setThreadParent] = useState<{ id: string; sender: string; content: string; timestamp: string } | null>(null);
   const [threadReplies, setThreadReplies] = useState<{ id: string; sender: string; content: string; timestamp: string; isOwn?: boolean }[]>([]);
+  const [sharedFolderDialogOpen, setSharedFolderDialogOpen] = useState(false);
+  const [sharedFolderDialogSubmitting, setSharedFolderDialogSubmitting] = useState(false);
 
   const openThread = useCallback(async (msg: { id: string; sender: string; content: string; timestamp: string }) => {
     setThreadParent(msg);
@@ -289,20 +292,24 @@ export default function ChatPage() {
   }, [service, resolvedConversationId, sendMessage]);
 
   // Handle creating a shared folder from a DM conversation
-  const handleCreateSharedFolder = useCallback(async () => {
+  const handleCreateSharedFolder = useCallback(() => {
     if (!service || !resolvedConversationId) return;
-    try {
-      const name = typeof window !== 'undefined'
-        ? window.prompt('Shared folder name:')
-        : null;
-      if (!name?.trim()) return;
+    setSharedFolderDialogOpen(true);
+  }, [service, resolvedConversationId]);
 
+  const handleSharedFolderDialogSubmit = useCallback(async (name: string) => {
+    if (!service || !resolvedConversationId || !name?.trim()) return;
+    setSharedFolderDialogSubmitting(true);
+    try {
       await service.createDmFolder(resolvedConversationId, null, name.trim(), myDid);
       console.log('[ChatPage] Shared folder created:', name.trim());
+      setSharedFolderDialogOpen(false);
     } catch (err) {
       console.error('[ChatPage] Failed to create shared folder:', err);
+    } finally {
+      setSharedFolderDialogSubmitting(false);
     }
-  }, [service, resolvedConversationId]);
+  }, [service, resolvedConversationId, myDid]);
 
   // Handle thread reply
   const handleThreadReply = useCallback(async (text: string) => {
@@ -487,6 +494,16 @@ export default function ChatPage() {
         }}
       />
       <SlotRenderer slot="right-panel" props={{ conversationId: resolvedConversationId }} />
+      <InputDialog
+        open={sharedFolderDialogOpen}
+        onClose={() => setSharedFolderDialogOpen(false)}
+        title="Create Shared Folder"
+        label="Folder Name"
+        placeholder="e.g. Project Files, Photos..."
+        submitLabel="Create"
+        submitting={sharedFolderDialogSubmitting}
+        onSubmit={handleSharedFolderDialogSubmit}
+      />
     </View>
   );
 }

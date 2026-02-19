@@ -64,6 +64,7 @@ export interface UmbraWasmModule {
   umbra_wasm_friends_unblock(did: string): boolean;
   umbra_wasm_friends_store_incoming(json: string): void;
   umbra_wasm_friends_accept_from_relay(json: string): string;
+  umbra_wasm_friends_build_accept_ack(json: string): string;
 
   // Messaging (core — implemented in Rust WASM)
   umbra_wasm_messaging_get_conversations(): string;
@@ -71,8 +72,10 @@ export interface UmbraWasmModule {
   umbra_wasm_messaging_get_messages(conversation_id: string, limit: number, offset: number): string;
   umbra_wasm_messaging_send(conversation_id: string, content: string, reply_to_id?: string): string;
   umbra_wasm_messaging_mark_read(conversation_id: string): number;
-  umbra_wasm_messaging_decrypt(conversation_id: string, content_encrypted_b64: string, nonce_hex: string, sender_did: string, timestamp: number | bigint): string;
+  umbra_wasm_messaging_decrypt(conversation_id: string, content_encrypted_b64: string, nonce_hex: string, sender_did: string, timestamp: number): string;
   umbra_wasm_messaging_store_incoming(json: string): void;
+  umbra_wasm_messaging_build_typing_envelope(json: string): string;
+  umbra_wasm_messaging_build_receipt_envelope(json: string): string;
 
   // Messaging (extended — implemented in Rust WASM, take JSON args)
   umbra_wasm_messaging_edit(json: string): string;
@@ -267,6 +270,18 @@ export interface UmbraWasmModule {
   umbra_wasm_dm_delete_folder(json: string): string;
   umbra_wasm_dm_rename_folder(json: string): string;
 
+  // Groups — Relay envelope builders
+  umbra_wasm_groups_send_invite(json: string): string;
+  umbra_wasm_groups_build_invite_accept_envelope(json: string): string;
+  umbra_wasm_groups_build_invite_decline_envelope(json: string): string;
+  umbra_wasm_groups_send_message(json: string): string;
+  umbra_wasm_groups_remove_member_with_rotation(json: string): string;
+
+  // Relay envelope builders
+  umbra_wasm_community_build_event_relay_batch(json: string): string;
+  umbra_wasm_build_dm_file_event_envelope(json: string): string;
+  umbra_wasm_build_metadata_envelope(json: string): string;
+
   // File Chunking (real WASM)
   umbra_wasm_chunk_file(json: string): string;
   umbra_wasm_reassemble_file(json: string): string;
@@ -285,6 +300,11 @@ export interface UmbraWasmModule {
   umbra_wasm_transfer_chunks_to_send(transfer_id: string): string;
   umbra_wasm_transfer_mark_chunk_sent(json: string): string;
 
+  // DHT — Content Discovery
+  umbra_wasm_dht_start_providing(json: string): string;
+  umbra_wasm_dht_get_providers(json: string): string;
+  umbra_wasm_dht_stop_providing(json: string): string;
+
   // Plugin Storage — KV
   umbra_wasm_plugin_kv_get(plugin_id: string, key: string): string;
   umbra_wasm_plugin_kv_set(plugin_id: string, key: string, value: string): string;
@@ -296,6 +316,15 @@ export interface UmbraWasmModule {
   umbra_wasm_plugin_bundle_load(plugin_id: string): string;
   umbra_wasm_plugin_bundle_delete(plugin_id: string): string;
   umbra_wasm_plugin_bundle_list(): string;
+
+  // Community Seats (Ghost Member Placeholders)
+  umbra_wasm_community_seat_list(community_id: string): string;
+  umbra_wasm_community_seat_list_unclaimed(community_id: string): string;
+  umbra_wasm_community_seat_find_match(json: string): string;
+  umbra_wasm_community_seat_claim(json: string): string;
+  umbra_wasm_community_seat_delete(json: string): string;
+  umbra_wasm_community_seat_create_batch(json: string): string;
+  umbra_wasm_community_seat_count(community_id: string): string;
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -572,6 +601,8 @@ function buildModule(wasmPkg: any): UmbraWasmModule {
       wasmPkg.umbra_wasm_friends_store_incoming(json),
     umbra_wasm_friends_accept_from_relay: (json: string) =>
       wasmPkg.umbra_wasm_friends_accept_from_relay(json),
+    umbra_wasm_friends_build_accept_ack: (json: string) =>
+      wasmPkg.umbra_wasm_friends_build_accept_ack(json),
 
     // Messaging (core — real WASM)
     umbra_wasm_messaging_get_conversations: () =>
@@ -584,10 +615,14 @@ function buildModule(wasmPkg: any): UmbraWasmModule {
       wasmPkg.umbra_wasm_messaging_send(cid, content),
     umbra_wasm_messaging_mark_read: (cid: string) =>
       wasmPkg.umbra_wasm_messaging_mark_read(cid),
-    umbra_wasm_messaging_decrypt: (cid: string, contentB64: string, nonceHex: string, senderDid: string, timestamp: number | bigint) =>
-      wasmPkg.umbra_wasm_messaging_decrypt(cid, contentB64, nonceHex, senderDid, typeof timestamp === 'bigint' ? timestamp : BigInt(timestamp)),
+    umbra_wasm_messaging_decrypt: (cid: string, contentB64: string, nonceHex: string, senderDid: string, timestamp: number) =>
+      wasmPkg.umbra_wasm_messaging_decrypt(cid, contentB64, nonceHex, senderDid, timestamp),
     umbra_wasm_messaging_store_incoming: (json: string) =>
       wasmPkg.umbra_wasm_messaging_store_incoming(json),
+    umbra_wasm_messaging_build_typing_envelope: (json: string) =>
+      wasmPkg.umbra_wasm_messaging_build_typing_envelope(json),
+    umbra_wasm_messaging_build_receipt_envelope: (json: string) =>
+      wasmPkg.umbra_wasm_messaging_build_receipt_envelope(json),
 
     // ── Extended messaging (real WASM — take JSON args) ────────────
     umbra_wasm_messaging_edit: (json: string) =>
@@ -922,6 +957,26 @@ function buildModule(wasmPkg: any): UmbraWasmModule {
     umbra_wasm_dm_rename_folder: (json: string) =>
       wasmPkg.umbra_wasm_dm_rename_folder(json),
 
+    // Groups — Relay envelope builders
+    umbra_wasm_groups_send_invite: (json: string) =>
+      wasmPkg.umbra_wasm_groups_send_invite(json),
+    umbra_wasm_groups_build_invite_accept_envelope: (json: string) =>
+      wasmPkg.umbra_wasm_groups_build_invite_accept_envelope(json),
+    umbra_wasm_groups_build_invite_decline_envelope: (json: string) =>
+      wasmPkg.umbra_wasm_groups_build_invite_decline_envelope(json),
+    umbra_wasm_groups_send_message: (json: string) =>
+      wasmPkg.umbra_wasm_groups_send_message(json),
+    umbra_wasm_groups_remove_member_with_rotation: (json: string) =>
+      wasmPkg.umbra_wasm_groups_remove_member_with_rotation(json),
+
+    // Relay envelope builders
+    umbra_wasm_community_build_event_relay_batch: (json: string) =>
+      wasmPkg.umbra_wasm_community_build_event_relay_batch(json),
+    umbra_wasm_build_dm_file_event_envelope: (json: string) =>
+      wasmPkg.umbra_wasm_build_dm_file_event_envelope(json),
+    umbra_wasm_build_metadata_envelope: (json: string) =>
+      wasmPkg.umbra_wasm_build_metadata_envelope(json),
+
     // ── File Chunking (real WASM) ───────────────────────────────────
     umbra_wasm_chunk_file: (json: string) =>
       wasmPkg.umbra_wasm_chunk_file(json),
@@ -953,6 +1008,14 @@ function buildModule(wasmPkg: any): UmbraWasmModule {
       wasmPkg.umbra_wasm_transfer_chunks_to_send(transfer_id),
     umbra_wasm_transfer_mark_chunk_sent: (json: string) =>
       wasmPkg.umbra_wasm_transfer_mark_chunk_sent(json),
+
+    // ── DHT — Content Discovery (real WASM) ──────────────────────────
+    umbra_wasm_dht_start_providing: (json: string) =>
+      wasmPkg.umbra_wasm_dht_start_providing(json),
+    umbra_wasm_dht_get_providers: (json: string) =>
+      wasmPkg.umbra_wasm_dht_get_providers(json),
+    umbra_wasm_dht_stop_providing: (json: string) =>
+      wasmPkg.umbra_wasm_dht_stop_providing(json),
 
     // ── Plugin KV Storage (JS stub — persists via localStorage) ──────
     umbra_wasm_plugin_kv_get: (pluginId: string, key: string): string => {
@@ -1047,5 +1110,21 @@ function buildModule(wasmPkg: any): UmbraWasmModule {
         return JSON.stringify({ plugins });
       } catch { return JSON.stringify({ plugins: [] }); }
     },
+
+    // ── Community Seats (Ghost Member Placeholders) ────────────────────
+    umbra_wasm_community_seat_list: (community_id: string) =>
+      wasmPkg.umbra_wasm_community_seat_list(community_id),
+    umbra_wasm_community_seat_list_unclaimed: (community_id: string) =>
+      wasmPkg.umbra_wasm_community_seat_list_unclaimed(community_id),
+    umbra_wasm_community_seat_find_match: (json: string) =>
+      wasmPkg.umbra_wasm_community_seat_find_match(json),
+    umbra_wasm_community_seat_claim: (json: string) =>
+      wasmPkg.umbra_wasm_community_seat_claim(json),
+    umbra_wasm_community_seat_delete: (json: string) =>
+      wasmPkg.umbra_wasm_community_seat_delete(json),
+    umbra_wasm_community_seat_create_batch: (json: string) =>
+      wasmPkg.umbra_wasm_community_seat_create_batch(json),
+    umbra_wasm_community_seat_count: (community_id: string) =>
+      wasmPkg.umbra_wasm_community_seat_count(community_id),
   };
 }

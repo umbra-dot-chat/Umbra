@@ -15,7 +15,7 @@
  */
 
 import React, { useState, useCallback, useMemo } from 'react';
-import { View, Platform, Alert, TextInput } from 'react-native';
+import { View, Pressable, Platform, Alert, TextInput } from 'react-native';
 import { useTheme, Text } from '@coexist/wisp-react-native';
 import { useCommunityFiles } from '@/hooks/useCommunityFiles';
 import { useCommunitySync } from '@/hooks/useCommunitySync';
@@ -24,7 +24,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { pickFile } from '@/utils/filePicker';
 import { getFileTypeIcon, formatFileSize } from '@/utils/fileIcons';
 import { canUploadFiles, canManageFiles } from '@/utils/permissions';
-import { LockIcon } from '@/components/icons';
+import { LockIcon, FolderIcon } from '@/components/icons';
+import { InputDialog } from '@/components/community/InputDialog';
 import type { FileFolderNode } from '@/hooks/useCommunityFiles';
 import type {
   CommunityFileRecord,
@@ -126,25 +127,6 @@ function toFolderTreeView(nodes: FileFolderNode[]): FileFolderView[] {
   }));
 }
 
-/** Prompt user for folder name — web uses window.prompt, mobile uses Alert.prompt. */
-function promptFolderName(): Promise<string | null> {
-  if (Platform.OS === 'web') {
-    const name = window.prompt('Enter folder name:');
-    return Promise.resolve(name && name.trim() ? name.trim() : null);
-  }
-  return new Promise((resolve) => {
-    Alert.prompt(
-      'New Folder',
-      'Enter folder name:',
-      [
-        { text: 'Cancel', onPress: () => resolve(null), style: 'cancel' },
-        { text: 'Create', onPress: (text?: string) => resolve(text && text.trim() ? text.trim() : null) },
-      ],
-      'plain-text',
-      '',
-    );
-  });
-}
 
 /** Trigger a file download on web via Blob + anchor tag. */
 function triggerWebDownload(base64Data: string, filename: string, mimeType: string) {
@@ -207,6 +189,9 @@ export function FileChannelContent({ channelId, communityId, myRoles = [], isOwn
   const [isUploading, setIsUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [folderDialogOpen, setFolderDialogOpen] = useState(false);
+  const [folderDialogSubmitting, setFolderDialogSubmitting] = useState(false);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Transform data for display, filtered by search query
   const query = searchQuery.trim().toLowerCase();
@@ -269,12 +254,21 @@ export function FileChannelContent({ channelId, communityId, myRoles = [], isOwn
     [navigateToFolder],
   );
 
-  const handleCreateFolder = useCallback(async () => {
-    const name = await promptFolderName();
-    if (!name) return;
-    const folder = await createFolder(name);
-    if (folder) {
-      syncEvent({ type: 'folderCreated', channelId, folderId: folder.id });
+  const handleCreateFolder = useCallback(() => {
+    setFolderDialogOpen(true);
+  }, []);
+
+  const handleFolderDialogSubmit = useCallback(async (name: string) => {
+    if (!name?.trim()) return;
+    setFolderDialogSubmitting(true);
+    try {
+      const folder = await createFolder(name.trim());
+      if (folder) {
+        syncEvent({ type: 'folderCreated', channelId, folderId: folder.id });
+      }
+      setFolderDialogOpen(false);
+    } finally {
+      setFolderDialogSubmitting(false);
     }
   }, [createFolder, syncEvent, channelId]);
 
@@ -373,7 +367,7 @@ export function FileChannelContent({ channelId, communityId, myRoles = [], isOwn
       } catch {
         // Chunks not available locally — P2P download not yet built
         if (Platform.OS === 'web') {
-          window.alert('P2P file download coming soon. File chunks are not available locally.');
+          setToastMessage('P2P file download coming soon. File chunks are not available locally.');
         } else {
           Alert.alert('Download unavailable', 'P2P file download coming soon.');
         }
@@ -573,9 +567,9 @@ export function FileChannelContent({ channelId, communityId, myRoles = [], isOwn
               </Text>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
                 {subfolderEntries.map((folder) => (
-                  <View
+                  <Pressable
                     key={folder.id}
-                    onTouchEnd={() => handleFolderClick(folder.id)}
+                    onPress={() => handleFolderClick(folder.id)}
                     style={{
                       backgroundColor: colors.background.raised,
                       borderRadius: 8,
@@ -587,13 +581,13 @@ export function FileChannelContent({ channelId, communityId, myRoles = [], isOwn
                         : colors.border.subtle,
                     }}
                   >
-                    <Text size="lg" style={{ marginBottom: 4 }}>
-                      {'\uD83D\uDCC1'}
-                    </Text>
+                    <View style={{ marginBottom: 6 }}>
+                      <FolderIcon size={28} color={colors.accent.primary} />
+                    </View>
                     <Text size="sm" weight="medium" numberOfLines={1} style={{ color: colors.text.primary }}>
                       {folder.name}
                     </Text>
-                  </View>
+                  </Pressable>
                 ))}
               </View>
             </View>
@@ -611,9 +605,9 @@ export function FileChannelContent({ channelId, communityId, myRoles = [], isOwn
               </Text>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
                 {sortedFiles.map((file) => (
-                  <View
+                  <Pressable
                     key={file.id}
-                    onTouchEnd={() => handleFileClick(file.id)}
+                    onPress={() => handleFileClick(file.id)}
                     style={{
                       backgroundColor: colors.background.raised,
                       borderRadius: 8,
@@ -625,10 +619,11 @@ export function FileChannelContent({ channelId, communityId, myRoles = [], isOwn
                         : colors.border.subtle,
                     }}
                   >
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginBottom: 4 }}>
-                      <Text size="lg">
-                        {getFileTypeIcon(file.mimeType).icon}
-                      </Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                      {React.createElement(getFileTypeIcon(file.mimeType).IconComponent, {
+                        size: 28,
+                        color: getFileTypeIcon(file.mimeType).color,
+                      })}
                       {file.isEncrypted && (
                         <LockIcon size={12} color={colors.accent.primary} />
                       )}
@@ -644,11 +639,55 @@ export function FileChannelContent({ channelId, communityId, myRoles = [], isOwn
                         {file.downloadCount} download{file.downloadCount !== 1 ? 's' : ''}
                       </Text>
                     )}
-                  </View>
+                  </Pressable>
                 ))}
               </View>
             </View>
           )}
+        </View>
+      )}
+
+      {/* Create folder dialog */}
+      <InputDialog
+        open={folderDialogOpen}
+        onClose={() => setFolderDialogOpen(false)}
+        title="Create Folder"
+        label="Folder Name"
+        placeholder="e.g. Documents, Images..."
+        submitLabel="Create"
+        submitting={folderDialogSubmitting}
+        onSubmit={handleFolderDialogSubmit}
+      />
+
+      {/* Toast notification (web only — mobile uses Alert) */}
+      {Platform.OS === 'web' && toastMessage && (
+        <View
+          style={{
+            position: 'absolute' as any,
+            bottom: 24,
+            left: '50%' as any,
+            transform: [{ translateX: -240 }] as any,
+            backgroundColor: '#1a1a2e',
+            padding: 12,
+            paddingHorizontal: 24,
+            borderRadius: 8,
+            borderWidth: 1,
+            borderColor: '#333',
+            maxWidth: 480,
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 12,
+            zIndex: 10000,
+          }}
+        >
+          <Text size="sm" style={{ color: '#e0e0e0', flex: 1 }}>{toastMessage}</Text>
+          <Text
+            size="sm"
+            onPress={() => setToastMessage(null)}
+            style={{ color: '#888', padding: 4 }}
+          >
+            ✕
+          </Text>
         </View>
       )}
 

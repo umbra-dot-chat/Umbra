@@ -1,0 +1,780 @@
+/**
+ * Discord Community Import Hook
+ *
+ * React hook for managing the Discord server import flow.
+ * Includes self-serve bot invite flow for reading server structure.
+ *
+ * @packageDocumentation
+ */
+
+import { useState, useCallback, useEffect, useRef } from 'react';
+import type {
+  DiscordGuildInfo,
+  DiscordImportedStructure,
+  MappedCommunityStructure,
+  MappedSeat,
+  CommunityImportProgress,
+  CommunityImportResult,
+  DiscordImportedMember,
+  DiscordGuildMembersResponse,
+} from '@umbra/service';
+import { mapDiscordToUmbra, validateImportStructure } from '@umbra/service';
+
+/**
+ * Configuration for the relay endpoint.
+ */
+const RELAY_BASE_URL = process.env.EXPO_PUBLIC_RELAY_URL || 'https://relay.umbra.chat';
+
+/**
+ * State phases for the import flow.
+ */
+export type ImportPhase =
+  | 'idle'
+  | 'authenticating'
+  | 'selecting_server'
+  | 'loading_structure'
+  | 'needs_bot'
+  | 'previewing'
+  | 'importing'
+  | 'complete'
+  | 'error';
+
+/**
+ * Bot status for the current guild.
+ */
+export type BotStatus = 'unknown' | 'checking' | 'not_in_guild' | 'in_guild' | 'disabled' | 'inviting';
+
+/**
+ * State for the Discord community import hook.
+ */
+export interface UseDiscordCommunityImportState {
+  /** Current phase of the import flow. */
+  phase: ImportPhase;
+  /** Access token from Discord OAuth. */
+  accessToken: string | null;
+  /** List of manageable guilds. */
+  guilds: DiscordGuildInfo[];
+  /** Selected guild for import. */
+  selectedGuild: DiscordGuildInfo | null;
+  /** Imported structure from Discord. */
+  importedStructure: DiscordImportedStructure | null;
+  /** Mapped structure ready for Umbra. */
+  mappedStructure: MappedCommunityStructure | null;
+  /** Validation issues (if any). */
+  validationIssues: string[];
+  /** Import progress. */
+  progress: CommunityImportProgress | null;
+  /** Import result. */
+  result: CommunityImportResult | null;
+  /** Error message. */
+  error: string | null;
+  /** Whether an operation is in progress. */
+  isLoading: boolean;
+  /** Bot membership status for the selected guild. */
+  botStatus: BotStatus;
+  /** Imported guild members (for seat creation). */
+  importedMembers: DiscordImportedMember[] | null;
+  /** Whether the bot has GUILD_MEMBERS intent (can fetch members). */
+  membersAvailable: boolean;
+  /** Whether to import members as seats. */
+  importMembers: boolean;
+}
+
+/**
+ * Actions for the Discord community import hook.
+ */
+export interface UseDiscordCommunityImportActions {
+  /** Start the OAuth flow to authenticate with Discord. */
+  startAuth: () => Promise<void>;
+  /** Refresh the list of guilds. */
+  refreshGuilds: () => Promise<void>;
+  /** Select a guild for import. */
+  selectGuild: (guild: DiscordGuildInfo) => Promise<void>;
+  /** Go back to guild selection. */
+  backToSelection: () => void;
+  /** Start the import process. */
+  startImport: (onCreateCommunity: (structure: MappedCommunityStructure) => Promise<CommunityImportResult>) => Promise<void>;
+  /** Open a popup to invite the bot to the selected guild, then poll for membership and re-fetch structure. */
+  inviteBot: () => Promise<void>;
+  /** Re-fetch the guild structure for the currently selected guild. */
+  refetchStructure: () => Promise<void>;
+  /** Toggle whether to import members as seats. */
+  toggleMemberImport: () => void;
+  /** Reset to initial state. */
+  reset: () => void;
+}
+
+/**
+ * Hook for managing Discord community import.
+ */
+export function useDiscordCommunityImport(): UseDiscordCommunityImportState & UseDiscordCommunityImportActions {
+  // State
+  const [phase, setPhase] = useState<ImportPhase>('idle');
+  const [accessToken, setAccessToken] = useState<string | null>(null);
+  const [guilds, setGuilds] = useState<DiscordGuildInfo[]>([]);
+  const [selectedGuild, setSelectedGuild] = useState<DiscordGuildInfo | null>(null);
+  const [importedStructure, setImportedStructure] = useState<DiscordImportedStructure | null>(null);
+  const [mappedStructure, setMappedStructure] = useState<MappedCommunityStructure | null>(null);
+  const [validationIssues, setValidationIssues] = useState<string[]>([]);
+  const [progress, setProgress] = useState<CommunityImportProgress | null>(null);
+  const [result, setResult] = useState<CommunityImportResult | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [botStatus, setBotStatus] = useState<BotStatus>('unknown');
+  const [importedMembers, setImportedMembers] = useState<DiscordImportedMember[] | null>(null);
+  const [membersAvailable, setMembersAvailable] = useState(false);
+  const [importMembers, setImportMembers] = useState(true);
+
+  // Refs
+  const popupRef = useRef<Window | null>(null);
+  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const authSucceededRef = useRef(false);
+
+  // Cleanup polling on unmount
+  useEffect(() => {
+    return () => {
+      if (pollTimerRef.current) {
+        clearInterval(pollTimerRef.current);
+        pollTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  // Listen for OAuth callback message
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      // Verify the message is from our popup
+      if (event.data?.type === 'UMBRA_COMMUNITY_IMPORT') {
+        if (event.data.success && event.data.token) {
+          authSucceededRef.current = true;
+          setAccessToken(event.data.token);
+          setPhase('selecting_server');
+          setError(null);
+          // Close popup if still open
+          if (popupRef.current && !popupRef.current.closed) {
+            popupRef.current.close();
+          }
+        } else if (event.data.error) {
+          setError(event.data.error);
+          setPhase('error');
+        }
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, []);
+
+  // Fetch guilds when we have an access token
+  useEffect(() => {
+    if (accessToken && phase === 'selecting_server' && guilds.length === 0) {
+      fetchGuilds();
+    }
+  }, [accessToken, phase]);
+
+  /**
+   * Fetch the list of guilds the user can manage.
+   */
+  const fetchGuilds = useCallback(async () => {
+    if (!accessToken) return;
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const response = await fetch(
+        `${RELAY_BASE_URL}/community/import/discord/guilds?token=${encodeURIComponent(accessToken)}`
+      );
+
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.error || 'Failed to fetch guilds');
+      }
+
+      const data = await response.json();
+      setGuilds(data.guilds || []);
+    } catch (err: any) {
+      setError(err.message || 'Failed to fetch guilds');
+      setPhase('error');
+    } finally {
+      setIsLoading(false);
+    }
+  }, [accessToken]);
+
+  /**
+   * Fetch guild structure from the relay.
+   * Returns the mapped structure, or null on failure.
+   */
+  const fetchStructure = useCallback(
+    async (guildId: string): Promise<MappedCommunityStructure | null> => {
+      if (!accessToken) return null;
+
+      const response = await fetch(
+        `${RELAY_BASE_URL}/community/import/discord/guild/${guildId}/structure?token=${encodeURIComponent(accessToken)}`
+      );
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch server structure');
+      }
+
+      const data = await response.json();
+
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to fetch server structure');
+      }
+
+      setImportedStructure(data.structure);
+
+      // Map to Umbra structure
+      const mapped = mapDiscordToUmbra(data.structure);
+      setMappedStructure(mapped);
+
+      // Validate
+      const validation = validateImportStructure(mapped);
+      setValidationIssues(validation.issues);
+
+      return mapped;
+    },
+    [accessToken]
+  );
+
+  /**
+   * Check if the structure is empty (no channels/categories/roles).
+   */
+  const isStructureEmpty = (structure: MappedCommunityStructure): boolean => {
+    return (
+      structure.categories.length === 0 &&
+      structure.channels.length === 0 &&
+      structure.roles.length === 0
+    );
+  };
+
+  /**
+   * Check bot status for a guild.
+   */
+  const checkBotStatusForGuild = useCallback(async (guildId: string): Promise<{ botEnabled: boolean; inGuild: boolean }> => {
+    try {
+      const response = await fetch(
+        `${RELAY_BASE_URL}/community/import/discord/bot-status?guild_id=${encodeURIComponent(guildId)}`
+      );
+      if (!response.ok) {
+        return { botEnabled: false, inGuild: false };
+      }
+      const data = await response.json();
+      return {
+        botEnabled: data.bot_enabled ?? false,
+        inGuild: data.in_guild ?? false,
+      };
+    } catch {
+      return { botEnabled: false, inGuild: false };
+    }
+  }, []);
+
+  /**
+   * Fetch guild members from the relay (requires bot with GUILD_MEMBERS intent).
+   */
+  const fetchMembers = useCallback(
+    async (guildId: string) => {
+      if (!accessToken) return;
+
+      try {
+        const response = await fetch(
+          `${RELAY_BASE_URL}/community/import/discord/guild/${guildId}/members?token=${encodeURIComponent(accessToken)}`
+        );
+
+        if (!response.ok) {
+          // 403 likely means the bot doesn't have GUILD_MEMBERS intent
+          if (response.status === 403) {
+            setMembersAvailable(false);
+            setImportedMembers(null);
+            return;
+          }
+          // Other errors — silently fail (members are optional)
+          setMembersAvailable(false);
+          setImportedMembers(null);
+          return;
+        }
+
+        const data: DiscordGuildMembersResponse = await response.json();
+        setMembersAvailable(data.hasMembersIntent);
+
+        if (data.hasMembersIntent && data.members.length > 0) {
+          // Filter out bots
+          const humanMembers = data.members.filter((m) => !m.bot);
+          setImportedMembers(humanMembers);
+        } else {
+          setImportedMembers(null);
+        }
+      } catch {
+        // Network error — members are optional, don't fail the flow
+        setMembersAvailable(false);
+        setImportedMembers(null);
+      }
+    },
+    [accessToken]
+  );
+
+  /**
+   * Map imported Discord members to platform-agnostic MappedSeat objects.
+   */
+  const mapMembersToSeats = useCallback(
+    (members: DiscordImportedMember[]): MappedSeat[] => {
+      return members.map((m) => ({
+        platform: 'discord',
+        platformUserId: m.userId,
+        platformUsername: m.username,
+        nickname: m.nickname ?? undefined,
+        avatarUrl: m.avatar
+          ? `https://cdn.discordapp.com/avatars/${m.userId}/${m.avatar}.png`
+          : undefined,
+        sourceRoleIds: m.roleIds,
+      }));
+    },
+    []
+  );
+
+  /**
+   * Start the OAuth authentication flow.
+   */
+  const startAuth = useCallback(async () => {
+    setPhase('authenticating');
+    setError(null);
+    setIsLoading(true);
+
+    // Open popup IMMEDIATELY in the click handler (before any async work)
+    // to avoid browser popup blockers that require a direct user gesture.
+    const width = 500;
+    const height = 700;
+    const left = window.screenX + (window.innerWidth - width) / 2;
+    const top = window.screenY + (window.innerHeight - height) / 2;
+
+    popupRef.current = window.open(
+      'about:blank',
+      'discord_community_import',
+      `width=${width},height=${height},left=${left},top=${top},menubar=no,toolbar=no,status=no`
+    );
+
+    if (!popupRef.current) {
+      setError('Failed to open popup. Please allow popups for this site.');
+      setPhase('error');
+      setIsLoading(false);
+      return;
+    }
+
+    try {
+      // Request the OAuth URL from the relay
+      const response = await fetch(`${RELAY_BASE_URL}/community/import/discord/start`, {
+        method: 'POST',
+      });
+
+      if (!response.ok) {
+        popupRef.current.close();
+        throw new Error('Failed to start Discord authentication');
+      }
+
+      const data = await response.json();
+
+      // Navigate the already-open popup to the Discord OAuth URL
+      popupRef.current.location.href = data.redirect_url;
+
+      // Poll for popup close (in case user closes without completing)
+      authSucceededRef.current = false;
+      const pollTimer = setInterval(() => {
+        if (popupRef.current?.closed) {
+          clearInterval(pollTimer);
+          setIsLoading(false);
+          if (!authSucceededRef.current) {
+            setPhase('idle');
+          }
+        }
+      }, 500);
+    } catch (err: any) {
+      if (popupRef.current && !popupRef.current.closed) {
+        popupRef.current.close();
+      }
+      setError(err.message || 'Failed to start authentication');
+      setPhase('error');
+      setIsLoading(false);
+    }
+  }, []);
+
+  /**
+   * Refresh the list of guilds.
+   */
+  const refreshGuilds = useCallback(async () => {
+    if (!accessToken) {
+      setError('Not authenticated');
+      return;
+    }
+    await fetchGuilds();
+  }, [accessToken, fetchGuilds]);
+
+  /**
+   * Select a guild and load its structure.
+   * If structure is empty, checks bot status and transitions to 'needs_bot' if appropriate.
+   */
+  const selectGuild = useCallback(
+    async (guild: DiscordGuildInfo) => {
+      if (!accessToken) {
+        setError('Not authenticated');
+        return;
+      }
+
+      setSelectedGuild(guild);
+      setPhase('loading_structure');
+      setIsLoading(true);
+      setError(null);
+      setBotStatus('unknown');
+      setImportedMembers(null);
+      setMembersAvailable(false);
+      setImportMembers(true);
+
+      try {
+        const mapped = await fetchStructure(guild.id);
+
+        if (!mapped) {
+          throw new Error('Failed to load server structure');
+        }
+
+        // If structure is empty, check if the bot needs to be invited
+        if (isStructureEmpty(mapped)) {
+          setBotStatus('checking');
+          const { botEnabled, inGuild } = await checkBotStatusForGuild(guild.id);
+
+          if (!botEnabled) {
+            setBotStatus('disabled');
+            // Bot not configured on this relay — show preview anyway (with 0s)
+            setPhase('previewing');
+          } else if (inGuild) {
+            setBotStatus('in_guild');
+            // Bot is in guild but structure is still empty — unusual, show preview
+            // Try to fetch members anyway (they may be available even with empty structure)
+            fetchMembers(guild.id);
+            setPhase('previewing');
+          } else {
+            setBotStatus('not_in_guild');
+            // Bot needs to be invited — show the bot invite screen
+            setPhase('needs_bot');
+          }
+        } else {
+          // Structure loaded via OAuth — check if bot is also in guild for enhanced features
+          const { botEnabled, inGuild } = await checkBotStatusForGuild(guild.id);
+          if (botEnabled && inGuild) {
+            setBotStatus('in_guild');
+            // Bot is in guild — fetch members in background
+            fetchMembers(guild.id);
+          } else if (botEnabled) {
+            setBotStatus('not_in_guild');
+            // Bot exists but not in this guild — preview will show "Connect Bot" banner
+          } else {
+            setBotStatus('disabled');
+            // Bot not configured on relay
+          }
+          setPhase('previewing');
+        }
+      } catch (err: any) {
+        setError(err.message || 'Failed to load server structure');
+        setPhase('selecting_server');
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [accessToken, fetchStructure, checkBotStatusForGuild, fetchMembers]
+  );
+
+  /**
+   * Go back to guild selection.
+   */
+  const backToSelection = useCallback(() => {
+    // Stop any ongoing polling
+    if (pollTimerRef.current) {
+      clearInterval(pollTimerRef.current);
+      pollTimerRef.current = null;
+    }
+    setSelectedGuild(null);
+    setImportedStructure(null);
+    setMappedStructure(null);
+    setValidationIssues([]);
+    setBotStatus('unknown');
+    setImportedMembers(null);
+    setMembersAvailable(false);
+    setImportMembers(true);
+    setPhase('selecting_server');
+  }, []);
+
+  /**
+   * Open a popup to invite the bot to the selected guild.
+   * Polls bot-status until the bot joins, then re-fetches structure.
+   */
+  const inviteBot = useCallback(async () => {
+    if (!selectedGuild) {
+      setError('No guild selected');
+      return;
+    }
+
+    setError(null);
+    setBotStatus('inviting');
+
+    // Open popup IMMEDIATELY (same pattern as startAuth to avoid blockers)
+    const width = 500;
+    const height = 750;
+    const left = window.screenX + (window.innerWidth - width) / 2;
+    const top = window.screenY + (window.innerHeight - height) / 2;
+
+    popupRef.current = window.open(
+      'about:blank',
+      'discord_bot_invite',
+      `width=${width},height=${height},left=${left},top=${top},menubar=no,toolbar=no,status=no`
+    );
+
+    if (!popupRef.current) {
+      setError('Failed to open popup. Please allow popups for this site.');
+      setBotStatus('not_in_guild');
+      return;
+    }
+
+    try {
+      // Fetch bot invite URL from relay
+      const response = await fetch(
+        `${RELAY_BASE_URL}/community/import/discord/bot-invite?guild_id=${encodeURIComponent(selectedGuild.id)}`
+      );
+
+      if (!response.ok) {
+        popupRef.current.close();
+        throw new Error('Failed to get bot invite URL');
+      }
+
+      const data = await response.json();
+
+      if (!data.bot_enabled || !data.invite_url) {
+        popupRef.current.close();
+        setBotStatus('disabled');
+        setError(data.message || 'Bot is not configured on this relay.');
+        return;
+      }
+
+      // Navigate popup to Discord bot authorization page
+      popupRef.current.location.href = data.invite_url;
+
+      // Poll bot-status every 2 seconds until the bot joins
+      pollTimerRef.current = setInterval(async () => {
+        // If popup was closed by user, stop polling but keep the status as inviting
+        // in case the bot was actually added
+        const popupClosed = !popupRef.current || popupRef.current.closed;
+
+        try {
+          const { inGuild } = await checkBotStatusForGuild(selectedGuild.id);
+
+          if (inGuild) {
+            // Bot has joined! Stop polling.
+            if (pollTimerRef.current) {
+              clearInterval(pollTimerRef.current);
+              pollTimerRef.current = null;
+            }
+
+            // Close popup if still open
+            if (popupRef.current && !popupRef.current.closed) {
+              popupRef.current.close();
+            }
+
+            setBotStatus('in_guild');
+
+            // Re-fetch structure now that the bot can read it
+            setIsLoading(true);
+            try {
+              const mapped = await fetchStructure(selectedGuild.id);
+              // Also fetch members now that bot is in guild
+              fetchMembers(selectedGuild.id);
+              if (mapped && !isStructureEmpty(mapped)) {
+                setPhase('previewing');
+              } else {
+                // Bot is in guild but structure still empty — show preview anyway
+                setPhase('previewing');
+              }
+            } catch {
+              setPhase('previewing');
+            } finally {
+              setIsLoading(false);
+            }
+            return;
+          }
+        } catch {
+          // Network error during poll — continue trying
+        }
+
+        // If popup closed and bot still not detected after 3 more checks, stop
+        if (popupClosed) {
+          if (pollTimerRef.current) {
+            clearInterval(pollTimerRef.current);
+            pollTimerRef.current = null;
+          }
+          // Do one final check
+          const { inGuild } = await checkBotStatusForGuild(selectedGuild.id);
+          if (inGuild) {
+            setBotStatus('in_guild');
+            setIsLoading(true);
+            try {
+              await fetchStructure(selectedGuild.id);
+              // Also fetch members now that bot is in guild
+              fetchMembers(selectedGuild.id);
+            } catch {
+              // ignore
+            } finally {
+              setIsLoading(false);
+            }
+            setPhase('previewing');
+          } else {
+            setBotStatus('not_in_guild');
+          }
+        }
+      }, 2000);
+    } catch (err: any) {
+      if (popupRef.current && !popupRef.current.closed) {
+        popupRef.current.close();
+      }
+      setError(err.message || 'Failed to invite bot');
+      setBotStatus('not_in_guild');
+    }
+  }, [selectedGuild, fetchStructure, fetchMembers, checkBotStatusForGuild]);
+
+  /**
+   * Re-fetch the guild structure for the currently selected guild.
+   * Always transitions to 'previewing' — used both after bot joins and for skip.
+   */
+  const refetchStructure = useCallback(async () => {
+    if (!selectedGuild || !accessToken) {
+      // If called as a skip (no structure change expected), just go to preview
+      setPhase('previewing');
+      return;
+    }
+
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      await fetchStructure(selectedGuild.id);
+      // Also re-fetch members in background
+      fetchMembers(selectedGuild.id);
+    } catch (err: any) {
+      setError(err.message || 'Failed to refresh structure');
+    } finally {
+      setIsLoading(false);
+      setPhase('previewing');
+    }
+  }, [selectedGuild, accessToken, fetchStructure, fetchMembers]);
+
+  /**
+   * Start the import process.
+   */
+  const startImport = useCallback(
+    async (onCreateCommunity: (structure: MappedCommunityStructure) => Promise<CommunityImportResult>) => {
+      if (!mappedStructure) {
+        setError('No structure to import');
+        return;
+      }
+
+      setPhase('importing');
+      setIsLoading(true);
+      setError(null);
+      setProgress({
+        phase: 'creating_community',
+        percent: 0,
+      });
+
+      try {
+        // Build the final structure with optional seats
+        const finalStructure: MappedCommunityStructure = {
+          ...mappedStructure,
+        };
+
+        // Inject seats if member import is enabled and we have members
+        if (importMembers && importedMembers && importedMembers.length > 0) {
+          finalStructure.seats = mapMembersToSeats(importedMembers);
+        }
+
+        const importResult = await onCreateCommunity(finalStructure);
+        setResult(importResult);
+
+        if (importResult.success) {
+          setPhase('complete');
+        } else {
+          setError(importResult.errors.join('. '));
+          setPhase('error');
+        }
+      } catch (err: any) {
+        setError(err.message || 'Failed to create community');
+        setPhase('error');
+      } finally {
+        setIsLoading(false);
+        setProgress(null);
+      }
+    },
+    [mappedStructure, importMembers, importedMembers, mapMembersToSeats]
+  );
+
+  /**
+   * Reset to initial state.
+   */
+  /**
+   * Toggle member import on/off.
+   */
+  const toggleMemberImport = useCallback(() => {
+    setImportMembers((prev) => !prev);
+  }, []);
+
+  /**
+   * Reset to initial state.
+   */
+  const reset = useCallback(() => {
+    // Stop any ongoing polling
+    if (pollTimerRef.current) {
+      clearInterval(pollTimerRef.current);
+      pollTimerRef.current = null;
+    }
+    setPhase('idle');
+    setAccessToken(null);
+    setGuilds([]);
+    setSelectedGuild(null);
+    setImportedStructure(null);
+    setMappedStructure(null);
+    setValidationIssues([]);
+    setProgress(null);
+    setResult(null);
+    setError(null);
+    setIsLoading(false);
+    setBotStatus('unknown');
+    setImportedMembers(null);
+    setMembersAvailable(false);
+    setImportMembers(true);
+  }, []);
+
+  return {
+    // State
+    phase,
+    accessToken,
+    guilds,
+    selectedGuild,
+    importedStructure,
+    mappedStructure,
+    validationIssues,
+    progress,
+    result,
+    error,
+    isLoading,
+    botStatus,
+    importedMembers,
+    membersAvailable,
+    importMembers,
+
+    // Actions
+    startAuth,
+    refreshGuilds,
+    selectGuild,
+    backToSelection,
+    startImport,
+    inviteBot,
+    refetchStructure,
+    toggleMemberImport,
+    reset,
+  };
+}

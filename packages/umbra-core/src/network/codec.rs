@@ -10,12 +10,15 @@ use futures::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use libp2p::{request_response, StreamProtocol};
 use serde::{Deserialize, Serialize};
 
+use super::file_transfer::FileTransferMessage;
 use super::protocols::{
     FriendRequest, FriendResponse, MessageRequest, MessageResponse, PresenceAnnouncement,
 };
 
-/// Maximum message size (64 KiB)
-const MAX_MESSAGE_SIZE: usize = 64 * 1024;
+/// Maximum message size (512 KiB).
+/// Raised from 64 KiB to accommodate file transfer chunk data.
+/// A base64-encoded 256KB chunk is ~342KB, plus message overhead.
+const MAX_MESSAGE_SIZE: usize = 512 * 1024;
 
 /// Protocol identifier for the Umbra RPC protocol
 pub const UMBRA_RPC_PROTOCOL: &str = "/umbra/rpc/1.0.0";
@@ -33,6 +36,29 @@ pub enum UmbraRequest {
     Friend(FriendRequest),
     /// Announce presence status
     Presence(PresenceAnnouncement),
+    /// File transfer protocol message (request, chunk, control).
+    ///
+    /// The inner message is JSON-serialized as a String because
+    /// `FileTransferMessage` uses `#[serde(tag = "type")]` (internally-tagged
+    /// enum) which is incompatible with bincode's `deserialize_any`.
+    /// Wrapping as JSON string keeps both transports (bincode over libp2p,
+    /// JSON over relay) working correctly.
+    FileTransfer(String),
+}
+
+impl UmbraRequest {
+    /// Construct a FileTransfer request from a `FileTransferMessage`.
+    pub fn file_transfer(msg: &FileTransferMessage) -> Self {
+        Self::FileTransfer(serde_json::to_string(msg).expect("FileTransferMessage serialization"))
+    }
+
+    /// Try to extract a `FileTransferMessage` from a FileTransfer request.
+    pub fn into_file_transfer_message(self) -> Option<FileTransferMessage> {
+        match self {
+            Self::FileTransfer(json) => serde_json::from_str(&json).ok(),
+            _ => None,
+        }
+    }
 }
 
 /// Umbrella response type sent over the wire
@@ -44,6 +70,24 @@ pub enum UmbraResponse {
     Friend(FriendResponse),
     /// Simple acknowledgment
     Ack,
+    /// File transfer protocol response (accept, ack, control).
+    /// See `UmbraRequest::FileTransfer` for why this is a JSON String.
+    FileTransfer(String),
+}
+
+impl UmbraResponse {
+    /// Construct a FileTransfer response from a `FileTransferMessage`.
+    pub fn file_transfer(msg: &FileTransferMessage) -> Self {
+        Self::FileTransfer(serde_json::to_string(msg).expect("FileTransferMessage serialization"))
+    }
+
+    /// Try to extract a `FileTransferMessage` from a FileTransfer response.
+    pub fn into_file_transfer_message(self) -> Option<FileTransferMessage> {
+        match self {
+            Self::FileTransfer(json) => serde_json::from_str(&json).ok(),
+            _ => None,
+        }
+    }
 }
 
 // ============================================================================
@@ -194,7 +238,9 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use base64::Engine;
     use crate::network::protocols::{MessageDeliveryStatus, FriendRequestType};
+    use crate::storage::chunking::ChunkManifest;
 
     #[test]
     fn test_umbra_request_message_roundtrip() {
@@ -436,5 +482,168 @@ mod tests {
         let protocol = UmbraCodec::protocol();
         assert_eq!(protocol.as_ref(), UMBRA_RPC_PROTOCOL);
         assert_eq!(protocol.as_ref(), "/umbra/rpc/1.0.0");
+    }
+
+    #[test]
+    fn test_file_transfer_request_roundtrip() {
+        let manifest = ChunkManifest {
+            file_id: "file-abc".to_string(),
+            filename: "photo.jpg".to_string(),
+            total_size: 1024 * 256,
+            chunk_size: 256 * 1024,
+            total_chunks: 1,
+            chunks: vec![],
+            file_hash: "deadbeef".to_string(),
+        };
+
+        let msg = FileTransferMessage::TransferRequest {
+            transfer_id: "xfer-001".to_string(),
+            file_id: "file-abc".to_string(),
+            sender_did: "did:key:z6MkAlice".to_string(),
+            manifest,
+        };
+        let request = UmbraRequest::file_transfer(&msg);
+
+        let bytes = bincode::serialize(&request).unwrap();
+        let restored: UmbraRequest = bincode::deserialize(&bytes).unwrap();
+
+        let ft = restored.into_file_transfer_message()
+            .expect("Should deserialize FileTransferMessage");
+        match ft {
+            FileTransferMessage::TransferRequest {
+                transfer_id,
+                file_id,
+                sender_did,
+                ..
+            } => {
+                assert_eq!(transfer_id, "xfer-001");
+                assert_eq!(file_id, "file-abc");
+                assert_eq!(sender_did, "did:key:z6MkAlice");
+            }
+            _ => panic!("Expected TransferRequest variant"),
+        }
+    }
+
+    #[test]
+    fn test_file_transfer_response_roundtrip() {
+        let msg = FileTransferMessage::TransferAccept {
+            transfer_id: "xfer-001".to_string(),
+            existing_chunks: vec![0, 2, 4],
+        };
+        let response = UmbraResponse::file_transfer(&msg);
+
+        let bytes = bincode::serialize(&response).unwrap();
+        let restored: UmbraResponse = bincode::deserialize(&bytes).unwrap();
+
+        let ft = restored.into_file_transfer_message()
+            .expect("Should deserialize FileTransferMessage");
+        match ft {
+            FileTransferMessage::TransferAccept {
+                transfer_id,
+                existing_chunks,
+            } => {
+                assert_eq!(transfer_id, "xfer-001");
+                assert_eq!(existing_chunks, vec![0, 2, 4]);
+            }
+            _ => panic!("Expected TransferAccept variant"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_chunk_data_near_size_limit() {
+        // A 256KB chunk, base64-encoded, is ~342KB. This must fit within MAX_MESSAGE_SIZE.
+        let chunk_data = base64::engine::general_purpose::STANDARD.encode(&vec![0xABu8; 256 * 1024]);
+        let msg = FileTransferMessage::ChunkData {
+            transfer_id: "xfer-big".to_string(),
+            chunk_index: 0,
+            data_b64: chunk_data,
+            hash: "abc123def456".to_string(),
+        };
+        let request = UmbraRequest::file_transfer(&msg);
+
+        let mut buf = Vec::new();
+        let result = write_length_prefixed(&mut buf, &request).await;
+        assert!(result.is_ok(), "256KB chunk should fit within 512KB message limit");
+
+        // Verify it can be read back
+        let mut cursor = futures::io::Cursor::new(buf);
+        let restored: UmbraRequest = read_length_prefixed(&mut cursor).await.unwrap();
+        let ft = restored.into_file_transfer_message()
+            .expect("Should deserialize FileTransferMessage");
+        match ft {
+            FileTransferMessage::ChunkData { chunk_index, .. } => {
+                assert_eq!(chunk_index, 0);
+            }
+            _ => panic!("Expected ChunkData variant"),
+        }
+    }
+
+    #[test]
+    fn test_file_transfer_chunk_ack_roundtrip() {
+        let msg = FileTransferMessage::ChunkAck {
+            transfer_id: "xfer-001".to_string(),
+            chunk_index: 5,
+            success: true,
+            error: None,
+        };
+        let response = UmbraResponse::file_transfer(&msg);
+
+        let bytes = bincode::serialize(&response).unwrap();
+        let restored: UmbraResponse = bincode::deserialize(&bytes).unwrap();
+
+        let ft = restored.into_file_transfer_message()
+            .expect("Should deserialize FileTransferMessage");
+        match ft {
+            FileTransferMessage::ChunkAck {
+                transfer_id,
+                chunk_index,
+                success,
+                error,
+            } => {
+                assert_eq!(transfer_id, "xfer-001");
+                assert_eq!(chunk_index, 5);
+                assert!(success);
+                assert!(error.is_none());
+            }
+            _ => panic!("Expected ChunkAck variant"),
+        }
+    }
+
+    #[test]
+    fn test_file_transfer_control_messages_roundtrip() {
+        let messages = vec![
+            FileTransferMessage::PauseTransfer {
+                transfer_id: "xfer-001".to_string(),
+            },
+            FileTransferMessage::ResumeTransfer {
+                transfer_id: "xfer-001".to_string(),
+                existing_chunks: vec![0, 1],
+            },
+            FileTransferMessage::CancelTransfer {
+                transfer_id: "xfer-001".to_string(),
+                reason: Some("user cancelled".to_string()),
+            },
+            FileTransferMessage::TransferComplete {
+                transfer_id: "xfer-001".to_string(),
+                file_hash: "sha256abcdef".to_string(),
+            },
+            FileTransferMessage::TransferReject {
+                transfer_id: "xfer-001".to_string(),
+                reason: "storage full".to_string(),
+            },
+            FileTransferMessage::ChunkAvailability {
+                transfer_id: "xfer-001".to_string(),
+                available_chunks: vec![0, 3, 7],
+            },
+        ];
+
+        for msg in messages {
+            let request = UmbraRequest::file_transfer(&msg);
+            let bytes = bincode::serialize(&request).unwrap();
+            let restored: UmbraRequest = bincode::deserialize(&bytes).unwrap();
+            let ft = restored.into_file_transfer_message()
+                .expect("Should deserialize FileTransferMessage");
+            assert_eq!(ft.transfer_id(), "xfer-001");
+        }
     }
 }

@@ -51,6 +51,7 @@ import type {
   CommunityChannel,
   CommunityMember,
   CommunityRole,
+  CommunitySeat,
   CommunityMessage,
   CommunityInvite,
   CommunityEvent,
@@ -59,7 +60,6 @@ import type {
   DmSharedFileRecord,
   DmSharedFolderRecord,
   DmFileEventPayload,
-  RelayEnvelope,
   MetadataEvent,
   ChunkManifest,
   FileManifestRecord,
@@ -917,6 +917,45 @@ export class UmbraService {
     return communityModule.deleteRole(roleId, actorDid);
   }
 
+  // Seats
+  getSeats(communityId: string): Promise<CommunitySeat[]> {
+    return communityModule.getSeats(communityId);
+  }
+
+  getUnclaimedSeats(communityId: string): Promise<CommunitySeat[]> {
+    return communityModule.getUnclaimedSeats(communityId);
+  }
+
+  findMatchingSeat(communityId: string, platform: string, platformUserId: string): Promise<CommunitySeat | null> {
+    return communityModule.findMatchingSeat(communityId, platform, platformUserId);
+  }
+
+  async claimSeat(seatId: string, claimerDid: string): Promise<void> {
+    await communityModule.claimSeat(seatId, claimerDid);
+  }
+
+  deleteSeat(seatId: string, actorDid: string): Promise<void> {
+    return communityModule.deleteSeat(seatId, actorDid);
+  }
+
+  countSeats(communityId: string): Promise<{ total: number; unclaimed: number }> {
+    return communityModule.countSeats(communityId);
+  }
+
+  createSeatsBatch(
+    communityId: string,
+    seats: Array<{
+      platform: string;
+      platform_user_id: string;
+      platform_username: string;
+      nickname?: string;
+      avatar_url?: string;
+      role_ids: string[];
+    }>
+  ): Promise<number> {
+    return communityModule.createSeatsBatch(communityId, seats);
+  }
+
   // Invites
   createCommunityInvite(communityId: string, creatorDid: string, maxUses?: number, expiresAt?: number): Promise<CommunityInvite> {
     return communityModule.createInvite(communityId, creatorDid, maxUses, expiresAt);
@@ -1197,11 +1236,11 @@ export class UmbraService {
 
   // ── DM File Events ──────────────────────────────────────────────────
 
-  buildDmFileEventEnvelope(conversationId: string, senderDid: string, event: DmFileEventPayload['event']): RelayEnvelope {
+  buildDmFileEventEnvelope(conversationId: string, senderDid: string, event: DmFileEventPayload['event']): Promise<{ payload: string }> {
     return dmFiles.buildDmFileEventEnvelope(conversationId, senderDid, event);
   }
 
-  broadcastDmFileEvent(recipientDids: string[], envelope: RelayEnvelope, relayWs: WebSocket | null): Promise<void> {
+  broadcastDmFileEvent(recipientDids: string[], envelope: { payload: string }, relayWs: WebSocket | null): Promise<void> {
     return dmFiles.broadcastDmFileEvent(recipientDids, envelope, relayWs);
   }
 
@@ -1377,27 +1416,7 @@ export class UmbraService {
 
     switch (domain) {
       case 'message': {
-        // Transform message events from WASM: the Rust side sends `content`
-        // as a plain string, but the TypeScript Message type expects
-        // `content: { type: 'text', text: string }`.
-        const msgData = camelData as Record<string, unknown>;
-        if (
-          (msgData.type === 'messageSent' || msgData.type === 'messageReceived') &&
-          msgData.message &&
-          typeof msgData.message === 'object'
-        ) {
-          const msg = msgData.message as Record<string, unknown>;
-          if (typeof msg.content === 'string') {
-            msg.content = { type: 'text', text: msg.content };
-          } else if (!msg.content) {
-            msg.content = { type: 'text', text: '' };
-          }
-          // Ensure required fields
-          if (msg.status === undefined) {
-            msg.status = msgData.type === 'messageSent' ? 'sent' : 'delivered';
-          }
-        }
-
+        // Rust now emits structured content ({ type, text }) and status directly.
         for (const listener of this._messageListeners) {
           try {
             listener(camelData as unknown as MessageEvent);

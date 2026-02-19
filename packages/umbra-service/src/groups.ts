@@ -12,7 +12,6 @@ import type {
   PendingGroupInvite,
   GroupInvitePayload,
   Message,
-  RelayEnvelope,
 } from './types';
 
 // =============================================================================
@@ -236,8 +235,8 @@ export async function decryptGroupMessage(
 /**
  * Send a group invitation to a friend via relay.
  *
- * Encrypts the group key for the invitee and sends the invite
- * envelope through the relay.
+ * Rust handles: group info lookup, profile, key encryption for invitee,
+ * member list, UUID generation, and envelope construction.
  *
  * @param groupId - Group ID
  * @param memberDid - Friend's DID to invite
@@ -248,55 +247,16 @@ export async function sendGroupInvite(
   memberDid: string,
   relayWs?: WebSocket | null
 ): Promise<void> {
-  // Get group info
-  const group = await getGroup(groupId);
+  const json = JSON.stringify({ group_id: groupId, member_did: memberDid });
+  const resultJson = wasm().umbra_wasm_groups_send_invite(json);
+  const raw = await parseWasm<{
+    relayMessages: Array<{ toDid: string; payload: string }>;
+  }>(resultJson);
 
-  // Get current key version and encrypt key for the invitee
-  const keyInfo = await encryptGroupKeyForMember(groupId, memberDid, 0); // 0 = latest
-
-  // Get our profile
-  const profileJson = wasm().umbra_wasm_identity_get_profile();
-  const profile = await parseWasm<{ did: string; displayName: string }>(profileJson);
-
-  // Get group members for the invite payload
-  const members = await getGroupMembers(groupId);
-  const membersJson = JSON.stringify(
-    members.map((m) => ({
-      did: m.memberDid,
-      display_name: m.displayName,
-      role: m.role,
-    }))
-  );
-
-  // Create invite ID
-  const inviteId = crypto.randomUUID();
-
-  if (relayWs && relayWs.readyState === WebSocket.OPEN) {
-    const envelope: RelayEnvelope = {
-      envelope: 'group_invite',
-      version: 1,
-      payload: {
-        inviteId,
-        groupId,
-        groupName: group.name,
-        description: group.description,
-        inviterDid: profile.did,
-        inviterName: profile.displayName,
-        encryptedGroupKey: keyInfo.encryptedKey,
-        nonce: keyInfo.nonce,
-        membersJson,
-        timestamp: Date.now(),
-      },
-    };
-
-    const relayMessage = JSON.stringify({
-      type: 'send',
-      to_did: memberDid,
-      payload: JSON.stringify(envelope),
-    });
-
-    relayWs.send(relayMessage);
-    console.log('[UmbraService] Group invite sent via relay to', memberDid);
+  if (relayWs && relayWs.readyState === WebSocket.OPEN && raw.relayMessages) {
+    for (const rm of raw.relayMessages) {
+      relayWs.send(JSON.stringify({ type: 'send', to_did: rm.toDid, payload: rm.payload }));
+    }
   }
 }
 
@@ -334,6 +294,7 @@ export async function getPendingGroupInvites(): Promise<PendingGroupInvite[]> {
  *
  * Imports the group key, creates the group and conversation locally,
  * and sends an acceptance notification to the inviter via relay.
+ * Rust builds the acceptance envelope (profile + inviter lookup).
  *
  * @param inviteId - Invite ID
  * @param relayWs - WebSocket for relay notification
@@ -346,37 +307,17 @@ export async function acceptGroupInvite(
   const resultJson = wasm().umbra_wasm_groups_accept_invite(inviteId);
   const result = await parseWasm<{ groupId: string; conversationId: string }>(resultJson);
 
-  // Notify the inviter via relay
+  // Build and send acceptance envelope via Rust
   if (relayWs && relayWs.readyState === WebSocket.OPEN) {
     try {
-      const profileJson = wasm().umbra_wasm_identity_get_profile();
-      const profile = await parseWasm<{ did: string; displayName: string }>(profileJson);
+      const envJson = JSON.stringify({ invite_id: inviteId, group_id: result.groupId });
+      const envResultJson = wasm().umbra_wasm_groups_build_invite_accept_envelope(envJson);
+      const envResult = await parseWasm<{
+        relayMessages: Array<{ toDid: string; payload: string }>;
+      }>(envResultJson);
 
-      // Get the invite to find the inviter
-      const invites = await getPendingGroupInvites();
-      const invite = invites.find((i) => i.id === inviteId);
-
-      if (invite) {
-        const envelope: RelayEnvelope = {
-          envelope: 'group_invite_accept',
-          version: 1,
-          payload: {
-            inviteId,
-            groupId: result.groupId,
-            fromDid: profile.did,
-            fromDisplayName: profile.displayName,
-            timestamp: Date.now(),
-          },
-        };
-
-        const relayMessage = JSON.stringify({
-          type: 'send',
-          to_did: invite.inviterDid,
-          payload: JSON.stringify(envelope),
-        });
-
-        relayWs.send(relayMessage);
-        console.log('[UmbraService] Group invite acceptance sent to', invite.inviterDid);
+      for (const rm of envResult.relayMessages) {
+        relayWs.send(JSON.stringify({ type: 'send', to_did: rm.toDid, payload: rm.payload }));
       }
     } catch (err) {
       console.warn('[UmbraService] Failed to send invite acceptance via relay:', err);
@@ -389,6 +330,9 @@ export async function acceptGroupInvite(
 /**
  * Decline a group invitation.
  *
+ * Rust builds the decline envelope (invite lookup + profile) before
+ * the invite is deleted from the database.
+ *
  * @param inviteId - Invite ID
  * @param relayWs - WebSocket for relay notification
  */
@@ -396,39 +340,28 @@ export async function declineGroupInvite(
   inviteId: string,
   relayWs?: WebSocket | null
 ): Promise<void> {
-  // Get invite info before declining (for relay notification)
-  const invites = await getPendingGroupInvites();
-  const invite = invites.find((i) => i.id === inviteId);
+  // Build envelope BEFORE declining (invite still exists in DB)
+  let relayMessages: Array<{ toDid: string; payload: string }> = [];
+  if (relayWs && relayWs.readyState === WebSocket.OPEN) {
+    try {
+      const envJson = JSON.stringify({ invite_id: inviteId });
+      const envResultJson = wasm().umbra_wasm_groups_build_invite_decline_envelope(envJson);
+      const envResult = await parseWasm<{
+        relayMessages: Array<{ toDid: string; payload: string }>;
+      }>(envResultJson);
+      relayMessages = envResult.relayMessages ?? [];
+    } catch (err) {
+      console.warn('[UmbraService] Failed to build decline envelope:', err);
+    }
+  }
 
+  // Now decline (deletes/marks the invite)
   wasm().umbra_wasm_groups_decline_invite(inviteId);
 
-  // Notify the inviter
-  if (relayWs && relayWs.readyState === WebSocket.OPEN && invite) {
-    try {
-      const profileJson = wasm().umbra_wasm_identity_get_profile();
-      const profile = await parseWasm<{ did: string; displayName: string }>(profileJson);
-
-      const envelope: RelayEnvelope = {
-        envelope: 'group_invite_decline',
-        version: 1,
-        payload: {
-          inviteId,
-          groupId: invite.groupId,
-          fromDid: profile.did,
-          fromDisplayName: profile.displayName,
-          timestamp: Date.now(),
-        },
-      };
-
-      const relayMessage = JSON.stringify({
-        type: 'send',
-        to_did: invite.inviterDid,
-        payload: JSON.stringify(envelope),
-      });
-
-      relayWs.send(relayMessage);
-    } catch (err) {
-      console.warn('[UmbraService] Failed to send invite decline via relay:', err);
+  // Send the pre-built envelopes
+  if (relayWs && relayWs.readyState === WebSocket.OPEN) {
+    for (const rm of relayMessages) {
+      relayWs.send(JSON.stringify({ type: 'send', to_did: rm.toDid, payload: rm.payload }));
     }
   }
 }
@@ -436,8 +369,8 @@ export async function declineGroupInvite(
 /**
  * Send a group message to all members via relay fan-out.
  *
- * Encrypts the message with the group's shared key and sends
- * it to each member individually through the relay.
+ * Rust handles: encryption, local storage, UUID generation,
+ * member lookup, and envelope construction for all members.
  *
  * @param groupId - Group ID
  * @param conversationId - Conversation ID for the group
@@ -451,69 +384,31 @@ export async function sendGroupMessage(
   text: string,
   relayWs?: WebSocket | null
 ): Promise<Message> {
-  // Encrypt with group key
-  const encrypted = await encryptGroupMessage(groupId, text);
+  const json = JSON.stringify({ group_id: groupId, conversation_id: conversationId, text });
+  const resultJson = wasm().umbra_wasm_groups_send_message(json);
+  const raw = await parseWasm<{
+    message: {
+      id: string;
+      conversationId: string;
+      senderDid: string;
+      timestamp: number;
+    };
+    relayMessages: Array<{ toDid: string; payload: string }>;
+  }>(resultJson);
 
-  // Get our profile
-  const profileJson = wasm().umbra_wasm_identity_get_profile();
-  const profile = await parseWasm<{ did: string; displayName: string }>(profileJson);
-
-  const messageId = crypto.randomUUID();
-  const timestamp = Date.now();
-
-  // Store locally (send through WASM messaging)
-  const storeJson = JSON.stringify({
-    message_id: messageId,
-    conversation_id: conversationId,
-    sender_did: profile.did,
-    content_encrypted: encrypted.ciphertext,
-    nonce: encrypted.nonce,
-    timestamp,
-  });
-  wasm().umbra_wasm_messaging_store_incoming(storeJson);
-
-  // Fan-out to all members via relay
-  if (relayWs && relayWs.readyState === WebSocket.OPEN) {
-    const members = await getGroupMembers(groupId);
-
-    for (const member of members) {
-      // Don't send to ourselves
-      if (member.memberDid === profile.did) continue;
-
-      const envelope: RelayEnvelope = {
-        envelope: 'group_message',
-        version: 1,
-        payload: {
-          messageId,
-          groupId,
-          conversationId,
-          senderDid: profile.did,
-          senderName: profile.displayName,
-          ciphertext: encrypted.ciphertext,
-          nonce: encrypted.nonce,
-          keyVersion: encrypted.keyVersion,
-          timestamp,
-        },
-      };
-
-      const relayMessage = JSON.stringify({
-        type: 'send',
-        to_did: member.memberDid,
-        payload: JSON.stringify(envelope),
-      });
-
-      relayWs.send(relayMessage);
+  // Fan-out relay messages
+  if (relayWs && relayWs.readyState === WebSocket.OPEN && raw.relayMessages) {
+    for (const rm of raw.relayMessages) {
+      relayWs.send(JSON.stringify({ type: 'send', to_did: rm.toDid, payload: rm.payload }));
     }
-
-    console.log('[UmbraService] Group message sent to', members.length - 1, 'members');
   }
 
   return {
-    id: messageId,
-    conversationId,
-    senderDid: profile.did,
+    id: raw.message.id,
+    conversationId: raw.message.conversationId,
+    senderDid: raw.message.senderDid,
     content: { type: 'text', text },
-    timestamp,
+    timestamp: raw.message.timestamp,
     read: false,
     delivered: false,
     status: 'sent',
@@ -523,8 +418,9 @@ export async function sendGroupMessage(
 /**
  * Remove a member from a group with key rotation.
  *
- * Removes the member, rotates the group key, and distributes
- * the new key to all remaining members via relay.
+ * Rust handles: member removal, key rotation, per-member ECDH key
+ * encryption, and building both `group_key_rotation` and
+ * `group_member_removed` envelopes for all remaining members.
  *
  * @param groupId - Group ID
  * @param memberDid - DID of the member to remove
@@ -535,78 +431,21 @@ export async function removeGroupMemberWithRotation(
   memberDid: string,
   relayWs?: WebSocket | null
 ): Promise<void> {
-  // Remove member locally
-  await removeGroupMember(groupId, memberDid);
+  const json = JSON.stringify({ group_id: groupId, member_did: memberDid });
+  const resultJson = wasm().umbra_wasm_groups_remove_member_with_rotation(json);
+  const raw = await parseWasm<{
+    keyVersion: number;
+    relayMessages: Array<{ toDid: string; payload: string }>;
+  }>(resultJson);
 
-  // Rotate key
-  const newKeyInfo = await rotateGroupKey(groupId);
-
-  const profileJson = wasm().umbra_wasm_identity_get_profile();
-  const profile = await parseWasm<{ did: string }>(profileJson);
-
-  if (relayWs && relayWs.readyState === WebSocket.OPEN) {
-    // Get remaining members
-    const members = await getGroupMembers(groupId);
-
-    // Distribute new key to each remaining member
-    for (const member of members) {
-      if (member.memberDid === profile.did) continue;
-
+  if (relayWs && relayWs.readyState === WebSocket.OPEN && raw.relayMessages) {
+    for (const rm of raw.relayMessages) {
       try {
-        // Encrypt the new key for this specific member
-        const keyForMember = await encryptGroupKeyForMember(
-          groupId,
-          member.memberDid,
-          newKeyInfo.keyVersion
-        );
-
-        // Send key rotation envelope
-        const keyEnvelope: RelayEnvelope = {
-          envelope: 'group_key_rotation',
-          version: 1,
-          payload: {
-            groupId,
-            encryptedKey: keyForMember.encryptedKey,
-            nonce: keyForMember.nonce,
-            senderDid: profile.did,
-            keyVersion: newKeyInfo.keyVersion,
-            timestamp: Date.now(),
-          },
-        };
-
-        relayWs.send(JSON.stringify({
-          type: 'send',
-          to_did: member.memberDid,
-          payload: JSON.stringify(keyEnvelope),
-        }));
+        relayWs.send(JSON.stringify({ type: 'send', to_did: rm.toDid, payload: rm.payload }));
       } catch (err) {
-        console.warn(`[UmbraService] Failed to send rotated key to ${member.memberDid}:`, err);
+        console.warn('[UmbraService] Failed to send relay message:', err);
       }
     }
-
-    // Notify about removal
-    for (const member of members) {
-      if (member.memberDid === profile.did) continue;
-
-      const removeEnvelope: RelayEnvelope = {
-        envelope: 'group_member_removed',
-        version: 1,
-        payload: {
-          groupId,
-          removedDid: memberDid,
-          removedBy: profile.did,
-          timestamp: Date.now(),
-        },
-      };
-
-      relayWs.send(JSON.stringify({
-        type: 'send',
-        to_did: member.memberDid,
-        payload: JSON.stringify(removeEnvelope),
-      }));
-    }
-
-    console.log('[UmbraService] Member removed, key rotated, notifications sent');
   }
 }
 

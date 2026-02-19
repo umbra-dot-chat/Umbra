@@ -152,6 +152,11 @@ impl Database {
             sql_bridge_execute_batch(schema::MIGRATE_V10_TO_V11).map_err(js_err)?;
             tracing::info!("Migration v10 → v11 complete");
         }
+        if from_version < 12 {
+            tracing::info!("Running migration v11 → v12 (community seats)");
+            sql_bridge_execute_batch(schema::MIGRATE_V11_TO_V12).map_err(js_err)?;
+            tracing::info!("Migration v11 → v12 complete");
+        }
         Ok(())
     }
 
@@ -1104,6 +1109,22 @@ impl Database {
             content_warning: row["content_warning"].as_str().map(|s| s.to_string()),
             edited_at: row["edited_at"].as_i64(),
             deleted_for_everyone: row["deleted_for_everyone"].as_i64().unwrap_or(0) != 0,
+            created_at: row["created_at"].as_i64().unwrap_or(0),
+        }
+    }
+
+    fn parse_community_seat(row: &serde_json::Value) -> CommunitySeatRecord {
+        CommunitySeatRecord {
+            id: row["id"].as_str().unwrap_or("").to_string(),
+            community_id: row["community_id"].as_str().unwrap_or("").to_string(),
+            platform: row["platform"].as_str().unwrap_or("").to_string(),
+            platform_user_id: row["platform_user_id"].as_str().unwrap_or("").to_string(),
+            platform_username: row["platform_username"].as_str().unwrap_or("").to_string(),
+            nickname: row["nickname"].as_str().map(|s| s.to_string()),
+            avatar_url: row["avatar_url"].as_str().map(|s| s.to_string()),
+            role_ids_json: row["role_ids_json"].as_str().unwrap_or("[]").to_string(),
+            claimed_by_did: row["claimed_by_did"].as_str().map(|s| s.to_string()),
+            claimed_at: row["claimed_at"].as_i64(),
             created_at: row["created_at"].as_i64().unwrap_or(0),
         }
     }
@@ -3132,6 +3153,116 @@ impl Database {
             updated_at: row["updated_at"].as_i64().unwrap_or(0),
         }).collect())
     }
+
+    // ── Community Seats ────────────────────────────────────────────────
+
+    /// Create a single community seat
+    #[allow(clippy::too_many_arguments)]
+    pub fn create_community_seat(
+        &self,
+        id: &str,
+        community_id: &str,
+        platform: &str,
+        platform_user_id: &str,
+        platform_username: &str,
+        nickname: Option<&str>,
+        avatar_url: Option<&str>,
+        role_ids_json: &str,
+        created_at: i64,
+    ) -> Result<()> {
+        self.exec(
+            "INSERT OR IGNORE INTO community_seats (id, community_id, platform, platform_user_id, platform_username, nickname, avatar_url, role_ids_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            json!([id, community_id, platform, platform_user_id, platform_username, nickname, avatar_url, role_ids_json, created_at]),
+        )?;
+        Ok(())
+    }
+
+    /// Bulk create community seats (for import)
+    pub fn create_community_seats_batch(&self, seats: &[CommunitySeatRecord]) -> Result<usize> {
+        let mut count = 0usize;
+        for seat in seats {
+            let result = self.exec(
+                "INSERT OR IGNORE INTO community_seats (id, community_id, platform, platform_user_id, platform_username, nickname, avatar_url, role_ids_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                json!([seat.id, seat.community_id, seat.platform, seat.platform_user_id, seat.platform_username, seat.nickname, seat.avatar_url, seat.role_ids_json, seat.created_at]),
+            )?;
+            count += result as usize;
+        }
+        Ok(count)
+    }
+
+    /// Get all seats for a community
+    pub fn get_community_seats(&self, community_id: &str) -> Result<Vec<CommunitySeatRecord>> {
+        let rows = self.query(
+            "SELECT id, community_id, platform, platform_user_id, platform_username, nickname, avatar_url, role_ids_json, claimed_by_did, claimed_at, created_at FROM community_seats WHERE community_id = ? ORDER BY platform_username",
+            json!([community_id]),
+        )?;
+        Ok(rows.iter().map(Self::parse_community_seat).collect())
+    }
+
+    /// Get unclaimed seats for a community
+    pub fn get_unclaimed_community_seats(&self, community_id: &str) -> Result<Vec<CommunitySeatRecord>> {
+        let rows = self.query(
+            "SELECT id, community_id, platform, platform_user_id, platform_username, nickname, avatar_url, role_ids_json, claimed_by_did, claimed_at, created_at FROM community_seats WHERE community_id = ? AND claimed_by_did IS NULL ORDER BY platform_username",
+            json!([community_id]),
+        )?;
+        Ok(rows.iter().map(Self::parse_community_seat).collect())
+    }
+
+    /// Find a seat by platform and platform user ID
+    pub fn find_community_seat_by_platform(
+        &self,
+        community_id: &str,
+        platform: &str,
+        platform_user_id: &str,
+    ) -> Result<Option<CommunitySeatRecord>> {
+        let rows = self.query(
+            "SELECT id, community_id, platform, platform_user_id, platform_username, nickname, avatar_url, role_ids_json, claimed_by_did, claimed_at, created_at FROM community_seats WHERE community_id = ? AND platform = ? AND platform_user_id = ?",
+            json!([community_id, platform, platform_user_id]),
+        )?;
+        Ok(rows.first().map(Self::parse_community_seat))
+    }
+
+    /// Get a seat by ID
+    pub fn get_community_seat(&self, seat_id: &str) -> Result<Option<CommunitySeatRecord>> {
+        let rows = self.query(
+            "SELECT id, community_id, platform, platform_user_id, platform_username, nickname, avatar_url, role_ids_json, claimed_by_did, claimed_at, created_at FROM community_seats WHERE id = ?",
+            json!([seat_id]),
+        )?;
+        Ok(rows.first().map(Self::parse_community_seat))
+    }
+
+    /// Claim a seat (set claimed_by_did and claimed_at)
+    pub fn claim_community_seat(&self, seat_id: &str, claimed_by_did: &str, claimed_at: i64) -> Result<()> {
+        let updated = self.exec(
+            "UPDATE community_seats SET claimed_by_did = ?, claimed_at = ? WHERE id = ? AND claimed_by_did IS NULL",
+            json!([claimed_by_did, claimed_at, seat_id]),
+        )?;
+        if updated == 0 {
+            return Err(Error::DatabaseError("Seat not found or already claimed".to_string()));
+        }
+        Ok(())
+    }
+
+    /// Delete a community seat
+    pub fn delete_community_seat(&self, seat_id: &str) -> Result<()> {
+        self.exec("DELETE FROM community_seats WHERE id = ?", json!([seat_id]))?;
+        Ok(())
+    }
+
+    /// Count seats for a community (total and unclaimed)
+    pub fn count_community_seats(&self, community_id: &str) -> Result<(i64, i64)> {
+        let total: i64 = self.query_scalar(
+            "SELECT COUNT(*) FROM community_seats WHERE community_id = ?",
+            json!([community_id]),
+        )?.unwrap_or(0);
+
+        let unclaimed: i64 = self.query_scalar(
+            "SELECT COUNT(*) FROM community_seats WHERE community_id = ? AND claimed_by_did IS NULL",
+            json!([community_id]),
+        )?.unwrap_or(0);
+
+        Ok((total, unclaimed))
+    }
 }
 
 // ============================================================================
@@ -3819,4 +3950,20 @@ pub struct TransferSessionRecord {
     pub error: Option<String>,
     pub started_at: i64,
     pub updated_at: i64,
+}
+
+/// A community seat record (ghost member placeholder from platform import)
+#[derive(Debug, Clone)]
+pub struct CommunitySeatRecord {
+    pub id: String,
+    pub community_id: String,
+    pub platform: String,
+    pub platform_user_id: String,
+    pub platform_username: String,
+    pub nickname: Option<String>,
+    pub avatar_url: Option<String>,
+    pub role_ids_json: String,
+    pub claimed_by_did: Option<String>,
+    pub claimed_at: Option<i64>,
+    pub created_at: i64,
 }

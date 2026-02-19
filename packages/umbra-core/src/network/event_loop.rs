@@ -47,6 +47,7 @@ use crate::error::{Error, Result};
 use super::{
     UmbraBehaviour, NetworkEvent, NetworkCommand, PeerInfo,
     codec::{UmbraRequest, UmbraResponse},
+    file_transfer::{FileTransferMessage, TransferManager},
     protocols::{MessageResponse, MessageDeliveryStatus, FriendResponse, FriendResponseStatus},
 };
 
@@ -60,6 +61,10 @@ pub struct EventLoopState {
     pub pending_queries: HashMap<kad::QueryId, oneshot::Sender<Result<Vec<Multiaddr>>>>,
     /// Addresses discovered for peers (before we have full info)
     pub discovered_addrs: HashMap<PeerId, Vec<Multiaddr>>,
+    /// File transfer manager for P2P file sharing
+    pub transfer_manager: TransferManager,
+    /// Pending DHT provider queries (query_id -> file_id)
+    pub pending_provider_queries: HashMap<kad::QueryId, String>,
 }
 
 impl EventLoopState {
@@ -73,6 +78,8 @@ impl EventLoopState {
             listen_addrs,
             pending_queries: HashMap::new(),
             discovered_addrs: HashMap::new(),
+            transfer_manager: TransferManager::new(),
+            pending_provider_queries: HashMap::new(),
         }
     }
 }
@@ -201,6 +208,37 @@ async fn handle_command(
         NetworkCommand::AddPeerAddress { peer_id, addr } => {
             tracing::debug!("Adding address for peer {}: {}", peer_id, addr);
             swarm.behaviour_mut().add_peer(peer_id, vec![addr]);
+        }
+
+        NetworkCommand::SendFileTransferMessage { peer_id, message } => {
+            tracing::debug!(
+                "Sending file transfer message to peer {}: {}",
+                peer_id,
+                message.transfer_id()
+            );
+            let request = UmbraRequest::file_transfer(&message);
+            let _request_id = swarm.behaviour_mut().send_request(&peer_id, request);
+        }
+
+        NetworkCommand::StartProviding { file_id } => {
+            tracing::info!("Announcing file {} on DHT", file_id);
+            let key = kad::RecordKey::new(&format!("file:{}", file_id));
+            if let Err(e) = swarm.behaviour_mut().kademlia.start_providing(key) {
+                tracing::warn!("Failed to start providing file {}: {:?}", file_id, e);
+            }
+        }
+
+        NetworkCommand::GetProviders { file_id } => {
+            tracing::info!("Querying DHT for providers of file {}", file_id);
+            let key = kad::RecordKey::new(&format!("file:{}", file_id));
+            let query_id = swarm.behaviour_mut().kademlia.get_providers(key);
+            state.pending_provider_queries.insert(query_id, file_id);
+        }
+
+        NetworkCommand::StopProviding { file_id } => {
+            tracing::info!("Stopping providing file {} on DHT", file_id);
+            let key = kad::RecordKey::new(&format!("file:{}", file_id));
+            swarm.behaviour_mut().kademlia.stop_providing(&key);
         }
 
         NetworkCommand::Shutdown => {
@@ -410,12 +448,12 @@ async fn handle_swarm_event(
                         // Inbound request from a peer
                         request_response::Message::Request { request, channel, .. } => {
                             tracing::info!("Received request from peer {}: {:?}", peer, std::mem::discriminant(&request));
-                            handle_inbound_request(peer, request, channel, swarm, event_tx);
+                            handle_inbound_request(peer, request, channel, swarm, event_tx, &mut state.transfer_manager);
                         }
                         // Response to our outbound request
                         request_response::Message::Response { response, request_id, .. } => {
                             tracing::debug!("Received response from peer {} for request {:?}: {:?}", peer, request_id, std::mem::discriminant(&response));
-                            handle_inbound_response(peer, response, event_tx);
+                            handle_inbound_response(peer, response, event_tx, &mut state.transfer_manager);
                         }
                     }
                 }
@@ -531,8 +569,30 @@ fn handle_kademlia_query_progress(
             tracing::warn!("DHT bootstrap error: {:?}", e);
         }
 
-        kad::QueryResult::GetProviders(Ok(result)) => {
-            tracing::debug!("GetProviders result: {:?}", result);
+        kad::QueryResult::GetProviders(Ok(kad::GetProvidersOk::FoundProviders { providers, .. })) => {
+            // Check if this was one of our file provider queries
+            if let Some(file_id) = state.pending_provider_queries.get(&query_id) {
+                let providers: Vec<PeerId> = providers.into_iter().collect();
+                tracing::info!(
+                    "Found {} providers for file {}: {:?}",
+                    providers.len(),
+                    file_id,
+                    providers
+                );
+                let _ = event_tx.send(NetworkEvent::FileProviders {
+                    file_id: file_id.clone(),
+                    providers,
+                });
+            } else {
+                tracing::debug!("GetProviders result (untracked query)");
+            }
+        }
+
+        kad::QueryResult::GetProviders(Ok(kad::GetProvidersOk::FinishedWithNoAdditionalRecord { .. })) => {
+            // Query finished — remove from pending
+            if let Some(file_id) = state.pending_provider_queries.remove(&query_id) {
+                tracing::debug!("GetProviders query finished for file {}", file_id);
+            }
         }
 
         kad::QueryResult::GetProviders(Err(e)) => {
@@ -572,6 +632,7 @@ fn handle_inbound_request(
     channel: request_response::ResponseChannel<UmbraResponse>,
     swarm: &mut Swarm<UmbraBehaviour>,
     event_tx: &broadcast::Sender<NetworkEvent>,
+    transfer_manager: &mut TransferManager,
 ) {
     match request {
         UmbraRequest::Message(msg_request) => {
@@ -646,6 +707,61 @@ fn handle_inbound_request(
                 tracing::warn!("Failed to send presence ack: {:?}", std::mem::discriminant(&e));
             }
         }
+
+        UmbraRequest::FileTransfer(ft_json) => {
+            // Deserialize from JSON string (internally-tagged enum not bincode-compatible)
+            match serde_json::from_str::<FileTransferMessage>(&ft_json) {
+                Ok(ft_message) => {
+                    let peer_did = peer.to_string();
+                    let transfer_id = ft_message.transfer_id().to_string();
+                    tracing::debug!(
+                        "Received file transfer message from {}: transfer={}",
+                        peer,
+                        transfer_id,
+                    );
+
+                    let now = crate::time::now_timestamp_millis();
+
+                    // Route message to TransferManager, which may return a response
+                    match transfer_manager.on_message(&peer_did, ft_message, now) {
+                        Ok(Some(response_msg)) => {
+                            // Send the response back to the peer
+                            let response = UmbraResponse::file_transfer(&response_msg);
+                            if let Err(e) = swarm.behaviour_mut().send_response(channel, response) {
+                                tracing::warn!(
+                                    "Failed to send file transfer response for {}: {:?}",
+                                    transfer_id,
+                                    std::mem::discriminant(&e)
+                                );
+                            }
+                        }
+                        Ok(None) => {
+                            // No response needed — just ack
+                            if let Err(e) = swarm.behaviour_mut().send_response(channel, UmbraResponse::Ack) {
+                                tracing::warn!("Failed to send file transfer ack: {:?}", std::mem::discriminant(&e));
+                            }
+                        }
+                        Err(e) => {
+                            tracing::error!("TransferManager error for {}: {}", transfer_id, e);
+                            if let Err(e) = swarm.behaviour_mut().send_response(channel, UmbraResponse::Ack) {
+                                tracing::warn!("Failed to send ack after error: {:?}", std::mem::discriminant(&e));
+                            }
+                        }
+                    }
+
+                    // Drain and emit all accumulated transfer events
+                    for event in transfer_manager.drain_events() {
+                        let _ = event_tx.send(NetworkEvent::FileTransferEvent(event));
+                    }
+                }
+                Err(e) => {
+                    tracing::error!("Failed to deserialize FileTransferMessage: {}", e);
+                    if let Err(e) = swarm.behaviour_mut().send_response(channel, UmbraResponse::Ack) {
+                        tracing::warn!("Failed to send ack after deser error: {:?}", std::mem::discriminant(&e));
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -654,6 +770,7 @@ fn handle_inbound_response(
     peer: PeerId,
     response: UmbraResponse,
     event_tx: &broadcast::Sender<NetworkEvent>,
+    transfer_manager: &mut TransferManager,
 ) {
     match response {
         UmbraResponse::Message(msg_response) => {
@@ -692,6 +809,39 @@ fn handle_inbound_response(
 
         UmbraResponse::Ack => {
             tracing::debug!("Ack received from {}", peer);
+        }
+
+        UmbraResponse::FileTransfer(ft_json) => {
+            // Deserialize from JSON string (internally-tagged enum not bincode-compatible)
+            match serde_json::from_str::<FileTransferMessage>(&ft_json) {
+                Ok(ft_message) => {
+                    let peer_did = peer.to_string();
+                    let transfer_id = ft_message.transfer_id().to_string();
+                    tracing::debug!(
+                        "Received file transfer response from {}: transfer={}",
+                        peer,
+                        transfer_id,
+                    );
+
+                    let now = crate::time::now_timestamp_millis();
+
+                    // Route response to TransferManager
+                    match transfer_manager.on_message(&peer_did, ft_message, now) {
+                        Ok(_) => {}
+                        Err(e) => {
+                            tracing::error!("TransferManager error processing response for {}: {}", transfer_id, e);
+                        }
+                    }
+
+                    // Drain and emit all accumulated transfer events
+                    for event in transfer_manager.drain_events() {
+                        let _ = event_tx.send(NetworkEvent::FileTransferEvent(event));
+                    }
+                }
+                Err(e) => {
+                    tracing::error!("Failed to deserialize FileTransferMessage response: {}", e);
+                }
+            }
         }
     }
 }

@@ -155,6 +155,10 @@ export function createTauriBackend(
       ) as any;
     },
 
+    umbra_wasm_friends_build_accept_ack: (json: string) => {
+      return invoke('build_friend_accept_ack', { json }).then(ensureJsonString) as any;
+    },
+
     // ── Messaging (core) ───────────────────────────────────────────
     umbra_wasm_messaging_get_conversations: () => {
       return invoke('get_conversations').then(ensureJsonString) as any;
@@ -214,6 +218,14 @@ export function createTauriBackend(
       invoke('store_incoming_message', { json }).catch(
         (e: unknown) => console.warn('[tauri-backend] store_incoming_message:', e)
       );
+    },
+
+    umbra_wasm_messaging_build_typing_envelope: (json: string) => {
+      return invoke('build_typing_envelope', { json }).then(ensureJsonString) as any;
+    },
+
+    umbra_wasm_messaging_build_receipt_envelope: (json: string) => {
+      return invoke('build_receipt_envelope', { json }).then(ensureJsonString) as any;
     },
 
     // ── Messaging (extended — JSON args) ────────────────────────────
@@ -773,6 +785,34 @@ export function createTauriBackend(
       return invoke('dm_rename_folder', { json }).then(ensureJsonString) as any;
     },
 
+    // ── Groups — Relay envelope builders ────────────────────────
+    umbra_wasm_groups_send_invite: (json: string) => {
+      return invoke('groups_send_invite', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_groups_build_invite_accept_envelope: (json: string) => {
+      return invoke('groups_build_invite_accept_envelope', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_groups_build_invite_decline_envelope: (json: string) => {
+      return invoke('groups_build_invite_decline_envelope', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_groups_send_message: (json: string) => {
+      return invoke('groups_send_message', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_groups_remove_member_with_rotation: (json: string) => {
+      return invoke('groups_remove_member_with_rotation', { json }).then(ensureJsonString) as any;
+    },
+
+    // ── Relay envelope builders ───────────────────────────────────
+    umbra_wasm_community_build_event_relay_batch: (json: string) => {
+      return invoke('community_build_event_relay_batch', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_build_dm_file_event_envelope: (json: string) => {
+      return invoke('build_dm_file_event_envelope', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_build_metadata_envelope: (json: string) => {
+      return invoke('build_metadata_envelope', { json }).then(ensureJsonString) as any;
+    },
+
     // ── File Chunking ─────────────────────────────────────────────
     umbra_wasm_chunk_file: (json: string) => {
       return invoke('chunk_file', { json }).then(ensureJsonString) as any;
@@ -819,6 +859,17 @@ export function createTauriBackend(
       return invoke('transfer_mark_chunk_sent', { json }).then(ensureJsonString) as any;
     },
 
+    // ── DHT — Content Discovery ────────────────────────────────────────
+    umbra_wasm_dht_start_providing: (json: string) => {
+      return invoke('dht_start_providing', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_dht_get_providers: (json: string) => {
+      return invoke('dht_get_providers', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_dht_stop_providing: (json: string) => {
+      return invoke('dht_stop_providing', { json }).then(ensureJsonString) as any;
+    },
+
     // ── File Encryption (E2EE) ────────────────────────────────────────
     umbra_wasm_file_derive_key: (json: string) => {
       return invoke('file_derive_key', { json }).then(ensureJsonString) as any;
@@ -846,6 +897,29 @@ export function createTauriBackend(
     },
     umbra_wasm_clear_reencryption_flag: (json: string) => {
       return invoke('clear_reencryption_flag', { json }).then(ensureJsonString) as any;
+    },
+
+    // ── Community Seats (Ghost Member Placeholders) ────────────────────
+    umbra_wasm_community_seat_list: (community_id: string) => {
+      return invoke('community_seat_list', { community_id }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_seat_list_unclaimed: (community_id: string) => {
+      return invoke('community_seat_list_unclaimed', { community_id }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_seat_find_match: (json: string) => {
+      return invoke('community_seat_find_match', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_seat_claim: (json: string) => {
+      return invoke('community_seat_claim', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_seat_delete: (json: string) => {
+      return invoke('community_seat_delete', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_seat_create_batch: (json: string) => {
+      return invoke('community_seat_create_batch', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_seat_count: (community_id: string) => {
+      return invoke('community_seat_count', { community_id }).then(ensureJsonString) as any;
     },
   };
 }

@@ -30,9 +30,12 @@ import { useCommunities } from '@/hooks/useCommunities';
 import { NavigationRail } from '@/components/navigation/NavigationRail';
 import { CommunityLayoutSidebar } from '@/components/sidebar/CommunityLayoutSidebar';
 import { CommunityCreateDialog } from '@coexist/wisp-react-native';
-import type { Community, Friend, MessageEvent } from '@umbra/service';
+import type { Community, Friend, MessageEvent, MappedCommunityStructure, CommunityImportResult } from '@umbra/service';
+import { createCommunityFromDiscordImport } from '@umbra/service';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUploadProgress } from '@/hooks/useUploadProgress';
+import { CommunityCreateOptionsDialog } from '@/components/community/CommunityCreateOptionsDialog';
+import { DiscordImportDialog } from '@/components/community/DiscordImportDialog';
 
 // TODO: Remove mock community once real communities exist
 const MOCK_COMMUNITY: Community = {
@@ -156,7 +159,9 @@ function MainLayoutInner() {
   const [createGroupOpen, setCreateGroupOpen] = useState(false);
   const [newDmOpen, setNewDmOpen] = useState(false);
   const [marketplaceOpen, setMarketplaceOpen] = useState(false);
+  const [createCommunityOptionsOpen, setCreateCommunityOptionsOpen] = useState(false);
   const [createCommunityOpen, setCreateCommunityOpen] = useState(false);
+  const [discordImportOpen, setDiscordImportOpen] = useState(false);
   const [communitySubmitting, setCommunitySubmitting] = useState(false);
   const [communityError, setCommunityError] = useState<string | undefined>();
   const { open: cmdOpen, setOpen: setCmdOpen } = useCommandPalette();
@@ -279,6 +284,55 @@ function MainLayoutInner() {
     setCommunitySubmitting(false);
   }, []);
 
+  // Handle community options dialog selections
+  const handleSelectScratch = useCallback(() => {
+    setCreateCommunityOptionsOpen(false);
+    setCreateCommunityOpen(true);
+  }, []);
+
+  const handleSelectDiscord = useCallback(() => {
+    setCreateCommunityOptionsOpen(false);
+    setDiscordImportOpen(true);
+  }, []);
+
+  // Handle Discord import completion
+  const handleDiscordImportComplete = useCallback((communityId: string) => {
+    setDiscordImportOpen(false);
+    router.push(`/community/${communityId}`);
+  }, [router]);
+
+  // Handle Discord import community creation
+  const handleDiscordCreateCommunity = useCallback(async (structure: MappedCommunityStructure): Promise<CommunityImportResult> => {
+    if (!identity?.did) {
+      return {
+        success: false,
+        categoriesCreated: 0,
+        channelsCreated: 0,
+        rolesCreated: 0,
+        seatsCreated: 0,
+        pinsImported: 0,
+        errors: ['No identity found'],
+        warnings: [],
+      };
+    }
+
+    const result = await createCommunityFromDiscordImport(
+      structure,
+      identity.did,
+      identity.displayName,
+    );
+
+    // Refresh communities list after import
+    if (result.success) {
+      // Small delay to ensure DB is updated
+      setTimeout(async () => {
+        // The useCommunities hook will auto-refresh
+      }, 100);
+    }
+
+    return result;
+  }, [identity?.did, identity?.displayName]);
+
   // Navigate to community page
   const handleCommunityPress = useCallback((communityId: string) => {
     router.push(`/community/${communityId}`);
@@ -345,7 +399,7 @@ function MainLayoutInner() {
           communities={communities}
           activeCommunityId={activeCommunityId}
           onCommunityPress={handleCommunityPress}
-          onCreateCommunity={() => setCreateCommunityOpen(true)}
+          onCreateCommunity={() => setCreateCommunityOptionsOpen(true)}
           onOpenSettings={() => openSettings()}
           loading={coreLoading || communitiesLoading}
         />
@@ -414,12 +468,26 @@ function MainLayoutInner() {
         onSelectFriend={handleDmFriendSelected}
       />
 
+      <CommunityCreateOptionsDialog
+        open={createCommunityOptionsOpen}
+        onClose={() => setCreateCommunityOptionsOpen(false)}
+        onSelectScratch={handleSelectScratch}
+        onSelectDiscord={handleSelectDiscord}
+      />
+
       <CommunityCreateDialog
         open={createCommunityOpen}
         onClose={handleCloseCommunityDialog}
         onSubmit={handleCommunityCreated}
         submitting={communitySubmitting}
         error={communityError}
+      />
+
+      <DiscordImportDialog
+        open={discordImportOpen}
+        onClose={() => setDiscordImportOpen(false)}
+        onImportComplete={handleDiscordImportComplete}
+        onCreateCommunity={handleDiscordCreateCommunity}
       />
 
       <CommandPalette
