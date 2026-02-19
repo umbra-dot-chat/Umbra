@@ -25,8 +25,8 @@ async function main(): Promise<void> {
     dataDir: config.dataDir,
   }, 'Umbra Bridge Bot starting');
 
-  // Load or generate identity
-  const identity = await loadOrCreateIdentity(config.dataDir);
+  // Load or generate identity (uses bridge-specific writable volume)
+  const identity = await loadOrCreateIdentity(config.bridgeDataDir);
   log.info({ did: identity.did }, 'Bridge identity ready');
 
   // Create and start the bridge controller

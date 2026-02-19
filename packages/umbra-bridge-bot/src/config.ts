@@ -18,8 +18,10 @@ export interface BridgeBotConfig {
   relayApiUrl: string;
   /** Log level (trace, debug, info, warn, error, fatal). */
   logLevel: string;
-  /** Shared data directory (same volume as relay). */
+  /** Shared data directory for reading relay bridge configs (read-only). */
   dataDir: string;
+  /** Bridge-specific writable directory for identity persistence. */
+  bridgeDataDir: string;
   /** How often to poll relay for config changes (ms). */
   configPollInterval: number;
   /** WebSocket keepalive ping interval (ms). */
@@ -37,12 +39,14 @@ function requireEnv(key: string): string {
 }
 
 export function loadConfig(): BridgeBotConfig {
+  const dataDir = process.env.DATA_DIR ?? '/data';
   return {
     discordBotToken: requireEnv('DISCORD_BOT_TOKEN'),
     relayUrl: process.env.RELAY_URL ?? 'ws://localhost:8080/ws',
     relayApiUrl: process.env.RELAY_API_URL ?? 'http://localhost:8080',
     logLevel: process.env.LOG_LEVEL ?? 'info',
-    dataDir: process.env.DATA_DIR ?? '/data',
+    dataDir,
+    bridgeDataDir: process.env.BRIDGE_DATA_DIR ?? dataDir,
     configPollInterval: parseInt(process.env.CONFIG_POLL_INTERVAL ?? '30000', 10),
     keepaliveInterval: parseInt(process.env.KEEPALIVE_INTERVAL ?? '30000', 10),
     maxReconnectDelay: parseInt(process.env.MAX_RECONNECT_DELAY ?? '60000', 10),

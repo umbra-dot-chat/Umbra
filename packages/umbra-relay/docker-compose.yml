@@ -80,9 +80,11 @@ services:
       - RELAY_URL=ws://relay:8080/ws
       - RELAY_API_URL=http://relay:8080
       - DATA_DIR=/data
+      - BRIDGE_DATA_DIR=/bridge-data
       - LOG_LEVEL=${BRIDGE_LOG_LEVEL:-info}
     volumes:
-      - relay_data:/data
+      - relay_data:/data:ro
+      - bridge_data:/bridge-data
     depends_on:
       relay:
         condition: service_healthy
@@ -100,3 +102,4 @@ services:
 
 volumes:
   relay_data:
+  bridge_data:

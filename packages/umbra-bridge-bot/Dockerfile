@@ -26,6 +26,10 @@ COPY --from=builder /app/dist ./dist
 
 # Non-root user for security
 RUN addgroup -S bridge && adduser -S bridge -G bridge
+
+# Create writable data directory for bridge identity persistence
+RUN mkdir -p /bridge-data && chown bridge:bridge /bridge-data
+
 USER bridge
 
 ENV NODE_ENV=production
