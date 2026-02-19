@@ -61,12 +61,33 @@ export function useCommunityMessages(channelId: string | null, communityId?: str
   const [error, setError] = useState<Error | null>(null);
   const loadingRef = useRef(false);
 
+  // Track messages received via relay (bridge + remote Umbra members) that
+  // don't exist in our local WASM DB. When we refresh from WASM we must
+  // merge these back in so they don't disappear.
+  const relayMessagesRef = useRef<Map<string, CommunityMessage>>(new Map());
+
+  // Merge WASM DB results with relay-only messages (newest first).
+  const mergeWithRelayMessages = useCallback((wasmMessages: CommunityMessage[]): CommunityMessage[] => {
+    const relayMsgs = relayMessagesRef.current;
+    if (relayMsgs.size === 0) return wasmMessages;
+
+    // Collect relay messages not already in WASM results
+    const wasmIds = new Set(wasmMessages.map((m) => m.id));
+    const extras = Array.from(relayMsgs.values()).filter((m) => !wasmIds.has(m.id));
+    if (extras.length === 0) return wasmMessages;
+
+    // Merge and sort newest first
+    const merged = [...wasmMessages, ...extras];
+    merged.sort((a, b) => b.createdAt - a.createdAt);
+    return merged;
+  }, []);
+
   const fetchMessages = useCallback(async () => {
     if (!service || !channelId) return;
     try {
       setIsLoading(true);
       const result = await service.getCommunityMessages(channelId, PAGE_SIZE);
-      setMessages(result);
+      setMessages(mergeWithRelayMessages(result));
       setHasMore(result.length >= PAGE_SIZE);
       setError(null);
     } catch (err) {
@@ -74,7 +95,7 @@ export function useCommunityMessages(channelId: string | null, communityId?: str
     } finally {
       setIsLoading(false);
     }
-  }, [service, channelId]);
+  }, [service, channelId, mergeWithRelayMessages]);
 
   const fetchPinned = useCallback(async () => {
     if (!service || !channelId) return;
@@ -101,6 +122,7 @@ export function useCommunityMessages(channelId: string | null, communityId?: str
       setPinnedMessages([]);
       setIsLoading(false);
       setHasMore(true);
+      relayMessagesRef.current.clear();
     }
   }, [channelId]);
 
@@ -111,14 +133,26 @@ export function useCommunityMessages(channelId: string | null, communityId?: str
   useEffect(() => {
     if (!service || !channelId) return;
 
+    // Helper: refresh from WASM DB and merge with relay messages
+    const refreshFromWasm = () => {
+      service.getCommunityMessages(channelId, PAGE_SIZE).then((fresh) => {
+        optimisticIdsRef.current.clear();
+        setMessages(mergeWithRelayMessages(fresh));
+      }).catch(() => {});
+    };
+
     const unsubscribe = service.onCommunityEvent((event: CommunityEvent) => {
       switch (event.type) {
         case 'communityMessageSent':
           if (event.channelId === channelId) {
-            // Bridge messages include inline content (they don't exist in local WASM DB).
-            // Construct a CommunityMessage from the event fields and append to state.
+            // Skip our own messages — we already added them optimistically
+            if (event.senderDid === identity?.did) break;
+
+            // All relay messages (both bridge and Umbra members) include inline
+            // content since the recipient doesn't have the message in their local
+            // WASM DB. Construct a CommunityMessage from the event fields.
             if (event.content) {
-              const bridgeMsg: CommunityMessage = {
+              const inlineMsg: CommunityMessage = {
                 id: event.messageId,
                 channelId: event.channelId,
                 senderDid: event.senderDid,
@@ -136,29 +170,28 @@ export function useCommunityMessages(channelId: string | null, communityId?: str
                 platformUserId: event.platformUserId,
                 platform: event.platform,
               };
+              // Persist in relay ref so it survives WASM DB refreshes
+              relayMessagesRef.current.set(inlineMsg.id, inlineMsg);
               setMessages((prev) => {
-                if (prev.some((m) => m.id === bridgeMsg.id)) return prev;
-                return [bridgeMsg, ...prev];
+                if (prev.some((m) => m.id === inlineMsg.id)) return prev;
+                return [inlineMsg, ...prev];
               });
             } else {
-              // Regular (non-bridge) message: refresh from WASM DB.
-              // If we sent this optimistically, the message is already in state.
-              service.getCommunityMessages(channelId, PAGE_SIZE).then((fresh) => {
-                optimisticIdsRef.current.clear();
-                setMessages(fresh);
-              }).catch(() => {});
+              // Event without content — refresh from local WASM DB
+              refreshFromWasm();
             }
           }
           break;
 
         case 'communityMessageEdited':
           if (event.channelId === channelId) {
-            service.getCommunityMessages(channelId, PAGE_SIZE).then(setMessages).catch(() => {});
+            refreshFromWasm();
           }
           break;
 
         case 'communityMessageDeleted':
           if (event.channelId === channelId) {
+            relayMessagesRef.current.delete(event.messageId);
             setMessages((prev) => prev.filter((m) => m.id !== event.messageId));
           }
           break;
@@ -166,13 +199,13 @@ export function useCommunityMessages(channelId: string | null, communityId?: str
         case 'communityReactionAdded':
         case 'communityReactionRemoved':
           // Refresh to get updated reactions
-          service.getCommunityMessages(channelId, PAGE_SIZE).then(setMessages).catch(() => {});
+          refreshFromWasm();
           break;
 
         case 'communityMessagePinned':
         case 'communityMessageUnpinned':
           if (event.channelId === channelId) {
-            service.getCommunityMessages(channelId, PAGE_SIZE).then(setMessages).catch(() => {});
+            refreshFromWasm();
             // Refresh the pinned messages list
             service.getCommunityPinnedMessages(channelId).then(setPinnedMessages).catch(() => {});
           }
@@ -181,7 +214,7 @@ export function useCommunityMessages(channelId: string | null, communityId?: str
     });
 
     return unsubscribe;
-  }, [service, channelId]);
+  }, [service, channelId, identity?.did, mergeWithRelayMessages]);
 
   const loadMore = useCallback(async () => {
     if (!service || !channelId || loadingRef.current || !hasMore) return;
@@ -212,7 +245,10 @@ export function useCommunityMessages(channelId: string | null, communityId?: str
           return [msg, ...prev];
         });
 
-        // Broadcast to other community members via relay
+        // Broadcast to other community members via relay.
+        // Include `content` so recipients can display the message immediately
+        // (they don't have it in their local WASM DB). The event handler
+        // constructs a CommunityMessage from the event fields for display.
         if (communityId) {
           const relayWs = service.getRelayWs();
           service.broadcastCommunityEvent(
