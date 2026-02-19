@@ -15,6 +15,7 @@
 //! **Privacy**: The relay never sees plaintext content. All E2E encryption
 //! happens client-side — the relay only handles opaque encrypted blobs.
 
+mod bridge;
 mod discovery;
 mod federation;
 mod handler;
@@ -27,7 +28,7 @@ use axum::{
     extract::{State, WebSocketUpgrade},
     http::Method,
     response::IntoResponse,
-    routing::{delete, get, post},
+    routing::{delete, get, post, put},
     Json, Router,
 };
 use clap::Parser;
@@ -35,6 +36,7 @@ use serde_json::json;
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
 
+use bridge::BridgeStore;
 use discovery::{DiscoveryConfig, DiscoveryStore};
 use federation::Federation;
 use state::{RelayConfig, RelayState};
@@ -232,6 +234,27 @@ async fn main() {
         }
     });
 
+    // ── Bridge Config Store Setup ──────────────────────────────────────────
+    let data_dir = std::env::var("DATA_DIR").ok();
+    let bridge_store = BridgeStore::new(data_dir.as_deref());
+    let bridge_loaded = bridge_store.load_from_disk();
+    if bridge_loaded > 0 {
+        tracing::info!(
+            bridges = bridge_loaded,
+            "Loaded bridge configs from disk"
+        );
+    }
+
+    // Build bridge router
+    let bridge_router = Router::new()
+        .route("/api/bridge/register", post(bridge::api::register_bridge))
+        .route("/api/bridge/list", get(bridge::api::list_bridges))
+        .route("/api/bridge/:id", get(bridge::api::get_bridge))
+        .route("/api/bridge/:id", delete(bridge::api::delete_bridge))
+        .route("/api/bridge/:id/members", put(bridge::api::update_members))
+        .route("/api/bridge/:id/enabled", put(bridge::api::set_enabled))
+        .with_state(bridge_store);
+
     // Build discovery router with its own state
     let discovery_router = Router::new()
         // OAuth routes (account linking)
@@ -298,6 +321,7 @@ async fn main() {
         .route("/info", get(info_handler))
         .with_state(state)
         .merge(discovery_router)
+        .merge(bridge_router)
         .layer(cors)
         .layer(TraceLayer::new_for_http());
 

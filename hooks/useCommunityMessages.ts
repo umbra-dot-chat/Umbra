@@ -115,12 +115,33 @@ export function useCommunityMessages(channelId: string | null): UseCommunityMess
       switch (event.type) {
         case 'communityMessageSent':
           if (event.channelId === channelId) {
-            // If we sent this optimistically, the message is already in state.
-            // Refresh to get the canonical server state (replaces optimistic copy).
-            service.getCommunityMessages(channelId, PAGE_SIZE).then((fresh) => {
-              optimisticIdsRef.current.clear();
-              setMessages(fresh);
-            }).catch(() => {});
+            // Bridge messages include inline content (they don't exist in local WASM DB).
+            // Construct a CommunityMessage from the event fields and append to state.
+            if (event.content) {
+              const bridgeMsg: CommunityMessage = {
+                id: event.messageId,
+                channelId: event.channelId,
+                senderDid: event.senderDid,
+                content: event.content,
+                edited: false,
+                pinned: false,
+                systemMessage: false,
+                threadReplyCount: 0,
+                createdAt: Date.now(),
+                updatedAt: Date.now(),
+              };
+              setMessages((prev) => {
+                if (prev.some((m) => m.id === bridgeMsg.id)) return prev;
+                return [bridgeMsg, ...prev];
+              });
+            } else {
+              // Regular (non-bridge) message: refresh from WASM DB.
+              // If we sent this optimistically, the message is already in state.
+              service.getCommunityMessages(channelId, PAGE_SIZE).then((fresh) => {
+                optimisticIdsRef.current.clear();
+                setMessages(fresh);
+              }).catch(() => {});
+            }
           }
           break;
 

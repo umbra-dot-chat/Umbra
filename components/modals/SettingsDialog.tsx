@@ -99,7 +99,7 @@ const AtSignInputIcon = AtSignIcon as InputIcon;
 // Types
 // ---------------------------------------------------------------------------
 
-export type SettingsSection = 'account' | 'profile' | 'appearance' | 'messaging' | 'notifications' | 'privacy' | 'audio-video' | 'network' | 'data' | 'plugins' | 'about';
+export type SettingsSection = 'account' | 'profile' | 'appearance' | 'messaging' | 'notifications' | 'sounds' | 'privacy' | 'audio-video' | 'network' | 'data' | 'plugins' | 'about';
 
 export interface SettingsDialogProps {
   open: boolean;
@@ -120,6 +120,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'appearance', label: 'Appearance', icon: PaletteIcon },
   { id: 'messaging', label: 'Messaging', icon: MessageIcon },
   { id: 'notifications', label: 'Notifications', icon: BellIcon },
+  { id: 'sounds', label: 'Sounds', icon: VolumeIcon },
   { id: 'privacy', label: 'Privacy', icon: ShieldIcon },
   { id: 'audio-video', label: 'Audio & Video', icon: VideoIcon },
   { id: 'network', label: 'Network', icon: GlobeIcon },
@@ -1035,28 +1036,8 @@ function FontSettingRow() {
 }
 
 function NotificationsSection() {
-  const { theme } = useTheme();
-  const tc = theme.colors;
-  const {
-    playSound,
-    masterVolume,
-    setMasterVolume,
-    muted,
-    setMuted,
-    categoryVolumes,
-    setCategoryVolume,
-    activeTheme,
-    setActiveTheme,
-  } = useSound();
   const [pushEnabled, setPushEnabled] = useState(true);
   const [messagePreview, setMessagePreview] = useState(true);
-
-  const themeOptions = useMemo(
-    () => SOUND_THEMES.map((t) => ({ value: t.id, label: `${t.name}${t.type === 'audio' ? ' (Pack)' : ''}` })),
-    [],
-  );
-
-  const masterPct = Math.round(masterVolume * 100);
 
   return (
     <View style={{ gap: 20 }}>
@@ -1072,17 +1053,50 @@ function NotificationsSection() {
       <SettingRow label="Message Preview" description="Show message content in notification banners.">
         <SoundToggle checked={messagePreview} onChange={() => setMessagePreview((p) => !p)} />
       </SettingRow>
+    </View>
+  );
+}
 
-      <Separator />
+function SoundsSection() {
+  const { theme } = useTheme();
+  const tc = theme.colors;
+  const {
+    playSound,
+    masterVolume,
+    setMasterVolume,
+    muted,
+    setMuted,
+    categoryVolumes,
+    setCategoryVolume,
+    categoryEnabled,
+    setCategoryEnabled,
+    activeTheme,
+    setActiveTheme,
+  } = useSound();
 
-      {/* ── Sound Settings ─────────────────────────────────────────────── */}
+  const themeOptions = useMemo(
+    () => SOUND_THEMES.map((t) => ({ value: t.id, label: `${t.name}${t.type === 'audio' ? ' (Pack)' : ''}` })),
+    [],
+  );
 
+  const masterPct = Math.round(masterVolume * 100);
+
+  const CATEGORY_DESCRIPTIONS: Record<string, string> = {
+    message: 'Sending, receiving, and deleting messages',
+    call: 'Joining, leaving, muting, and ringing',
+    navigation: 'Tab switches, dialog open/close',
+    social: 'Friend requests, accepts, notifications',
+    system: 'Toggles, errors, success confirmations',
+  };
+
+  return (
+    <View style={{ gap: 20 }}>
       <SectionHeader
-        title="Sound Effects"
-        description="Choose a sound theme and adjust volumes for different categories."
+        title="Sounds"
+        description="Choose a sound theme and control which sounds play."
       />
 
-      <SettingRow label="Enable Sounds" description="Play UI sounds for actions and events.">
+      <SettingRow label="Enable Sounds" description="Master toggle for all UI sounds.">
         <SoundToggle checked={!muted} onChange={() => setMuted(!muted)} />
       </SettingRow>
 
@@ -1097,7 +1111,6 @@ function NotificationsSection() {
               size="md"
               fullWidth
             />
-            {/* Theme description */}
             {(() => {
               const meta = SOUND_THEMES.find((t) => t.id === activeTheme);
               return meta ? (
@@ -1118,45 +1131,60 @@ function NotificationsSection() {
             />
           </SettingRow>
 
-          {/* ── Per-category volumes ──────────────────────────────── */}
+          <Separator />
 
-          <View style={{ gap: 12 }}>
+          {/* ── Per-category enabled toggles + volumes ──────────────── */}
+
+          <View style={{ gap: 16 }}>
             <RNText style={{ fontSize: 13, fontWeight: '600', color: tc.text.primary }}>
-              Category Volumes
+              Sound Categories
             </RNText>
 
             {SOUND_CATEGORIES.map((cat) => {
+              const enabled = categoryEnabled[cat] ?? true;
               const pct = Math.round((categoryVolumes[cat] ?? 1) * 100);
               return (
-                <View key={cat} style={{ gap: 4 }}>
+                <View key={cat} style={{ gap: 8, opacity: enabled ? 1 : 0.5 }}>
                   <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <RNText style={{ fontSize: 13, color: tc.text.secondary }}>
-                      {CATEGORY_LABELS[cat]}
-                    </RNText>
+                    <View style={{ flex: 1, marginRight: 12 }}>
+                      <RNText style={{ fontSize: 13, fontWeight: '600', color: tc.text.primary }}>
+                        {CATEGORY_LABELS[cat]}
+                      </RNText>
+                      <RNText style={{ fontSize: 12, color: tc.text.muted, marginTop: 2 }}>
+                        {CATEGORY_DESCRIPTIONS[cat]}
+                      </RNText>
+                    </View>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      {enabled && (
+                        <Pressable
+                          onPress={() => playSound(SoundEngine.getSampleSound(cat))}
+                          style={{
+                            paddingHorizontal: 8,
+                            paddingVertical: 4,
+                            borderRadius: 6,
+                            backgroundColor: tc.background.secondary,
+                          }}
+                        >
+                          <VolumeIcon size={14} color={tc.accent.primary} />
+                        </Pressable>
+                      )}
+                      <Toggle checked={enabled} onChange={(v) => setCategoryEnabled(cat, v)} />
+                    </View>
+                  </View>
+                  {enabled && (
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      <Slider
+                        value={pct}
+                        min={0}
+                        max={100}
+                        step={5}
+                        onChange={(v) => setCategoryVolume(cat, v / 100)}
+                      />
                       <RNText style={{ fontSize: 12, color: tc.text.muted, minWidth: 32, textAlign: 'right' }}>
                         {pct}%
                       </RNText>
-                      <Pressable
-                        onPress={() => playSound(SoundEngine.getSampleSound(cat))}
-                        style={{
-                          paddingHorizontal: 8,
-                          paddingVertical: 4,
-                          borderRadius: 6,
-                          backgroundColor: tc.background.secondary,
-                        }}
-                      >
-                        <VolumeIcon size={14} color={tc.accent.primary} />
-                      </Pressable>
                     </View>
-                  </View>
-                  <Slider
-                    value={pct}
-                    min={0}
-                    max={100}
-                    step={5}
-                    onChange={(v) => setCategoryVolume(cat, v / 100)}
-                  />
+                  )}
                 </View>
               );
             })}
@@ -3946,6 +3974,8 @@ export function SettingsDialog({ open, onClose, onOpenMarketplace, initialSectio
         return <MessagingSection />;
       case 'notifications':
         return <NotificationsSection />;
+      case 'sounds':
+        return <SoundsSection />;
       case 'privacy':
         return <PrivacySection />;
       case 'audio-video':

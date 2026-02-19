@@ -82,6 +82,8 @@ export interface UseDiscordCommunityImportState {
   importMembers: boolean;
   /** Whether to import pinned messages. */
   importPins: boolean;
+  /** Whether to enable the Discord bridge (bidirectional message sync). */
+  enableBridge: boolean;
   /** Fetched pinned messages keyed by source (Discord) channel ID. */
   pinnedMessages: Record<string, MappedPinnedMessage[]> | null;
   /** Whether pinned messages are available (bot is in guild). */
@@ -116,6 +118,8 @@ export interface UseDiscordCommunityImportActions {
   toggleMemberImport: () => void;
   /** Toggle whether to import pinned messages. */
   togglePinImport: () => void;
+  /** Toggle whether to enable the Discord bridge. */
+  toggleBridge: () => void;
   /** Reset to initial state. */
   reset: () => void;
 }
@@ -145,6 +149,7 @@ export function useDiscordCommunityImport(): UseDiscordCommunityImportState & Us
   const [pinsAvailable, setPinsAvailable] = useState(false);
   const [membersLoading, setMembersLoading] = useState(false);
   const [pinsLoading, setPinsLoading] = useState(false);
+  const [enableBridge, setEnableBridge] = useState(false);
 
   // Refs
   const popupRef = useRef<Window | null>(null);
@@ -625,6 +630,7 @@ export function useDiscordCommunityImport(): UseDiscordCommunityImportState & Us
     setPinsAvailable(false);
     setImportPins(true);
     setPinsLoading(false);
+    setEnableBridge(false);
     setPhase('selecting_server');
   }, []);
 
@@ -830,6 +836,51 @@ export function useDiscordCommunityImport(): UseDiscordCommunityImportState & Us
         setResult(importResult);
 
         if (importResult.success) {
+          // Register bridge config with relay if bridge is enabled
+          if (enableBridge && selectedGuild && importResult.communityId) {
+            try {
+              // Build channel mapping using Discord IDs from mappedStructure
+              // and Umbra IDs from the import result
+              const channelMapping = (mappedStructure.channels || [])
+                .filter((ch) => ch.discordId)
+                .map((ch) => ({
+                  discordChannelId: ch.discordId,
+                  umbraChannelId: importResult.channelIdMap?.[ch.discordId] ?? ch.discordId,
+                  name: ch.name,
+                }));
+
+              // Build seat list from imported members
+              const seatList = (importedMembers || []).map((m) => ({
+                discordUserId: m.userId,
+                discordUsername: m.username,
+                avatarUrl: m.avatar
+                  ? `https://cdn.discordapp.com/avatars/${m.userId}/${m.avatar}.png`
+                  : null,
+                seatDid: null,
+              }));
+
+              // Build member DID list (community members)
+              const memberDids = importResult.memberDids ?? [];
+
+              await fetch(`${RELAY_BASE_URL}/api/bridge/register`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  communityId: importResult.communityId,
+                  guildId: selectedGuild.id,
+                  channels: channelMapping,
+                  seats: seatList,
+                  memberDids,
+                }),
+              });
+
+              console.log('[Import] Bridge config registered with relay');
+            } catch (bridgeErr) {
+              // Bridge registration failure is non-fatal — community was still created
+              console.warn('[Import] Failed to register bridge config:', bridgeErr);
+            }
+          }
+
           setPhase('complete');
         } else {
           setError(importResult.errors.join('. '));
@@ -843,7 +894,7 @@ export function useDiscordCommunityImport(): UseDiscordCommunityImportState & Us
         setProgress(null);
       }
     },
-    [mappedStructure, importMembers, importedMembers, mapMembersToSeats, importPins, pinnedMessages]
+    [mappedStructure, importMembers, importedMembers, mapMembersToSeats, importPins, pinnedMessages, enableBridge, selectedGuild]
   );
 
   /**
@@ -861,6 +912,13 @@ export function useDiscordCommunityImport(): UseDiscordCommunityImportState & Us
    */
   const togglePinImport = useCallback(() => {
     setImportPins((prev) => !prev);
+  }, []);
+
+  /**
+   * Toggle bridge on/off.
+   */
+  const toggleBridge = useCallback(() => {
+    setEnableBridge((prev) => !prev);
   }, []);
 
   /**
@@ -892,6 +950,7 @@ export function useDiscordCommunityImport(): UseDiscordCommunityImportState & Us
     setPinsAvailable(false);
     setImportPins(true);
     setPinsLoading(false);
+    setEnableBridge(false);
   }, []);
 
   // Compute total pin count
@@ -917,6 +976,7 @@ export function useDiscordCommunityImport(): UseDiscordCommunityImportState & Us
     membersAvailable,
     importMembers,
     importPins,
+    enableBridge,
     pinnedMessages,
     pinsAvailable,
     pinCount,
@@ -933,6 +993,7 @@ export function useDiscordCommunityImport(): UseDiscordCommunityImportState & Us
     refetchStructure,
     toggleMemberImport,
     togglePinImport,
+    toggleBridge,
     reset,
   };
 }

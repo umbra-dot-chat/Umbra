@@ -106,6 +106,16 @@ function XIcon({ size, color }: { size?: number; color?: string }) {
   );
 }
 
+function AlertTriangleIcon({ size, color }: { size?: number; color?: string }) {
+  return (
+    <Svg width={size || 18} height={size || 18} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3" />
+      <Line x1="12" y1="9" x2="12" y2="13" />
+      <Line x1="12" y1="17" x2="12.01" y2="17" />
+    </Svg>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -117,7 +127,8 @@ export type CommunitySettingsSection =
   | 'seats'
   | 'invites'
   | 'moderation'
-  | 'audit-log';
+  | 'audit-log'
+  | 'danger';
 
 export interface CommunitySettingsDialogProps {
   /** Whether the dialog is visible. */
@@ -182,6 +193,12 @@ export interface CommunitySettingsDialogProps {
   onRescanSeats?: () => Promise<void>;
   /** Whether a rescan is in progress. */
   rescanningSeats?: boolean;
+
+  // -- Leave/Delete community --
+  /** Called when user wants to leave the community. */
+  onLeaveCommunity?: () => void;
+  /** Called when owner wants to delete the community. */
+  onDeleteCommunity?: () => void;
 }
 
 interface NavItem {
@@ -198,6 +215,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'invites', label: 'Invites', icon: LinkIcon },
   { id: 'moderation', label: 'Moderation', icon: BanIcon },
   { id: 'audit-log', label: 'Audit Log', icon: FileTextIcon },
+  { id: 'danger', label: 'Danger', icon: AlertTriangleIcon },
 ];
 
 // ---------------------------------------------------------------------------
@@ -236,6 +254,9 @@ export function CommunitySettingsDialog({
   // Seats re-scan
   onRescanSeats,
   rescanningSeats,
+  // Leave/Delete community
+  onLeaveCommunity,
+  onDeleteCommunity,
 }: CommunitySettingsDialogProps) {
   const { theme, mode } = useTheme();
   const tc = theme.colors;
@@ -244,6 +265,12 @@ export function CommunitySettingsDialog({
   const { identity } = useAuth();
 
   const [activeSection, setActiveSection] = useState<CommunitySettingsSection>(initialSection || 'overview');
+
+  // Determine if current user is the community owner
+  const isOwner = useMemo(() => {
+    if (!community || !identity?.did) return false;
+    return community.ownerDid === identity.did;
+  }, [community, identity?.did]);
 
   // Seats state (loaded lazily when seats tab is selected)
   const [seats, setSeats] = useState<CommunitySeat[]>([]);
@@ -674,6 +701,58 @@ export function CommunitySettingsDialog({
           </View>
         );
 
+      case 'danger':
+        return (
+          <View style={{ flex: 1, padding: defaultSpacing.md }}>
+            <Text size="lg" weight="semibold" style={{ color: tc.status.danger, marginBottom: defaultSpacing.sm }}>
+              Danger Zone
+            </Text>
+            <Text size="sm" style={{ color: tc.text.muted, marginBottom: defaultSpacing.lg }}>
+              Irreversible and destructive actions.
+            </Text>
+
+            <View
+              style={{
+                padding: defaultSpacing.md,
+                borderRadius: defaultRadii.md,
+                borderWidth: 1,
+                borderColor: tc.status.danger,
+                gap: defaultSpacing.md,
+              }}
+            >
+              {isOwner ? (
+                <>
+                  <View>
+                    <Text size="sm" weight="semibold" style={{ color: tc.text.primary, marginBottom: defaultSpacing.xs }}>
+                      Delete Community
+                    </Text>
+                    <Text size="sm" style={{ color: tc.text.muted }}>
+                      Permanently delete this community and all of its data including channels, messages, roles, and members. This action cannot be undone.
+                    </Text>
+                  </View>
+                  <Button variant="destructive" onPress={onDeleteCommunity}>
+                    Delete Community
+                  </Button>
+                </>
+              ) : (
+                <>
+                  <View>
+                    <Text size="sm" weight="semibold" style={{ color: tc.text.primary, marginBottom: defaultSpacing.xs }}>
+                      Leave Community
+                    </Text>
+                    <Text size="sm" style={{ color: tc.text.muted }}>
+                      Leave this community and lose access to all channels and messages. You can rejoin later if you have an invite.
+                    </Text>
+                  </View>
+                  <Button variant="destructive" onPress={onLeaveCommunity}>
+                    Leave Community
+                  </Button>
+                </>
+              )}
+            </View>
+          </View>
+        );
+
       default:
         return null;
     }
@@ -694,41 +773,58 @@ export function CommunitySettingsDialog({
 
           {NAV_ITEMS.map((item) => {
             const isActive = activeSection === item.id;
+            const isDanger = item.id === 'danger';
             const Icon = item.icon;
 
             return (
-              <Pressable
-                key={item.id}
-                onPress={() => setActiveSection(item.id)}
-                style={({ pressed }) => ({
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: 10,
-                  paddingVertical: 8,
-                  paddingHorizontal: 10,
-                  borderRadius: 8,
-                  backgroundColor: isActive
-                    ? tc.accent.primary
-                    : pressed
-                      ? tc.accent.highlight
-                      : 'transparent',
-                  marginBottom: 2,
-                })}
-              >
-                <Icon
-                  size={18}
-                  color={isActive ? tc.text.inverse : tc.text.secondary}
-                />
-                <RNText
-                  style={{
-                    fontSize: 14,
-                    fontWeight: isActive ? '600' : '400',
-                    color: isActive ? tc.text.inverse : tc.text.secondary,
-                  }}
+              <React.Fragment key={item.id}>
+                {/* Separator before danger section */}
+                {isDanger && (
+                  <View
+                    style={{
+                      height: 1,
+                      backgroundColor: tc.border.subtle,
+                      marginVertical: 8,
+                      marginHorizontal: 4,
+                    }}
+                  />
+                )}
+                <Pressable
+                  onPress={() => setActiveSection(item.id)}
+                  style={({ pressed }) => ({
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 10,
+                    paddingVertical: 8,
+                    paddingHorizontal: 10,
+                    borderRadius: 8,
+                    backgroundColor: isActive
+                      ? isDanger
+                        ? tc.status.danger
+                        : tc.accent.primary
+                      : pressed
+                        ? isDanger
+                          ? tc.status.danger + '20'
+                          : tc.accent.highlight
+                        : 'transparent',
+                    marginBottom: 2,
+                  })}
                 >
-                  {item.label}
-                </RNText>
-              </Pressable>
+                  <Icon
+                    size={18}
+                    color={isActive ? tc.text.inverse : isDanger ? tc.status.danger : tc.text.secondary}
+                  />
+                  <RNText
+                    style={{
+                      fontSize: 14,
+                      fontWeight: isActive ? '600' : '400',
+                      color: isActive ? tc.text.inverse : isDanger ? tc.status.danger : tc.text.secondary,
+                    }}
+                  >
+                    {item.label}
+                  </RNText>
+                </Pressable>
+              </React.Fragment>
             );
           })}
         </ScrollView>

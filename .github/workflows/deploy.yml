@@ -15,6 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       relay: ${{ steps.filter.outputs.relay }}
+      bridge: ${{ steps.filter.outputs.bridge }}
       coturn: ${{ steps.filter.outputs.coturn }}
       frontend: ${{ steps.filter.outputs.frontend }}
 
@@ -29,6 +30,8 @@ jobs:
           filters: |
             relay:
               - 'packages/umbra-relay/**'
+            bridge:
+              - 'packages/umbra-bridge-bot/**'
             coturn:
               - 'infra/coturn/**'
             frontend:
@@ -55,7 +58,7 @@ jobs:
   deploy-relay:
     name: Deploy Relay (${{ matrix.name }})
     needs: changes
-    if: needs.changes.outputs.relay == 'true'
+    if: needs.changes.outputs.relay == 'true' || needs.changes.outputs.bridge == 'true'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -110,6 +113,28 @@ jobs:
             packages/umbra-relay/src/ \
             $SSH_USER@$HOST:$RELAY_PATH/src/
 
+      - name: Sync bridge bot files to server
+        env:
+          SSH_USER: ${{ secrets.DEPLOY_SSH_USER }}
+          HOST: ${{ matrix.host }}
+          RELAY_PATH: /opt/umbra-relay
+        run: |
+          SSH_OPTS="-i ~/.ssh/deploy_key -o StrictHostKeyChecking=no"
+
+          # Ensure bridge bot directory exists
+          ssh $SSH_OPTS $SSH_USER@$HOST "mkdir -p $RELAY_PATH/bridge-bot/src"
+
+          # Sync bridge bot source files
+          rsync -avz --delete -e "ssh $SSH_OPTS" \
+            packages/umbra-bridge-bot/package.json \
+            packages/umbra-bridge-bot/tsconfig.json \
+            packages/umbra-bridge-bot/Dockerfile \
+            $SSH_USER@$HOST:$RELAY_PATH/bridge-bot/
+
+          rsync -avz --delete -e "ssh $SSH_OPTS" \
+            packages/umbra-bridge-bot/src/ \
+            $SSH_USER@$HOST:$RELAY_PATH/bridge-bot/src/
+
       - name: Build and restart relay
         env:
           SSH_USER: ${{ secrets.DEPLOY_SSH_USER }}
@@ -120,9 +145,18 @@ jobs:
           RELAY_ID: ${{ matrix.relay_id }}
           RELAY_PUBLIC_URL: ${{ matrix.relay_public_url }}
           RELAY_PEERS: ${{ matrix.relay_peers }}
+          DISCORD_BOT_TOKEN: ${{ secrets.DISCORD_BOT_TOKEN }}
         run: |
           SSH_OPTS="-i ~/.ssh/deploy_key -o StrictHostKeyChecking=no"
 
+          # Write .env with bot token so docker compose picks it up
+          if [ -n "$DISCORD_BOT_TOKEN" ]; then
+            ssh $SSH_OPTS $SSH_USER@$HOST "grep -q '^DISCORD_BOT_TOKEN=' $RELAY_PATH/.env 2>/dev/null && \
+              sed -i 's|^DISCORD_BOT_TOKEN=.*|DISCORD_BOT_TOKEN=$DISCORD_BOT_TOKEN|' $RELAY_PATH/.env || \
+              echo 'DISCORD_BOT_TOKEN=$DISCORD_BOT_TOKEN' >> $RELAY_PATH/.env"
+          fi
+
+          # Build and restart relay
           ssh $SSH_OPTS $SSH_USER@$HOST "cd $RELAY_PATH && \
             RELAY_REGION='$RELAY_REGION' \
             RELAY_LOCATION='$RELAY_LOCATION' \
@@ -137,6 +171,13 @@ jobs:
             RELAY_PUBLIC_URL='$RELAY_PUBLIC_URL' \
             RELAY_PEERS='$RELAY_PEERS' \
             docker compose up -d"
+
+          # Start bridge bot if DISCORD_BOT_TOKEN is available
+          if [ -n "$DISCORD_BOT_TOKEN" ]; then
+            ssh $SSH_OPTS $SSH_USER@$HOST "cd $RELAY_PATH && \
+              docker compose --profile bridge build && \
+              docker compose --profile bridge up -d"
+          fi
 
       - name: Verify relay health
         env:

@@ -49,6 +49,10 @@ export interface SoundContextValue {
   categoryVolumes: Record<SoundCategory, number>;
   /** Set volume for a specific category. */
   setCategoryVolume: (cat: SoundCategory, v: number) => void;
+  /** Per-category enabled/disabled. */
+  categoryEnabled: Record<SoundCategory, boolean>;
+  /** Enable or disable a specific category. */
+  setCategoryEnabled: (cat: SoundCategory, enabled: boolean) => void;
   /** Active sound theme ID. */
   activeTheme: SoundThemeId;
   /** Switch the active sound theme. */
@@ -67,6 +71,7 @@ const KV_NAMESPACE = '__umbra_system__';
 const KEY_MASTER_VOLUME = 'sound_master_volume';
 const KEY_MUTED = 'sound_muted';
 const KEY_CATEGORY_VOLUMES = 'sound_category_volumes';
+const KEY_CATEGORY_ENABLED = 'sound_category_enabled';
 const KEY_THEME = 'sound_theme';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -79,6 +84,10 @@ const DEFAULT_THEME: SoundThemeId = 'playful';
 
 function defaultCategoryVolumes(): Record<SoundCategory, number> {
   return { message: 1.0, call: 1.0, navigation: 1.0, social: 1.0, system: 1.0 };
+}
+
+function defaultCategoryEnabled(): Record<SoundCategory, boolean> {
+  return { message: true, call: true, navigation: false, social: true, system: false };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -95,6 +104,9 @@ export function SoundProvider({ children }: { children: React.ReactNode }) {
   const [muted, setMutedState] = useState(DEFAULT_MUTED);
   const [categoryVolumes, setCategoryVolumesState] = useState<Record<SoundCategory, number>>(
     defaultCategoryVolumes,
+  );
+  const [categoryEnabled, setCategoryEnabledState] = useState<Record<SoundCategory, boolean>>(
+    defaultCategoryEnabled,
   );
   const [activeTheme, setActiveThemeState] = useState<SoundThemeId>(DEFAULT_THEME);
   const [loaded, setLoaded] = useState(false);
@@ -171,6 +183,34 @@ export function SoundProvider({ children }: { children: React.ReactNode }) {
       }
     }
 
+    // Category enabled/disabled
+    const savedEnabled = kvGet(KEY_CATEGORY_ENABLED);
+    if (savedEnabled) {
+      try {
+        const parsed = JSON.parse(savedEnabled);
+        const enabled = defaultCategoryEnabled();
+        for (const cat of SOUND_CATEGORIES) {
+          if (typeof parsed[cat] === 'boolean') {
+            enabled[cat] = parsed[cat];
+            engine.setCategoryEnabled(cat, parsed[cat]);
+          }
+        }
+        setCategoryEnabledState(enabled);
+      } catch {
+        // ignore corrupt data — use defaults
+        const defaults = defaultCategoryEnabled();
+        for (const cat of SOUND_CATEGORIES) {
+          engine.setCategoryEnabled(cat, defaults[cat]);
+        }
+      }
+    } else {
+      // Apply defaults to engine
+      const defaults = defaultCategoryEnabled();
+      for (const cat of SOUND_CATEGORIES) {
+        engine.setCategoryEnabled(cat, defaults[cat]);
+      }
+    }
+
     // Theme
     const savedTheme = kvGet(KEY_THEME);
     if (savedTheme) {
@@ -244,6 +284,18 @@ export function SoundProvider({ children }: { children: React.ReactNode }) {
     [kvSet],
   );
 
+  const setCategoryEnabled = useCallback(
+    (cat: SoundCategory, enabled: boolean) => {
+      setCategoryEnabledState((prev) => {
+        const next = { ...prev, [cat]: enabled };
+        engineRef.current.setCategoryEnabled(cat, enabled);
+        kvSet(KEY_CATEGORY_ENABLED, JSON.stringify(next));
+        return next;
+      });
+    },
+    [kvSet],
+  );
+
   const setActiveTheme = useCallback(
     (id: SoundThemeId) => {
       setActiveThemeState(id);
@@ -269,6 +321,8 @@ export function SoundProvider({ children }: { children: React.ReactNode }) {
       setMuted,
       categoryVolumes,
       setCategoryVolume,
+      categoryEnabled,
+      setCategoryEnabled,
       activeTheme,
       setActiveTheme,
       preferencesLoaded: loaded,
@@ -281,6 +335,8 @@ export function SoundProvider({ children }: { children: React.ReactNode }) {
       setMuted,
       categoryVolumes,
       setCategoryVolume,
+      categoryEnabled,
+      setCategoryEnabled,
       activeTheme,
       setActiveTheme,
       loaded,

@@ -1,16 +1,18 @@
 # ============================================================================
 # Umbra Relay Server — Docker Compose
 #
-# Single-relay deployment with optional federation.
+# Single-relay deployment with optional federation and Discord bridge.
 # Federation peers are configured via RELAY_PEERS env var.
 #
 # Usage:
-#   docker-compose up -d          # Start the relay server
-#   docker-compose logs -f        # View logs
-#   docker-compose down           # Stop the server
+#   docker compose up -d                          # Start relay only
+#   docker compose --profile bridge up -d         # Start relay + bridge bot
+#   docker compose logs -f                        # View logs
+#   docker compose down                           # Stop all services
 #
 # Configuration:
 #   Set environment variables in .env file, inline below, or pass at deploy time.
+#   Bridge requires DISCORD_BOT_TOKEN to be set.
 # ============================================================================
 
 version: '3.8'
@@ -65,6 +67,36 @@ services:
         reservations:
           memory: 64M
           cpus: '0.1'
+
+  # ── Discord Bridge Bot ────────────────────────────────────────────────────
+  # Bidirectional Discord ↔ Umbra message bridge.
+  # Only starts when explicitly enabled: docker compose --profile bridge up -d
+  bridge:
+    build:
+      context: ./bridge-bot
+      dockerfile: Dockerfile
+    environment:
+      - DISCORD_BOT_TOKEN=${DISCORD_BOT_TOKEN:-}
+      - RELAY_URL=ws://relay:8080/ws
+      - RELAY_API_URL=http://relay:8080
+      - DATA_DIR=/data
+      - LOG_LEVEL=${BRIDGE_LOG_LEVEL:-info}
+    volumes:
+      - relay_data:/data
+    depends_on:
+      relay:
+        condition: service_healthy
+    restart: unless-stopped
+    profiles:
+      - bridge
+    deploy:
+      resources:
+        limits:
+          memory: 128M
+          cpus: '0.25'
+        reservations:
+          memory: 32M
+          cpus: '0.05'
 
 volumes:
   relay_data:

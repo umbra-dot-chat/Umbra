@@ -1174,7 +1174,7 @@ export type CommunityEvent =
   | { type: 'memberUnbanned'; communityId: string; memberDid: string }
   | { type: 'roleAssigned'; communityId: string; memberDid: string; roleId: string }
   | { type: 'roleUnassigned'; communityId: string; memberDid: string; roleId: string }
-  | { type: 'communityMessageSent'; channelId: string; messageId: string; senderDid: string }
+  | { type: 'communityMessageSent'; channelId: string; messageId: string; senderDid: string; content?: string; senderDisplayName?: string; senderAvatarUrl?: string }
   | { type: 'communityMessageEdited'; channelId: string; messageId: string }
   | { type: 'communityMessageDeleted'; channelId: string; messageId: string }
   | { type: 'communityReactionAdded'; messageId: string; emoji: string; memberDid: string }

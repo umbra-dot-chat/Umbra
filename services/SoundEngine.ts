@@ -391,6 +391,13 @@ export class SoundEngine {
     social: 1.0,
     system: 1.0,
   };
+  private _categoryEnabled: Record<SoundCategory, boolean> = {
+    message: true,
+    call: true,
+    navigation: false,
+    social: true,
+    system: false,
+  };
   private _activeTheme: SoundThemeId = 'playful';
 
   /** Cache of decoded audio buffers for audio packs. */
@@ -440,6 +447,7 @@ export class SoundEngine {
     if (this._muted) return;
 
     const category = SOUND_CATEGORY_MAP[name];
+    if (!this._categoryEnabled[category]) return;
     const catVol = this._categoryVolumes[category] ?? 1.0;
     if (catVol <= 0) return;
 
@@ -557,6 +565,14 @@ export class SoundEngine {
 
   getCategoryVolumes(): Record<SoundCategory, number> {
     return { ...this._categoryVolumes };
+  }
+
+  setCategoryEnabled(category: SoundCategory, enabled: boolean): void {
+    this._categoryEnabled[category] = enabled;
+  }
+
+  getCategoryEnabled(): Record<SoundCategory, boolean> {
+    return { ...this._categoryEnabled };
   }
 
   setMuted(muted: boolean): void {

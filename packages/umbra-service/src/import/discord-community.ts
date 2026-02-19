@@ -521,4 +521,8 @@ export interface CommunityImportResult {
   errors: string[];
   /** Warnings (non-fatal issues). */
   warnings: string[];
+  /** Discord channel ID → Umbra channel ID mapping (for bridge config). */
+  channelIdMap?: Record<string, string>;
+  /** DIDs of all community members (for bridge fan-out). */
+  memberDids?: string[];
 }

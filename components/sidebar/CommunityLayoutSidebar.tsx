@@ -26,7 +26,7 @@ import {
   type ManagedRole, type RolePermissionCategory,
 } from '@coexist/wisp-react-native';
 
-import { SettingsIcon, FileTextIcon, ShieldIcon, UserPlusIcon, BellIcon, LogOutIcon, PlusIcon, VolumeIcon } from '@/components/icons';
+import { SettingsIcon, FileTextIcon, ShieldIcon, UserPlusIcon, BellIcon, LogOutIcon, PlusIcon, VolumeIcon, TrashIcon } from '@/components/icons';
 import { VoiceChannelBar } from '@/components/community/VoiceChannelBar';
 import { VoiceChannelUsers } from '@/components/community/VoiceChannelUsers';
 import { useVoiceChannel } from '@/contexts/VoiceChannelContext';
@@ -297,9 +297,19 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
   const [moveCategoryDialogOpen, setMoveCategoryDialogOpen] = useState(false);
   const [moveCategoryChannelTarget, setMoveCategoryChannelTarget] = useState<{ id: string; name: string } | null>(null);
 
+  // Leave/Delete community dialog state
+  const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+
   // ---------------------------------------------------------------------------
   // Resolve data — use mock data for mock communities, real data otherwise
   // ---------------------------------------------------------------------------
+
+  // Determine if current user is the community owner
+  const isOwner = useMemo(() => {
+    if (isMock || !community || !myDid) return false;
+    return community.ownerDid === myDid;
+  }, [isMock, community, myDid]);
 
   const communityInfo = useMemo<CommunityInfo>(() => {
     if (isMock) return MOCK_COMMUNITY_INFO;
@@ -484,14 +494,37 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
     }
   }, []);
 
-  // Leave server handler — calls backend and navigates home
-  const handleLeaveServer = useCallback(async () => {
+  // Leave server handler — opens confirmation dialog
+  const handleLeaveServer = useCallback(() => {
+    setLeaveDialogOpen(true);
+  }, []);
+
+  // Actual leave handler — called from confirmation dialog
+  const handleLeaveConfirm = useCallback(async () => {
     if (!service || !myDid || isMock) return;
     try {
       await service.leaveCommunity(communityId, myDid);
       router.push('/');
     } catch (err) {
       console.warn('[CommunityLayoutSidebar] Failed to leave community:', err);
+      throw err;
+    }
+  }, [service, myDid, isMock, communityId, router]);
+
+  // Delete community handler — opens confirmation dialog
+  const handleDeleteCommunity = useCallback(() => {
+    setDeleteDialogOpen(true);
+  }, []);
+
+  // Actual delete handler — called from confirmation dialog
+  const handleDeleteConfirm = useCallback(async () => {
+    if (!service || !myDid || isMock) return;
+    try {
+      await service.deleteCommunity(communityId, myDid);
+      router.push('/');
+    } catch (err) {
+      console.warn('[CommunityLayoutSidebar] Failed to delete community:', err);
+      throw err;
     }
   }, [service, myDid, isMock, communityId, router]);
 
@@ -1434,9 +1467,15 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
             Notification Settings
           </DropdownMenuItem>
           <DropdownMenuSeparator />
-          <DropdownMenuItem icon={<LogOutIcon size={16} />} danger onSelect={handleLeaveServer}>
-            Leave Server
-          </DropdownMenuItem>
+          {isOwner ? (
+            <DropdownMenuItem icon={<TrashIcon size={16} />} danger onSelect={handleDeleteCommunity}>
+              Delete Community
+            </DropdownMenuItem>
+          ) : (
+            <DropdownMenuItem icon={<LogOutIcon size={16} />} danger onSelect={handleLeaveServer}>
+              Leave Server
+            </DropdownMenuItem>
+          )}
         </DropdownMenuContent>
       </DropdownMenu>
 
@@ -1473,6 +1512,9 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
         // Seats re-scan (TODO: requires storing source guild ID + relay bot token endpoint)
         // onRescanSeats={handleRescanSeats}
         // rescanningSeats={rescanningSeats}
+        // Leave/Delete community (opens confirmation dialog)
+        onLeaveCommunity={() => { setSettingsDialogOpen(false); setLeaveDialogOpen(true); }}
+        onDeleteCommunity={() => { setSettingsDialogOpen(false); setDeleteDialogOpen(true); }}
       />
 
 
@@ -1628,6 +1670,26 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
         categories={spaceCategoriesForMove}
         currentCategoryId={moveCategoryChannelCurrentCategoryId}
         onSelect={handleMoveToCategorySelect}
+      />
+
+      {/* Leave Community Confirmation */}
+      <ConfirmDialog
+        open={leaveDialogOpen}
+        onClose={() => setLeaveDialogOpen(false)}
+        title="Leave Community"
+        message={`Are you sure you want to leave "${community?.name || 'this community'}"? You will lose access to all channels and messages.`}
+        confirmLabel="Leave"
+        onConfirm={handleLeaveConfirm}
+      />
+
+      {/* Delete Community Confirmation */}
+      <ConfirmDialog
+        open={deleteDialogOpen}
+        onClose={() => setDeleteDialogOpen(false)}
+        title="Delete Community"
+        message={`Are you sure you want to permanently delete "${community?.name || 'this community'}"? This will delete all channels, messages, roles, and members. This action cannot be undone.`}
+        confirmLabel="Delete Community"
+        onConfirm={handleDeleteConfirm}
       />
     </View>
   );

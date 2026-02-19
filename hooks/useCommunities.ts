@@ -29,6 +29,8 @@ export interface UseCommunititesResult {
   createCommunity: (name: string, description?: string) => Promise<CommunityCreateResult | null>;
   /** Delete a community (owner only) */
   deleteCommunity: (communityId: string) => Promise<void>;
+  /** Leave a community (non-owners only) */
+  leaveCommunity: (communityId: string) => Promise<void>;
 }
 
 export function useCommunities(): UseCommunititesResult {
@@ -101,6 +103,21 @@ export function useCommunities(): UseCommunititesResult {
         await fetchCommunities();
       } catch (err) {
         setError(err instanceof Error ? err : new Error(String(err)));
+        throw err;
+      }
+    },
+    [service, identity?.did, fetchCommunities],
+  );
+
+  const leaveCommunity = useCallback(
+    async (communityId: string): Promise<void> => {
+      if (!service || !identity?.did) return;
+      try {
+        await service.leaveCommunity(communityId, identity.did);
+        await fetchCommunities();
+      } catch (err) {
+        setError(err instanceof Error ? err : new Error(String(err)));
+        throw err;
       }
     },
     [service, identity?.did, fetchCommunities],
@@ -113,5 +130,6 @@ export function useCommunities(): UseCommunititesResult {
     refresh: fetchCommunities,
     createCommunity,
     deleteCommunity,
+    leaveCommunity,
   };
 }

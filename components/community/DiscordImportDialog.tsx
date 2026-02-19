@@ -8,7 +8,7 @@
 
 import React, { useCallback, useEffect } from 'react';
 import { View, ScrollView, Pressable, ActivityIndicator } from 'react-native';
-import { Dialog, Button, Text, useTheme } from '@coexist/wisp-react-native';
+import { Dialog, Button, Text, Toggle, useTheme } from '@coexist/wisp-react-native';
 import { useSound } from '@/contexts/SoundContext';
 import { defaultSpacing, defaultRadii } from '@coexist/wisp-core/theme/create-theme';
 import Svg, { Path, Circle, Rect, Line, Polyline } from 'react-native-svg';
@@ -332,48 +332,6 @@ function ServerSelectionScreen({
   );
 }
 
-/**
- * A simple toggle switch component for the import dialog.
- */
-function ToggleSwitch({
-  value,
-  onToggle,
-  disabled,
-}: {
-  value: boolean;
-  onToggle: () => void;
-  disabled?: boolean;
-}) {
-  const { theme } = useTheme();
-  const tc = theme.colors;
-
-  return (
-    <Pressable
-      onPress={onToggle}
-      disabled={disabled}
-      style={{
-        width: 40,
-        height: 22,
-        borderRadius: 11,
-        backgroundColor: value ? tc.accent.primary : tc.background.sunken,
-        justifyContent: 'center',
-        paddingHorizontal: 2,
-        opacity: disabled ? 0.4 : 1,
-      }}
-    >
-      <View
-        style={{
-          width: 18,
-          height: 18,
-          borderRadius: 9,
-          backgroundColor: '#fff',
-          alignSelf: value ? 'flex-end' : 'flex-start',
-        }}
-      />
-    </Pressable>
-  );
-}
-
 function UsersIcon({ size, color }: { size: number; color: string }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
@@ -397,6 +355,15 @@ function PinIcon({ size, color }: { size: number; color: string }) {
   );
 }
 
+function BridgeIcon({ size, color }: { size: number; color: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+      <Path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+    </Svg>
+  );
+}
+
 function PreviewScreen({
   structure,
   validationIssues,
@@ -415,6 +382,8 @@ function PreviewScreen({
   pinsLoading,
   botStatus,
   onInviteBot,
+  enableBridge,
+  onToggleBridge,
 }: {
   structure: MappedCommunityStructure;
   validationIssues: string[];
@@ -433,6 +402,8 @@ function PreviewScreen({
   pinsLoading: boolean;
   botStatus: BotStatus;
   onInviteBot: () => void;
+  enableBridge: boolean;
+  onToggleBridge: () => void;
 }) {
   const { theme } = useTheme();
   const tc = theme.colors;
@@ -597,7 +568,7 @@ function PreviewScreen({
                   {memberCount.toLocaleString()} members as claimable ghost seats
                 </Text>
               </View>
-              <ToggleSwitch value={importMembers} onToggle={onToggleMemberImport} />
+              <Toggle checked={importMembers} onChange={() => onToggleMemberImport()} size="sm" />
             </View>
           ) : !membersAvailable && (
             <View
@@ -658,14 +629,36 @@ function PreviewScreen({
                   {pinCount.toLocaleString()} pinned message{pinCount !== 1 ? 's' : ''} across channels
                 </Text>
               </View>
-              <ToggleSwitch value={importPins} onToggle={onTogglePinImport} />
+              <Toggle checked={importPins} onChange={() => onTogglePinImport()} size="sm" />
             </View>
           ) : null}
+
+          {/* Bridge toggle — always shown when bot is connected */}
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: defaultSpacing.md,
+              padding: defaultSpacing.md,
+              backgroundColor: tc.background.sunken,
+              borderRadius: defaultRadii.md,
+            }}
+          >
+            <BridgeIcon size={18} color={tc.text.muted} />
+            <View style={{ flex: 1 }}>
+              <Text size="sm" weight="medium" style={{ color: tc.text.primary }}>
+                Enable Discord Bridge
+              </Text>
+              <Text size="xs" style={{ color: tc.text.muted }}>
+                Keep messages synced between Discord and Umbra in real-time
+              </Text>
+            </View>
+            <Toggle checked={enableBridge} onChange={() => onToggleBridge()} size="sm" />
+          </View>
         </>
       ) : (
         /* Bot not connected — show connect banner */
-        <Pressable
-          onPress={botStatus === 'inviting' ? undefined : onInviteBot}
+        <View
           style={{
             padding: defaultSpacing.md,
             backgroundColor: tc.accent.primary + '10',
@@ -685,22 +678,9 @@ function PreviewScreen({
                 Unlock additional import features
               </Text>
             </View>
-            {botStatus === 'inviting' ? (
-              <ActivityIndicator size="small" />
-            ) : (
-              <View
-                style={{
-                  paddingHorizontal: defaultSpacing.md,
-                  paddingVertical: defaultSpacing.xs,
-                  backgroundColor: tc.accent.primary,
-                  borderRadius: defaultRadii.sm,
-                }}
-              >
-                <Text size="xs" weight="semibold" style={{ color: '#fff' }}>
-                  Connect
-                </Text>
-              </View>
-            )}
+            <Button size="xs" onPress={onInviteBot} isLoading={botStatus === 'inviting'}>
+              Connect
+            </Button>
           </View>
           <View style={{ gap: 4, paddingLeft: 26 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: defaultSpacing.xs }}>
@@ -722,7 +702,7 @@ function PreviewScreen({
               </Text>
             </View>
           </View>
-        </Pressable>
+        </View>
       )}
 
       {/* Channel preview */}
@@ -1208,6 +1188,8 @@ export function DiscordImportDialog({
     refetchStructure,
     toggleMemberImport,
     togglePinImport,
+    toggleBridge,
+    enableBridge,
     reset,
   } = useDiscordCommunityImport();
 
@@ -1314,6 +1296,8 @@ export function DiscordImportDialog({
             pinsLoading={pinsLoading}
             botStatus={botStatus}
             onInviteBot={inviteBot}
+            enableBridge={enableBridge}
+            onToggleBridge={toggleBridge}
           />
         ) : null;
 

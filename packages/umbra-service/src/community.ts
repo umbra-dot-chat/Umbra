@@ -1329,6 +1329,12 @@ export async function createCommunityFromDiscordImport(
       percent: 100,
     });
 
+    // Convert channelIdMap to a plain object for the result
+    const channelIdMapObj: Record<string, string> = {};
+    channelIdMap.forEach((umbraId, discordId) => {
+      channelIdMapObj[discordId] = umbraId;
+    });
+
     return {
       success: true,
       communityId,
@@ -1339,6 +1345,7 @@ export async function createCommunityFromDiscordImport(
       pinsImported,
       errors,
       warnings,
+      channelIdMap: channelIdMapObj,
     };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
