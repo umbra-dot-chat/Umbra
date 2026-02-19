@@ -18,7 +18,7 @@ use uuid::Uuid;
 use crate::discovery::{
     config::DISCORD_COMMUNITY_IMPORT_SCOPES,
     types::{
-        DiscordChannelType, DiscordGuildInfo, DiscordGuildsResponse, DiscordGuildStructureResponse,
+        DiscordChannelType, DiscordEmoji, DiscordGuildInfo, DiscordGuildsResponse, DiscordGuildStructureResponse,
         DiscordImportedChannel, DiscordImportedRole, DiscordImportedStructure,
         DiscordPermissionOverwrite, OAuthState, Platform, StartAuthResponse,
     },
@@ -114,8 +114,29 @@ struct DiscordFullGuildApiResponse {
     id: String,
     name: String,
     icon: Option<String>,
+    #[serde(default)]
+    banner: Option<String>,
+    #[serde(default)]
+    splash: Option<String>,
+    #[serde(default)]
+    discovery_splash: Option<String>,
+    #[serde(default)]
+    description: Option<String>,
     owner_id: String,
     roles: Vec<DiscordRoleApiResponse>,
+    #[serde(default)]
+    emojis: Vec<DiscordEmojiApiResponse>,
+}
+
+/// Discord emoji from guild info API response.
+#[derive(Debug, Clone, Deserialize)]
+struct DiscordEmojiApiResponse {
+    id: Option<String>,
+    name: Option<String>,
+    #[serde(default)]
+    animated: bool,
+    #[serde(default)]
+    available: bool,
 }
 
 /// Query for fetching guilds list (requires access token).
@@ -699,7 +720,7 @@ pub async fn get_discord_guild_structure(
         .send()
         .await;
 
-    let (roles, _guild_info): (Vec<DiscordRoleApiResponse>, Option<DiscordFullGuildApiResponse>) =
+    let (roles, full_guild_info): (Vec<DiscordRoleApiResponse>, Option<DiscordFullGuildApiResponse>) =
         match guild_response {
             Ok(resp) if resp.status().is_success() => match resp.json().await {
                 Ok(g) => {
@@ -766,10 +787,36 @@ pub async fn get_discord_guild_structure(
         })
         .collect();
 
+    // Extract extra guild data from full guild response (if available)
+    let (banner, splash, description) = if let Some(ref fg) = full_guild_info {
+        (fg.banner.clone(), fg.splash.clone(), fg.description.clone())
+    } else {
+        (None, None, None)
+    };
+
+    // Convert emojis to our format
+    let imported_emojis: Vec<DiscordEmoji> = full_guild_info
+        .as_ref()
+        .map(|fg| {
+            fg.emojis
+                .iter()
+                .filter(|e| e.available && e.id.is_some())
+                .map(|e| DiscordEmoji {
+                    id: e.id.clone(),
+                    name: e.name.clone(),
+                    animated: e.animated,
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
     let guild_info = DiscordGuildInfo {
         id: guild.id.clone(),
         name: guild.name.clone(),
         icon: guild.icon.clone(),
+        banner,
+        splash,
+        description,
         owner: guild.owner,
         permissions,
         can_manage: true,
@@ -779,6 +826,7 @@ pub async fn get_discord_guild_structure(
         guild_id = guild_id.as_str(),
         channel_count = imported_channels.len(),
         role_count = imported_roles.len(),
+        emoji_count = imported_emojis.len(),
         "Fetched Discord guild structure for community import"
     );
 
@@ -788,6 +836,7 @@ pub async fn get_discord_guild_structure(
             guild: guild_info,
             channels: imported_channels,
             roles: imported_roles,
+            emojis: imported_emojis,
         }),
         error: None,
     })

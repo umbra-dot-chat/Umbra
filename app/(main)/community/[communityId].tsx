@@ -297,7 +297,7 @@ export default function CommunityPage() {
     sendMessage,
     pinnedMessages,
     unpinMessage,
-  } = useCommunityMessages(isMock ? null : activeChannelId);
+  } = useCommunityMessages(isMock ? null : activeChannelId, communityId);
 
   // Right panel
   const { visiblePanel, panelWidth, togglePanel } = useRightPanel();

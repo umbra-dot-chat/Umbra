@@ -409,12 +409,33 @@ pub struct DiscordGuildInfo {
     pub name: String,
     /// Guild icon hash (can be used to construct icon URL).
     pub icon: Option<String>,
+    /// Guild banner hash (for banner image).
+    #[serde(default)]
+    pub banner: Option<String>,
+    /// Guild splash hash (for invite splash image).
+    #[serde(default)]
+    pub splash: Option<String>,
+    /// Guild description.
+    #[serde(default)]
+    pub description: Option<String>,
     /// Whether the user is the owner.
     pub owner: bool,
     /// User's permissions in this guild (as integer bitfield).
     pub permissions: u64,
     /// Whether the user has MANAGE_GUILD permission.
     pub can_manage: bool,
+}
+
+/// Discord custom emoji.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscordEmoji {
+    /// Emoji ID (null for unicode emoji).
+    pub id: Option<String>,
+    /// Emoji name.
+    pub name: Option<String>,
+    /// Whether the emoji is animated.
+    pub animated: bool,
 }
 
 /// Discord channel types (subset we care about).
@@ -519,6 +540,9 @@ pub struct DiscordImportedStructure {
     pub channels: Vec<DiscordImportedChannel>,
     /// All roles (excluding @everyone which is position 0).
     pub roles: Vec<DiscordImportedRole>,
+    /// Custom emojis.
+    #[serde(default)]
+    pub emojis: Vec<DiscordEmoji>,
 }
 
 /// Response from the guilds list endpoint.

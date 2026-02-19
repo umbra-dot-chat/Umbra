@@ -7,7 +7,7 @@
  */
 
 import React, { useCallback, useEffect } from 'react';
-import { View, ScrollView, Pressable, ActivityIndicator } from 'react-native';
+import { View, ScrollView, Pressable, ActivityIndicator, Image } from 'react-native';
 import { Dialog, Button, Text, Toggle, useTheme } from '@coexist/wisp-react-native';
 import { useSound } from '@/contexts/SoundContext';
 import { defaultSpacing, defaultRadii } from '@coexist/wisp-core/theme/create-theme';
@@ -21,7 +21,7 @@ import type {
   CommunityImportResult,
   CommunityImportProgress,
 } from '@umbra/service';
-import { getGuildIconUrl } from '@umbra/service';
+import { getGuildIconUrl, getGuildBannerUrl } from '@umbra/service';
 
 // ---------------------------------------------------------------------------
 // Icons
@@ -117,6 +117,27 @@ function EyeIcon({ size, color }: { size: number; color: string }) {
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
       <Path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
       <Circle cx="12" cy="12" r="3" />
+    </Svg>
+  );
+}
+
+function SmileIcon({ size, color }: { size: number; color: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Circle cx="12" cy="12" r="10" />
+      <Path d="M8 14s1.5 2 4 2 4-2 4-2" />
+      <Line x1="9" y1="9" x2="9.01" y2="9" />
+      <Line x1="15" y1="9" x2="15.01" y2="9" />
+    </Svg>
+  );
+}
+
+function ImageIcon({ size, color }: { size: number; color: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+      <Circle cx="8.5" cy="8.5" r="1.5" />
+      <Polyline points="21,15 16,10 5,21" />
     </Svg>
   );
 }
@@ -299,11 +320,12 @@ function ServerSelectionScreen({
                   }}
                 >
                   {guild.icon ? (
-                    <View
+                    <Image
+                      source={{ uri: getGuildIconUrl(guild.id, guild.icon, 128) ?? undefined }}
                       style={{
                         width: 40,
                         height: 40,
-                        backgroundColor: tc.background.sunken,
+                        borderRadius: 20,
                       }}
                     />
                   ) : (
@@ -366,6 +388,7 @@ function BridgeIcon({ size, color }: { size: number; color: string }) {
 
 function PreviewScreen({
   structure,
+  selectedGuild,
   validationIssues,
   onBack,
   onImport,
@@ -386,6 +409,7 @@ function PreviewScreen({
   onToggleBridge,
 }: {
   structure: MappedCommunityStructure;
+  selectedGuild: DiscordGuildInfo | null;
   validationIssues: string[];
   onBack: () => void;
   onImport: () => void;
@@ -410,20 +434,89 @@ function PreviewScreen({
 
   const hasIssues = validationIssues.length > 0;
   const memberCount = importedMembers?.length ?? 0;
+  const emojiCount = structure.emojis?.length ?? 0;
+  const bannerUrl = selectedGuild ? getGuildBannerUrl(selectedGuild.id, selectedGuild.banner, 960) : null;
+  const iconUrl = selectedGuild ? getGuildIconUrl(selectedGuild.id, selectedGuild.icon, 128) : null;
 
   return (
     <View style={{ gap: defaultSpacing.md }}>
-      {/* Header */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: defaultSpacing.md }}>
-        <Button variant="tertiary" size="sm" onPress={onBack}>
-          Back
-        </Button>
-        <View style={{ flex: 1 }}>
-          <Text size="lg" weight="semibold" style={{ color: tc.text.primary }}>
-            {structure.name}
-          </Text>
+      {/* Banner and header */}
+      {bannerUrl ? (
+        <View style={{ marginHorizontal: -defaultSpacing.lg, marginTop: -defaultSpacing.lg }}>
+          <Image
+            source={{ uri: bannerUrl }}
+            style={{
+              width: '100%',
+              height: 120,
+              borderTopLeftRadius: defaultRadii.lg,
+              borderTopRightRadius: defaultRadii.lg,
+            }}
+            resizeMode="cover"
+          />
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: defaultSpacing.md,
+              paddingHorizontal: defaultSpacing.lg,
+              paddingTop: defaultSpacing.sm,
+              marginTop: -30,
+            }}
+          >
+            <Button variant="tertiary" size="sm" onPress={onBack}>
+              Back
+            </Button>
+            {iconUrl ? (
+              <View
+                style={{
+                  width: 48,
+                  height: 48,
+                  borderRadius: 24,
+                  borderWidth: 3,
+                  borderColor: tc.background.base,
+                  overflow: 'hidden',
+                }}
+              >
+                <Image
+                  source={{ uri: iconUrl }}
+                  style={{ width: 42, height: 42 }}
+                />
+              </View>
+            ) : null}
+            <View style={{ flex: 1 }}>
+              <Text size="lg" weight="semibold" style={{ color: tc.text.primary }}>
+                {structure.name}
+              </Text>
+            </View>
+          </View>
         </View>
-      </View>
+      ) : (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: defaultSpacing.md }}>
+          <Button variant="tertiary" size="sm" onPress={onBack}>
+            Back
+          </Button>
+          {iconUrl ? (
+            <View
+              style={{
+                width: 40,
+                height: 40,
+                borderRadius: 20,
+                overflow: 'hidden',
+              }}
+            >
+              <Image
+                source={{ uri: iconUrl }}
+                style={{ width: 40, height: 40 }}
+              />
+            </View>
+          ) : null}
+          <View style={{ flex: 1 }}>
+            <Text size="lg" weight="semibold" style={{ color: tc.text.primary }}>
+              {structure.name}
+            </Text>
+          </View>
+        </View>
+      )}
 
       {/* Validation issues */}
       {hasIssues && (
@@ -518,6 +611,25 @@ function PreviewScreen({
             </Text>
             <Text size="xs" style={{ color: tc.text.muted }}>
               Members
+            </Text>
+          </View>
+        )}
+        {emojiCount > 0 && (
+          <View
+            style={{
+              flex: 1,
+              minWidth: 70,
+              padding: defaultSpacing.md,
+              backgroundColor: tc.background.sunken,
+              borderRadius: defaultRadii.md,
+              alignItems: 'center',
+            }}
+          >
+            <Text size="xl" weight="bold" style={{ color: tc.accent.primary }}>
+              {emojiCount}
+            </Text>
+            <Text size="xs" style={{ color: tc.text.muted }}>
+              Emojis
             </Text>
           </View>
         )}
@@ -1280,6 +1392,7 @@ export function DiscordImportDialog({
         return mappedStructure ? (
           <PreviewScreen
             structure={mappedStructure}
+            selectedGuild={selectedGuild}
             validationIssues={validationIssues}
             onBack={backToSelection}
             onImport={handleImport}

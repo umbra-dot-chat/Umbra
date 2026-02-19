@@ -51,7 +51,7 @@ export interface UseCommunityMessagesResult {
   refreshPinned: () => Promise<void>;
 }
 
-export function useCommunityMessages(channelId: string | null): UseCommunityMessagesResult {
+export function useCommunityMessages(channelId: string | null, communityId?: string | null): UseCommunityMessagesResult {
   const { service, isReady } = useUmbra();
   const { identity } = useAuth();
   const [messages, setMessages] = useState<CommunityMessage[]>([]);
@@ -211,13 +211,42 @@ export function useCommunityMessages(channelId: string | null): UseCommunityMess
           if (prev.some((m) => m.id === msg.id)) return prev;
           return [msg, ...prev];
         });
+
+        // Broadcast to other community members via relay
+        if (communityId) {
+          const relayWs = service.getRelayWs();
+          service.broadcastCommunityEvent(
+            communityId,
+            {
+              type: 'communityMessageSent',
+              channelId,
+              messageId: msg.id,
+              senderDid: identity.did,
+              content,
+            },
+            identity.did,
+            relayWs,
+          ).catch((err) => console.warn('[useCommunityMessages] Failed to broadcast message:', err));
+        }
+
         return msg;
       } catch (err) {
         setError(err instanceof Error ? err : new Error(String(err)));
         return null;
       }
     },
-    [service, channelId, identity?.did],
+    [service, channelId, communityId, identity?.did],
+  );
+
+  // Helper to broadcast a community event via the relay
+  const broadcast = useCallback(
+    (event: CommunityEvent) => {
+      if (!service || !communityId || !identity?.did) return;
+      const relayWs = service.getRelayWs();
+      service.broadcastCommunityEvent(communityId, event, identity.did, relayWs)
+        .catch((err) => console.warn('[useCommunityMessages] Broadcast failed:', err));
+    },
+    [service, communityId, identity?.did],
   );
 
   const editMessage = useCallback(
@@ -231,11 +260,12 @@ export function useCommunityMessages(channelId: string | null): UseCommunityMess
             m.id === messageId ? { ...m, content: newContent, edited: true, editedAt: Date.now() } : m,
           ),
         );
+        if (channelId) broadcast({ type: 'communityMessageEdited', channelId, messageId });
       } catch (err) {
         setError(err instanceof Error ? err : new Error(String(err)));
       }
     },
-    [service, identity?.did],
+    [service, channelId, identity?.did, broadcast],
   );
 
   const deleteMessage = useCallback(
@@ -244,11 +274,12 @@ export function useCommunityMessages(channelId: string | null): UseCommunityMess
       try {
         await service.deleteCommunityMessage(messageId);
         setMessages((prev) => prev.filter((m) => m.id !== messageId));
+        if (channelId) broadcast({ type: 'communityMessageDeleted', channelId, messageId });
       } catch (err) {
         setError(err instanceof Error ? err : new Error(String(err)));
       }
     },
-    [service],
+    [service, channelId, broadcast],
   );
 
   const pinMessage = useCallback(
@@ -261,11 +292,12 @@ export function useCommunityMessages(channelId: string | null): UseCommunityMess
             m.id === messageId ? { ...m, pinned: true, pinnedBy: identity.did, pinnedAt: Date.now() } : m,
           ),
         );
+        broadcast({ type: 'communityMessagePinned', channelId, messageId });
       } catch (err) {
         setError(err instanceof Error ? err : new Error(String(err)));
       }
     },
-    [service, channelId, identity?.did],
+    [service, channelId, identity?.did, broadcast],
   );
 
   const unpinMessage = useCallback(
@@ -278,11 +310,12 @@ export function useCommunityMessages(channelId: string | null): UseCommunityMess
             m.id === messageId ? { ...m, pinned: false, pinnedBy: undefined, pinnedAt: undefined } : m,
           ),
         );
+        broadcast({ type: 'communityMessageUnpinned', channelId, messageId });
       } catch (err) {
         setError(err instanceof Error ? err : new Error(String(err)));
       }
     },
-    [service, channelId, identity?.did],
+    [service, channelId, identity?.did, broadcast],
   );
 
   const addReaction = useCallback(
@@ -290,11 +323,12 @@ export function useCommunityMessages(channelId: string | null): UseCommunityMess
       if (!service || !identity?.did) return;
       try {
         await service.addCommunityReaction(messageId, identity.did, emoji);
+        broadcast({ type: 'communityReactionAdded', messageId, emoji, memberDid: identity.did });
       } catch (err) {
         setError(err instanceof Error ? err : new Error(String(err)));
       }
     },
-    [service, identity?.did],
+    [service, identity?.did, broadcast],
   );
 
   const removeReaction = useCallback(
@@ -302,6 +336,7 @@ export function useCommunityMessages(channelId: string | null): UseCommunityMess
       if (!service || !identity?.did) return;
       try {
         await service.removeCommunityReaction(messageId, identity.did, emoji);
+        broadcast({ type: 'communityReactionRemoved', messageId, emoji, memberDid: identity.did });
       } catch (err) {
         setError(err instanceof Error ? err : new Error(String(err)));
       }

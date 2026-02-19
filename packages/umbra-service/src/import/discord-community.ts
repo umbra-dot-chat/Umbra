@@ -18,12 +18,30 @@ export interface DiscordGuildInfo {
   name: string;
   /** Guild icon hash (can be used to construct icon URL). */
   icon: string | null;
+  /** Guild banner hash (for banner image). */
+  banner: string | null;
+  /** Guild splash hash (for invite splash image). */
+  splash: string | null;
+  /** Guild description. */
+  description: string | null;
   /** Whether the authenticated user is the owner. */
   owner: boolean;
   /** User's permissions in this guild (as integer). */
   permissions: number;
   /** Whether the user has MANAGE_GUILD permission. */
   canManage: boolean;
+}
+
+/**
+ * Discord custom emoji.
+ */
+export interface DiscordEmoji {
+  /** Emoji ID (null for unicode emoji). */
+  id: string | null;
+  /** Emoji name. */
+  name: string | null;
+  /** Whether the emoji is animated. */
+  animated: boolean;
 }
 
 /**
@@ -106,6 +124,8 @@ export interface DiscordImportedStructure {
   channels: DiscordImportedChannel[];
   /** All roles (excluding @everyone). */
   roles: DiscordImportedRole[];
+  /** Custom emojis. */
+  emojis?: DiscordEmoji[];
 }
 
 /**
@@ -129,6 +149,20 @@ export interface DiscordGuildStructureResponse {
 }
 
 /**
+ * Mapped emoji for import.
+ */
+export interface MappedEmoji {
+  /** Source platform emoji ID. */
+  id: string;
+  /** Emoji name (without colons). */
+  name: string;
+  /** Whether the emoji is animated. */
+  animated: boolean;
+  /** Full URL to the emoji image. */
+  url: string;
+}
+
+/**
  * Mapped structure ready for Umbra community creation.
  *
  * This is the platform-agnostic output contract for all import adapters.
@@ -147,6 +181,10 @@ export interface MappedCommunityStructure {
   description: string;
   /** Source Discord guild ID (for later re-sync / fetch-users). */
   sourceGuildId?: string;
+  /** Community icon URL (from source platform). */
+  iconUrl?: string;
+  /** Community banner URL (from source platform). */
+  bannerUrl?: string;
   /** Categories to create. */
   categories: MappedCategory[];
   /** Channels to create (sorted by position within categories). */
@@ -157,6 +195,8 @@ export interface MappedCommunityStructure {
   seats?: MappedSeat[];
   /** Pinned messages by source channel ID. */
   pinnedMessages?: Record<string, MappedPinnedMessage[]>;
+  /** Custom emojis from the source platform. */
+  emojis?: MappedEmoji[];
 }
 
 /**
@@ -331,6 +371,31 @@ export function getGuildIconUrl(guildId: string, iconHash: string | null, size =
 }
 
 /**
+ * Get the Discord CDN URL for a guild banner.
+ */
+export function getGuildBannerUrl(guildId: string, bannerHash: string | null, size = 480): string | null {
+  if (!bannerHash) return null;
+  const format = bannerHash.startsWith('a_') ? 'gif' : 'png';
+  return `https://cdn.discordapp.com/banners/${guildId}/${bannerHash}.${format}?size=${size}`;
+}
+
+/**
+ * Get the Discord CDN URL for a guild splash.
+ */
+export function getGuildSplashUrl(guildId: string, splashHash: string | null, size = 480): string | null {
+  if (!splashHash) return null;
+  return `https://cdn.discordapp.com/splashes/${guildId}/${splashHash}.png?size=${size}`;
+}
+
+/**
+ * Get the Discord CDN URL for a custom emoji.
+ */
+export function getEmojiUrl(emojiId: string, animated: boolean, size = 128): string {
+  const format = animated ? 'gif' : 'png';
+  return `https://cdn.discordapp.com/emojis/${emojiId}.${format}?size=${size}`;
+}
+
+/**
  * Map a Discord channel type number to our type string.
  */
 export function mapChannelType(type: number | string): DiscordChannelType {
@@ -419,13 +484,33 @@ export function mapDiscordToUmbra(structure: DiscordImportedStructure): MappedCo
       mentionable: r.mentionable,
     }));
 
+  // Build icon and banner URLs
+  const iconUrl = getGuildIconUrl(structure.guild.id, structure.guild.icon, 256);
+  const bannerUrl = getGuildBannerUrl(structure.guild.id, structure.guild.banner, 960);
+
+  // Map emojis
+  const emojis: MappedEmoji[] = (structure.emojis || [])
+    .filter((e) => e.id && e.name)
+    .map((e) => ({
+      id: e.id!,
+      name: e.name!,
+      animated: e.animated,
+      url: getEmojiUrl(e.id!, e.animated),
+    }));
+
+  // Use Discord description if available, otherwise generate one
+  const description = structure.guild.description || `Imported from Discord server "${structure.guild.name}"`;
+
   return {
     name: structure.guild.name,
-    description: `Imported from Discord server "${structure.guild.name}"`,
+    description,
     sourceGuildId: structure.guild.id,
+    iconUrl: iconUrl ?? undefined,
+    bannerUrl: bannerUrl ?? undefined,
     categories,
     channels,
     roles,
+    emojis: emojis.length > 0 ? emojis : undefined,
   };
 }
 
