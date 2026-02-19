@@ -254,7 +254,7 @@ deploy_relay_to_host() {
     fi
 
     # Create the relay directory
-    eval "$local_ssh_cmd $SSH_USER@$ssh_target 'mkdir -p $path/src'"
+    eval "$local_ssh_cmd $SSH_USER@$ssh_target 'mkdir -p $path/src $path/bridge-bot/src'"
 
     # Copy necessary files
     rsync -avz --delete -e "$local_rsync_ssh" "$PROJECT_ROOT/packages/umbra-relay/Dockerfile" "$SSH_USER@$ssh_target:$path/"
@@ -271,6 +271,18 @@ deploy_relay_to_host() {
     # Copy src directory
     rsync -avz --delete -e "$local_rsync_ssh" "$PROJECT_ROOT/packages/umbra-relay/src/" "$SSH_USER@$ssh_target:$path/src/"
 
+    # Copy bridge bot files
+    log_info "Syncing bridge bot files..."
+    rsync -avz --delete -e "$local_rsync_ssh" \
+        "$PROJECT_ROOT/packages/umbra-bridge-bot/package.json" \
+        "$PROJECT_ROOT/packages/umbra-bridge-bot/package-lock.json" \
+        "$PROJECT_ROOT/packages/umbra-bridge-bot/tsconfig.json" \
+        "$PROJECT_ROOT/packages/umbra-bridge-bot/Dockerfile" \
+        "$SSH_USER@$ssh_target:$path/bridge-bot/"
+    rsync -avz --delete -e "$local_rsync_ssh" \
+        "$PROJECT_ROOT/packages/umbra-bridge-bot/src/" \
+        "$SSH_USER@$ssh_target:$path/bridge-bot/src/"
+
     # Build and restart on the server with federation env vars
     log_info "Building and starting relay on server..."
     eval "$local_ssh_cmd $SSH_USER@$ssh_target 'cd $path && \
@@ -286,7 +298,20 @@ deploy_relay_to_host() {
         RELAY_ID=\"$relay_id\" \
         RELAY_PUBLIC_URL=\"$public_url\" \
         RELAY_PEERS=\"$peers\" \
-        docker compose up -d && \
+        docker compose up -d'"
+
+    # Start bridge bot if DISCORD_BOT_TOKEN is configured in .env
+    eval "$local_ssh_cmd $SSH_USER@$ssh_target 'cd $path && \
+        if grep -q \"^DISCORD_BOT_TOKEN=.\" .env 2>/dev/null; then \
+            echo \"Starting bridge bot...\"; \
+            docker compose --profile bridge build && \
+            docker compose --profile bridge up -d; \
+        else \
+            echo \"DISCORD_BOT_TOKEN not set in .env, skipping bridge bot\"; \
+        fi'"
+
+    # Show status
+    eval "$local_ssh_cmd $SSH_USER@$ssh_target 'cd $path && \
         docker compose ps && \
         docker compose logs --tail=20'"
 
