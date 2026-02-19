@@ -1,7 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { Platform, View } from 'react-native';
-import { Text, useTheme } from '@coexist/wisp-react-native';
-import { E2EEKeyExchangeUI } from '@coexist/wisp-react-native/src/components/e2ee-key-exchange-ui';
+import { Text, useTheme, E2EEKeyExchangeUI } from '@coexist/wisp-react-native';
 import { useHoverMessage } from '@/hooks/useHoverMessage';
 import { useRightPanel } from '@/hooks/useRightPanel';
 import { useProfilePopoverContext } from '@/contexts/ProfilePopoverContext';

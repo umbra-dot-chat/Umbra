@@ -145,4 +145,13 @@ if (pkg.exports) {
 fs.writeFileSync('$RN_DEST/package.json', JSON.stringify(pkg, null, 2) + '\n');
 "
 
+# Add missing exports to the react-native main index.ts
+# E2EEKeyExchangeUI is exported from components but not the main barrel.
+# Append re-exports for components that Umbra uses via deep imports.
+echo "" >> "$RN_DEST/src/index.ts"
+echo "// Re-exports added by patch-wisp.sh for deep import compatibility" >> "$RN_DEST/src/index.ts"
+echo "export { E2EEKeyExchangeUI } from './components/e2ee-key-exchange-ui';" >> "$RN_DEST/src/index.ts"
+echo "export type { E2EEKeyExchangeUIProps } from './components/e2ee-key-exchange-ui';" >> "$RN_DEST/src/index.ts"
+echo "export type { SearchResult, SearchFilter, SearchFilterType } from './components/message-search';" >> "$RN_DEST/src/index.ts"
+
 echo "Done. Wisp packages patched successfully."

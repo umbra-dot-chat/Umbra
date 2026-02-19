@@ -25,10 +25,9 @@ import type { GestureResponderEvent } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import {
   useTheme, Text, EmojiPicker,
-  MemberList, MessageInput, MessageList,
+  MemberList, MessageInput, MessageList, E2EEKeyExchangeUI,
   type MemberListSection, type MemberListMember, type MessageListEntry,
 } from '@coexist/wisp-react-native';
-import { E2EEKeyExchangeUI } from '@coexist/wisp-react-native/src/components/e2ee-key-exchange-ui';
 
 import { useAuth } from '@/contexts/AuthContext';
 import { useCommunity } from '@/hooks/useCommunity';
