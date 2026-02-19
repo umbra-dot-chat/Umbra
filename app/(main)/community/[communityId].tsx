@@ -473,21 +473,34 @@ export default function CommunityPage() {
   }, [seats]);
 
   // Build pinned messages for the right panel
+  // Uses ghost seat lookup for imported/bridge messages
   const pinnedForPanel = useMemo(() =>
-    (pinnedMessages || []).map((m) => ({
-      id: m.id,
-      sender: m.senderDisplayName
-        || (m.senderDid ? (memberNameMap.get(m.senderDid) || (m.senderDid === myDid ? 'You' : m.senderDid.slice(0, 16))) : 'Unknown'),
-      content: m.content ?? '',
-      timestamp: m.createdAt
-        ? new Date(m.createdAt < 1000000000000 ? m.createdAt * 1000 : m.createdAt)
-            .toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
-        : '',
-      pinnedBy: m.pinnedBy
-        ? (memberNameMap.get(m.pinnedBy) || m.pinnedBy.slice(0, 16))
-        : undefined,
-    })),
-  [pinnedMessages, memberNameMap, myDid]);
+    (pinnedMessages || []).map((m) => {
+      // Look up ghost seat if message has a platformUserId
+      const seat = m.platformUserId ? seatByPlatformUserId.get(m.platformUserId) : undefined;
+
+      // Priority: seat username > senderDisplayName > member nickname > truncated DID
+      const sender = (seat ? seat.platformUsername : undefined)
+        || m.senderDisplayName
+        || (m.senderDid ? (memberNameMap.get(m.senderDid) || (m.senderDid === myDid ? 'You' : m.senderDid.slice(0, 16))) : 'Unknown');
+
+      return {
+        id: m.id,
+        sender,
+        content: m.content ?? '',
+        timestamp: m.createdAt
+          ? new Date(m.createdAt < 1000000000000 ? m.createdAt * 1000 : m.createdAt)
+              .toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+          : '',
+        pinnedBy: m.pinnedBy
+          ? (memberNameMap.get(m.pinnedBy) || m.pinnedBy.slice(0, 16))
+          : undefined,
+        // Include avatar URL for potential future use in pinned message display
+        avatarUrl: seat?.avatarUrl || m.senderAvatarUrl,
+        isGhostSeat: seat && !seat.claimedByDid,
+      };
+    }),
+  [pinnedMessages, memberNameMap, myDid, seatByPlatformUserId]);
 
   const messageEntries = useMemo<MessageListEntry[]>(() => {
     const sorted = [...messages].reverse();

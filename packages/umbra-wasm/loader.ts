@@ -166,6 +166,7 @@ export interface UmbraWasmModule {
   umbra_wasm_community_update(json: string): string;
   umbra_wasm_community_delete(json: string): string;
   umbra_wasm_community_transfer_ownership(json: string): string;
+  umbra_wasm_community_update_branding(json: string): string;
 
   // Community — Spaces
   umbra_wasm_community_space_create(json: string): string;
@@ -325,6 +326,10 @@ export interface UmbraWasmModule {
   umbra_wasm_community_seat_delete(json: string): string;
   umbra_wasm_community_seat_create_batch(json: string): string;
   umbra_wasm_community_seat_count(community_id: string): string;
+
+  // Community Audit Log
+  umbra_wasm_community_audit_log_create_batch(json: string): string;
+  umbra_wasm_community_audit_log_list(json: string): string;
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -776,6 +781,8 @@ function buildModule(wasmPkg: any): UmbraWasmModule {
       wasmPkg.umbra_wasm_community_delete(json),
     umbra_wasm_community_transfer_ownership: (json: string) =>
       wasmPkg.umbra_wasm_community_transfer_ownership(json),
+    umbra_wasm_community_update_branding: (json: string) =>
+      wasmPkg.umbra_wasm_community_update_branding(json),
 
     // Community — Spaces
     umbra_wasm_community_space_create: (json: string) =>
@@ -1126,5 +1133,11 @@ function buildModule(wasmPkg: any): UmbraWasmModule {
       wasmPkg.umbra_wasm_community_seat_create_batch(json),
     umbra_wasm_community_seat_count: (community_id: string) =>
       wasmPkg.umbra_wasm_community_seat_count(community_id),
+
+    // ── Community Audit Log ─────────────────────────────────────────────
+    umbra_wasm_community_audit_log_create_batch: (json: string) =>
+      wasmPkg.umbra_wasm_community_audit_log_create_batch(json),
+    umbra_wasm_community_audit_log_list: (json: string) =>
+      wasmPkg.umbra_wasm_community_audit_log_list(json),
   };
 }

@@ -152,6 +152,7 @@ export function useCommunityMessages(channelId: string | null, communityId?: str
             // content since the recipient doesn't have the message in their local
             // WASM DB. Construct a CommunityMessage from the event fields.
             if (event.content) {
+              const now = Date.now();
               const inlineMsg: CommunityMessage = {
                 id: event.messageId,
                 channelId: event.channelId,
@@ -161,8 +162,8 @@ export function useCommunityMessages(channelId: string | null, communityId?: str
                 pinned: false,
                 systemMessage: false,
                 threadReplyCount: 0,
-                createdAt: Date.now(),
-                updatedAt: Date.now(),
+                createdAt: now,
+                updatedAt: now,
                 // Bridge messages carry sender display name & avatar from Discord
                 senderDisplayName: event.senderDisplayName,
                 senderAvatarUrl: event.senderAvatarUrl,
@@ -176,6 +177,13 @@ export function useCommunityMessages(channelId: string | null, communityId?: str
                 if (prev.some((m) => m.id === inlineMsg.id)) return prev;
                 return [inlineMsg, ...prev];
               });
+
+              // Persist to local WASM DB so message survives app restart
+              service.storeReceivedCommunityMessage(
+                event.messageId, event.channelId, event.senderDid, event.content, now,
+              ).catch((err) =>
+                console.warn('[useCommunityMessages] Failed to persist relay message:', err),
+              );
             } else {
               // Event without content — refresh from local WASM DB
               refreshFromWasm();
@@ -259,6 +267,8 @@ export function useCommunityMessages(channelId: string | null, communityId?: str
               messageId: msg.id,
               senderDid: identity.did,
               content,
+              senderDisplayName: identity.displayName,
+              senderAvatarUrl: identity.avatar,
             },
             identity.did,
             relayWs,

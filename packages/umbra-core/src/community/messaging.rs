@@ -190,6 +190,27 @@ impl super::CommunityService {
         Ok(id)
     }
 
+    /// Store a received message from another member (via relay / bridge).
+    ///
+    /// Unlike `send_message`, this skips permission checks and slow-mode
+    /// enforcement because the message was authored elsewhere. Uses
+    /// INSERT OR IGNORE so duplicate IDs are silently skipped.
+    pub fn store_received_message(
+        &self,
+        id: &str,
+        channel_id: &str,
+        sender_did: &str,
+        content: &str,
+        created_at: i64,
+    ) -> Result<()> {
+        self.db().store_community_message_if_not_exists(
+            id, channel_id, sender_did,
+            None, Some(content), None, None, false,
+            None, None, false, false,
+            None, created_at,
+        )
+    }
+
     /// Get messages for a channel with pagination.
     pub fn get_messages(
         &self,

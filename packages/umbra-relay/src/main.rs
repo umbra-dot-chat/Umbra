@@ -289,6 +289,7 @@ async fn main() {
         .route("/community/import/discord/bot-status", get(discovery::oauth::community_import::check_bot_in_guild))
         .route("/community/import/discord/guild/:id/members", get(discovery::oauth::community_import::get_discord_guild_members))
         .route("/community/import/discord/channel/:id/pins", get(discovery::oauth::community_import::get_discord_channel_pins))
+        .route("/community/import/discord/guild/:id/audit-log", get(discovery::oauth::community_import::get_discord_guild_audit_log))
         // API routes
         .route("/discovery/status", get(discovery::api::get_status))
         .route("/discovery/settings", post(discovery::api::update_settings))

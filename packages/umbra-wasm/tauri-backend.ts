@@ -527,6 +527,9 @@ export function createTauriBackend(
     umbra_wasm_community_transfer_ownership: (json: string) => {
       return invoke('community_transfer_ownership', { json }).then(ensureJsonString) as any;
     },
+    umbra_wasm_community_update_branding: (json: string) => {
+      return invoke('community_update_branding', { json }).then(ensureJsonString) as any;
+    },
 
     // ── Community — Spaces ──────────────────────────────────────────
     umbra_wasm_community_space_create: (json: string) => {
@@ -920,6 +923,14 @@ export function createTauriBackend(
     },
     umbra_wasm_community_seat_count: (community_id: string) => {
       return invoke('community_seat_count', { community_id }).then(ensureJsonString) as any;
+    },
+
+    // ── Community Audit Log ─────────────────────────────────────────────
+    umbra_wasm_community_audit_log_create_batch: (json: string) => {
+      return invoke('community_audit_log_create_batch', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_audit_log_list: (json: string) => {
+      return invoke('community_audit_log_list', { json }).then(ensureJsonString) as any;
     },
   };
 }

@@ -142,6 +142,16 @@ function ImageIcon({ size, color }: { size: number; color: string }) {
   );
 }
 
+function HistoryIcon({ size, color }: { size: number; color: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M3 3v5h5" />
+      <Path d="M3.05 13A9 9 0 1 0 6 5.3L3 8" />
+      <Path d="M12 7v5l4 2" />
+    </Svg>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -403,6 +413,11 @@ function PreviewScreen({
   pinsAvailable,
   membersLoading,
   pinsLoading,
+  importAuditLog,
+  onToggleAuditLogImport,
+  auditLogCount,
+  auditLogAvailable,
+  auditLogLoading,
   botStatus,
   onInviteBot,
   enableBridge,
@@ -424,6 +439,11 @@ function PreviewScreen({
   pinsAvailable: boolean;
   membersLoading: boolean;
   pinsLoading: boolean;
+  importAuditLog: boolean;
+  onToggleAuditLogImport: () => void;
+  auditLogCount: number;
+  auditLogAvailable: boolean;
+  auditLogLoading: boolean;
   botStatus: BotStatus;
   onInviteBot: () => void;
   enableBridge: boolean;
@@ -437,6 +457,15 @@ function PreviewScreen({
   const emojiCount = structure.emojis?.length ?? 0;
   const bannerUrl = selectedGuild ? getGuildBannerUrl(selectedGuild.id, selectedGuild.banner, 960) : null;
   const iconUrl = selectedGuild ? getGuildIconUrl(selectedGuild.id, selectedGuild.icon, 128) : null;
+
+  // Debug logging for audit log
+  console.log('[PreviewScreen] Audit log state:', {
+    auditLogCount,
+    auditLogAvailable,
+    auditLogLoading,
+    importAuditLog,
+    botStatus,
+  });
 
   return (
     <View style={{ gap: defaultSpacing.md }}>
@@ -745,6 +774,67 @@ function PreviewScreen({
             </View>
           ) : null}
 
+          {/* Audit log toggle */}
+          {auditLogLoading ? (
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: defaultSpacing.md,
+                padding: defaultSpacing.md,
+                backgroundColor: tc.background.sunken,
+                borderRadius: defaultRadii.md,
+              }}
+            >
+              <ActivityIndicator size="small" color={tc.text.muted} />
+              <View style={{ flex: 1 }}>
+                <Text size="sm" weight="medium" style={{ color: tc.text.primary }}>
+                  Fetching audit log...
+                </Text>
+                <Text size="xs" style={{ color: tc.text.muted }}>
+                  Loading server moderation history
+                </Text>
+              </View>
+            </View>
+          ) : auditLogCount > 0 ? (
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: defaultSpacing.md,
+                padding: defaultSpacing.md,
+                backgroundColor: tc.background.sunken,
+                borderRadius: defaultRadii.md,
+              }}
+            >
+              <HistoryIcon size={18} color={tc.text.muted} />
+              <View style={{ flex: 1 }}>
+                <Text size="sm" weight="medium" style={{ color: tc.text.primary }}>
+                  Import audit log
+                </Text>
+                <Text size="xs" style={{ color: tc.text.muted }}>
+                  {auditLogCount.toLocaleString()} moderation action{auditLogCount !== 1 ? 's' : ''}
+                </Text>
+              </View>
+              <Toggle checked={importAuditLog} onChange={() => onToggleAuditLogImport()} size="sm" />
+            </View>
+          ) : !auditLogAvailable && !auditLogLoading ? (
+            <View
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: defaultSpacing.sm,
+                paddingHorizontal: defaultSpacing.md,
+                paddingVertical: defaultSpacing.sm,
+              }}
+            >
+              <HistoryIcon size={14} color={tc.text.muted} />
+              <Text size="xs" style={{ color: tc.text.muted, flex: 1 }}>
+                No audit log entries found or unable to fetch audit log.
+              </Text>
+            </View>
+          ) : null}
+
           {/* Bridge toggle — always shown when bot is connected */}
           <View
             style={{
@@ -811,6 +901,12 @@ function PreviewScreen({
               <PinIcon size={12} color={tc.text.muted} />
               <Text size="xs" style={{ color: tc.text.muted }}>
                 Pinned messages — import pinned messages from channels
+              </Text>
+            </View>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: defaultSpacing.xs }}>
+              <HistoryIcon size={12} color={tc.text.muted} />
+              <Text size="xs" style={{ color: tc.text.muted }}>
+                Audit log — import moderation history with user seats
               </Text>
             </View>
           </View>
@@ -1076,6 +1172,7 @@ const PHASE_LABELS: Record<string, string> = {
   creating_roles: 'Creating roles…',
   creating_seats: 'Importing members…',
   importing_pins: 'Importing pinned messages…',
+  importing_audit_log: 'Importing audit log…',
   complete: 'Finishing up…',
 };
 
@@ -1221,6 +1318,16 @@ function CompleteScreen({
             </Text>
           </View>
         )}
+        {result.auditLogImported > 0 && (
+          <View style={{ alignItems: 'center' }}>
+            <Text size="xl" weight="bold" style={{ color: tc.accent.primary }}>
+              {result.auditLogImported.toLocaleString()}
+            </Text>
+            <Text size="xs" style={{ color: tc.text.muted }}>
+              Audit Log
+            </Text>
+          </View>
+        )}
       </View>
 
       {/* Warnings — compact, truncated to avoid overwhelming the screen */}
@@ -1290,6 +1397,11 @@ export function DiscordImportDialog({
     pinCount,
     membersLoading,
     pinsLoading,
+    importAuditLog,
+    auditLogEntries,
+    auditLogAvailable,
+    auditLogLoading,
+    auditLogCount,
     progress,
     startAuth,
     refreshGuilds,
@@ -1300,6 +1412,7 @@ export function DiscordImportDialog({
     refetchStructure,
     toggleMemberImport,
     togglePinImport,
+    toggleAuditLogImport,
     toggleBridge,
     enableBridge,
     reset,
@@ -1407,6 +1520,11 @@ export function DiscordImportDialog({
             pinsAvailable={pinsAvailable}
             membersLoading={membersLoading}
             pinsLoading={pinsLoading}
+            importAuditLog={importAuditLog}
+            onToggleAuditLogImport={toggleAuditLogImport}
+            auditLogCount={auditLogCount}
+            auditLogAvailable={auditLogAvailable}
+            auditLogLoading={auditLogLoading}
             botStatus={botStatus}
             onInviteBot={inviteBot}
             enableBridge={enableBridge}

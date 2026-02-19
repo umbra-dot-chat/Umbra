@@ -197,6 +197,8 @@ export interface MappedCommunityStructure {
   pinnedMessages?: Record<string, MappedPinnedMessage[]>;
   /** Custom emojis from the source platform. */
   emojis?: MappedEmoji[];
+  /** Audit log entries from the source platform. */
+  auditLog?: MappedAuditLogEntry[];
 }
 
 /**
@@ -351,6 +353,87 @@ export interface DiscordPinnedMessage {
 export interface DiscordChannelPinsResponse {
   /** List of pinned messages. */
   pins: DiscordPinnedMessage[];
+}
+
+/**
+ * A Discord audit log entry.
+ */
+export interface DiscordAuditLogEntry {
+  /** Entry ID. */
+  id: string;
+  /** Umbra-mapped action type (e.g., "member_ban_add"). */
+  actionType: string;
+  /** Original Discord action type number. */
+  discordActionType: number;
+  /** Discord user ID of who performed the action. */
+  actorUserId: string;
+  /** Username of who performed the action. */
+  actorUsername: string;
+  /** Avatar hash of the actor. */
+  actorAvatar: string | null;
+  /** Target ID (user, channel, role, etc.). */
+  targetId: string | null;
+  /** Target type (member, channel, role, etc.). */
+  targetType: string;
+  /** Reason provided for the action. */
+  reason: string | null;
+  /** Changes made (for update actions). */
+  changes?: unknown[];
+  /** Additional options (for specific actions). */
+  options?: Record<string, unknown>;
+}
+
+/**
+ * Response from the guild audit log endpoint.
+ */
+export interface DiscordAuditLogResponse {
+  /** List of audit log entries. */
+  entries: DiscordAuditLogEntry[];
+  /** Error message if fetch failed. */
+  error?: string;
+}
+
+/**
+ * Mapped audit log entry for Umbra import.
+ */
+export interface MappedAuditLogEntry {
+  /** Action type (e.g., "member_ban_add", "channel_create"). */
+  actionType: string;
+  /** Platform user ID of who performed the action. */
+  actorPlatformUserId: string;
+  /** Username of the actor. */
+  actorUsername: string;
+  /** Avatar URL of the actor. */
+  actorAvatarUrl?: string;
+  /** Target type (member, channel, role, etc.). */
+  targetType: string;
+  /** Target ID (platform-specific). */
+  targetId?: string;
+  /** Reason for the action. */
+  reason?: string;
+  /** Additional metadata. */
+  metadata?: Record<string, unknown>;
+  /** Original timestamp (approximated from snowflake ID). */
+  timestamp: number;
+}
+
+/**
+ * Convert Discord avatar to CDN URL.
+ */
+export function getAvatarUrl(userId: string, avatarHash: string | null, size = 128): string | null {
+  if (!avatarHash) return null;
+  const format = avatarHash.startsWith('a_') ? 'gif' : 'png';
+  return `https://cdn.discordapp.com/avatars/${userId}/${avatarHash}.${format}?size=${size}`;
+}
+
+/**
+ * Extract timestamp from Discord snowflake ID.
+ * Discord epoch is 2015-01-01T00:00:00.000Z
+ */
+export function snowflakeToTimestamp(snowflake: string): number {
+  const DISCORD_EPOCH = 1420070400000;
+  const id = BigInt(snowflake);
+  return Number((id >> 22n) + BigInt(DISCORD_EPOCH));
 }
 
 /**
@@ -573,7 +656,7 @@ export function validateImportStructure(
  */
 export interface CommunityImportProgress {
   /** Current phase of import. */
-  phase: 'creating_community' | 'creating_categories' | 'creating_channels' | 'creating_roles' | 'creating_seats' | 'importing_pins' | 'complete';
+  phase: 'creating_community' | 'creating_categories' | 'creating_channels' | 'creating_roles' | 'creating_seats' | 'importing_pins' | 'importing_audit_log' | 'complete';
   /** Progress percentage (0-100). */
   percent: number;
   /** Current item being created. */
@@ -602,6 +685,8 @@ export interface CommunityImportResult {
   seatsCreated: number;
   /** Number of pinned messages imported. */
   pinsImported: number;
+  /** Number of audit log entries imported. */
+  auditLogImported: number;
   /** Any errors that occurred. */
   errors: string[];
   /** Warnings (non-fatal issues). */

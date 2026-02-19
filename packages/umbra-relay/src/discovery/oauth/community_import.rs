@@ -1317,3 +1317,244 @@ pub async fn get_discord_channel_pins(
     }))
     .into_response()
 }
+
+// ---------------------------------------------------------------------------
+// Discord Audit Log (for audit log import)
+// ---------------------------------------------------------------------------
+
+/// Query for fetching audit log.
+#[derive(Debug, Deserialize)]
+pub struct AuditLogQuery {
+    /// Access token from OAuth flow.
+    pub token: String,
+    /// Maximum number of entries to fetch (default 100, max 100).
+    #[serde(default)]
+    pub limit: Option<u32>,
+}
+
+/// Get audit log entries from a Discord guild.
+///
+/// GET /community/import/discord/guild/:id/audit-log?token=...&limit=100
+///
+/// Uses the Bot token to fetch audit log entries. Requires VIEW_AUDIT_LOG permission.
+pub async fn get_discord_guild_audit_log(
+    State((_, config)): State<(DiscoveryStore, DiscoveryConfig)>,
+    Path(guild_id): Path<String>,
+    Query(query): Query<AuditLogQuery>,
+) -> impl IntoResponse {
+    let bot_token = match &config.discord_bot_token {
+        Some(token) => token,
+        None => {
+            return Json(serde_json::json!({
+                "entries": [],
+                "error": "Bot token not configured"
+            }))
+            .into_response();
+        }
+    };
+
+    // Verify user has access to this guild
+    let client = Client::new();
+    let guilds_response = client
+        .get(format!("{}/users/@me/guilds", config.discord_api_url()))
+        .header("Authorization", format!("Bearer {}", query.token))
+        .send()
+        .await;
+
+    let has_access = match guilds_response {
+        Ok(resp) if resp.status().is_success() => {
+            let guilds: Vec<DiscordGuildApiResponse> = resp.json().await.unwrap_or_default();
+            guilds.iter().any(|g| g.id == guild_id)
+        }
+        _ => false,
+    };
+
+    if !has_access {
+        return Json(serde_json::json!({
+            "entries": [],
+            "error": "No access to this guild"
+        }))
+        .into_response();
+    }
+
+    // Fetch audit log using bot token
+    let limit = query.limit.unwrap_or(100).min(100);
+    let response = client
+        .get(format!(
+            "{}/guilds/{}/audit-logs?limit={}",
+            config.discord_api_url(),
+            guild_id,
+            limit
+        ))
+        .header("Authorization", format!("Bot {}", bot_token))
+        .send()
+        .await;
+
+    let entries: Vec<serde_json::Value> = match response {
+        Ok(resp) if resp.status().is_success() => {
+            let data: serde_json::Value = resp.json().await.unwrap_or_default();
+
+            // Build user lookup map from the users array in the response
+            let users = data["users"].as_array().unwrap_or(&Vec::new()).clone();
+            let user_map: std::collections::HashMap<String, &serde_json::Value> = users
+                .iter()
+                .filter_map(|u| {
+                    let id = u["id"].as_str()?;
+                    Some((id.to_string(), u))
+                })
+                .collect();
+
+            // Parse audit log entries
+            data["audit_log_entries"]
+                .as_array()
+                .unwrap_or(&Vec::new())
+                .iter()
+                .filter_map(|entry| {
+                    let id = entry["id"].as_str()?.to_string();
+                    let action_type = entry["action_type"].as_u64()?;
+                    let user_id = entry["user_id"].as_str()?;
+                    let target_id = entry["target_id"].as_str().map(|s| s.to_string());
+                    let reason = entry["reason"].as_str().map(|s| s.to_string());
+
+                    // Get user info from the lookup map
+                    let user = user_map.get(user_id);
+                    let username = user.and_then(|u| u["username"].as_str()).unwrap_or("Unknown");
+                    let avatar = user.and_then(|u| u["avatar"].as_str());
+
+                    // Map Discord action types to Umbra action types
+                    let (umbra_action_type, target_type) = map_discord_audit_action(action_type);
+
+                    Some(serde_json::json!({
+                        "id": id,
+                        "actionType": umbra_action_type,
+                        "discordActionType": action_type,
+                        "actorUserId": user_id,
+                        "actorUsername": username,
+                        "actorAvatar": avatar,
+                        "targetId": target_id,
+                        "targetType": target_type,
+                        "reason": reason,
+                        "changes": entry["changes"],
+                        "options": entry["options"],
+                    }))
+                })
+                .collect()
+        }
+        Ok(resp) => {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+
+            if status.as_u16() == 403 {
+                tracing::warn!(
+                    "Bot lacks VIEW_AUDIT_LOG permission for guild {}: {}",
+                    guild_id, body
+                );
+                return Json(serde_json::json!({
+                    "entries": [],
+                    "error": "Bot does not have VIEW_AUDIT_LOG permission"
+                }))
+                .into_response();
+            }
+
+            tracing::warn!(
+                "Discord audit log fetch failed for guild {}: {} - {}",
+                guild_id, status, body
+            );
+            Vec::new()
+        }
+        Err(e) => {
+            tracing::error!("Discord audit log request failed: {}", e);
+            Vec::new()
+        }
+    };
+
+    tracing::info!(
+        guild_id = guild_id.as_str(),
+        entry_count = entries.len(),
+        "Fetched Discord guild audit log"
+    );
+
+    Json(serde_json::json!({
+        "entries": entries,
+    }))
+    .into_response()
+}
+
+/// Map Discord audit action types to Umbra action types.
+/// See: https://discord.com/developers/docs/resources/audit-log#audit-log-entry-object-audit-log-events
+fn map_discord_audit_action(action_type: u64) -> (&'static str, &'static str) {
+    match action_type {
+        // Guild updates
+        1 => ("guild_update", "guild"),
+        // Channel operations
+        10 => ("channel_create", "channel"),
+        11 => ("channel_update", "channel"),
+        12 => ("channel_delete", "channel"),
+        13 => ("channel_overwrite_create", "channel"),
+        14 => ("channel_overwrite_update", "channel"),
+        15 => ("channel_overwrite_delete", "channel"),
+        // Member operations
+        20 => ("member_kick", "member"),
+        21 => ("member_prune", "member"),
+        22 => ("member_ban_add", "member"),
+        23 => ("member_ban_remove", "member"),
+        24 => ("member_update", "member"),
+        25 => ("member_role_update", "member"),
+        26 => ("member_move", "member"),
+        27 => ("member_disconnect", "member"),
+        28 => ("bot_add", "member"),
+        // Role operations
+        30 => ("role_create", "role"),
+        31 => ("role_update", "role"),
+        32 => ("role_delete", "role"),
+        // Invite operations
+        40 => ("invite_create", "invite"),
+        41 => ("invite_update", "invite"),
+        42 => ("invite_delete", "invite"),
+        // Webhook operations
+        50 => ("webhook_create", "webhook"),
+        51 => ("webhook_update", "webhook"),
+        52 => ("webhook_delete", "webhook"),
+        // Emoji operations
+        60 => ("emoji_create", "emoji"),
+        61 => ("emoji_update", "emoji"),
+        62 => ("emoji_delete", "emoji"),
+        // Message operations
+        72 => ("message_delete", "message"),
+        73 => ("message_bulk_delete", "message"),
+        74 => ("message_pin", "message"),
+        75 => ("message_unpin", "message"),
+        // Integration operations
+        80 => ("integration_create", "integration"),
+        81 => ("integration_update", "integration"),
+        82 => ("integration_delete", "integration"),
+        83 => ("stage_instance_create", "stage"),
+        84 => ("stage_instance_update", "stage"),
+        85 => ("stage_instance_delete", "stage"),
+        // Sticker operations
+        90 => ("sticker_create", "sticker"),
+        91 => ("sticker_update", "sticker"),
+        92 => ("sticker_delete", "sticker"),
+        // Scheduled event operations
+        100 => ("event_create", "event"),
+        101 => ("event_update", "event"),
+        102 => ("event_delete", "event"),
+        // Thread operations
+        110 => ("thread_create", "thread"),
+        111 => ("thread_update", "thread"),
+        112 => ("thread_delete", "thread"),
+        // Auto moderation
+        140 => ("automod_rule_create", "automod"),
+        141 => ("automod_rule_update", "automod"),
+        142 => ("automod_rule_delete", "automod"),
+        143 => ("automod_block_message", "automod"),
+        144 => ("automod_flag_message", "automod"),
+        145 => ("automod_timeout_member", "automod"),
+        // Soundboard
+        130 => ("soundboard_sound_create", "soundboard"),
+        131 => ("soundboard_sound_update", "soundboard"),
+        132 => ("soundboard_sound_delete", "soundboard"),
+        // Default
+        _ => ("unknown", "unknown"),
+    }
+}

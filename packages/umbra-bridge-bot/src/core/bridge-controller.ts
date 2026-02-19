@@ -250,11 +250,23 @@ export class BridgeController {
   private handleDiscordMessage(msg: DiscordToUmbraMessage): void {
     // Find the bridge for this guild
     const bridge = this.bridgesByGuild.get(msg.guildId);
-    if (!bridge) return; // Not a bridged guild
+    if (!bridge) {
+      this.log.debug(
+        { guildId: msg.guildId, bridgedGuilds: Array.from(this.bridgesByGuild.keys()) },
+        'Discord message from non-bridged guild',
+      );
+      return;
+    }
 
     // Look up the Umbra channel
     const umbraChannelId = bridge.channelMap.getUmbraChannelId(msg.discordChannelId);
-    if (!umbraChannelId) return; // Not a bridged channel
+    if (!umbraChannelId) {
+      this.log.debug(
+        { discordChannelId: msg.discordChannelId },
+        'Discord message from non-bridged channel',
+      );
+      return;
+    }
 
     // Resolve the sender's Umbra identity
     const seat = bridge.seatResolver.resolveDiscordUser(
@@ -287,19 +299,37 @@ export class BridgeController {
 
     // Fan out to all community members
     let sent = 0;
-    for (const memberDid of bridge.config.memberDids) {
-      // Don't send to the bridge bot itself
-      if (memberDid === this.identity.did) continue;
+    let failed = 0;
+    const targetMembers = bridge.config.memberDids.filter((d) => d !== this.identity.did);
 
+    for (const memberDid of targetMembers) {
       if (this.relay.sendToDid(memberDid, payload)) {
         sent++;
+      } else {
+        failed++;
+        this.log.warn({ memberDid }, 'Failed to send bridged message to member (relay not connected?)');
       }
     }
 
     // Record for echo guard
     this.echoGuard.recordBridged(messageId);
 
-    this.log.debug(
+    if (sent === 0 && targetMembers.length > 0) {
+      this.log.warn(
+        {
+          direction: 'discord→umbra',
+          guild: msg.guildId,
+          channel: msg.discordChannelId,
+          sender: msg.discordUsername,
+          totalMembers: bridge.config.memberDids.length,
+          targetMembers: targetMembers.length,
+          relayConnected: this.relay.connected,
+        },
+        'Bridged message sent to 0 recipients! Check relay connection.',
+      );
+    }
+
+    this.log.info(
       {
         direction: 'discord→umbra',
         guild: msg.guildId,
@@ -308,6 +338,7 @@ export class BridgeController {
         senderDid: seat.did,
         ghost: seat.isGhost,
         recipients: sent,
+        failed,
         messageId,
       },
       'Bridged message Discord → Umbra',

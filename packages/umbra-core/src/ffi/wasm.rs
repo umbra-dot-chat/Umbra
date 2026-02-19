@@ -6051,6 +6051,36 @@ pub fn umbra_wasm_community_message_send_encrypted(json: &str) -> Result<JsValue
     Ok(JsValue::from_str(&serde_json::json!({"message_id": id}).to_string()))
 }
 
+/// Store a message received from another member via relay / bridge.
+///
+/// Skips permission checks and uses INSERT OR IGNORE so duplicate IDs
+/// are silently skipped. Returns `{ "stored": true }`.
+///
+/// Takes JSON: { "id": "...", "channel_id": "...", "sender_did": "...",
+///               "content": "...", "created_at": 1234567890 }
+#[wasm_bindgen]
+pub fn umbra_wasm_community_message_store_received(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let id = data["id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing id"))?;
+    let channel_id = data["channel_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing channel_id"))?;
+    let sender_did = data["sender_did"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing sender_did"))?;
+    let content = data["content"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing content"))?;
+    let created_at = data["created_at"].as_i64()
+        .ok_or_else(|| JsValue::from_str("Missing created_at"))?;
+
+    let svc = community_service()?;
+    svc.store_received_message(id, channel_id, sender_did, content, created_at)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    Ok(JsValue::from_str(&serde_json::json!({"stored": true}).to_string()))
+}
+
 /// Get messages for a community channel (paginated).
 ///
 /// Takes JSON: { "channel_id": "...", "limit": 50, "before_timestamp": null }

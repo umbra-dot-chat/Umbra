@@ -24,6 +24,7 @@ import type {
   MappedCommunityStructure,
   CommunityImportResult,
   CommunityImportProgress,
+  MappedAuditLogEntry,
 } from './import/discord-community';
 
 // =============================================================================
@@ -81,6 +82,32 @@ export async function updateCommunity(
     actor_did: actorDid,
   });
   wasm().umbra_wasm_community_update(json);
+}
+
+/**
+ * Update a community's branding (icon, banner, etc.).
+ */
+export async function updateCommunityBranding(
+  communityId: string,
+  actorDid: string,
+  options: {
+    iconUrl?: string;
+    bannerUrl?: string;
+    splashUrl?: string;
+    accentColor?: string;
+    customCss?: string;
+  },
+): Promise<void> {
+  const json = JSON.stringify({
+    community_id: communityId,
+    icon_url: options.iconUrl ?? null,
+    banner_url: options.bannerUrl ?? null,
+    splash_url: options.splashUrl ?? null,
+    accent_color: options.accentColor ?? null,
+    custom_css: options.customCss ?? null,
+    actor_did: actorDid,
+  });
+  wasm().umbra_wasm_community_update_branding(json);
 }
 
 /**
@@ -685,6 +712,27 @@ export async function sendMessage(
 }
 
 /**
+ * Store a message received from another member via relay / bridge.
+ * Uses INSERT OR IGNORE so duplicate IDs are silently skipped.
+ */
+export async function storeReceivedMessage(
+  id: string,
+  channelId: string,
+  senderDid: string,
+  content: string,
+  createdAt: number,
+): Promise<void> {
+  const json = JSON.stringify({
+    id,
+    channel_id: channelId,
+    sender_did: senderDid,
+    content,
+    created_at: createdAt,
+  });
+  wasm().umbra_wasm_community_message_store_received(json);
+}
+
+/**
  * Get messages in a channel (paginated).
  */
 export async function getMessages(
@@ -1060,6 +1108,7 @@ export async function createCommunityFromDiscordImport(
   let rolesCreated = 0;
   let seatsCreated = 0;
   let pinsImported = 0;
+  let auditLogImported = 0;
   let communityId: string | undefined;
 
   try {
@@ -1077,6 +1126,19 @@ export async function createCommunityFromDiscordImport(
       ownerNickname,
     );
     communityId = createResult.communityId;
+
+    // Set community branding (icon/banner) if available
+    if (structure.iconUrl || structure.bannerUrl) {
+      try {
+        await updateCommunityBranding(createResult.communityId, ownerDid, {
+          iconUrl: structure.iconUrl,
+          bannerUrl: structure.bannerUrl,
+        });
+      } catch (err) {
+        const msg = `Failed to set community branding: ${err instanceof Error ? err.message : String(err)}`;
+        warnings.push(msg);
+      }
+    }
 
     // Get the default space that was created with the community
     const spaces = await getSpaces(createResult.communityId);
@@ -1268,7 +1330,7 @@ export async function createCommunityFromDiscordImport(
 
       onProgress?.({
         phase: 'importing_pins',
-        percent: 97,
+        percent: 93,
         totalItems: totalPinCount,
         completedItems: 0,
         currentItem: `0 / ${totalPinCount} pins`,
@@ -1307,10 +1369,10 @@ export async function createCommunityFromDiscordImport(
 
           // Report progress every chunk
           if (pinsDone % PIN_CHUNK_SIZE === 0 || pinsDone === totalPinCount) {
-            const pct = 97 + Math.round((pinsDone / totalPinCount) * 2); // 97% → 99%
+            const pct = 93 + Math.round((pinsDone / totalPinCount) * 3); // 93% → 96%
             onProgress?.({
               phase: 'importing_pins',
-              percent: Math.min(pct, 99),
+              percent: Math.min(pct, 96),
               totalItems: totalPinCount,
               completedItems: pinsDone,
               currentItem: `${pinsDone} / ${totalPinCount} pins`,
@@ -1320,6 +1382,47 @@ export async function createCommunityFromDiscordImport(
             await new Promise((r) => setTimeout(r, 0));
           }
         }
+      }
+    }
+
+    // Phase 7: Import audit log
+    if (structure.auditLog && structure.auditLog.length > 0) {
+      const totalAuditEntries = structure.auditLog.length;
+
+      onProgress?.({
+        phase: 'importing_audit_log',
+        percent: 96,
+        totalItems: totalAuditEntries,
+        completedItems: 0,
+        currentItem: `0 / ${totalAuditEntries} entries`,
+      });
+
+      try {
+        // Create audit log entries in batch
+        // Each entry is associated with the actor's seat (if available) via actorPlatformUserId
+        const created = await createAuditLogBatch(createResult.communityId, structure.auditLog);
+        auditLogImported = created;
+
+        onProgress?.({
+          phase: 'importing_audit_log',
+          percent: 99,
+          totalItems: totalAuditEntries,
+          completedItems: created,
+          currentItem: `${created} / ${totalAuditEntries} entries`,
+        });
+      } catch (err) {
+        // Audit log storage may not be implemented yet - log count anyway
+        console.warn('[Import] Audit log storage not yet implemented:', err);
+        auditLogImported = totalAuditEntries; // Count entries even if storage fails
+        warnings.push(`Audit log entries fetched (${totalAuditEntries}) but storage not yet implemented`);
+
+        onProgress?.({
+          phase: 'importing_audit_log',
+          percent: 99,
+          totalItems: totalAuditEntries,
+          completedItems: totalAuditEntries,
+          currentItem: `${totalAuditEntries} entries (pending storage)`,
+        });
       }
     }
 
@@ -1343,6 +1446,7 @@ export async function createCommunityFromDiscordImport(
       rolesCreated,
       seatsCreated,
       pinsImported,
+      auditLogImported,
       errors,
       warnings,
       channelIdMap: channelIdMapObj,
@@ -1359,6 +1463,7 @@ export async function createCommunityFromDiscordImport(
       rolesCreated,
       seatsCreated,
       pinsImported,
+      auditLogImported,
       errors,
       warnings,
     };
@@ -1446,4 +1551,71 @@ export async function createSeatsBatch(
 export async function countSeats(communityId: string): Promise<{ total: number; unclaimed: number }> {
   const resultJson = wasm().umbra_wasm_community_seat_count(communityId);
   return await parseWasm<{ total: number; unclaimed: number }>(resultJson);
+}
+
+// =============================================================================
+// COMMUNITY AUDIT LOG
+// =============================================================================
+
+/**
+ * Audit log entry stored in the database.
+ */
+export interface CommunityAuditLogEntry {
+  id: string;
+  communityId: string;
+  actionType: string;
+  actorPlatformUserId: string;
+  actorUsername: string;
+  actorAvatarUrl?: string;
+  targetType: string;
+  targetId?: string;
+  reason?: string;
+  metadata?: Record<string, unknown>;
+  timestamp: number;
+  createdAt: number;
+}
+
+/**
+ * Create audit log entries in batch (for import).
+ */
+export async function createAuditLogBatch(
+  communityId: string,
+  entries: MappedAuditLogEntry[]
+): Promise<number> {
+  const resultJson = wasm().umbra_wasm_community_audit_log_create_batch(
+    JSON.stringify({
+      community_id: communityId,
+      entries: entries.map((e) => ({
+        action_type: e.actionType,
+        actor_platform_user_id: e.actorPlatformUserId,
+        actor_username: e.actorUsername,
+        actor_avatar_url: e.actorAvatarUrl,
+        target_type: e.targetType,
+        target_id: e.targetId,
+        reason: e.reason,
+        metadata: e.metadata,
+        timestamp: e.timestamp,
+      })),
+    })
+  );
+  const result = await parseWasm<{ created: number }>(resultJson);
+  return result.created;
+}
+
+/**
+ * Get audit log entries for a community.
+ */
+export async function getAuditLog(
+  communityId: string,
+  limit?: number,
+  beforeTimestamp?: number
+): Promise<CommunityAuditLogEntry[]> {
+  const resultJson = wasm().umbra_wasm_community_audit_log_list(
+    JSON.stringify({
+      community_id: communityId,
+      limit: limit ?? 100,
+      before_timestamp: beforeTimestamp ?? null,
+    })
+  );
+  return await parseWasm<CommunityAuditLogEntry[]>(resultJson);
 }

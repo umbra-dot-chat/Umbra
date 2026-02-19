@@ -1547,6 +1547,18 @@ impl Database {
         Ok(())
     }
 
+    /// Store a community message only if it doesn't already exist (INSERT OR IGNORE).
+    /// Used for persisting messages received from the relay / bridge.
+    #[allow(clippy::too_many_arguments)]
+    pub fn store_community_message_if_not_exists(&self, id: &str, channel_id: &str, sender_did: &str, content_encrypted: Option<&[u8]>, content_plaintext: Option<&str>, nonce: Option<&str>, key_version: Option<i32>, is_e2ee: bool, reply_to_id: Option<&str>, thread_id: Option<&str>, has_embed: bool, has_attachment: bool, content_warning: Option<&str>, created_at: i64) -> Result<()> {
+        let ct_hex = content_encrypted.map(hex::encode);
+        self.exec(
+            "INSERT OR IGNORE INTO community_messages (id, channel_id, sender_did, content_encrypted, content_plaintext, nonce, key_version, is_e2ee, reply_to_id, thread_id, has_embed, has_attachment, content_warning, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            json!([id, channel_id, sender_did, ct_hex, content_plaintext, nonce, key_version, is_e2ee as i32, reply_to_id, thread_id, has_embed as i32, has_attachment as i32, content_warning, created_at]),
+        )?;
+        Ok(())
+    }
+
     /// Get community messages for a channel
     pub fn get_community_messages(&self, channel_id: &str, limit: usize, before_timestamp: Option<i64>) -> Result<Vec<CommunityMessageRecord>> {
         let rows = if let Some(before) = before_timestamp {

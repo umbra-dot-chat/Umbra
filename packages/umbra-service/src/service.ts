@@ -981,6 +981,13 @@ export class UmbraService {
     return communityModule.sendMessage(channelId, senderDid, content, replyToId, threadId);
   }
 
+  /** Store a message received from another member via relay / bridge (INSERT OR IGNORE). */
+  storeReceivedCommunityMessage(
+    id: string, channelId: string, senderDid: string, content: string, createdAt: number,
+  ): Promise<void> {
+    return communityModule.storeReceivedMessage(id, channelId, senderDid, content, createdAt);
+  }
+
   getCommunityMessages(channelId: string, limit?: number, beforeTimestamp?: number): Promise<CommunityMessage[]> {
     return communityModule.getMessages(channelId, limit, beforeTimestamp);
   }

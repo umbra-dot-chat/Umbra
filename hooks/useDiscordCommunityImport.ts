@@ -14,13 +14,15 @@ import type {
   MappedCommunityStructure,
   MappedSeat,
   MappedPinnedMessage,
+  MappedAuditLogEntry,
   CommunityImportProgress,
   CommunityImportResult,
   DiscordImportedMember,
   DiscordGuildMembersResponse,
   DiscordChannelPinsResponse,
+  DiscordAuditLogResponse,
 } from '@umbra/service';
-import { mapDiscordToUmbra, validateImportStructure } from '@umbra/service';
+import { mapDiscordToUmbra, validateImportStructure, getAvatarUrl, snowflakeToTimestamp } from '@umbra/service';
 
 /**
  * Configuration for the relay endpoint.
@@ -94,6 +96,16 @@ export interface UseDiscordCommunityImportState {
   membersLoading: boolean;
   /** Whether pinned messages are currently being fetched. */
   pinsLoading: boolean;
+  /** Fetched audit log entries. */
+  auditLogEntries: MappedAuditLogEntry[] | null;
+  /** Whether audit log is available (bot is in guild with required permissions). */
+  auditLogAvailable: boolean;
+  /** Whether audit log is currently being fetched. */
+  auditLogLoading: boolean;
+  /** Whether to import audit log. */
+  importAuditLog: boolean;
+  /** Total count of fetched audit log entries. */
+  auditLogCount: number;
 }
 
 /**
@@ -120,6 +132,8 @@ export interface UseDiscordCommunityImportActions {
   togglePinImport: () => void;
   /** Toggle whether to enable the Discord bridge. */
   toggleBridge: () => void;
+  /** Toggle whether to import audit log. */
+  toggleAuditLogImport: () => void;
   /** Reset to initial state. */
   reset: () => void;
 }
@@ -150,6 +164,10 @@ export function useDiscordCommunityImport(): UseDiscordCommunityImportState & Us
   const [membersLoading, setMembersLoading] = useState(false);
   const [pinsLoading, setPinsLoading] = useState(false);
   const [enableBridge, setEnableBridge] = useState(false);
+  const [auditLogEntries, setAuditLogEntries] = useState<MappedAuditLogEntry[] | null>(null);
+  const [auditLogAvailable, setAuditLogAvailable] = useState(false);
+  const [auditLogLoading, setAuditLogLoading] = useState(false);
+  const [importAuditLog, setImportAuditLog] = useState(true);
 
   // Refs
   const popupRef = useRef<Window | null>(null);
@@ -454,6 +472,81 @@ export function useDiscordCommunityImport(): UseDiscordCommunityImportState & Us
   );
 
   /**
+   * Fetch audit log for a guild.
+   * Requires the bot to be in the guild with VIEW_AUDIT_LOG permission.
+   */
+  const fetchAuditLog = useCallback(
+    async (guildId: string) => {
+      const token = accessTokenRef.current;
+      console.log('[fetchAuditLog] ===== CALLED =====');
+      console.log('[fetchAuditLog] guildId:', guildId);
+      console.log('[fetchAuditLog] accessToken present?', !!token);
+      if (!token) {
+        console.warn('[fetchAuditLog] No accessToken — skipping');
+        return;
+      }
+
+      setAuditLogLoading(true);
+      try {
+        const url = `${RELAY_BASE_URL}/community/import/discord/guild/${guildId}/audit-log?token=${encodeURIComponent(token)}`;
+        console.log('[fetchAuditLog] Fetching:', url.replace(/token=[^&]+/, 'token=***'));
+        const response = await fetch(url);
+        console.log('[fetchAuditLog] Response status:', response.status);
+
+        if (!response.ok) {
+          // 403 likely means the bot doesn't have VIEW_AUDIT_LOG permission
+          if (response.status === 403) {
+            console.warn('[fetchAuditLog] 403 — bot likely lacks VIEW_AUDIT_LOG permission');
+            setAuditLogAvailable(false);
+            setAuditLogEntries(null);
+            return;
+          }
+          // Other errors — silently fail (audit log is optional)
+          console.warn('[fetchAuditLog] Non-OK response:', response.status);
+          setAuditLogAvailable(false);
+          setAuditLogEntries(null);
+          return;
+        }
+
+        const data: DiscordAuditLogResponse = await response.json();
+        console.log('[fetchAuditLog] Response data:', {
+          entryCount: data.entries?.length ?? 0,
+          error: (data as any).error,
+        });
+
+        if (data.entries && data.entries.length > 0) {
+          // Map audit log entries to MappedAuditLogEntry format
+          const mappedEntries: MappedAuditLogEntry[] = data.entries.map((entry) => ({
+            actionType: entry.actionType,
+            actorPlatformUserId: entry.actorUserId,
+            actorUsername: entry.actorUsername,
+            actorAvatarUrl: entry.actorAvatar ? getAvatarUrl(entry.actorUserId, entry.actorAvatar) ?? undefined : undefined,
+            targetType: entry.targetType,
+            targetId: entry.targetId ?? undefined,
+            reason: entry.reason ?? undefined,
+            metadata: entry.changes ? { changes: entry.changes, options: entry.options } : entry.options,
+            timestamp: snowflakeToTimestamp(entry.id),
+          }));
+          console.log('[fetchAuditLog] Mapped entries:', mappedEntries.length);
+          setAuditLogEntries(mappedEntries);
+          setAuditLogAvailable(true);
+        } else {
+          setAuditLogEntries(null);
+          setAuditLogAvailable(false);
+        }
+      } catch (err) {
+        // Network error — audit log is optional, don't fail the flow
+        console.error('[fetchAuditLog] Error:', err);
+        setAuditLogAvailable(false);
+        setAuditLogEntries(null);
+      } finally {
+        setAuditLogLoading(false);
+      }
+    },
+    []
+  );
+
+  /**
    * Start the OAuth authentication flow.
    */
   const startAuth = useCallback(async () => {
@@ -571,6 +664,7 @@ export function useDiscordCommunityImport(): UseDiscordCommunityImportState & Us
             // Try to fetch members anyway (they may be available even with empty structure)
             fetchMembers(guild.id);
             if (mapped) fetchPins(mapped.channels);
+            fetchAuditLog(guild.id);
             setPhase('previewing');
           } else {
             setBotStatus('not_in_guild');
@@ -583,10 +677,11 @@ export function useDiscordCommunityImport(): UseDiscordCommunityImportState & Us
           console.log('[selectGuild] Bot status:', { botEnabled, inGuild, guildId: guild.id });
           if (botEnabled && inGuild) {
             setBotStatus('in_guild');
-            // Bot is in guild — fetch members and pins in background
-            console.log('[selectGuild] Calling fetchMembers + fetchPins for guild', guild.id);
+            // Bot is in guild — fetch members, pins, and audit log in background
+            console.log('[selectGuild] Calling fetchMembers + fetchPins + fetchAuditLog for guild', guild.id);
             fetchMembers(guild.id);
             if (mapped) fetchPins(mapped.channels);
+            fetchAuditLog(guild.id);
           } else if (botEnabled) {
             setBotStatus('not_in_guild');
             console.log('[selectGuild] Bot enabled but NOT in guild — skipping fetchMembers');
@@ -605,7 +700,7 @@ export function useDiscordCommunityImport(): UseDiscordCommunityImportState & Us
         setIsLoading(false);
       }
     },
-    [fetchStructure, checkBotStatusForGuild, fetchMembers, fetchPins]
+    [fetchStructure, checkBotStatusForGuild, fetchMembers, fetchPins, fetchAuditLog]
   );
 
   /**
@@ -631,6 +726,10 @@ export function useDiscordCommunityImport(): UseDiscordCommunityImportState & Us
     setImportPins(true);
     setPinsLoading(false);
     setEnableBridge(false);
+    setAuditLogEntries(null);
+    setAuditLogAvailable(false);
+    setAuditLogLoading(false);
+    setImportAuditLog(true);
     setPhase('selecting_server');
   }, []);
 
@@ -715,9 +814,10 @@ export function useDiscordCommunityImport(): UseDiscordCommunityImportState & Us
             setIsLoading(true);
             try {
               const mapped = await fetchStructure(selectedGuild.id);
-              // Also fetch members and pins now that bot is in guild
+              // Also fetch members, pins, and audit log now that bot is in guild
               fetchMembers(selectedGuild.id);
               if (mapped) fetchPins(mapped.channels);
+              fetchAuditLog(selectedGuild.id);
               if (mapped && !isStructureEmpty(mapped)) {
                 setPhase('previewing');
               } else {
@@ -748,9 +848,10 @@ export function useDiscordCommunityImport(): UseDiscordCommunityImportState & Us
             setIsLoading(true);
             try {
               const mapped = await fetchStructure(selectedGuild.id);
-              // Also fetch members and pins now that bot is in guild
+              // Also fetch members, pins, and audit log now that bot is in guild
               fetchMembers(selectedGuild.id);
               if (mapped) fetchPins(mapped.channels);
+              fetchAuditLog(selectedGuild.id);
             } catch {
               // ignore
             } finally {
@@ -769,7 +870,7 @@ export function useDiscordCommunityImport(): UseDiscordCommunityImportState & Us
       setError(err.message || 'Failed to invite bot');
       setBotStatus('not_in_guild');
     }
-  }, [selectedGuild, fetchStructure, fetchMembers, fetchPins, checkBotStatusForGuild]);
+  }, [selectedGuild, fetchStructure, fetchMembers, fetchPins, fetchAuditLog, checkBotStatusForGuild]);
 
   /**
    * Re-fetch the guild structure for the currently selected guild.
@@ -787,16 +888,17 @@ export function useDiscordCommunityImport(): UseDiscordCommunityImportState & Us
 
     try {
       const mapped = await fetchStructure(selectedGuild.id);
-      // Also re-fetch members and pins in background
+      // Also re-fetch members, pins, and audit log in background
       fetchMembers(selectedGuild.id);
       if (mapped) fetchPins(mapped.channels);
+      fetchAuditLog(selectedGuild.id);
     } catch (err: any) {
       setError(err.message || 'Failed to refresh structure');
     } finally {
       setIsLoading(false);
       setPhase('previewing');
     }
-  }, [selectedGuild, fetchStructure, fetchMembers, fetchPins]);
+  }, [selectedGuild, fetchStructure, fetchMembers, fetchPins, fetchAuditLog]);
 
   /**
    * Start the import process.
@@ -830,6 +932,11 @@ export function useDiscordCommunityImport(): UseDiscordCommunityImportState & Us
         // Inject pinned messages if pin import is enabled
         if (importPins && pinnedMessages) {
           finalStructure.pinnedMessages = pinnedMessages;
+        }
+
+        // Inject audit log if audit log import is enabled
+        if (importAuditLog && auditLogEntries) {
+          finalStructure.auditLog = auditLogEntries;
         }
 
         const importResult = await onCreateCommunity(finalStructure);
@@ -894,7 +1001,7 @@ export function useDiscordCommunityImport(): UseDiscordCommunityImportState & Us
         setProgress(null);
       }
     },
-    [mappedStructure, importMembers, importedMembers, mapMembersToSeats, importPins, pinnedMessages, enableBridge, selectedGuild]
+    [mappedStructure, importMembers, importedMembers, mapMembersToSeats, importPins, pinnedMessages, importAuditLog, auditLogEntries, enableBridge, selectedGuild]
   );
 
   /**
@@ -919,6 +1026,13 @@ export function useDiscordCommunityImport(): UseDiscordCommunityImportState & Us
    */
   const toggleBridge = useCallback(() => {
     setEnableBridge((prev) => !prev);
+  }, []);
+
+  /**
+   * Toggle audit log import on/off.
+   */
+  const toggleAuditLogImport = useCallback(() => {
+    setImportAuditLog((prev) => !prev);
   }, []);
 
   /**
@@ -951,12 +1065,19 @@ export function useDiscordCommunityImport(): UseDiscordCommunityImportState & Us
     setImportPins(true);
     setPinsLoading(false);
     setEnableBridge(false);
+    setAuditLogEntries(null);
+    setAuditLogAvailable(false);
+    setAuditLogLoading(false);
+    setImportAuditLog(true);
   }, []);
 
   // Compute total pin count
   const pinCount = pinnedMessages
     ? Object.values(pinnedMessages).reduce((sum, arr) => sum + arr.length, 0)
     : 0;
+
+  // Compute total audit log count
+  const auditLogCount = auditLogEntries?.length ?? 0;
 
   return {
     // State
@@ -982,6 +1103,11 @@ export function useDiscordCommunityImport(): UseDiscordCommunityImportState & Us
     pinCount,
     membersLoading,
     pinsLoading,
+    auditLogEntries,
+    auditLogAvailable,
+    auditLogLoading,
+    importAuditLog,
+    auditLogCount,
 
     // Actions
     startAuth,
@@ -994,6 +1120,7 @@ export function useDiscordCommunityImport(): UseDiscordCommunityImportState & Us
     toggleMemberImport,
     togglePinImport,
     toggleBridge,
+    toggleAuditLogImport,
     reset,
   };
 }
