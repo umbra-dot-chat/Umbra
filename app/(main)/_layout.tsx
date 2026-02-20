@@ -9,6 +9,7 @@ import { useConversations } from '@/hooks/useConversations';
 import { useFriends } from '@/hooks/useFriends';
 import { useGroups } from '@/hooks/useGroups';
 import { useFriendNotifications } from '@/hooks/useFriendNotifications';
+import { useMessageNotifications } from '@/hooks/useMessageNotifications';
 import { ChatSidebar } from '@/components/sidebar/ChatSidebar';
 import { SettingsDialog } from '@/components/modals/SettingsDialog';
 import { GuideDialog } from '@/components/modals/GuideDialog';
@@ -24,7 +25,7 @@ import { PluginMarketplace } from '@/components/modals/PluginMarketplace';
 import { InstallBanner } from '@/components/ui/InstallBanner';
 import { useCommandPalette } from '@/hooks/useCommandPalette';
 import { SettingsDialogProvider, useSettingsDialog } from '@/contexts/SettingsDialogContext';
-import { CommunityProvider } from '@/contexts/CommunityContext';
+import { CommunityProvider, useCommunityContext } from '@/contexts/CommunityContext';
 import { VoiceChannelProvider } from '@/contexts/VoiceChannelContext';
 import { useCommunities } from '@/hooks/useCommunities';
 import { NavigationRail } from '@/components/navigation/NavigationRail';
@@ -37,6 +38,8 @@ import { useUploadProgress } from '@/hooks/useUploadProgress';
 import { CommunityCreateOptionsDialog } from '@/components/community/CommunityCreateOptionsDialog';
 import { DiscordImportDialog } from '@/components/community/DiscordImportDialog';
 import { useSound } from '@/contexts/SoundContext';
+import { ResizeHandle } from '@/components/ui/ResizeHandle';
+import { useIsMobile } from '@/hooks/useIsMobile';
 
 // TODO: Remove mock community once real communities exist
 const MOCK_COMMUNITY: Community = {
@@ -74,12 +77,14 @@ function MainLayoutInner() {
   const pathname = usePathname();
   const { selectedMember, popoverAnchor, closeProfile } = useProfilePopoverContext();
   const { playSound } = useSound();
+  const isMobile = useIsMobile();
+  const { activeChannelId: communityActiveChannelId } = useCommunityContext();
 
   // Service + data hooks
   const { service, isReady } = useUmbra();
   const { identity } = useAuth();
   const { conversations, refresh: refreshConversations, isLoading: conversationsLoading } = useConversations();
-  const { friends } = useFriends();
+  const { friends, incomingRequests } = useFriends();
   const { groups, pendingInvites, acceptInvite, declineInvite } = useGroups();
   const { communities: realCommunities, createCommunity, isLoading: communitiesLoading } = useCommunities();
 
@@ -153,9 +158,25 @@ function MainLayoutInner() {
     });
   }, [conversations, friendMap, groupMap, lastMessages]);
 
+  // Resizable sidebar
+  const SIDEBAR_MIN = 220;
+  const SIDEBAR_DEFAULT = 320;
+  const SIDEBAR_MAX = 500;
+  const sidebarWidthRef = useRef(SIDEBAR_DEFAULT);
+  const [sidebarWidth, setSidebarWidth] = useState(SIDEBAR_DEFAULT);
+
+  const handleSidebarResize = useCallback((dx: number) => {
+    const newWidth = Math.min(SIDEBAR_MAX, Math.max(SIDEBAR_MIN, sidebarWidthRef.current + dx));
+    sidebarWidthRef.current = newWidth;
+    setSidebarWidth(newWidth);
+  }, []);
+
   // Sidebar state
   const [search, setSearch] = useState('');
   const { activeId, setActiveId, requestSearchPanel } = useActiveConversation();
+
+  // Message notifications for non-active conversations
+  useMessageNotifications(activeId);
   const { isOpen: settingsOpen, openSettings, closeSettings, initialSection: settingsInitialSection } = useSettingsDialog();
   const [guideOpen, setGuideOpen] = useState(false);
   const [createGroupOpen, setCreateGroupOpen] = useState(false);
@@ -316,6 +337,9 @@ function MainLayoutInner() {
         rolesCreated: 0,
         seatsCreated: 0,
         pinsImported: 0,
+        auditLogImported: 0,
+        emojiImported: 0,
+        stickersImported: 0,
         errors: ['No identity found'],
         warnings: [],
       };
@@ -394,54 +418,87 @@ function MainLayoutInner() {
 
   const isFriendsActive = pathname === '/friends';
 
+  // Calculate total unread message count across all conversations
+  const totalUnreadMessages = useMemo(() => {
+    return conversations.reduce((sum, c) => sum + (c.unreadCount || 0), 0);
+  }, [conversations]);
+
+  // Aggregate notification count for home badge (friend requests + unread messages)
+  const homeNotificationCount = incomingRequests.length + totalUnreadMessages;
+
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.background.canvas }}>
       <InstallBanner />
-      <HStack gap={0} style={{ flex: 1 }}>
-        <NavigationRail
-          isHomeActive={isHomeActive}
-          onHomePress={handleHomePress}
-          isFilesActive={isFilesActive}
-          onFilesPress={handleFilesPress}
-          uploadRingProgress={uploadRingProgress}
-          communities={communities}
-          activeCommunityId={activeCommunityId}
-          onCommunityPress={handleCommunityPress}
-          onCreateCommunity={() => { playSound('dialog_open'); setCreateCommunityOptionsOpen(true); }}
-          onOpenSettings={() => { playSound('dialog_open'); openSettings(); }}
-          loading={coreLoading || communitiesLoading}
-        />
-        {activeCommunityId ? (
-          <CommunityLayoutSidebar communityId={activeCommunityId} />
-        ) : (
-          <ChatSidebar
-            search={search}
-            onSearchChange={setSearch}
-            conversations={filtered}
-            activeId={activeId}
-            onSelectConversation={(id) => {
-              setActiveId(id);
-              if (pathname !== '/') {
-                router.push('/');
-              }
-            }}
-            onFriendsPress={() => router.push('/friends')}
-            onNewDm={() => { playSound('dialog_open'); setNewDmOpen(true); }}
-            onCreateGroup={() => { playSound('dialog_open'); setCreateGroupOpen(true); }}
-            onGuidePress={() => { playSound('dialog_open'); setGuideOpen(true); }}
-            onMarketplacePress={() => { playSound('dialog_open'); setMarketplaceOpen(true); }}
-            isFriendsActive={isFriendsActive}
-            pendingInvites={pendingInvites}
-            onAcceptInvite={handleAcceptInvite}
-            onDeclineInvite={handleDeclineInvite}
-            loading={coreLoading || conversationsLoading}
-          />
-        )}
+      {(() => {
+        // Mobile: sidebar and content are mutually exclusive (separate full-screen views)
+        // Desktop: both are always visible side-by-side
+        const mobileShowContent = isMobile && (
+          activeId ||                                           // DM chat is open
+          isFilesActive ||                                      // Files page
+          isFriendsActive ||                                    // Friends page
+          (activeCommunityId && communityActiveChannelId)        // Community channel selected
+        );
+        const showSidebar = !isMobile || !mobileShowContent;
+        const showContent = !isMobile || !!mobileShowContent;
 
-        <View style={{ flex: 1 }}>
-          <Slot />
-        </View>
-      </HStack>
+        return (
+          <HStack gap={0} style={{ flex: 1 }}>
+            {showSidebar && (
+              <>
+                <NavigationRail
+                  isHomeActive={isHomeActive}
+                  onHomePress={handleHomePress}
+                  isFilesActive={isFilesActive}
+                  onFilesPress={handleFilesPress}
+                  uploadRingProgress={uploadRingProgress}
+                  communities={communities}
+                  activeCommunityId={activeCommunityId}
+                  onCommunityPress={handleCommunityPress}
+                  onCreateCommunity={() => { playSound('dialog_open'); setCreateCommunityOptionsOpen(true); }}
+                  onOpenSettings={() => { playSound('dialog_open'); openSettings(); }}
+                  loading={coreLoading || communitiesLoading}
+                  homeNotificationCount={homeNotificationCount}
+                />
+                <View style={{ width: isMobile ? undefined : sidebarWidth, flex: isMobile ? 1 : undefined, flexShrink: 0 }}>
+                  {activeCommunityId ? (
+                    <CommunityLayoutSidebar communityId={activeCommunityId} />
+                  ) : (
+                    <ChatSidebar
+                      search={search}
+                      onSearchChange={setSearch}
+                      conversations={filtered}
+                      activeId={activeId}
+                      onSelectConversation={(id) => {
+                        setActiveId(id);
+                        if (pathname !== '/') {
+                          router.push('/');
+                        }
+                      }}
+                      onFriendsPress={() => router.push('/friends')}
+                      onNewDm={() => { playSound('dialog_open'); setNewDmOpen(true); }}
+                      onCreateGroup={() => { playSound('dialog_open'); setCreateGroupOpen(true); }}
+                      onGuidePress={() => { playSound('dialog_open'); setGuideOpen(true); }}
+                      onMarketplacePress={() => { playSound('dialog_open'); setMarketplaceOpen(true); }}
+                      isFriendsActive={isFriendsActive}
+                      pendingInvites={pendingInvites}
+                      onAcceptInvite={handleAcceptInvite}
+                      onDeclineInvite={handleDeclineInvite}
+                      loading={coreLoading || conversationsLoading}
+                      pendingFriendRequests={incomingRequests.length}
+                    />
+                  )}
+                </View>
+              </>
+            )}
+            {!isMobile && <ResizeHandle onResize={handleSidebarResize} />}
+            {showContent && (
+              <View style={{ flex: 1 }}>
+                <Slot />
+              </View>
+            )}
+          </HStack>
+        );
+      })()}
 
       <ProfilePopover
         selectedMember={selectedMember}

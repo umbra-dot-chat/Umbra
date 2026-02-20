@@ -26,6 +26,8 @@ import { useCall } from '@/hooks/useCall';
 import { pickFile } from '@/utils/filePicker';
 import { InputDialog } from '@/components/community/InputDialog';
 import { useSettingsDialog } from '@/contexts/SettingsDialogContext';
+import { ResizeHandle } from '@/components/ui/ResizeHandle';
+import { useAllCustomEmoji } from '@/hooks/useAllCustomEmoji';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Empty conversation state
@@ -76,7 +78,7 @@ export default function ChatPage() {
   const { friends } = useFriends();
   const { groups, getMembers } = useGroups();
 
-  // Build a DID → display name map from the friends list
+  // Build DID → display name and DID → avatar maps from the friends list
   const friendNames = useMemo(() => {
     const map: Record<string, string> = {};
     for (const f of friends) {
@@ -85,8 +87,16 @@ export default function ChatPage() {
     return map;
   }, [friends]);
 
+  const friendAvatars = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const f of friends) {
+      if (f.avatar) map[f.did] = f.avatar;
+    }
+    return map;
+  }, [friends]);
+
   // Active conversation — shared with sidebar via context
-  const { activeId: activeConversationId, searchPanelRequested, clearSearchPanelRequest } = useActiveConversation();
+  const { activeId: activeConversationId, clearActiveId, searchPanelRequested, clearSearchPanelRequest } = useActiveConversation();
 
   // Resolve active conversation: prefer explicitly selected, fall back to first
   const resolvedConversationId = activeConversationId ?? conversations[0]?.id ?? null;
@@ -139,7 +149,8 @@ export default function ChatPage() {
 
   // Custom hooks
   const { hoveredMessage, handleHoverIn, handleHoverOut } = useHoverMessage();
-  const { rightPanel, visiblePanel, panelWidth, togglePanel } = useRightPanel();
+  const { rightPanel, visiblePanel, panelWidth, togglePanel, resizePanel, panelContentWidth } = useRightPanel();
+  const { customEmojiItems, stickerPickerPacks } = useAllCustomEmoji();
 
   // Open search panel when requested from CommandPalette
   useEffect(() => {
@@ -407,7 +418,8 @@ export default function ChatPage() {
           showCallButtons={!!resolvedConversationId && (isDm ? !!friendDid : true)}
           onVoiceCall={handleVoiceCall}
           onVideoCall={handleVideoCall}
-          onCreateSharedFolder={isDm && resolvedConversationId ? handleCreateSharedFolder : undefined}
+          showFilesButton={isDm && !!resolvedConversationId}
+          onBack={clearActiveId}
         />
         <SlotRenderer slot="chat-header" props={{ conversationId: resolvedConversationId }} />
         {activeCall && activeCall.status !== 'incoming' && activeCall.conversationId === resolvedConversationId ? (
@@ -430,7 +442,10 @@ export default function ChatPage() {
         <ChatArea
           messages={messages}
           myDid={myDid}
+          myDisplayName={identity?.displayName}
+          myAvatar={identity?.avatar}
           friendNames={friendNames}
+          friendAvatars={friendAvatars}
           isLoading={msgsLoading}
           isGroupChat={activeConversation?.type === 'group'}
           typingUser={typingDisplay}
@@ -471,9 +486,17 @@ export default function ChatPage() {
           editing={editingMessage}
           onCancelEdit={handleCancelEdit}
           onAttachmentClick={handleAttachment}
+          customEmojis={customEmojiItems.length > 0 ? customEmojiItems : undefined}
+          stickerPacks={stickerPickerPacks.length > 0 ? stickerPickerPacks : undefined}
+          onStickerSelect={(stickerId) => {
+            if (resolvedConversationId) {
+              sendMessage(`sticker::${stickerId}`);
+            }
+          }}
         />
       </View>
 
+      {rightPanel && <ResizeHandle onResize={resizePanel} />}
       <RightPanel
         panelWidth={panelWidth}
         visiblePanel={visiblePanel}
@@ -493,6 +516,9 @@ export default function ChatPage() {
           // TODO: Scroll to the matched message in the chat view
           console.log('[ChatPage] Search result clicked, message:', messageId);
         }}
+        onCreateFolder={isDm && resolvedConversationId ? handleCreateSharedFolder : undefined}
+        onUploadFile={isDm && resolvedConversationId ? handleAttachment : undefined}
+        panelContentWidth={panelContentWidth}
       />
       <SlotRenderer slot="right-panel" props={{ conversationId: resolvedConversationId }} />
       <InputDialog

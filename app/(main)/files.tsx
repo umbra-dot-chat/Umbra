@@ -8,16 +8,14 @@
  * - Storage: usage meter with cleanup actions
  */
 
-import React, { useState, useCallback, useMemo } from 'react';
-import { Pressable, ScrollView, View } from 'react-native';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
+import { Platform, Pressable, ScrollView, View } from 'react-native';
 import { Text, Button, useTheme } from '@coexist/wisp-react-native';
 import { useFileTransfer } from '@/hooks/useFileTransfer';
 import { useSharedFolders } from '@/hooks/useSharedFolders';
 import { useStorageManager } from '@/hooks/useStorageManager';
 import { useUploadProgress } from '@/hooks/useUploadProgress';
 import { useCommunities } from '@/hooks/useCommunities';
-import { useConversations } from '@/hooks/useConversations';
-import { useFriends } from '@/hooks/useFriends';
 import { useUmbra } from '@/contexts/UmbraContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'expo-router';
@@ -28,7 +26,8 @@ import {
   PlusIcon,
   LockIcon,
 } from '@/components/icons';
-import { InputDialog } from '@/components/community/InputDialog';
+import { pickFile, readFileAsBase64 } from '@/utils/filePicker';
+import { MobileBackButton } from '@/components/ui/MobileBackButton';
 
 // ---------------------------------------------------------------------------
 // Section: Active Transfers Bar
@@ -387,30 +386,167 @@ function FolderDetailView({
 }) {
   const { theme } = useTheme();
   const { service } = useUmbra();
+  const { identity } = useAuth();
+  const myDid = identity?.did ?? '';
   const { formatBytes } = useStorageManager();
   const [files, setFiles] = useState<any[]>([]);
   const [loadingFiles, setLoadingFiles] = useState(true);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const dropZoneRef = useRef<View>(null);
 
   // Load files for this folder
-  React.useEffect(() => {
+  const refreshFiles = useCallback(async () => {
+    if (!service) return;
+    try {
+      const result = await service.getDmFiles(folder.conversationId, folder.folder.id, 1000, 0);
+      setFiles(result);
+    } catch (err) {
+      console.error('[FolderDetailView] Failed to load files:', err);
+    }
+  }, [service, folder.conversationId, folder.folder.id]);
+
+  useEffect(() => {
     if (!service) return;
     let cancelled = false;
-
     (async () => {
-      try {
-        setLoadingFiles(true);
-        const result = await service.getDmFiles(folder.conversationId, folder.folder.id, 1000, 0);
-        if (!cancelled) setFiles(result);
-      } catch (err) {
-        console.error('[FolderDetailView] Failed to load files:', err);
-      } finally {
-        if (!cancelled) setLoadingFiles(false);
-      }
+      setLoadingFiles(true);
+      await refreshFiles();
+      if (!cancelled) setLoadingFiles(false);
     })();
-
     return () => { cancelled = true; };
-  }, [service, folder.conversationId, folder.folder.id]);
+  }, [service, refreshFiles]);
+
+  // Subscribe to DM file events so uploads from DmSharedFilesPanel (or relay) stay in sync
+  useEffect(() => {
+    if (!service) return;
+    const unsubscribe = service.onDmFileEvent((event) => {
+      if (event.conversationId !== folder.conversationId) return;
+      const evt = event.event;
+      if (evt.type === 'fileUploaded') {
+        // Only add if the file belongs to this folder
+        if (evt.file.folderId === folder.folder.id) {
+          setFiles((prev) => {
+            if (prev.some((f) => f.id === evt.file.id)) return prev;
+            return [evt.file, ...prev];
+          });
+        }
+      } else if (evt.type === 'fileDeleted') {
+        setFiles((prev) => prev.filter((f) => f.id !== evt.fileId));
+      } else if (evt.type === 'fileMoved') {
+        refreshFiles();
+      }
+    });
+    return unsubscribe;
+  }, [service, folder.conversationId, folder.folder.id, refreshFiles]);
+
+  // Shared upload logic — processes native File objects (from picker or drag-and-drop)
+  // Dispatches a local DmFileEvent so useDmFiles (DmSharedFilesPanel) stays in sync.
+  const processFileUpload = useCallback(async (nativeFile: File) => {
+    if (!service || !myDid) return;
+    try {
+      const dataBase64 = await readFileAsBase64(nativeFile);
+      const fileId = crypto.randomUUID();
+      const manifest = await service.chunkFile(fileId, nativeFile.name, dataBase64);
+      const record = await service.uploadDmFile(
+        folder.conversationId,
+        folder.folder.id,
+        nativeFile.name,
+        '',
+        nativeFile.size,
+        nativeFile.type || 'application/octet-stream',
+        JSON.stringify(manifest),
+        myDid,
+      );
+      // Dispatch local event so other consumers (e.g. DmSharedFilesPanel) stay in sync
+      service.dispatchDmFileEvent({
+        conversationId: folder.conversationId,
+        senderDid: myDid,
+        timestamp: Date.now(),
+        event: { type: 'fileUploaded', file: record },
+      });
+    } catch (err) {
+      console.error('[FolderDetailView] Upload failed:', err);
+      throw err;
+    }
+  }, [service, myDid, folder.conversationId, folder.folder.id]);
+
+  // Upload button handler — uses file picker
+  const handleUploadClick = useCallback(async () => {
+    if (!service || isUploading) return;
+    const picked = await pickFile();
+    if (!picked) return;
+
+    setIsUploading(true);
+    try {
+      // Convert PickedFile to a native File for the shared upload logic
+      const binaryStr = atob(picked.dataBase64);
+      const bytes = new Uint8Array(binaryStr.length);
+      for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+      const nativeFile = new File([bytes], picked.filename, { type: picked.mimeType });
+      await processFileUpload(nativeFile);
+      await refreshFiles();
+      setToastMessage(`Uploaded ${picked.filename}`);
+    } catch {
+      setToastMessage('Upload failed. Please try again.');
+    } finally {
+      setIsUploading(false);
+    }
+  }, [service, isUploading, processFileUpload, refreshFiles]);
+
+  // Drag-and-drop (web only)
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const node = dropZoneRef.current as unknown as HTMLElement | null;
+    if (!node || typeof node.addEventListener !== 'function') return;
+
+    const handleDragOver = (e: DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsDragOver(true);
+    };
+
+    const handleDragLeave = (e: DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsDragOver(false);
+    };
+
+    const handleDrop = async (e: DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+      setIsDragOver(false);
+
+      const droppedFiles = e.dataTransfer?.files;
+      if (!droppedFiles || droppedFiles.length === 0) return;
+
+      setIsUploading(true);
+      let uploadCount = 0;
+      try {
+        for (let i = 0; i < droppedFiles.length; i++) {
+          await processFileUpload(droppedFiles[i]);
+          uploadCount++;
+        }
+        await refreshFiles();
+        setToastMessage(`Uploaded ${uploadCount} file${uploadCount !== 1 ? 's' : ''}`);
+      } catch {
+        setToastMessage(`Uploaded ${uploadCount} file${uploadCount !== 1 ? 's' : ''}, some failed.`);
+        await refreshFiles();
+      } finally {
+        setIsUploading(false);
+      }
+    };
+
+    node.addEventListener('dragover', handleDragOver);
+    node.addEventListener('dragleave', handleDragLeave);
+    node.addEventListener('drop', handleDrop);
+    return () => {
+      node.removeEventListener('dragover', handleDragOver);
+      node.removeEventListener('dragleave', handleDragLeave);
+      node.removeEventListener('drop', handleDrop);
+    };
+  }, [processFileUpload, refreshFiles]);
 
   // Stub download handler
   const handleDownload = useCallback(async (fileId: string, filename: string) => {
@@ -418,7 +554,6 @@ function FolderDetailView({
     try {
       const result = await service.reassembleFile(fileId);
       if (result && typeof window !== 'undefined') {
-        // Convert base64 to blob and trigger download
         const binaryStr = atob(result.dataB64);
         const bytes = new Uint8Array(binaryStr.length);
         for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
@@ -442,8 +577,8 @@ function FolderDetailView({
     : 'Unknown';
 
   return (
-    <View style={{ marginBottom: 24 }}>
-      {/* Header with back button */}
+    <View ref={dropZoneRef} style={{ marginBottom: 24 }}>
+      {/* Header with back button + upload button */}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 }}>
         <Button variant="tertiary" size="sm" onPress={onBack}>
           Back
@@ -464,15 +599,46 @@ function FolderDetailView({
             {syncStatusLabel}
           </Text>
         </View>
+        <Button
+          variant="secondary"
+          size="xs"
+          onPress={handleUploadClick}
+          disabled={isUploading}
+          iconLeft={<PlusIcon size={14} />}
+        >
+          {isUploading ? 'Uploading...' : 'Upload'}
+        </Button>
         <Button variant="secondary" size="xs" onPress={onSync}>
           Sync Now
         </Button>
       </View>
 
+      {/* Drag-and-drop overlay */}
+      {isDragOver && (
+        <View
+          style={{
+            borderRadius: 12,
+            borderWidth: 2,
+            borderColor: theme.colors.accent.primary,
+            borderStyle: 'dashed' as any,
+            backgroundColor: theme.colors.accent.primary + '10',
+            padding: 40,
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginBottom: 12,
+          }}
+        >
+          <PlusIcon size={32} color={theme.colors.accent.primary} />
+          <Text size="sm" weight="medium" style={{ color: theme.colors.accent.primary, marginTop: 8 }}>
+            Drop files to upload
+          </Text>
+        </View>
+      )}
+
       {/* File list */}
       {loadingFiles ? (
         <Text size="sm" style={{ color: theme.colors.text.muted }}>Loading files...</Text>
-      ) : files.length === 0 ? (
+      ) : files.length === 0 && !isDragOver ? (
         <View
           style={{
             borderRadius: 12,
@@ -487,8 +653,11 @@ function FolderDetailView({
           <Text size="sm" style={{ color: theme.colors.text.muted, marginTop: 8 }}>
             No files in this folder yet
           </Text>
+          <Text size="xs" style={{ color: theme.colors.text.muted, marginTop: 4, textAlign: 'center' }}>
+            Drag and drop files here or click Upload above.
+          </Text>
         </View>
-      ) : (
+      ) : files.length > 0 ? (
         <View
           style={{
             borderRadius: 12,
@@ -530,7 +699,7 @@ function FolderDetailView({
             </Pressable>
           ))}
         </View>
-      )}
+      ) : null}
 
       {/* Toast notification */}
       {toastMessage && (
@@ -883,79 +1052,9 @@ function AutoCleanupRuleRow({
 
 export default function FilesPage() {
   const { theme } = useTheme();
-  const { service } = useUmbra();
-  const { identity } = useAuth();
-  const myDid = identity?.did ?? '';
+  const router = useRouter();
   const { hasActiveUploads, uploadRingProgress } = useUploadProgress();
-  const { conversations } = useConversations();
-  const { friends } = useFriends();
-  const { refresh: refreshFolders } = useSharedFolders();
   const [openFolderId, setOpenFolderId] = useState<string | null>(null);
-  const [sharedFolderDialogOpen, setSharedFolderDialogOpen] = useState(false);
-  const [sharedFolderDialogSubmitting, setSharedFolderDialogSubmitting] = useState(false);
-  const [contactPickerOpen, setContactPickerOpen] = useState(false);
-  const [pendingFolderName, setPendingFolderName] = useState<string>('');
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
-
-  // Build a friend DID → display name map
-  const friendNameMap = useMemo(() => {
-    const map: Record<string, string> = {};
-    for (const f of friends) {
-      map[f.did] = f.displayName;
-    }
-    return map;
-  }, [friends]);
-
-  // DM conversations for the "create shared folder" flow
-  const dmConversations = useMemo(
-    () => conversations.filter((c) => c.type !== 'group' && c.friendDid),
-    [conversations],
-  );
-
-  // Create shared folder from the Files page — Step 1: open folder name dialog
-  const handleCreateSharedFolder = useCallback(() => {
-    if (!service) return;
-    if (dmConversations.length === 0) {
-      setToastMessage('No DM conversations available. Start a conversation with a friend first.');
-      return;
-    }
-    setSharedFolderDialogOpen(true);
-  }, [service, dmConversations]);
-
-  // Step 2: after folder name entered, show contact picker (or auto-select if only one)
-  const handleFolderNameSubmit = useCallback(async (name: string) => {
-    if (!name?.trim()) return;
-    setPendingFolderName(name.trim());
-    setSharedFolderDialogOpen(false);
-
-    if (dmConversations.length === 1) {
-      // Auto-select the only available conversation
-      const conv = dmConversations[0];
-      try {
-        await service?.createDmFolder(conv.id, null, name.trim(), myDid);
-        await refreshFolders();
-        console.log('[FilesPage] Shared folder created:', name.trim());
-      } catch (err) {
-        console.error('[FilesPage] Failed to create shared folder:', err);
-      }
-    } else {
-      setContactPickerOpen(true);
-    }
-  }, [dmConversations, service, myDid, refreshFolders]);
-
-  // Step 3: user selects a contact from the picker
-  const handleContactSelect = useCallback(async (convId: string) => {
-    setContactPickerOpen(false);
-    if (!service || !pendingFolderName) return;
-    try {
-      await service.createDmFolder(convId, null, pendingFolderName, myDid);
-      await refreshFolders();
-      console.log('[FilesPage] Shared folder created:', pendingFolderName);
-    } catch (err) {
-      console.error('[FilesPage] Failed to create shared folder:', err);
-    }
-    setPendingFolderName('');
-  }, [service, myDid, pendingFolderName, refreshFolders]);
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.background.canvas }}>
@@ -968,10 +1067,10 @@ export default function FilesPage() {
           borderBottomColor: theme.colors.border.subtle,
           flexDirection: 'row',
           alignItems: 'center',
-          justifyContent: 'space-between',
         }}
       >
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <MobileBackButton onPress={() => router.back()} label="Back to conversations" />
           <FolderIcon size={24} color={theme.colors.text.primary} />
           <Text size="lg" weight="bold" style={{ color: theme.colors.text.primary }}>
             Files
@@ -991,14 +1090,6 @@ export default function FilesPage() {
             </View>
           )}
         </View>
-        <Button
-          variant="primary"
-          size="sm"
-          onPress={handleCreateSharedFolder}
-          iconLeft={<PlusIcon size={16} color="#fff" />}
-        >
-          New Shared Folder
-        </Button>
       </View>
 
       {/* Content */}
@@ -1014,109 +1105,8 @@ export default function FilesPage() {
           onCloseFolder={() => setOpenFolderId(null)}
         />
         {!openFolderId && <CommunityFilesSection />}
-        <StorageSection />
+        {!openFolderId && <StorageSection />}
       </ScrollView>
-
-      {/* Shared folder name dialog */}
-      <InputDialog
-        open={sharedFolderDialogOpen}
-        onClose={() => setSharedFolderDialogOpen(false)}
-        title="Create Shared Folder"
-        label="Folder Name"
-        placeholder="e.g. Project Files, Photos..."
-        submitLabel="Next"
-        submitting={sharedFolderDialogSubmitting}
-        onSubmit={handleFolderNameSubmit}
-      />
-
-      {/* Contact picker modal */}
-      {contactPickerOpen && (
-        <View
-          style={{
-            position: 'absolute' as any,
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-            backgroundColor: 'rgba(0,0,0,0.5)',
-            alignItems: 'center',
-            justifyContent: 'center',
-            zIndex: 9999,
-          }}
-        >
-          <View
-            style={{
-              backgroundColor: theme.colors.background.surface,
-              borderRadius: 12,
-              padding: 24,
-              maxWidth: 380,
-              width: '90%' as any,
-              borderWidth: 1,
-              borderColor: theme.colors.border.subtle,
-            }}
-          >
-            <Text size="md" weight="bold" style={{ color: theme.colors.text.primary, marginBottom: 4 }}>
-              Select Contact
-            </Text>
-            <Text size="sm" style={{ color: theme.colors.text.muted, marginBottom: 16 }}>
-              Share &quot;{pendingFolderName}&quot; with:
-            </Text>
-            {dmConversations.map((conv) => (
-              <Pressable
-                key={conv.id}
-                onPress={() => handleContactSelect(conv.id)}
-                style={({ pressed }) => ({
-                  paddingVertical: 10,
-                  paddingHorizontal: 12,
-                  borderRadius: 8,
-                  backgroundColor: pressed
-                    ? theme.colors.accent.primary + '20'
-                    : 'transparent',
-                  marginBottom: 4,
-                })}
-              >
-                <Text size="sm" weight="medium" style={{ color: theme.colors.text.primary }}>
-                  {friendNameMap[conv.friendDid!] || conv.friendDid!.slice(0, 16)}
-                </Text>
-              </Pressable>
-            ))}
-            <Pressable
-              onPress={() => { setContactPickerOpen(false); setPendingFolderName(''); }}
-              style={{ marginTop: 12, alignItems: 'center', paddingVertical: 8 }}
-            >
-              <Text size="sm" weight="medium" style={{ color: theme.colors.text.muted }}>
-                Cancel
-              </Text>
-            </Pressable>
-          </View>
-        </View>
-      )}
-
-      {/* Toast notification */}
-      {toastMessage && (
-        <View
-          style={{
-            position: 'absolute' as any,
-            bottom: 24,
-            left: '50%' as any,
-            transform: [{ translateX: -200 }] as any,
-            backgroundColor: '#1a1a2e',
-            padding: 12,
-            paddingHorizontal: 24,
-            borderRadius: 8,
-            borderWidth: 1,
-            borderColor: '#333',
-            maxWidth: 400,
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 12,
-            zIndex: 10000,
-          }}
-        >
-          <Text size="sm" style={{ color: '#e0e0e0', flex: 1 }}>{toastMessage}</Text>
-          <Text size="sm" onPress={() => setToastMessage(null)} style={{ color: '#888', padding: 4 }}>✕</Text>
-        </View>
-      )}
     </View>
   );
 }

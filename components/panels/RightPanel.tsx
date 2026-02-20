@@ -1,11 +1,12 @@
 import React, { useMemo } from 'react';
 import { Animated, View } from 'react-native';
 import { useTheme, MemberList, PinnedMessages, ThreadPanel } from '@coexist/wisp-react-native';
-import { PANEL_WIDTH } from '@/types/panels';
 import type { RightPanel as RightPanelType } from '@/types/panels';
+import { PANEL_WIDTH } from '@/types/panels';
 import { useFriends } from '@/hooks/useFriends';
 import { SearchPanel } from './SearchPanel';
 import { DmSharedFilesPanel } from '@/components/messaging/DmSharedFilesPanel';
+import { useIsMobile } from '@/hooks/useIsMobile';
 
 export interface RightPanelProps {
   panelWidth: Animated.Value;
@@ -23,6 +24,12 @@ export interface RightPanelProps {
   conversationId?: string | null;
   /** Callback when a search result is clicked */
   onSearchResultClick?: (messageId: string) => void;
+  /** Create a shared folder for the current DM conversation */
+  onCreateFolder?: () => void;
+  /** Upload/attach a file to the current DM conversation */
+  onUploadFile?: () => void;
+  /** Actual content width of the panel (for resizable panels) */
+  panelContentWidth?: number;
 }
 
 export function RightPanel({
@@ -31,9 +38,11 @@ export function RightPanel({
   threadParent, threadReplies,
   pinnedMessages, onUnpinMessage, onThreadReply,
   conversationId, onSearchResultClick,
+  onCreateFolder, onUploadFile, panelContentWidth,
 }: RightPanelProps) {
   const { theme } = useTheme();
   const { friends } = useFriends();
+  const isMobile = useIsMobile();
 
   // Build member sections from real friends data
   const memberSections = useMemo(() => {
@@ -50,49 +59,78 @@ export function RightPanel({
     ];
   }, [friends]);
 
+  const panelContent = (
+    <>
+      {visiblePanel === 'members' && (
+        <MemberList
+          sections={memberSections}
+          title="Members"
+          onClose={() => togglePanel('members')}
+          onMemberClick={onMemberClick}
+        />
+      )}
+      {visiblePanel === 'pins' && (
+        <PinnedMessages
+          messages={pinnedMessages || []}
+          onClose={() => togglePanel('pins')}
+          onMessageClick={() => {}}
+          onUnpin={(msg: any) => onUnpinMessage?.(msg.id)}
+        />
+      )}
+      {visiblePanel === 'thread' && threadParent && (
+        <ThreadPanel
+          parentMessage={threadParent}
+          replies={threadReplies}
+          replyCount={threadReplies.length}
+          onClose={() => togglePanel('thread')}
+          onReply={(text: string) => onThreadReply?.(text)}
+        />
+      )}
+      {visiblePanel === 'search' && (
+        <SearchPanel
+          query={searchQuery}
+          onQueryChange={onSearchQueryChange}
+          onClose={() => togglePanel('search')}
+          conversationId={conversationId}
+          onResultClick={onSearchResultClick}
+        />
+      )}
+      {visiblePanel === 'files' && conversationId && (
+        <DmSharedFilesPanel
+          conversationId={conversationId}
+          onClose={() => togglePanel('files')}
+          onCreateFolder={onCreateFolder}
+          onUploadFile={onUploadFile}
+        />
+      )}
+    </>
+  );
+
+  // Mobile: full-screen overlay
+  if (isMobile) {
+    if (!visiblePanel) return null;
+    return (
+      <View
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          backgroundColor: theme.colors.background.canvas,
+          zIndex: 50,
+        }}
+      >
+        {panelContent}
+      </View>
+    );
+  }
+
+  // Desktop: animated side panel
   return (
     <Animated.View style={{ width: panelWidth, overflow: 'hidden' }}>
-      <View style={{ width: PANEL_WIDTH, height: '100%', borderLeftWidth: 1, borderLeftColor: theme.colors.border.subtle }}>
-        {visiblePanel === 'members' && (
-          <MemberList
-            sections={memberSections}
-            title="Members"
-            onClose={() => togglePanel('members')}
-            onMemberClick={onMemberClick}
-          />
-        )}
-        {visiblePanel === 'pins' && (
-          <PinnedMessages
-            messages={pinnedMessages || []}
-            onClose={() => togglePanel('pins')}
-            onMessageClick={() => {}}
-            onUnpin={(msg: any) => onUnpinMessage?.(msg.id)}
-          />
-        )}
-        {visiblePanel === 'thread' && threadParent && (
-          <ThreadPanel
-            parentMessage={threadParent}
-            replies={threadReplies}
-            replyCount={threadReplies.length}
-            onClose={() => togglePanel('thread')}
-            onReply={(text: string) => onThreadReply?.(text)}
-          />
-        )}
-        {visiblePanel === 'search' && (
-          <SearchPanel
-            query={searchQuery}
-            onQueryChange={onSearchQueryChange}
-            onClose={() => togglePanel('search')}
-            conversationId={conversationId}
-            onResultClick={onSearchResultClick}
-          />
-        )}
-        {visiblePanel === 'files' && conversationId && (
-          <DmSharedFilesPanel
-            conversationId={conversationId}
-            onClose={() => togglePanel('files')}
-          />
-        )}
+      <View style={{ width: panelContentWidth ?? PANEL_WIDTH, height: '100%', borderLeftWidth: 1, borderLeftColor: theme.colors.border.subtle }}>
+        {panelContent}
       </View>
     </Animated.View>
   );

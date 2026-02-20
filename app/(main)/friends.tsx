@@ -25,6 +25,7 @@ import { FriendSuggestionCard } from '@/components/discovery/FriendSuggestionCar
 import { searchByUsername, searchUsernames, lookupUsername } from '@umbra/service';
 import type { Friend, FriendRequest, DiscoverySearchResult, UsernameSearchResult } from '@umbra/service';
 import { useSound } from '@/contexts/SoundContext';
+import { MobileBackButton } from '@/components/ui/MobileBackButton';
 
 // ---------------------------------------------------------------------------
 // Search Platform Selector
@@ -409,6 +410,7 @@ export default function FriendsPage() {
           }}
         >
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginRight: 24, paddingBottom: 12 }}>
+            <MobileBackButton onPress={() => router.back()} label="Back to conversations" />
             <UsersIcon size={20} color={theme.colors.text.primary} />
             <Text size="lg" weight="bold">Friends</Text>
           </View>
@@ -416,8 +418,8 @@ export default function FriendsPage() {
           <TabList style={{ marginBottom: -1 }}>
             <Tab value="all">All</Tab>
             <Tab value="online">Online</Tab>
-            <Tab value="pending">
-              {incomingRequests.length > 0 ? `Pending (${incomingRequests.length})` : 'Pending'}
+            <Tab value="pending" badge={incomingRequests.length > 0 ? incomingRequests.length : undefined}>
+              Pending
             </Tab>
             <Tab value="blocked">Blocked</Tab>
           </TabList>

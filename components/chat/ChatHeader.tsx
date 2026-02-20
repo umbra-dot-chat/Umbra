@@ -6,7 +6,8 @@ import {
   Text, useTheme,
 } from '@coexist/wisp-react-native';
 import type { RightPanel } from '@/types/panels';
-import { SearchIcon, PinIcon, UsersIcon, PhoneIcon, VideoIcon, PaperclipIcon, FolderIcon } from '@/components/icons';
+import { SearchIcon, PinIcon, UsersIcon, PhoneIcon, VideoIcon, FolderIcon, ArrowLeftIcon } from '@/components/icons';
+import { useIsMobile } from '@/hooks/useIsMobile';
 
 export interface ChatHeaderProps {
   active: { name: string; online?: boolean; group?: string[]; memberCount?: number } | undefined;
@@ -17,18 +18,30 @@ export interface ChatHeaderProps {
   onVideoCall?: () => void;
   /** Whether to show call buttons */
   showCallButtons?: boolean;
-  /** Create a shared folder for this DM conversation */
-  onCreateSharedFolder?: () => void;
+  /** Whether to show the shared files button (DM only) */
+  showFilesButton?: boolean;
+  /** Mobile back navigation — returns to sidebar */
+  onBack?: () => void;
 }
 
-export function ChatHeader({ active, rightPanel, togglePanel, onShowProfile, onVoiceCall, onVideoCall, showCallButtons, onCreateSharedFolder }: ChatHeaderProps) {
+export function ChatHeader({ active, rightPanel, togglePanel, onShowProfile, onVoiceCall, onVideoCall, showCallButtons, showFilesButton, onBack }: ChatHeaderProps) {
   const { theme } = useTheme();
   const themeColors = theme.colors;
+  const isMobile = useIsMobile();
 
   return (
     <Navbar variant="transparent" style={{ borderBottomWidth: 1, borderBottomColor: themeColors.border.subtle }}>
       <NavbarBrand>
         <HStack style={{ alignItems: 'center', gap: 10 }}>
+          {isMobile && onBack && (
+            <Button
+              variant="tertiary"
+              size="sm"
+              onPress={onBack}
+              accessibilityLabel="Back to conversations"
+              iconLeft={<ArrowLeftIcon size={20} color={themeColors.text.secondary} />}
+            />
+          )}
           {active && (
             active.group ? (
               <AvatarGroup max={2} size="sm" spacing={10}>
@@ -86,19 +99,12 @@ export function ChatHeader({ active, rightPanel, togglePanel, onShowProfile, onV
           accessibilityLabel="Search messages"
           iconLeft={<SearchIcon size={18} color={themeColors.text.secondary} />}
         />
-        <Button
-          variant={rightPanel === 'files' ? 'secondary' : 'tertiary'}
-          size="sm"
-          onPress={() => togglePanel('files')}
-          accessibilityLabel="Toggle shared files"
-          iconLeft={<PaperclipIcon size={18} color={themeColors.text.secondary} />}
-        />
-        {onCreateSharedFolder && (
+        {showFilesButton && (
           <Button
-            variant="tertiary"
+            variant={rightPanel === 'files' ? 'secondary' : 'tertiary'}
             size="sm"
-            onPress={onCreateSharedFolder}
-            accessibilityLabel="Create shared folder"
+            onPress={() => togglePanel('files')}
+            accessibilityLabel="Toggle shared files"
             iconLeft={<FolderIcon size={18} color={themeColors.text.secondary} />}
           />
         )}

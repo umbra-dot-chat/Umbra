@@ -3,6 +3,8 @@ import React, { createContext, useContext, useState, useCallback } from 'react';
 interface ActiveConversationState {
   activeId: string | null;
   setActiveId: (id: string) => void;
+  /** Clear the active conversation (mobile back navigation) */
+  clearActiveId: () => void;
   /** Whether the search panel should be opened (set by CommandPalette, consumed by ChatPage) */
   searchPanelRequested: boolean;
   /** Request the search panel to open */
@@ -14,6 +16,7 @@ interface ActiveConversationState {
 const ActiveConversationContext = createContext<ActiveConversationState>({
   activeId: null,
   setActiveId: () => {},
+  clearActiveId: () => {},
   searchPanelRequested: false,
   requestSearchPanel: () => {},
   clearSearchPanelRequest: () => {},
@@ -27,6 +30,10 @@ export function ActiveConversationProvider({ children }: { children: React.React
     setActiveIdRaw(id);
   }, []);
 
+  const clearActiveId = useCallback(() => {
+    setActiveIdRaw(null);
+  }, []);
+
   const requestSearchPanel = useCallback(() => {
     setSearchPanelRequested(true);
   }, []);
@@ -36,7 +43,7 @@ export function ActiveConversationProvider({ children }: { children: React.React
   }, []);
 
   return (
-    <ActiveConversationContext.Provider value={{ activeId, setActiveId, searchPanelRequested, requestSearchPanel, clearSearchPanelRequest }}>
+    <ActiveConversationContext.Provider value={{ activeId, setActiveId, clearActiveId, searchPanelRequested, requestSearchPanel, clearSearchPanelRequest }}>
       {children}
     </ActiveConversationContext.Provider>
   );
