@@ -34,6 +34,8 @@ export interface ChatSidebarProps {
   onDeclineInvite?: (inviteId: string) => void;
   /** Whether conversations are still loading */
   loading?: boolean;
+  /** Number of pending friend requests for badge display */
+  pendingFriendRequests?: number;
 }
 
 export function ChatSidebar(props: ChatSidebarProps) {
@@ -44,7 +46,7 @@ function ChatSidebarInner({
   search, onSearchChange, conversations,
   activeId, onSelectConversation,
   onFriendsPress, onNewDm, onCreateGroup, onGuidePress, onMarketplacePress, isFriendsActive,
-  pendingInvites, onAcceptInvite, onDeclineInvite, loading,
+  pendingInvites, onAcceptInvite, onDeclineInvite, loading, pendingFriendRequests,
 }: ChatSidebarProps) {
   const { theme } = useTheme();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -58,7 +60,7 @@ function ChatSidebarInner({
   }, []);
 
   return (
-      <Sidebar width="wide" style={{ paddingHorizontal: 8, paddingTop: 20 }}>
+      <Sidebar width="wide" style={{ paddingHorizontal: 8, paddingTop: 20, width: '100%' }}>
         {/* Search bar */}
         <SidebarSection>
           <View style={{ paddingHorizontal: 6 }}>
@@ -77,18 +79,35 @@ function ChatSidebarInner({
         {/* Navigation buttons */}
         <SidebarSection style={{ marginTop: 12 }}>
           <View style={{ marginHorizontal: 6 }}>
-            <Button
-              variant={isFriendsActive ? 'secondary' : 'tertiary'}
-              onSurface
-              size="md"
-              fullWidth
-              iconLeft={<UsersIcon size={18} color={isFriendsActive ? theme.colors.text.onRaised : theme.colors.text.onRaisedSecondary} />}
-              onPress={onFriendsPress}
-              accessibilityLabel="Friends"
-              style={{ justifyContent: 'flex-start' }}
-            >
-              Friends
-            </Button>
+              <Button
+                variant={isFriendsActive ? 'secondary' : 'tertiary'}
+                onSurface
+                size="md"
+                fullWidth
+                iconLeft={<UsersIcon size={18} color={isFriendsActive ? theme.colors.text.onRaised : theme.colors.text.onRaisedSecondary} />}
+                onPress={onFriendsPress}
+                accessibilityLabel="Friends"
+                style={{ justifyContent: 'flex-start' }}
+              >
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Text size="sm">Friends</Text>
+                  {!!pendingFriendRequests && pendingFriendRequests > 0 && (
+                    <View style={{
+                      backgroundColor: theme.colors.status.danger,
+                      borderRadius: 99,
+                      paddingHorizontal: 4,
+                      minWidth: 16,
+                      height: 16,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}>
+                      <Text style={{ fontSize: 9, fontWeight: '700', color: '#FFFFFF', textAlign: 'center' }}>
+                        {pendingFriendRequests > 99 ? '99+' : pendingFriendRequests}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              </Button>
           </View>
           {onGuidePress && (
             <View style={{ marginHorizontal: 6, marginTop: 2 }}>

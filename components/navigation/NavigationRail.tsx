@@ -14,8 +14,9 @@
 
 import React from 'react';
 import { Image, Pressable, ScrollView, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
-import { Text, Skeleton, useTheme } from '@coexist/wisp-react-native';
+import { Text, Skeleton, useTheme, NotificationBadge } from '@coexist/wisp-react-native';
 import { HomeIcon, FolderIcon, PlusIcon, SettingsIcon } from '@/components/icons';
 import type { Community } from '@umbra/service';
 
@@ -55,6 +56,8 @@ export interface NavigationRailProps {
   onOpenSettings?: () => void;
   /** Whether community data is still loading */
   loading?: boolean;
+  /** Aggregated notification count for the home badge (shown when not on home) */
+  homeNotificationCount?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -73,8 +76,10 @@ export function NavigationRail({
   onCreateCommunity,
   onOpenSettings,
   loading,
+  homeNotificationCount,
 }: NavigationRailProps) {
   const { theme } = useTheme();
+  const insets = useSafeAreaInsets();
 
   return (
     <View
@@ -83,7 +88,7 @@ export function NavigationRail({
         backgroundColor: theme.colors.background.surface,
         borderRightWidth: 1,
         borderRightColor: theme.colors.border.subtle,
-        paddingTop: 20,
+        paddingTop: Math.max(insets.top, 20),
         alignItems: 'center',
         flexShrink: 0,
       }}
@@ -94,6 +99,7 @@ export function NavigationRail({
         onPress={onHomePress}
         accentColor={theme.colors.accent.primary}
         theme={theme}
+        badgeCount={!isHomeActive && homeNotificationCount ? homeNotificationCount : undefined}
       >
         <HomeIcon
           size={22}
@@ -193,7 +199,7 @@ export function NavigationRail({
 
       {/* Settings button — anchored to the bottom */}
       {onOpenSettings && (
-        <View style={{ paddingBottom: 16, paddingTop: 8, alignItems: 'center', width: '100%' }}>
+        <View style={{ paddingBottom: Math.max(insets.bottom, 16), paddingTop: 8, alignItems: 'center', width: '100%' }}>
           <View
             style={{
               width: 28,
@@ -233,9 +239,11 @@ interface RailItemProps {
   ringProgress?: number;
   /** Optional icon image URL (e.g. Discord guild icon) */
   iconUrl?: string;
+  /** Optional notification badge count rendered on the icon */
+  badgeCount?: number;
 }
 
-function RailItem({ active, onPress, accentColor, theme, children, ringProgress, iconUrl }: RailItemProps) {
+function RailItem({ active, onPress, accentColor, theme, children, ringProgress, iconUrl, badgeCount }: RailItemProps) {
   const showRing = ringProgress != null && ringProgress > 0 && ringProgress < 100;
 
   return (
@@ -295,32 +303,39 @@ function RailItem({ active, onPress, accentColor, theme, children, ringProgress,
         </View>
       )}
 
-      <Pressable
-        onPress={onPress}
-        style={({ pressed }) => ({
-          width: ICON_SIZE,
-          height: ICON_SIZE,
-          borderRadius: active ? ICON_RADIUS : ICON_SIZE / 2,
-          backgroundColor: active
-            ? (accentColor ?? theme.colors.accent.primary)
-            : pressed
-              ? theme.colors.border.strong
-              : theme.colors.background.sunken,
-          alignItems: 'center',
-          justifyContent: 'center',
-          overflow: 'hidden',
-        })}
+      <NotificationBadge
+        count={badgeCount}
+        color="danger"
+        size="sm"
+        invisible={!badgeCount}
       >
-        {iconUrl ? (
-          <Image
-            source={{ uri: iconUrl }}
-            style={{ width: ICON_SIZE, height: ICON_SIZE }}
-            resizeMode="cover"
-          />
-        ) : (
-          children
-        )}
-      </Pressable>
+        <Pressable
+          onPress={onPress}
+          style={({ pressed }) => ({
+            width: ICON_SIZE,
+            height: ICON_SIZE,
+            borderRadius: active ? ICON_RADIUS : ICON_SIZE / 2,
+            backgroundColor: active
+              ? (accentColor ?? theme.colors.accent.primary)
+              : pressed
+                ? theme.colors.border.strong
+                : theme.colors.background.sunken,
+            alignItems: 'center',
+            justifyContent: 'center',
+            overflow: 'hidden',
+          })}
+        >
+          {iconUrl ? (
+            <Image
+              source={{ uri: iconUrl }}
+              style={{ width: ICON_SIZE, height: ICON_SIZE }}
+              resizeMode="cover"
+            />
+          ) : (
+            children
+          )}
+        </Pressable>
+      </NotificationBadge>
     </View>
   );
 }

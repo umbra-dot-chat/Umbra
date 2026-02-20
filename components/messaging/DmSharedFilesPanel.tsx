@@ -4,17 +4,21 @@
  * Displays a flat list of files shared in the conversation with filter tabs
  * (All / Images / Documents / Media / Other).
  *
+ * Also provides "New Folder" and "Upload File" actions.
+ *
  * Uses the `useDmFiles` hook for data and real-time updates.
  */
 
 import React, { useCallback } from 'react';
 import { View, ScrollView, Pressable } from 'react-native';
-import { useTheme, Text } from '@coexist/wisp-react-native';
+import { Button, useTheme, Text } from '@coexist/wisp-react-native';
 import { useDmFiles } from '@/hooks/useDmFiles';
 import type { DmFileFilter } from '@/hooks/useDmFiles';
 import { getFileTypeIcon, formatFileSize } from '@/utils/fileIcons';
-import { LockIcon } from '@/components/icons';
+import { LockIcon, FolderIcon, PlusIcon } from '@/components/icons';
 import type { DmSharedFileRecord } from '@umbra/service';
+import Svg, { Line } from 'react-native-svg';
+import { defaultSpacing, defaultRadii, defaultTypography } from '@coexist/wisp-core/theme/create-theme';
 
 // ---------------------------------------------------------------------------
 // Props
@@ -25,6 +29,32 @@ export interface DmSharedFilesPanelProps {
   conversationId: string;
   /** Close the panel. */
   onClose: () => void;
+  /** Create a shared folder for this conversation. */
+  onCreateFolder?: () => void;
+  /** Upload/attach a file to this conversation. */
+  onUploadFile?: () => void;
+}
+
+// ---------------------------------------------------------------------------
+// SVG Close Icon (matches MemberList / PinnedMessages)
+// ---------------------------------------------------------------------------
+
+function CloseIcon({ size = 16, color }: { size?: number; color?: string }) {
+  return (
+    <Svg
+      width={size}
+      height={size}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke={color ?? 'currentColor'}
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <Line x1={18} y1={6} x2={6} y2={18} />
+      <Line x1={6} y1={6} x2={18} y2={18} />
+    </Svg>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -43,7 +73,7 @@ const FILTER_TABS: { key: DmFileFilter; label: string }[] = [
 // Component
 // ---------------------------------------------------------------------------
 
-export function DmSharedFilesPanel({ conversationId, onClose }: DmSharedFilesPanelProps) {
+export function DmSharedFilesPanel({ conversationId, onClose, onCreateFolder, onUploadFile }: DmSharedFilesPanelProps) {
   const { theme } = useTheme();
   const colors = theme.colors;
 
@@ -65,30 +95,79 @@ export function DmSharedFilesPanel({ conversationId, onClose }: DmSharedFilesPan
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.background.canvas }}>
-      {/* Header */}
+      {/* Header — matches MemberList / PinnedMessages style */}
       <View
         style={{
           flexDirection: 'row',
           alignItems: 'center',
           justifyContent: 'space-between',
-          paddingHorizontal: 16,
-          paddingVertical: 12,
+          paddingVertical: defaultSpacing.sm,
+          paddingHorizontal: defaultSpacing.md,
           borderBottomWidth: 1,
           borderBottomColor: colors.border.subtle,
+          minHeight: 56,
         }}
       >
-        <Text size="md" weight="semibold" style={{ color: colors.text.primary }}>
+        <Text
+          style={{
+            fontSize: defaultTypography.sizes.sm.fontSize,
+            lineHeight: defaultTypography.sizes.sm.lineHeight,
+            fontWeight: String(defaultTypography.weights.semibold) as any,
+            color: colors.text.primary,
+          }}
+        >
           Shared Files
         </Text>
-        <Text
-          size="sm"
-          weight="medium"
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Close shared files"
           onPress={onClose}
-          style={{ color: colors.text.muted }}
+          style={{
+            width: 28,
+            height: 28,
+            borderRadius: defaultRadii.md,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
         >
-          Close
-        </Text>
+          <CloseIcon size={16} color={colors.text.muted} />
+        </Pressable>
       </View>
+
+      {/* Action buttons — New Folder + Upload */}
+      {(onCreateFolder || onUploadFile) && (
+        <View
+          style={{
+            flexDirection: 'row',
+            paddingHorizontal: defaultSpacing.md,
+            paddingVertical: defaultSpacing.sm,
+            gap: defaultSpacing.xs,
+            borderBottomWidth: 1,
+            borderBottomColor: colors.border.subtle,
+          }}
+        >
+          {onCreateFolder && (
+            <Button
+              variant="secondary"
+              size="xs"
+              onPress={onCreateFolder}
+              iconLeft={<FolderIcon size={14} color={colors.text.secondary} />}
+            >
+              New Folder
+            </Button>
+          )}
+          {onUploadFile && (
+            <Button
+              variant="secondary"
+              size="xs"
+              onPress={onUploadFile}
+              iconLeft={<PlusIcon size={14} color={colors.text.secondary} />}
+            >
+              Upload
+            </Button>
+          )}
+        </View>
+      )}
 
       {/* Filter tabs */}
       <View

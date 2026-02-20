@@ -45,14 +45,8 @@ export function useFriendNotifications(): void {
 
       switch (event.type) {
         case 'requestReceived': {
-          const senderName = event.request.fromDisplayName || event.request.fromDid.slice(0, 16) + '...';
+          // Play sound only - visual notification handled by badge on Friends tab
           playSound('friend_request');
-          toast({
-            title: 'Friend Request',
-            description: `${senderName} wants to be your friend`,
-            variant: 'default',
-            duration: 5000,
-          });
           break;
         }
 

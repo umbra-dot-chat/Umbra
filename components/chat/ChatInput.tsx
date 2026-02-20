@@ -1,6 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Platform, View } from 'react-native';
-import { Avatar, EmojiPicker, MessageInput, useTheme, MentionAutocomplete } from '@coexist/wisp-react-native';
+import {
+  Avatar, CombinedPicker, MessageInput, useTheme, MentionAutocomplete,
+} from '@coexist/wisp-react-native';
+import type { EmojiItem } from '@coexist/wisp-core/types/EmojiPicker.types';
+import type { StickerPickerPack } from '@coexist/wisp-core/types/StickerPicker.types';
 import { useFriends } from '@/hooks/useFriends';
 import { useMention } from '@/hooks/useMention';
 
@@ -18,12 +22,19 @@ export interface ChatInputProps {
   onCancelEdit?: () => void;
   /** Called when the attachment button is clicked */
   onAttachmentClick?: () => void;
+  /** Custom community emoji for the picker */
+  customEmojis?: EmojiItem[];
+  /** Sticker packs for the picker */
+  stickerPacks?: StickerPickerPack[];
+  /** Called when a sticker is selected */
+  onStickerSelect?: (stickerId: string, packId: string) => void;
 }
 
 export function ChatInput({
   message, onMessageChange, emojiOpen, onToggleEmoji,
   replyingTo, onClearReply, onSubmit,
   editing, onCancelEdit, onAttachmentClick,
+  customEmojis, stickerPacks, onStickerSelect,
 }: ChatInputProps) {
   const { theme } = useTheme();
   const { friends } = useFriends();
@@ -139,10 +150,16 @@ export function ChatInput({
     <>
       {emojiOpen && (
         <View style={{ position: 'absolute', bottom: 64, right: 12, zIndex: 20 }}>
-          <EmojiPicker
+          <CombinedPicker
             size="md"
-            onSelect={(emoji) => {
+            onEmojiSelect={(emoji) => {
               onMessageChange(message + emoji);
+              onToggleEmoji();
+            }}
+            customEmojis={customEmojis}
+            stickerPacks={stickerPacks}
+            onStickerSelect={(stickerId, packId) => {
+              onStickerSelect?.(stickerId, packId);
               onToggleEmoji();
             }}
           />

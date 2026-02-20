@@ -72,7 +72,7 @@ function pickFileWeb(multiple: boolean): Promise<PickedFile[] | null> {
   });
 }
 
-function readFileAsBase64(file: File): Promise<string> {
+export function readFileAsBase64(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => {

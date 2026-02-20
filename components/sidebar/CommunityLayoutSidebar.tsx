@@ -218,6 +218,9 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
     channels,
     members,
     roles: realRoles,
+    emoji,
+    stickers,
+    stickerPacks,
     memberRolesMap,
     isLoading: communityLoading,
     refresh: refreshCommunity,
@@ -1349,7 +1352,7 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
   return (
     <View
       style={{
-        width: 320,
+        width: '100%',
         height: '100%',
         backgroundColor: theme.colors.background.surface,
         borderRightWidth: 1,
@@ -1359,7 +1362,7 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
       {/* Invisible anchor at the top to measure the header position for the dropdown */}
       <View
         ref={headerAnchorRef}
-        style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 48 }}
+        style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 56 }}
         pointerEvents="none"
       />
 
@@ -1422,6 +1425,7 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
           style={{
             width: '100%',
             height: 120,
+            backgroundColor: theme.colors.background.tertiary,
           }}
           resizeMode="cover"
         />
@@ -1528,6 +1532,11 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
         onDeleteInvite={handleDeleteInvite}
         inviteCreating={inviteCreating}
         invitesLoading={invitesLoading}
+        // Emoji
+        emoji={emoji}
+        // Stickers
+        stickers={stickers}
+        stickerPacks={stickerPacks}
         // Seats re-scan (TODO: requires storing source guild ID + relay bot token endpoint)
         // onRescanSeats={handleRescanSeats}
         // rescanningSeats={rescanningSeats}

@@ -24,10 +24,12 @@ import { View, Image, Animated, Pressable } from 'react-native';
 import type { GestureResponderEvent } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import {
-  useTheme, Text, EmojiPicker,
+  useTheme, Text, CombinedPicker,
   MemberList, MessageInput, MessageList, E2EEKeyExchangeUI, PinnedMessages,
   type MemberListSection, type MemberListMember, type MessageListEntry,
 } from '@coexist/wisp-react-native';
+import type { EmojiItem } from '@coexist/wisp-core/types/EmojiPicker.types';
+import type { StickerPickerPack } from '@coexist/wisp-core/types/StickerPicker.types';
 
 import { useAuth } from '@/contexts/AuthContext';
 import { useCommunity } from '@/hooks/useCommunity';
@@ -279,6 +281,9 @@ export default function CommunityPage() {
     members,
     roles,
     seats,
+    emoji: communityEmoji,
+    stickers: communityStickers,
+    stickerPacks: communityStickerPacks,
     memberRolesMap,
     refresh: refreshCommunity,
   } = useCommunity(communityId ?? null);
@@ -286,6 +291,51 @@ export default function CommunityPage() {
   // Permission context for file channels
   const myRoles = memberRolesMap[myDid] ?? [];
   const isOwner = community?.ownerDid === myDid;
+
+  // Transform community emoji to EmojiPicker items
+  const customEmojiItems = useMemo<EmojiItem[]>(() => {
+    if (!communityEmoji || communityEmoji.length === 0) return [];
+    return communityEmoji.map((e) => ({
+      emoji: `:${e.name}:`,
+      name: e.name,
+      category: 'custom' as const,
+      keywords: [e.name],
+      imageUrl: e.imageUrl,
+      animated: e.animated,
+    }));
+  }, [communityEmoji]);
+
+  // Transform community stickers into StickerPicker packs
+  const stickerPickerPacks = useMemo<StickerPickerPack[]>(() => {
+    if (!communityStickers || communityStickers.length === 0) return [];
+
+    // Group stickers by pack
+    const packMap = new Map<string, { id: string; name: string; stickers: Array<{ id: string; name: string; imageUrl: string; animated?: boolean }> }>();
+
+    // Add packs from communityStickerPacks first
+    for (const pack of (communityStickerPacks ?? [])) {
+      packMap.set(pack.id, { id: pack.id, name: pack.name, stickers: [] });
+    }
+
+    // Default "Uncategorized" pack for stickers without a pack
+    const uncategorizedId = '__uncategorized__';
+
+    for (const sticker of communityStickers) {
+      const packId = sticker.packId ?? uncategorizedId;
+      if (!packMap.has(packId)) {
+        packMap.set(packId, { id: packId, name: packId === uncategorizedId ? 'Stickers' : packId, stickers: [] });
+      }
+      packMap.get(packId)!.stickers.push({
+        id: sticker.id,
+        name: sticker.name,
+        imageUrl: sticker.imageUrl,
+        animated: sticker.animated,
+      });
+    }
+
+    // Filter out empty packs and return
+    return Array.from(packMap.values()).filter((p) => p.stickers.length > 0);
+  }, [communityStickers, communityStickerPacks]);
 
   // Use mock channels as fallback when no real channels are available
   const channels = isMock && realChannels.length === 0 ? MOCK_CHANNELS : realChannels;
@@ -305,7 +355,7 @@ export default function CommunityPage() {
   // Message display mode (bubble vs inline)
   const { displayMode } = useMessaging();
 
-  // Emoji picker + message text state
+  // Emoji picker + sticker picker + message text state
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [messageText, setMessageText] = useState('');
 
@@ -559,11 +609,13 @@ export default function CommunityPage() {
           )
         : undefined;
 
+      const parsedContent = msg.content;
+
       entries.push({
         type: 'message',
         id: msg.id,
         sender: senderName,
-        content: msg.content,
+        content: parsedContent,
         timestamp: new Date(msg.createdAt < 1000000000000 ? msg.createdAt * 1000 : msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         isOwn: msg.senderDid === myDid,
         edited: msg.edited,
@@ -790,10 +842,17 @@ export default function CommunityPage() {
             <View style={{ position: 'relative', padding: 12 }}>
               {emojiOpen && (
                 <View style={{ position: 'absolute', bottom: 64, right: 12, zIndex: 20 }}>
-                  <EmojiPicker
+                  <CombinedPicker
                     size="md"
-                    onSelect={(emoji: string) => {
-                      setMessageText((prev) => prev + emoji);
+                    customEmojis={customEmojiItems.length > 0 ? customEmojiItems : undefined}
+                    stickerPacks={stickerPickerPacks.length > 0 ? stickerPickerPacks : undefined}
+                    onEmojiSelect={(emoji: string, item?: EmojiItem) => {
+                      const text = item?.imageUrl ? `:${item.name}:` : emoji;
+                      setMessageText((prev) => prev + text);
+                      setEmojiOpen(false);
+                    }}
+                    onStickerSelect={(stickerId: string) => {
+                      handleSendMessage(`sticker::${stickerId}`);
                       setEmojiOpen(false);
                     }}
                   />
@@ -810,7 +869,9 @@ export default function CommunityPage() {
                 variant="pill"
                 showAttachment
                 showEmoji
-                onEmojiClick={() => setEmojiOpen((prev) => !prev)}
+                onEmojiClick={() => {
+                  setEmojiOpen((prev) => !prev);
+                }}
               />
             </View>
           </>

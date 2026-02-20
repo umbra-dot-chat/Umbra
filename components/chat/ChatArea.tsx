@@ -21,8 +21,14 @@ export interface ChatAreaProps {
   messages: Message[];
   /** Current user's DID — used to determine incoming vs outgoing */
   myDid: string;
+  /** Current user's display name (shown on outgoing messages) */
+  myDisplayName?: string;
+  /** Current user's avatar URL or base64 */
+  myAvatar?: string;
   /** Map of DID → display name for rendering sender names */
   friendNames: Record<string, string>;
+  /** Map of DID → avatar URL/base64 for rendering friend avatars */
+  friendAvatars?: Record<string, string>;
   /** Whether messages are still loading */
   isLoading?: boolean;
   /** Whether this is a group conversation (enables per-member color differentiation) */
@@ -272,7 +278,8 @@ function LoadingSkeleton() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function ChatArea({
-  messages, myDid, friendNames, isLoading, isGroupChat, typingUser,
+  messages, myDid, myDisplayName, myAvatar, friendNames, friendAvatars,
+  isLoading, isGroupChat, typingUser,
   hoveredMessage, onHoverIn, onHoverOut,
   onReplyTo, onOpenThread, onShowProfile,
   onToggleReaction, onEditMessage, onDeleteMessage, onPinMessage, onForwardMessage, onCopyMessage,
@@ -294,8 +301,18 @@ export function ChatArea({
   const groups = groupMessages(messages);
 
   const getSenderName = (did: string): string => {
-    if (did === myDid) return 'You';
+    if (did === myDid) return myDisplayName || did.slice(0, 16) + '...';
     return friendNames[did] || did.slice(0, 16) + '...';
+  };
+
+  const getSenderAvatar = (did: string): string | undefined => {
+    if (did === myDid) return myAvatar;
+    return friendAvatars?.[did];
+  };
+
+  const renderAvatar = (did: string, name: string) => {
+    const avatarSrc = getSenderAvatar(did);
+    return <Avatar name={name} src={avatarSrc} size="sm" />;
   };
 
   const handleCopy = (text: string) => {
@@ -407,6 +424,8 @@ export function ChatArea({
             const isOwn = msg.senderDid === myDid;
             const fileInfo = tryParseFileMessage(msg);
 
+            const displayContent = fileInfo ? null : text;
+
             // Build reaction chips for Wisp ChatBubble
             const reactionChips = msg.reactions?.map((r) => ({
               emoji: r.emoji,
@@ -461,10 +480,12 @@ export function ChatArea({
                           thumbnail={fileInfo.thumbnail}
                           isOutgoing={isOwn}
                         />
-                      ) : (
+                      ) : typeof displayContent === 'string' ? (
                         <RNText style={{ fontSize: 14, color: themeColors.text.primary, lineHeight: 20 }}>
-                          {text}
+                          {displayContent}
                         </RNText>
+                      ) : (
+                        <View style={{ minHeight: 20 }}>{displayContent}</View>
                       )}
                       {msg.edited && (
                         <RNText style={{ fontSize: 10, color: themeColors.text.muted }}>(edited)</RNText>
@@ -489,7 +510,7 @@ export function ChatArea({
                           isOutgoing={isOwn}
                         />
                       ) : (
-                        text
+                        displayContent
                       )}
                     </ChatBubble>
                   )}
@@ -531,7 +552,7 @@ export function ChatArea({
             <InlineMsgGroup
               key={`group-${groupIdx}`}
               sender={senderName}
-              avatar={<Avatar name={senderName} size="sm" />}
+              avatar={renderAvatar(senderDid, senderName)}
               timestamp={timeStr}
               status={isOutgoing ? (firstMsg.status as string) : undefined}
               senderColor={isGroupChat ? memberColor(senderDid) : undefined}
@@ -549,12 +570,12 @@ export function ChatArea({
             key={`group-${groupIdx}`}
             align={isOutgoing ? 'outgoing' : 'incoming'}
             sender={senderName}
-            avatar={!isOutgoing ? <Avatar name={senderName} size="sm" /> : undefined}
+            avatar={renderAvatar(senderDid, senderName)}
             timestamp={timeStr}
             status={isOutgoing ? (firstMsg.status as string) : undefined}
             senderColor={isGroupChat && !isOutgoing ? memberColor(senderDid) : undefined}
             themeColors={themeColors}
-            onAvatarPress={!isOutgoing ? (e: any) => onShowProfile(senderName, e) : undefined}
+            onAvatarPress={(e: any) => onShowProfile(senderName, e)}
           >
             {renderMessages(false)}
           </MsgGroup>
