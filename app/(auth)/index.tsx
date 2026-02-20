@@ -18,9 +18,11 @@ const FONT_URL = 'https://fonts.googleapis.com/css2?family=BBH+Bartle&display=sw
 
 function useGoogleFont() {
   const [loaded, setLoaded] = useState(false);
+  const isWeb = Platform.OS === 'web';
 
   useEffect(() => {
-    if (Platform.OS !== 'web') {
+    if (!isWeb) {
+      // On native, Google Fonts aren't available — use system font fallback
       setLoaded(true);
       return;
     }
@@ -48,7 +50,7 @@ function useGoogleFont() {
     }
   }, []);
 
-  return loaded;
+  return { loaded, isWeb };
 }
 
 // ---------------------------------------------------------------------------
@@ -62,18 +64,26 @@ interface AuthContentProps {
   onCreateWallet: () => void;
   onImportWallet: () => void;
   fontLoaded: boolean;
+  /** Whether running on web (where Google Fonts work) */
+  isWeb: boolean;
 }
 
-function AuthContent({ inverted, onCreateWallet, onImportWallet, fontLoaded }: AuthContentProps) {
+function AuthContent({ inverted, onCreateWallet, onImportWallet, fontLoaded, isWeb }: AuthContentProps) {
   const textColor = inverted ? '#FFFFFF' : undefined;
   const mutedColor = inverted ? 'rgba(255,255,255,0.6)' : undefined;
 
   // Inverted buttons: white bg + black text (visible on black blob)
+  // Include borderRadius to ensure it renders on React Native
   const invertedBtnStyle: ViewStyle | undefined = inverted
-    ? { backgroundColor: '#FFFFFF', borderColor: '#FFFFFF' }
+    ? { backgroundColor: '#FFFFFF', borderColor: '#FFFFFF', borderRadius: 8, overflow: 'hidden' }
     : undefined;
 
   const iconColor = inverted ? '#000000' : '#FFFFFF';
+
+  // On native, use system font; on web, use Google Fonts
+  const titleFontFamily = isWeb
+    ? (fontLoaded ? `"${FONT_FAMILY}", sans-serif` : 'sans-serif')
+    : Platform.OS === 'ios' ? 'Georgia' : 'serif';
 
   return (
     <View style={{ width: '100%', maxWidth: 420, alignSelf: 'center' }}>
@@ -82,9 +92,9 @@ function AuthContent({ inverted, onCreateWallet, onImportWallet, fontLoaded }: A
         <VStack gap="sm" style={{ alignItems: 'center', marginBottom: 16 }}>
           <RNText
             style={{
-              fontFamily: fontLoaded ? `"${FONT_FAMILY}", sans-serif` : 'sans-serif',
+              fontFamily: titleFontFamily,
               fontSize: 72,
-              lineHeight: 80,
+              lineHeight: 90,
               letterSpacing: 2,
               color: textColor ?? '#000000',
               textAlign: 'center',
@@ -154,7 +164,7 @@ function AuthContent({ inverted, onCreateWallet, onImportWallet, fontLoaded }: A
             <Button
               variant={inverted ? 'secondary' : 'primary'}
               size="lg"
-              shape="rounded"
+              shape="pill"
               fullWidth
               onPress={onCreateWallet}
               style={invertedBtnStyle}
@@ -238,7 +248,7 @@ function AuthContent({ inverted, onCreateWallet, onImportWallet, fontLoaded }: A
             <Button
               variant={inverted ? 'secondary' : 'primary'}
               size="lg"
-              shape="rounded"
+              shape="pill"
               fullWidth
               onPress={onImportWallet}
               style={invertedBtnStyle}
@@ -268,7 +278,7 @@ function AuthContent({ inverted, onCreateWallet, onImportWallet, fontLoaded }: A
 // ---------------------------------------------------------------------------
 
 export default function AuthScreen() {
-  const fontLoaded = useGoogleFont();
+  const { loaded: fontLoaded, isWeb } = useGoogleFont();
   const { pathData } = useBlobPath(); // single source of truth for blob shape
 
   // Flow visibility state
@@ -303,6 +313,7 @@ export default function AuthScreen() {
           onCreateWallet={handleCreateWallet}
           onImportWallet={handleImportWallet}
           fontLoaded={fontLoaded}
+          isWeb={isWeb}
         />
       </ScrollView>
 
@@ -335,6 +346,7 @@ export default function AuthScreen() {
             onCreateWallet={handleCreateWallet}
             onImportWallet={handleImportWallet}
             fontLoaded={fontLoaded}
+            isWeb={isWeb}
           />
         </ScrollView>
       </View>

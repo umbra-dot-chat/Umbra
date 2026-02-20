@@ -1,7 +1,10 @@
 /**
- * Shared modal chrome for wallet creation / import flows.
+ * Shared layout chrome for wallet creation / import flows.
  *
- * Renders an Overlay with a white modal panel containing:
+ * - On web: renders as an Overlay with a centered white modal panel.
+ * - On native (iOS/Android): renders as a full-screen view with a back button.
+ *
+ * Contains:
  * - ProgressSteps at the top
  * - Scrollable step content with animated transitions
  * - Footer bar for navigation buttons
@@ -9,7 +12,7 @@
 
 import React, { useRef } from 'react';
 import { View, ScrollView, Platform, type ViewStyle } from 'react-native';
-import { Overlay, ProgressSteps, Separator, Presence } from '@coexist/wisp-react-native';
+import { Overlay, ProgressSteps, Separator, Presence, Button, Text } from '@coexist/wisp-react-native';
 import type { ProgressStep, PresenceAnimation } from '@coexist/wisp-react-native';
 
 export interface WalletFlowLayoutProps {
@@ -40,6 +43,54 @@ export function WalletFlowLayout({
     currentStep >= prevStepRef.current ? 'slideUp' : 'slideDown';
   prevStepRef.current = currentStep;
 
+  if (!open) return null;
+
+  const content = (
+    <>
+      {/* Step indicator */}
+      <View style={{ paddingHorizontal: 24, paddingTop: 24, paddingBottom: 16 }}>
+        <ProgressSteps
+          steps={steps}
+          currentStep={currentStep}
+          orientation="horizontal"
+          size="sm"
+          onStepClick={onStepClick}
+        />
+      </View>
+
+      <Separator spacing="none" />
+
+      {/* Step content — animated on step change */}
+      <ScrollView
+        style={{ flex: 1 }}
+        contentContainerStyle={{ padding: 24 }}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        <Presence key={currentStep} visible animation={direction} duration={250}>
+          {children}
+        </Presence>
+      </ScrollView>
+
+      <Separator spacing="none" />
+
+      {/* Footer */}
+      <View style={{ paddingHorizontal: 24, paddingVertical: 16 }}>
+        {footer}
+      </View>
+    </>
+  );
+
+  // Native: full-screen view
+  if (Platform.OS !== 'web') {
+    return (
+      <View style={fullScreenStyle}>
+        {content}
+      </View>
+    );
+  }
+
+  // Web: centered modal overlay
   return (
     <Overlay
       open={open}
@@ -49,41 +100,22 @@ export function WalletFlowLayout({
       useModal={false}
     >
       <View style={modalStyle}>
-        {/* Step indicator */}
-        <View style={{ paddingHorizontal: 24, paddingTop: 24, paddingBottom: 16 }}>
-          <ProgressSteps
-            steps={steps}
-            currentStep={currentStep}
-            orientation="horizontal"
-            size="sm"
-            onStepClick={onStepClick}
-          />
-        </View>
-
-        <Separator spacing="none" />
-
-        {/* Step content — animated on step change */}
-        <ScrollView
-          style={{ flex: 1 }}
-          contentContainerStyle={{ padding: 24 }}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-        >
-          <Presence key={currentStep} visible animation={direction} duration={250}>
-            {children}
-          </Presence>
-        </ScrollView>
-
-        <Separator spacing="none" />
-
-        {/* Footer */}
-        <View style={{ paddingHorizontal: 24, paddingVertical: 16 }}>
-          {footer}
-        </View>
+        {content}
       </View>
     </Overlay>
   );
 }
+
+const fullScreenStyle: ViewStyle = {
+  flex: 1,
+  backgroundColor: '#FFFFFF',
+  position: 'absolute',
+  top: 0,
+  left: 0,
+  right: 0,
+  bottom: 0,
+  zIndex: 100,
+};
 
 const modalStyle: ViewStyle = {
   backgroundColor: '#FFFFFF',
