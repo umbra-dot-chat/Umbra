@@ -19,14 +19,11 @@ Pod::Spec.new do |s|
   # Swift source files
   s.source_files = '**/*.swift'
 
-  # Link the pre-compiled Rust static library
-  # After running scripts/build-mobile.sh, the library will be at:
-  #   packages/umbra-core/target/aarch64-apple-ios/release/libumbra_core.a (device)
-  #   packages/umbra-core/target/aarch64-apple-ios-sim/release/libumbra_core.a (simulator)
-  #
-  # For development, create a universal (fat) library or use xcframework.
-  # The vendored_libraries path is relative to this podspec.
-  s.vendored_libraries = 'libumbra_core.a'
+  # Link the pre-compiled Rust static library via XCFramework.
+  # After running scripts/build-mobile.sh ios, this bundles both:
+  #   - aarch64-apple-ios (device)
+  #   - aarch64-apple-ios-sim (simulator)
+  s.vendored_frameworks = 'UmbraCore.xcframework'
 
   # System frameworks required by the Rust library
   s.frameworks = 'Security', 'SystemConfiguration'

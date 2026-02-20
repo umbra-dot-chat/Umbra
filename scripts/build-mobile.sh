@@ -72,35 +72,51 @@ check_android_ndk() {
 build_ios() {
     echo ""
     echo "──────────────────────────────────────────"
-    echo "  Building for iOS (arm64)"
+    echo "  Building iOS XCFramework (device + sim)"
     echo "──────────────────────────────────────────"
 
     check_rust_target "aarch64-apple-ios"
+    check_rust_target "aarch64-apple-ios-sim"
 
     cd "$CORE_DIR"
 
-    cargo build --release \
-        --target aarch64-apple-ios \
-        --features ffi \
-        --lib
+    # Build both targets
+    echo "Building for device (aarch64-apple-ios)..."
+    cargo build --release --target aarch64-apple-ios --features ffi --lib
 
-    # Copy to Expo module
-    local src="$CORE_DIR/target/aarch64-apple-ios/release/libumbra_core.a"
-    local dst="$MODULE_DIR/ios/libumbra_core.a"
+    echo "Building for simulator (aarch64-apple-ios-sim)..."
+    cargo build --release --target aarch64-apple-ios-sim --features ffi --lib
 
-    if [ -f "$src" ]; then
-        cp "$src" "$dst"
-        echo "✓ iOS device library: $dst ($(du -h "$dst" | cut -f1))"
-    else
-        echo "ERROR: Build succeeded but library not found at $src"
+    local device_lib="$CORE_DIR/target/aarch64-apple-ios/release/libumbra_core.a"
+    local sim_lib="$CORE_DIR/target/aarch64-apple-ios-sim/release/libumbra_core.a"
+    local xcfw_dir="$MODULE_DIR/ios/UmbraCore.xcframework"
+
+    if [ ! -f "$device_lib" ] || [ ! -f "$sim_lib" ]; then
+        echo "ERROR: One or both builds failed to produce libraries"
+        [ ! -f "$device_lib" ] && echo "  Missing: $device_lib"
+        [ ! -f "$sim_lib" ] && echo "  Missing: $sim_lib"
         return 1
     fi
+
+    # Remove old xcframework / legacy .a
+    rm -rf "$xcfw_dir"
+    rm -f "$MODULE_DIR/ios/libumbra_core.a"
+
+    # Create XCFramework bundling both device and simulator
+    xcodebuild -create-xcframework \
+        -library "$device_lib" \
+        -library "$sim_lib" \
+        -output "$xcfw_dir"
+
+    echo "✓ iOS XCFramework: $xcfw_dir"
+    echo "  device:    $(du -h "$device_lib" | cut -f1)"
+    echo "  simulator: $(du -h "$sim_lib" | cut -f1)"
 }
 
 build_ios_sim() {
     echo ""
     echo "──────────────────────────────────────────"
-    echo "  Building for iOS Simulator (arm64)"
+    echo "  Building for iOS Simulator only (arm64)"
     echo "──────────────────────────────────────────"
 
     check_rust_target "aarch64-apple-ios-sim"
@@ -112,47 +128,27 @@ build_ios_sim() {
         --features ffi \
         --lib
 
-    # For development, we use the simulator build directly
-    local src="$CORE_DIR/target/aarch64-apple-ios-sim/release/libumbra_core.a"
-    local dst="$MODULE_DIR/ios/libumbra_core.a"
+    local sim_lib="$CORE_DIR/target/aarch64-apple-ios-sim/release/libumbra_core.a"
+    local xcfw_dir="$MODULE_DIR/ios/UmbraCore.xcframework"
 
-    if [ -f "$src" ]; then
-        cp "$src" "$dst"
-        echo "✓ iOS simulator library: $dst ($(du -h "$dst" | cut -f1))"
-        echo ""
-        echo "NOTE: This is the simulator build. For a device build, run:"
-        echo "  ./scripts/build-mobile.sh ios"
-    else
-        echo "ERROR: Build succeeded but library not found at $src"
+    if [ ! -f "$sim_lib" ]; then
+        echo "ERROR: Build succeeded but library not found at $sim_lib"
         return 1
     fi
-}
 
-build_ios_universal() {
+    # Remove old xcframework / legacy .a
+    rm -rf "$xcfw_dir"
+    rm -f "$MODULE_DIR/ios/libumbra_core.a"
+
+    # Create single-platform XCFramework (simulator only)
+    xcodebuild -create-xcframework \
+        -library "$sim_lib" \
+        -output "$xcfw_dir"
+
+    echo "✓ iOS XCFramework (simulator only): $xcfw_dir ($(du -h "$sim_lib" | cut -f1))"
     echo ""
-    echo "──────────────────────────────────────────"
-    echo "  Creating iOS Universal Library"
-    echo "──────────────────────────────────────────"
-
-    check_rust_target "aarch64-apple-ios"
-    check_rust_target "aarch64-apple-ios-sim"
-
-    cd "$CORE_DIR"
-
-    # Build both targets
-    cargo build --release --target aarch64-apple-ios --features ffi --lib
-    cargo build --release --target aarch64-apple-ios-sim --features ffi --lib
-
-    local device_lib="$CORE_DIR/target/aarch64-apple-ios/release/libumbra_core.a"
-    local sim_lib="$CORE_DIR/target/aarch64-apple-ios-sim/release/libumbra_core.a"
-    local dst="$MODULE_DIR/ios/libumbra_core.a"
-
-    # For now, just use the simulator build for development
-    # TODO: Create xcframework with both architectures
-    cp "$sim_lib" "$dst"
-    echo "✓ iOS library (simulator): $dst ($(du -h "$dst" | cut -f1))"
-    echo ""
-    echo "Device library also available at: $device_lib"
+    echo "NOTE: This only supports the simulator. For device + sim, run:"
+    echo "  ./scripts/build-mobile.sh ios"
 }
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -237,18 +233,15 @@ case "$PLATFORM" in
     ios-sim)
         build_ios_sim
         ;;
-    ios-all)
-        build_ios_universal
-        ;;
     android)
         build_android
         ;;
     all)
-        build_ios_universal
+        build_ios
         build_android
         ;;
     *)
-        echo "Usage: $0 [ios|ios-sim|ios-all|android|all]"
+        echo "Usage: $0 [ios|ios-sim|android|all]"
         exit 1
         ;;
 esac
