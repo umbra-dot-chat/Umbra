@@ -12,7 +12,7 @@ path = "src/main.rs"
 
 [dependencies]
 # Web framework
-axum = { version = "0.7", features = ["ws"] }
+axum = { version = "0.7", features = ["ws", "multipart"] }
 tower = "0.4"
 tower-http = { version = "0.5", features = ["cors", "trace"] }
 

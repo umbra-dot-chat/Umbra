@@ -17,9 +17,11 @@ import Svg, { Path, Circle, Line, Polyline } from 'react-native-svg';
 
 import { useUmbra } from '@/contexts/UmbraContext';
 import { useAuth } from '@/contexts/AuthContext';
-import type { Community, CommunityMember, CommunityRole, CommunitySeat } from '@umbra/service';
+import type { Community, CommunityMember, CommunityRole, CommunitySeat, CommunityEmoji, CommunitySticker, StickerPack } from '@umbra/service';
 
 import { CommunityOverviewPanel } from '@/components/community/CommunityOverviewPanel';
+import { CommunityEmojiPanel } from '@/components/community/CommunityEmojiPanel';
+import { CommunityStickerPanel } from '@/components/community/CommunityStickerPanel';
 import { CommunitySeatsPanel } from '@/components/community/CommunitySeatsPanel';
 import { CommunityRolePanel } from '@/components/community/CommunityRolePanel';
 import type { CommunityRole as CommunityRolePanelType } from '@/components/community/CommunityRolePanel';
@@ -125,6 +127,26 @@ function BridgeIcon({ size, color }: { size?: number; color?: string }) {
   );
 }
 
+function SmileIcon({ size, color }: { size?: number; color?: string }) {
+  return (
+    <Svg width={size || 18} height={size || 18} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Circle cx="12" cy="12" r="10" />
+      <Path d="M8 14s1.5 2 4 2 4-2 4-2" />
+      <Line x1="9" y1="9" x2="9.01" y2="9" />
+      <Line x1="15" y1="9" x2="15.01" y2="9" />
+    </Svg>
+  );
+}
+
+function StickerIcon({ size, color }: { size?: number; color?: string }) {
+  return (
+    <Svg width={size || 18} height={size || 18} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7l-5-5z" />
+      <Polyline points="14 2 14 8 20 8" />
+    </Svg>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -138,6 +160,8 @@ export type CommunitySettingsSection =
   | 'bridge'
   | 'moderation'
   | 'audit-log'
+  | 'emoji'
+  | 'stickers'
   | 'danger';
 
 export interface CommunitySettingsDialogProps {
@@ -204,6 +228,16 @@ export interface CommunitySettingsDialogProps {
   /** Whether a rescan is in progress. */
   rescanningSeats?: boolean;
 
+  // -- Emoji --
+  /** Custom emoji for the community. */
+  emoji?: CommunityEmoji[];
+
+  // -- Stickers --
+  /** Custom stickers for the community. */
+  stickers?: CommunitySticker[];
+  /** Sticker packs for the community. */
+  stickerPacks?: StickerPack[];
+
   // -- Leave/Delete community --
   /** Called when user wants to leave the community. */
   onLeaveCommunity?: () => void;
@@ -226,6 +260,8 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'bridge', label: 'Bridge', icon: BridgeIcon },
   { id: 'moderation', label: 'Moderation', icon: BanIcon },
   { id: 'audit-log', label: 'Audit Log', icon: FileTextIcon },
+  { id: 'emoji', label: 'Emoji', icon: SmileIcon },
+  { id: 'stickers', label: 'Stickers', icon: StickerIcon },
   { id: 'danger', label: 'Danger', icon: AlertTriangleIcon },
 ];
 
@@ -265,6 +301,11 @@ export function CommunitySettingsDialog({
   // Seats re-scan
   onRescanSeats,
   rescanningSeats,
+  // Emoji
+  emoji,
+  // Stickers
+  stickers,
+  stickerPacks,
   // Leave/Delete community
   onLeaveCommunity,
   onDeleteCommunity,
@@ -896,7 +937,7 @@ export function CommunitySettingsDialog({
   );
 
   // -- Whether the active section needs its own scroll (panels manage their own) --
-  const sectionManagesOwnScroll = activeSection === 'roles' || activeSection === 'invites';
+  const sectionManagesOwnScroll = activeSection === 'roles' || activeSection === 'invites' || activeSection === 'emoji' || activeSection === 'stickers';
 
   // -- Render section content ------------------------------------------------
 
@@ -1331,6 +1372,23 @@ export function CommunitySettingsDialog({
               Review actions taken by members and administrators.
             </Text>
           </View>
+        );
+
+      case 'emoji':
+        return (
+          <CommunityEmojiPanel
+            communityId={communityId}
+            emoji={emoji ?? []}
+          />
+        );
+
+      case 'stickers':
+        return (
+          <CommunityStickerPanel
+            communityId={communityId}
+            stickers={stickers ?? []}
+            stickerPacks={stickerPacks ?? []}
+          />
         );
 
       case 'danger':

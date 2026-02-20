@@ -15,6 +15,7 @@
 //! **Privacy**: The relay never sees plaintext content. All E2E encryption
 //! happens client-side — the relay only handles opaque encrypted blobs.
 
+mod asset;
 mod bridge;
 mod discovery;
 mod federation;
@@ -245,6 +246,28 @@ async fn main() {
         );
     }
 
+    // ── Asset Store Setup ────────────────────────────────────────────────
+    let asset_store = asset::store::AssetStore::new(data_dir.as_deref());
+    let assets_loaded = asset_store.load_from_disk();
+    if assets_loaded > 0 {
+        tracing::info!(
+            assets = assets_loaded,
+            "Loaded community assets from disk"
+        );
+    }
+
+    // Build asset router
+    let asset_router = Router::new()
+        .route(
+            "/api/community/:communityId/assets/upload",
+            post(asset::api::upload_asset),
+        )
+        .route(
+            "/api/community/:communityId/assets/:filename",
+            get(asset::api::get_asset),
+        )
+        .with_state(asset_store);
+
     // Build bridge router
     let bridge_router = Router::new()
         .route("/api/bridge/register", post(bridge::api::register_bridge))
@@ -323,6 +346,7 @@ async fn main() {
         .with_state(state)
         .merge(discovery_router)
         .merge(bridge_router)
+        .merge(asset_router)
         .layer(cors)
         .layer(TraceLayer::new_for_http());
 

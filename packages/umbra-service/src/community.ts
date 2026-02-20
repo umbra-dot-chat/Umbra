@@ -19,13 +19,41 @@ import type {
   CommunityFileRecord,
   CommunityFileFolderRecord,
   CommunitySeat,
+  CommunityEmoji,
+  CommunitySticker,
+  StickerPack,
+  MessageMetadata,
 } from './types';
 import type {
   MappedCommunityStructure,
   CommunityImportResult,
   CommunityImportProgress,
+  MappedEmoji,
+  MappedSticker,
   MappedAuditLogEntry,
 } from './import/discord-community';
+import { downloadAndStoreAsset } from './import/discord-community';
+import { getRelayUrl } from './discovery/api';
+
+// =============================================================================
+// HELPERS
+// =============================================================================
+
+/**
+ * Post-process a CommunityMessage from parseWasm to hydrate metadata.
+ *
+ * The WASM layer returns `metadataJson` as a raw JSON string.  We parse it
+ * into a typed `metadata` object and remove the raw string key.
+ */
+function hydrateMessageMetadata(msg: CommunityMessage & { metadataJson?: string | null }): CommunityMessage {
+  if (msg.metadataJson) {
+    try {
+      (msg as CommunityMessage).metadata = JSON.parse(msg.metadataJson);
+    } catch { /* ignore invalid JSON */ }
+  }
+  delete (msg as any).metadataJson;
+  return msg;
+}
 
 // =============================================================================
 // COMMUNITY CRUD
@@ -698,6 +726,7 @@ export async function sendMessage(
   content: string,
   replyToId?: string,
   threadId?: string,
+  metadata?: MessageMetadata,
 ): Promise<CommunityMessage> {
   const json = JSON.stringify({
     channel_id: channelId,
@@ -706,9 +735,11 @@ export async function sendMessage(
     reply_to_id: replyToId ?? null,
     thread_id: threadId ?? null,
     content_warning: null,
+    metadata_json: metadata ? JSON.stringify(metadata) : null,
   });
   const resultJson = wasm().umbra_wasm_community_message_send(json);
-  return await parseWasm<CommunityMessage>(resultJson);
+  const msg = await parseWasm<CommunityMessage>(resultJson);
+  return hydrateMessageMetadata(msg);
 }
 
 /**
@@ -721,6 +752,7 @@ export async function storeReceivedMessage(
   senderDid: string,
   content: string,
   createdAt: number,
+  metadata?: MessageMetadata,
 ): Promise<void> {
   const json = JSON.stringify({
     id,
@@ -728,6 +760,7 @@ export async function storeReceivedMessage(
     sender_did: senderDid,
     content,
     created_at: createdAt,
+    metadata_json: metadata ? JSON.stringify(metadata) : null,
   });
   wasm().umbra_wasm_community_message_store_received(json);
 }
@@ -746,7 +779,8 @@ export async function getMessages(
     before_timestamp: beforeTimestamp ?? null,
   });
   const resultJson = wasm().umbra_wasm_community_message_list(json);
-  return await parseWasm<CommunityMessage[]>(resultJson);
+  const msgs = await parseWasm<CommunityMessage[]>(resultJson);
+  return msgs.map(hydrateMessageMetadata);
 }
 
 /**
@@ -754,7 +788,8 @@ export async function getMessages(
  */
 export async function getMessage(messageId: string): Promise<CommunityMessage> {
   const resultJson = wasm().umbra_wasm_community_message_get(messageId);
-  return await parseWasm<CommunityMessage>(resultJson);
+  const msg = await parseWasm<CommunityMessage>(resultJson);
+  return hydrateMessageMetadata(msg);
 }
 
 /**
@@ -855,7 +890,8 @@ export async function unpinMessage(
  */
 export async function getPinnedMessages(channelId: string): Promise<CommunityMessage[]> {
   const resultJson = wasm().umbra_wasm_community_pin_list(channelId);
-  return await parseWasm<CommunityMessage[]>(resultJson);
+  const msgs = await parseWasm<CommunityMessage[]>(resultJson);
+  return msgs.map(hydrateMessageMetadata);
 }
 
 // =============================================================================
@@ -895,7 +931,8 @@ export async function getThreadMessages(
     before_timestamp: beforeTimestamp ?? null,
   });
   const resultJson = wasm().umbra_wasm_community_thread_messages(json);
-  return await parseWasm<CommunityMessage[]>(resultJson);
+  const msgs = await parseWasm<CommunityMessage[]>(resultJson);
+  return msgs.map(hydrateMessageMetadata);
 }
 
 // =============================================================================
@@ -1109,6 +1146,8 @@ export async function createCommunityFromDiscordImport(
   let seatsCreated = 0;
   let pinsImported = 0;
   let auditLogImported = 0;
+  let emojiImported = 0;
+  let stickersImported = 0;
   let communityId: string | undefined;
 
   try {
@@ -1127,13 +1166,41 @@ export async function createCommunityFromDiscordImport(
     );
     communityId = createResult.communityId;
 
-    // Set community branding (icon/banner) if available
+    // Download and store branding images locally (icon/banner)
+    // Instead of using Discord CDN URLs directly, we download and re-upload to our relay
     if (structure.iconUrl || structure.bannerUrl) {
       try {
-        await updateCommunityBranding(createResult.communityId, ownerDid, {
-          iconUrl: structure.iconUrl,
-          bannerUrl: structure.bannerUrl,
+        onProgress?.({
+          phase: 'downloading_branding',
+          percent: 5,
+          currentItem: 'Downloading branding images...',
         });
+
+        const relayUrl = getRelayUrl();
+
+        // Download and store each branding image in parallel
+        const [localIconUrl, localBannerUrl] = await Promise.all([
+          structure.iconUrl
+            ? downloadAndStoreAsset(structure.iconUrl, createResult.communityId, 'icon', ownerDid, relayUrl)
+            : Promise.resolve(null),
+          structure.bannerUrl
+            ? downloadAndStoreAsset(structure.bannerUrl, createResult.communityId, 'banner', ownerDid, relayUrl)
+            : Promise.resolve(null),
+        ]);
+
+        // Update branding with local URLs
+        await updateCommunityBranding(createResult.communityId, ownerDid, {
+          iconUrl: localIconUrl ?? undefined,
+          bannerUrl: localBannerUrl ?? undefined,
+        });
+
+        // Log if any downloads failed
+        if (structure.iconUrl && !localIconUrl) {
+          warnings.push('Failed to download community icon - using no icon');
+        }
+        if (structure.bannerUrl && !localBannerUrl) {
+          warnings.push('Failed to download community banner - using no banner');
+        }
       } catch (err) {
         const msg = `Failed to set community branding: ${err instanceof Error ? err.message : String(err)}`;
         warnings.push(msg);
@@ -1426,6 +1493,173 @@ export async function createCommunityFromDiscordImport(
       }
     }
 
+    // Phase 8: Import custom emoji
+    if (structure.emojis && structure.emojis.length > 0) {
+      const totalEmoji = structure.emojis.length;
+      const relayUrl = getRelayUrl();
+
+      onProgress?.({
+        phase: 'importing_emoji',
+        percent: 93,
+        totalItems: totalEmoji,
+        completedItems: 0,
+        currentItem: `0 / ${totalEmoji} emoji`,
+      });
+
+      for (let i = 0; i < totalEmoji; i++) {
+        const mappedEmoji = structure.emojis[i];
+        try {
+          // Fetch the emoji image from Discord CDN
+          const imgRes = await fetch(mappedEmoji.url);
+          if (!imgRes.ok) {
+            warnings.push(`Failed to fetch emoji "${mappedEmoji.name}" from Discord CDN (${imgRes.status})`);
+            continue;
+          }
+          const blob = await imgRes.blob();
+
+          // Re-host to our relay via asset upload endpoint
+          const formData = new FormData();
+          formData.append('file', blob, `${mappedEmoji.name}.${mappedEmoji.animated ? 'gif' : 'png'}`);
+          formData.append('type', 'emoji');
+          formData.append('did', ownerDid);
+
+          const uploadRes = await fetch(
+            `${relayUrl}/api/community/${encodeURIComponent(createResult.communityId)}/assets/upload`,
+            { method: 'POST', body: formData },
+          );
+
+          if (!uploadRes.ok) {
+            const body = await uploadRes.json().catch(() => ({}));
+            warnings.push(`Failed to upload emoji "${mappedEmoji.name}" to relay: ${(body as any).error || uploadRes.status}`);
+            continue;
+          }
+
+          const { data } = await uploadRes.json() as { data: { url: string; hash: string } };
+          const imageUrl = `${relayUrl}${data.url}`;
+
+          // Persist to local WASM DB
+          await createEmoji(
+            createResult.communityId,
+            mappedEmoji.name,
+            imageUrl,
+            mappedEmoji.animated,
+            ownerDid,
+          );
+
+          emojiImported++;
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          warnings.push(`Failed to import emoji "${mappedEmoji.name}": ${msg}`);
+        }
+
+        // Report progress every 5 emoji or on the last one
+        if ((i + 1) % 5 === 0 || i === totalEmoji - 1) {
+          onProgress?.({
+            phase: 'importing_emoji',
+            percent: 93 + Math.round(((i + 1) / totalEmoji) * 3),
+            totalItems: totalEmoji,
+            completedItems: emojiImported,
+            currentItem: `${emojiImported} / ${totalEmoji} emoji`,
+          });
+        }
+      }
+    }
+
+    // Phase 9: Import stickers
+    if (structure.stickers && structure.stickers.length > 0) {
+      const totalStickers = structure.stickers.length;
+      const relayUrl = getRelayUrl();
+
+      // Create a "Discord Import" sticker pack to group imported stickers
+      let importPackId: string | undefined;
+      try {
+        const importPack = await createStickerPack(
+          createResult.communityId,
+          'Discord Import',
+          ownerDid,
+          `Stickers imported from Discord server "${structure.name}"`,
+        );
+        importPackId = importPack.id;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err);
+        warnings.push(`Failed to create sticker import pack: ${msg}`);
+      }
+
+      onProgress?.({
+        phase: 'importing_stickers',
+        percent: 97,
+        totalItems: totalStickers,
+        completedItems: 0,
+        currentItem: `0 / ${totalStickers} stickers`,
+      });
+
+      for (let i = 0; i < totalStickers; i++) {
+        const mappedSticker = structure.stickers[i];
+        try {
+          // Fetch the sticker from Discord CDN
+          const imgRes = await fetch(mappedSticker.url);
+          if (!imgRes.ok) {
+            warnings.push(`Failed to fetch sticker "${mappedSticker.name}" from Discord CDN (${imgRes.status})`);
+            continue;
+          }
+          const blob = await imgRes.blob();
+
+          // Determine file extension
+          let ext = 'png';
+          if (mappedSticker.format === 'gif') ext = 'gif';
+          else if (mappedSticker.format === 'apng') ext = 'png';
+          else if (mappedSticker.format === 'lottie') ext = 'json';
+
+          // Re-host to our relay via asset upload endpoint
+          const formData = new FormData();
+          formData.append('file', blob, `${mappedSticker.name}.${ext}`);
+          formData.append('type', 'sticker');
+          formData.append('did', ownerDid);
+
+          const uploadRes = await fetch(
+            `${relayUrl}/api/community/${encodeURIComponent(createResult.communityId)}/assets/upload`,
+            { method: 'POST', body: formData },
+          );
+
+          if (!uploadRes.ok) {
+            const body = await uploadRes.json().catch(() => ({}));
+            warnings.push(`Failed to upload sticker "${mappedSticker.name}" to relay: ${(body as any).error || uploadRes.status}`);
+            continue;
+          }
+
+          const { data } = await uploadRes.json() as { data: { url: string; hash: string } };
+          const imageUrl = `${relayUrl}${data.url}`;
+
+          // Persist to local WASM DB
+          await createSticker(
+            createResult.communityId,
+            mappedSticker.name,
+            imageUrl,
+            mappedSticker.animated,
+            mappedSticker.format,
+            ownerDid,
+            importPackId,
+          );
+
+          stickersImported++;
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          warnings.push(`Failed to import sticker "${mappedSticker.name}": ${msg}`);
+        }
+
+        // Report progress every 3 stickers or on the last one
+        if ((i + 1) % 3 === 0 || i === totalStickers - 1) {
+          onProgress?.({
+            phase: 'importing_stickers',
+            percent: 97 + Math.round(((i + 1) / totalStickers) * 2),
+            totalItems: totalStickers,
+            completedItems: stickersImported,
+            currentItem: `${stickersImported} / ${totalStickers} stickers`,
+          });
+        }
+      }
+    }
+
     // Complete
     onProgress?.({
       phase: 'complete',
@@ -1447,6 +1681,8 @@ export async function createCommunityFromDiscordImport(
       seatsCreated,
       pinsImported,
       auditLogImported,
+      emojiImported,
+      stickersImported,
       errors,
       warnings,
       channelIdMap: channelIdMapObj,
@@ -1464,6 +1700,8 @@ export async function createCommunityFromDiscordImport(
       seatsCreated,
       pinsImported,
       auditLogImported,
+      emojiImported,
+      stickersImported,
       errors,
       warnings,
     };
@@ -1618,4 +1856,227 @@ export async function getAuditLog(
     })
   );
   return await parseWasm<CommunityAuditLogEntry[]>(resultJson);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Custom Emoji
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Create a custom emoji in a community.
+ */
+export async function createEmoji(
+  communityId: string,
+  name: string,
+  imageUrl: string,
+  animated: boolean,
+  uploadedBy: string,
+): Promise<CommunityEmoji> {
+  const json = JSON.stringify({
+    community_id: communityId,
+    name,
+    image_url: imageUrl,
+    animated,
+    uploaded_by: uploadedBy,
+  });
+  const resultJson = wasm().umbra_wasm_community_emoji_create(json);
+  return await parseWasm<CommunityEmoji>(resultJson);
+}
+
+/**
+ * List all custom emoji for a community.
+ */
+export async function listEmoji(communityId: string): Promise<CommunityEmoji[]> {
+  const resultJson = wasm().umbra_wasm_community_emoji_list(communityId);
+  return await parseWasm<CommunityEmoji[]>(resultJson);
+}
+
+/**
+ * Delete a custom emoji.
+ */
+export async function deleteEmoji(emojiId: string, actorDid: string): Promise<void> {
+  const json = JSON.stringify({
+    emoji_id: emojiId,
+    actor_did: actorDid,
+  });
+  wasm().umbra_wasm_community_emoji_delete(json);
+}
+
+/**
+ * Rename a custom emoji.
+ */
+export async function renameEmoji(emojiId: string, newName: string): Promise<void> {
+  const json = JSON.stringify({
+    emoji_id: emojiId,
+    new_name: newName,
+  });
+  wasm().umbra_wasm_community_emoji_rename(json);
+}
+
+/**
+ * Store a received emoji from a relay broadcast (INSERT OR IGNORE).
+ */
+export async function storeReceivedEmoji(
+  id: string,
+  communityId: string,
+  name: string,
+  imageUrl: string,
+  animated: boolean,
+  uploadedBy: string,
+  createdAt: number,
+): Promise<void> {
+  const json = JSON.stringify({
+    id,
+    community_id: communityId,
+    name,
+    image_url: imageUrl,
+    animated,
+    uploaded_by: uploadedBy,
+    created_at: createdAt,
+  });
+  wasm().umbra_wasm_community_emoji_create(json);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Custom Stickers
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Create a custom sticker in a community.
+ */
+export async function createSticker(
+  communityId: string,
+  name: string,
+  imageUrl: string,
+  animated: boolean,
+  format: string,
+  uploadedBy: string,
+  packId?: string,
+): Promise<CommunitySticker> {
+  const json = JSON.stringify({
+    community_id: communityId,
+    name,
+    image_url: imageUrl,
+    animated,
+    format,
+    uploaded_by: uploadedBy,
+    pack_id: packId ?? null,
+  });
+  const resultJson = wasm().umbra_wasm_community_sticker_create(json);
+  return await parseWasm<CommunitySticker>(resultJson);
+}
+
+/**
+ * List all custom stickers for a community.
+ */
+export async function listStickers(communityId: string): Promise<CommunitySticker[]> {
+  const resultJson = wasm().umbra_wasm_community_sticker_list(communityId);
+  return await parseWasm<CommunitySticker[]>(resultJson);
+}
+
+/**
+ * Delete a custom sticker.
+ */
+export async function deleteSticker(stickerId: string): Promise<void> {
+  wasm().umbra_wasm_community_sticker_delete(stickerId);
+}
+
+/**
+ * Store a received sticker from a relay broadcast (INSERT OR IGNORE).
+ */
+export async function storeReceivedSticker(
+  id: string,
+  communityId: string,
+  name: string,
+  imageUrl: string,
+  animated: boolean,
+  format: string,
+  uploadedBy: string,
+  createdAt: number,
+  packId?: string,
+): Promise<void> {
+  const json = JSON.stringify({
+    id,
+    community_id: communityId,
+    name,
+    image_url: imageUrl,
+    animated,
+    format,
+    uploaded_by: uploadedBy,
+    created_at: createdAt,
+    pack_id: packId ?? null,
+  });
+  wasm().umbra_wasm_community_sticker_create(json);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Sticker Packs
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Create a sticker pack in a community.
+ */
+export async function createStickerPack(
+  communityId: string,
+  name: string,
+  createdBy: string,
+  description?: string,
+  coverStickerId?: string,
+): Promise<StickerPack> {
+  const json = JSON.stringify({
+    community_id: communityId,
+    name,
+    description: description ?? null,
+    cover_sticker_id: coverStickerId ?? null,
+    created_by: createdBy,
+  });
+  const resultJson = wasm().umbra_wasm_community_sticker_pack_create(json);
+  return await parseWasm<StickerPack>(resultJson);
+}
+
+/**
+ * List all sticker packs for a community.
+ */
+export async function listStickerPacks(communityId: string): Promise<StickerPack[]> {
+  const resultJson = wasm().umbra_wasm_community_sticker_pack_list(communityId);
+  return await parseWasm<StickerPack[]>(resultJson);
+}
+
+/**
+ * Delete a sticker pack.
+ */
+export async function deleteStickerPack(packId: string): Promise<void> {
+  wasm().umbra_wasm_community_sticker_pack_delete(packId);
+}
+
+/**
+ * Rename a sticker pack.
+ */
+export async function renameStickerPack(packId: string, newName: string): Promise<void> {
+  const json = JSON.stringify({ pack_id: packId, new_name: newName });
+  wasm().umbra_wasm_community_sticker_pack_rename(json);
+}
+
+/**
+ * Store a received sticker pack from a relay broadcast (INSERT OR IGNORE).
+ */
+export async function storeReceivedStickerPack(
+  id: string,
+  communityId: string,
+  name: string,
+  createdBy: string,
+  createdAt: number,
+  description?: string,
+  coverStickerId?: string,
+): Promise<void> {
+  const json = JSON.stringify({
+    id,
+    community_id: communityId,
+    name,
+    description: description ?? null,
+    cover_sticker_id: coverStickerId ?? null,
+    created_by: createdBy,
+    created_at: createdAt,
+  });
+  wasm().umbra_wasm_community_sticker_pack_create(json);
 }

@@ -53,7 +53,7 @@
 //! ```
 
 /// Current schema version
-pub const SCHEMA_VERSION: i32 = 12;
+pub const SCHEMA_VERSION: i32 = 13;
 
 /// SQL to create all tables
 pub const CREATE_TABLES: &str = r#"
@@ -1579,9 +1579,54 @@ CREATE INDEX IF NOT EXISTS idx_community_seats_platform ON community_seats(platf
 UPDATE schema_version SET version = 12;
 "#;
 
+/// Migration v12 → v13:
+/// - community_sticker_packs table
+/// - metadata_json on community_messages (for text effects)
+/// - sticker_placements table (iMessage-style sticker placement)
+/// - format column on community_stickers
+pub const MIGRATE_V12_TO_V13: &str = r#"
+-- Sticker packs for grouping community stickers
+CREATE TABLE IF NOT EXISTS community_sticker_packs (
+    id TEXT PRIMARY KEY,
+    community_id TEXT NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT,
+    cover_sticker_id TEXT,
+    created_by TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    FOREIGN KEY (community_id) REFERENCES communities(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_community_sticker_packs_community ON community_sticker_packs(community_id);
+
+-- Add format column to community_stickers (gif, apng, lottie, png, webp)
+ALTER TABLE community_stickers ADD COLUMN format TEXT NOT NULL DEFAULT 'png';
+
+-- Add metadata_json to community_messages for text effects
+ALTER TABLE community_messages ADD COLUMN metadata_json TEXT;
+
+-- Sticker placements (iMessage-style sticker placement on messages)
+CREATE TABLE IF NOT EXISTS sticker_placements (
+    id TEXT PRIMARY KEY,
+    message_id TEXT NOT NULL,
+    channel_id TEXT NOT NULL,
+    sticker_id TEXT NOT NULL,
+    placed_by TEXT NOT NULL,
+    x_offset REAL NOT NULL DEFAULT 0.5,
+    y_offset REAL NOT NULL DEFAULT 0.5,
+    scale REAL NOT NULL DEFAULT 1.0,
+    rotation REAL NOT NULL DEFAULT 0.0,
+    created_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_sticker_placements_channel_message ON sticker_placements(channel_id, message_id);
+
+UPDATE schema_version SET version = 13;
+"#;
+
 /// SQL to drop all tables (for testing/reset)
 #[allow(dead_code)]
 pub const DROP_TABLES: &str = r#"
+DROP TABLE IF EXISTS sticker_placements;
+DROP TABLE IF EXISTS community_sticker_packs;
 DROP TABLE IF EXISTS community_seats;
 DROP TABLE IF EXISTS transfer_sessions;
 DROP TABLE IF EXISTS dm_shared_folders;

@@ -511,8 +511,16 @@ export function useDiscordCommunityImport(): UseDiscordCommunityImportState & Us
         const data: DiscordAuditLogResponse = await response.json();
         console.log('[fetchAuditLog] Response data:', {
           entryCount: data.entries?.length ?? 0,
-          error: (data as any).error,
+          error: data.error,
         });
+
+        // Check for error in response
+        if (data.error) {
+          console.warn('[fetchAuditLog] Error in response:', data.error);
+          setAuditLogAvailable(false);
+          setAuditLogEntries(null);
+          return;
+        }
 
         if (data.entries && data.entries.length > 0) {
           // Map audit log entries to MappedAuditLogEntry format

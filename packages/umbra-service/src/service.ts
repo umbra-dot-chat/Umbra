@@ -57,6 +57,10 @@ import type {
   CommunityEvent,
   CommunityFileRecord,
   CommunityFileFolderRecord,
+  CommunityEmoji,
+  CommunitySticker,
+  StickerPack,
+  MessageMetadata,
   DmSharedFileRecord,
   DmSharedFolderRecord,
   DmFileEventPayload,
@@ -976,16 +980,17 @@ export class UmbraService {
   // Messages
   sendCommunityMessage(
     channelId: string, senderDid: string, content: string,
-    replyToId?: string, threadId?: string,
+    replyToId?: string, threadId?: string, metadata?: MessageMetadata,
   ): Promise<CommunityMessage> {
-    return communityModule.sendMessage(channelId, senderDid, content, replyToId, threadId);
+    return communityModule.sendMessage(channelId, senderDid, content, replyToId, threadId, metadata);
   }
 
   /** Store a message received from another member via relay / bridge (INSERT OR IGNORE). */
   storeReceivedCommunityMessage(
     id: string, channelId: string, senderDid: string, content: string, createdAt: number,
+    metadata?: MessageMetadata,
   ): Promise<void> {
-    return communityModule.storeReceivedMessage(id, channelId, senderDid, content, createdAt);
+    return communityModule.storeReceivedMessage(id, channelId, senderDid, content, createdAt, metadata);
   }
 
   getCommunityMessages(channelId: string, limit?: number, beforeTimestamp?: number): Promise<CommunityMessage[]> {
@@ -1025,6 +1030,81 @@ export class UmbraService {
   // Read Receipts
   markCommunityRead(channelId: string, memberDid: string, timestamp?: number): Promise<void> {
     return communityModule.markRead(channelId, memberDid, timestamp);
+  }
+
+  // Emoji
+  createCommunityEmoji(
+    communityId: string, name: string, imageUrl: string, animated: boolean, uploadedBy: string,
+  ): Promise<CommunityEmoji> {
+    return communityModule.createEmoji(communityId, name, imageUrl, animated, uploadedBy);
+  }
+
+  listCommunityEmoji(communityId: string): Promise<CommunityEmoji[]> {
+    return communityModule.listEmoji(communityId);
+  }
+
+  deleteCommunityEmoji(emojiId: string, actorDid: string): Promise<void> {
+    return communityModule.deleteEmoji(emojiId, actorDid);
+  }
+
+  renameCommunityEmoji(emojiId: string, newName: string): Promise<void> {
+    return communityModule.renameEmoji(emojiId, newName);
+  }
+
+  storeReceivedCommunityEmoji(
+    id: string, communityId: string, name: string, imageUrl: string,
+    animated: boolean, uploadedBy: string, createdAt: number,
+  ): Promise<void> {
+    return communityModule.storeReceivedEmoji(id, communityId, name, imageUrl, animated, uploadedBy, createdAt);
+  }
+
+  // Stickers
+  createCommunitySticker(
+    communityId: string, name: string, imageUrl: string, animated: boolean, format: string, uploadedBy: string, packId?: string,
+  ): Promise<CommunitySticker> {
+    return communityModule.createSticker(communityId, name, imageUrl, animated, format, uploadedBy, packId);
+  }
+
+  listCommunityStickers(communityId: string): Promise<CommunitySticker[]> {
+    return communityModule.listStickers(communityId);
+  }
+
+  deleteCommunitySticker(stickerId: string): Promise<void> {
+    return communityModule.deleteSticker(stickerId);
+  }
+
+  storeReceivedCommunitySticker(
+    id: string, communityId: string, name: string, imageUrl: string,
+    animated: boolean, format: string, uploadedBy: string, createdAt: number,
+    packId?: string,
+  ): Promise<void> {
+    return communityModule.storeReceivedSticker(id, communityId, name, imageUrl, animated, format, uploadedBy, createdAt, packId);
+  }
+
+  // Sticker Packs
+  createCommunityStickerPack(
+    communityId: string, name: string, createdBy: string, description?: string, coverStickerId?: string,
+  ): Promise<StickerPack> {
+    return communityModule.createStickerPack(communityId, name, createdBy, description, coverStickerId);
+  }
+
+  listCommunityStickerPacks(communityId: string): Promise<StickerPack[]> {
+    return communityModule.listStickerPacks(communityId);
+  }
+
+  deleteCommunityStickerPack(packId: string): Promise<void> {
+    return communityModule.deleteStickerPack(packId);
+  }
+
+  renameCommunityStickerPack(packId: string, newName: string): Promise<void> {
+    return communityModule.renameStickerPack(packId, newName);
+  }
+
+  storeReceivedCommunityStickerPack(
+    id: string, communityId: string, name: string, createdBy: string, createdAt: number,
+    description?: string, coverStickerId?: string,
+  ): Promise<void> {
+    return communityModule.storeReceivedStickerPack(id, communityId, name, createdBy, createdAt, description, coverStickerId);
   }
 
   // ── Files ──────────────────────────────────────────────────────────────

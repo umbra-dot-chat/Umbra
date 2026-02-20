@@ -993,6 +993,8 @@ export interface CommunityMessage {
   platformUserId?: string;
   /** Bridge message: platform identifier (e.g. "discord") for ghost seat lookup */
   platform?: string;
+  /** Optional metadata (text effects, etc.) stored as JSON */
+  metadata?: MessageMetadata;
 }
 
 /**
@@ -1016,6 +1018,97 @@ export interface CommunityInvite {
   /** Expiry timestamp (null = never) */
   expiresAt?: number;
   /** Created timestamp */
+  createdAt: number;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Message Metadata & Text Effects
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Available text effects for iMessage-style message animations.
+ */
+export type TextEffect =
+  | 'slam'
+  | 'gentle'
+  | 'loud'
+  | 'invisible_ink'
+  | 'confetti'
+  | 'balloons'
+  | 'shake'
+  | 'fade_in';
+
+/**
+ * Metadata attached to a community message (stored as JSON).
+ */
+export interface MessageMetadata {
+  /** Optional text effect applied to this message. */
+  textEffect?: TextEffect;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Community Emoji & Stickers
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** A custom emoji belonging to a community. */
+export interface CommunityEmoji {
+  /** Unique emoji ID. */
+  id: string;
+  /** Community this emoji belongs to. */
+  communityId: string;
+  /** Short name (used as `:name:` in messages). */
+  name: string;
+  /** URL to the emoji image (relay-hosted or external). */
+  imageUrl: string;
+  /** Optional base64-encoded image data for P2P distribution. */
+  imageBase64?: string;
+  /** Whether this emoji is animated (GIF/APNG). */
+  animated: boolean;
+  /** DID of the user who uploaded this emoji. */
+  uploadedBy: string;
+  /** Unix timestamp of creation. */
+  createdAt: number;
+}
+
+/** A custom sticker belonging to a community. */
+export interface CommunitySticker {
+  /** Unique sticker ID. */
+  id: string;
+  /** Community this sticker belongs to. */
+  communityId: string;
+  /** Optional sticker pack ID. */
+  packId?: string;
+  /** Sticker display name. */
+  name: string;
+  /** URL to the sticker image (relay-hosted or external). */
+  imageUrl: string;
+  /** Optional base64-encoded image data for P2P distribution. */
+  imageBase64?: string;
+  /** Whether this sticker is animated. */
+  animated: boolean;
+  /** Format of the sticker: gif, apng, lottie, png, webp. */
+  format?: string;
+  /** DID of the user who uploaded this sticker. */
+  uploadedBy: string;
+  /** Unix timestamp of creation. */
+  createdAt: number;
+}
+
+/** A sticker pack grouping multiple stickers. */
+export interface StickerPack {
+  /** Unique pack ID. */
+  id: string;
+  /** Community this pack belongs to. */
+  communityId: string;
+  /** Pack display name. */
+  name: string;
+  /** Optional description. */
+  description?: string;
+  /** Optional cover sticker ID. */
+  coverStickerId?: string;
+  /** DID of the creator. */
+  createdBy: string;
+  /** Unix timestamp of creation. */
   createdAt: number;
 }
 
@@ -1182,7 +1275,7 @@ export type CommunityEvent =
   | { type: 'memberUnbanned'; communityId: string; memberDid: string }
   | { type: 'roleAssigned'; communityId: string; memberDid: string; roleId: string }
   | { type: 'roleUnassigned'; communityId: string; memberDid: string; roleId: string }
-  | { type: 'communityMessageSent'; channelId: string; messageId: string; senderDid: string; content?: string; senderDisplayName?: string; senderAvatarUrl?: string; platformUserId?: string; platform?: string }
+  | { type: 'communityMessageSent'; channelId: string; messageId: string; senderDid: string; content?: string; senderDisplayName?: string; senderAvatarUrl?: string; platformUserId?: string; platform?: string; metadata?: MessageMetadata }
   | { type: 'communityMessageEdited'; channelId: string; messageId: string }
   | { type: 'communityMessageDeleted'; channelId: string; messageId: string }
   | { type: 'communityReactionAdded'; messageId: string; emoji: string; memberDid: string }
@@ -1202,7 +1295,16 @@ export type CommunityEvent =
   | { type: 'fileDeleted'; channelId: string; fileId: string }
   | { type: 'folderCreated'; channelId: string; folderId: string }
   | { type: 'folderDeleted'; channelId: string; folderId: string }
-  | { type: 'fileMoved'; channelId: string; fileId: string; targetFolderId: string | null };
+  | { type: 'fileMoved'; channelId: string; fileId: string; targetFolderId: string | null }
+  // Emoji events
+  | { type: 'emojiCreated'; communityId: string; emoji: CommunityEmoji }
+  | { type: 'emojiDeleted'; communityId: string; emojiId: string }
+  | { type: 'emojiRenamed'; communityId: string; emojiId: string; newName: string }
+  // Sticker events
+  | { type: 'stickerCreated'; communityId: string; sticker: CommunitySticker }
+  | { type: 'stickerDeleted'; communityId: string; stickerId: string }
+  | { type: 'stickerPackCreated'; communityId: string; pack: StickerPack }
+  | { type: 'stickerPackDeleted'; communityId: string; packId: string };
 
 /**
  * Initialization configuration

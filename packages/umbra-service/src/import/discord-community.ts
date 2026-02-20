@@ -115,6 +115,22 @@ export interface DiscordImportedRole {
 }
 
 /**
+ * Discord guild sticker.
+ */
+export interface DiscordSticker {
+  /** Sticker ID. */
+  id: string;
+  /** Sticker name. */
+  name: string;
+  /** Sticker description. */
+  description: string | null;
+  /** Format type: 1 = PNG, 2 = APNG, 3 = Lottie, 4 = GIF. */
+  formatType: number;
+  /** Whether the sticker is available. */
+  available: boolean;
+}
+
+/**
  * Full imported structure of a Discord guild.
  */
 export interface DiscordImportedStructure {
@@ -126,6 +142,8 @@ export interface DiscordImportedStructure {
   roles: DiscordImportedRole[];
   /** Custom emojis. */
   emojis?: DiscordEmoji[];
+  /** Guild stickers. */
+  stickers?: DiscordSticker[];
 }
 
 /**
@@ -163,6 +181,22 @@ export interface MappedEmoji {
 }
 
 /**
+ * Mapped sticker for import.
+ */
+export interface MappedSticker {
+  /** Source platform sticker ID. */
+  id: string;
+  /** Sticker name. */
+  name: string;
+  /** Full URL to the sticker image. */
+  url: string;
+  /** Whether the sticker is animated. */
+  animated: boolean;
+  /** Sticker format: 'png' | 'apng' | 'gif' | 'lottie'. */
+  format: string;
+}
+
+/**
  * Mapped structure ready for Umbra community creation.
  *
  * This is the platform-agnostic output contract for all import adapters.
@@ -197,6 +231,8 @@ export interface MappedCommunityStructure {
   pinnedMessages?: Record<string, MappedPinnedMessage[]>;
   /** Custom emojis from the source platform. */
   emojis?: MappedEmoji[];
+  /** Custom stickers from the source platform. */
+  stickers?: MappedSticker[];
   /** Audit log entries from the source platform. */
   auditLog?: MappedAuditLogEntry[];
 }
@@ -455,8 +491,9 @@ export function getGuildIconUrl(guildId: string, iconHash: string | null, size =
 
 /**
  * Get the Discord CDN URL for a guild banner.
+ * Note: Discord CDN only supports specific sizes (powers of 2): 16, 32, 64, 128, 256, 512, 1024, 2048, 4096
  */
-export function getGuildBannerUrl(guildId: string, bannerHash: string | null, size = 480): string | null {
+export function getGuildBannerUrl(guildId: string, bannerHash: string | null, size = 1024): string | null {
   if (!bannerHash) return null;
   const format = bannerHash.startsWith('a_') ? 'gif' : 'png';
   return `https://cdn.discordapp.com/banners/${guildId}/${bannerHash}.${format}?size=${size}`;
@@ -464,10 +501,137 @@ export function getGuildBannerUrl(guildId: string, bannerHash: string | null, si
 
 /**
  * Get the Discord CDN URL for a guild splash.
+ * Note: Discord CDN only supports specific sizes (powers of 2): 16, 32, 64, 128, 256, 512, 1024, 2048, 4096
  */
-export function getGuildSplashUrl(guildId: string, splashHash: string | null, size = 480): string | null {
+export function getGuildSplashUrl(guildId: string, splashHash: string | null, size = 512): string | null {
   if (!splashHash) return null;
   return `https://cdn.discordapp.com/splashes/${guildId}/${splashHash}.png?size=${size}`;
+}
+
+/**
+ * Download an image from a URL and upload it to the relay's asset storage.
+ * Returns the local asset URL that can be used instead of the original URL.
+ *
+ * @param sourceUrl - The URL to download the image from
+ * @param communityId - The community to store the asset under
+ * @param assetType - The type of asset (icon, banner, splash, emoji, sticker)
+ * @param uploaderDid - The DID of the uploader
+ * @param relayUrl - The relay URL (defaults to env EXPO_PUBLIC_RELAY_URL)
+ * @returns The local asset URL, or null if download/upload failed
+ */
+export async function downloadAndStoreAsset(
+  sourceUrl: string,
+  communityId: string,
+  assetType: 'icon' | 'banner' | 'splash' | 'emoji' | 'sticker',
+  uploaderDid: string,
+  relayUrl?: string,
+): Promise<string | null> {
+  const relay = relayUrl || process.env.EXPO_PUBLIC_RELAY_URL || 'https://relay.umbra.chat';
+
+  try {
+    // Download the image from the source URL
+    const response = await fetch(sourceUrl);
+    if (!response.ok) {
+      console.warn(`[downloadAndStoreAsset] Failed to download from ${sourceUrl}: ${response.status}`);
+      return null;
+    }
+
+    const blob = await response.blob();
+    const contentType = blob.type || 'image/png';
+
+    // Create form data for upload
+    const formData = new FormData();
+    formData.append('file', blob, `${assetType}.${contentType.split('/')[1] || 'png'}`);
+    formData.append('type', assetType === 'emoji' || assetType === 'sticker' ? assetType : 'branding');
+    formData.append('did', uploaderDid);
+
+    // Upload to relay
+    const uploadUrl = `${relay}/api/community/${encodeURIComponent(communityId)}/assets/upload`;
+    const uploadResponse = await fetch(uploadUrl, {
+      method: 'POST',
+      body: formData,
+    });
+
+    if (!uploadResponse.ok) {
+      const errorText = await uploadResponse.text();
+      console.warn(`[downloadAndStoreAsset] Failed to upload to relay: ${uploadResponse.status} - ${errorText}`);
+      return null;
+    }
+
+    const result = await uploadResponse.json();
+    if (!result.ok || !result.data?.url) {
+      console.warn('[downloadAndStoreAsset] Upload failed:', result.error);
+      return null;
+    }
+
+    // Return the full URL to the asset
+    return `${relay}${result.data.url}`;
+  } catch (error) {
+    console.warn('[downloadAndStoreAsset] Error:', error);
+    return null;
+  }
+}
+
+/**
+ * Download and store guild branding assets (icon, banner, splash) to local storage.
+ * This replaces Discord CDN URLs with locally-stored copies.
+ *
+ * @param guildId - Discord guild ID
+ * @param icon - Guild icon hash
+ * @param banner - Guild banner hash
+ * @param splash - Guild splash hash
+ * @param communityId - The Umbra community ID to store assets under
+ * @param uploaderDid - The DID of the uploader
+ * @param relayUrl - The relay URL
+ * @returns Object with local URLs for each asset, or null for failed downloads
+ */
+export async function downloadAndStoreGuildBranding(
+  guildId: string,
+  icon: string | null,
+  banner: string | null,
+  splash: string | null,
+  communityId: string,
+  uploaderDid: string,
+  relayUrl?: string,
+): Promise<{ iconUrl: string | null; bannerUrl: string | null; splashUrl: string | null }> {
+  const results = await Promise.all([
+    // Icon
+    icon
+      ? downloadAndStoreAsset(
+          getGuildIconUrl(guildId, icon, 256)!,
+          communityId,
+          'icon',
+          uploaderDid,
+          relayUrl,
+        )
+      : Promise.resolve(null),
+    // Banner
+    banner
+      ? downloadAndStoreAsset(
+          getGuildBannerUrl(guildId, banner, 1024)!,
+          communityId,
+          'banner',
+          uploaderDid,
+          relayUrl,
+        )
+      : Promise.resolve(null),
+    // Splash
+    splash
+      ? downloadAndStoreAsset(
+          getGuildSplashUrl(guildId, splash, 512)!,
+          communityId,
+          'splash',
+          uploaderDid,
+          relayUrl,
+        )
+      : Promise.resolve(null),
+  ]);
+
+  return {
+    iconUrl: results[0],
+    bannerUrl: results[1],
+    splashUrl: results[2],
+  };
 }
 
 /**
@@ -476,6 +640,40 @@ export function getGuildSplashUrl(guildId: string, splashHash: string | null, si
 export function getEmojiUrl(emojiId: string, animated: boolean, size = 128): string {
   const format = animated ? 'gif' : 'png';
   return `https://cdn.discordapp.com/emojis/${emojiId}.${format}?size=${size}`;
+}
+
+/**
+ * Get the Discord CDN URL for a guild sticker.
+ *
+ * Discord sticker format types: 1 = PNG, 2 = APNG, 3 = Lottie (JSON), 4 = GIF.
+ */
+export function getStickerUrl(stickerId: string, formatType: number): string {
+  // Lottie stickers are served as JSON
+  if (formatType === 3) {
+    return `https://cdn.discordapp.com/stickers/${stickerId}.json`;
+  }
+  // GIF format
+  if (formatType === 4) {
+    return `https://cdn.discordapp.com/stickers/${stickerId}.gif`;
+  }
+  // APNG format (Discord serves these as PNG but they're animated PNGs)
+  if (formatType === 2) {
+    return `https://cdn.discordapp.com/stickers/${stickerId}.png`;
+  }
+  // Default PNG
+  return `https://cdn.discordapp.com/stickers/${stickerId}.png`;
+}
+
+/**
+ * Map Discord sticker format type to Umbra format string.
+ */
+export function mapStickerFormat(formatType: number): string {
+  switch (formatType) {
+    case 2: return 'apng';
+    case 3: return 'lottie';
+    case 4: return 'gif';
+    default: return 'png';
+  }
 }
 
 /**
@@ -569,7 +767,7 @@ export function mapDiscordToUmbra(structure: DiscordImportedStructure): MappedCo
 
   // Build icon and banner URLs
   const iconUrl = getGuildIconUrl(structure.guild.id, structure.guild.icon, 256);
-  const bannerUrl = getGuildBannerUrl(structure.guild.id, structure.guild.banner, 960);
+  const bannerUrl = getGuildBannerUrl(structure.guild.id, structure.guild.banner, 1024);
 
   // Map emojis
   const emojis: MappedEmoji[] = (structure.emojis || [])
@@ -579,6 +777,17 @@ export function mapDiscordToUmbra(structure: DiscordImportedStructure): MappedCo
       name: e.name!,
       animated: e.animated,
       url: getEmojiUrl(e.id!, e.animated),
+    }));
+
+  // Map stickers
+  const stickers: MappedSticker[] = (structure.stickers || [])
+    .filter((s) => s.id && s.name)
+    .map((s) => ({
+      id: s.id,
+      name: s.name,
+      url: getStickerUrl(s.id, s.formatType),
+      animated: s.formatType === 2 || s.formatType === 3 || s.formatType === 4,
+      format: mapStickerFormat(s.formatType),
     }));
 
   // Use Discord description if available, otherwise generate one
@@ -594,6 +803,7 @@ export function mapDiscordToUmbra(structure: DiscordImportedStructure): MappedCo
     channels,
     roles,
     emojis: emojis.length > 0 ? emojis : undefined,
+    stickers: stickers.length > 0 ? stickers : undefined,
   };
 }
 
@@ -656,7 +866,7 @@ export function validateImportStructure(
  */
 export interface CommunityImportProgress {
   /** Current phase of import. */
-  phase: 'creating_community' | 'creating_categories' | 'creating_channels' | 'creating_roles' | 'creating_seats' | 'importing_pins' | 'importing_audit_log' | 'complete';
+  phase: 'creating_community' | 'creating_categories' | 'creating_channels' | 'creating_roles' | 'creating_seats' | 'importing_pins' | 'importing_audit_log' | 'importing_emoji' | 'importing_stickers' | 'complete';
   /** Progress percentage (0-100). */
   percent: number;
   /** Current item being created. */
@@ -687,6 +897,10 @@ export interface CommunityImportResult {
   pinsImported: number;
   /** Number of audit log entries imported. */
   auditLogImported: number;
+  /** Number of custom emoji imported. */
+  emojiImported: number;
+  /** Number of stickers imported. */
+  stickersImported: number;
   /** Any errors that occurred. */
   errors: string[];
   /** Warnings (non-fatal issues). */

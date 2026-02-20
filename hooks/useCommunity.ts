@@ -22,6 +22,9 @@ import type {
   CommunityRole,
   CommunityEvent,
   CommunitySeat,
+  CommunityEmoji,
+  CommunitySticker,
+  StickerPack,
 } from '@umbra/service';
 
 /** Map of member DID → their assigned role IDs */
@@ -42,6 +45,12 @@ export interface UseCommunityResult {
   roles: CommunityRole[];
   /** Imported seats (ghost + claimed) for this community */
   seats: CommunitySeat[];
+  /** Custom emoji for this community */
+  emoji: CommunityEmoji[];
+  /** Custom stickers for this community */
+  stickers: CommunitySticker[];
+  /** Sticker packs for this community */
+  stickerPacks: StickerPack[];
   /** Map of member DID → their assigned roles */
   memberRolesMap: MemberRolesMap;
   /** Whether the initial load is in progress */
@@ -61,6 +70,9 @@ export function useCommunity(communityId: string | null): UseCommunityResult {
   const [members, setMembers] = useState<CommunityMember[]>([]);
   const [roles, setRoles] = useState<CommunityRole[]>([]);
   const [seats, setSeats] = useState<CommunitySeat[]>([]);
+  const [emoji, setEmoji] = useState<CommunityEmoji[]>([]);
+  const [stickers, setStickers] = useState<CommunitySticker[]>([]);
+  const [stickerPacks, setStickerPacks] = useState<StickerPack[]>([]);
   const [memberRolesMap, setMemberRolesMap] = useState<MemberRolesMap>({});
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
@@ -69,7 +81,7 @@ export function useCommunity(communityId: string | null): UseCommunityResult {
     if (!service || !communityId) return;
     try {
       setIsLoading(true);
-      const [communityData, spacesData, categoriesData, channelsData, membersData, rolesData, seatsData] = await Promise.all([
+      const [communityData, spacesData, categoriesData, channelsData, membersData, rolesData, seatsData, emojiData, stickersData, stickerPacksData] = await Promise.all([
         service.getCommunity(communityId),
         service.getSpaces(communityId),
         service.getAllCategories(communityId),
@@ -77,6 +89,9 @@ export function useCommunity(communityId: string | null): UseCommunityResult {
         service.getCommunityMembers(communityId),
         service.getCommunityRoles(communityId),
         service.getSeats(communityId).catch(() => [] as CommunitySeat[]),
+        service.listCommunityEmoji(communityId).catch(() => [] as CommunityEmoji[]),
+        service.listCommunityStickers(communityId).catch(() => [] as CommunitySticker[]),
+        service.listCommunityStickerPacks(communityId).catch(() => [] as StickerPack[]),
       ]);
 
       setCommunity(communityData);
@@ -86,6 +101,9 @@ export function useCommunity(communityId: string | null): UseCommunityResult {
       setMembers(membersData);
       setRoles(rolesData);
       setSeats(seatsData);
+      setEmoji(emojiData);
+      setStickers(stickersData);
+      setStickerPacks(stickerPacksData);
 
       // Fetch per-member role assignments
       const rolesMapResult: MemberRolesMap = {};
@@ -126,6 +144,9 @@ export function useCommunity(communityId: string | null): UseCommunityResult {
       setMembers([]);
       setRoles([]);
       setSeats([]);
+      setEmoji([]);
+      setStickers([]);
+      setStickerPacks([]);
       setMemberRolesMap({});
       setIsLoading(false);
     }
@@ -203,6 +224,72 @@ export function useCommunity(communityId: string | null): UseCommunityResult {
           // Refresh roles when roles are created, updated, or deleted
           service.getCommunityRoles(communityId).then(setRoles).catch(() => {});
           break;
+
+        case 'emojiCreated':
+          // Persist received emoji to local WASM DB, then refresh list
+          if (event.emoji) {
+            const e = event.emoji;
+            service.storeReceivedCommunityEmoji(
+              e.id, e.communityId, e.name, e.imageUrl, e.animated, e.uploadedBy, e.createdAt,
+            ).catch(() => {});
+          }
+          service.listCommunityEmoji(communityId).then(setEmoji).catch(() => {});
+          break;
+
+        case 'emojiDeleted':
+          // Delete locally and refresh
+          if (event.emojiId) {
+            service.deleteCommunityEmoji(event.emojiId, '').catch(() => {});
+          }
+          service.listCommunityEmoji(communityId).then(setEmoji).catch(() => {});
+          break;
+
+        case 'emojiRenamed':
+          // Rename locally and refresh
+          if (event.emojiId && event.newName) {
+            service.renameCommunityEmoji(event.emojiId, event.newName).catch(() => {});
+          }
+          service.listCommunityEmoji(communityId).then(setEmoji).catch(() => {});
+          break;
+
+        // Sticker events
+        case 'stickerCreated':
+          // Persist received sticker to local WASM DB, then refresh list
+          if (event.sticker) {
+            const s = event.sticker;
+            service.storeReceivedCommunitySticker(
+              s.id, s.communityId, s.name, s.imageUrl, s.animated, s.format ?? 'png', s.uploadedBy, s.createdAt, s.packId,
+            ).catch(() => {});
+          }
+          service.listCommunityStickers(communityId).then(setStickers).catch(() => {});
+          break;
+
+        case 'stickerDeleted':
+          if (event.stickerId) {
+            service.deleteCommunitySticker(event.stickerId).catch(() => {});
+          }
+          service.listCommunityStickers(communityId).then(setStickers).catch(() => {});
+          break;
+
+        case 'stickerPackCreated':
+          // Persist received sticker pack to local WASM DB, then refresh list
+          if (event.pack) {
+            const p = event.pack;
+            service.storeReceivedCommunityStickerPack(
+              p.id, p.communityId, p.name, p.createdBy, p.createdAt, p.description, p.coverStickerId,
+            ).catch(() => {});
+          }
+          service.listCommunityStickerPacks(communityId).then(setStickerPacks).catch(() => {});
+          break;
+
+        case 'stickerPackDeleted':
+          if (event.packId) {
+            service.deleteCommunityStickerPack(event.packId).catch(() => {});
+          }
+          service.listCommunityStickerPacks(communityId).then(setStickerPacks).catch(() => {});
+          // Also refresh stickers since pack deletion nullifies pack_id
+          service.listCommunityStickers(communityId).then(setStickers).catch(() => {});
+          break;
       }
     });
 
@@ -258,6 +345,9 @@ export function useCommunity(communityId: string | null): UseCommunityResult {
     members,
     roles,
     seats,
+    emoji,
+    stickers,
+    stickerPacks,
     memberRolesMap,
     isLoading,
     error,

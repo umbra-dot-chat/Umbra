@@ -438,6 +438,27 @@ pub struct DiscordEmoji {
     pub animated: bool,
 }
 
+/// Discord guild sticker.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscordSticker {
+    /// Sticker ID.
+    pub id: String,
+    /// Sticker name.
+    pub name: String,
+    /// Sticker description.
+    pub description: Option<String>,
+    /// Format type: 1 = PNG, 2 = APNG, 3 = Lottie, 4 = GIF.
+    pub format_type: u8,
+    /// Whether the sticker is available (not deleted/expired).
+    #[serde(default = "default_true")]
+    pub available: bool,
+}
+
+fn default_true() -> bool {
+    true
+}
+
 /// Discord channel types (subset we care about).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -543,6 +564,9 @@ pub struct DiscordImportedStructure {
     /// Custom emojis.
     #[serde(default)]
     pub emojis: Vec<DiscordEmoji>,
+    /// Guild stickers.
+    #[serde(default)]
+    pub stickers: Vec<DiscordSticker>,
 }
 
 /// Response from the guilds list endpoint.

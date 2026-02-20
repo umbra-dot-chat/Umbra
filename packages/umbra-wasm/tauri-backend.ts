@@ -703,6 +703,45 @@ export function createTauriBackend(
       return invoke('community_reaction_list', { messageId }).then(ensureJsonString) as any;
     },
 
+    // ── Community — Emoji ───────────────────────────────────────────
+    umbra_wasm_community_emoji_create: (json: string) => {
+      return invoke('community_emoji_create', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_emoji_list: (communityId: string) => {
+      return invoke('community_emoji_list', { communityId }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_emoji_delete: (json: string) => {
+      return invoke('community_emoji_delete', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_emoji_rename: (json: string) => {
+      return invoke('community_emoji_rename', { json }).then(ensureJsonString) as any;
+    },
+
+    // ── Community — Stickers ─────────────────────────────────────────
+    umbra_wasm_community_sticker_create: (json: string) => {
+      return invoke('community_sticker_create', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_sticker_list: (communityId: string) => {
+      return invoke('community_sticker_list', { communityId }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_sticker_delete: (stickerId: string) => {
+      return invoke('community_sticker_delete', { stickerId }).then(ensureJsonString) as any;
+    },
+
+    // ── Community — Sticker Packs ─────────────────────────────────────
+    umbra_wasm_community_sticker_pack_create: (json: string) => {
+      return invoke('community_sticker_pack_create', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_sticker_pack_list: (communityId: string) => {
+      return invoke('community_sticker_pack_list', { communityId }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_sticker_pack_delete: (packId: string) => {
+      return invoke('community_sticker_pack_delete', { packId }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_community_sticker_pack_rename: (json: string) => {
+      return invoke('community_sticker_pack_rename', { json }).then(ensureJsonString) as any;
+    },
+
     // ── Community — Pins ────────────────────────────────────────────
     umbra_wasm_community_pin_message: (json: string) => {
       return invoke('community_pin_message', { json }).then(ensureJsonString) as any;

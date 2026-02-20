@@ -94,7 +94,7 @@ pub use database::{
     // Phase 2-11 record types
     CommunityReadReceiptRecord, CommunityPinRecord,
     CommunityFileRecord, CommunityFileFolderRecord,
-    CommunityEmojiRecord, CommunityStickerRecord,
+    CommunityEmojiRecord, CommunityStickerRecord, CommunityStickerPackRecord,
     CommunityWebhookRecord, ChannelKeyRecord, CommunityDeletedMessageRecord,
     // Gap fill record types
     CommunityTimeoutRecord, CommunityThreadFollowerRecord,

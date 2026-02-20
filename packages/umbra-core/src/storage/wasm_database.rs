@@ -157,6 +157,11 @@ impl Database {
             sql_bridge_execute_batch(schema::MIGRATE_V11_TO_V12).map_err(js_err)?;
             tracing::info!("Migration v11 → v12 complete");
         }
+        if from_version < 13 {
+            tracing::info!("Running migration v12 → v13 (sticker packs, metadata, placements)");
+            sql_bridge_execute_batch(schema::MIGRATE_V12_TO_V13).map_err(js_err)?;
+            tracing::info!("Migration v12 → v13 complete");
+        }
         Ok(())
     }
 
@@ -470,6 +475,18 @@ impl Database {
         self.exec("UPDATE conversations SET unread_count = 0 WHERE id = ?",
             json!([conversation_id]))?;
         Ok(count)
+    }
+
+    /// Increment unread count for a conversation
+    pub fn increment_unread_count(&self, conversation_id: &str) -> Result<i32> {
+        self.exec("UPDATE conversations SET unread_count = unread_count + 1 WHERE id = ?",
+            json!([conversation_id]))
+    }
+
+    /// Update last_message_at timestamp for a conversation
+    pub fn update_last_message_at(&self, conversation_id: &str, timestamp: i64) -> Result<i32> {
+        self.exec("UPDATE conversations SET last_message_at = ? WHERE id = ?",
+            json!([timestamp, conversation_id]))
     }
 
     /// Get a single message by ID
@@ -1110,6 +1127,7 @@ impl Database {
             edited_at: row["edited_at"].as_i64(),
             deleted_for_everyone: row["deleted_for_everyone"].as_i64().unwrap_or(0) != 0,
             created_at: row["created_at"].as_i64().unwrap_or(0),
+            metadata_json: row["metadata_json"].as_str().map(|s| s.to_string()),
         }
     }
 
@@ -1538,11 +1556,11 @@ impl Database {
 
     /// Store a community message
     #[allow(clippy::too_many_arguments)]
-    pub fn store_community_message(&self, id: &str, channel_id: &str, sender_did: &str, content_encrypted: Option<&[u8]>, content_plaintext: Option<&str>, nonce: Option<&str>, key_version: Option<i32>, is_e2ee: bool, reply_to_id: Option<&str>, thread_id: Option<&str>, has_embed: bool, has_attachment: bool, content_warning: Option<&str>, created_at: i64) -> Result<()> {
+    pub fn store_community_message(&self, id: &str, channel_id: &str, sender_did: &str, content_encrypted: Option<&[u8]>, content_plaintext: Option<&str>, nonce: Option<&str>, key_version: Option<i32>, is_e2ee: bool, reply_to_id: Option<&str>, thread_id: Option<&str>, has_embed: bool, has_attachment: bool, content_warning: Option<&str>, created_at: i64, metadata_json: Option<&str>) -> Result<()> {
         let ct_hex = content_encrypted.map(hex::encode);
         self.exec(
-            "INSERT INTO community_messages (id, channel_id, sender_did, content_encrypted, content_plaintext, nonce, key_version, is_e2ee, reply_to_id, thread_id, has_embed, has_attachment, content_warning, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            json!([id, channel_id, sender_did, ct_hex, content_plaintext, nonce, key_version, is_e2ee as i32, reply_to_id, thread_id, has_embed as i32, has_attachment as i32, content_warning, created_at]),
+            "INSERT INTO community_messages (id, channel_id, sender_did, content_encrypted, content_plaintext, nonce, key_version, is_e2ee, reply_to_id, thread_id, has_embed, has_attachment, content_warning, created_at, metadata_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            json!([id, channel_id, sender_did, ct_hex, content_plaintext, nonce, key_version, is_e2ee as i32, reply_to_id, thread_id, has_embed as i32, has_attachment as i32, content_warning, created_at, metadata_json]),
         )?;
         Ok(())
     }
@@ -1550,11 +1568,11 @@ impl Database {
     /// Store a community message only if it doesn't already exist (INSERT OR IGNORE).
     /// Used for persisting messages received from the relay / bridge.
     #[allow(clippy::too_many_arguments)]
-    pub fn store_community_message_if_not_exists(&self, id: &str, channel_id: &str, sender_did: &str, content_encrypted: Option<&[u8]>, content_plaintext: Option<&str>, nonce: Option<&str>, key_version: Option<i32>, is_e2ee: bool, reply_to_id: Option<&str>, thread_id: Option<&str>, has_embed: bool, has_attachment: bool, content_warning: Option<&str>, created_at: i64) -> Result<()> {
+    pub fn store_community_message_if_not_exists(&self, id: &str, channel_id: &str, sender_did: &str, content_encrypted: Option<&[u8]>, content_plaintext: Option<&str>, nonce: Option<&str>, key_version: Option<i32>, is_e2ee: bool, reply_to_id: Option<&str>, thread_id: Option<&str>, has_embed: bool, has_attachment: bool, content_warning: Option<&str>, created_at: i64, metadata_json: Option<&str>) -> Result<()> {
         let ct_hex = content_encrypted.map(hex::encode);
         self.exec(
-            "INSERT OR IGNORE INTO community_messages (id, channel_id, sender_did, content_encrypted, content_plaintext, nonce, key_version, is_e2ee, reply_to_id, thread_id, has_embed, has_attachment, content_warning, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            json!([id, channel_id, sender_did, ct_hex, content_plaintext, nonce, key_version, is_e2ee as i32, reply_to_id, thread_id, has_embed as i32, has_attachment as i32, content_warning, created_at]),
+            "INSERT OR IGNORE INTO community_messages (id, channel_id, sender_did, content_encrypted, content_plaintext, nonce, key_version, is_e2ee, reply_to_id, thread_id, has_embed, has_attachment, content_warning, created_at, metadata_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            json!([id, channel_id, sender_did, ct_hex, content_plaintext, nonce, key_version, is_e2ee as i32, reply_to_id, thread_id, has_embed as i32, has_attachment as i32, content_warning, created_at, metadata_json]),
         )?;
         Ok(())
     }
@@ -1563,12 +1581,12 @@ impl Database {
     pub fn get_community_messages(&self, channel_id: &str, limit: usize, before_timestamp: Option<i64>) -> Result<Vec<CommunityMessageRecord>> {
         let rows = if let Some(before) = before_timestamp {
             self.query(
-                "SELECT id, channel_id, sender_did, content_encrypted, content_plaintext, nonce, key_version, is_e2ee, reply_to_id, thread_id, has_embed, has_attachment, content_warning, edited_at, deleted_for_everyone, created_at FROM community_messages WHERE channel_id = ? AND created_at < ? ORDER BY created_at DESC LIMIT ?",
+                "SELECT id, channel_id, sender_did, content_encrypted, content_plaintext, nonce, key_version, is_e2ee, reply_to_id, thread_id, has_embed, has_attachment, content_warning, edited_at, deleted_for_everyone, created_at, metadata_json FROM community_messages WHERE channel_id = ? AND created_at < ? ORDER BY created_at DESC LIMIT ?",
                 json!([channel_id, before, limit as i64]),
             )?
         } else {
             self.query(
-                "SELECT id, channel_id, sender_did, content_encrypted, content_plaintext, nonce, key_version, is_e2ee, reply_to_id, thread_id, has_embed, has_attachment, content_warning, edited_at, deleted_for_everyone, created_at FROM community_messages WHERE channel_id = ? ORDER BY created_at DESC LIMIT ?",
+                "SELECT id, channel_id, sender_did, content_encrypted, content_plaintext, nonce, key_version, is_e2ee, reply_to_id, thread_id, has_embed, has_attachment, content_warning, edited_at, deleted_for_everyone, created_at, metadata_json FROM community_messages WHERE channel_id = ? ORDER BY created_at DESC LIMIT ?",
                 json!([channel_id, limit as i64]),
             )?
         };
@@ -2494,6 +2512,12 @@ impl Database {
         }).collect())
     }
 
+    /// Rename a custom emoji
+    pub fn rename_community_emoji(&self, id: &str, new_name: &str) -> Result<()> {
+        self.exec("UPDATE community_emoji SET name = ? WHERE id = ?", json!([new_name, id]))?;
+        Ok(())
+    }
+
     /// Delete a custom emoji
     pub fn delete_community_emoji(&self, id: &str) -> Result<()> {
         self.exec("DELETE FROM community_emoji WHERE id = ?", json!([id]))?;
@@ -2502,10 +2526,10 @@ impl Database {
 
     /// Create a custom sticker
     #[allow(clippy::too_many_arguments)]
-    pub fn create_community_sticker(&self, id: &str, community_id: &str, pack_id: Option<&str>, name: &str, image_url: &str, animated: bool, uploaded_by: &str, created_at: i64) -> Result<()> {
+    pub fn create_community_sticker(&self, id: &str, community_id: &str, pack_id: Option<&str>, name: &str, image_url: &str, animated: bool, format: &str, uploaded_by: &str, created_at: i64) -> Result<()> {
         self.exec(
-            "INSERT INTO community_stickers (id, community_id, pack_id, name, image_url, animated, uploaded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            json!([id, community_id, pack_id, name, image_url, animated as i32, uploaded_by, created_at]),
+            "INSERT INTO community_stickers (id, community_id, pack_id, name, image_url, animated, format, uploaded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            json!([id, community_id, pack_id, name, image_url, animated as i32, format, uploaded_by, created_at]),
         )?;
         Ok(())
     }
@@ -2513,7 +2537,7 @@ impl Database {
     /// Get all stickers for a community
     pub fn get_community_stickers(&self, community_id: &str) -> Result<Vec<CommunityStickerRecord>> {
         let rows = self.query(
-            "SELECT id, community_id, pack_id, name, image_url, animated, uploaded_by, created_at FROM community_stickers WHERE community_id = ? ORDER BY name",
+            "SELECT id, community_id, pack_id, name, image_url, animated, format, uploaded_by, created_at FROM community_stickers WHERE community_id = ? ORDER BY name",
             json!([community_id]),
         )?;
         Ok(rows.iter().map(|row| CommunityStickerRecord {
@@ -2523,6 +2547,7 @@ impl Database {
             name: row["name"].as_str().unwrap_or("").to_string(),
             image_url: row["image_url"].as_str().unwrap_or("").to_string(),
             animated: row["animated"].as_i64().unwrap_or(0) != 0,
+            format: row["format"].as_str().unwrap_or("png").to_string(),
             uploaded_by: row["uploaded_by"].as_str().unwrap_or("").to_string(),
             created_at: row["created_at"].as_i64().unwrap_or(0),
         }).collect())
@@ -2531,6 +2556,49 @@ impl Database {
     /// Delete a sticker
     pub fn delete_community_sticker(&self, id: &str) -> Result<()> {
         self.exec("DELETE FROM community_stickers WHERE id = ?", json!([id]))?;
+        Ok(())
+    }
+
+    // ── Sticker Packs ───────────────────────────────────────────────────
+
+    /// Create a sticker pack
+    #[allow(clippy::too_many_arguments)]
+    pub fn create_community_sticker_pack(&self, id: &str, community_id: &str, name: &str, description: Option<&str>, cover_sticker_id: Option<&str>, created_by: &str, created_at: i64) -> Result<()> {
+        self.exec(
+            "INSERT INTO community_sticker_packs (id, community_id, name, description, cover_sticker_id, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            json!([id, community_id, name, description, cover_sticker_id, created_by, created_at]),
+        )?;
+        Ok(())
+    }
+
+    /// Get all sticker packs for a community
+    pub fn get_community_sticker_packs(&self, community_id: &str) -> Result<Vec<CommunityStickerPackRecord>> {
+        let rows = self.query(
+            "SELECT id, community_id, name, description, cover_sticker_id, created_by, created_at FROM community_sticker_packs WHERE community_id = ? ORDER BY name",
+            json!([community_id]),
+        )?;
+        Ok(rows.iter().map(|row| CommunityStickerPackRecord {
+            id: row["id"].as_str().unwrap_or("").to_string(),
+            community_id: row["community_id"].as_str().unwrap_or("").to_string(),
+            name: row["name"].as_str().unwrap_or("").to_string(),
+            description: row["description"].as_str().map(|s| s.to_string()),
+            cover_sticker_id: row["cover_sticker_id"].as_str().map(|s| s.to_string()),
+            created_by: row["created_by"].as_str().unwrap_or("").to_string(),
+            created_at: row["created_at"].as_i64().unwrap_or(0),
+        }).collect())
+    }
+
+    /// Delete a sticker pack
+    pub fn delete_community_sticker_pack(&self, id: &str) -> Result<()> {
+        // First nullify pack_id on stickers referencing this pack
+        self.exec("UPDATE community_stickers SET pack_id = NULL WHERE pack_id = ?", json!([id]))?;
+        self.exec("DELETE FROM community_sticker_packs WHERE id = ?", json!([id]))?;
+        Ok(())
+    }
+
+    /// Rename a sticker pack
+    pub fn rename_community_sticker_pack(&self, id: &str, new_name: &str) -> Result<()> {
+        self.exec("UPDATE community_sticker_packs SET name = ? WHERE id = ?", json!([new_name, id]))?;
         Ok(())
     }
 
@@ -3639,6 +3707,7 @@ pub struct CommunityMessageRecord {
     pub edited_at: Option<i64>,
     pub deleted_for_everyone: bool,
     pub created_at: i64,
+    pub metadata_json: Option<String>,
 }
 
 /// A community reaction record
@@ -3808,7 +3877,20 @@ pub struct CommunityStickerRecord {
     pub name: String,
     pub image_url: String,
     pub animated: bool,
+    pub format: String,
     pub uploaded_by: String,
+    pub created_at: i64,
+}
+
+/// A sticker pack record
+#[derive(Debug, Clone)]
+pub struct CommunityStickerPackRecord {
+    pub id: String,
+    pub community_id: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub cover_sticker_id: Option<String>,
+    pub created_by: String,
     pub created_at: i64,
 }
 

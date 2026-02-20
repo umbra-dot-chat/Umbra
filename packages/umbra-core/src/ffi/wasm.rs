@@ -1374,6 +1374,16 @@ pub fn umbra_wasm_messaging_store_incoming(json: &str) -> Result<(), JsValue> {
         ).map_err(|e| JsValue::from_str(&format!("Failed to store message: {}", e)))?;
     }
 
+    // Update conversation metadata (unread count and last_message_at)
+    // Only increment unread for non-thread messages
+    if thread_id.is_none() {
+        database.increment_unread_count(&actual_conversation_id)
+            .map_err(|e| JsValue::from_str(&format!("Failed to increment unread count: {}", e)))?;
+    }
+    // Always update last_message_at so conversations sort correctly
+    database.update_last_message_at(&actual_conversation_id, timestamp)
+        .map_err(|e| JsValue::from_str(&format!("Failed to update last_message_at: {}", e)))?;
+
     // Emit event for real-time UI updates (use actual_conversation_id)
     let mut event_json = serde_json::json!({
         "type": "messageReceived",
@@ -5992,9 +6002,10 @@ pub fn umbra_wasm_community_message_send(json: &str) -> Result<JsValue, JsValue>
     let reply_to_id = data["reply_to_id"].as_str();
     let thread_id = data["thread_id"].as_str();
     let content_warning = data["content_warning"].as_str();
+    let metadata_json = data["metadata_json"].as_str();
 
     let svc = community_service()?;
-    let msg = svc.send_message(channel_id, sender_did, content, reply_to_id, thread_id, content_warning)
+    let msg = svc.send_message(channel_id, sender_did, content, reply_to_id, thread_id, content_warning, metadata_json)
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
 
     let json_result = message_to_json(&msg);
@@ -6073,9 +6084,10 @@ pub fn umbra_wasm_community_message_store_received(json: &str) -> Result<JsValue
         .ok_or_else(|| JsValue::from_str("Missing content"))?;
     let created_at = data["created_at"].as_i64()
         .ok_or_else(|| JsValue::from_str("Missing created_at"))?;
+    let metadata_json = data["metadata_json"].as_str();
 
     let svc = community_service()?;
-    svc.store_received_message(id, channel_id, sender_did, content, created_at)
+    svc.store_received_message(id, channel_id, sender_did, content, created_at, metadata_json)
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
 
     Ok(JsValue::from_str(&serde_json::json!({"stored": true}).to_string()))
@@ -7131,6 +7143,27 @@ pub fn umbra_wasm_community_emoji_delete(json: &str) -> Result<JsValue, JsValue>
     Ok(JsValue::from_str("{\"success\":true}"))
 }
 
+/// Rename a custom emoji.
+///
+/// Takes JSON: { "emoji_id": "...", "new_name": "..." }
+/// Returns JSON: { "success": true }
+#[wasm_bindgen]
+pub fn umbra_wasm_community_emoji_rename(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let emoji_id = data["emoji_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing emoji_id"))?;
+    let new_name = data["new_name"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing new_name"))?;
+
+    let svc = community_service()?;
+    svc.rename_emoji(emoji_id, new_name)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    Ok(JsValue::from_str("{\"success\":true}"))
+}
+
 // ============================================================================
 // COMMUNITY — STICKERS (Phase 9)
 // ============================================================================
@@ -7138,7 +7171,7 @@ pub fn umbra_wasm_community_emoji_delete(json: &str) -> Result<JsValue, JsValue>
 /// Create a custom sticker.
 ///
 /// Takes JSON: { "community_id": "...", "pack_id": null, "name": "...",
-///               "image_url": "...", "animated": false, "uploaded_by": "..." }
+///               "image_url": "...", "animated": false, "format": "png", "uploaded_by": "..." }
 /// Returns JSON: CommunitySticker object
 #[wasm_bindgen]
 pub fn umbra_wasm_community_sticker_create(json: &str) -> Result<JsValue, JsValue> {
@@ -7153,11 +7186,12 @@ pub fn umbra_wasm_community_sticker_create(json: &str) -> Result<JsValue, JsValu
     let image_url = data["image_url"].as_str()
         .ok_or_else(|| JsValue::from_str("Missing image_url"))?;
     let animated = data["animated"].as_bool().unwrap_or(false);
+    let format = data["format"].as_str().unwrap_or("png");
     let uploaded_by = data["uploaded_by"].as_str()
         .ok_or_else(|| JsValue::from_str("Missing uploaded_by"))?;
 
     let svc = community_service()?;
-    let sticker = svc.create_sticker(community_id, pack_id, name, image_url, animated, uploaded_by)
+    let sticker = svc.create_sticker(community_id, pack_id, name, image_url, animated, format, uploaded_by)
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
 
     let json_result = serde_json::json!({
@@ -7167,6 +7201,7 @@ pub fn umbra_wasm_community_sticker_create(json: &str) -> Result<JsValue, JsValu
         "name": sticker.name,
         "image_url": sticker.image_url,
         "animated": sticker.animated,
+        "format": sticker.format,
         "uploaded_by": sticker.uploaded_by,
         "created_at": sticker.created_at,
     });
@@ -7191,6 +7226,7 @@ pub fn umbra_wasm_community_sticker_list(community_id: &str) -> Result<JsValue, 
             "name": s.name,
             "image_url": s.image_url,
             "animated": s.animated,
+            "format": s.format,
             "uploaded_by": s.uploaded_by,
             "created_at": s.created_at,
         })
@@ -7206,6 +7242,101 @@ pub fn umbra_wasm_community_sticker_list(community_id: &str) -> Result<JsValue, 
 pub fn umbra_wasm_community_sticker_delete(sticker_id: &str) -> Result<JsValue, JsValue> {
     let svc = community_service()?;
     svc.delete_sticker(sticker_id)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    Ok(JsValue::from_str("{\"success\":true}"))
+}
+
+// ============================================================================
+// COMMUNITY — STICKER PACKS
+// ============================================================================
+
+/// Create a sticker pack.
+///
+/// Takes JSON: { "community_id": "...", "name": "...", "description": null,
+///               "cover_sticker_id": null, "created_by": "..." }
+/// Returns JSON: StickerPack object
+#[wasm_bindgen]
+pub fn umbra_wasm_community_sticker_pack_create(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let community_id = data["community_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing community_id"))?;
+    let name = data["name"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing name"))?;
+    let description = data["description"].as_str();
+    let cover_sticker_id = data["cover_sticker_id"].as_str();
+    let created_by = data["created_by"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing created_by"))?;
+
+    let svc = community_service()?;
+    let pack = svc.create_sticker_pack(community_id, name, description, cover_sticker_id, created_by)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let json_result = serde_json::json!({
+        "id": pack.id,
+        "community_id": pack.community_id,
+        "name": pack.name,
+        "description": pack.description,
+        "cover_sticker_id": pack.cover_sticker_id,
+        "created_by": pack.created_by,
+        "created_at": pack.created_at,
+    });
+
+    Ok(JsValue::from_str(&json_result.to_string()))
+}
+
+/// Get all sticker packs for a community.
+///
+/// Returns JSON: StickerPack[]
+#[wasm_bindgen]
+pub fn umbra_wasm_community_sticker_pack_list(community_id: &str) -> Result<JsValue, JsValue> {
+    let svc = community_service()?;
+    let packs = svc.get_sticker_packs(community_id)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let arr: Vec<serde_json::Value> = packs.iter().map(|p| {
+        serde_json::json!({
+            "id": p.id,
+            "community_id": p.community_id,
+            "name": p.name,
+            "description": p.description,
+            "cover_sticker_id": p.cover_sticker_id,
+            "created_by": p.created_by,
+            "created_at": p.created_at,
+        })
+    }).collect();
+
+    Ok(JsValue::from_str(&serde_json::to_string(&arr).unwrap_or_default()))
+}
+
+/// Delete a sticker pack.
+///
+/// Returns JSON: { "success": true }
+#[wasm_bindgen]
+pub fn umbra_wasm_community_sticker_pack_delete(pack_id: &str) -> Result<JsValue, JsValue> {
+    let svc = community_service()?;
+    svc.delete_sticker_pack(pack_id)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    Ok(JsValue::from_str("{\"success\":true}"))
+}
+
+/// Rename a sticker pack.
+///
+/// Takes JSON: { "pack_id": "...", "new_name": "..." }
+/// Returns JSON: { "success": true }
+#[wasm_bindgen]
+pub fn umbra_wasm_community_sticker_pack_rename(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let pack_id = data["pack_id"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing pack_id"))?;
+    let new_name = data["new_name"].as_str()
+        .ok_or_else(|| JsValue::from_str("Missing new_name"))?;
+
+    let svc = community_service()?;
+    svc.rename_sticker_pack(pack_id, new_name)
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
     Ok(JsValue::from_str("{\"success\":true}"))
 }
@@ -9233,6 +9364,7 @@ fn message_to_json(m: &crate::storage::CommunityMessageRecord) -> serde_json::Va
         "pinned": false,
         "deleted_for_everyone": m.deleted_for_everyone,
         "created_at": m.created_at,
+        "metadata_json": m.metadata_json,
         "thread_reply_count": 0,
     })
 }

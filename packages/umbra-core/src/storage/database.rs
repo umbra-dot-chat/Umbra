@@ -173,6 +173,11 @@ impl Database {
                     conn.execute_batch(schema::MIGRATE_V11_TO_V12)
                         .map_err(|e| Error::DatabaseError(format!("Migration v11→v12 failed: {}", e)))?;
                 }
+                if v < 13 {
+                    tracing::info!("Running migration v12 → v13 (sticker packs, metadata, placements)");
+                    conn.execute_batch(schema::MIGRATE_V12_TO_V13)
+                        .map_err(|e| Error::DatabaseError(format!("Migration v12→v13 failed: {}", e)))?;
+                }
 
                 tracing::info!("All migrations complete (now at version {})", schema::SCHEMA_VERSION);
             }
@@ -2414,13 +2419,13 @@ impl Database {
         nonce: Option<&str>, key_version: Option<i32>, is_e2ee: bool,
         reply_to_id: Option<&str>, thread_id: Option<&str>,
         has_embed: bool, has_attachment: bool, content_warning: Option<&str>,
-        created_at: i64,
+        created_at: i64, metadata_json: Option<&str>,
     ) -> Result<()> {
         let conn = self.conn.lock();
         conn.execute(
-            "INSERT INTO community_messages (id, channel_id, sender_did, content_encrypted, content_plaintext, nonce, key_version, is_e2ee, reply_to_id, thread_id, has_embed, has_attachment, content_warning, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            params![id, channel_id, sender_did, content_encrypted, content_plaintext, nonce, key_version, is_e2ee as i32, reply_to_id, thread_id, has_embed as i32, has_attachment as i32, content_warning, created_at],
+            "INSERT INTO community_messages (id, channel_id, sender_did, content_encrypted, content_plaintext, nonce, key_version, is_e2ee, reply_to_id, thread_id, has_embed, has_attachment, content_warning, created_at, metadata_json)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            params![id, channel_id, sender_did, content_encrypted, content_plaintext, nonce, key_version, is_e2ee as i32, reply_to_id, thread_id, has_embed as i32, has_attachment as i32, content_warning, created_at, metadata_json],
         ).map_err(|e| Error::DatabaseError(format!("Failed to store community message: {}", e)))?;
         Ok(())
     }
@@ -2434,13 +2439,13 @@ impl Database {
         nonce: Option<&str>, key_version: Option<i32>, is_e2ee: bool,
         reply_to_id: Option<&str>, thread_id: Option<&str>,
         has_embed: bool, has_attachment: bool, content_warning: Option<&str>,
-        created_at: i64,
+        created_at: i64, metadata_json: Option<&str>,
     ) -> Result<()> {
         let conn = self.conn.lock();
         conn.execute(
-            "INSERT OR IGNORE INTO community_messages (id, channel_id, sender_did, content_encrypted, content_plaintext, nonce, key_version, is_e2ee, reply_to_id, thread_id, has_embed, has_attachment, content_warning, created_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            params![id, channel_id, sender_did, content_encrypted, content_plaintext, nonce, key_version, is_e2ee as i32, reply_to_id, thread_id, has_embed as i32, has_attachment as i32, content_warning, created_at],
+            "INSERT OR IGNORE INTO community_messages (id, channel_id, sender_did, content_encrypted, content_plaintext, nonce, key_version, is_e2ee, reply_to_id, thread_id, has_embed, has_attachment, content_warning, created_at, metadata_json)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            params![id, channel_id, sender_did, content_encrypted, content_plaintext, nonce, key_version, is_e2ee as i32, reply_to_id, thread_id, has_embed as i32, has_attachment as i32, content_warning, created_at, metadata_json],
         ).map_err(|e| Error::DatabaseError(format!("Failed to store received community message: {}", e)))?;
         Ok(())
     }
@@ -2449,10 +2454,10 @@ impl Database {
     pub fn get_community_messages(&self, channel_id: &str, limit: usize, before_timestamp: Option<i64>) -> Result<Vec<CommunityMessageRecord>> {
         let conn = self.conn.lock();
         let (sql, params_vec): (&str, Vec<Box<dyn rusqlite::types::ToSql>>) = if let Some(before) = before_timestamp {
-            ("SELECT id, channel_id, sender_did, content_encrypted, content_plaintext, nonce, key_version, is_e2ee, reply_to_id, thread_id, has_embed, has_attachment, content_warning, edited_at, deleted_for_everyone, created_at FROM community_messages WHERE channel_id = ? AND created_at < ? AND deleted_for_everyone = 0 ORDER BY created_at DESC LIMIT ?",
+            ("SELECT id, channel_id, sender_did, content_encrypted, content_plaintext, nonce, key_version, is_e2ee, reply_to_id, thread_id, has_embed, has_attachment, content_warning, edited_at, deleted_for_everyone, created_at, metadata_json FROM community_messages WHERE channel_id = ? AND created_at < ? AND deleted_for_everyone = 0 ORDER BY created_at DESC LIMIT ?",
              vec![Box::new(channel_id.to_string()), Box::new(before), Box::new(limit as i64)])
         } else {
-            ("SELECT id, channel_id, sender_did, content_encrypted, content_plaintext, nonce, key_version, is_e2ee, reply_to_id, thread_id, has_embed, has_attachment, content_warning, edited_at, deleted_for_everyone, created_at FROM community_messages WHERE channel_id = ? AND deleted_for_everyone = 0 ORDER BY created_at DESC LIMIT ?",
+            ("SELECT id, channel_id, sender_did, content_encrypted, content_plaintext, nonce, key_version, is_e2ee, reply_to_id, thread_id, has_embed, has_attachment, content_warning, edited_at, deleted_for_everyone, created_at, metadata_json FROM community_messages WHERE channel_id = ? AND deleted_for_everyone = 0 ORDER BY created_at DESC LIMIT ?",
              vec![Box::new(channel_id.to_string()), Box::new(limit as i64)])
         };
 
@@ -2466,7 +2471,7 @@ impl Database {
             thread_id: row.get(9)?, has_embed: row.get::<_, i32>(10)? != 0,
             has_attachment: row.get::<_, i32>(11)? != 0, content_warning: row.get(12)?,
             edited_at: row.get(13)?, deleted_for_everyone: row.get::<_, i32>(14)? != 0,
-            created_at: row.get(15)?,
+            created_at: row.get(15)?, metadata_json: row.get(16)?,
         })).map_err(|e| Error::DatabaseError(e.to_string()))?;
 
         let mut messages = Vec::new();
@@ -2479,7 +2484,7 @@ impl Database {
     pub fn get_community_message(&self, id: &str) -> Result<Option<CommunityMessageRecord>> {
         let conn = self.conn.lock();
         let result = conn.query_row(
-            "SELECT id, channel_id, sender_did, content_encrypted, content_plaintext, nonce, key_version, is_e2ee, reply_to_id, thread_id, has_embed, has_attachment, content_warning, edited_at, deleted_for_everyone, created_at FROM community_messages WHERE id = ?",
+            "SELECT id, channel_id, sender_did, content_encrypted, content_plaintext, nonce, key_version, is_e2ee, reply_to_id, thread_id, has_embed, has_attachment, content_warning, edited_at, deleted_for_everyone, created_at, metadata_json FROM community_messages WHERE id = ?",
             params![id],
             |row| Ok(CommunityMessageRecord {
                 id: row.get(0)?, channel_id: row.get(1)?, sender_did: row.get(2)?,
@@ -2489,7 +2494,7 @@ impl Database {
                 thread_id: row.get(9)?, has_embed: row.get::<_, i32>(10)? != 0,
                 has_attachment: row.get::<_, i32>(11)? != 0, content_warning: row.get(12)?,
                 edited_at: row.get(13)?, deleted_for_everyone: row.get::<_, i32>(14)? != 0,
-                created_at: row.get(15)?,
+                created_at: row.get(15)?, metadata_json: row.get(16)?,
             }),
         );
         match result {
@@ -3077,6 +3082,14 @@ impl Database {
         Ok(emojis)
     }
 
+    /// Rename a custom emoji
+    pub fn rename_community_emoji(&self, id: &str, new_name: &str) -> Result<()> {
+        let conn = self.conn.lock();
+        conn.execute("UPDATE community_emoji SET name = ? WHERE id = ?", params![new_name, id])
+            .map_err(|e| Error::DatabaseError(e.to_string()))?;
+        Ok(())
+    }
+
     /// Delete a custom emoji
     pub fn delete_community_emoji(&self, id: &str) -> Result<()> {
         let conn = self.conn.lock();
@@ -3087,11 +3100,11 @@ impl Database {
 
     /// Create a custom sticker
     #[allow(clippy::too_many_arguments)]
-    pub fn create_community_sticker(&self, id: &str, community_id: &str, pack_id: Option<&str>, name: &str, image_url: &str, animated: bool, uploaded_by: &str, created_at: i64) -> Result<()> {
+    pub fn create_community_sticker(&self, id: &str, community_id: &str, pack_id: Option<&str>, name: &str, image_url: &str, animated: bool, format: &str, uploaded_by: &str, created_at: i64) -> Result<()> {
         let conn = self.conn.lock();
         conn.execute(
-            "INSERT INTO community_stickers (id, community_id, pack_id, name, image_url, animated, uploaded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            params![id, community_id, pack_id, name, image_url, animated as i32, uploaded_by, created_at],
+            "INSERT INTO community_stickers (id, community_id, pack_id, name, image_url, animated, format, uploaded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            params![id, community_id, pack_id, name, image_url, animated as i32, format, uploaded_by, created_at],
         ).map_err(|e| Error::DatabaseError(format!("Failed to create sticker: {}", e)))?;
         Ok(())
     }
@@ -3100,13 +3113,13 @@ impl Database {
     pub fn get_community_stickers(&self, community_id: &str) -> Result<Vec<CommunityStickerRecord>> {
         let conn = self.conn.lock();
         let mut stmt = conn.prepare(
-            "SELECT id, community_id, pack_id, name, image_url, animated, uploaded_by, created_at FROM community_stickers WHERE community_id = ? ORDER BY name",
+            "SELECT id, community_id, pack_id, name, image_url, animated, format, uploaded_by, created_at FROM community_stickers WHERE community_id = ? ORDER BY name",
         ).map_err(|e| Error::DatabaseError(e.to_string()))?;
 
         let rows = stmt.query_map(params![community_id], |row| Ok(CommunityStickerRecord {
             id: row.get(0)?, community_id: row.get(1)?, pack_id: row.get(2)?,
             name: row.get(3)?, image_url: row.get(4)?, animated: row.get::<_, i32>(5)? != 0,
-            uploaded_by: row.get(6)?, created_at: row.get(7)?,
+            format: row.get(6)?, uploaded_by: row.get(7)?, created_at: row.get(8)?,
         })).map_err(|e| Error::DatabaseError(e.to_string()))?;
 
         let mut stickers = Vec::new();
@@ -3118,6 +3131,56 @@ impl Database {
     pub fn delete_community_sticker(&self, id: &str) -> Result<()> {
         let conn = self.conn.lock();
         conn.execute("DELETE FROM community_stickers WHERE id = ?", params![id])
+            .map_err(|e| Error::DatabaseError(e.to_string()))?;
+        Ok(())
+    }
+
+    // ── Sticker Packs ───────────────────────────────────────────────────
+
+    /// Create a sticker pack
+    #[allow(clippy::too_many_arguments)]
+    pub fn create_community_sticker_pack(&self, id: &str, community_id: &str, name: &str, description: Option<&str>, cover_sticker_id: Option<&str>, created_by: &str, created_at: i64) -> Result<()> {
+        let conn = self.conn.lock();
+        conn.execute(
+            "INSERT INTO community_sticker_packs (id, community_id, name, description, cover_sticker_id, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            params![id, community_id, name, description, cover_sticker_id, created_by, created_at],
+        ).map_err(|e| Error::DatabaseError(format!("Failed to create sticker pack: {}", e)))?;
+        Ok(())
+    }
+
+    /// Get all sticker packs for a community
+    pub fn get_community_sticker_packs(&self, community_id: &str) -> Result<Vec<CommunityStickerPackRecord>> {
+        let conn = self.conn.lock();
+        let mut stmt = conn.prepare(
+            "SELECT id, community_id, name, description, cover_sticker_id, created_by, created_at FROM community_sticker_packs WHERE community_id = ? ORDER BY name",
+        ).map_err(|e| Error::DatabaseError(e.to_string()))?;
+
+        let rows = stmt.query_map(params![community_id], |row| Ok(CommunityStickerPackRecord {
+            id: row.get(0)?, community_id: row.get(1)?, name: row.get(2)?,
+            description: row.get(3)?, cover_sticker_id: row.get(4)?,
+            created_by: row.get(5)?, created_at: row.get(6)?,
+        })).map_err(|e| Error::DatabaseError(e.to_string()))?;
+
+        let mut packs = Vec::new();
+        for row in rows { packs.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?); }
+        Ok(packs)
+    }
+
+    /// Delete a sticker pack (stickers with this pack_id will have pack_id set to NULL)
+    pub fn delete_community_sticker_pack(&self, id: &str) -> Result<()> {
+        let conn = self.conn.lock();
+        // First nullify pack_id on stickers referencing this pack
+        conn.execute("UPDATE community_stickers SET pack_id = NULL WHERE pack_id = ?", params![id])
+            .map_err(|e| Error::DatabaseError(e.to_string()))?;
+        conn.execute("DELETE FROM community_sticker_packs WHERE id = ?", params![id])
+            .map_err(|e| Error::DatabaseError(e.to_string()))?;
+        Ok(())
+    }
+
+    /// Rename a sticker pack
+    pub fn rename_community_sticker_pack(&self, id: &str, new_name: &str) -> Result<()> {
+        let conn = self.conn.lock();
+        conn.execute("UPDATE community_sticker_packs SET name = ? WHERE id = ?", params![new_name, id])
             .map_err(|e| Error::DatabaseError(e.to_string()))?;
         Ok(())
     }
@@ -3373,7 +3436,7 @@ impl Database {
             thread_id: row.get(9)?, has_embed: row.get::<_, i32>(10)? != 0,
             has_attachment: row.get::<_, i32>(11)? != 0, content_warning: row.get(12)?,
             edited_at: row.get(13)?, deleted_for_everyone: row.get::<_, i32>(14)? != 0,
-            created_at: row.get(15)?,
+            created_at: row.get(15)?, metadata_json: row.get(16)?,
         })).map_err(|e| Error::DatabaseError(e.to_string()))?;
 
         let mut messages = Vec::new();
@@ -3697,7 +3760,7 @@ impl Database {
             thread_id: row.get(9)?, has_embed: row.get::<_, i32>(10)? != 0,
             has_attachment: row.get::<_, i32>(11)? != 0, content_warning: row.get(12)?,
             edited_at: row.get(13)?, deleted_for_everyone: row.get::<_, i32>(14)? != 0,
-            created_at: row.get(15)?,
+            created_at: row.get(15)?, metadata_json: row.get(16)?,
         })).map_err(|e| Error::DatabaseError(e.to_string()))?;
 
         let mut results = Vec::new();
@@ -3736,21 +3799,21 @@ impl Database {
                 thread_id: row.get(9)?, has_embed: row.get::<_, i32>(10)? != 0,
                 has_attachment: row.get::<_, i32>(11)? != 0, content_warning: row.get(12)?,
                 edited_at: row.get(13)?, deleted_for_everyone: row.get::<_, i32>(14)? != 0,
-                created_at: row.get(15)?,
+                created_at: row.get(15)?, metadata_json: row.get(16)?,
             })
         }
 
         let mut results = Vec::new();
         if let Some(before) = before_timestamp {
             let mut stmt = conn.prepare(
-                "SELECT id, channel_id, sender_did, content_encrypted, content_plaintext, nonce, key_version, is_e2ee, reply_to_id, thread_id, has_embed, has_attachment, content_warning, edited_at, deleted_for_everyone, created_at FROM community_messages WHERE thread_id = ? AND deleted_for_everyone = 0 AND created_at < ? ORDER BY created_at DESC LIMIT ?",
+                "SELECT id, channel_id, sender_did, content_encrypted, content_plaintext, nonce, key_version, is_e2ee, reply_to_id, thread_id, has_embed, has_attachment, content_warning, edited_at, deleted_for_everyone, created_at, metadata_json FROM community_messages WHERE thread_id = ? AND deleted_for_everyone = 0 AND created_at < ? ORDER BY created_at DESC LIMIT ?",
             ).map_err(|e| Error::DatabaseError(e.to_string()))?;
             let rows = stmt.query_map(params![thread_id, before, limit as i64], parse_msg_row)
                 .map_err(|e| Error::DatabaseError(e.to_string()))?;
             for row in rows { results.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?); }
         } else {
             let mut stmt = conn.prepare(
-                "SELECT id, channel_id, sender_did, content_encrypted, content_plaintext, nonce, key_version, is_e2ee, reply_to_id, thread_id, has_embed, has_attachment, content_warning, edited_at, deleted_for_everyone, created_at FROM community_messages WHERE thread_id = ? AND deleted_for_everyone = 0 ORDER BY created_at DESC LIMIT ?",
+                "SELECT id, channel_id, sender_did, content_encrypted, content_plaintext, nonce, key_version, is_e2ee, reply_to_id, thread_id, has_embed, has_attachment, content_warning, edited_at, deleted_for_everyone, created_at, metadata_json FROM community_messages WHERE thread_id = ? AND deleted_for_everyone = 0 ORDER BY created_at DESC LIMIT ?",
             ).map_err(|e| Error::DatabaseError(e.to_string()))?;
             let rows = stmt.query_map(params![thread_id, limit as i64], parse_msg_row)
                 .map_err(|e| Error::DatabaseError(e.to_string()))?;
@@ -4563,6 +4626,7 @@ pub struct CommunityMessageRecord {
     pub edited_at: Option<i64>,
     pub deleted_for_everyone: bool,
     pub created_at: i64,
+    pub metadata_json: Option<String>,
 }
 
 /// A community reaction record
@@ -4708,7 +4772,20 @@ pub struct CommunityStickerRecord {
     pub name: String,
     pub image_url: String,
     pub animated: bool,
+    pub format: String,
     pub uploaded_by: String,
+    pub created_at: i64,
+}
+
+/// A sticker pack record
+#[derive(Debug, Clone)]
+pub struct CommunityStickerPackRecord {
+    pub id: String,
+    pub community_id: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub cover_sticker_id: Option<String>,
+    pub created_by: String,
     pub created_at: i64,
 }
 

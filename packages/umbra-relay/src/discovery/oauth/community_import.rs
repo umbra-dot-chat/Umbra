@@ -20,7 +20,7 @@ use crate::discovery::{
     types::{
         DiscordChannelType, DiscordEmoji, DiscordGuildInfo, DiscordGuildsResponse, DiscordGuildStructureResponse,
         DiscordImportedChannel, DiscordImportedRole, DiscordImportedStructure,
-        DiscordPermissionOverwrite, OAuthState, Platform, StartAuthResponse,
+        DiscordPermissionOverwrite, DiscordSticker, OAuthState, Platform, StartAuthResponse,
     },
     DiscoveryConfig, DiscoveryStore,
 };
@@ -126,6 +126,8 @@ struct DiscordFullGuildApiResponse {
     roles: Vec<DiscordRoleApiResponse>,
     #[serde(default)]
     emojis: Vec<DiscordEmojiApiResponse>,
+    #[serde(default)]
+    stickers: Vec<DiscordStickerApiResponse>,
 }
 
 /// Discord emoji from guild info API response.
@@ -137,6 +139,22 @@ struct DiscordEmojiApiResponse {
     animated: bool,
     #[serde(default)]
     available: bool,
+}
+
+/// Discord sticker from guild info API response.
+#[derive(Debug, Clone, Deserialize)]
+struct DiscordStickerApiResponse {
+    id: String,
+    name: String,
+    description: Option<String>,
+    /// Format type: 1 = PNG, 2 = APNG, 3 = Lottie, 4 = GIF.
+    format_type: u8,
+    #[serde(default = "default_available")]
+    available: bool,
+}
+
+fn default_available() -> bool {
+    true
 }
 
 /// Query for fetching guilds list (requires access token).
@@ -813,6 +831,24 @@ pub async fn get_discord_guild_structure(
         })
         .unwrap_or_default();
 
+    // Convert stickers to our format
+    let imported_stickers: Vec<DiscordSticker> = full_guild_info
+        .as_ref()
+        .map(|fg| {
+            fg.stickers
+                .iter()
+                .filter(|s| s.available)
+                .map(|s| DiscordSticker {
+                    id: s.id.clone(),
+                    name: s.name.clone(),
+                    description: s.description.clone(),
+                    format_type: s.format_type,
+                    available: s.available,
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+
     let guild_info = DiscordGuildInfo {
         id: guild.id.clone(),
         name: guild.name.clone(),
@@ -830,6 +866,7 @@ pub async fn get_discord_guild_structure(
         channel_count = imported_channels.len(),
         role_count = imported_roles.len(),
         emoji_count = imported_emojis.len(),
+        sticker_count = imported_stickers.len(),
         "Fetched Discord guild structure for community import"
     );
 
@@ -840,6 +877,7 @@ pub async fn get_discord_guild_structure(
             channels: imported_channels,
             roles: imported_roles,
             emojis: imported_emojis,
+            stickers: imported_stickers,
         }),
         error: None,
     })
@@ -1353,7 +1391,7 @@ pub async fn get_discord_guild_audit_log(
         }
     };
 
-    // Verify user has access to this guild
+    // Verify user has access to this guild (with bot fallback for rate-limited user tokens)
     let client = Client::new();
     let guilds_response = client
         .get(format!("{}/users/@me/guilds", config.discord_api_url()))
@@ -1361,12 +1399,61 @@ pub async fn get_discord_guild_audit_log(
         .send()
         .await;
 
-    let has_access = match guilds_response {
-        Ok(resp) if resp.status().is_success() => {
-            let guilds: Vec<DiscordGuildApiResponse> = resp.json().await.unwrap_or_default();
-            guilds.iter().any(|g| g.id == guild_id)
+    let user_has_access = match &guilds_response {
+        Ok(resp) if resp.status().is_success() => true,
+        Ok(resp) => {
+            tracing::warn!(
+                status = %resp.status(),
+                guild_id = guild_id.as_str(),
+                "User guilds fetch failed for audit log (possible rate limit)"
+            );
+            false
         }
-        _ => false,
+        Err(e) => {
+            tracing::warn!(
+                error = %e,
+                guild_id = guild_id.as_str(),
+                "User guilds request failed for audit log"
+            );
+            false
+        }
+    };
+
+    let has_access = if user_has_access {
+        match guilds_response {
+            Ok(resp) => {
+                let guilds: Vec<DiscordGuildApiResponse> = resp.json().await.unwrap_or_default();
+                let found = guilds.iter().any(|g| g.id == guild_id);
+                if !found {
+                    tracing::warn!(
+                        guild_id = guild_id.as_str(),
+                        guild_count = guilds.len(),
+                        "Guild not found in user's guild list for audit log"
+                    );
+                }
+                found
+            }
+            _ => false,
+        }
+    } else {
+        // Fallback: verify the bot is in the guild (proves this is a legitimate request
+        // since the bot was invited by a guild admin). This handles Discord rate-limiting
+        // the user's OAuth token.
+        let bot_check = client
+            .get(format!("{}/guilds/{}", config.discord_api_url(), guild_id))
+            .header("Authorization", format!("Bot {}", bot_token))
+            .send()
+            .await;
+        match bot_check {
+            Ok(resp) if resp.status().is_success() => {
+                tracing::info!(
+                    guild_id = guild_id.as_str(),
+                    "User token failed but bot confirmed in guild — allowing audit log fetch"
+                );
+                true
+            }
+            _ => false,
+        }
     };
 
     if !has_access {

@@ -14,7 +14,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useUmbra } from '@/contexts/UmbraContext';
 import { useAuth } from '@/contexts/AuthContext';
-import type { CommunityMessage, CommunityEvent } from '@umbra/service';
+import type { CommunityMessage, CommunityEvent, MessageMetadata } from '@umbra/service';
 
 const PAGE_SIZE = 50;
 
@@ -30,7 +30,7 @@ export interface UseCommunityMessagesResult {
   /** Load older messages (pagination) */
   loadMore: () => Promise<void>;
   /** Send a new message */
-  sendMessage: (content: string, replyToId?: string) => Promise<CommunityMessage | null>;
+  sendMessage: (content: string, replyToId?: string, metadata?: MessageMetadata) => Promise<CommunityMessage | null>;
   /** Edit a message */
   editMessage: (messageId: string, newContent: string) => Promise<void>;
   /** Delete a message */
@@ -170,6 +170,8 @@ export function useCommunityMessages(channelId: string | null, communityId?: str
                 // Platform identity for ghost seat lookup
                 platformUserId: event.platformUserId,
                 platform: event.platform,
+                // Text effect metadata
+                metadata: event.metadata,
               };
               // Persist in relay ref so it survives WASM DB refreshes
               relayMessagesRef.current.set(inlineMsg.id, inlineMsg);
@@ -181,6 +183,7 @@ export function useCommunityMessages(channelId: string | null, communityId?: str
               // Persist to local WASM DB so message survives app restart
               service.storeReceivedCommunityMessage(
                 event.messageId, event.channelId, event.senderDid, event.content, now,
+                event.metadata,
               ).catch((err) =>
                 console.warn('[useCommunityMessages] Failed to persist relay message:', err),
               );
@@ -241,10 +244,10 @@ export function useCommunityMessages(channelId: string | null, communityId?: str
   }, [service, channelId, hasMore, messages]);
 
   const sendMessage = useCallback(
-    async (content: string, replyToId?: string): Promise<CommunityMessage | null> => {
+    async (content: string, replyToId?: string, metadata?: MessageMetadata): Promise<CommunityMessage | null> => {
       if (!service || !channelId || !identity?.did) return null;
       try {
-        const msg = await service.sendCommunityMessage(channelId, identity.did, content, replyToId);
+        const msg = await service.sendCommunityMessage(channelId, identity.did, content, replyToId, undefined, metadata);
         // Track this as an optimistic add so the event handler doesn't duplicate it
         optimisticIdsRef.current.add(msg.id);
         // Optimistically add the message (deduplicating in case event already fired)
@@ -269,6 +272,7 @@ export function useCommunityMessages(channelId: string | null, communityId?: str
               content,
               senderDisplayName: identity.displayName,
               senderAvatarUrl: identity.avatar,
+              metadata,
             },
             identity.did,
             relayWs,

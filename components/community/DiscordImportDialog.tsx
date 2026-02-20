@@ -455,7 +455,7 @@ function PreviewScreen({
   const hasIssues = validationIssues.length > 0;
   const memberCount = importedMembers?.length ?? 0;
   const emojiCount = structure.emojis?.length ?? 0;
-  const bannerUrl = selectedGuild ? getGuildBannerUrl(selectedGuild.id, selectedGuild.banner, 960) : null;
+  const bannerUrl = selectedGuild ? getGuildBannerUrl(selectedGuild.id, selectedGuild.banner, 1024) : null;
   const iconUrl = selectedGuild ? getGuildIconUrl(selectedGuild.id, selectedGuild.icon, 128) : null;
 
   // Debug logging for audit log
@@ -1173,6 +1173,8 @@ const PHASE_LABELS: Record<string, string> = {
   creating_seats: 'Importing members…',
   importing_pins: 'Importing pinned messages…',
   importing_audit_log: 'Importing audit log…',
+  importing_emoji: 'Importing custom emoji…',
+  importing_stickers: 'Importing stickers…',
   complete: 'Finishing up…',
 };
 
@@ -1325,6 +1327,26 @@ function CompleteScreen({
             </Text>
             <Text size="xs" style={{ color: tc.text.muted }}>
               Audit Log
+            </Text>
+          </View>
+        )}
+        {result.emojiImported > 0 && (
+          <View style={{ alignItems: 'center' }}>
+            <Text size="xl" weight="bold" style={{ color: tc.accent.primary }}>
+              {result.emojiImported.toLocaleString()}
+            </Text>
+            <Text size="xs" style={{ color: tc.text.muted }}>
+              Emoji
+            </Text>
+          </View>
+        )}
+        {result.stickersImported > 0 && (
+          <View style={{ alignItems: 'center' }}>
+            <Text size="xl" weight="bold" style={{ color: tc.accent.primary }}>
+              {result.stickersImported.toLocaleString()}
+            </Text>
+            <Text size="xs" style={{ color: tc.text.muted }}>
+              Stickers
             </Text>
           </View>
         )}

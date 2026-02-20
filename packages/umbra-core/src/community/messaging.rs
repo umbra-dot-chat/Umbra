@@ -69,6 +69,7 @@ impl super::CommunityService {
         reply_to_id: Option<&str>,
         thread_id: Option<&str>,
         content_warning: Option<&str>,
+        metadata_json: Option<&str>,
     ) -> Result<CommunityMessageRecord> {
         let now = crate::time::now_timestamp();
         let id = generate_id();
@@ -134,7 +135,7 @@ impl super::CommunityService {
             &id, channel_id, sender_did,
             None, Some(content), None, None, false,
             reply_to_id, thread_id, false, false,
-            content_warning, now,
+            content_warning, now, metadata_json,
         )?;
 
         // If this is a thread reply, update thread counters
@@ -159,6 +160,7 @@ impl super::CommunityService {
             edited_at: None,
             deleted_for_everyone: false,
             created_at: now,
+            metadata_json: metadata_json.map(|s| s.to_string()),
         })
     }
 
@@ -180,7 +182,7 @@ impl super::CommunityService {
         self.db().store_community_message(
             &id, channel_id, sender_did,
             Some(content_encrypted), None, Some(nonce), Some(key_version), true,
-            reply_to_id, thread_id, false, false, None, now,
+            reply_to_id, thread_id, false, false, None, now, None,
         )?;
 
         if let Some(tid) = thread_id {
@@ -202,12 +204,13 @@ impl super::CommunityService {
         sender_did: &str,
         content: &str,
         created_at: i64,
+        metadata_json: Option<&str>,
     ) -> Result<()> {
         self.db().store_community_message_if_not_exists(
             id, channel_id, sender_did,
             None, Some(content), None, None, false,
             None, None, false, false,
-            None, created_at,
+            None, created_at, metadata_json,
         )
     }
 
@@ -369,7 +372,7 @@ impl super::CommunityService {
         self.db().store_community_message(
             &id, channel_id, "system",
             None, Some(content), None, None, false,
-            None, None, false, false, None, now,
+            None, None, false, false, None, now, None,
         )?;
 
         Ok(CommunityMessageRecord {
@@ -389,6 +392,7 @@ impl super::CommunityService {
             edited_at: None,
             deleted_for_everyone: false,
             created_at: now,
+            metadata_json: None,
         })
     }
 
