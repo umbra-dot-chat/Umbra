@@ -36,7 +36,6 @@ import { DiscoveryOptInDialog } from '@/components/discovery/DiscoveryOptInDialo
 import type { UsernameResponse } from '@/packages/umbra-service/src/discovery/types';
 import {
   UserIcon,
-  ArrowLeftIcon,
   ArrowRightIcon,
   CheckCircleIcon,
   AlertTriangleIcon,
@@ -604,10 +603,7 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
     switch (currentStep) {
       case 0:
         return (
-          <HStack gap="md" style={{ justifyContent: 'space-between' }}>
-            <Button variant="tertiary" onPress={handleClose}>
-              Cancel
-            </Button>
+          <HStack gap="md" style={{ justifyContent: 'flex-end' }}>
             <Button
               variant="primary"
               onPress={goNext}
@@ -621,14 +617,7 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
 
       case 1:
         return (
-          <HStack gap="md" style={{ justifyContent: 'space-between' }}>
-            <Button
-              variant="tertiary"
-              onPress={goBack}
-              iconLeft={<ArrowLeftIcon size={16} />}
-            >
-              Back
-            </Button>
+          <HStack gap="md" style={{ justifyContent: 'flex-end' }}>
             <Button
               variant="primary"
               onPress={goNext}
@@ -642,14 +631,7 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
 
       case 2:
         return (
-          <HStack gap="md" style={{ justifyContent: 'space-between' }}>
-            <Button
-              variant="tertiary"
-              onPress={goBack}
-              iconLeft={<ArrowLeftIcon size={16} />}
-            >
-              Back
-            </Button>
+          <HStack gap="md" style={{ justifyContent: 'flex-end' }}>
             <Button
               variant="primary"
               onPress={goNext}
@@ -720,6 +702,7 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
       <WalletFlowLayout
         open={open}
         onClose={handleClose}
+        onBack={isFirstStep ? handleClose : goBack}
         steps={STEPS}
         currentStep={currentStep}
         allowBackdropClose={isFirstStep}

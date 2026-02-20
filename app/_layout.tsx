@@ -1,6 +1,7 @@
 import 'react-native-gesture-handler';
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { View } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Slot, useSegments, useRouter, useNavigationContainerRef } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { WispProvider, ToastProvider } from '@coexist/wisp-react-native';
@@ -165,28 +166,30 @@ function AuthGate() {
 
 export default function RootLayout() {
   return (
-    <WispProvider mode="dark">
-      <ToastProvider maxToasts={3}>
-        <AuthProvider>
-          <UmbraProvider>
-            <FontProvider>
-              <ThemeProvider>
-                <SoundProvider>
-                <MessagingProvider>
-                <PluginProvider>
-                  <HelpProvider>
-                    <StatusBar style="dark" />
-                    <AuthGate />
-                    <HelpPopoverHost />
-                  </HelpProvider>
-                </PluginProvider>
-                </MessagingProvider>
-                </SoundProvider>
-              </ThemeProvider>
-            </FontProvider>
-          </UmbraProvider>
-        </AuthProvider>
-      </ToastProvider>
-    </WispProvider>
+    <SafeAreaProvider>
+      <WispProvider mode="light">
+        <ToastProvider maxToasts={3}>
+          <AuthProvider>
+            <UmbraProvider>
+              <FontProvider>
+                <ThemeProvider>
+                  <SoundProvider>
+                  <MessagingProvider>
+                  <PluginProvider>
+                    <HelpProvider>
+                      <StatusBar style="dark" />
+                      <AuthGate />
+                      <HelpPopoverHost />
+                    </HelpProvider>
+                  </PluginProvider>
+                  </MessagingProvider>
+                  </SoundProvider>
+                </ThemeProvider>
+              </FontProvider>
+            </UmbraProvider>
+          </AuthProvider>
+        </ToastProvider>
+      </WispProvider>
+    </SafeAreaProvider>
   );
 }

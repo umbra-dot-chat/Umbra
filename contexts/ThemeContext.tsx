@@ -20,7 +20,7 @@ import React, {
 import { useTheme } from '@coexist/wisp-react-native';
 import { getWasm } from '@umbra/wasm';
 import { useUmbra } from '@/contexts/UmbraContext';
-import { useFonts } from '@/contexts/FontContext';
+import { useFonts, getFontFamily } from '@/contexts/FontContext';
 import type { ThemePreset, DeepPartial } from '@/themes/types';
 import { THEME_REGISTRY, getThemeById } from '@/themes/registry';
 
@@ -96,6 +96,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const { isReady } = useUmbra();
   const { setOverrides, setMode, mode } = useTheme();
   const { activeFont } = useFonts();
+  const activeFontFamily = getFontFamily(activeFont);
 
   const [activeTheme, setActiveTheme] = useState<ThemePreset | null>(null);
   const [accentColor, setAccentColorState] = useState<string | null>(null);
@@ -203,16 +204,16 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     }
 
     // Apply everything
-    applyOverrides(theme, accent, activeFont.css);
+    applyOverrides(theme, accent, activeFontFamily);
     setLoaded(true);
-  }, [isReady, kvGet, applyOverrides, activeFont.css, setMode]);
+  }, [isReady, kvGet, applyOverrides, activeFontFamily, setMode]);
 
   // ── Re-apply when font changes ───────────────────────────────────────
 
   useEffect(() => {
     if (!loaded) return;
-    applyOverrides(activeTheme, accentColor, activeFont.css);
-  }, [activeFont.css, loaded]); // eslint-disable-line react-hooks/exhaustive-deps
+    applyOverrides(activeTheme, accentColor, activeFontFamily);
+  }, [activeFontFamily, loaded]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Public setters ───────────────────────────────────────────────────
 
@@ -237,7 +238,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       // If this theme is active, reset to default first
       if (activeTheme?.id === id) {
         setActiveTheme(null);
-        applyOverrides(null, accentColor, activeFont.css);
+        applyOverrides(null, accentColor, activeFontFamily);
         kvSet(KEY_THEME_ID, '');
       }
 
@@ -249,7 +250,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         return next;
       });
     },
-    [activeTheme, accentColor, activeFont.css, applyOverrides, kvSet],
+    [activeTheme, accentColor, activeFontFamily, applyOverrides, kvSet],
   );
 
   const setTheme = useCallback(
@@ -269,7 +270,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       }
 
       setActiveTheme(theme);
-      applyOverrides(theme, null, activeFont.css);
+      applyOverrides(theme, null, activeFontFamily);
 
       // Persist
       if (theme) {
@@ -278,18 +279,18 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         kvSet(KEY_THEME_ID, '');
       }
     },
-    [activeFont.css, applyOverrides, kvSet, installedThemeIds, installTheme],
+    [activeFontFamily, applyOverrides, kvSet, installedThemeIds, installTheme],
   );
 
   const setAccentColor = useCallback(
     (color: string | null) => {
       setAccentColorState(color);
-      applyOverrides(activeTheme, color, activeFont.css);
+      applyOverrides(activeTheme, color, activeFontFamily);
 
       // Persist
       kvSet(KEY_ACCENT_COLOR, color ?? '');
     },
-    [activeTheme, activeFont.css, applyOverrides, kvSet],
+    [activeTheme, activeFontFamily, applyOverrides, kvSet],
   );
 
   // ── Persist mode changes ─────────────────────────────────────────────

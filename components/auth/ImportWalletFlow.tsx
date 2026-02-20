@@ -322,10 +322,7 @@ export function ImportWalletFlow({ open, onClose }: ImportWalletFlowProps) {
     switch (currentStep) {
       case 0:
         return (
-          <HStack gap="md" style={{ justifyContent: 'space-between' }}>
-            <Button variant="tertiary" onPress={handleClose}>
-              Cancel
-            </Button>
+          <HStack gap="md" style={{ justifyContent: 'flex-end' }}>
             <Button
               variant="primary"
               onPress={validateAndAdvance}
@@ -338,14 +335,7 @@ export function ImportWalletFlow({ open, onClose }: ImportWalletFlowProps) {
 
       case 1:
         return (
-          <HStack gap="md" style={{ justifyContent: 'space-between' }}>
-            <Button
-              variant="tertiary"
-              onPress={goBack}
-              iconLeft={<ArrowLeftIcon size={16} />}
-            >
-              Back
-            </Button>
+          <HStack gap="md" style={{ justifyContent: 'flex-end' }}>
             <Button
               variant="primary"
               onPress={goNext}
@@ -408,6 +398,7 @@ export function ImportWalletFlow({ open, onClose }: ImportWalletFlowProps) {
     <WalletFlowLayout
       open={open}
       onClose={handleClose}
+      onBack={isFirstStep ? handleClose : goBack}
       steps={STEPS}
       currentStep={currentStep}
       allowBackdropClose={isFirstStep}

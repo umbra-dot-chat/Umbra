@@ -1,52 +1,60 @@
-import React, { useEffect, useState } from 'react';
-import { View, ScrollView, Platform, type ViewStyle, Text as RNText } from 'react-native';
+import React, { useEffect, useState, useRef } from 'react';
+import { View, ScrollView, Platform, type ViewStyle, Text as RNText, Dimensions, useWindowDimensions, Animated } from 'react-native';
 import { Text, Button, Card, VStack, HStack, Separator } from '@coexist/wisp-react-native';
+import * as ExpoFont from 'expo-font';
 import { useBlobPath, AnimatedBlobs } from '@/components/auth/AnimatedBlobs';
 import { WalletIcon, DownloadIcon, KeyIcon } from '@/components/icons';
 import { CreateWalletFlow } from '@/components/auth/CreateWalletFlow';
 import { ImportWalletFlow } from '@/components/auth/ImportWalletFlow';
 import { HelpIndicator } from '@/components/ui/HelpIndicator';
 import { HelpText, HelpHighlight, HelpListItem } from '@/components/ui/HelpContent';
+// react-native-svg is already used by AnimatedBlobs, safe to import on all platforms
+import Svg, { Path } from 'react-native-svg';
 
 // ---------------------------------------------------------------------------
-// Load BBH Bartle from Google Fonts (web only)
+// Load BBH Bartle from Google Fonts (web + native)
 // Preloads the font and only renders the title once loaded to avoid FOUT
 // ---------------------------------------------------------------------------
 
 const FONT_FAMILY = 'BBH Bartle';
 const FONT_URL = 'https://fonts.googleapis.com/css2?family=BBH+Bartle&display=swap';
+/** Direct .ttf URL via fontsource CDN for native loading */
+const FONT_TTF_URL = 'https://cdn.jsdelivr.net/fontsource/fonts/bbh-bartle@latest/latin-400-normal.ttf';
 
 function useGoogleFont() {
   const [loaded, setLoaded] = useState(false);
   const isWeb = Platform.OS === 'web';
 
   useEffect(() => {
-    if (!isWeb) {
-      // On native, Google Fonts aren't available — use system font fallback
-      setLoaded(true);
-      return;
-    }
+    if (isWeb) {
+      // Web: inject <link> stylesheet
+      if (!document.querySelector(`link[href="${FONT_URL}"]`)) {
+        const link = document.createElement('link');
+        link.rel = 'stylesheet';
+        link.href = FONT_URL;
+        document.head.appendChild(link);
+      }
 
-    // Inject the stylesheet if not already present
-    if (!document.querySelector(`link[href="${FONT_URL}"]`)) {
-      const link = document.createElement('link');
-      link.rel = 'stylesheet';
-      link.href = FONT_URL;
-      document.head.appendChild(link);
-    }
-
-    // Use the Font Loading API to detect when the font is ready
-    if ('fonts' in document) {
-      document.fonts.load(`400 72px "${FONT_FAMILY}"`).then(() => {
+      if ('fonts' in document) {
+        document.fonts.load(`400 72px "${FONT_FAMILY}"`).then(() => {
+          setLoaded(true);
+        }).catch(() => {
+          setLoaded(true);
+        });
+      } else {
+        const timer = setTimeout(() => setLoaded(true), 500);
+        return () => clearTimeout(timer);
+      }
+    } else {
+      // Native: load .ttf via expo-font
+      ExpoFont.loadAsync({
+        [FONT_FAMILY]: FONT_TTF_URL,
+      }).then(() => {
         setLoaded(true);
       }).catch(() => {
-        // Font failed to load, show fallback
+        // Font failed to load — show with fallback
         setLoaded(true);
       });
-    } else {
-      // Fallback: wait a bit for font to load
-      const timer = setTimeout(() => setLoaded(true), 500);
-      return () => clearTimeout(timer);
     }
   }, []);
 
@@ -59,6 +67,33 @@ function useGoogleFont() {
 // overlap the blob appear white at the pixel level.
 // ---------------------------------------------------------------------------
 
+// ---------------------------------------------------------------------------
+// Responsive title sizing — scales the "Umbra" text down on narrow screens
+// ---------------------------------------------------------------------------
+
+function useResponsiveTitleSize() {
+  const { width } = useWindowDimensions();
+  // 72px fits comfortably on all modern phones (375px+).
+  // Only scale down on very narrow screens (<340px) — clamp to min 48px.
+  const fontSize = width < 340 ? Math.max(48, Math.round(width * 0.2)) : 72;
+  const lineHeight = Math.round(fontSize * 1.25);
+  return { fontSize, lineHeight };
+}
+
+// ---------------------------------------------------------------------------
+// Slot-machine tagline rotation
+// ---------------------------------------------------------------------------
+
+const TAGLINES = [
+  'Private by math, not by promise.',
+  'Messaging that forgets you exist.',
+  'The chat app that can\u2019t read your chats.',
+  'Zero-trust messaging for everyone.',
+];
+
+const TAGLINE_INTERVAL = 3500; // ms between rotations
+const TAGLINE_ANIM_DURATION = 500; // ms for the slide transition
+
 interface AuthContentProps {
   inverted?: boolean;
   onCreateWallet: () => void;
@@ -66,9 +101,15 @@ interface AuthContentProps {
   fontLoaded: boolean;
   /** Whether running on web (where Google Fonts work) */
   isWeb: boolean;
+  /** Current tagline index from shared rotation */
+  taglineIndex: number;
+  /** Animated translateY for slot-machine effect */
+  taglineSlideAnim: Animated.Value;
+  /** Line height of the tagline text for clipping */
+  taglineLineHeight: number;
 }
 
-function AuthContent({ inverted, onCreateWallet, onImportWallet, fontLoaded, isWeb }: AuthContentProps) {
+function AuthContent({ inverted, onCreateWallet, onImportWallet, fontLoaded, isWeb, taglineIndex, taglineSlideAnim, taglineLineHeight }: AuthContentProps) {
   const textColor = inverted ? '#FFFFFF' : undefined;
   const mutedColor = inverted ? 'rgba(255,255,255,0.6)' : undefined;
 
@@ -80,10 +121,12 @@ function AuthContent({ inverted, onCreateWallet, onImportWallet, fontLoaded, isW
 
   const iconColor = inverted ? '#000000' : '#FFFFFF';
 
-  // On native, use system font; on web, use Google Fonts
+  // Font family for the title — works on both web and native now
   const titleFontFamily = isWeb
     ? (fontLoaded ? `"${FONT_FAMILY}", sans-serif` : 'sans-serif')
-    : Platform.OS === 'ios' ? 'Georgia' : 'serif';
+    : (fontLoaded ? FONT_FAMILY : Platform.OS === 'ios' ? 'Georgia' : 'serif');
+
+  const { fontSize: titleFontSize, lineHeight: titleLineHeight } = useResponsiveTitleSize();
 
   return (
     <View style={{ width: '100%', maxWidth: 420, alignSelf: 'center' }}>
@@ -91,10 +134,12 @@ function AuthContent({ inverted, onCreateWallet, onImportWallet, fontLoaded, isW
         {/* Branding */}
         <VStack gap="sm" style={{ alignItems: 'center', marginBottom: 16 }}>
           <RNText
+            adjustsFontSizeToFit
+            numberOfLines={1}
             style={{
               fontFamily: titleFontFamily,
-              fontSize: 72,
-              lineHeight: 90,
+              fontSize: titleFontSize,
+              lineHeight: titleLineHeight,
               letterSpacing: 2,
               color: textColor ?? '#000000',
               textAlign: 'center',
@@ -103,14 +148,19 @@ function AuthContent({ inverted, onCreateWallet, onImportWallet, fontLoaded, isW
           >
             Umbra
           </RNText>
-          <Text
-            size="md"
-            align="center"
-            style={mutedColor ? { color: mutedColor } : undefined}
-            color={mutedColor ? undefined : 'secondary'}
-          >
-            Encrypted messaging, powered by your keys
-          </Text>
+          {/* Slot-machine tagline rotation */}
+          <View style={{ height: taglineLineHeight, overflow: 'hidden' }}>
+            <Animated.View style={{ transform: [{ translateY: taglineSlideAnim }] }}>
+              <Text
+                size="md"
+                align="center"
+                style={mutedColor ? { color: mutedColor } : undefined}
+                color={mutedColor ? undefined : 'secondary'}
+              >
+                {TAGLINES[taglineIndex]}
+              </Text>
+            </Animated.View>
+          </View>
         </VStack>
 
         {/* Create Account */}
@@ -164,7 +214,7 @@ function AuthContent({ inverted, onCreateWallet, onImportWallet, fontLoaded, isW
             <Button
               variant={inverted ? 'secondary' : 'primary'}
               size="lg"
-              shape="pill"
+              shape="rounded"
               fullWidth
               onPress={onCreateWallet}
               style={invertedBtnStyle}
@@ -248,7 +298,7 @@ function AuthContent({ inverted, onCreateWallet, onImportWallet, fontLoaded, isW
             <Button
               variant={inverted ? 'secondary' : 'primary'}
               size="lg"
-              shape="pill"
+              shape="rounded"
               fullWidth
               onPress={onImportWallet}
               style={invertedBtnStyle}
@@ -274,12 +324,65 @@ function AuthContent({ inverted, onCreateWallet, onImportWallet, fontLoaded, isW
 }
 
 // ---------------------------------------------------------------------------
-// Auth screen
+// Native inverted layer — uses MaskedView + SVG blob as mask
 // ---------------------------------------------------------------------------
+
+/**
+ * Native-only inverted layer — uses MaskedView to clip content to the blob shape.
+ * MaskedView uses the alpha channel of the mask element: black (opaque) regions
+ * reveal the children, transparent regions hide them.
+ */
+function NativeInvertedLayer({
+  pathData,
+  children,
+}: {
+  pathData: string;
+  children: React.ReactNode;
+}) {
+  // Lazy-require MaskedView so it's never bundled on web
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const MaskedViewComponent = require('@react-native-masked-view/masked-view').default;
+
+  const [dims, setDims] = useState(() => Dimensions.get('window'));
+
+  useEffect(() => {
+    const sub = Dimensions.addEventListener('change', ({ window }) => {
+      setDims(window);
+    });
+    return () => sub?.remove();
+  }, []);
+
+  if (!pathData || dims.width === 0) return null;
+
+  return (
+    <MaskedViewComponent
+      style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+      }}
+      pointerEvents="none"
+      maskElement={
+        <Svg
+          width={dims.width}
+          height={dims.height}
+          viewBox={`0 0 ${dims.width} ${dims.height}`}
+        >
+          <Path d={pathData} fill="black" />
+        </Svg>
+      }
+    >
+      {children}
+    </MaskedViewComponent>
+  );
+}
 
 export default function AuthScreen() {
   const { loaded: fontLoaded, isWeb } = useGoogleFont();
   const { pathData } = useBlobPath(); // single source of truth for blob shape
+  const { height: windowHeight } = useWindowDimensions();
 
   // Flow visibility state
   const [showCreate, setShowCreate] = useState(false);
@@ -288,70 +391,134 @@ export default function AuthScreen() {
   const handleCreateWallet = () => setShowCreate(true);
   const handleImportWallet = () => setShowImport(true);
 
+  // Tagline slot-machine rotation — shared across both AuthContent layers
+  const taglineLineHeight = 24; // matches Text size="md" line height
+  const [taglineIndex, setTaglineIndex] = useState(0);
+  const taglineSlideAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      // Slide current tagline up and out
+      Animated.timing(taglineSlideAnim, {
+        toValue: -taglineLineHeight,
+        duration: TAGLINE_ANIM_DURATION,
+        useNativeDriver: true,
+      }).start(() => {
+        // Swap to next tagline, position it below
+        setTaglineIndex((prev) => (prev + 1) % TAGLINES.length);
+        taglineSlideAnim.setValue(taglineLineHeight);
+        // Slide new tagline up into view
+        Animated.timing(taglineSlideAnim, {
+          toValue: 0,
+          duration: TAGLINE_ANIM_DURATION,
+          useNativeDriver: true,
+        }).start();
+      });
+    }, TAGLINE_INTERVAL);
+
+    return () => clearInterval(interval);
+  }, [taglineSlideAnim]);
+
+  const isNative = Platform.OS !== 'web';
+
   // CSS clip-path using the blob's SVG path data (web only)
   const clipStyle =
-    Platform.OS === 'web'
+    !isNative
       ? ({ clipPath: `path('${pathData}')` } as any)
-      : { display: 'none' as const };
+      : undefined;
+
+  // -------------------------------------------------------------------------
+  // Single-ScrollView architecture: all three layers live inside ONE
+  // ScrollView so they scroll & bounce together on iOS.
+  //
+  //   ScrollView
+  //     └─ contentWrapper (minHeight: screen, relative)
+  //         ├─ Layer 1: AnimatedBlobs (absolute fill)
+  //         ├─ Layer 2: AuthContent (normal, centered)
+  //         └─ Layer 3: Inverted AuthContent (absolute fill, clipped to blob)
+  // -------------------------------------------------------------------------
+
+  // Inverted content — no ScrollView wrapper needed anymore since it's in the
+  // single outer ScrollView
+  const invertedContent = (
+    <View
+      style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 24,
+      }}
+      pointerEvents="none"
+    >
+      <AuthContent
+        inverted
+        onCreateWallet={handleCreateWallet}
+        onImportWallet={handleImportWallet}
+        fontLoaded={fontLoaded}
+        isWeb={isWeb}
+        taglineIndex={taglineIndex}
+        taglineSlideAnim={taglineSlideAnim}
+        taglineLineHeight={taglineLineHeight}
+      />
+    </View>
+  );
 
   return (
     <View style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
-      {/* Layer 1: Black blobs — shares same pathData so it stays in sync */}
-      <AnimatedBlobs pathData={pathData} />
-
-      {/* Layer 2: Normal content (black text on white) */}
       <ScrollView
         contentContainerStyle={{
           flexGrow: 1,
-          justifyContent: 'center',
-          alignItems: 'center',
-          padding: 24,
         }}
         style={{ flex: 1 }}
+        bounces={true}
+        alwaysBounceVertical={true}
       >
-        <AuthContent
-          onCreateWallet={handleCreateWallet}
-          onImportWallet={handleImportWallet}
-          fontLoaded={fontLoaded}
-          isWeb={isWeb}
-        />
-      </ScrollView>
+        {/* All layers in one container — scrolls & bounces as a unit */}
+        <View style={{ minHeight: windowHeight, justifyContent: 'center', alignItems: 'center', padding: 24 }}>
+          {/* Layer 1: Black blobs — absolute within the scrollable area */}
+          <AnimatedBlobs pathData={pathData} />
 
-      {/* Layer 3: Inverted content (white text, clipped to blob shape) */}
-      <View
-        style={[
-          {
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-          },
-          clipStyle,
-        ]}
-        pointerEvents="none"
-      >
-        <ScrollView
-          contentContainerStyle={{
-            flexGrow: 1,
-            justifyContent: 'center',
-            alignItems: 'center',
-            padding: 24,
-          }}
-          style={{ flex: 1 }}
-          scrollEnabled={false}
-        >
+          {/* Layer 2: Normal content (black text on white) */}
           <AuthContent
-            inverted
             onCreateWallet={handleCreateWallet}
             onImportWallet={handleImportWallet}
             fontLoaded={fontLoaded}
             isWeb={isWeb}
+            taglineIndex={taglineIndex}
+            taglineSlideAnim={taglineSlideAnim}
+            taglineLineHeight={taglineLineHeight}
           />
-        </ScrollView>
-      </View>
 
-      {/* Wallet flow modals */}
+          {/* Layer 3: Inverted content (white text, clipped to blob shape) */}
+          {isNative ? (
+            <NativeInvertedLayer pathData={pathData}>
+              {invertedContent}
+            </NativeInvertedLayer>
+          ) : (
+            <View
+              style={[
+                {
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  right: 0,
+                  bottom: 0,
+                },
+                clipStyle,
+              ]}
+              pointerEvents="none"
+            >
+              {invertedContent}
+            </View>
+          )}
+        </View>
+      </ScrollView>
+
+      {/* Wallet flow modals — outside scroll so they overlay */}
       <CreateWalletFlow
         open={showCreate}
         onClose={() => setShowCreate(false)}

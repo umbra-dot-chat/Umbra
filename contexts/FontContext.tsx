@@ -19,6 +19,7 @@ import React, {
   useRef,
 } from 'react';
 import { Platform } from 'react-native';
+import * as ExpoFont from 'expo-font';
 import { getWasm } from '@umbra/wasm';
 import { useUmbra } from '@/contexts/UmbraContext';
 import { fetchGoogleFontsCatalog } from '@/services/googleFontsApi';
@@ -44,6 +45,19 @@ export interface FontEntry {
   builtin?: boolean;
   /** Preview text */
   preview?: string;
+}
+
+/**
+ * Get the platform-appropriate fontFamily string for a FontEntry.
+ * - Web: returns the CSS value with fallbacks (e.g. '"Inter", sans-serif')
+ * - Native: returns just the font name (e.g. 'Inter') since RN expects the
+ *   registered font name without quotes or fallbacks.
+ */
+export function getFontFamily(font: FontEntry): string {
+  if (font.id === 'system') return font.css;
+  if (Platform.OS === 'web') return font.css;
+  // Native: use the display name which matches what we register via expo-font
+  return font.name;
 }
 
 /** Default system font stack */
@@ -96,48 +110,86 @@ export const FONT_REGISTRY: FontEntry[] = [
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Google Fonts loader
+// Google Fonts loader (web + native)
 // ─────────────────────────────────────────────────────────────────────────────
+
+/** Track which fonts have been loaded natively to avoid re-registering */
+const nativeLoadedFonts = new Set<string>();
 
 function buildGoogleFontsUrl(font: FontEntry): string {
   const weights = font.weights.join(';');
   return `https://fonts.googleapis.com/css2?family=${font.family}:wght@${weights}&display=swap`;
 }
 
-/** Load a Google Font by injecting a <link> stylesheet */
-function loadGoogleFont(font: FontEntry): Promise<void> {
-  if (Platform.OS !== 'web' || font.id === 'system') {
-    return Promise.resolve();
+/**
+ * Build a direct .ttf download URL via the fontsource CDN.
+ * fontsource hosts Google Fonts as npm packages on jsDelivr.
+ * URL pattern: https://cdn.jsdelivr.net/fontsource/fonts/{id}@latest/latin-{weight}-normal.ttf
+ */
+function buildNativeFontUrl(font: FontEntry, weight: number): string {
+  return `https://cdn.jsdelivr.net/fontsource/fonts/${font.id}@latest/latin-${weight}-normal.ttf`;
+}
+
+/**
+ * Load a Google Font.
+ * - Web: injects a <link> stylesheet and waits for the Font Loading API.
+ * - Native (iOS/Android): downloads .ttf from fontsource CDN and registers
+ *   via expo-font's Font.loadAsync. The font becomes available as the font's
+ *   display name (e.g. "Inter", "Poppins") for use in style fontFamily.
+ */
+async function loadGoogleFont(font: FontEntry): Promise<void> {
+  if (font.id === 'system') return;
+
+  if (Platform.OS === 'web') {
+    // Web: CSS injection approach
+    const url = buildGoogleFontsUrl(font);
+    const linkId = `font-${font.id}`;
+
+    return new Promise((resolve) => {
+      if (document.getElementById(linkId)) {
+        resolve();
+        return;
+      }
+
+      const link = document.createElement('link');
+      link.id = linkId;
+      link.rel = 'stylesheet';
+      link.href = url;
+      link.onload = () => {
+        if ('fonts' in document) {
+          document.fonts
+            .load(`400 16px ${font.css.split(',')[0]}`)
+            .then(() => resolve())
+            .catch(() => resolve());
+        } else {
+          resolve();
+        }
+      };
+      link.onerror = () => resolve();
+      document.head.appendChild(link);
+    });
   }
 
-  const url = buildGoogleFontsUrl(font);
-  const linkId = `font-${font.id}`;
+  // Native: download .ttf files and register via expo-font
+  if (nativeLoadedFonts.has(font.id)) return;
 
-  return new Promise((resolve) => {
-    // Already loaded?
-    if (document.getElementById(linkId)) {
-      resolve();
-      return;
+  try {
+    // Build a map of font names to remote URLs for each weight.
+    // expo-font's loadAsync accepts remote URLs and handles caching.
+    const fontMap: Record<string, string> = {};
+    for (const weight of font.weights) {
+      // Use weight suffix for non-400 weights (e.g. "Inter_500", "Inter_700")
+      // The primary weight (400) registers as just the font name
+      const key = weight === 400 ? font.name : `${font.name}_${weight}`;
+      fontMap[key] = buildNativeFontUrl(font, weight);
     }
 
-    const link = document.createElement('link');
-    link.id = linkId;
-    link.rel = 'stylesheet';
-    link.href = url;
-    link.onload = () => {
-      // Wait for font to be ready via Font Loading API
-      if ('fonts' in document) {
-        document.fonts
-          .load(`400 16px ${font.css.split(',')[0]}`)
-          .then(() => resolve())
-          .catch(() => resolve());
-      } else {
-        resolve();
-      }
-    };
-    link.onerror = () => resolve(); // Don't block on failure
-    document.head.appendChild(link);
-  });
+    await ExpoFont.loadAsync(fontMap);
+    nativeLoadedFonts.add(font.id);
+  } catch (err) {
+    console.warn(`[FontContext] Failed to load native font "${font.name}":`, err);
+    // Don't block — font will fall back to system default
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -268,7 +320,7 @@ export function FontProvider({ children }: { children: React.ReactNode }) {
   // ── Fetch Google Fonts catalog ─────────────────────────────────────
 
   useEffect(() => {
-    if (!isReady || Platform.OS !== 'web') return;
+    if (!isReady) return;
 
     fetchGoogleFontsCatalog()
       .then((catalogFonts) => {
