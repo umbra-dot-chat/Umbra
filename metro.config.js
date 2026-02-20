@@ -13,6 +13,7 @@ config.watchFolders = [
   path.resolve(__dirname, 'packages/umbra-service'),
   path.resolve(__dirname, 'packages/umbra-plugin-sdk'),
   path.resolve(__dirname, 'packages/umbra-plugin-runtime'),
+  path.resolve(__dirname, 'modules/expo-umbra-core'),
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -25,6 +26,14 @@ config.resolver.assetExts = [
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Node.js stdlib shims — sql.js contains `require("fs")` / `require("path")`
+// which Metro can't resolve on iOS/Android. Point them to an empty module so
+// the bundle builds; the Node-only code paths never execute at runtime.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const emptyModule = require.resolve('metro-runtime/src/modules/empty-module.js');
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Custom resolver for deep imports
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -32,6 +41,11 @@ const originalResolveRequest = config.resolver.resolveRequest;
 
 config.resolver.resolveRequest = (context, moduleName, platform) => {
   const fs = require('fs');
+
+  // Shim Node.js builtins on native platforms (sql.js needs this)
+  if (platform !== 'web' && (moduleName === 'fs' || moduleName === 'path' || moduleName === 'crypto')) {
+    return { type: 'sourceFile', filePath: emptyModule };
+  }
 
   // Intercept deep imports from @coexist/wisp-core (e.g. @coexist/wisp-core/animation/presets)
   if (moduleName.startsWith('@coexist/wisp-core/')) {
@@ -82,6 +96,14 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
   // Resolve @umbra/plugin-runtime to local package
   if (moduleName === '@umbra/plugin-runtime') {
     const filePath = path.resolve(__dirname, 'packages/umbra-plugin-runtime/src/index.ts');
+    if (fs.existsSync(filePath)) {
+      return { type: 'sourceFile', filePath };
+    }
+  }
+
+  // Resolve expo-umbra-core to local module
+  if (moduleName === 'expo-umbra-core') {
+    const filePath = path.resolve(__dirname, 'modules/expo-umbra-core/src/index.ts');
     if (fs.existsSync(filePath)) {
       return { type: 'sourceFile', filePath };
     }

@@ -7,11 +7,18 @@
     "patch": "./scripts/patch-wisp.sh",
     "presync": "node scripts/postinstall.js",
     "start": "node scripts/postinstall.js && expo start",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
+    "android": "expo run:android --device",
+    "ios": "expo run:ios --device",
     "web": "node scripts/postinstall.js && expo start --web",
     "build:web": "node scripts/postinstall.js && npx expo export --platform web",
     "build:wasm": "./scripts/build-wasm.sh",
+    "build:mobile": "./scripts/build-mobile.sh",
+    "build:mobile:ios": "./scripts/build-mobile.sh ios-sim",
+    "build:mobile:ios:device": "./scripts/build-mobile.sh ios",
+    "build:mobile:android": "./scripts/build-mobile.sh android",
+    "prebuild": "npx expo prebuild --clean",
+    "run:ios": "./scripts/build-mobile.sh ios-sim && npx expo prebuild --clean && npx expo run:ios --device",
+    "run:android": "./scripts/build-mobile.sh android && npx expo prebuild --clean && npx expo run:android --device",
     "build:desktop": "./scripts/build-desktop.sh",
     "build:mac": "./scripts/build-mac.sh",
     "build:win": "./scripts/build-win.sh",
@@ -31,6 +38,7 @@
     "@coexist/wisp-react-native": "^0.1.0",
     "@expo/vector-icons": "^15.0.3",
     "@mediapipe/tasks-vision": "^0.10.32",
+    "@react-native-masked-view/masked-view": "0.3.2",
     "@react-navigation/native": "^7.1.8",
     "@tauri-apps/api": "^2.10.1",
     "@tauri-apps/plugin-process": "^2.0.0",
@@ -39,6 +47,7 @@
     "@umbra/plugin-sdk": "file:packages/umbra-plugin-sdk",
     "@umbra/service": "file:packages/umbra-service",
     "@umbra/wasm": "file:packages/umbra-wasm",
+    "expo-umbra-core": "file:modules/expo-umbra-core",
     "expo": "~54.0.33",
     "expo-clipboard": "~8.0.8",
     "expo-constants": "~18.0.13",
@@ -71,6 +80,12 @@
     "jest-expo": "^54.0.17",
     "react-test-renderer": "19.1.0",
     "typescript": "~5.9.2"
+  },
+  "overrides": {
+    "react-native-svg": "15.12.1"
+  },
+  "resolutions": {
+    "react-native-svg": "15.12.1"
   },
   "private": true
 }

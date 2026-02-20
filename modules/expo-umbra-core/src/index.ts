@@ -1,0 +1,80 @@
+/**
+ * expo-umbra-core — Expo native module wrapping the Umbra Core Rust library.
+ *
+ * On iOS: calls into libumbra_core.a via C FFI
+ * On Android: calls into libumbra_core.so via JNI
+ *
+ * All methods return JSON strings matching the WASM module interface,
+ * so rn-backend.ts can map them 1:1 to the UmbraWasmModule contract.
+ */
+
+import { requireNativeModule } from 'expo-modules-core';
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Types
+// ─────────────────────────────────────────────────────────────────────────────
+
+export interface NativeUmbraCore {
+  // ── Lifecycle ──────────────────────────────────────────────────────────────
+  init(storagePath: string): string; // JSON FfiResult
+  shutdown(): string;
+  version(): string;
+
+  // ── Identity ───────────────────────────────────────────────────────────────
+  identityCreate(displayName: string): string; // JSON: { did, recovery_phrase }
+  identityRestore(recoveryPhrase: string, displayName: string): string;
+  identityGetDid(): string;
+  identityGetProfile(): string; // JSON: { did, display_name, bio, avatar_url }
+  identityUpdateProfile(json: string): string;
+
+  // ── Network ────────────────────────────────────────────────────────────────
+  networkStart(configJson: string | null): Promise<string>;
+  networkStop(): Promise<string>;
+  networkStatus(): string;
+  networkConnect(addr: string): Promise<string>;
+
+  // ── Discovery ──────────────────────────────────────────────────────────────
+  discoveryGetConnectionInfo(): string;
+  discoveryConnectWithInfo(info: string): Promise<string>;
+  discoveryLookupPeer(did: string): Promise<string>;
+
+  // ── Friends ────────────────────────────────────────────────────────────────
+  friendsSendRequest(did: string, message: string | null): string;
+  friendsAcceptRequest(requestId: string): string;
+  friendsRejectRequest(requestId: string): string;
+  friendsList(): string; // JSON array
+  friendsPendingRequests(): string; // JSON array
+
+  // ── Messaging ──────────────────────────────────────────────────────────────
+  messagingSendText(recipientDid: string, text: string): Promise<string>;
+  messagingGetConversations(): string; // JSON array
+  messagingGetMessages(conversationId: string, limit: number, beforeId: string | null): string;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Module
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Require the native module. Returns null if not linked (allows graceful
+ * fallback to stub backend during development).
+ */
+let _module: NativeUmbraCore | null = null;
+
+export function getExpoUmbraCore(): NativeUmbraCore | null {
+  if (_module) return _module;
+  try {
+    _module = requireNativeModule('ExpoUmbraCore') as NativeUmbraCore;
+    return _module;
+  } catch {
+    // Module not linked yet — this is expected during development
+    // before the native Rust library is compiled and linked.
+    console.warn(
+      '[expo-umbra-core] Native module not available. ' +
+      'Run scripts/build-mobile.sh to compile the Rust library.'
+    );
+    return null;
+  }
+}
+
+export default getExpoUmbraCore;

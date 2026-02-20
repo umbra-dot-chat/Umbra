@@ -21,8 +21,9 @@
  * of which backend is active.
  */
 
-import { initSqlBridge, initSqlBridgeWithPersistence, enablePersistence } from './sql-bridge';
-import { initOpfsBridge } from '../umbra-service/src/opfs-bridge';
+// NOTE: sql-bridge and opfs-bridge are imported dynamically inside doInitWasm()
+// to avoid loading sql.js on platforms that don't support WebAssembly (React Native).
+// The static import was causing Metro to bundle sql.js which then crashes on JSC.
 
 // ─────────────────────────────────────────────────────────────────────────
 // Types
@@ -236,6 +237,23 @@ export interface UmbraWasmModule {
   umbra_wasm_community_reaction_remove(json: string): string;
   umbra_wasm_community_reaction_list(message_id: string): string;
 
+  // Community — Emoji
+  umbra_wasm_community_emoji_create(json: string): string;
+  umbra_wasm_community_emoji_list(community_id: string): string;
+  umbra_wasm_community_emoji_delete(json: string): string;
+  umbra_wasm_community_emoji_rename(json: string): string;
+
+  // Community — Stickers
+  umbra_wasm_community_sticker_create(json: string): string;
+  umbra_wasm_community_sticker_list(community_id: string): string;
+  umbra_wasm_community_sticker_delete(sticker_id: string): string;
+
+  // Community — Sticker Packs
+  umbra_wasm_community_sticker_pack_create(json: string): string;
+  umbra_wasm_community_sticker_pack_list(community_id: string): string;
+  umbra_wasm_community_sticker_pack_delete(pack_id: string): string;
+  umbra_wasm_community_sticker_pack_rename(json: string): string;
+
   // Community — Pins
   umbra_wasm_community_pin_message(json: string): string;
   umbra_wasm_community_unpin_message(json: string): string;
@@ -341,7 +359,7 @@ let wasmModule: UmbraWasmModule | null = null;
 let initPromise: Promise<UmbraWasmModule> | null = null;
 
 // ─────────────────────────────────────────────────────────────────────────
-// Tauri Detection
+// Platform Detection
 // ─────────────────────────────────────────────────────────────────────────
 
 /**
@@ -357,6 +375,19 @@ export function isTauri(): boolean {
   );
 }
 
+/**
+ * Detect if we're running inside React Native (iOS/Android).
+ *
+ * React Native sets `navigator.product` to 'ReactNative'. This is
+ * reliable across JSC and Hermes engines.
+ */
+export function isReactNative(): boolean {
+  return (
+    typeof navigator !== 'undefined' &&
+    navigator.product === 'ReactNative'
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────────────
 // Public API
 // ─────────────────────────────────────────────────────────────────────────
@@ -366,6 +397,8 @@ export function isTauri(): boolean {
  *
  * - On desktop (Tauri): loads the Tauri IPC adapter and initializes via
  *   native Rust backend. No WASM or sql.js needed.
+ * - On mobile (React Native): loads the native Rust backend via Expo Module
+ *   FFI. No WASM or sql.js needed — native SQLite + Rust crypto.
  * - On web: loads sql.js, the WASM binary, and initializes everything.
  *
  * Safe to call multiple times — subsequent calls return the cached module.
@@ -411,9 +444,22 @@ export function isWasmReady(): boolean {
  * available). The database was initialized without persistence, and
  * this enables it retroactively.
  *
+ * On React Native this is a no-op — native SQLite handles persistence
+ * automatically via the filesystem.
+ *
  * @param did - The DID of the newly created identity
  */
-export { enablePersistence } from './sql-bridge';
+export function enablePersistence(did: string): void {
+  if (isReactNative()) {
+    // Native SQLite handles persistence automatically — no IndexedDB needed
+    console.log(`[umbra] Persistence is automatic on React Native (DID: ${did.slice(0, 20)}...)`);
+    return;
+  }
+  // Dynamically import sql-bridge to avoid loading sql.js on non-web platforms
+  import('./sql-bridge').then(({ enablePersistence: enable }) => {
+    enable(did);
+  });
+}
 
 // ─────────────────────────────────────────────────────────────────────────
 // Internal
@@ -422,6 +468,9 @@ export { enablePersistence } from './sql-bridge';
 async function doInit(did?: string): Promise<UmbraWasmModule> {
   if (isTauri()) {
     return doInitTauri();
+  }
+  if (isReactNative()) {
+    return doInitReactNative(did);
   }
   return doInitWasm(did);
 }
@@ -468,6 +517,31 @@ async function doInitTauri(): Promise<UmbraWasmModule> {
 }
 
 /**
+ * Initialize via native Rust FFI (React Native path).
+ *
+ * Uses the Expo Module (expo-umbra-core) which wraps the native Rust
+ * library compiled for iOS/Android. Falls back to a stub backend if
+ * the native module isn't linked yet.
+ *
+ * No WASM binary or sql.js needed — native SQLite + Rust crypto.
+ */
+async function doInitReactNative(_did?: string): Promise<UmbraWasmModule> {
+  console.log('[umbra] Initializing React Native backend...');
+
+  const { createReactNativeBackend } = await import('./rn-backend');
+  const backend = createReactNativeBackend();
+
+  // Initialize
+  backend.umbra_wasm_init();
+  await backend.umbra_wasm_init_database();
+
+  wasmModule = backend;
+  console.log(`[umbra] React Native backend ready! Version: ${backend.umbra_wasm_version()}`);
+
+  return backend;
+}
+
+/**
  * Initialize via WASM (web browser path).
  *
  * Loads sql.js for in-memory SQLite, then the wasm-bindgen WASM binary.
@@ -476,6 +550,9 @@ async function doInitWasm(did?: string): Promise<UmbraWasmModule> {
   console.log('[umbra-wasm] Initializing...');
 
   // Step 1: Initialize sql.js bridge (must happen before WASM DB init)
+  // Dynamic import to avoid loading sql.js on non-web platforms
+  const { initSqlBridge, initSqlBridgeWithPersistence } = await import('./sql-bridge');
+
   // If a DID is provided, enable IndexedDB persistence (restore from saved state)
   if (did) {
     console.log('[umbra-wasm] Loading sql.js with IndexedDB persistence...');
@@ -486,6 +563,7 @@ async function doInitWasm(did?: string): Promise<UmbraWasmModule> {
   }
 
   // Step 1.5: Initialize OPFS bridge (sets globalThis.__umbra_opfs for Rust WASM)
+  const { initOpfsBridge } = await import('../umbra-service/src/opfs-bridge');
   const opfsReady = initOpfsBridge();
   console.log(`[umbra-wasm] OPFS bridge: ${opfsReady ? 'initialized' : 'not available (non-web or unsupported)'}`);
 
@@ -904,6 +982,34 @@ function buildModule(wasmPkg: any): UmbraWasmModule {
       wasmPkg.umbra_wasm_community_reaction_remove(json),
     umbra_wasm_community_reaction_list: (messageId: string) =>
       wasmPkg.umbra_wasm_community_reaction_list(messageId),
+
+    // Community — Emoji
+    umbra_wasm_community_emoji_create: (json: string) =>
+      wasmPkg.umbra_wasm_community_emoji_create(json),
+    umbra_wasm_community_emoji_list: (communityId: string) =>
+      wasmPkg.umbra_wasm_community_emoji_list(communityId),
+    umbra_wasm_community_emoji_delete: (json: string) =>
+      wasmPkg.umbra_wasm_community_emoji_delete(json),
+    umbra_wasm_community_emoji_rename: (json: string) =>
+      wasmPkg.umbra_wasm_community_emoji_rename(json),
+
+    // Community — Stickers
+    umbra_wasm_community_sticker_create: (json: string) =>
+      wasmPkg.umbra_wasm_community_sticker_create(json),
+    umbra_wasm_community_sticker_list: (communityId: string) =>
+      wasmPkg.umbra_wasm_community_sticker_list(communityId),
+    umbra_wasm_community_sticker_delete: (stickerId: string) =>
+      wasmPkg.umbra_wasm_community_sticker_delete(stickerId),
+
+    // Community — Sticker Packs
+    umbra_wasm_community_sticker_pack_create: (json: string) =>
+      wasmPkg.umbra_wasm_community_sticker_pack_create(json),
+    umbra_wasm_community_sticker_pack_list: (communityId: string) =>
+      wasmPkg.umbra_wasm_community_sticker_pack_list(communityId),
+    umbra_wasm_community_sticker_pack_delete: (packId: string) =>
+      wasmPkg.umbra_wasm_community_sticker_pack_delete(packId),
+    umbra_wasm_community_sticker_pack_rename: (json: string) =>
+      wasmPkg.umbra_wasm_community_sticker_pack_rename(json),
 
     // Community — Pins
     umbra_wasm_community_pin_message: (json: string) =>

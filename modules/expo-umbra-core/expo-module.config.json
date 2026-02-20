@@ -1,0 +1,9 @@
+{
+  "platforms": ["apple", "android"],
+  "apple": {
+    "modules": ["ExpoUmbraCoreModule"]
+  },
+  "android": {
+    "modules": ["expo.modules.umbracore.ExpoUmbraCoreModule"]
+  }
+}

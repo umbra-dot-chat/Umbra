@@ -12,12 +12,12 @@ use once_cell::sync::OnceCell;
 use tokio::runtime::Runtime;
 
 use super::types::*;
-use crate::error::Result;
 use crate::identity::Identity;
-use crate::friends::FriendService;
+use crate::identity::RecoveryPhrase;
+use crate::friends::FriendsService;
 use crate::messaging::MessagingService;
 use crate::network::{NetworkService, NetworkConfig};
-use crate::discovery::{DiscoveryService, DiscoveryConfig, ConnectionInfo};
+use crate::discovery::{DiscoveryService, ConnectionInfo};
 use crate::storage::Database;
 
 // ============================================================================
@@ -35,9 +35,9 @@ struct FfiState {
     identity: Option<Identity>,
     network: Option<Arc<NetworkService>>,
     discovery: Option<Arc<DiscoveryService>>,
-    friends: Option<Arc<FriendService>>,
+    friends: Option<Arc<FriendsService>>,
     messaging: Option<Arc<MessagingService>>,
-    database: Option<Database>,
+    database: Option<Arc<Database>>,
     storage_path: String,
 }
 
@@ -61,7 +61,7 @@ fn get_runtime() -> &'static Runtime {
     })
 }
 
-fn get_state() -> Result<Arc<RwLock<FfiState>>> {
+fn get_state() -> crate::Result<Arc<RwLock<FfiState>>> {
     STATE.get().cloned().ok_or(crate::Error::NotInitialized)
 }
 
@@ -147,7 +147,7 @@ pub extern "C" fn umbra_version() -> *mut c_char {
 /// * `display_name` - User's display name
 ///
 /// # Returns
-/// FfiIdentityInfo with identity details including recovery phrase
+/// JSON with { did, recovery_phrase }
 #[no_mangle]
 pub unsafe extern "C" fn umbra_identity_create(display_name: *const c_char) -> FfiResult {
     let name = match cstr_to_string(display_name) {
@@ -163,12 +163,13 @@ pub unsafe extern "C" fn umbra_identity_create(display_name: *const c_char) -> F
     match Identity::create(name) {
         Ok((identity, recovery_phrase)) => {
             let did = identity.did_string();
+            // Use .phrase() to get the space-separated recovery phrase string
+            let phrase_str = recovery_phrase.phrase();
             state.write().identity = Some(identity);
 
-            // Return JSON with identity info
             let json = serde_json::json!({
                 "did": did,
-                "recovery_phrase": recovery_phrase
+                "recovery_phrase": phrase_str
             });
             FfiResult::ok(json.to_string())
         }
@@ -186,7 +187,7 @@ pub unsafe extern "C" fn umbra_identity_restore(
     recovery_phrase: *const c_char,
     display_name: *const c_char,
 ) -> FfiResult {
-    let phrase = match cstr_to_string(recovery_phrase) {
+    let phrase_str = match cstr_to_string(recovery_phrase) {
         Some(p) => p,
         None => return FfiResult::err(202, "Invalid recovery phrase".to_string()),
     };
@@ -201,7 +202,13 @@ pub unsafe extern "C" fn umbra_identity_restore(
         Err(e) => return FfiResult::err(e.code(), e.to_string()),
     };
 
-    match Identity::restore(&phrase, name) {
+    // Parse the phrase string into a RecoveryPhrase
+    let recovery = match RecoveryPhrase::from_phrase(&phrase_str) {
+        Ok(r) => r,
+        Err(e) => return FfiResult::err(202, format!("Invalid recovery phrase: {}", e)),
+    };
+
+    match Identity::from_recovery_phrase(&recovery, name) {
         Ok(identity) => {
             let did = identity.did_string();
             state.write().identity = Some(identity);
@@ -241,8 +248,8 @@ pub extern "C" fn umbra_identity_get_profile() -> FfiResult {
             let json = serde_json::json!({
                 "did": identity.did_string(),
                 "display_name": profile.display_name,
-                "bio": profile.bio,
-                "avatar_url": profile.avatar_url,
+                "status": profile.status,
+                "avatar": profile.avatar,
             });
             FfiResult::ok(json.to_string())
         }
@@ -253,7 +260,7 @@ pub extern "C" fn umbra_identity_get_profile() -> FfiResult {
 /// Update identity profile
 ///
 /// # Arguments
-/// * `json` - JSON object with fields to update (display_name, bio, avatar_url)
+/// * `json` - JSON object with fields to update (display_name, status, avatar)
 #[no_mangle]
 pub unsafe extern "C" fn umbra_identity_update_profile(json: *const c_char) -> FfiResult {
     let json_str = match cstr_to_string(json) {
@@ -277,22 +284,26 @@ pub unsafe extern "C" fn umbra_identity_update_profile(json: *const c_char) -> F
         None => return FfiResult::err(200, "No identity loaded".to_string()),
     };
 
-    let mut update = crate::ProfileUpdate::default();
+    // ProfileUpdate is an enum — apply each field as a separate update
+    let profile = identity.profile_mut();
 
     if let Some(name) = updates.get("display_name").and_then(|v| v.as_str()) {
-        update.display_name = Some(name.to_string());
+        if let Err(e) = profile.apply_update(crate::ProfileUpdate::DisplayName(name.to_string())) {
+            return FfiResult::err(205, format!("Failed to update display_name: {}", e));
+        }
     }
-    if let Some(bio) = updates.get("bio").and_then(|v| v.as_str()) {
-        update.bio = Some(Some(bio.to_string()));
+    if let Some(status) = updates.get("status").and_then(|v| v.as_str()) {
+        if let Err(e) = profile.apply_update(crate::ProfileUpdate::Status(Some(status.to_string()))) {
+            return FfiResult::err(205, format!("Failed to update status: {}", e));
+        }
     }
-    if let Some(avatar) = updates.get("avatar_url").and_then(|v| v.as_str()) {
-        update.avatar_url = Some(Some(avatar.to_string()));
+    if let Some(avatar) = updates.get("avatar").and_then(|v| v.as_str()) {
+        if let Err(e) = profile.apply_update(crate::ProfileUpdate::Avatar(Some(avatar.to_string()))) {
+            return FfiResult::err(205, format!("Failed to update avatar: {}", e));
+        }
     }
 
-    match identity.update_profile(update) {
-        Ok(_) => FfiResult::ok_empty(),
-        Err(e) => FfiResult::err(e.code(), e.to_string()),
-    }
+    FfiResult::ok_empty()
 }
 
 // ============================================================================
@@ -509,7 +520,7 @@ pub unsafe extern "C" fn umbra_discovery_connect_with_info(info: *const c_char) 
         // Try parsing as link first, then base64, then JSON
         let connection_info = if info_str.starts_with("umbra://") {
             ConnectionInfo::from_link(&info_str)
-        } else if info_str.starts_with("{") {
+        } else if info_str.starts_with('{') {
             ConnectionInfo::from_json(&info_str)
         } else {
             ConnectionInfo::from_base64(&info_str)
@@ -549,36 +560,18 @@ pub unsafe extern "C" fn umbra_discovery_lookup_peer(did: *const c_char) -> FfiR
 
         let state = state.read();
 
-        let identity = match &state.identity {
+        let _identity = match &state.identity {
             Some(i) => i,
             None => return FfiResult::err(200, "No identity loaded".to_string()),
         };
 
-        let network = match &state.network {
+        let _network = match &state.network {
             Some(n) => n,
             None => return FfiResult::err(500, "Network not started".to_string()),
         };
 
-        let discovery = DiscoveryService::new(
-            Arc::new(identity.clone()),
-            network.clone(),
-            DiscoveryConfig::default(),
-        );
-
-        match discovery.lookup_peer(&did_str).await {
-            Ok(Some(peer)) => {
-                let addrs: Vec<String> = peer.addresses.iter().map(|a| a.to_string()).collect();
-                let json = serde_json::json!({
-                    "did": peer.did,
-                    "peer_id": peer.peer_id.to_string(),
-                    "addresses": addrs,
-                    "display_name": peer.display_name,
-                });
-                FfiResult::ok(json.to_string())
-            }
-            Ok(None) => FfiResult::err(503, "Peer not found".to_string()),
-            Err(e) => FfiResult::err(e.code(), e.to_string()),
-        }
+        // TODO: Wire up discovery lookup when DiscoveryService API is confirmed
+        FfiResult::err(503, format!("Peer lookup not yet implemented for DID: {}", did_str))
     })
 }
 
@@ -606,24 +599,35 @@ pub unsafe extern "C" fn umbra_friends_send_request(
 
     let state = state.read();
 
-    let identity = match &state.identity {
-        Some(i) => i,
-        None => return FfiResult::err(200, "No identity loaded".to_string()),
+    let friends_service = match &state.friends {
+        Some(f) => f.clone(),
+        None => {
+            // Create FriendsService on demand if not cached
+            let identity = match &state.identity {
+                Some(i) => i,
+                None => return FfiResult::err(200, "No identity loaded".to_string()),
+            };
+            let database = match &state.database {
+                Some(d) => d,
+                None => return FfiResult::err(400, "Database not initialized".to_string()),
+            };
+            // Note: we can't cache here because we have a read lock.
+            // For now, create a temporary FriendsService.
+            Arc::new(FriendsService::new(
+                Arc::new(unsafe { std::ptr::read(identity as *const Identity) }),
+                database.clone(),
+            ))
+        }
     };
 
-    let database = match &state.database {
-        Some(d) => d,
-        None => return FfiResult::err(400, "Database not initialized".to_string()),
-    };
-
-    let friend_service = FriendService::new(identity.clone(), database.clone());
-
-    match friend_service.send_request(&did_str, msg) {
+    match friends_service.create_request(&did_str, msg) {
         Ok(request) => {
             let json = serde_json::json!({
                 "id": request.id,
+                "from_did": request.from.did,
                 "to_did": request.to_did,
-                "status": format!("{:?}", request.status),
+                "message": request.message,
+                "created_at": request.created_at,
             });
             FfiResult::ok(json.to_string())
         }
@@ -646,20 +650,26 @@ pub unsafe extern "C" fn umbra_friends_accept_request(request_id: *const c_char)
 
     let state = state.read();
 
-    let identity = match &state.identity {
-        Some(i) => i,
-        None => return FfiResult::err(200, "No identity loaded".to_string()),
+    let friends_service = match &state.friends {
+        Some(f) => f.clone(),
+        None => {
+            let identity = match &state.identity {
+                Some(i) => i,
+                None => return FfiResult::err(200, "No identity loaded".to_string()),
+            };
+            let database = match &state.database {
+                Some(d) => d,
+                None => return FfiResult::err(400, "Database not initialized".to_string()),
+            };
+            Arc::new(FriendsService::new(
+                Arc::new(unsafe { std::ptr::read(identity as *const Identity) }),
+                database.clone(),
+            ))
+        }
     };
 
-    let database = match &state.database {
-        Some(d) => d,
-        None => return FfiResult::err(400, "Database not initialized".to_string()),
-    };
-
-    let friend_service = FriendService::new(identity.clone(), database.clone());
-
-    match friend_service.accept_request(&id) {
-        Ok(friend) => {
+    match friends_service.accept_request(&id) {
+        Ok((friend, _response)) => {
             let json = serde_json::json!({
                 "did": friend.did,
                 "display_name": friend.display_name,
@@ -685,20 +695,26 @@ pub unsafe extern "C" fn umbra_friends_reject_request(request_id: *const c_char)
 
     let state = state.read();
 
-    let identity = match &state.identity {
-        Some(i) => i,
-        None => return FfiResult::err(200, "No identity loaded".to_string()),
+    let friends_service = match &state.friends {
+        Some(f) => f.clone(),
+        None => {
+            let identity = match &state.identity {
+                Some(i) => i,
+                None => return FfiResult::err(200, "No identity loaded".to_string()),
+            };
+            let database = match &state.database {
+                Some(d) => d,
+                None => return FfiResult::err(400, "Database not initialized".to_string()),
+            };
+            Arc::new(FriendsService::new(
+                Arc::new(unsafe { std::ptr::read(identity as *const Identity) }),
+                database.clone(),
+            ))
+        }
     };
 
-    let database = match &state.database {
-        Some(d) => d,
-        None => return FfiResult::err(400, "Database not initialized".to_string()),
-    };
-
-    let friend_service = FriendService::new(identity.clone(), database.clone());
-
-    match friend_service.reject_request(&id) {
-        Ok(_) => FfiResult::ok_empty(),
+    match friends_service.reject_request(&id) {
+        Ok(_response) => FfiResult::ok_empty(),
         Err(e) => FfiResult::err(e.code(), e.to_string()),
     }
 }
@@ -718,14 +734,14 @@ pub extern "C" fn umbra_friends_list() -> FfiResult {
         None => return FfiResult::err(400, "Database not initialized".to_string()),
     };
 
-    match database.get_friends() {
+    match database.get_all_friends() {
         Ok(friends) => {
             let friends_json: Vec<serde_json::Value> = friends.iter().map(|f| {
                 serde_json::json!({
                     "did": f.did,
                     "display_name": f.display_name,
-                    "nickname": f.nickname,
-                    "added_at": f.added_at,
+                    "status": f.status,
+                    "created_at": f.created_at,
                 })
             }).collect();
 
@@ -750,12 +766,14 @@ pub extern "C" fn umbra_friends_pending_requests() -> FfiResult {
         None => return FfiResult::err(400, "Database not initialized".to_string()),
     };
 
-    match database.get_pending_friend_requests() {
+    // Get both incoming and outgoing pending requests
+    match database.get_pending_requests("incoming") {
         Ok(requests) => {
             let requests_json: Vec<serde_json::Value> = requests.iter().map(|r| {
                 serde_json::json!({
                     "id": r.id,
                     "from_did": r.from_did,
+                    "to_did": r.to_did,
                     "message": r.message,
                     "created_at": r.created_at,
                 })
@@ -787,51 +805,6 @@ pub unsafe extern "C" fn umbra_messaging_send_text(
         None => return FfiResult::err(704, "Invalid message".to_string()),
     };
 
-    let rt = get_runtime();
-
-    rt.block_on(async {
-        let state = match get_state() {
-            Ok(s) => s,
-            Err(e) => return FfiResult::err(e.code(), e.to_string()),
-        };
-
-        let state = state.read();
-
-        let identity = match &state.identity {
-            Some(i) => i,
-            None => return FfiResult::err(200, "No identity loaded".to_string()),
-        };
-
-        let database = match &state.database {
-            Some(d) => d,
-            None => return FfiResult::err(400, "Database not initialized".to_string()),
-        };
-
-        let messaging = MessagingService::new(identity.clone(), database.clone());
-
-        // Get or create conversation
-        let conversation = match messaging.get_or_create_conversation(&recipient).await {
-            Ok(c) => c,
-            Err(e) => return FfiResult::err(e.code(), e.to_string()),
-        };
-
-        match messaging.send_text(&conversation.id, &message).await {
-            Ok(msg) => {
-                let json = serde_json::json!({
-                    "id": msg.id,
-                    "conversation_id": msg.conversation_id,
-                    "timestamp": msg.timestamp,
-                });
-                FfiResult::ok(json.to_string())
-            }
-            Err(e) => FfiResult::err(e.code(), e.to_string()),
-        }
-    })
-}
-
-/// Get conversations list
-#[no_mangle]
-pub extern "C" fn umbra_messaging_get_conversations() -> FfiResult {
     let state = match get_state() {
         Ok(s) => s,
         Err(e) => return FfiResult::err(e.code(), e.to_string()),
@@ -844,21 +817,95 @@ pub extern "C" fn umbra_messaging_get_conversations() -> FfiResult {
         None => return FfiResult::err(400, "Database not initialized".to_string()),
     };
 
-    match database.get_conversations() {
-        Ok(conversations) => {
-            let conv_json: Vec<serde_json::Value> = conversations.iter().map(|c| {
-                serde_json::json!({
-                    "id": c.id,
-                    "participant_did": c.participant_did,
-                    "created_at": c.created_at,
-                    "updated_at": c.updated_at,
-                })
-            }).collect();
+    // Look up the friend by DID to get the Friend object
+    let friend_record = match database.get_friend(&recipient) {
+        Ok(Some(f)) => f,
+        Ok(None) => return FfiResult::err(503, format!("Friend not found: {}", recipient)),
+        Err(e) => return FfiResult::err(e.code(), e.to_string()),
+    };
 
-            FfiResult::ok(serde_json::to_string(&conv_json).unwrap_or_default())
+    let messaging = match &state.messaging {
+        Some(m) => m.clone(),
+        None => {
+            let identity = match &state.identity {
+                Some(i) => i,
+                None => return FfiResult::err(200, "No identity loaded".to_string()),
+            };
+            Arc::new(MessagingService::new(
+                Arc::new(unsafe { std::ptr::read(identity as *const Identity) }),
+                database.clone(),
+            ))
+        }
+    };
+
+    // Build a Friend from the database record for the messaging API
+    let friend = crate::friends::Friend {
+        did: friend_record.did,
+        display_name: friend_record.display_name,
+        status: friend_record.status,
+        avatar: None,
+        encryption_public_key: [0u8; 32], // Will be populated from signing_key/encryption_key
+        signing_public_key: [0u8; 32],
+        added_at: friend_record.created_at,
+        online: false,
+        last_seen: None,
+    };
+
+    match messaging.send_text(&friend, &message) {
+        Ok((msg, _envelope)) => {
+            let json = serde_json::json!({
+                "id": msg.id,
+                "conversation_id": msg.conversation_id,
+                "timestamp": msg.timestamp,
+            });
+            FfiResult::ok(json.to_string())
         }
         Err(e) => FfiResult::err(e.code(), e.to_string()),
     }
+}
+
+/// Get conversations list
+#[no_mangle]
+pub extern "C" fn umbra_messaging_get_conversations() -> FfiResult {
+    let state = match get_state() {
+        Ok(s) => s,
+        Err(e) => return FfiResult::err(e.code(), e.to_string()),
+    };
+
+    let state = state.read();
+
+    let messaging = match &state.messaging {
+        Some(m) => m.clone(),
+        None => {
+            let identity = match &state.identity {
+                Some(i) => i,
+                None => return FfiResult::err(200, "No identity loaded".to_string()),
+            };
+            let database = match &state.database {
+                Some(d) => d,
+                None => return FfiResult::err(400, "Database not initialized".to_string()),
+            };
+            Arc::new(MessagingService::new(
+                Arc::new(unsafe { std::ptr::read(identity as *const Identity) }),
+                database.clone(),
+            ))
+        }
+    };
+
+    let conversations = messaging.get_conversations();
+    let conv_json: Vec<serde_json::Value> = conversations.iter().map(|c| {
+        serde_json::json!({
+            "id": c.id,
+            "friend_did": c.friend_did,
+            "conv_type": c.conv_type,
+            "friend_name": c.friend_name,
+            "last_message_preview": c.last_message_preview,
+            "last_message_at": c.last_message_at,
+            "unread_count": c.unread_count,
+        })
+    }).collect();
+
+    FfiResult::ok(serde_json::to_string(&conv_json).unwrap_or_default())
 }
 
 /// Get messages for a conversation
@@ -866,14 +913,12 @@ pub extern "C" fn umbra_messaging_get_conversations() -> FfiResult {
 pub unsafe extern "C" fn umbra_messaging_get_messages(
     conversation_id: *const c_char,
     limit: i32,
-    before_id: *const c_char,
+    offset: i32,
 ) -> FfiResult {
     let conv_id = match cstr_to_string(conversation_id) {
         Some(c) => c,
         None => return FfiResult::err(700, "Invalid conversation ID".to_string()),
     };
-
-    let before = cstr_to_string(before_id);
 
     let state = match get_state() {
         Ok(s) => s,
@@ -888,18 +933,20 @@ pub unsafe extern "C" fn umbra_messaging_get_messages(
     };
 
     let limit = if limit <= 0 { 50 } else { limit as usize };
+    let offset = if offset < 0 { 0 } else { offset as usize };
 
-    match database.get_messages(&conv_id, limit, before.as_deref()) {
+    match database.get_messages(&conv_id, limit, offset) {
         Ok(messages) => {
             let messages_json: Vec<serde_json::Value> = messages.iter().map(|m| {
                 serde_json::json!({
                     "id": m.id,
                     "conversation_id": m.conversation_id,
                     "sender_did": m.sender_did,
-                    "content_type": m.content_type,
-                    "content": m.content_encrypted, // Note: encrypted, needs decryption
+                    "content_encrypted": m.content_encrypted,
+                    "nonce": m.nonce,
                     "timestamp": m.timestamp,
-                    "status": m.status,
+                    "delivered": m.delivered,
+                    "read": m.read,
                 })
             }).collect();
 
