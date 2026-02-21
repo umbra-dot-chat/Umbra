@@ -277,6 +277,24 @@ CREATE TABLE IF NOT EXISTS call_history (
 );
 CREATE INDEX IF NOT EXISTS idx_call_history_conversation ON call_history(conversation_id, started_at DESC);
 
+-- Plugin key-value storage (namespaced per plugin)
+CREATE TABLE IF NOT EXISTS plugin_kv (
+    plugin_id TEXT NOT NULL,
+    key TEXT NOT NULL,
+    value TEXT NOT NULL,
+    updated_at INTEGER NOT NULL,
+    PRIMARY KEY (plugin_id, key)
+);
+CREATE INDEX IF NOT EXISTS idx_plugin_kv_plugin ON plugin_kv(plugin_id);
+
+-- Plugin bundle storage (for web platform; desktop uses filesystem)
+CREATE TABLE IF NOT EXISTS plugin_bundles (
+    plugin_id TEXT PRIMARY KEY,
+    manifest TEXT NOT NULL,
+    bundle TEXT NOT NULL,
+    installed_at INTEGER NOT NULL
+);
+
 -- =========================================================================
 -- COMMUNITY TABLES
 -- =========================================================================
