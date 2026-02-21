@@ -74,6 +74,7 @@ packages/umbra-relay/.env
 .wisp/
 
 # Compiled native binaries (rebuilt locally via build scripts)
-modules/expo-umbra-core/ios/UmbraCore.xcframework/
+# NOTE: UmbraCore.xcframework is committed for EAS cloud builds.
+# Rebuild with: npm run build:mobile:ios
 modules/expo-umbra-core/android/src/main/jniLibs/
 packages/umbra-relay/releases/
