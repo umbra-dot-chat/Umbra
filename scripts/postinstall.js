@@ -77,4 +77,18 @@ for (const pkgDir of [CORE_DEST, RN_DEST]) {
   }
 }
 
+// ── Configure git hooks ──────────────────────────────────────────────────────
+// Point git to .githooks/ so the pre-commit XCFramework check runs automatically.
+// This is a no-op if already configured or if we're in CI (no .git directory).
+const gitDir = path.join(UMBRA_DIR, '.git');
+const hooksDir = path.join(UMBRA_DIR, '.githooks');
+if (fs.existsSync(gitDir) && fs.existsSync(hooksDir)) {
+  try {
+    execSync('git config core.hooksPath .githooks', { cwd: UMBRA_DIR, stdio: 'ignore' });
+    console.log('[postinstall] Git hooks configured → .githooks/');
+  } catch {
+    // Non-fatal — hooks are a convenience, not a requirement
+  }
+}
+
 console.log('[postinstall] Done.');

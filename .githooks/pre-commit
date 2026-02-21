@@ -1,0 +1,53 @@
+#!/bin/bash
+# ============================================================================
+# Pre-commit hook: XCFramework staleness check
+#
+# If Rust source files in umbra-core changed, warn if the pre-built
+# XCFramework wasn't also updated. The XCFramework is committed for
+# EAS cloud builds and must stay in sync with the Rust source.
+# ============================================================================
+
+XCFW="modules/expo-umbra-core/ios/UmbraCore.xcframework"
+RUST_SRC="packages/umbra-core/src"
+
+# Get staged files
+STAGED=$(git diff --cached --name-only)
+
+# Check if any Rust source files are staged
+RUST_CHANGED=false
+while IFS= read -r file; do
+  case "$file" in
+    "$RUST_SRC"/*) RUST_CHANGED=true; break ;;
+  esac
+done <<< "$STAGED"
+
+if [ "$RUST_CHANGED" = false ]; then
+  exit 0
+fi
+
+# Rust source changed — check if XCFramework is also staged
+XCFW_CHANGED=false
+while IFS= read -r file; do
+  case "$file" in
+    "$XCFW"/*) XCFW_CHANGED=true; break ;;
+  esac
+done <<< "$STAGED"
+
+if [ "$XCFW_CHANGED" = false ]; then
+  echo ""
+  echo "⚠️  Rust source (packages/umbra-core/src/) changed but the"
+  echo "   XCFramework was not updated. EAS cloud builds use the"
+  echo "   committed XCFramework — it may be out of sync."
+  echo ""
+  echo "   To rebuild:"
+  echo "     npm run build:mobile:ios"
+  echo "     git add modules/expo-umbra-core/ios/UmbraCore.xcframework/"
+  echo ""
+  echo "   To skip this check:"
+  echo "     git commit --no-verify"
+  echo ""
+  # Warn but don't block — sometimes you intentionally commit Rust
+  # changes separately from a framework rebuild.
+fi
+
+exit 0
