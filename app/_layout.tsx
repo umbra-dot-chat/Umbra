@@ -4,7 +4,7 @@ import { View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Slot, useSegments, useRouter, useNavigationContainerRef } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { WispProvider, ToastProvider } from '@coexist/wisp-react-native';
+import { WispProvider, ToastProvider, useTheme } from '@coexist/wisp-react-native';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { UmbraProvider, useUmbra } from '@/contexts/UmbraContext';
 import { PluginProvider } from '@/contexts/PluginContext';
@@ -22,6 +22,12 @@ import { PRIMARY_RELAY_URL } from '@/config';
 
 /** Max time (ms) to wait for the relay before giving up retries */
 const RELAY_TIMEOUT_MS = 5000;
+
+/** Dynamic iOS status bar: light text on dark themes, dark text on light themes. */
+function DynamicStatusBar() {
+  const { mode } = useTheme();
+  return <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />;
+}
 
 function AuthGate() {
   const { isAuthenticated, hasPin, isPinVerified, identity } = useAuth();
@@ -177,7 +183,7 @@ export default function RootLayout() {
                   <MessagingProvider>
                   <PluginProvider>
                     <HelpProvider>
-                      <StatusBar style="dark" />
+                      <DynamicStatusBar />
                       <AuthGate />
                       <HelpPopoverHost />
                     </HelpProvider>

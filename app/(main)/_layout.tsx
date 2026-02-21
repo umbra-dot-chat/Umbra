@@ -446,62 +446,64 @@ function MainLayoutInner() {
         return (
           <HStack gap={0} style={{ flex: 1 }}>
             {showSidebar && (
-              <>
-                <NavigationRail
-                  isHomeActive={isHomeActive}
-                  onHomePress={handleHomePress}
-                  isFilesActive={isFilesActive}
-                  onFilesPress={handleFilesPress}
-                  uploadRingProgress={uploadRingProgress}
-                  communities={communities}
-                  activeCommunityId={activeCommunityId}
-                  onCommunityPress={handleCommunityPress}
-                  onCreateCommunity={() => { playSound('dialog_open'); setCreateCommunityOptionsOpen(true); }}
-                  onOpenSettings={() => { playSound('dialog_open'); openSettings(); }}
-                  loading={coreLoading || communitiesLoading}
-                  homeNotificationCount={homeNotificationCount}
-                  safeAreaTop={insets.top}
-                  safeAreaBottom={insets.bottom}
-                />
-                <View style={{ width: isMobile ? undefined : sidebarWidth, flex: isMobile ? 1 : undefined, flexShrink: 0 }}>
-                  {/* Safe area header — matches sidebar background with border */}
-                  {insets.top > 0 && (
-                    <View style={{
-                      height: insets.top,
-                      backgroundColor: theme.colors.background.surface,
-                      borderBottomWidth: 1,
-                      borderBottomColor: theme.colors.border.subtle,
-                    }} />
-                  )}
-                  {activeCommunityId ? (
-                    <CommunityLayoutSidebar communityId={activeCommunityId} />
-                  ) : (
-                    <ChatSidebar
-                      search={search}
-                      onSearchChange={setSearch}
-                      conversations={filtered}
-                      activeId={activeId}
-                      onSelectConversation={(id) => {
-                        setActiveId(id);
-                        if (pathname !== '/') {
-                          router.push('/');
-                        }
-                      }}
-                      onFriendsPress={() => router.push('/friends')}
-                      onNewDm={() => { playSound('dialog_open'); setNewDmOpen(true); }}
-                      onCreateGroup={() => { playSound('dialog_open'); setCreateGroupOpen(true); }}
-                      onGuidePress={() => { playSound('dialog_open'); setGuideOpen(true); }}
-                      onMarketplacePress={() => { playSound('dialog_open'); setMarketplaceOpen(true); }}
-                      isFriendsActive={isFriendsActive}
-                      pendingInvites={pendingInvites}
-                      onAcceptInvite={handleAcceptInvite}
-                      onDeclineInvite={handleDeclineInvite}
-                      loading={coreLoading || conversationsLoading}
-                      pendingFriendRequests={incomingRequests.length}
-                    />
-                  )}
-                </View>
-              </>
+              <View style={{ flexDirection: 'column', width: isMobile ? undefined : (64 + sidebarWidth), flex: isMobile ? 1 : undefined, flexShrink: 0 }}>
+                {/* Safe area header — spans rail + sidebar, same surface color */}
+                {insets.top > 0 && (
+                  <View style={{
+                    height: insets.top,
+                    backgroundColor: theme.colors.background.surface,
+                    borderBottomWidth: 1,
+                    borderBottomColor: theme.colors.border.subtle,
+                  }} />
+                )}
+                <HStack gap={0} style={{ flex: 1 }}>
+                  <NavigationRail
+                    isHomeActive={isHomeActive}
+                    onHomePress={handleHomePress}
+                    isFilesActive={isFilesActive}
+                    onFilesPress={handleFilesPress}
+                    uploadRingProgress={uploadRingProgress}
+                    communities={communities}
+                    activeCommunityId={activeCommunityId}
+                    onCommunityPress={handleCommunityPress}
+                    onCreateCommunity={() => { playSound('dialog_open'); setCreateCommunityOptionsOpen(true); }}
+                    onOpenSettings={() => { playSound('dialog_open'); openSettings(); }}
+                    loading={coreLoading || communitiesLoading}
+                    homeNotificationCount={homeNotificationCount}
+                    safeAreaTop={0}
+                    safeAreaBottom={insets.bottom}
+                  />
+                  <View style={{ flex: 1 }}>
+                    {activeCommunityId ? (
+                      <CommunityLayoutSidebar communityId={activeCommunityId} />
+                    ) : (
+                      <ChatSidebar
+                        search={search}
+                        onSearchChange={setSearch}
+                        conversations={filtered}
+                        activeId={activeId}
+                        onSelectConversation={(id) => {
+                          setActiveId(id);
+                          if (pathname !== '/') {
+                            router.push('/');
+                          }
+                        }}
+                        onFriendsPress={() => router.push('/friends')}
+                        onNewDm={() => { playSound('dialog_open'); setNewDmOpen(true); }}
+                        onCreateGroup={() => { playSound('dialog_open'); setCreateGroupOpen(true); }}
+                        onGuidePress={() => { playSound('dialog_open'); setGuideOpen(true); }}
+                        onMarketplacePress={() => { playSound('dialog_open'); setMarketplaceOpen(true); }}
+                        isFriendsActive={isFriendsActive}
+                        pendingInvites={pendingInvites}
+                        onAcceptInvite={handleAcceptInvite}
+                        onDeclineInvite={handleDeclineInvite}
+                        loading={coreLoading || conversationsLoading}
+                        pendingFriendRequests={incomingRequests.length}
+                      />
+                    )}
+                  </View>
+                </HStack>
+              </View>
             )}
             {!isMobile && <ResizeHandle onResize={handleSidebarResize} />}
             {showContent && (
