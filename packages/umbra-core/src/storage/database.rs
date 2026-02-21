@@ -186,6 +186,26 @@ impl Database {
             }
         }
 
+        // Safety net: ensure critical tables exist even if a previous build
+        // created the DB at the current SCHEMA_VERSION but was missing tables
+        // that were only defined in migrations (not in CREATE_TABLES at the time).
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS plugin_kv (
+                plugin_id TEXT NOT NULL,
+                key TEXT NOT NULL,
+                value TEXT NOT NULL,
+                updated_at INTEGER NOT NULL,
+                PRIMARY KEY (plugin_id, key)
+            );
+            CREATE INDEX IF NOT EXISTS idx_plugin_kv_plugin ON plugin_kv(plugin_id);
+            CREATE TABLE IF NOT EXISTS plugin_bundles (
+                plugin_id TEXT PRIMARY KEY,
+                manifest TEXT NOT NULL,
+                bundle TEXT NOT NULL,
+                installed_at INTEGER NOT NULL
+            );"
+        ).map_err(|e| Error::DatabaseError(format!("Failed to ensure plugin tables: {}", e)))?;
+
         Ok(())
     }
 
