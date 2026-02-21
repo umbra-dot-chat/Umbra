@@ -1,7 +1,8 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import { View } from 'react-native';
+import { Platform, View } from 'react-native';
 import { Slot, usePathname, useRouter } from 'expo-router';
 import { HStack, useTheme } from '@coexist/wisp-react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useUmbra } from '@/contexts/UmbraContext';
 import { ActiveConversationProvider, useActiveConversation } from '@/contexts/ActiveConversationContext';
@@ -79,6 +80,7 @@ function MainLayoutInner() {
   const { playSound } = useSound();
   const isMobile = useIsMobile();
   const { activeChannelId: communityActiveChannelId } = useCommunityContext();
+  const insets = Platform.OS !== 'web' ? useSafeAreaInsets() : { top: 0, bottom: 0, left: 0, right: 0 };
 
   // Service + data hooks
   const { service, isReady } = useUmbra();
@@ -458,10 +460,19 @@ function MainLayoutInner() {
                   onOpenSettings={() => { playSound('dialog_open'); openSettings(); }}
                   loading={coreLoading || communitiesLoading}
                   homeNotificationCount={homeNotificationCount}
-                  safeAreaTop={0}
-                  safeAreaBottom={0}
+                  safeAreaTop={insets.top}
+                  safeAreaBottom={insets.bottom}
                 />
                 <View style={{ width: isMobile ? undefined : sidebarWidth, flex: isMobile ? 1 : undefined, flexShrink: 0 }}>
+                  {/* Safe area header — matches sidebar background with border */}
+                  {insets.top > 0 && (
+                    <View style={{
+                      height: insets.top,
+                      backgroundColor: theme.colors.background.surface,
+                      borderBottomWidth: 1,
+                      borderBottomColor: theme.colors.border.subtle,
+                    }} />
+                  )}
                   {activeCommunityId ? (
                     <CommunityLayoutSidebar communityId={activeCommunityId} />
                   ) : (
@@ -494,7 +505,7 @@ function MainLayoutInner() {
             )}
             {!isMobile && <ResizeHandle onResize={handleSidebarResize} />}
             {showContent && (
-              <View style={{ flex: 1 }}>
+              <View style={{ flex: 1, paddingTop: insets.top }}>
                 <Slot />
               </View>
             )}
