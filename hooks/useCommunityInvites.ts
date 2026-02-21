@@ -98,6 +98,25 @@ export function useCommunityInvites(communityId: string | null): UseCommunityInv
         setCreating(true);
         const invite = await service.createCommunityInvite(communityId, identity.did, maxUses, expiresAt);
         await fetchInvites();
+
+        // Publish invite to relay for remote resolution
+        try {
+          const community = await service.getCommunity(communityId);
+          const members = await service.getCommunityMembers(communityId);
+          const relayWs = service.getRelayWs();
+          service.publishCommunityInviteToRelay(
+            relayWs,
+            invite,
+            community.name,
+            community.description,
+            community.iconUrl,
+            members.length,
+          );
+        } catch (publishErr) {
+          // Non-fatal — invite is still created locally
+          console.warn('[useCommunityInvites] Failed to publish invite to relay:', publishErr);
+        }
+
         return invite;
       } catch (err) {
         setError(err instanceof Error ? err : new Error(String(err)));
@@ -113,13 +132,26 @@ export function useCommunityInvites(communityId: string | null): UseCommunityInv
     async (inviteId: string): Promise<void> => {
       if (!service || !identity?.did) return;
       try {
+        // Find the invite code before deleting so we can revoke on relay
+        const inv = invites.find((i) => i.id === inviteId);
         await service.deleteCommunityInvite(inviteId, identity.did);
+
+        // Revoke on relay
+        if (inv) {
+          try {
+            const relayWs = service.getRelayWs();
+            service.revokeCommunityInviteOnRelay(relayWs, inv.code);
+          } catch {
+            // Non-fatal
+          }
+        }
+
         await fetchInvites();
       } catch (err) {
         setError(err instanceof Error ? err : new Error(String(err)));
       }
     },
-    [service, identity?.did, fetchInvites],
+    [service, identity?.did, invites, fetchInvites],
   );
 
   const useInvite = useCallback(

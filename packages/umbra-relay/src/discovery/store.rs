@@ -49,6 +49,10 @@ pub struct DiscoveryStore {
     /// Lowercase name → list of (tag, DID) for tag assignment and search.
     name_tags: Arc<DashMap<String, Vec<(String, String)>>>,
 
+    /// Profile import results (state_nonce → ImportedProfile).
+    /// Stored temporarily so mobile clients can poll for results.
+    profile_results: Arc<DashMap<String, crate::discovery::types::ImportedProfile>>,
+
     /// Configuration for hashing.
     config: Arc<DiscoveryConfig>,
 
@@ -66,6 +70,7 @@ impl DiscoveryStore {
             oauth_states: Arc::new(DashMap::new()),
             username_index: Arc::new(DashMap::new()),
             name_tags: Arc::new(DashMap::new()),
+            profile_results: Arc::new(DashMap::new()),
             config: Arc::new(config),
             data_dir,
         }
@@ -629,6 +634,18 @@ impl DiscoveryStore {
         }
     }
 
+    // ── Profile Import Results ────────────────────────────────────────────────
+
+    /// Store a profile import result for mobile polling.
+    pub fn store_profile_result(&self, state: &str, profile: crate::discovery::types::ImportedProfile) {
+        self.profile_results.insert(state.to_string(), profile);
+    }
+
+    /// Retrieve and remove a profile import result.
+    pub fn take_profile_result(&self, state: &str) -> Option<crate::discovery::types::ImportedProfile> {
+        self.profile_results.remove(state).map(|(_, p)| p)
+    }
+
     // ── Stats ────────────────────────────────────────────────────────────────
 
     /// Get the number of registered users.
@@ -658,6 +675,7 @@ mod tests {
             discord_redirect_uri: None,
             discord_profile_import_redirect_uri: None,
             discord_community_import_redirect_uri: None,
+            discord_bot_token: None,
             github_client_id: None,
             github_client_secret: None,
             github_redirect_uri: None,

@@ -19,6 +19,7 @@ import {
 } from '@coexist/wisp-react-native';
 import { MessageIcon, CheckIcon } from '@/components/icons';
 import { useFriends } from '@/hooks/useFriends';
+import { useNetwork } from '@/hooks/useNetwork';
 import { useConversations } from '@/hooks/useConversations';
 import type { Friend } from '@umbra/service';
 
@@ -34,6 +35,7 @@ export function NewDmDialog({ open, onClose, onSelectFriend }: NewDmDialogProps)
   const { theme } = useTheme();
   const tc = theme.colors;
   const { friends } = useFriends();
+  const { onlineDids } = useNetwork();
   const { conversations } = useConversations();
   const [search, setSearch] = useState('');
 
@@ -132,7 +134,7 @@ export function NewDmDialog({ open, onClose, onSelectFriend }: NewDmDialogProps)
                     })}
                   >
                     <HStack style={{ alignItems: 'center', gap: 10, flex: 1 }}>
-                      <Avatar name={friend.displayName} size="sm" />
+                      <Avatar name={friend.displayName} size="sm" status={onlineDids.has(friend.did) ? 'online' : undefined} />
                       <VStack style={{ flex: 1 }}>
                         <RNText
                           style={{

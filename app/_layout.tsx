@@ -18,7 +18,9 @@ import { PinLockScreen } from '@/components/auth/PinLockScreen';
 import { LoadingScreen } from '@/components/loading/LoadingScreen';
 import type { LoadingStep } from '@/components/loading/LoadingScreen';
 import { useNetwork } from '@/hooks/useNetwork';
+import { usePendingInvite } from '@/hooks/usePendingInvite';
 import { PRIMARY_RELAY_URL } from '@/config';
+import * as Linking from 'expo-linking';
 
 /** Max time (ms) to wait for the relay before giving up retries */
 const RELAY_TIMEOUT_MS = 5000;
@@ -41,6 +43,8 @@ function AuthGate() {
   const [loadingDismissed, setLoadingDismissed] = useState(false);
   const [relayTimedOut, setRelayTimedOut] = useState(false);
   const retryCountRef = useRef(0);
+  const pendingInviteHandledRef = useRef(false);
+  const { pendingCode, isLoaded: inviteLoaded, consumePendingCode } = usePendingInvite();
   const inAuthGroup = segments[0] === '(auth)';
 
   // Wait for the navigation tree to be ready before attempting navigation
@@ -62,6 +66,48 @@ function AuthGate() {
       router.replace('/(main)');
     }
   }, [isAuthenticated, inAuthGroup, navReady]);
+
+  // ── Deep link handler ─────────────────────────────────────────────────
+  // Listens for umbra://invite/CODE and https://umbra.chat/invite/CODE
+  useEffect(() => {
+    if (!navReady) return;
+
+    const handleUrl = (url: string) => {
+      try {
+        const parsed = Linking.parse(url);
+        if (parsed.path?.startsWith('invite/')) {
+          const code = parsed.path.replace('invite/', '').replace(/\/$/, '');
+          if (code) {
+            router.push(`/invite/${code}` as any);
+          }
+        }
+      } catch {
+        // Ignore malformed URLs
+      }
+    };
+
+    // Handle URL that launched the app
+    Linking.getInitialURL().then((url) => {
+      if (url) handleUrl(url);
+    });
+
+    // Handle URLs received while app is running
+    const sub = Linking.addEventListener('url', ({ url }) => handleUrl(url));
+    return () => sub.remove();
+  }, [navReady, router]);
+
+  // ── Pending invite consumption ────────────────────────────────────────
+  // After auth completes + service is ready, check for a pending invite
+  // that was stored before the user signed up/in.
+  useEffect(() => {
+    if (!isAuthenticated || !isReady || !inviteLoaded || !pendingCode || pendingInviteHandledRef.current) return;
+    pendingInviteHandledRef.current = true;
+    consumePendingCode().then((code) => {
+      if (code) {
+        router.push(`/invite/${code}` as any);
+      }
+    });
+  }, [isAuthenticated, isReady, inviteLoaded, pendingCode, consumePendingCode, router]);
 
   // Show PIN lock screen when authenticated + has PIN + not yet verified
   const showPinLock = isAuthenticated && hasPin && !isPinVerified;

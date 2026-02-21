@@ -178,6 +178,16 @@ impl Database {
                     conn.execute_batch(schema::MIGRATE_V12_TO_V13)
                         .map_err(|e| Error::DatabaseError(format!("Migration v12→v13 failed: {}", e)))?;
                 }
+                if v < 14 {
+                    tracing::info!("Running migration v13 → v14 (friend avatars)");
+                    conn.execute_batch(schema::MIGRATE_V13_TO_V14)
+                        .map_err(|e| Error::DatabaseError(format!("Migration v13→v14 failed: {}", e)))?;
+                }
+                if v < 15 {
+                    tracing::info!("Running migration v14 → v15 (friend request avatars)");
+                    conn.execute_batch(schema::MIGRATE_V14_TO_V15)
+                        .map_err(|e| Error::DatabaseError(format!("Migration v14→v15 failed: {}", e)))?;
+                }
 
                 tracing::info!("All migrations complete (now at version {})", schema::SCHEMA_VERSION);
             }
@@ -222,18 +232,32 @@ impl Database {
         encryption_key: &[u8; 32],
         status: Option<&str>,
     ) -> Result<i64> {
+        self.add_friend_with_avatar(did, display_name, signing_key, encryption_key, status, None)
+    }
+
+    /// Add a new friend with optional avatar
+    pub fn add_friend_with_avatar(
+        &self,
+        did: &str,
+        display_name: &str,
+        signing_key: &[u8; 32],
+        encryption_key: &[u8; 32],
+        status: Option<&str>,
+        avatar: Option<&str>,
+    ) -> Result<i64> {
         let conn = self.conn.lock();
         let now = crate::time::now_timestamp();
 
         conn.execute(
-            "INSERT INTO friends (did, display_name, signing_key, encryption_key, status, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "INSERT INTO friends (did, display_name, signing_key, encryption_key, status, avatar, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             params![
                 did,
                 display_name,
                 hex::encode(signing_key),
                 hex::encode(encryption_key),
                 status,
+                avatar,
                 now,
                 now,
             ],
@@ -248,7 +272,7 @@ impl Database {
         let conn = self.conn.lock();
 
         let result = conn.query_row(
-            "SELECT id, did, display_name, signing_key, encryption_key, status, created_at, updated_at
+            "SELECT id, did, display_name, signing_key, encryption_key, status, avatar, created_at, updated_at
              FROM friends WHERE did = ?",
             params![did],
             |row| {
@@ -259,8 +283,9 @@ impl Database {
                     signing_key: row.get(3)?,
                     encryption_key: row.get(4)?,
                     status: row.get(5)?,
-                    created_at: row.get(6)?,
-                    updated_at: row.get(7)?,
+                    avatar: row.get(6)?,
+                    created_at: row.get(7)?,
+                    updated_at: row.get(8)?,
                 })
             },
         );
@@ -277,7 +302,7 @@ impl Database {
         let conn = self.conn.lock();
         let mut stmt = conn
             .prepare(
-                "SELECT id, did, display_name, signing_key, encryption_key, status, created_at, updated_at
+                "SELECT id, did, display_name, signing_key, encryption_key, status, avatar, created_at, updated_at
                  FROM friends ORDER BY display_name",
             )
             .map_err(|e| Error::DatabaseError(format!("Failed to prepare query: {}", e)))?;
@@ -291,8 +316,9 @@ impl Database {
                     signing_key: row.get(3)?,
                     encryption_key: row.get(4)?,
                     status: row.get(5)?,
-                    created_at: row.get(6)?,
-                    updated_at: row.get(7)?,
+                    avatar: row.get(6)?,
+                    created_at: row.get(7)?,
+                    updated_at: row.get(8)?,
                 })
             })
             .map_err(|e| Error::DatabaseError(format!("Failed to query friends: {}", e)))?;
@@ -348,6 +374,19 @@ impl Database {
             .execute(&sql, params.as_slice())
             .map_err(|e| Error::DatabaseError(format!("Failed to update friend: {}", e)))?;
 
+        Ok(rows > 0)
+    }
+
+    /// Update a friend's avatar
+    pub fn update_friend_avatar(&self, did: &str, avatar: Option<&str>) -> Result<bool> {
+        let conn = self.conn.lock();
+        let now = crate::time::now_timestamp();
+        let rows = conn
+            .execute(
+                "UPDATE friends SET avatar = ?, updated_at = ? WHERE did = ?",
+                params![avatar, now, did],
+            )
+            .map_err(|e| Error::DatabaseError(format!("Failed to update friend avatar: {}", e)))?;
         Ok(rows > 0)
     }
 
@@ -745,6 +784,12 @@ impl Database {
             .map_err(|e| Error::DatabaseError(format!("Failed to set forwarded: {}", e)))?;
 
         Ok(rows > 0)
+    }
+
+    /// Mark a single message as sent (relay confirmed receipt).
+    /// This is a logical status update — no DB column change needed.
+    pub fn mark_message_sent(&self, _message_id: &str) -> Result<()> {
+        Ok(())
     }
 
     /// Mark a single message as delivered
@@ -1169,8 +1214,8 @@ impl Database {
 
         conn.execute(
             "INSERT INTO friend_requests
-             (id, from_did, to_did, direction, message, from_signing_key, from_encryption_key, from_display_name, created_at, status)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+             (id, from_did, to_did, direction, message, from_signing_key, from_encryption_key, from_display_name, from_avatar, created_at, status)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             params![
                 request.id,
                 request.from_did,
@@ -1180,6 +1225,7 @@ impl Database {
                 request.from_signing_key,
                 request.from_encryption_key,
                 request.from_display_name,
+                request.from_avatar,
                 request.created_at,
                 request.status,
             ],
@@ -1194,7 +1240,7 @@ impl Database {
         let conn = self.conn.lock();
         let mut stmt = conn
             .prepare(
-                "SELECT id, from_did, to_did, direction, message, from_signing_key, from_encryption_key, from_display_name, created_at, status
+                "SELECT id, from_did, to_did, direction, message, from_signing_key, from_encryption_key, from_display_name, from_avatar, created_at, status
                  FROM friend_requests WHERE status = 'pending' AND direction = ?
                  ORDER BY created_at DESC",
             )
@@ -1211,8 +1257,9 @@ impl Database {
                     from_signing_key: row.get(5)?,
                     from_encryption_key: row.get(6)?,
                     from_display_name: row.get(7)?,
-                    created_at: row.get(8)?,
-                    status: row.get(9)?,
+                    from_avatar: row.get(8)?,
+                    created_at: row.get(9)?,
+                    status: row.get(10)?,
                 })
             })
             .map_err(|e| Error::DatabaseError(format!("Failed to query requests: {}", e)))?;
@@ -1230,7 +1277,7 @@ impl Database {
         let conn = self.conn.lock();
         let mut stmt = conn
             .prepare(
-                "SELECT id, from_did, to_did, direction, message, from_signing_key, from_encryption_key, from_display_name, created_at, status
+                "SELECT id, from_did, to_did, direction, message, from_signing_key, from_encryption_key, from_display_name, from_avatar, created_at, status
                  FROM friend_requests WHERE id = ?",
             )
             .map_err(|e| Error::DatabaseError(format!("Failed to prepare query: {}", e)))?;
@@ -1246,8 +1293,9 @@ impl Database {
                     from_signing_key: row.get(5)?,
                     from_encryption_key: row.get(6)?,
                     from_display_name: row.get(7)?,
-                    created_at: row.get(8)?,
-                    status: row.get(9)?,
+                    from_avatar: row.get(8)?,
+                    created_at: row.get(9)?,
+                    status: row.get(10)?,
                 })
             })
             .map_err(|e| Error::DatabaseError(format!("Failed to query request: {}", e)))?;
@@ -4374,6 +4422,8 @@ pub struct FriendRecord {
     pub encryption_key: String,
     /// Status message
     pub status: Option<String>,
+    /// Avatar (base64 image data or URL)
+    pub avatar: Option<String>,
     /// Created timestamp
     pub created_at: i64,
     /// Updated timestamp
@@ -4528,6 +4578,8 @@ pub struct FriendRequestRecord {
     pub from_encryption_key: Option<String>,
     /// Sender's display name
     pub from_display_name: Option<String>,
+    /// Sender's avatar (base64 or URL)
+    pub from_avatar: Option<String>,
     /// Created timestamp
     pub created_at: i64,
     /// Status

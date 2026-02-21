@@ -162,6 +162,16 @@ impl Database {
             sql_bridge_execute_batch(schema::MIGRATE_V12_TO_V13).map_err(js_err)?;
             tracing::info!("Migration v12 → v13 complete");
         }
+        if from_version < 14 {
+            tracing::info!("Running migration v13 → v14 (friend avatars)");
+            sql_bridge_execute_batch(schema::MIGRATE_V13_TO_V14).map_err(js_err)?;
+            tracing::info!("Migration v13 → v14 complete");
+        }
+        if from_version < 15 {
+            tracing::info!("Running migration v14 → v15 (friend request avatars)");
+            sql_bridge_execute_batch(schema::MIGRATE_V14_TO_V15).map_err(js_err)?;
+            tracing::info!("Migration v14 → v15 complete");
+        }
         Ok(())
     }
 
@@ -203,6 +213,7 @@ impl Database {
             signing_key: row["signing_key"].as_str().unwrap_or("").to_string(),
             encryption_key: row["encryption_key"].as_str().unwrap_or("").to_string(),
             status: row["status"].as_str().map(|s| s.to_string()),
+            avatar: row["avatar"].as_str().map(|s| s.to_string()),
             created_at: row["created_at"].as_i64().unwrap_or(0),
             updated_at: row["updated_at"].as_i64().unwrap_or(0),
         }
@@ -312,6 +323,7 @@ impl Database {
             from_signing_key: row["from_signing_key"].as_str().map(|s| s.to_string()),
             from_encryption_key: row["from_encryption_key"].as_str().map(|s| s.to_string()),
             from_display_name: row["from_display_name"].as_str().map(|s| s.to_string()),
+            from_avatar: row["from_avatar"].as_str().map(|s| s.to_string()),
             created_at: row["created_at"].as_i64().unwrap_or(0),
             status: row["status"].as_str().unwrap_or("pending").to_string(),
         }
@@ -324,11 +336,17 @@ impl Database {
     /// Add a new friend to the database
     pub fn add_friend(&self, did: &str, display_name: &str, signing_key: &[u8; 32],
                       encryption_key: &[u8; 32], status: Option<&str>) -> Result<i64> {
+        self.add_friend_with_avatar(did, display_name, signing_key, encryption_key, status, None)
+    }
+
+    /// Add a new friend with optional avatar
+    pub fn add_friend_with_avatar(&self, did: &str, display_name: &str, signing_key: &[u8; 32],
+                      encryption_key: &[u8; 32], status: Option<&str>, avatar: Option<&str>) -> Result<i64> {
         let now = crate::time::now_timestamp();
         self.exec(
-            "INSERT INTO friends (did, display_name, signing_key, encryption_key, status, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?, ?)",
-            json!([did, display_name, hex::encode(signing_key), hex::encode(encryption_key), status, now, now]),
+            "INSERT INTO friends (did, display_name, signing_key, encryption_key, status, avatar, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            json!([did, display_name, hex::encode(signing_key), hex::encode(encryption_key), status, avatar, now, now]),
         )?;
         let id: Option<i64> = self.query_scalar("SELECT last_insert_rowid()", json!([]))?;
         Ok(id.unwrap_or(0))
@@ -337,7 +355,7 @@ impl Database {
     /// Get a friend by DID
     pub fn get_friend(&self, did: &str) -> Result<Option<FriendRecord>> {
         let rows = self.query(
-            "SELECT id, did, display_name, signing_key, encryption_key, status, created_at, updated_at FROM friends WHERE did = ?",
+            "SELECT id, did, display_name, signing_key, encryption_key, status, avatar, created_at, updated_at FROM friends WHERE did = ?",
             json!([did]),
         )?;
         Ok(rows.first().map(Self::parse_friend))
@@ -346,7 +364,7 @@ impl Database {
     /// Get all friends
     pub fn get_all_friends(&self) -> Result<Vec<FriendRecord>> {
         let rows = self.query(
-            "SELECT id, did, display_name, signing_key, encryption_key, status, created_at, updated_at FROM friends ORDER BY display_name",
+            "SELECT id, did, display_name, signing_key, encryption_key, status, avatar, created_at, updated_at FROM friends ORDER BY display_name",
             json!([]),
         )?;
         Ok(rows.iter().map(Self::parse_friend).collect())
@@ -367,6 +385,16 @@ impl Database {
             self.exec("UPDATE friends SET status = ?, updated_at = ? WHERE did = ?",
                 json!([status, now, did]))?
         };
+        Ok(affected > 0)
+    }
+
+    /// Update a friend's avatar
+    pub fn update_friend_avatar(&self, did: &str, avatar: Option<&str>) -> Result<bool> {
+        let now = crate::time::now_timestamp();
+        let affected = self.exec(
+            "UPDATE friends SET avatar = ?, updated_at = ? WHERE did = ?",
+            json!([avatar, now, did]),
+        )?;
         Ok(affected > 0)
     }
 
@@ -454,6 +482,12 @@ impl Database {
             }
         }
         Ok(counts)
+    }
+
+    /// Mark a single message as sent (relay confirmed receipt).
+    /// This is a logical status update — no DB column change needed.
+    pub fn mark_message_sent(&self, _message_id: &str) -> Result<()> {
+        Ok(())
     }
 
     /// Mark a single message as delivered
@@ -776,8 +810,8 @@ impl Database {
     /// Store a friend request
     pub fn store_friend_request(&self, r: &FriendRequestRecord) -> Result<()> {
         self.exec(
-            "INSERT INTO friend_requests (id, from_did, to_did, direction, message, from_signing_key, from_encryption_key, from_display_name, created_at, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            json!([r.id, r.from_did, r.to_did, r.direction, r.message, r.from_signing_key, r.from_encryption_key, r.from_display_name, r.created_at, r.status]),
+            "INSERT INTO friend_requests (id, from_did, to_did, direction, message, from_signing_key, from_encryption_key, from_display_name, from_avatar, created_at, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            json!([r.id, r.from_did, r.to_did, r.direction, r.message, r.from_signing_key, r.from_encryption_key, r.from_display_name, r.from_avatar, r.created_at, r.status]),
         )?;
         Ok(())
     }
@@ -785,7 +819,7 @@ impl Database {
     /// Get pending friend requests
     pub fn get_pending_requests(&self, direction: &str) -> Result<Vec<FriendRequestRecord>> {
         let rows = self.query(
-            "SELECT id, from_did, to_did, direction, message, from_signing_key, from_encryption_key, from_display_name, created_at, status
+            "SELECT id, from_did, to_did, direction, message, from_signing_key, from_encryption_key, from_display_name, from_avatar, created_at, status
              FROM friend_requests WHERE status = 'pending' AND direction = ? ORDER BY created_at DESC",
             json!([direction]),
         )?;
@@ -795,7 +829,7 @@ impl Database {
     /// Get a friend request by ID
     pub fn get_friend_request(&self, id: &str) -> Result<Option<FriendRequestRecord>> {
         let rows = self.query(
-            "SELECT id, from_did, to_did, direction, message, from_signing_key, from_encryption_key, from_display_name, created_at, status
+            "SELECT id, from_did, to_did, direction, message, from_signing_key, from_encryption_key, from_display_name, from_avatar, created_at, status
              FROM friend_requests WHERE id = ?",
             json!([id]),
         )?;
@@ -3364,6 +3398,8 @@ pub struct FriendRecord {
     pub encryption_key: String,
     /// Status message
     pub status: Option<String>,
+    /// Avatar (base64 image data or URL)
+    pub avatar: Option<String>,
     /// Created timestamp
     pub created_at: i64,
     /// Updated timestamp
@@ -3538,6 +3574,8 @@ pub struct FriendRequestRecord {
     pub from_encryption_key: Option<String>,
     /// Sender's display name
     pub from_display_name: Option<String>,
+    /// Sender's avatar (base64 or URL)
+    pub from_avatar: Option<String>,
     /// Created timestamp
     pub created_at: i64,
     /// Status

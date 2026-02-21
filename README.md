@@ -370,9 +370,13 @@ Environment variables:
 
 ### Prerequisites
 
-- **Node.js** 20+
-- **Rust** 1.75+ (for building umbra-core)
-- **[wasm-pack][wasm-pack]** (for WASM builds)
+All platforms need these base dependencies:
+
+| Dependency | Version | Install |
+|------------|---------|---------|
+| **Node.js** | 20+ | [nodejs.org](https://nodejs.org/) or `brew install node` |
+| **Rust** | 1.75+ | `curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs \| sh` |
+| **Yarn** | 1.x | `npm install -g yarn` |
 
 ### Setup
 
@@ -382,31 +386,185 @@ git clone https://github.com/InfamousVague/Umbra.git
 cd Umbra
 
 # Install dependencies
-npm install
+yarn install
 
-# Start development server
+# Start web development server
 npm run web
 ```
 
-### Building
+---
+
+### Running on iOS
+
+#### iOS Dependencies
+
+| Dependency | Version | Install | Notes |
+|------------|---------|---------|-------|
+| **Xcode** | 15+ | Mac App Store | Includes Simulator, `xcodebuild`, and Apple SDKs |
+| **Xcode Command Line Tools** | — | `xcode-select --install` | Required for `xcodebuild` CLI |
+| **CocoaPods** | 1.14+ | `sudo gem install cocoapods` | Manages native iOS dependencies |
+| **Rust iOS targets** | — | See below | Cross-compilation targets for ARM64 |
+| **Apple Developer Account** | — | [developer.apple.com](https://developer.apple.com/) | Required for device builds (free tier works) |
+
+#### Install Rust iOS targets
 
 ```bash
-# Build WASM core
+rustup target add aarch64-apple-ios          # Physical devices (iPhone, iPad)
+rustup target add aarch64-apple-ios-sim      # Simulator (Apple Silicon Macs)
+```
+
+#### Build & Run (Simulator)
+
+```bash
+# 1. Build the Rust core as an XCFramework for iOS Simulator
+npm run build:mobile:ios:sim
+
+# 2. Generate native iOS project and launch Simulator
+npm run run:ios:sim
+```
+
+This will:
+- Compile `umbra-core` with `--features ffi` for `aarch64-apple-ios-sim`
+- Bundle it into `modules/expo-umbra-core/ios/UmbraCore.xcframework/`
+- Run `expo prebuild --clean` to generate the Xcode project
+- Open the app in iOS Simulator
+
+#### Build & Run (Physical Device)
+
+```bash
+# 1. Build the Rust core as an XCFramework for iOS device
+npm run build:mobile:ios
+
+# 2. Generate native project and run on connected device
+npm run run:ios
+```
+
+> **Note:** Running on a physical device requires a valid signing identity. Open the generated Xcode project at `ios/Umbra.xcworkspace` to configure your team and provisioning profile if needed.
+
+#### iOS Build Summary
+
+| Command | What it does |
+|---------|-------------|
+| `npm run build:mobile:ios` | Builds Rust XCFramework for device (`aarch64-apple-ios`) |
+| `npm run build:mobile:ios:sim` | Builds Rust XCFramework for Simulator (`aarch64-apple-ios-sim`) |
+| `npm run run:ios` | Full pipeline: build Rust + prebuild + launch on device |
+| `npm run run:ios:sim` | Full pipeline: build Rust + prebuild + launch in Simulator |
+| `npm run prebuild` | Regenerate native project without rebuilding Rust |
+
+---
+
+### Running on Desktop (Tauri)
+
+Umbra uses [Tauri v2][tauri] for desktop builds. Tauri wraps the Expo web bundle in a native window with Rust-powered backend commands.
+
+#### Desktop Dependencies
+
+| Dependency | Version | Install | Notes |
+|------------|---------|---------|-------|
+| **Tauri CLI** | 2.x | Included in `devDependencies` | Runs via `npx tauri` |
+| **Xcode** (macOS) | 15+ | Mac App Store | Needed for native compilation |
+| **create-dmg** (macOS) | — | `brew install create-dmg` | Only needed for `.dmg` installer builds |
+| **MSVC Build Tools** (Windows) | 2019+ | [Visual Studio](https://visualstudio.microsoft.com/) | Select "Desktop development with C++" |
+| **WebView2** (Windows) | — | Pre-installed on Windows 10/11 | Runtime for Tauri windows |
+| **System libs** (Linux) | — | See below | GTK, WebKit, and other system libraries |
+
+<details>
+<summary><strong>Linux system dependencies</strong></summary>
+
+```bash
+# Debian / Ubuntu
+sudo apt install -y \
+  libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev \
+  librsvg2-dev patchelf libssl-dev wget curl
+
+# Fedora
+sudo dnf install -y \
+  webkit2gtk4.1-devel gtk3-devel libappindicator-gtk3-devel \
+  librsvg2-devel patchelf openssl-devel
+
+# Arch
+sudo pacman -S --needed \
+  webkit2gtk-4.1 gtk3 libappindicator-gtk3 librsvg patchelf openssl
+```
+
+</details>
+
+#### Desktop Dev Mode (Hot Reload)
+
+```bash
+# Launch with hot reload — changes to the UI update live
+npm run build:desktop:dev
+```
+
+This runs `npx tauri dev`, which:
+- Starts the Expo web dev server
+- Opens a native Tauri window pointed at the dev server
+- Rebuilds Rust code on changes to `src-tauri/`
+
+#### Desktop Production Build
+
+```bash
+# Build for current platform
+npm run build:desktop
+
+# Platform-specific builds
+npm run build:mac           # macOS .dmg + .app (Apple Silicon)
+npm run build:win           # Windows .exe + .msi
+npm run build:linux         # Linux .deb + .AppImage
+```
+
+The build pipeline:
+1. Exports the Expo web bundle (`npx expo export --platform web`)
+2. Compiles the Tauri Rust backend (`cargo build --release`)
+3. Packages the installer for the target platform
+
+Build output is at `src-tauri/target/release/bundle/`.
+
+#### Desktop Build Summary
+
+| Command | Output | Target |
+|---------|--------|--------|
+| `npm run build:desktop:dev` | Dev window with hot reload | Current platform |
+| `npm run build:desktop` | Production installer | Current platform |
+| `npm run build:mac` | `.dmg`, `.app` | `aarch64-apple-darwin` |
+| `npm run build:win` | `.exe`, `.msi` | `x86_64-pc-windows-msvc` |
+| `npm run build:linux` | `.deb`, `.AppImage` | `x86_64-unknown-linux-gnu` |
+
+---
+
+### Building WASM (Web)
+
+The web app uses the Rust core compiled to WebAssembly.
+
+```bash
+# Install wasm-pack (first time only)
+cargo install wasm-pack
+rustup target add wasm32-unknown-unknown
+
+# Build WASM
 npm run build:wasm
 
-# Build web app
+# Build web app for production
 npm run build:web
-
-# Build desktop apps (requires Tauri CLI)
-npm run build:desktop       # All platforms
-npm run build:mac           # macOS only
-npm run build:win           # Windows only
-npm run build:linux         # Linux only
-
-# Build relay server
-cd packages/umbra-relay
-cargo build --release
 ```
+
+`build:wasm` compiles `umbra-core` with `--features wasm` and copies the output to `public/` where the Expo web server serves it.
+
+---
+
+### Running on Android
+
+```bash
+# Install Rust Android targets
+rustup target add aarch64-linux-android
+
+# Build Rust core + run on connected device
+npm run run:android
+```
+
+> Requires Android Studio with SDK 34+ and NDK installed.
+
+---
 
 ### Testing
 
@@ -421,9 +579,10 @@ npm run test:coverage
 npm run test:e2e
 
 # Test relay server
-cd packages/umbra-relay
-cargo test
+cd packages/umbra-relay && cargo test
 ```
+
+---
 
 ### Project Structure
 
@@ -435,15 +594,22 @@ Umbra/
 ├── components/             # React components
 ├── contexts/               # React Context providers
 ├── hooks/                  # Custom React hooks
+├── modules/
+│   └── expo-umbra-core/    # Expo native module (Swift/Kotlin FFI bridge)
+│       └── ios/            # UmbraCore.xcframework lives here
 ├── packages/
-│   ├── umbra-core/         # Rust core (crypto, networking)
+│   ├── umbra-core/         # Rust core (crypto, networking, storage)
 │   ├── umbra-service/      # TypeScript API layer
-│   ├── umbra-wasm/         # WASM bridge
-│   ├── umbra-relay/        # Relay server
+│   ├── umbra-wasm/         # WASM bridge + RN backend adapter
+│   ├── umbra-relay/        # Relay server (Rust)
 │   ├── umbra-plugin-sdk/   # Plugin development kit
-│   └── umbra-plugin-runtime/ # Plugin execution
-├── src-tauri/              # Tauri desktop shell
+│   └── umbra-plugin-runtime/ # Plugin sandbox + marketplace
+├── src-tauri/              # Tauri v2 desktop shell (Rust)
 ├── scripts/                # Build & deploy scripts
+│   ├── build-mobile.sh     # iOS/Android Rust → XCFramework
+│   ├── build-desktop.sh    # Tauri production builds
+│   ├── build-wasm.sh       # wasm-pack build
+│   └── deploy.sh           # Relay server deployment
 └── infra/                  # Infrastructure configs
     └── coturn/             # TURN server config
 ```

@@ -64,10 +64,8 @@ export function useTyping(
 
         setTypingUsers((prev) => {
           const next = new Map(prev);
-          // We don't have the name in the event, use DID as fallback
-          if (!next.has(did)) {
-            next.set(did, did.slice(0, 12) + '...');
-          }
+          // Use sender name from the typing event, fall back to short DID
+          next.set(did, event.senderName || prev.get(did) || did.slice(0, 12) + '...');
           return next;
         });
 

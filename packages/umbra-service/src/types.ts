@@ -116,6 +116,8 @@ export interface FriendRequest {
   message?: string;
   /** Sender's display name */
   fromDisplayName?: string;
+  /** Sender's avatar (base64 image data or URL) */
+  fromAvatar?: string;
   /** Sender's signing key (hex) */
   fromSigningKey?: string;
   /** Sender's encryption key (hex) */
@@ -360,8 +362,8 @@ export type MessageEvent =
   | { type: 'reactionRemoved'; messageId: string; emoji: string; userDid: string }
   | { type: 'messagePinned'; messageId: string; pinnedBy: string; pinnedAt: number }
   | { type: 'messageUnpinned'; messageId: string }
-  | { type: 'typingStarted'; conversationId: string; did: string }
-  | { type: 'typingStopped'; conversationId: string; did: string }
+  | { type: 'typingStarted'; conversationId: string; did: string; senderName?: string }
+  | { type: 'typingStopped'; conversationId: string; did: string; senderName?: string }
   // DM file sharing events
   | { type: 'fileShared'; conversationId: string; message: Message }
   | { type: 'sharedFolderCreated'; conversationId: string; folder: DmSharedFolderRecord }
@@ -463,7 +465,9 @@ export type RelayEnvelope =
   | { envelope: 'call_state'; version: 1; payload: any }
   | { envelope: 'community_event'; version: 1; payload: CommunityEventPayload }
   | { envelope: 'dm_file_event'; version: 1; payload: DmFileEventPayload }
-  | { envelope: 'account_metadata'; version: 1; payload: AccountMetadataPayload };
+  | { envelope: 'account_metadata'; version: 1; payload: AccountMetadataPayload }
+  | { envelope: 'presence_online'; version: 1; payload: { timestamp: number } }
+  | { envelope: 'presence_ack'; version: 1; payload: { timestamp: number } };
 
 /**
  * Payload for account metadata sync across sessions.
@@ -510,6 +514,8 @@ export interface FriendRequestPayload {
   fromDid: string;
   /** Sender's display name */
   fromDisplayName?: string;
+  /** Sender's avatar (base64 image data or URL) */
+  fromAvatar?: string;
   /** Sender's signing key (hex) */
   fromSigningKey?: string;
   /** Sender's encryption key (hex) */
@@ -530,6 +536,8 @@ export interface FriendResponsePayload {
   fromDid: string;
   /** Responder's display name */
   fromDisplayName?: string;
+  /** Responder's avatar (base64 image data or URL) */
+  fromAvatar?: string;
   /** Responder's signing key (hex) */
   fromSigningKey?: string;
   /** Responder's encryption key (hex) */

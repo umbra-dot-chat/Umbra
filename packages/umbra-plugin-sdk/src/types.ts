@@ -55,7 +55,7 @@ export interface PluginManifest {
 // =============================================================================
 
 /** Supported target platforms */
-export type PluginPlatform = 'web' | 'desktop';
+export type PluginPlatform = 'web' | 'desktop' | 'mobile';
 
 /**
  * Fine-grained permission tokens.

@@ -26,6 +26,8 @@ import { searchByUsername, searchUsernames, lookupUsername } from '@umbra/servic
 import type { Friend, FriendRequest, DiscoverySearchResult, UsernameSearchResult } from '@umbra/service';
 import { useSound } from '@/contexts/SoundContext';
 import { MobileBackButton } from '@/components/ui/MobileBackButton';
+import { useIsMobile } from '@/hooks/useIsMobile';
+import { useNetwork } from '@/hooks/useNetwork';
 
 // ---------------------------------------------------------------------------
 // Search Platform Selector
@@ -55,8 +57,8 @@ const PLATFORM_LABELS: Record<Exclude<SearchPlatform, 'umbra'>, string> = {
 
 type FriendStatus = 'online' | 'idle' | 'dnd' | 'offline';
 
-function getFriendStatus(friend: Friend): FriendStatus {
-  return friend.online ? 'online' : 'offline';
+function getFriendStatus(friend: Friend, onlineDids?: Set<string>): FriendStatus {
+  return (onlineDids ? onlineDids.has(friend.did) : friend.online) ? 'online' : 'offline';
 }
 
 /** Map app-level status to Wisp Avatar status values. */
@@ -93,6 +95,7 @@ export default function FriendsPage() {
   const { theme } = useTheme();
   const router = useRouter();
   const { playSound } = useSound();
+  const isMobile = useIsMobile();
   const {
     friends,
     incomingRequests,
@@ -103,6 +106,7 @@ export default function FriendsPage() {
     rejectRequest,
     unblockUser,
   } = useFriends();
+  const { onlineDids } = useNetwork();
 
   const [activeTab, setActiveTab] = useState('all');
   const handleTabChange = useCallback((tab: string) => {
@@ -253,9 +257,9 @@ export default function FriendsPage() {
     }
   }, [sendRequest, playSound]);
 
-  // Group friends by status
-  const onlineFriends = friends.filter((f) => f.online);
-  const offlineFriends = friends.filter((f) => !f.online);
+  // Group friends by status (enriched with relay presence data)
+  const onlineFriends = friends.filter((f) => onlineDids.has(f.did));
+  const offlineFriends = friends.filter((f) => !onlineDids.has(f.did));
 
   const iconColor = theme.colors.text.secondary;
 
@@ -352,8 +356,8 @@ export default function FriendsPage() {
       key={friend.did}
       name={friend.displayName}
       username={friend.did.slice(0, 20) + '...'}
-      avatar={<Avatar name={friend.displayName} size="md" status={toAvatarStatus(getFriendStatus(friend))} />}
-      status={getFriendStatus(friend)}
+      avatar={<Avatar name={friend.displayName} src={friend.avatar} size="md" status={toAvatarStatus(getFriendStatus(friend, onlineDids))} />}
+      status={getFriendStatus(friend, onlineDids)}
       statusText={friend.status}
       actions={friendActions(friend.did)}
       flat
@@ -365,7 +369,7 @@ export default function FriendsPage() {
       key={req.id}
       name={req.fromDisplayName || req.fromDid.slice(0, 20) + '...'}
       username={req.fromDid.slice(0, 20) + '...'}
-      avatar={<Avatar name={req.fromDisplayName || 'Unknown'} size="md" />}
+      avatar={<Avatar name={req.fromDisplayName || 'Unknown'} src={req.fromAvatar} size="md" />}
       type="incoming"
       timestamp={formatRelativeTime(req.createdAt)}
       onAccept={() => handleAcceptRequest(req.id)}
@@ -374,18 +378,23 @@ export default function FriendsPage() {
     />
   );
 
-  const renderOutgoingRequest = (req: FriendRequest) => (
-    <FriendRequestItem
-      key={req.id}
-      name={req.fromDisplayName || req.toDid.slice(0, 20) + '...'}
-      username={req.toDid.slice(0, 20) + '...'}
-      avatar={<Avatar name={req.fromDisplayName || 'Unknown'} size="md" />}
-      type="outgoing"
-      timestamp={formatRelativeTime(req.createdAt)}
-      onCancel={() => handleCancelRequest(req.id)}
-      flat
-    />
-  );
+  const renderOutgoingRequest = (req: FriendRequest) => {
+    // For outgoing requests, fromDisplayName is OUR name (the sender).
+    // Show the recipient's DID since we don't have their display name.
+    const recipientLabel = req.toDid.slice(0, 20) + '...';
+    return (
+      <FriendRequestItem
+        key={req.id}
+        name={recipientLabel}
+        username={req.toDid.slice(0, 20) + '...'}
+        avatar={<Avatar name={recipientLabel} size="md" />}
+        type="outgoing"
+        timestamp={formatRelativeTime(req.createdAt)}
+        onCancel={() => handleCancelRequest(req.id)}
+        flat
+      />
+    );
+  };
 
   if (isLoading) {
     return (
@@ -397,7 +406,7 @@ export default function FriendsPage() {
 
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.background.canvas }}>
-      <Tabs value={activeTab} onChange={handleTabChange}>
+      <Tabs value={activeTab} onChange={handleTabChange} style={{ flex: 1 }}>
         {/* Header bar with title + tabs */}
         <View
           style={{
@@ -409,13 +418,13 @@ export default function FriendsPage() {
             borderBottomColor: theme.colors.border.subtle,
           }}
         >
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginRight: 24, paddingBottom: 12 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginRight: isMobile ? 12 : 24, paddingBottom: 12 }}>
             <MobileBackButton onPress={() => router.back()} label="Back to conversations" />
             <UsersIcon size={20} color={theme.colors.text.primary} />
-            <Text size="lg" weight="bold">Friends</Text>
+            {!isMobile && <Text size="lg" weight="bold">Friends</Text>}
           </View>
 
-          <TabList style={{ marginBottom: -1 }}>
+          <TabList style={{ marginBottom: -1, borderBottomWidth: 0 }}>
             <Tab value="all">All</Tab>
             <Tab value="online">Online</Tab>
             <Tab value="pending" badge={incomingRequests.length > 0 ? incomingRequests.length : undefined}>
@@ -426,7 +435,7 @@ export default function FriendsPage() {
         </View>
 
         {/* ─── All Friends ─── */}
-        <TabPanel value="all">
+        <TabPanel value="all" style={{ flex: 1 }}>
           <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }}>
             <ProfileCard style={{ marginBottom: 12 }} />
             <View style={{ marginBottom: 16 }}>
@@ -596,7 +605,7 @@ export default function FriendsPage() {
         </TabPanel>
 
         {/* ─── Online ─── */}
-        <TabPanel value="online">
+        <TabPanel value="online" style={{ flex: 1 }}>
           <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }}>
             {onlineFriends.length > 0 ? (
               <FriendSection title="Online" count={onlineFriends.length}>
@@ -613,7 +622,7 @@ export default function FriendsPage() {
         </TabPanel>
 
         {/* ─── Pending ─── */}
-        <TabPanel value="pending">
+        <TabPanel value="pending" style={{ flex: 1 }}>
           <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }}>
             <ProfileCard style={{ marginBottom: 12 }} />
             <View style={{ marginBottom: 16 }}>
@@ -776,7 +785,7 @@ export default function FriendsPage() {
         </TabPanel>
 
         {/* ─── Blocked ─── */}
-        <TabPanel value="blocked">
+        <TabPanel value="blocked" style={{ flex: 1 }}>
           <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }}>
             <FriendSection
               title="Blocked Users"

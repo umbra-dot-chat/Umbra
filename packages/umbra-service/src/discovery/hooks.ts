@@ -8,6 +8,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Platform as RNPlatform } from 'react-native';
+import * as WebBrowser from 'expo-web-browser';
 
 import * as api from './api';
 import type {
@@ -136,7 +137,7 @@ export function useLinkedAccounts(did: string | null) {
         setError(null);
 
         // Use profile import OAuth with DID — relay will auto-link the account
-        const { redirectUrl } = await api.startProfileImport(platform, did);
+        const { redirectUrl, state } = await api.startProfileImport(platform, did);
 
         if (RNPlatform.OS === 'web') {
           // Open OAuth in popup
@@ -163,11 +164,36 @@ export function useLinkedAccounts(did: string | null) {
             }, 500);
           });
         } else {
-          // For native, open in system browser and refresh on return
-          const { Linking } = await import('react-native');
-          await Linking.openURL(redirectUrl);
-          await fetchStatus();
-          return true;
+          // For native, use expo-web-browser + poll for result
+          await WebBrowser.openBrowserAsync(redirectUrl, {
+            dismissButtonStyle: 'cancel',
+            presentationStyle: WebBrowser.WebBrowserPresentationStyle.FULL_SCREEN,
+          });
+
+          // Browser closed — poll relay for the OAuth result
+          const relayUrl = api.getRelayUrl();
+          const pollUrl = `${relayUrl}/profile/import/result/${state}`;
+          let attempts = 0;
+          const maxAttempts = 15;
+          while (attempts < maxAttempts) {
+            attempts++;
+            try {
+              const res = await fetch(pollUrl);
+              if (res.ok) {
+                const result = await res.json();
+                if (result.success && result.profile) {
+                  await fetchStatus();
+                  setIsLoading(false);
+                  return true;
+                }
+              }
+            } catch {
+              // Network error, keep polling
+            }
+            await new Promise((r) => setTimeout(r, 1000));
+          }
+          setIsLoading(false);
+          return false;
         }
       } catch (err) {
         const error = err instanceof Error ? err : new Error(String(err));

@@ -7,6 +7,7 @@ import {
   useTheme,
 } from '@coexist/wisp-react-native';
 import { useFriends } from '@/hooks/useFriends';
+import { useNetwork } from '@/hooks/useNetwork';
 import { usePlugins } from '@/contexts/PluginContext';
 import { UsersIcon, SearchIcon, SettingsIcon, MessageIcon, ZapIcon, DownloadIcon } from '@/components/icons';
 
@@ -31,6 +32,7 @@ const Download = DownloadIcon as IconComponent;
 export function CommandPalette({ open, onOpenChange, onOpenSettings, onOpenMarketplace, onSearchMessages }: CommandPaletteProps) {
   const router = useRouter();
   const { friends } = useFriends();
+  const { onlineDids } = useNetwork();
   const { pluginCommands } = usePlugins();
   const { mode } = useTheme();
 
@@ -124,7 +126,7 @@ export function CommandPalette({ open, onOpenChange, onOpenSettings, onOpenMarke
                   value={`user:${f.did}`}
                   keywords={[f.displayName, f.displayName.toLowerCase().replace(/\s/g, '')]}
                   icon={Users}
-                  description={f.online ? 'online' : 'offline'}
+                  description={onlineDids.has(f.did) ? 'online' : 'offline'}
                 >
                   {f.displayName}
                 </CommandItem>

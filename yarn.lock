@@ -2068,9 +2068,9 @@
 "@umbra/plugin-runtime@file:packages/umbra-plugin-runtime":
   version "0.1.0"
   dependencies:
-    "@umbra/plugin-sdk" "file:../../Library/Caches/Yarn/v6/npm-@umbra-plugin-runtime-0.1.0-689b267c-e73d-45b3-9518-1720acc4bf6b-1771560315625/node_modules/@umbra/umbra-plugin-sdk"
-    "@umbra/service" "file:../../Library/Caches/Yarn/v6/npm-@umbra-plugin-runtime-0.1.0-689b267c-e73d-45b3-9518-1720acc4bf6b-1771560315625/node_modules/@umbra/umbra-service"
-    "@umbra/wasm" "file:../../Library/Caches/Yarn/v6/npm-@umbra-plugin-runtime-0.1.0-689b267c-e73d-45b3-9518-1720acc4bf6b-1771560315625/node_modules/@umbra/umbra-wasm"
+    "@umbra/plugin-sdk" "file:../../Library/Caches/Yarn/v6/npm-@umbra-plugin-runtime-0.1.0-a724e9a9-5b53-4c3c-ae5c-a5a55c4c8dd7-1771662495508/node_modules/@umbra/umbra-plugin-sdk"
+    "@umbra/service" "file:../../Library/Caches/Yarn/v6/npm-@umbra-plugin-runtime-0.1.0-a724e9a9-5b53-4c3c-ae5c-a5a55c4c8dd7-1771662495508/node_modules/@umbra/umbra-service"
+    "@umbra/wasm" "file:../../Library/Caches/Yarn/v6/npm-@umbra-plugin-runtime-0.1.0-a724e9a9-5b53-4c3c-ae5c-a5a55c4c8dd7-1771662495508/node_modules/@umbra/umbra-wasm"
 
 "@umbra/plugin-sdk@file:packages/umbra-plugin-sdk":
   version "0.1.0"
@@ -2078,7 +2078,7 @@
 "@umbra/service@file:packages/umbra-service":
   version "0.1.0"
   dependencies:
-    "@umbra/wasm" "file:../../Library/Caches/Yarn/v6/npm-@umbra-service-0.1.0-3d6bc22c-652e-41b2-8e79-82e1f1b26c7a-1771560315626/node_modules/@umbra/umbra-wasm"
+    "@umbra/wasm" "file:../../Library/Caches/Yarn/v6/npm-@umbra-service-0.1.0-5db2f7cb-664b-4886-b706-bee445b71580-1771662495511/node_modules/@umbra/umbra-wasm"
     jszip "^3.10.1"
 
 "@umbra/wasm@file:packages/umbra-wasm":
@@ -3227,6 +3227,13 @@ expo-asset@~12.0.12:
     "@expo/image-utils" "^0.8.8"
     expo-constants "~18.0.12"
 
+expo-camera@~17.0.10:
+  version "17.0.10"
+  resolved "https://registry.yarnpkg.com/expo-camera/-/expo-camera-17.0.10.tgz#b3a217f0eb811a6e3522c2aff9f42be578aa6456"
+  integrity sha512-w1RBw83mAGVk4BPPwNrCZyFop0VLiVSRE3c2V9onWbdFwonpRhzmB4drygG8YOUTl1H3wQvALJHyMPTbgsK1Jg==
+  dependencies:
+    invariant "^2.2.4"
+
 expo-clipboard@~8.0.8:
   version "8.0.8"
   resolved "https://registry.npmjs.org/expo-clipboard/-/expo-clipboard-8.0.8.tgz"
@@ -3330,6 +3337,9 @@ expo-status-bar@~3.0.9:
   integrity sha512-xyYyVg6V1/SSOZWh4Ni3U129XHCnFHBTcUo0dhWtFDrZbNp/duw5AGsQfb2sVeU0gxWHXSY1+5F0jnKYC7WuOw==
   dependencies:
     react-native-is-edge-to-edge "^1.2.1"
+
+"expo-umbra-core@file:modules/expo-umbra-core":
+  version "0.1.0"
 
 expo-web-browser@~15.0.10:
   version "15.0.10"

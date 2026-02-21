@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { Platform, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text, useTheme, E2EEKeyExchangeUI } from '@coexist/wisp-react-native';
 import { useHoverMessage } from '@/hooks/useHoverMessage';
 import { useRightPanel } from '@/hooks/useRightPanel';
@@ -28,6 +29,7 @@ import { InputDialog } from '@/components/community/InputDialog';
 import { useSettingsDialog } from '@/contexts/SettingsDialogContext';
 import { ResizeHandle } from '@/components/ui/ResizeHandle';
 import { useAllCustomEmoji } from '@/hooks/useAllCustomEmoji';
+import { useNetwork } from '@/hooks/useNetwork';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Empty conversation state
@@ -72,11 +74,13 @@ export default function ChatPage() {
   const { identity } = useAuth();
   const { service } = useUmbra();
   const myDid = identity?.did ?? '';
+  const insets = Platform.OS !== 'web' ? useSafeAreaInsets() : { top: 0, bottom: 0 };
 
   // Data hooks
   const { conversations, isLoading: convsLoading } = useConversations();
   const { friends } = useFriends();
   const { groups, getMembers } = useGroups();
+  const { onlineDids } = useNetwork();
 
   // Build DID → display name and DID → avatar maps from the friends list
   const friendNames = useMemo(() => {
@@ -215,10 +219,10 @@ export default function ChatPage() {
         ? (friendNames[activeConversation.friendDid] || activeConversation.friendDid.slice(0, 16) + '...')
         : 'Chat',
       online: activeConversation.friendDid
-        ? friends.find((f) => f.did === activeConversation.friendDid)?.online
+        ? onlineDids.has(activeConversation.friendDid)
         : undefined,
     };
-  }, [activeConversation, groups, friendNames, friends, activeMemberCount]);
+  }, [activeConversation, groups, friendNames, onlineDids, activeMemberCount]);
 
   // Handle sending a message (or editing)
   const handleSubmit = useCallback(async (msg: string) => {
@@ -409,7 +413,11 @@ export default function ChatPage() {
 
   return (
     <View style={{ flex: 1, flexDirection: 'row' }}>
-      <View style={{ flex: 1, flexDirection: 'column' }}>
+      <KeyboardAvoidingView
+        style={{ flex: 1, flexDirection: 'column' }}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
+      >
         <ChatHeader
           active={activeHeaderInfo}
           rightPanel={rightPanel}
@@ -494,7 +502,7 @@ export default function ChatPage() {
             }
           }}
         />
-      </View>
+      </KeyboardAvoidingView>
 
       {rightPanel && <ResizeHandle onResize={resizePanel} />}
       <RightPanel
@@ -502,7 +510,7 @@ export default function ChatPage() {
         visiblePanel={visiblePanel}
         togglePanel={togglePanel}
         onMemberClick={(member, event) => {
-          showProfile(member.name, event);
+          showProfile(member.name, event, member.status === 'online' ? 'online' : 'offline');
         }}
         searchQuery={searchQuery}
         onSearchQueryChange={setSearchQuery}

@@ -421,6 +421,7 @@ mod tests {
             discord_redirect_uri: None,
             discord_profile_import_redirect_uri: None,
             discord_community_import_redirect_uri: None,
+            discord_bot_token: None,
             github_client_id: None,
             github_client_secret: None,
             github_redirect_uri: None,

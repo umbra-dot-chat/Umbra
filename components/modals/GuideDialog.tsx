@@ -3,11 +3,16 @@
  *
  * Organised into chapters on the left with scrollable content on
  * the right, mirroring the familiar Settings dialog layout.
+ *
+ * On narrow screens (< 600px) the sidebar collapses into a
+ * horizontal chapter picker strip at the top, and the modal
+ * becomes full-screen for easier reading on mobile devices.
  */
 
 import React, { useState, useMemo, useCallback } from 'react';
-import { View, Pressable, ScrollView, Text as RNText } from 'react-native';
+import { View, Pressable, ScrollView, Text as RNText, Platform, useWindowDimensions } from 'react-native';
 import type { ViewStyle } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Overlay, useTheme } from '@coexist/wisp-react-native';
 import {
   BookOpenIcon,
@@ -81,6 +86,9 @@ const CHAPTERS: ChapterItem[] = [
   { id: 'technical', label: 'Tech Reference', icon: SettingsIcon, color: '#6366F1' },
 ];
 
+/** Breakpoint below which we use the compact mobile layout. */
+const MOBILE_BREAKPOINT = 600;
+
 // ---------------------------------------------------------------------------
 // GuideDialog
 // ---------------------------------------------------------------------------
@@ -89,29 +97,40 @@ export function GuideDialog({ open, onClose }: GuideDialogProps) {
   const { theme, mode } = useTheme();
   const tc = theme.colors;
   const isDark = mode === 'dark';
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const isMobile = windowWidth < MOBILE_BREAKPOINT;
+  const safeInsets = Platform.OS !== 'web' ? useSafeAreaInsets() : { top: 0, bottom: 0, left: 0, right: 0 };
   const [activeChapter, setActiveChapter] = useState<Chapter>('getting-started');
 
   // -- Styles ----------------------------------------------------------------
 
   const modalStyle = useMemo<ViewStyle>(
-    () => ({
-      width: 860,
-      maxWidth: '95%',
-      height: 600,
-      maxHeight: '90%',
-      flexDirection: 'row',
-      borderRadius: 16,
-      overflow: 'hidden',
-      backgroundColor: isDark ? tc.background.raised : tc.background.canvas,
-      borderWidth: isDark ? 1 : 0,
-      borderColor: isDark ? tc.border.subtle : 'transparent',
-      shadowColor: '#000',
-      shadowOffset: { width: 0, height: 12 },
-      shadowOpacity: isDark ? 0.6 : 0.25,
-      shadowRadius: 32,
-      elevation: 12,
-    }),
-    [tc, isDark],
+    () =>
+      isMobile
+        ? {
+            width: windowWidth,
+            height: windowHeight,
+            flexDirection: 'column',
+            backgroundColor: isDark ? tc.background.raised : tc.background.canvas,
+          }
+        : {
+            width: 860,
+            maxWidth: '95%',
+            height: 600,
+            maxHeight: '90%',
+            flexDirection: 'row',
+            borderRadius: 16,
+            overflow: 'hidden',
+            backgroundColor: isDark ? tc.background.raised : tc.background.canvas,
+            borderWidth: isDark ? 1 : 0,
+            borderColor: isDark ? tc.border.subtle : 'transparent',
+            shadowColor: '#000',
+            shadowOffset: { width: 0, height: 12 },
+            shadowOpacity: isDark ? 0.6 : 0.25,
+            shadowRadius: 32,
+            elevation: 12,
+          },
+    [tc, isDark, isMobile, windowWidth, windowHeight],
   );
 
   const sidebarStyle = useMemo<ViewStyle>(
@@ -160,6 +179,144 @@ export function GuideDialog({ open, onClose }: GuideDialogProps) {
   const activeInfo = CHAPTERS.find((c) => c.id === activeChapter)!;
 
   // -- Render ----------------------------------------------------------------
+
+  if (isMobile) {
+    return (
+      <Overlay open={open} backdrop="dim" center onBackdropPress={onClose} animationType="fade">
+        <View style={modalStyle}>
+          {/* ── Mobile Header ── */}
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              paddingHorizontal: 16,
+              paddingTop: 12 + safeInsets.top,
+              paddingBottom: 12,
+              borderBottomWidth: 1,
+              borderBottomColor: tc.border.subtle,
+              backgroundColor: isDark ? tc.background.surface : tc.background.sunken,
+            }}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <View
+                style={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: 7,
+                  backgroundColor: tc.accent.primary,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <BookOpenIcon size={14} color={tc.text.inverse} />
+              </View>
+              <RNText style={{ fontSize: 16, fontWeight: '700', color: tc.text.primary }}>
+                User Guide
+              </RNText>
+            </View>
+            <Pressable
+              onPress={onClose}
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: 8,
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+              accessibilityLabel="Close guide"
+            >
+              <XIcon size={18} color={tc.text.secondary} />
+            </Pressable>
+          </View>
+
+          {/* ── Horizontal Chapter Picker ── */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ paddingHorizontal: 12, paddingVertical: 10, gap: 6 }}
+            style={{
+              borderBottomWidth: 1,
+              borderBottomColor: tc.border.subtle,
+              flexGrow: 0,
+            }}
+          >
+            {CHAPTERS.map((ch) => {
+              const isActive = activeChapter === ch.id;
+              const Icon = ch.icon;
+              return (
+                <Pressable
+                  key={ch.id}
+                  onPress={() => setActiveChapter(ch.id)}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 6,
+                    paddingVertical: 6,
+                    paddingHorizontal: 10,
+                    borderRadius: 8,
+                    backgroundColor: isActive ? tc.accent.primary : tc.accent.highlight,
+                  }}
+                >
+                  <View
+                    style={{
+                      width: 20,
+                      height: 20,
+                      borderRadius: 5,
+                      backgroundColor: isActive ? ch.color : 'transparent',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <Icon size={11} color={isActive ? tc.text.inverse : tc.text.secondary} />
+                  </View>
+                  <RNText
+                    style={{
+                      fontSize: 12,
+                      fontWeight: isActive ? '600' : '400',
+                      color: isActive ? tc.text.inverse : tc.text.secondary,
+                    }}
+                    numberOfLines={1}
+                  >
+                    {ch.label}
+                  </RNText>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+
+          {/* ── Chapter Content ── */}
+          <ScrollView
+            style={{ flex: 1 }}
+            contentContainerStyle={{ padding: 16, paddingBottom: 16 + safeInsets.bottom, gap: 14 }}
+            showsVerticalScrollIndicator={false}
+          >
+            {/* Inline chapter title */}
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+              <View
+                style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: 8,
+                  backgroundColor: activeInfo.color,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <activeInfo.icon size={16} color={tc.text.inverse} />
+              </View>
+              <RNText style={{ fontSize: 17, fontWeight: '700', color: tc.text.primary }}>
+                {activeInfo.label}
+              </RNText>
+            </View>
+            {renderChapter()}
+          </ScrollView>
+        </View>
+      </Overlay>
+    );
+  }
+
+  // -- Desktop layout (unchanged) ------------------------------------------
 
   return (
     <Overlay open={open} backdrop="dim" center onBackdropPress={onClose} animationType="fade">

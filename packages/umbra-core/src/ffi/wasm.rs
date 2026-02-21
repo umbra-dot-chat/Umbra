@@ -368,6 +368,7 @@ pub fn umbra_wasm_friends_send_request(
         from_signing_key: Some(hex::encode(&request.from.public_keys.signing)),
         from_encryption_key: Some(hex::encode(&request.from.public_keys.encryption)),
         from_display_name: Some(request.from.display_name.clone()),
+        from_avatar: request.from.avatar.clone(),
         created_at: request.created_at,
         status: "pending".to_string(),
     };
@@ -415,6 +416,7 @@ pub fn umbra_wasm_friends_send_request(
             "id": request.id,
             "fromDid": request.from.did,
             "fromDisplayName": request.from.display_name,
+            "fromAvatar": request.from.avatar,
             "fromSigningKey": hex::encode(&request.from.public_keys.signing),
             "fromEncryptionKey": hex::encode(&request.from.public_keys.encryption),
             "message": request.message,
@@ -461,6 +463,7 @@ pub fn umbra_wasm_friends_store_incoming(json: &str) -> Result<(), JsValue> {
         from_signing_key: data["from_signing_key"].as_str().map(|s| s.to_string()),
         from_encryption_key: data["from_encryption_key"].as_str().map(|s| s.to_string()),
         from_display_name: data["from_display_name"].as_str().map(|s| s.to_string()),
+        from_avatar: data["from_avatar"].as_str().map(|s| s.to_string()),
         created_at: data["created_at"].as_i64().unwrap_or(0),
         status: "pending".to_string(),
     };
@@ -504,6 +507,7 @@ pub fn umbra_wasm_friends_accept_from_relay(json: &str) -> Result<JsValue, JsVal
         .ok_or_else(|| JsValue::from_str("Missing from_signing_key"))?;
     let encryption_key_hex = data["from_encryption_key"].as_str()
         .ok_or_else(|| JsValue::from_str("Missing from_encryption_key"))?;
+    let avatar = data["from_avatar"].as_str();
 
     let signing_key_bytes = hex::decode(signing_key_hex)
         .map_err(|e| JsValue::from_str(&format!("Invalid signing key hex: {}", e)))?;
@@ -519,8 +523,8 @@ pub fn umbra_wasm_friends_accept_from_relay(json: &str) -> Result<JsValue, JsVal
     let mut encryption_key = [0u8; 32];
     encryption_key.copy_from_slice(&encryption_key_bytes);
 
-    // Add as friend
-    database.add_friend(from_did, display_name, &signing_key, &encryption_key, None)
+    // Add as friend (with avatar if provided)
+    database.add_friend_with_avatar(from_did, display_name, &signing_key, &encryption_key, None, avatar)
         .map_err(|e| JsValue::from_str(&format!("Failed to add friend: {}", e)))?;
 
     // Create conversation with deterministic ID (both sides produce the same ID)
@@ -674,6 +678,7 @@ pub fn umbra_wasm_friends_accept_request(request_id: &str) -> Result<JsValue, Js
             "requestId": request_id,
             "fromDid": our_did,
             "fromDisplayName": identity.profile().display_name,
+            "fromAvatar": identity.profile().avatar,
             "fromSigningKey": our_signing_key_hex,
             "fromEncryptionKey": our_encryption_key_hex,
             "accepted": true,
@@ -761,6 +766,7 @@ pub fn umbra_wasm_friends_list() -> Result<JsValue, JsValue> {
                     "did": f.did,
                     "display_name": f.display_name,
                     "status": f.status,
+                    "avatar": f.avatar,
                     "signing_key": f.signing_key,
                     "encryption_key": f.encryption_key,
                     "created_at": f.created_at,
@@ -2859,6 +2865,10 @@ pub fn umbra_wasm_messaging_update_status(json: &str) -> Result<(), JsValue> {
         .ok_or_else(|| JsValue::from_str("Missing status"))?;
 
     match status {
+        "sent" => {
+            database.mark_message_sent(message_id)
+                .map_err(|e| JsValue::from_str(&format!("DB error: {}", e)))?;
+        }
         "delivered" => {
             database.mark_message_delivered(message_id)
                 .map_err(|e| JsValue::from_str(&format!("DB error: {}", e)))?;
@@ -3792,6 +3802,7 @@ fn handle_inbound_friend_request(
                 from_signing_key: Some(fr.from_signing_key.clone()),
                 from_encryption_key: Some(fr.from_encryption_key.clone()),
                 from_display_name: Some(fr.from_display_name.clone()),
+                from_avatar: None, // P2P requests don't include avatar
                 created_at: fr.timestamp,
                 status: "pending".to_string(),
             };

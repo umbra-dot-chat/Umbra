@@ -6,7 +6,7 @@
  */
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { View, Pressable, Platform, Linking } from 'react-native';
+import { View, Pressable, Platform } from 'react-native';
 import {
   VStack,
   HStack,
@@ -19,6 +19,7 @@ import {
   useTheme,
 } from '@coexist/wisp-react-native';
 import Svg, { Path } from 'react-native-svg';
+import * as WebBrowser from 'expo-web-browser';
 
 // Types
 export type ImportPlatform = 'discord' | 'github' | 'steam' | 'bluesky';
@@ -276,10 +277,43 @@ export function ProfileImportSelector({
             }
           }, 500);
         } else {
-          // For native, use Linking
-          await Linking.openURL(data.redirect_url);
-          // Native flow would use deep links to return
-          setStatus('idle');
+          // For native, use expo-web-browser + poll for result
+          const stateParam = data.state;
+          await WebBrowser.openBrowserAsync(data.redirect_url, {
+            dismissButtonStyle: 'cancel',
+            presentationStyle: WebBrowser.WebBrowserPresentationStyle.FULL_SCREEN,
+          });
+
+          // Browser closed — poll relay for the OAuth result
+          setStatus('fetching');
+          const pollUrl = `${relayUrl}/profile/import/result/${stateParam}`;
+          let attempts = 0;
+          const maxAttempts = 15; // 15 × 1s = 15 seconds max
+          const pollForResult = async () => {
+            while (attempts < maxAttempts) {
+              attempts++;
+              try {
+                const res = await fetch(pollUrl);
+                if (res.ok) {
+                  const result = await res.json();
+                  if (result.success && result.profile) {
+                    const normalized = normalizeProfile(result.profile);
+                    setImportedProfile(normalized);
+                    setStatus('success');
+                    onProfileImported(normalized);
+                    return;
+                  }
+                }
+              } catch {
+                // Network error, keep polling
+              }
+              await new Promise((r) => setTimeout(r, 1000));
+            }
+            // Timed out
+            setError('Login timed out. Please try again.');
+            setStatus('error');
+          };
+          pollForResult();
         }
       }
     } catch (err: any) {
@@ -309,7 +343,11 @@ export function ProfileImportSelector({
         <VStack gap="md" style={{ alignItems: 'center' }}>
           <Spinner size="md" />
           <Text size="sm" color="muted">
-            {status === 'connecting' ? 'Connecting...' : 'Complete login in popup...'}
+            {status === 'connecting'
+              ? 'Connecting...'
+              : Platform.OS === 'web'
+                ? 'Complete login in popup...'
+                : 'Waiting for login to complete...'}
           </Text>
           {status === 'fetching' && (
             <Button variant="ghost" size="sm" onPress={handleRetry}>

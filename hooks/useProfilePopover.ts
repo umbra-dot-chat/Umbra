@@ -11,13 +11,11 @@ export function useProfilePopover() {
   const [selectedMember, setSelectedMember] = useState<ProfileMember | null>(null);
   const [popoverAnchor, setPopoverAnchor] = useState<{ x: number; y: number } | null>(null);
 
-  const showProfile = useCallback((name: string, event?: any) => {
-    // Create a simple profile member from the name
-    // In the real app, we'd look up the friend's online status
+  const showProfile = useCallback((name: string, event?: any, status?: 'online' | 'idle' | 'offline') => {
     setSelectedMember({
       id: name,
       name,
-      status: 'online', // Default — the component that triggers this can pass real status
+      status: status ?? 'offline',
     });
     setPopoverAnchor({
       x: event?.nativeEvent?.pageX ?? event?.pageX ?? 0,

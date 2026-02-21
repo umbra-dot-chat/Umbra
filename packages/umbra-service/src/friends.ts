@@ -168,6 +168,7 @@ export async function storeIncomingRequest(request: FriendRequest): Promise<void
     from_signing_key: request.fromSigningKey,
     from_encryption_key: request.fromEncryptionKey,
     from_display_name: request.fromDisplayName,
+    from_avatar: request.fromAvatar,
     created_at: request.createdAt,
   });
   wasm().umbra_wasm_friends_store_incoming(json);
@@ -186,12 +187,14 @@ export async function storeIncomingRequest(request: FriendRequest): Promise<void
 export async function processAcceptedFriendResponse(payload: {
   fromDid: string;
   fromDisplayName?: string;
+  fromAvatar?: string;
   fromSigningKey?: string;
   fromEncryptionKey?: string;
 }): Promise<void> {
   const json = JSON.stringify({
     from_did: payload.fromDid,
     from_display_name: payload.fromDisplayName ?? '',
+    from_avatar: payload.fromAvatar ?? null,
     from_signing_key: payload.fromSigningKey ?? '',
     from_encryption_key: payload.fromEncryptionKey ?? '',
   });

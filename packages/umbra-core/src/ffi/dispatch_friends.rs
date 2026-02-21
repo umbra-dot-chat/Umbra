@@ -27,6 +27,7 @@ pub fn friends_send_request(args: &str) -> DResult {
         from_signing_key: Some(hex::encode(&request.from.public_keys.signing)),
         from_encryption_key: Some(hex::encode(&request.from.public_keys.encryption)),
         from_display_name: Some(request.from.display_name.clone()),
+        from_avatar: request.from.avatar.clone(),
         created_at: request.created_at,
         status: "pending".to_string(),
     };
@@ -37,6 +38,7 @@ pub fn friends_send_request(args: &str) -> DResult {
         "payload": {
             "id": request.id, "fromDid": request.from.did,
             "fromDisplayName": request.from.display_name,
+            "fromAvatar": request.from.avatar,
             "fromSigningKey": hex::encode(&request.from.public_keys.signing),
             "fromEncryptionKey": hex::encode(&request.from.public_keys.encryption),
             "message": request.message, "createdAt": request.created_at,
@@ -71,6 +73,7 @@ pub fn friends_store_incoming(args: &str) -> DResult {
         from_signing_key: data["from_signing_key"].as_str().map(|s| s.to_string()),
         from_encryption_key: data["from_encryption_key"].as_str().map(|s| s.to_string()),
         from_display_name: data["from_display_name"].as_str().map(|s| s.to_string()),
+        from_avatar: data["from_avatar"].as_str().map(|s| s.to_string()),
         created_at: data["created_at"].as_i64().unwrap_or(0),
         status: "pending".to_string(),
     };
@@ -88,23 +91,48 @@ pub fn friends_accept_from_relay(args: &str) -> DResult {
     let identity = state.identity.as_ref().ok_or_else(|| err(200, "No identity loaded"))?;
     let db = state.database.as_ref().ok_or_else(|| err(400, "Database not initialized"))?;
 
-    let friend_did = require_str(&data, "friend_did")?;
-    let display_name = data["display_name"].as_str().unwrap_or("Unknown");
-    let signing_key = require_str(&data, "signing_key")?;
-    let encryption_key = require_str(&data, "encryption_key")?;
+    // Accept both field name conventions:
+    //   WASM path sends:       from_did, from_display_name, from_signing_key, from_encryption_key
+    //   Dispatcher path sends: friend_did, display_name, signing_key, encryption_key
+    let friend_did = data["from_did"].as_str()
+        .or_else(|| data["friend_did"].as_str())
+        .ok_or_else(|| err(2, "Missing from_did or friend_did"))?;
+    let display_name = data["from_display_name"].as_str()
+        .or_else(|| data["display_name"].as_str())
+        .unwrap_or("Unknown");
+    let signing_key = data["from_signing_key"].as_str()
+        .or_else(|| data["signing_key"].as_str())
+        .ok_or_else(|| err(2, "Missing from_signing_key or signing_key"))?;
+    let encryption_key = data["from_encryption_key"].as_str()
+        .or_else(|| data["encryption_key"].as_str())
+        .ok_or_else(|| err(2, "Missing from_encryption_key or encryption_key"))?;
+    let avatar = data["from_avatar"].as_str()
+        .or_else(|| data["avatar"].as_str());
 
     let sk_bytes = hex::decode(signing_key).map_err(|e| err(704, format!("Invalid signing key: {}", e)))?;
     let ek_bytes = hex::decode(encryption_key).map_err(|e| err(704, format!("Invalid encryption key: {}", e)))?;
     if sk_bytes.len() != 32 || ek_bytes.len() != 32 { return Err(err(704, "Keys must be 32 bytes")); }
     let mut sk = [0u8; 32]; sk.copy_from_slice(&sk_bytes);
     let mut ek = [0u8; 32]; ek.copy_from_slice(&ek_bytes);
-    db.add_friend(friend_did, display_name, &sk, &ek, None)
+    db.add_friend_with_avatar(friend_did, display_name, &sk, &ek, None, avatar)
         .map_err(|e| err(e.code(), e))?;
 
     let our_did = identity.did_string();
     let conv_id = deterministic_conversation_id(&our_did, friend_did);
-    db.create_conversation(&conv_id, friend_did)
-        .map_err(|e| err(e.code(), e))?;
+    // Use best-effort create — conversation may already exist
+    let _ = db.create_conversation(&conv_id, friend_did);
+
+    // Clean up the outgoing request (mark as accepted) so it disappears
+    // from the pending list. Best-effort — request may not exist if
+    // friendship was initiated via P2P.
+    if let Ok(outgoing) = db.get_pending_requests("outgoing") {
+        for req in &outgoing {
+            if req.to_did == friend_did {
+                let _ = db.update_request_status(&req.id, "accepted");
+                break;
+            }
+        }
+    }
 
     super::dispatcher::emit_event("friend", &serde_json::json!({"type": "friendAdded", "friend_did": friend_did, "conversation_id": conv_id}));
 
@@ -133,7 +161,7 @@ pub fn friends_accept_request(args: &str) -> DResult {
     if sk_bytes.len() != 32 || ek_bytes.len() != 32 { return Err(err(704, "Keys must be 32 bytes")); }
     let mut sk = [0u8; 32]; sk.copy_from_slice(&sk_bytes);
     let mut ek = [0u8; 32]; ek.copy_from_slice(&ek_bytes);
-    db.add_friend(friend_did, display_name, &sk, &ek, None)
+    db.add_friend_with_avatar(friend_did, display_name, &sk, &ek, None, req.from_avatar.as_deref())
         .map_err(|e| err(e.code(), e))?;
     db.update_request_status(request_id, "accepted")
         .map_err(|e| err(e.code(), e))?;
@@ -150,6 +178,7 @@ pub fn friends_accept_request(args: &str) -> DResult {
         "payload": {
             "requestId": request_id, "fromDid": our_did,
             "fromDisplayName": identity.profile().display_name,
+            "fromAvatar": identity.profile().avatar,
             "fromSigningKey": our_signing, "fromEncryptionKey": our_enc,
         }
     });
@@ -165,7 +194,12 @@ pub fn friends_accept_request(args: &str) -> DResult {
 
 pub fn friends_build_accept_ack(args: &str) -> DResult {
     let data = json_parse(args)?;
-    let to_did = require_str(&data, "to_did")?;
+    // Accept both field name conventions:
+    //   WASM path sends: accepter_did (the DID to send the ack to)
+    //   Dispatcher may also receive: to_did
+    let to_did = data["accepter_did"].as_str()
+        .or_else(|| data["to_did"].as_str())
+        .ok_or_else(|| err(2, "Missing accepter_did or to_did"))?;
     let state = get_state().map_err(|e| err(100, e))?;
     let state = state.read();
     let identity = state.identity.as_ref().ok_or_else(|| err(200, "No identity loaded"))?;
@@ -198,7 +232,7 @@ pub fn friends_list() -> DResult {
     let arr: Vec<serde_json::Value> = friends.iter().map(|f| serde_json::json!({
         "did": f.did, "display_name": f.display_name,
         "signing_key": f.signing_key, "encryption_key": f.encryption_key,
-        "status": f.status, "created_at": f.created_at,
+        "status": f.status, "avatar": f.avatar, "created_at": f.created_at,
     })).collect();
     Ok(serde_json::to_string(&arr).unwrap_or_default())
 }
@@ -214,7 +248,8 @@ pub fn friends_pending_requests(args: &str) -> DResult {
         "id": r.id, "from_did": r.from_did, "to_did": r.to_did,
         "direction": r.direction, "message": r.message,
         "from_signing_key": r.from_signing_key, "from_encryption_key": r.from_encryption_key,
-        "from_display_name": r.from_display_name, "created_at": r.created_at,
+        "from_display_name": r.from_display_name, "from_avatar": r.from_avatar,
+        "created_at": r.created_at,
     })).collect();
     Ok(serde_json::to_string(&arr).unwrap_or_default())
 }

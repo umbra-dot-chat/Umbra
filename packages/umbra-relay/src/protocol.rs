@@ -52,6 +52,35 @@ pub enum ClientMessage {
     /// Ping to keep connection alive.
     Ping,
 
+    /// Publish an invite to the relay so it can be resolved by other clients.
+    /// The community owner sends this when creating an invite.
+    PublishInvite {
+        /// The invite code
+        code: String,
+        /// Community metadata for the invite preview
+        community_id: String,
+        community_name: String,
+        community_description: Option<String>,
+        community_icon: Option<String>,
+        member_count: u32,
+        /// Invite constraints
+        max_uses: Option<i32>,
+        expires_at: Option<i64>,
+        /// The full invite data blob (encrypted community structure) that
+        /// the joiner needs to bootstrap their local DB
+        invite_payload: String,
+    },
+
+    /// Revoke a previously published invite.
+    RevokeInvite {
+        code: String,
+    },
+
+    /// Resolve an invite code — request the relay to return invite details.
+    ResolveInvite {
+        code: String,
+    },
+
     /// Create a call room for group calling.
     /// Returns a room_id that participants can join.
     CreateCallRoom {
@@ -136,6 +165,25 @@ pub enum ServerMessage {
     /// Generic acknowledgement.
     Ack {
         id: String,
+    },
+
+    /// Response to ResolveInvite — the invite was found.
+    InviteResolved {
+        code: String,
+        community_id: String,
+        community_name: String,
+        community_description: Option<String>,
+        community_icon: Option<String>,
+        member_count: u32,
+        max_uses: Option<i32>,
+        expires_at: Option<i64>,
+        /// The full invite data payload the joiner needs to bootstrap
+        invite_payload: String,
+    },
+
+    /// Response to ResolveInvite — the invite was not found.
+    InviteNotFound {
+        code: String,
     },
 
     /// A call room was successfully created.
@@ -244,6 +292,46 @@ pub enum PeerMessage {
         timestamp: i64,
     },
 
+    /// Replicate a published invite across the federation mesh.
+    InviteSync {
+        code: String,
+        publisher_did: String,
+        community_id: String,
+        community_name: String,
+        community_description: Option<String>,
+        community_icon: Option<String>,
+        member_count: u32,
+        max_uses: Option<i32>,
+        expires_at: Option<i64>,
+        invite_payload: String,
+        published_at: i64,
+    },
+
+    /// Revoke a published invite across the federation mesh.
+    InviteRevoke {
+        code: String,
+    },
+
+    /// Forward an invite resolution request to peer relays.
+    ForwardResolveInvite {
+        code: String,
+        requester_did: String,
+    },
+
+    /// Forward an invite resolution response from a peer relay.
+    ForwardInviteResolved {
+        code: String,
+        requester_did: String,
+        community_id: String,
+        community_name: String,
+        community_description: Option<String>,
+        community_icon: Option<String>,
+        member_count: u32,
+        max_uses: Option<i32>,
+        expires_at: Option<i64>,
+        invite_payload: String,
+    },
+
     /// Ping to keep inter-relay connection alive.
     PeerPing,
 
@@ -279,6 +367,29 @@ pub struct CallRoom {
     pub max_participants: usize,
     /// When the room was created
     pub created_at: DateTime<Utc>,
+}
+
+/// A published community invite stored at the relay.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct PublishedInvite {
+    /// The invite code
+    pub code: String,
+    /// DID of the community owner who published this invite
+    pub publisher_did: String,
+    /// Community metadata
+    pub community_id: String,
+    pub community_name: String,
+    pub community_description: Option<String>,
+    pub community_icon: Option<String>,
+    pub member_count: u32,
+    /// Invite constraints
+    pub max_uses: Option<i32>,
+    pub use_count: i32,
+    pub expires_at: Option<i64>,
+    /// The full invite payload (community bootstrap data)
+    pub invite_payload: String,
+    /// When the invite was published to the relay
+    pub published_at: DateTime<Utc>,
 }
 
 /// A signaling session for single-scan friend adding.
@@ -460,6 +571,19 @@ mod tests {
             ClientMessage::JoinSession { session_id: "s1".to_string(), answer_payload: "answer".to_string() },
             ClientMessage::FetchOffline,
             ClientMessage::Ping,
+            ClientMessage::PublishInvite {
+                code: "abc123".to_string(),
+                community_id: "comm-1".to_string(),
+                community_name: "Test Community".to_string(),
+                community_description: Some("A test".to_string()),
+                community_icon: None,
+                member_count: 42,
+                max_uses: Some(100),
+                expires_at: None,
+                invite_payload: "{}".to_string(),
+            },
+            ClientMessage::RevokeInvite { code: "abc123".to_string() },
+            ClientMessage::ResolveInvite { code: "abc123".to_string() },
             ClientMessage::CreateCallRoom { group_id: "group-1".to_string() },
             ClientMessage::JoinCallRoom { room_id: "room-1".to_string() },
             ClientMessage::LeaveCallRoom { room_id: "room-1".to_string() },
@@ -651,6 +775,36 @@ mod tests {
                 from_did: "did:key:z6MkA".to_string(),
                 payload: "queued".to_string(),
                 timestamp: 100,
+            },
+            PeerMessage::InviteSync {
+                code: "test123".to_string(),
+                publisher_did: "did:key:z6MkA".to_string(),
+                community_id: "comm-1".to_string(),
+                community_name: "Test".to_string(),
+                community_description: None,
+                community_icon: None,
+                member_count: 10,
+                max_uses: None,
+                expires_at: None,
+                invite_payload: "{}".to_string(),
+                published_at: 100,
+            },
+            PeerMessage::InviteRevoke { code: "test123".to_string() },
+            PeerMessage::ForwardResolveInvite {
+                code: "test123".to_string(),
+                requester_did: "did:key:z6MkB".to_string(),
+            },
+            PeerMessage::ForwardInviteResolved {
+                code: "test123".to_string(),
+                requester_did: "did:key:z6MkB".to_string(),
+                community_id: "comm-1".to_string(),
+                community_name: "Test".to_string(),
+                community_description: None,
+                community_icon: None,
+                member_count: 10,
+                max_uses: None,
+                expires_at: None,
+                invite_payload: "{}".to_string(),
             },
             PeerMessage::PeerPing,
             PeerMessage::PeerPong,

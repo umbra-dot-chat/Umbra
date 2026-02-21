@@ -6,6 +6,7 @@ import {
 import type { EmojiItem } from '@coexist/wisp-core/types/EmojiPicker.types';
 import type { StickerPickerPack } from '@coexist/wisp-core/types/StickerPicker.types';
 import { useFriends } from '@/hooks/useFriends';
+import { useNetwork } from '@/hooks/useNetwork';
 import { useMention } from '@/hooks/useMention';
 
 export interface ChatInputProps {
@@ -38,17 +39,18 @@ export function ChatInput({
 }: ChatInputProps) {
   const { theme } = useTheme();
   const { friends } = useFriends();
+  const { onlineDids } = useNetwork();
 
-  // Build mention users from the real friends list
+  // Build mention users from the real friends list, enriched with relay presence
   const mentionUsers = useMemo(
     () => friends.map((f) => ({
       id: f.did,
       name: f.displayName,
       username: f.displayName.toLowerCase().replace(/\s/g, ''),
-      online: f.online ?? false,
-      avatar: <Avatar name={f.displayName} size="sm" />,
+      online: onlineDids.has(f.did),
+      avatar: <Avatar name={f.displayName} size="sm" status={onlineDids.has(f.did) ? 'online' : undefined} />,
     })),
-    [friends],
+    [friends, onlineDids],
   );
 
   // Names list for mention highlighting in the input

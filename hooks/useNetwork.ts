@@ -77,6 +77,11 @@ export function pushPendingRelayAck(messageId: string): void {
   _pendingRelayAcks.push(messageId);
 }
 
+/** Mark a DID as online (called from external hooks when relay activity is detected). */
+export function markDidOnline(did: string): void {
+  _markDidOnline(did);
+}
+
 // Module-level relay state + subscriber list so ALL useNetwork() instances
 // stay in sync. Without this, only the instance that called connectRelay
 // sees the WebSocket open — other instances' relayConnected stays false.
@@ -90,6 +95,32 @@ function _notifyRelayState(connected: boolean, url: string | null) {
   _relayUrl = url;
   for (const listener of _relayListeners) {
     listener(connected, url);
+  }
+}
+
+// ── Module-level presence tracking ──────────────────────────────────────
+// Track which friend DIDs we've seen activity from via relay.
+// Any relay message from a DID means they're online right now.
+const _onlineDids = new Set<string>();
+type PresenceListener = (onlineDids: Set<string>) => void;
+const _presenceListeners = new Set<PresenceListener>();
+
+function _markDidOnline(did: string) {
+  if (!did || _onlineDids.has(did)) return;
+  _onlineDids.add(did);
+  _notifyPresence();
+}
+
+function _clearOnlineDids() {
+  if (_onlineDids.size === 0) return;
+  _onlineDids.clear();
+  _notifyPresence();
+}
+
+function _notifyPresence() {
+  const snapshot = new Set(_onlineDids);
+  for (const listener of _presenceListeners) {
+    listener(snapshot);
   }
 }
 
@@ -192,6 +223,9 @@ export interface UseNetworkResult {
    * Used for sending messages via the relay (e.g., friend requests).
    */
   getRelayWs: () => WebSocket | null;
+
+  /** Set of friend DIDs currently known to be online (seen via relay) */
+  onlineDids: Set<string>;
 }
 
 export function useNetwork(): UseNetworkResult {
@@ -214,6 +248,17 @@ export function useNetwork(): UseNetworkResult {
   const [relayConnected, setRelayConnected] = useState(_relayConnected);
   const [relayUrl, setRelayUrl] = useState<string | null>(_relayUrl);
   const relayWsRef = useRef<WebSocket | null>(null);
+
+  // Presence state — synced from module-level shared state
+  const [onlineDids, setOnlineDids] = useState<Set<string>>(new Set(_onlineDids));
+
+  // Subscribe to module-level presence changes
+  useEffect(() => {
+    setOnlineDids(new Set(_onlineDids));
+    const listener: PresenceListener = (dids) => setOnlineDids(dids);
+    _presenceListeners.add(listener);
+    return () => { _presenceListeners.delete(listener); };
+  }, []);
 
   const fetchStatus = useCallback(async () => {
     if (!service) return;
@@ -456,6 +501,31 @@ export function useNetwork(): UseNetworkResult {
                 }).catch((err) => {
                   console.error('[useNetwork] Failed to fetch offline messages:', err);
                 });
+
+                // Broadcast presence_online to all friends so they know we're online.
+                // When they receive it, they mark us online via _markDidOnline.
+                // This is a lightweight envelope — no encryption needed, just a signal.
+                service.getFriends().then(async (friendsList) => {
+                  const presenceEnvelope = JSON.stringify({
+                    envelope: 'presence_online',
+                    version: 1,
+                    payload: { timestamp: Date.now() },
+                  });
+                  for (const f of friendsList) {
+                    try {
+                      const { relayMessage } = await service.relaySend(f.did, presenceEnvelope);
+                      if (ws.readyState === WebSocket.OPEN) {
+                        ws.send(relayMessage);
+                      }
+                    } catch {
+                      // Best-effort — skip friends we can't reach
+                    }
+                  }
+                  console.log('[useNetwork] Broadcast presence_online to', friendsList.length, 'friends');
+                }).catch((err) => {
+                  console.warn('[useNetwork] Failed to broadcast presence:', err);
+                });
+
                 break;
               }
 
@@ -463,6 +533,9 @@ export function useNetwork(): UseNetworkResult {
                 // Handle incoming message - could be a friend request/response
                 const { from_did, payload } = msg;
                 console.log('[useNetwork] Message from', from_did);
+
+                // Track presence — any relay message means the sender is online
+                if (from_did) _markDidOnline(from_did);
 
                 try {
                   const envelope = JSON.parse(payload) as RelayEnvelope;
@@ -480,6 +553,7 @@ export function useNetwork(): UseNetworkResult {
                       direction: 'incoming',
                       message: reqPayload.message,
                       fromDisplayName: reqPayload.fromDisplayName,
+                      fromAvatar: reqPayload.fromAvatar,
                       fromSigningKey: reqPayload.fromSigningKey,
                       fromEncryptionKey: reqPayload.fromEncryptionKey,
                       createdAt: reqPayload.createdAt,
@@ -507,6 +581,7 @@ export function useNetwork(): UseNetworkResult {
                         await service.processAcceptedFriendResponse({
                           fromDid: respPayload.fromDid,
                           fromDisplayName: respPayload.fromDisplayName,
+                          fromAvatar: respPayload.fromAvatar,
                           fromSigningKey: respPayload.fromSigningKey,
                           fromEncryptionKey: respPayload.fromEncryptionKey,
                         });
@@ -751,6 +826,7 @@ export function useNetwork(): UseNetworkResult {
                       type: typingPayload.isTyping ? 'typingStarted' : 'typingStopped',
                       conversationId: typingPayload.conversationId,
                       did: typingPayload.senderDid,
+                      senderName: typingPayload.senderName,
                     });
                   } else if (envelope.envelope === 'call_offer' && envelope.version === 1) {
                     service.dispatchCallEvent({ type: 'callOffer', payload: envelope.payload as any });
@@ -782,6 +858,27 @@ export function useNetwork(): UseNetworkResult {
                       value: metaPayload.value,
                       timestamp: metaPayload.timestamp,
                     });
+                  } else if (envelope.envelope === 'presence_online') {
+                    // Presence ping — sender is online.
+                    // Already handled above via _markDidOnline(from_did).
+                    // Send a presence_ack back so the sender also knows we're online.
+                    if (from_did) {
+                      const ackEnvelope = JSON.stringify({
+                        envelope: 'presence_ack',
+                        version: 1,
+                        payload: { timestamp: Date.now() },
+                      });
+                      service.relaySend(from_did, ackEnvelope).then(({ relayMessage }) => {
+                        if (ws.readyState === WebSocket.OPEN) {
+                          ws.send(relayMessage);
+                        }
+                      }).catch(() => {
+                        // Best-effort ack
+                      });
+                    }
+                  } else if (envelope.envelope === 'presence_ack') {
+                    // Presence ack — sender confirmed they're online.
+                    // Already handled via _markDidOnline(from_did) above.
                   }
                 } catch (parseErr) {
                   console.log('[useNetwork] Message payload is not a relay envelope:', parseErr);
@@ -807,6 +904,7 @@ export function useNetwork(): UseNetworkResult {
                         direction: 'incoming',
                         message: reqPayload.message,
                         fromDisplayName: reqPayload.fromDisplayName,
+                        fromAvatar: reqPayload.fromAvatar,
                         fromSigningKey: reqPayload.fromSigningKey,
                         fromEncryptionKey: reqPayload.fromEncryptionKey,
                         createdAt: reqPayload.createdAt,
@@ -831,6 +929,7 @@ export function useNetwork(): UseNetworkResult {
                           await service.processAcceptedFriendResponse({
                             fromDid: respPayload.fromDid,
                             fromDisplayName: respPayload.fromDisplayName,
+                            fromAvatar: respPayload.fromAvatar,
                             fromSigningKey: respPayload.fromSigningKey,
                             fromEncryptionKey: respPayload.fromEncryptionKey,
                           });
@@ -1002,6 +1101,8 @@ export function useNetwork(): UseNetworkResult {
                         value: metaPayload.value,
                         timestamp: metaPayload.timestamp,
                       });
+                    } else if (envelope.envelope === 'presence_online' || envelope.envelope === 'presence_ack') {
+                      // Stale presence from when we were offline — ignore silently
                     }
                   } catch (parseErr) {
                     console.log('[useNetwork] Offline message parse error:', parseErr);
@@ -1099,6 +1200,8 @@ export function useNetwork(): UseNetworkResult {
             relayWsRef.current = null;
             // Notify ALL useNetwork() instances
             _notifyRelayState(false, null);
+            // Clear presence — can't know who's online without relay
+            _clearOnlineDids();
           }
         };
       } catch (err) {
@@ -1279,5 +1382,8 @@ export function useNetwork(): UseNetworkResult {
     createOfferSession,
     acceptSession,
     getRelayWs,
+
+    // Presence
+    onlineDids,
   };
 }

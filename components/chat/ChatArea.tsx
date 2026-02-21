@@ -40,7 +40,7 @@ export interface ChatAreaProps {
   onHoverOut: () => void;
   onReplyTo: (reply: { sender: string; text: string }) => void;
   onOpenThread: (msg: { id: string; sender: string; content: string; timestamp: string }) => void;
-  onShowProfile: (name: string, event: any) => void;
+  onShowProfile: (name: string, event: any, status?: 'online' | 'idle' | 'offline') => void;
   // Extended handlers
   onToggleReaction?: (messageId: string, emoji: string) => void;
   onEditMessage?: (messageId: string) => void;

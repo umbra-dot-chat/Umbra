@@ -2,953 +2,443 @@
 
 ## Overview
 
-Implement a complete community invite system that allows users to share invite links that work seamlessly across platforms. When a user clicks an invite link, they are taken through a smooth onboarding flow that handles both authenticated and unauthenticated states.
+Make community invites work end-to-end on **desktop (Tauri)** and **mobile (React Native/Expo)**. Currently, the entire backend is implemented (DB schema, Rust handlers, TypeScript service, hooks, UI management panel) but there is no way to actually *use* an invite link — clicking one does nothing because there is no route, no deep link handler, and no join-via-code UI.
 
-## Current Issues
+## Current State
 
-1. **Wrong Domain**: Invite URLs use `umbra.app` instead of `umbra.chat`
-   - Hardcoded in Wisp `InviteManager.tsx` (line 253): `baseUrl = 'https://umbra.app/invite/'`
-   - Hardcoded in Wisp `VanityURLSettings.tsx`: `umbra.app/c/`
+### What Works
+- **Invite CRUD**: Create, list, delete invites via `CommunitySettingsDialog > Invites` tab
+- **Backend**: `community_invite_create`, `community_invite_use`, `community_invite_list`, `community_invite_delete`, `community_invite_set_vanity` — all fully implemented in Rust dispatcher + WASM + RN backend + Tauri backend
+- **Hook**: `useCommunityInvites(communityId)` with real-time event updates
+- **Invite Panel**: `CommunityInvitePanel` wraps Wisp `InviteManager` with copy-to-clipboard
+- **Vanity URLs**: Custom invite codes supported
 
-2. **No Deep Link Handler**: No route exists to handle `/invite/[code]` URLs
-   - App scheme `umbra://` is configured but not used for invites
-   - No web URL handler for `umbra.chat/invite/[code]`
+### What's Broken/Missing
+1. **Wrong domain**: Wisp `InviteManager` defaults `baseUrl` to `https://umbra.app/invite/` — should be `https://umbra.chat/invite/`
+2. **No invite route**: No `app/invite/[code].tsx` page exists — invite URLs lead nowhere
+3. **No deep link handler**: `app/_layout.tsx` has no `Linking` listener for `umbra://invite/CODE`
+4. **No join-via-code UI**: No modal/page for an authenticated user to paste/receive an invite code and join
+5. **No pending invite persistence**: Unauthenticated users who click an invite link lose the code during auth
+6. **No invite preview API**: Can't show community name/icon before joining (community data is local-only)
+7. **Tauri protocol handler**: Desktop has no `umbra://` protocol registration
 
-3. **No Auth State Persistence**: Unauthenticated users lose the invite context during signup
-   - No mechanism to store pending invite code
-   - No redirect back to invite after account creation
+### Key Architecture Constraint
 
-4. **No In-Chat Link Preview**: Community invite links appear as plain text
-   - No rich preview card with community info
-   - No inline "Join" button
+Community and invite data is stored **locally per-user**. When User A creates a community and an invite, that data lives only in User A's DB. User B doesn't have it. The `use_invite(code)` function does a local DB lookup — so **the invite record must already exist in the joiner's local DB** for `use_invite` to work.
+
+This means the MVP invite flow requires the **community owner to relay the invite data** to the invitee alongside the code. Two approaches:
+
+- **Option A (MVP)**: The invite code is sent alongside community metadata via relay message. When the invitee opens the link, the app first stores the relayed community + invite data, then calls `use_invite`.
+- **Option B (Future)**: A relay HTTP endpoint resolves invite codes server-side, returning community preview data.
+
+For this plan, we use **Option A** for the same-app flow (paste code / click link while app is running) and defer Option B to a future phase.
+
+---
 
 ## Implementation Plan
 
-### Phase 1: Fix Domain & Base URL
+### Phase 1: Fix Base URL + Pass `baseUrl` Prop
 
-**Goal**: Change all invite URLs to use `umbra.chat`
+**Goal**: Generated invite URLs use `umbra.chat` instead of `umbra.app`
 
-#### 1.1 Update Wisp InviteManager Component
+#### Task 1.1 — Update Wisp `InviteManager` default
 
 **File**: `node_modules/@coexist/wisp-react-native/src/components/invite-manager/InviteManager.tsx`
 
+Change the default prop:
 ```typescript
-// Change line 253 from:
+// From:
 baseUrl = 'https://umbra.app/invite/',
-
 // To:
 baseUrl = 'https://umbra.chat/invite/',
 ```
 
-#### 1.2 Update Wisp VanityURLSettings Component
+> **Note**: This is a Wisp package change. Publish a new Wisp version, or apply via patch-package.
 
-**File**: `node_modules/@coexist/wisp-react-native/src/components/vanity-url-settings/VanityURLSettings.tsx`
-
-Update the default vanity URL base from `umbra.app/c/` to `umbra.chat/c/`.
-
-#### 1.3 Pass baseUrl from CommunityInvitePanel
+#### Task 1.2 — Pass `baseUrl` from `CommunityInvitePanel`
 
 **File**: `components/community/CommunityInvitePanel.tsx`
 
+Add explicit `baseUrl` prop to avoid depending on the Wisp default:
 ```typescript
 const INVITE_BASE_URL = 'https://umbra.chat/invite/';
-const VANITY_BASE_URL = 'umbra.chat/c/';
 
-// In the component:
 return (
   <InviteManager
     invites={links}
     baseUrl={INVITE_BASE_URL}
-    // ... other props
+    // ... existing props
   />
 );
 ```
 
+**Acceptance**: Copying an invite URL produces `https://umbra.chat/invite/abc12def`.
+
 ---
 
-### Phase 2: Create Invite Route & Deep Linking
+### Phase 2: Join-via-Code UI (In-App)
 
-**Goal**: Handle invite URLs and route users appropriately
+**Goal**: Let users paste an invite code to join a community without needing deep links
 
-#### 2.1 Create Invite Page Route
+This is the simplest path to a working invite system. Before deep links, users can share codes in chat and paste them.
+
+#### Task 2.1 — Create `JoinCommunityModal` component
+
+**File**: `components/community/JoinCommunityModal.tsx` (NEW)
+
+A modal dialog with:
+- Text input for paste-an-invite-code
+- "Join" button that calls `service.useCommunityInvite(code, identity.did, displayName)`
+- Loading state while joining
+- Error states: invalid code, expired, max uses reached, already member, community not found
+- Success: navigates to the community page
+
+```typescript
+interface JoinCommunityModalProps {
+  open: boolean;
+  onClose: () => void;
+  /** Pre-filled invite code (from deep link or paste) */
+  initialCode?: string;
+}
+```
+
+**Error handling for "community not found" (the local-DB constraint)**:
+When `use_invite` fails because the community/invite data doesn't exist locally, show a message like:
+> "This invite couldn't be resolved. Ask the community owner to send you a direct invitation from within the app."
+
+This is the MVP fallback. In Phase 5, we add relay-based invite resolution.
+
+#### Task 2.2 — Add "Join Community" button to community list
+
+**File**: `components/sidebar/CommunitySidebar.tsx` (or wherever the community list is rendered)
+
+Add a `+` / "Join" button at the bottom of the community list that opens `JoinCommunityModal`.
+
+**Acceptance**: User pastes an invite code → joins the community → navigated to community page.
+
+---
+
+### Phase 3: Invite Route + Deep Linking
+
+**Goal**: Handle `umbra://invite/CODE` and `https://umbra.chat/invite/CODE` URLs
+
+#### Task 3.1 — Create invite route page
 
 **File**: `app/invite/[code].tsx` (NEW)
 
 ```typescript
-/**
- * Community Invite Handler
- *
- * Routes:
- * - Web: https://umbra.chat/invite/[code]
- * - Deep link: umbra://invite/[code]
- *
- * Flow:
- * 1. Parse invite code from URL
- * 2. Fetch invite/community info from backend
- * 3. If authenticated: show accept modal
- * 4. If unauthenticated: store code, redirect to auth
- */
-
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { View } from 'react-native';
 import { useAuth } from '@/contexts/AuthContext';
-import { InviteAcceptModal } from '@/components/community/InviteAcceptModal';
-import { usePendingInvite } from '@/hooks/usePendingInvite';
+import { JoinCommunityModal } from '@/components/community/JoinCommunityModal';
 
 export default function InvitePage() {
   const { code } = useLocalSearchParams<{ code: string }>();
   const { isAuthenticated } = useAuth();
-  const { setPendingInvite } = usePendingInvite();
   const router = useRouter();
-  const [showModal, setShowModal] = useState(false);
-
-  useEffect(() => {
-    if (!code) return;
-
-    if (isAuthenticated) {
-      // Show acceptance modal
-      setShowModal(true);
-    } else {
-      // Store invite code and redirect to auth
-      setPendingInvite(code);
-      router.replace('/(auth)');
-    }
-  }, [code, isAuthenticated]);
 
   if (!isAuthenticated) {
-    return null; // Redirecting to auth
+    // Will be handled by AuthGate redirect + pending invite (Phase 4)
+    return null;
   }
 
   return (
-    <View style={{ flex: 1 }}>
-      <InviteAcceptModal
-        open={showModal}
-        inviteCode={code}
-        onClose={() => {
-          setShowModal(false);
-          router.replace('/(main)');
-        }}
-        onAccepted={(communityId) => {
-          router.replace(`/(main)/community/${communityId}`);
-        }}
+    <View style={{ flex: 1, backgroundColor: '#000' }}>
+      <JoinCommunityModal
+        open
+        initialCode={code}
+        onClose={() => router.replace('/(main)')}
       />
     </View>
   );
 }
 ```
 
-#### 2.2 Configure Web URL Handling
-
-**File**: `app.json`
-
-```json
-{
-  "expo": {
-    "scheme": "umbra",
-    "web": {
-      "bundler": "metro",
-      "output": "static"
-    },
-    "plugins": [
-      "expo-router",
-      [
-        "expo-linking",
-        {
-          "origin": "https://umbra.chat"
-        }
-      ]
-    ]
-  }
-}
-```
-
-#### 2.3 Add Linking Configuration
+#### Task 3.2 — Add deep link handling to root layout
 
 **File**: `app/_layout.tsx`
+
+Add Linking listener in `AuthGate` (or a new `DeepLinkHandler` component):
 
 ```typescript
 import * as Linking from 'expo-linking';
 
-// In RootLayout:
+// Inside AuthGate:
 useEffect(() => {
-  // Handle initial URL (app opened via link)
+  const handleUrl = ({ url }: { url: string }) => {
+    const parsed = Linking.parse(url);
+    // Handle: umbra://invite/CODE or https://umbra.chat/invite/CODE
+    if (parsed.path?.startsWith('invite/')) {
+      const code = parsed.path.replace('invite/', '');
+      if (code) router.push(`/invite/${code}`);
+    }
+  };
+
+  // Handle URL that launched the app
   Linking.getInitialURL().then((url) => {
-    if (url) handleDeepLink(url);
+    if (url) handleUrl({ url });
   });
 
-  // Handle URL while app is open
-  const subscription = Linking.addEventListener('url', ({ url }) => {
-    handleDeepLink(url);
-  });
-
-  return () => subscription.remove();
+  // Handle URLs while app is running
+  const sub = Linking.addEventListener('url', handleUrl);
+  return () => sub.remove();
 }, []);
+```
 
-function handleDeepLink(url: string) {
-  const parsed = Linking.parse(url);
-  if (parsed.path?.startsWith('invite/')) {
-    const code = parsed.path.replace('invite/', '');
-    router.push(`/invite/${code}`);
+#### Task 3.3 — Configure Tauri deep link protocol
+
+**File**: `src-tauri/tauri.conf.json`
+
+Add deep link plugin configuration:
+```json
+{
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["umbra"]
+      }
+    }
   }
 }
 ```
 
+**File**: `src-tauri/Cargo.toml` — Add `tauri-plugin-deep-link`
+
+**File**: `src-tauri/src/lib.rs` — Register the plugin and forward URLs to the webview
+
+#### Task 3.4 — Configure iOS universal links (mobile)
+
+**File**: `app.json`
+
+Add associated domains for iOS:
+```json
+{
+  "expo": {
+    "ios": {
+      "associatedDomains": ["applinks:umbra.chat"]
+    }
+  }
+}
+```
+
+**Server-side**: Deploy `/.well-known/apple-app-site-association` on `umbra.chat`:
+```json
+{
+  "applinks": {
+    "apps": [],
+    "details": [{
+      "appID": "TEAM_ID.com.anonymous.Umbra",
+      "paths": ["/invite/*"]
+    }]
+  }
+}
+```
+
+**Acceptance**: Clicking `umbra://invite/abc12def` opens the app → shows `JoinCommunityModal` with code pre-filled → joining works.
+
 ---
 
-### Phase 3: Pending Invite State Management
+### Phase 4: Pending Invite (Auth Flow Persistence)
 
-**Goal**: Persist invite code through auth flow
+**Goal**: If an unauthenticated user clicks an invite link, preserve the code through signup
 
-#### 3.1 Create Pending Invite Hook
+#### Task 4.1 — Create `usePendingInvite` hook
 
 **File**: `hooks/usePendingInvite.ts` (NEW)
 
 ```typescript
-/**
- * Manages pending invite state across auth flow.
- *
- * When an unauthenticated user clicks an invite link:
- * 1. Store the invite code in AsyncStorage
- * 2. Redirect to auth
- * 3. After auth completes, retrieve and clear the code
- * 4. Auto-join the community
- */
-
 import { useState, useEffect, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Platform } from 'react-native';
 
 const PENDING_INVITE_KEY = '@umbra/pending_invite';
 
-export interface PendingInvite {
-  code: string;
-  timestamp: number;
-}
-
 export function usePendingInvite() {
-  const [pendingInvite, setPendingInviteState] = useState<PendingInvite | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [pendingCode, setPendingCodeState] = useState<string | null>(null);
+  const [isLoaded, setIsLoaded] = useState(false);
 
-  // Load on mount
   useEffect(() => {
-    AsyncStorage.getItem(PENDING_INVITE_KEY)
-      .then((value) => {
-        if (value) {
-          const parsed = JSON.parse(value) as PendingInvite;
-          // Expire after 1 hour
-          if (Date.now() - parsed.timestamp < 3600000) {
-            setPendingInviteState(parsed);
-          } else {
-            AsyncStorage.removeItem(PENDING_INVITE_KEY);
-          }
-        }
-      })
-      .finally(() => setIsLoading(false));
+    if (Platform.OS === 'web') {
+      const code = localStorage.getItem(PENDING_INVITE_KEY);
+      setPendingCodeState(code);
+      setIsLoaded(true);
+    } else {
+      AsyncStorage.getItem(PENDING_INVITE_KEY)
+        .then((code) => setPendingCodeState(code))
+        .finally(() => setIsLoaded(true));
+    }
   }, []);
 
-  const setPendingInvite = useCallback(async (code: string) => {
-    const invite: PendingInvite = { code, timestamp: Date.now() };
-    await AsyncStorage.setItem(PENDING_INVITE_KEY, JSON.stringify(invite));
-    setPendingInviteState(invite);
+  const setPendingCode = useCallback(async (code: string) => {
+    if (Platform.OS === 'web') {
+      localStorage.setItem(PENDING_INVITE_KEY, code);
+    } else {
+      await AsyncStorage.setItem(PENDING_INVITE_KEY, code);
+    }
+    setPendingCodeState(code);
   }, []);
 
-  const clearPendingInvite = useCallback(async () => {
-    await AsyncStorage.removeItem(PENDING_INVITE_KEY);
-    setPendingInviteState(null);
-  }, []);
-
-  const consumePendingInvite = useCallback(async (): Promise<string | null> => {
-    if (!pendingInvite) return null;
-    const code = pendingInvite.code;
-    await clearPendingInvite();
+  const consumePendingCode = useCallback(async (): Promise<string | null> => {
+    const code = pendingCode;
+    if (Platform.OS === 'web') {
+      localStorage.removeItem(PENDING_INVITE_KEY);
+    } else {
+      await AsyncStorage.removeItem(PENDING_INVITE_KEY);
+    }
+    setPendingCodeState(null);
     return code;
-  }, [pendingInvite, clearPendingInvite]);
+  }, [pendingCode]);
 
-  return {
-    pendingInvite,
-    isLoading,
-    setPendingInvite,
-    clearPendingInvite,
-    consumePendingInvite,
-  };
+  return { pendingCode, isLoaded, setPendingCode, consumePendingCode };
 }
 ```
 
-#### 3.2 Handle Pending Invite After Auth
+#### Task 4.2 — Wire pending invite into `AuthGate`
 
-**File**: `app/_layout.tsx` (modify AuthGate)
+**File**: `app/_layout.tsx`
+
+In AuthGate, after authentication completes + WASM is ready, check for pending invite:
 
 ```typescript
-function AuthGate() {
-  const { isAuthenticated } = useAuth();
-  const { pendingInvite, consumePendingInvite, isLoading: inviteLoading } = usePendingInvite();
-  const router = useRouter();
+const { pendingCode, isLoaded: inviteLoaded, consumePendingCode } = usePendingInvite();
 
-  // After authentication, check for pending invite
-  useEffect(() => {
-    if (!isAuthenticated || inviteLoading) return;
-
-    if (pendingInvite) {
-      consumePendingInvite().then((code) => {
-        if (code) {
-          router.push(`/invite/${code}`);
-        }
-      });
-    }
-  }, [isAuthenticated, inviteLoading, pendingInvite]);
-
-  // ... rest of AuthGate
-}
+useEffect(() => {
+  if (!isAuthenticated || !isReady || !inviteLoaded || !pendingCode) return;
+  consumePendingCode().then((code) => {
+    if (code) router.push(`/invite/${code}`);
+  });
+}, [isAuthenticated, isReady, inviteLoaded, pendingCode]);
 ```
+
+#### Task 4.3 — Store pending invite on unauthenticated deep link
+
+**File**: `app/invite/[code].tsx`
+
+When the invite page loads for an unauthenticated user:
+```typescript
+useEffect(() => {
+  if (!isAuthenticated && code) {
+    setPendingCode(code);
+    router.replace('/(auth)');
+  }
+}, [isAuthenticated, code]);
+```
+
+**Acceptance**: Unauthenticated user clicks invite link → redirected to auth → creates account → automatically redirected to invite join flow.
 
 ---
 
-### Phase 4: Invite Accept Modal
+### Phase 5: Relay-Based Invite Resolution (Future)
 
-**Goal**: Show a modal for authenticated users to accept invites
+**Goal**: Allow users to join communities they don't have locally via relay lookup
 
-#### 4.1 Create InviteAcceptModal Component
+This phase is needed for the invite system to work fully — without it, `use_invite` fails if the community data isn't already in the joiner's local DB.
 
-**File**: `components/community/InviteAcceptModal.tsx` (NEW)
+#### Task 5.1 — Add `invite_preview` dispatcher method
 
-```typescript
-/**
- * Modal shown when an authenticated user opens an invite link.
- *
- * Displays:
- * - Community name and icon
- * - Member count
- * - Invite creator info
- * - Accept/Decline buttons
- */
+**Files**:
+- `packages/umbra-core/src/community/invites.rs` — Add `get_invite_preview()` method
+- `packages/umbra-core/src/ffi/dispatch_community.rs` — Add `community_invite_preview` match arm
+- `packages/umbra-core/src/ffi/dispatcher.rs` — Add route
+- `packages/umbra-core/src/ffi/wasm.rs` — Add WASM binding
+- `packages/umbra-wasm/rn-backend.ts` — Add RN backend binding
+- `packages/umbra-wasm/tauri-backend.ts` — Add Tauri backend binding
+- `packages/umbra-service/src/community.ts` — Add `getInvitePreview()` TS function
 
-import React, { useEffect, useState } from 'react';
-import { View, Image } from 'react-native';
-import { Dialog, Text, Button, VStack, HStack, Avatar } from '@coexist/wisp-react-native';
-import { UmbraService } from '@umbra/service';
-import { useAuth } from '@/contexts/AuthContext';
-import { useCommunityInvites } from '@/hooks/useCommunityInvites';
+The preview returns: `{ community_id, community_name, community_icon, member_count, already_member }`.
 
-interface InviteInfo {
-  communityId: string;
-  communityName: string;
-  communityIcon?: string;
-  memberCount: number;
-  creatorNickname?: string;
-  alreadyMember: boolean;
-}
+This works when the community data exists locally. For non-local communities, returns an error that the UI handles gracefully.
 
-interface InviteAcceptModalProps {
-  open: boolean;
-  inviteCode: string;
-  onClose: () => void;
-  onAccepted: (communityId: string) => void;
-}
+#### Task 5.2 — Add relay invite resolution endpoint
 
-export function InviteAcceptModal({
-  open,
-  inviteCode,
-  onClose,
-  onAccepted,
-}: InviteAcceptModalProps) {
-  const { identity } = useAuth();
-  const { useInvite } = useCommunityInvites(null);
-  const [inviteInfo, setInviteInfo] = useState<InviteInfo | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isAccepting, setIsAccepting] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+The relay server needs a new endpoint that community owners can register their invites with, allowing remote preview/resolution. This requires:
 
-  // Fetch invite info on mount
-  useEffect(() => {
-    if (!open || !inviteCode) return;
+1. Community owners push invite metadata to relay when creating invites
+2. Relay stores: `{ code, community_name, community_icon, member_count, owner_did }`
+3. `GET /api/invite/:code` returns preview data
+4. `POST /api/invite/:code/use` forwards join request to community owner via relay
 
-    setIsLoading(true);
-    setError(null);
+This is a significant server-side addition and should be planned separately.
 
-    // TODO: Add API to fetch invite preview info
-    // For now, we'll try to use the invite directly
-    UmbraService.getInvitePreview(inviteCode)
-      .then((info) => {
-        setInviteInfo(info);
-      })
-      .catch((err) => {
-        setError(err.message || 'Invalid or expired invite');
-      })
-      .finally(() => setIsLoading(false));
-  }, [open, inviteCode]);
+#### Task 5.3 — Relay-based community data sync on invite use
 
-  const handleAccept = async () => {
-    if (!identity?.did || !inviteCode) return;
-
-    setIsAccepting(true);
-    setError(null);
-
-    try {
-      const communityId = await useInvite(inviteCode);
-      if (communityId) {
-        onAccepted(communityId);
-      }
-    } catch (err: any) {
-      setError(err.message || 'Failed to join community');
-    } finally {
-      setIsAccepting(false);
-    }
-  };
-
-  return (
-    <Dialog open={open} onClose={onClose}>
-      <Dialog.Content>
-        <VStack gap="lg" style={{ alignItems: 'center', padding: 24 }}>
-          {isLoading ? (
-            <Text>Loading invite...</Text>
-          ) : error ? (
-            <>
-              <Text color="error">{error}</Text>
-              <Button variant="secondary" onPress={onClose}>
-                Close
-              </Button>
-            </>
-          ) : inviteInfo?.alreadyMember ? (
-            <>
-              <Avatar
-                src={inviteInfo.communityIcon}
-                name={inviteInfo.communityName}
-                size="xl"
-              />
-              <Text size="xl" weight="bold">
-                {inviteInfo.communityName}
-              </Text>
-              <Text color="secondary">
-                You're already a member of this community
-              </Text>
-              <Button
-                variant="primary"
-                onPress={() => onAccepted(inviteInfo.communityId)}
-              >
-                Go to Community
-              </Button>
-            </>
-          ) : (
-            <>
-              <Avatar
-                src={inviteInfo?.communityIcon}
-                name={inviteInfo?.communityName}
-                size="xl"
-              />
-              <Text size="xl" weight="bold">
-                {inviteInfo?.communityName}
-              </Text>
-              <Text color="secondary">
-                {inviteInfo?.memberCount} members
-              </Text>
-              {inviteInfo?.creatorNickname && (
-                <Text size="sm" color="muted">
-                  Invited by {inviteInfo.creatorNickname}
-                </Text>
-              )}
-              <HStack gap="md" style={{ marginTop: 16 }}>
-                <Button
-                  variant="secondary"
-                  onPress={onClose}
-                  disabled={isAccepting}
-                >
-                  Decline
-                </Button>
-                <Button
-                  variant="primary"
-                  onPress={handleAccept}
-                  loading={isAccepting}
-                >
-                  Accept Invite
-                </Button>
-              </HStack>
-            </>
-          )}
-        </VStack>
-      </Dialog.Content>
-    </Dialog>
-  );
-}
-```
-
-#### 4.2 Add Invite Preview API
-
-**File**: `packages/umbra-service/src/community.ts`
-
-```typescript
-/**
- * Get preview information for an invite code without using it.
- */
-export async function getInvitePreview(code: string): Promise<{
-  communityId: string;
-  communityName: string;
-  communityIcon?: string;
-  memberCount: number;
-  creatorNickname?: string;
-  alreadyMember: boolean;
-}> {
-  const result = await communityModule.getInvitePreview(code);
-  return result;
-}
-```
-
-**File**: `packages/umbra-core/src/community/invites.rs`
-
-```rust
-/// Get preview information for an invite without consuming it.
-pub fn get_invite_preview(
-    &self,
-    code: &str,
-    viewer_did: Option<&str>,
-) -> Result<InvitePreview> {
-    let invite = self.db().get_community_invite_by_code(code)?
-        .ok_or(Error::InviteNotFound)?;
-
-    // Check expiration
-    if let Some(expires_at) = invite.expires_at {
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_millis() as u64)
-            .unwrap_or(0);
-        if now > expires_at {
-            return Err(Error::InviteExpired);
-        }
-    }
-
-    // Check max uses
-    if let Some(max_uses) = invite.max_uses {
-        if invite.use_count >= max_uses {
-            return Err(Error::InviteMaxUsesReached);
-        }
-    }
-
-    let community = self.db().get_community(&invite.community_id)?
-        .ok_or(Error::CommunityNotFound)?;
-
-    let member_count = self.db().get_community_member_count(&invite.community_id)?;
-
-    let already_member = viewer_did
-        .map(|did| self.db().is_community_member(&invite.community_id, did).unwrap_or(false))
-        .unwrap_or(false);
-
-    let creator = self.db().get_community_member(&invite.community_id, &invite.creator_did)?;
-
-    Ok(InvitePreview {
-        community_id: invite.community_id,
-        community_name: community.name,
-        community_icon: community.icon,
-        member_count,
-        creator_nickname: creator.map(|m| m.nickname),
-        already_member,
-    })
-}
-```
+When a user successfully uses an invite via relay, the community owner needs to:
+1. Send the full community structure (spaces, categories, channels, roles) to the new member
+2. The new member's client stores this data locally
+3. Then the member can interact with the community
 
 ---
 
-### Phase 5: In-Chat Invite Link Preview
+### Phase 6: In-Chat Link Preview (Optional Enhancement)
 
-**Goal**: Render rich previews for invite links in conversations
+**Goal**: Show rich invite previews when invite URLs are sent in DMs or community channels
 
-#### 5.1 Create InviteLinkPreview Component
+#### Task 6.1 — Create `InviteLinkPreview` component
 
 **File**: `components/chat/InviteLinkPreview.tsx` (NEW)
 
-```typescript
-/**
- * Rich preview card for community invite links in chat.
- *
- * Detects umbra.chat/invite/[code] URLs and renders:
- * - Community avatar and name
- * - Member count
- * - Join button (or "Joined" badge if already member)
- */
+Detects `umbra.chat/invite/CODE` URLs in messages and renders a card with community info + Join button.
 
-import React, { useEffect, useState } from 'react';
-import { View, Pressable } from 'react-native';
-import { Text, Avatar, Button, Card, HStack, Badge } from '@coexist/wisp-react-native';
-import { UmbraService } from '@umbra/service';
-import { useAuth } from '@/contexts/AuthContext';
-import { useCommunityInvites } from '@/hooks/useCommunityInvites';
-import { useRouter } from 'expo-router';
+#### Task 6.2 — Integrate with message rendering
 
-interface InviteLinkPreviewProps {
-  url: string;
-}
-
-const INVITE_URL_REGEX = /^https?:\/\/umbra\.chat\/invite\/([a-zA-Z0-9]+)$/;
-
-export function InviteLinkPreview({ url }: InviteLinkPreviewProps) {
-  const match = url.match(INVITE_URL_REGEX);
-  const code = match?.[1];
-  const { identity } = useAuth();
-  const { useInvite } = useCommunityInvites(null);
-  const router = useRouter();
-
-  const [preview, setPreview] = useState<{
-    communityId: string;
-    communityName: string;
-    communityIcon?: string;
-    memberCount: number;
-    alreadyMember: boolean;
-  } | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isJoining, setIsJoining] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!code) return;
-
-    setIsLoading(true);
-    UmbraService.getInvitePreview(code)
-      .then(setPreview)
-      .catch((err) => setError(err.message))
-      .finally(() => setIsLoading(false));
-  }, [code]);
-
-  if (!code) return null;
-
-  const handleJoin = async () => {
-    if (!identity?.did) return;
-
-    setIsJoining(true);
-    try {
-      const communityId = await useInvite(code);
-      if (communityId) {
-        router.push(`/(main)/community/${communityId}`);
-      }
-    } catch (err: any) {
-      setError(err.message);
-    } finally {
-      setIsJoining(false);
-    }
-  };
-
-  const handleGoToCommunity = () => {
-    if (preview?.communityId) {
-      router.push(`/(main)/community/${preview.communityId}`);
-    }
-  };
-
-  if (isLoading) {
-    return (
-      <Card variant="outlined" padding="md" style={{ marginTop: 8 }}>
-        <Text color="muted">Loading invite preview...</Text>
-      </Card>
-    );
-  }
-
-  if (error || !preview) {
-    return (
-      <Card variant="outlined" padding="md" style={{ marginTop: 8 }}>
-        <Text color="error">{error || 'Invalid invite'}</Text>
-      </Card>
-    );
-  }
-
-  return (
-    <Card variant="outlined" padding="md" style={{ marginTop: 8 }}>
-      <Pressable onPress={preview.alreadyMember ? handleGoToCommunity : undefined}>
-        <HStack gap="md" style={{ alignItems: 'center' }}>
-          <Avatar
-            src={preview.communityIcon}
-            name={preview.communityName}
-            size="md"
-          />
-          <View style={{ flex: 1 }}>
-            <Text weight="semibold">{preview.communityName}</Text>
-            <Text size="sm" color="secondary">
-              {preview.memberCount} members
-            </Text>
-          </View>
-          {preview.alreadyMember ? (
-            <Badge variant="success" size="sm">Joined</Badge>
-          ) : (
-            <Button
-              variant="primary"
-              size="sm"
-              onPress={handleJoin}
-              loading={isJoining}
-            >
-              Join
-            </Button>
-          )}
-        </HStack>
-      </Pressable>
-    </Card>
-  );
-}
-
-/**
- * Check if a URL is an Umbra invite link.
- */
-export function isInviteLink(url: string): boolean {
-  return INVITE_URL_REGEX.test(url);
-}
-```
-
-#### 5.2 Integrate into Message Rendering
-
-The Wisp `ChatBubble` component handles message rendering. We need to either:
-
-**Option A**: Extend ChatBubble to detect and render invite links
-**Option B**: Post-process messages to extract and render previews
-
-**Recommended**: Option B - Create a wrapper that detects links
-
-**File**: `components/chat/MessageWithPreviews.tsx` (NEW)
-
-```typescript
-/**
- * Wrapper around chat messages that detects and renders link previews.
- */
-
-import React, { useMemo } from 'react';
-import { View } from 'react-native';
-import { InviteLinkPreview, isInviteLink } from './InviteLinkPreview';
-
-interface MessageWithPreviewsProps {
-  content: string;
-  children: React.ReactNode;
-}
-
-const URL_REGEX = /https?:\/\/[^\s<]+/g;
-
-export function MessageWithPreviews({ content, children }: MessageWithPreviewsProps) {
-  const inviteLinks = useMemo(() => {
-    const urls = content.match(URL_REGEX) || [];
-    return urls.filter(isInviteLink);
-  }, [content]);
-
-  return (
-    <View>
-      {children}
-      {inviteLinks.map((url, i) => (
-        <InviteLinkPreview key={`${url}-${i}`} url={url} />
-      ))}
-    </View>
-  );
-}
-```
-
----
-
-### Phase 6: Backend Relay Support (Optional)
-
-**Goal**: Allow invite preview fetching without requiring local database
-
-For web-based link previews (Open Graph) and cross-device preview fetching, add relay endpoints.
-
-#### 6.1 Add Invite Preview Endpoint
-
-**File**: `packages/umbra-relay/src/routes/invite.rs` (NEW)
-
-```rust
-/// GET /invite/:code/preview
-///
-/// Returns public preview info for an invite without consuming it.
-/// Used for:
-/// - Link preview cards in chat
-/// - Open Graph meta tags
-/// - Pre-auth invite validation
-pub async fn get_invite_preview(
-    Path(code): Path<String>,
-) -> Result<Json<InvitePreviewResponse>, StatusCode> {
-    // This would require communities to be synced to relay
-    // or a p2p request to the community owner
-    //
-    // For MVP: Return 501 Not Implemented
-    // Full implementation requires community data on relay
-    Err(StatusCode::NOT_IMPLEMENTED)
-}
-```
+Wrap message content rendering to detect and render invite link previews inline.
 
 ---
 
 ## File Summary
 
-### New Files
+### New Files (Phases 1–4)
+| File | Phase | Description |
+|------|-------|-------------|
+| `components/community/JoinCommunityModal.tsx` | 2 | Paste-code-to-join modal |
+| `app/invite/[code].tsx` | 3 | Deep link route handler |
+| `hooks/usePendingInvite.ts` | 4 | Auth flow invite persistence |
 
-| File | Description |
-|------|-------------|
-| `app/invite/[code].tsx` | Invite route handler |
-| `hooks/usePendingInvite.ts` | Pending invite state management |
-| `components/community/InviteAcceptModal.tsx` | Accept invite modal |
-| `components/chat/InviteLinkPreview.tsx` | In-chat link preview |
-| `components/chat/MessageWithPreviews.tsx` | Message wrapper with previews |
-
-### Modified Files
-
-| File | Changes |
-|------|---------|
-| `components/community/CommunityInvitePanel.tsx` | Pass `baseUrl` prop |
-| `app/_layout.tsx` | Add deep link handling, pending invite check |
-| `app.json` | Add expo-linking config |
-| `packages/umbra-service/src/community.ts` | Add `getInvitePreview()` |
-| `packages/umbra-core/src/community/invites.rs` | Add `get_invite_preview()` |
-| Wisp `InviteManager.tsx` | Update default `baseUrl` |
-
-### Wisp Package Changes
-
-The following changes need to be made to the Wisp design system:
-
-1. `InviteManager.tsx`: Change default `baseUrl` from `umbra.app` to `umbra.chat`
-2. `VanityURLSettings.tsx`: Update vanity URL base domain
-
----
-
-## User Flow Diagrams
-
-### Authenticated User Flow
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    User clicks invite link                       │
-│              https://umbra.chat/invite/abc123                   │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                    App opens /invite/abc123                      │
-│                    Check: isAuthenticated?                       │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼ YES
-┌─────────────────────────────────────────────────────────────────┐
-│                    Show InviteAcceptModal                        │
-│                    - Fetch invite preview                        │
-│                    - Display community info                      │
-│                    - Accept / Decline buttons                    │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-              ┌───────────────┴───────────────┐
-              ▼                               ▼
-┌─────────────────────────┐     ┌─────────────────────────┐
-│     User clicks         │     │     User clicks         │
-│       "Accept"          │     │       "Decline"         │
-└─────────────────────────┘     └─────────────────────────┘
-              │                               │
-              ▼                               ▼
-┌─────────────────────────┐     ┌─────────────────────────┐
-│  Call useCommunityInvite│     │  Close modal            │
-│  Navigate to community  │     │  Return to previous     │
-└─────────────────────────┘     └─────────────────────────┘
-```
-
-### Unauthenticated User Flow
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    User clicks invite link                       │
-│              https://umbra.chat/invite/abc123                   │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                    App opens /invite/abc123                      │
-│                    Check: isAuthenticated?                       │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼ NO
-┌─────────────────────────────────────────────────────────────────┐
-│                    Store invite code                             │
-│                    AsyncStorage: @umbra/pending_invite           │
-│                    Redirect to /(auth)                           │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                    Auth Screen                                   │
-│                    Create / Import Wallet                        │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                    Auth completes                                │
-│                    AuthGate detects pendingInvite                │
-│                    Consumes and redirects to /invite/abc123      │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                    Show InviteAcceptModal                        │
-│                    (Same as authenticated flow)                  │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-### In-Chat Link Preview
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│  Message: "Join our community! https://umbra.chat/invite/xyz"   │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│                    MessageWithPreviews                           │
-│                    - Detects invite URL                          │
-│                    - Renders InviteLinkPreview                   │
-└─────────────────────────────────────────────────────────────────┘
-                              │
-                              ▼
-┌─────────────────────────────────────────────────────────────────┐
-│  ┌────────────────────────────────────────────────────────────┐ │
-│  │  [Avatar]  My Cool Community                    [Join]     │ │
-│  │            42 members                                      │ │
-│  └────────────────────────────────────────────────────────────┘ │
-└─────────────────────────────────────────────────────────────────┘
-```
+### Modified Files (Phases 1–4)
+| File | Phase | Changes |
+|------|-------|---------|
+| `components/community/CommunityInvitePanel.tsx` | 1 | Add `baseUrl` prop |
+| Wisp `InviteManager.tsx` (via patch) | 1 | Fix default domain |
+| Community sidebar component | 2 | Add "Join" button |
+| `app/_layout.tsx` | 3, 4 | Deep link handler + pending invite consumption |
+| `src-tauri/tauri.conf.json` | 3 | Protocol handler config |
+| `src-tauri/Cargo.toml` | 3 | Deep link plugin dependency |
+| `src-tauri/src/lib.rs` | 3 | Register deep link plugin |
+| `app.json` | 3 | iOS associated domains |
 
 ---
 
 ## Testing Checklist
 
-### Domain Fix
-- [ ] Invite URLs generated use `umbra.chat` domain
-- [ ] Vanity URLs use `umbra.chat/c/` format
-- [ ] Copied URLs are correct
+### Phase 1 — Domain Fix
+- [ ] Copying an invite URL produces `https://umbra.chat/invite/CODE`
+- [ ] Vanity URL displays use `umbra.chat/c/` prefix
 
-### Deep Linking
-- [ ] Web URL `umbra.chat/invite/[code]` routes correctly
-- [ ] Native deep link `umbra://invite/[code]` works
-- [ ] Invalid codes show appropriate error
+### Phase 2 — Join via Code
+- [ ] Open "Join Community" modal from community list
+- [ ] Paste valid invite code → join succeeds → navigated to community
+- [ ] Invalid code → shows "invite not found" error
+- [ ] Expired code → shows "invite expired" error
+- [ ] Max uses reached → shows appropriate error
+- [ ] Already a member → shows "already a member" message
 
-### Auth Flow
-- [ ] Unauthenticated user stores pending invite
-- [ ] After signup, user is redirected to invite
-- [ ] After import, user is redirected to invite
-- [ ] Pending invite expires after 1 hour
+### Phase 3 — Deep Linking
+- [ ] `umbra://invite/CODE` opens app and shows join modal (mobile)
+- [ ] Desktop protocol handler opens join flow
+- [ ] Web URL `https://umbra.chat/invite/CODE` routes correctly
 
-### Accept Modal
-- [ ] Shows community name and icon
-- [ ] Shows member count
-- [ ] Accept button joins community
-- [ ] Decline button closes modal
-- [ ] Already member shows "Go to Community"
-
-### Link Preview
-- [ ] Invite links in chat show preview card
-- [ ] Preview shows community info
-- [ ] Join button works from preview
-- [ ] "Joined" badge shows for members
-- [ ] Multiple invite links in one message work
+### Phase 4 — Pending Invite
+- [ ] Unauthenticated click → stored → auth → auto-redirected to join
+- [ ] Pending invite cleared after consumption
+- [ ] Stale pending invites don't interfere
 
 ---
 
 ## Security Considerations
 
-1. **Invite Code Validation**: Always validate invite codes on the backend
-2. **Rate Limiting**: Prevent invite code enumeration attacks
-3. **Expiry Checking**: Server-side expiry validation, not just client
-4. **Ban Checking**: Verify user isn't banned before allowing join
-5. **Pending Invite TTL**: Expire stored invite codes after 1 hour
-
----
-
-## Future Enhancements
-
-1. **Open Graph Tags**: Generate meta tags for link previews on social media
-2. **QR Codes**: Generate scannable invite QR codes
-3. **Invite Analytics**: Track invite usage and conversion rates
-4. **Custom Invite Pages**: Branded landing pages for communities
-5. **Relay-Based Preview**: Fetch preview from relay for cross-device support
+1. **Rate limit invite usage**: Prevent brute-force code enumeration
+2. **Validate server-side**: Expiry and max-uses checked in Rust, not just UI
+3. **Ban check**: `join_community` already checks ban list
+4. **Pending invite TTL**: Clear stale pending invites after 1 hour
+5. **Invite code entropy**: 8 chars from 36-char alphabet = ~41 bits — acceptable for non-security-critical codes

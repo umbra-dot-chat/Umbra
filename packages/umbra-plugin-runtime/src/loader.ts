@@ -57,8 +57,8 @@ export function validateManifest(manifest: unknown): ValidationResult {
 
   if (Array.isArray(m.platforms)) {
     for (const p of m.platforms) {
-      if (p !== 'web' && p !== 'desktop') {
-        errors.push(`Invalid platform: "${p}". Must be "web" or "desktop".`);
+      if (p !== 'web' && p !== 'desktop' && p !== 'mobile') {
+        errors.push(`Invalid platform: "${p}". Must be "web", "desktop", or "mobile".`);
       }
     }
   }
@@ -98,6 +98,9 @@ export class PluginLoader {
    *
    * The bundle is evaluated as a self-contained module that exports
    * `{ activate, deactivate, components }`.
+   *
+   * Uses Blob + dynamic import on web/desktop, and Function() evaluation
+   * on mobile (React Native) where Blob URLs aren't available.
    */
   async loadFromBundle(pluginId: string, bundleCode: string): Promise<PluginModule> {
     // Check cache
@@ -105,18 +108,53 @@ export class PluginLoader {
     if (cached) return cached;
 
     try {
-      // Create a blob URL and dynamically import
-      const blob = new Blob([bundleCode], { type: 'application/javascript' });
-      const url = URL.createObjectURL(blob);
+      let mod: any;
 
-      try {
-        const mod = await import(/* webpackIgnore: true */ url);
-        const pluginModule = this.extractPluginModule(mod);
-        this.moduleCache.set(pluginId, pluginModule);
-        return pluginModule;
-      } finally {
-        URL.revokeObjectURL(url);
+      if (typeof Blob !== 'undefined' && typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function') {
+        // Web/Desktop: Blob URL + dynamic import (supports full ESM)
+        const blob = new Blob([bundleCode], { type: 'application/javascript' });
+        const url = URL.createObjectURL(blob);
+        try {
+          mod = await import(/* webpackIgnore: true */ url);
+        } finally {
+          URL.revokeObjectURL(url);
+        }
+      } else {
+        // Mobile (React Native): evaluate via Function() constructor.
+        // Plugin bundles use ESM `export` statements which are invalid inside
+        // a Function body, so we transform them to CJS assignments first.
+        let cjsCode = bundleCode
+          // export async function name(  →  async function name(  +  exports.name = name
+          .replace(/export\s+(async\s+)?function\s+(\w+)/g, '$1function $2')
+          // export function name(  →  function name(  +  exports.name = name
+          // export const name =  →  const name =  +  exports.name = name
+          .replace(/export\s+(const|let|var)\s+(\w+)/g, '$1 $2')
+          // Collect exported names for assignment
+          ;
+
+        // Extract named exports and append CJS assignments
+        const exportNames: string[] = [];
+        const namedExportRe = /export\s+(?:async\s+)?(?:function|const|let|var)\s+(\w+)/g;
+        let m2: RegExpExecArray | null;
+        while ((m2 = namedExportRe.exec(bundleCode)) !== null) {
+          exportNames.push(m2[1]);
+        }
+        for (const name of exportNames) {
+          cjsCode += `\nexports.${name} = ${name};`;
+        }
+
+        const exports: Record<string, any> = {};
+        const moduleObj = { exports };
+        // eslint-disable-next-line no-new-func
+        const factory = new Function('module', 'exports', 'React', cjsCode);
+        const React = require('react');
+        factory(moduleObj, exports, React);
+        mod = moduleObj.exports;
       }
+
+      const pluginModule = this.extractPluginModule(mod);
+      this.moduleCache.set(pluginId, pluginModule);
+      return pluginModule;
     } catch (err: any) {
       throw new Error(`Failed to load plugin "${pluginId}" from bundle: ${err.message}`);
     }

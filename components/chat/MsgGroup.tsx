@@ -28,7 +28,7 @@ export function MsgGroup({
         {avatar && onAvatarPress ? (
           <Pressable onPress={onAvatarPress}>{avatar}</Pressable>
         ) : avatar}
-        <View style={{ flexDirection: 'column', gap: 2, alignItems: isOut ? 'flex-end' : 'flex-start', flexShrink: 1 }}>
+        <View style={{ flexDirection: 'column', gap: 2, alignItems: isOut ? 'flex-end' : 'flex-start', flex: 1, flexShrink: 1 }}>
           {children}
         </View>
       </View>

@@ -72,7 +72,12 @@ import {
   createPluginStorage,
   createSandboxedAPI,
 } from '@umbra/plugin-runtime';
-import type { ServiceBridge } from '@umbra/plugin-runtime';
+import type { ServiceBridge, PluginRegistryJSON } from '@umbra/plugin-runtime';
+
+// Bundled plugin registry — used as a fallback on mobile where
+// fetch('/plugins.json') is unavailable (no dev server serving static files).
+import BUNDLED_REGISTRY_JSON from '@/public/plugins.json';
+const BUNDLED_REGISTRY = BUNDLED_REGISTRY_JSON as unknown as PluginRegistryJSON;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -121,7 +126,7 @@ export function PluginProvider({ children }: { children: React.ReactNode }) {
   // Stable references
   const registryRef = useRef(new PluginRegistry());
   const loaderRef = useRef(new PluginLoader());
-  const marketplaceRef = useRef(new MarketplaceClient());
+  const marketplaceRef = useRef(new MarketplaceClient(undefined, BUNDLED_REGISTRY));
   const commandsRef = useRef<Map<string, PluginCommand[]>>(new Map());
 
   const registry = registryRef.current;

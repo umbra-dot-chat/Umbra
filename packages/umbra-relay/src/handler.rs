@@ -215,6 +215,40 @@ async fn handle_client_message(state: &RelayState, from_did: &str, msg: ClientMe
             state.send_to_client(from_did, ServerMessage::Pong);
         }
 
+        ClientMessage::PublishInvite {
+            code,
+            community_id,
+            community_name,
+            community_description,
+            community_icon,
+            member_count,
+            max_uses,
+            expires_at,
+            invite_payload,
+        } => {
+            handle_publish_invite(
+                state,
+                from_did,
+                &code,
+                &community_id,
+                &community_name,
+                community_description.as_deref(),
+                community_icon.as_deref(),
+                member_count,
+                max_uses,
+                expires_at,
+                &invite_payload,
+            );
+        }
+
+        ClientMessage::RevokeInvite { code } => {
+            handle_revoke_invite(state, from_did, &code);
+        }
+
+        ClientMessage::ResolveInvite { code } => {
+            handle_resolve_invite(state, from_did, &code);
+        }
+
         ClientMessage::CreateCallRoom { group_id } => {
             handle_create_call_room(state, from_did, &group_id);
         }
@@ -391,6 +425,103 @@ fn handle_fetch_offline(state: &RelayState, did: &str) {
     state.send_to_client(
         did,
         ServerMessage::OfflineMessages { messages },
+    );
+}
+
+// ── Invite Handlers ──────────────────────────────────────────────────────────
+
+/// Publish a community invite to the relay.
+#[allow(clippy::too_many_arguments)]
+fn handle_publish_invite(
+    state: &RelayState,
+    publisher_did: &str,
+    code: &str,
+    community_id: &str,
+    community_name: &str,
+    community_description: Option<&str>,
+    community_icon: Option<&str>,
+    member_count: u32,
+    max_uses: Option<i32>,
+    expires_at: Option<i64>,
+    invite_payload: &str,
+) {
+    state.publish_invite(
+        code,
+        publisher_did,
+        community_id,
+        community_name,
+        community_description,
+        community_icon,
+        member_count,
+        max_uses,
+        expires_at,
+        invite_payload,
+    );
+
+    state.send_to_client(
+        publisher_did,
+        ServerMessage::Ack {
+            id: format!("invite_published_{}", code),
+        },
+    );
+}
+
+/// Revoke a published invite.
+fn handle_revoke_invite(state: &RelayState, publisher_did: &str, code: &str) {
+    state.revoke_invite(code);
+
+    state.send_to_client(
+        publisher_did,
+        ServerMessage::Ack {
+            id: format!("invite_revoked_{}", code),
+        },
+    );
+}
+
+/// Resolve an invite code — look up published invite metadata.
+/// Tries local store first, then asks federated peers.
+fn handle_resolve_invite(state: &RelayState, requester_did: &str, code: &str) {
+    // Try local resolution first
+    if let Some(invite) = state.resolve_invite(code) {
+        state.send_to_client(
+            requester_did,
+            ServerMessage::InviteResolved {
+                code: invite.code,
+                community_id: invite.community_id,
+                community_name: invite.community_name,
+                community_description: invite.community_description,
+                community_icon: invite.community_icon,
+                member_count: invite.member_count,
+                max_uses: invite.max_uses,
+                expires_at: invite.expires_at,
+                invite_payload: invite.invite_payload,
+            },
+        );
+        return;
+    }
+
+    // Try federation — ask all peers if they have this invite
+    if let Some(ref fed) = state.federation {
+        tracing::debug!(
+            code = code,
+            requester = requester_did,
+            "Invite not found locally, forwarding to federation"
+        );
+        fed.broadcast_to_peers(PeerMessage::ForwardResolveInvite {
+            code: code.to_string(),
+            requester_did: requester_did.to_string(),
+        });
+        // The response will come back via ForwardInviteResolved
+        // and be delivered by handle_federation_inbound
+        return;
+    }
+
+    // Not found anywhere
+    state.send_to_client(
+        requester_did,
+        ServerMessage::InviteNotFound {
+            code: code.to_string(),
+        },
     );
 }
 
@@ -722,6 +853,118 @@ pub async fn handle_federation_inbound(
                 );
 
                 state.queue_offline_message(&to_did, &from_did, &payload, timestamp);
+            }
+
+            PeerMessage::InviteSync {
+                code,
+                publisher_did,
+                community_id,
+                community_name,
+                community_description,
+                community_icon,
+                member_count,
+                max_uses,
+                expires_at,
+                invite_payload,
+                published_at,
+            } => {
+                tracing::debug!(
+                    code = code.as_str(),
+                    community = community_name.as_str(),
+                    "Importing federated invite"
+                );
+
+                let invite = crate::protocol::PublishedInvite {
+                    code,
+                    publisher_did,
+                    community_id,
+                    community_name,
+                    community_description,
+                    community_icon,
+                    member_count,
+                    max_uses,
+                    use_count: 0,
+                    expires_at,
+                    invite_payload,
+                    published_at: chrono::DateTime::from_timestamp(published_at, 0)
+                        .unwrap_or_else(Utc::now),
+                };
+
+                state.import_invite(invite);
+            }
+
+            PeerMessage::InviteRevoke { code } => {
+                tracing::debug!(
+                    code = code.as_str(),
+                    "Processing federated invite revocation"
+                );
+                // Remove locally without re-broadcasting (avoid loops)
+                state.published_invites.remove(&code);
+            }
+
+            PeerMessage::ForwardResolveInvite {
+                code,
+                requester_did,
+            } => {
+                tracing::debug!(
+                    code = code.as_str(),
+                    requester = requester_did.as_str(),
+                    "Processing federated invite resolution request"
+                );
+
+                // Check if we have this invite locally
+                if let Some(invite) = state.resolve_invite(&code) {
+                    // Send the resolution back through federation
+                    if let Some(ref fed) = state.federation {
+                        fed.broadcast_to_peers(PeerMessage::ForwardInviteResolved {
+                            code: invite.code,
+                            requester_did,
+                            community_id: invite.community_id,
+                            community_name: invite.community_name,
+                            community_description: invite.community_description,
+                            community_icon: invite.community_icon,
+                            member_count: invite.member_count,
+                            max_uses: invite.max_uses,
+                            expires_at: invite.expires_at,
+                            invite_payload: invite.invite_payload,
+                        });
+                    }
+                }
+            }
+
+            PeerMessage::ForwardInviteResolved {
+                code,
+                requester_did,
+                community_id,
+                community_name,
+                community_description,
+                community_icon,
+                member_count,
+                max_uses,
+                expires_at,
+                invite_payload,
+            } => {
+                tracing::debug!(
+                    code = code.as_str(),
+                    requester = requester_did.as_str(),
+                    "Delivering federated invite resolution"
+                );
+
+                // Deliver the resolved invite to the local requester
+                state.send_to_client(
+                    &requester_did,
+                    ServerMessage::InviteResolved {
+                        code,
+                        community_id,
+                        community_name,
+                        community_description,
+                        community_icon,
+                        member_count,
+                        max_uses,
+                        expires_at,
+                        invite_payload,
+                    },
+                );
             }
 
             // Presence messages are handled by the federation module directly

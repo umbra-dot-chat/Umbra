@@ -80,14 +80,26 @@ export class MarketplaceClient {
   private cache: PluginRegistry | null = null;
   private cacheExpiry: number = 0;
   private cacheTTL: number = 5 * 60 * 1000; // 5 minutes
+  private bundledRegistry: PluginRegistry | null = null;
 
-  constructor(registryUrl?: string) {
+  constructor(registryUrl?: string, bundledRegistry?: PluginRegistry) {
     this.registryUrl = registryUrl ?? DEFAULT_REGISTRY_URL;
+    this.bundledRegistry = bundledRegistry ?? null;
+  }
+
+  /**
+   * Provide a bundled/embedded registry as a fallback.
+   * Used on platforms where fetch('/plugins.json') is unavailable (e.g. React Native).
+   */
+  setBundledRegistry(registry: PluginRegistry): void {
+    this.bundledRegistry = registry;
   }
 
   /**
    * Fetch the full plugin registry.
-   * Results are cached for 5 minutes.
+   * Results are cached for 5 minutes. Falls back to bundled registry
+   * when the network fetch fails (e.g. on React Native where relative
+   * URLs don't resolve to a dev server).
    */
   async getRegistry(): Promise<PluginRegistry> {
     if (this.cache && Date.now() < this.cacheExpiry) {
@@ -109,6 +121,14 @@ export class MarketplaceClient {
       if (this.cache) {
         console.warn('Failed to refresh plugin registry, using stale cache:', err.message);
         return this.cache;
+      }
+
+      // Fall back to bundled registry (for mobile / offline)
+      if (this.bundledRegistry) {
+        console.warn('Using bundled plugin registry (fetch failed):', err.message);
+        this.cache = this.bundledRegistry;
+        this.cacheExpiry = Date.now() + this.cacheTTL;
+        return this.bundledRegistry;
       }
 
       // Return empty registry on first failure

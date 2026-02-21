@@ -354,7 +354,11 @@ impl Federation {
             | PeerMessage::ForwardMessage { .. }
             | PeerMessage::ForwardSessionJoin { .. }
             | PeerMessage::SessionSync { .. }
-            | PeerMessage::ForwardOffline { .. } => {
+            | PeerMessage::ForwardOffline { .. }
+            | PeerMessage::InviteSync { .. }
+            | PeerMessage::InviteRevoke { .. }
+            | PeerMessage::ForwardResolveInvite { .. }
+            | PeerMessage::ForwardInviteResolved { .. } => {
                 if let Err(e) = self.inbound_tx.send(msg) {
                     tracing::error!(
                         peer = peer_url,

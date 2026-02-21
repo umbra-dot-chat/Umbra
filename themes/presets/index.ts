@@ -30,3 +30,4 @@ export { moonlightTheme } from './moonlight';
 export { vesperTheme } from './vesper';
 export { midnightTheme } from './midnight';
 export { emberTheme } from './ember';
+export { inkBlackTheme } from './ink-black';

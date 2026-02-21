@@ -50,7 +50,7 @@ export function ActiveCallBar() {
       }}
     >
       {/* Caller info */}
-      <Avatar name={activeCall.remoteDisplayName} size="xs" />
+      <Avatar name={activeCall.remoteDisplayName} size="xs" status="online" />
       <View style={{ flex: 1, gap: 2 }}>
         <Text size="sm" weight="semibold" style={{ color: '#FFFFFF' }}>
           {activeCall.remoteDisplayName}

@@ -8,7 +8,8 @@
  */
 
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
-import { View, Pressable, ScrollView, Text as RNText, ActivityIndicator, Platform } from 'react-native';
+import { View, Pressable, ScrollView, Text as RNText, ActivityIndicator, Platform, useWindowDimensions } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Overlay,
   Button,
@@ -20,7 +21,7 @@ import {
 } from '@coexist/wisp-react-native';
 import { SearchInput } from '@coexist/wisp-react-native';
 import { usePlugins } from '@/contexts/PluginContext';
-import { useFonts, FONT_REGISTRY } from '@/contexts/FontContext';
+import { useFonts, FONT_REGISTRY, loadGoogleFont, getFontFamily } from '@/contexts/FontContext';
 import { useAppTheme } from '@/contexts/ThemeContext';
 import type { FontEntry } from '@/contexts/FontContext';
 import {
@@ -139,8 +140,11 @@ function formatSize(bytes: number): string {
  * Google Font file has finished loading, triggering a re-apply to ensure
  * the browser renders with the correct typeface.
  */
-function FontPreviewText({ fontFamily, fontReady, style, children }: {
+function FontPreviewText({ fontFamily, nativeFontName, fontReady, style, children }: {
+  /** CSS font-family value for web (e.g. '"Inter", sans-serif') */
   fontFamily?: string;
+  /** Native font name registered via expo-font (e.g. 'Inter') */
+  nativeFontName?: string;
   fontReady?: boolean;
   style?: Record<string, any>;
   children: React.ReactNode;
@@ -150,14 +154,17 @@ function FontPreviewText({ fontFamily, fontReady, style, children }: {
   useEffect(() => {
     if (Platform.OS !== 'web' || !ref.current || !fontFamily) return;
     const el = ref.current as unknown as HTMLElement;
-    // setProperty with !important priority beats the CSS * rule
+    // setProperty with !important priority beats the global CSS * rule
     el.style.setProperty('font-family', fontFamily, 'important');
   }, [fontFamily, fontReady]);
+
+  // On native, use the registered font name directly; on web, the ref effect handles it
+  const resolvedFamily = Platform.OS !== 'web' ? nativeFontName : undefined;
 
   return (
     <RNText
       ref={ref}
-      style={[style, fontFamily ? { fontFamily: fontFamily.split(',')[0].replace(/"/g, '') } : undefined]}
+      style={[style, resolvedFamily ? { fontFamily: resolvedFamily } : undefined]}
       numberOfLines={1}
     >
       {children}
@@ -232,16 +239,58 @@ function ListingCard({
           )}
         </View>
       </View>
-      {listing.tags.length > 0 && (
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4 }}>
-          {listing.tags.slice(0, 4).map((tag) => (
-            <Tag key={tag} size="sm" style={{ borderRadius: 6 }}>
-              {tag}
-            </Tag>
-          ))}
-        </View>
-      )}
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
+        {/* Platform badges */}
+        {listing.platforms && listing.platforms.length > 0 && (
+          <PlatformBadges platforms={listing.platforms} />
+        )}
+        {listing.tags.length > 0 && listing.tags.slice(0, 4).map((tag) => (
+          <Tag key={tag} size="sm" style={{ borderRadius: 6 }}>
+            {tag}
+          </Tag>
+        ))}
+      </View>
     </Pressable>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Platform Badges — visual indicator for supported platforms
+// ─────────────────────────────────────────────────────────────────────────────
+
+const PLATFORM_CONFIG: Record<string, { label: string; color: string; icon: string }> = {
+  web: { label: 'Web', color: '#3B82F6', icon: '\u{1F310}' },
+  desktop: { label: 'Desktop', color: '#8B5CF6', icon: '\u{1F5A5}' },
+  mobile: { label: 'Mobile', color: '#10B981', icon: '\u{1F4F1}' },
+};
+
+function PlatformBadges({ platforms }: { platforms: string[] }) {
+  const { theme } = useTheme();
+  const tc = theme.colors;
+
+  // If all three platforms, show a single "Cross-platform" badge
+  if (platforms.length >= 3 && platforms.includes('web') && platforms.includes('desktop') && platforms.includes('mobile')) {
+    return (
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, backgroundColor: 'rgba(16,185,129,0.15)' }}>
+        <RNText style={{ fontSize: 9 }}>{'\u{2728}'}</RNText>
+        <RNText style={{ fontSize: 10, fontWeight: '600', color: '#10B981' }}>Cross-platform</RNText>
+      </View>
+    );
+  }
+
+  return (
+    <>
+      {platforms.map((p) => {
+        const config = PLATFORM_CONFIG[p];
+        if (!config) return null;
+        return (
+          <View key={p} style={{ flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 5, paddingVertical: 2, borderRadius: 4, backgroundColor: `${config.color}15` }}>
+            <RNText style={{ fontSize: 9 }}>{config.icon}</RNText>
+            <RNText style={{ fontSize: 10, fontWeight: '500', color: config.color }}>{config.label}</RNText>
+          </View>
+        );
+      })}
+    </>
   );
 }
 
@@ -363,9 +412,11 @@ function PluginDetailView({
             <RNText style={{ fontSize: 14, fontWeight: '600', color: tc.text.primary }}>{formatSize(listing.size)}</RNText>
           </View>
         )}
-        <View style={{ gap: 2 }}>
+        <View style={{ gap: 4 }}>
           <RNText style={{ fontSize: 11, color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>Platforms</RNText>
-          <RNText style={{ fontSize: 14, fontWeight: '600', color: tc.text.primary }}>{listing.platforms.join(', ')}</RNText>
+          <View style={{ flexDirection: 'row', gap: 4, flexWrap: 'wrap' }}>
+            <PlatformBadges platforms={listing.platforms} />
+          </View>
         </View>
       </View>
       {listing.permissions && listing.permissions.length > 0 && (
@@ -421,42 +472,48 @@ function FontCard({ font, isInstalled, isActive, isLoading, onInstall, onActivat
   const isDark = mode === 'dark';
   const [previewLoaded, setPreviewLoaded] = useState(false);
 
-  // Load preview font on mount (lightweight — just for preview).
-  // Uses the Font Loading API to wait for actual font file readiness,
-  // not just the CSS stylesheet load.
+  // Load preview font on mount — works on both web and native.
+  // Web: injects a <link> stylesheet and waits via Font Loading API.
+  // Native: downloads .ttf via expo-font (reuses loadGoogleFont from FontContext).
   useEffect(() => {
     if (font.id === 'system') { setPreviewLoaded(true); return; }
-    if (typeof document === 'undefined') return;
-    const previewText = 'The quick brown fox jumps over the lazy dog 0123456789';
-    const url = `https://fonts.googleapis.com/css2?family=${font.family}:wght@400;700&display=swap&text=${encodeURIComponent(previewText)}`;
-    const linkId = `font-preview-${font.id}`;
-    if (document.getElementById(linkId)) {
-      // Link already exists — check if font is ready
-      if ('fonts' in document) {
-        const familyName = font.css.split(',')[0].trim();
-        document.fonts.load(`400 16px ${familyName}`).then(() => setPreviewLoaded(true)).catch(() => setPreviewLoaded(true));
-      } else {
-        setPreviewLoaded(true);
+
+    if (Platform.OS === 'web') {
+      if (typeof document === 'undefined') return;
+      const previewText = 'The quick brown fox jumps over the lazy dog 0123456789';
+      const url = `https://fonts.googleapis.com/css2?family=${font.family}:wght@400;700&display=swap&text=${encodeURIComponent(previewText)}`;
+      const linkId = `font-preview-${font.id}`;
+      if (document.getElementById(linkId)) {
+        if ('fonts' in document) {
+          const familyName = font.css.split(',')[0].trim();
+          document.fonts.load(`400 16px ${familyName}`).then(() => setPreviewLoaded(true)).catch(() => setPreviewLoaded(true));
+        } else {
+          setPreviewLoaded(true);
+        }
+        return;
       }
-      return;
+      const link = document.createElement('link');
+      link.id = linkId;
+      link.rel = 'stylesheet';
+      link.href = url;
+      link.onload = () => {
+        if ('fonts' in document) {
+          const familyName = font.css.split(',')[0].trim();
+          document.fonts.load(`400 16px ${familyName}`)
+            .then(() => setPreviewLoaded(true))
+            .catch(() => setPreviewLoaded(true));
+        } else {
+          setPreviewLoaded(true);
+        }
+      };
+      link.onerror = () => setPreviewLoaded(true);
+      document.head.appendChild(link);
+    } else {
+      // Native: load via expo-font (handles caching internally)
+      loadGoogleFont(font)
+        .then(() => setPreviewLoaded(true))
+        .catch(() => setPreviewLoaded(true));
     }
-    const link = document.createElement('link');
-    link.id = linkId;
-    link.rel = 'stylesheet';
-    link.href = url;
-    link.onload = () => {
-      // Stylesheet loaded — now wait for font file via Font Loading API
-      if ('fonts' in document) {
-        const familyName = font.css.split(',')[0].trim();
-        document.fonts.load(`400 16px ${familyName}`)
-          .then(() => setPreviewLoaded(true))
-          .catch(() => setPreviewLoaded(true));
-      } else {
-        setPreviewLoaded(true);
-      }
-    };
-    link.onerror = () => setPreviewLoaded(true);
-    document.head.appendChild(link);
   }, [font]);
 
   return (
@@ -470,6 +527,7 @@ function FontCard({ font, isInstalled, isActive, isLoading, onInstall, onActivat
       <View style={{ minHeight: 48, justifyContent: 'center' }}>
         <FontPreviewText
           fontFamily={font.id === 'system' ? undefined : font.css}
+          nativeFontName={font.id === 'system' ? undefined : font.name}
           fontReady={previewLoaded}
           style={{ fontSize: 22, fontWeight: '700' as const, color: tc.text.primary, opacity: previewLoaded ? 1 : 0.3 }}
         >
@@ -477,6 +535,7 @@ function FontCard({ font, isInstalled, isActive, isLoading, onInstall, onActivat
         </FontPreviewText>
         <FontPreviewText
           fontFamily={font.id === 'system' ? undefined : font.css}
+          nativeFontName={font.id === 'system' ? undefined : font.name}
           fontReady={previewLoaded}
           style={{ fontSize: 14, color: tc.text.secondary, marginTop: 2, opacity: previewLoaded ? 1 : 0.3 }}
         >
@@ -1052,10 +1111,16 @@ function ComingSoonContent({ title, description, icon: Icon, color }: { title: s
 // Main Component
 // ─────────────────────────────────────────────────────────────────────────────
 
+/** Breakpoint below which we use the compact mobile layout. */
+const MOBILE_BREAKPOINT = 600;
+
 export function PluginMarketplace({ open, onClose }: PluginMarketplaceProps) {
   const { theme, mode } = useTheme();
   const tc = theme.colors;
   const isDark = mode === 'dark';
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+  const isMobile = windowWidth < MOBILE_BREAKPOINT;
+  const safeInsets = Platform.OS !== 'web' ? useSafeAreaInsets() : { top: 0, bottom: 0, left: 0, right: 0 };
   const {
     registry, marketplace, installPlugin, uninstallPlugin, enablePlugin, disablePlugin, enabledCount,
   } = usePlugins();
@@ -1095,8 +1160,12 @@ export function PluginMarketplace({ open, onClose }: PluginMarketplaceProps) {
     return () => { cancelled = true; };
   }, [open, marketplace]);
 
+  const currentPlatform = Platform.OS === 'web' ? 'web' : Platform.OS === 'ios' || Platform.OS === 'android' ? 'mobile' : 'desktop';
+
   const filteredListings = useMemo(() => {
     let result = listings;
+    // Filter by current platform — only show plugins that support this platform
+    result = result.filter((p) => !p.platforms || p.platforms.length === 0 || p.platforms.includes(currentPlatform as any));
     const q = search.toLowerCase().trim();
     if (q) {
       result = result.filter((p) => p.name.toLowerCase().includes(q) || p.description.toLowerCase().includes(q) || p.tags.some((t) => t.toLowerCase().includes(q)) || p.author.name.toLowerCase().includes(q));
@@ -1106,7 +1175,7 @@ export function PluginMarketplace({ open, onClose }: PluginMarketplaceProps) {
       result = result.filter((p) => p.tags.some((t) => t.toLowerCase() === cat));
     }
     return result;
-  }, [listings, search, selectedCategory]);
+  }, [listings, search, selectedCategory, currentPlatform]);
 
   const allPlugins = registry.getAllPlugins();
 
@@ -1144,110 +1213,21 @@ export function PluginMarketplace({ open, onClose }: PluginMarketplaceProps) {
 
   const activeSectionInfo = SECTIONS.find((s) => s.id === activeSection)!;
 
-  // ── Render ──────────────────────────────────────────────────────────────
+  // ── Shared Content Renderer ────────────────────────────────────────────
 
-  return (
-    <Overlay open={open} backdrop="dim" center onBackdropPress={handleClose} animationType="fade">
-      <View
-        style={{
-          width: 860, maxWidth: '95%', height: 600, maxHeight: '90%',
-          flexDirection: 'row', borderRadius: 16, overflow: 'hidden',
-          backgroundColor: isDark ? tc.background.raised : tc.background.canvas,
-          borderWidth: 1,
-          borderColor: tc.border.subtle,
-          shadowColor: '#000', shadowOffset: { width: 0, height: 12 },
-          shadowOpacity: isDark ? 0.6 : 0.25, shadowRadius: 32, elevation: 12,
-        }}
-      >
-        {/* ── Left Sidebar ── */}
-        <View
-          style={{
-            width: 210,
-            backgroundColor: isDark ? tc.background.surface : tc.background.sunken,
-            borderRightWidth: 1,
-            borderRightColor: tc.border.subtle,
-            paddingVertical: 16, paddingHorizontal: 10,
-          }}
-        >
-          {/* Title */}
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 8, marginBottom: 16 }}>
-            <View style={{ width: 30, height: 30, borderRadius: 8, backgroundColor: '#F59E0B', alignItems: 'center', justifyContent: 'center' }}>
-              <ShoppingBagIcon size={16} color={tc.text.inverse} />
-            </View>
-            <RNText style={{ fontSize: 15, fontWeight: '700', color: tc.text.primary }}>Marketplace</RNText>
-          </View>
-
-          {/* Section List */}
-          <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
-            {SECTIONS.map((sec) => {
-              const isActive = activeSection === sec.id;
-              const Icon = sec.icon;
-              return (
-                <Pressable
-                  key={sec.id}
-                  onPress={() => { setActiveSection(sec.id); setSelectedListing(null); }}
-                  style={({ pressed }) => ({
-                    flexDirection: 'row', alignItems: 'center', gap: 10,
-                    paddingVertical: 9, paddingHorizontal: 10, borderRadius: 8,
-                    backgroundColor: isActive ? tc.accent.primary : pressed ? tc.accent.highlight : 'transparent',
-                    marginBottom: 2,
-                  })}
-                >
-                  <View style={{ width: 24, height: 24, borderRadius: 6, backgroundColor: isActive ? sec.color : tc.accent.highlight, alignItems: 'center', justifyContent: 'center' }}>
-                    <Icon size={13} color={isActive ? tc.text.inverse : tc.text.secondary} />
-                  </View>
-                  <RNText style={{ fontSize: 13, fontWeight: isActive ? '600' : '400', color: isActive ? tc.text.inverse : tc.text.secondary, flex: 1 }} numberOfLines={1}>
-                    {sec.label}
-                  </RNText>
-                  {sec.id === 'plugins' && allPlugins.length > 0 && (
-                    <View style={{ paddingHorizontal: 6, paddingVertical: 1, borderRadius: 8, backgroundColor: isActive ? 'rgba(255,255,255,0.2)' : tc.accent.highlight }}>
-                      <RNText style={{ fontSize: 10, fontWeight: '600', color: isActive ? tc.text.inverse : tc.text.muted }}>{allPlugins.length}</RNText>
-                    </View>
-                  )}
-                </Pressable>
-              );
-            })}
-          </ScrollView>
-
-          {/* Footer */}
-          <RNText style={{ fontSize: 11, color: tc.text.muted, textAlign: 'center', marginTop: 12 }}>
-            Umbra Marketplace
-          </RNText>
+  const renderSectionContent = () => (
+    <>
+      {/* Error banner */}
+      {error && (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: isMobile ? 12 : 20, marginTop: 10, padding: 10, borderRadius: 8, backgroundColor: `${tc.status.danger}15` }}>
+          <AlertTriangleIcon size={14} color={tc.status.danger} />
+          <RNText style={{ fontSize: 12, color: tc.status.danger, flex: 1 }}>{error}</RNText>
+          <Pressable onPress={() => setError(null)} style={{ padding: 2 }}><XIcon size={12} color={tc.status.danger} /></Pressable>
         </View>
+      )}
 
-        {/* ── Right Content ── */}
-        <View style={{ flex: 1 }}>
-          {/* Section Header */}
-          <View
-            style={{
-              flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-              paddingHorizontal: 28, paddingVertical: 16,
-              borderBottomWidth: 1,
-              borderBottomColor: tc.border.subtle,
-            }}
-          >
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-              <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: activeSectionInfo.color, alignItems: 'center', justifyContent: 'center' }}>
-                <activeSectionInfo.icon size={18} color={tc.text.inverse} />
-              </View>
-              <RNText style={{ fontSize: 18, fontWeight: '700', color: tc.text.primary }}>{activeSectionInfo.label}</RNText>
-            </View>
-            <Pressable onPress={handleClose} style={{ width: 28, height: 28, borderRadius: 6, alignItems: 'center', justifyContent: 'center' }} accessibilityLabel="Close marketplace">
-              <XIcon size={16} color={tc.text.secondary} />
-            </Pressable>
-          </View>
-
-          {/* Error banner */}
-          {error && (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: 20, marginTop: 10, padding: 10, borderRadius: 8, backgroundColor: `${tc.status.danger}15` }}>
-              <AlertTriangleIcon size={14} color={tc.status.danger} />
-              <RNText style={{ fontSize: 12, color: tc.status.danger, flex: 1 }}>{error}</RNText>
-              <Pressable onPress={() => setError(null)} style={{ padding: 2 }}><XIcon size={12} color={tc.status.danger} /></Pressable>
-            </View>
-          )}
-
-          {/* Section Content */}
-          {activeSection === 'plugins' ? (
+      {/* Section Content */}
+      {activeSection === 'plugins' ? (
             selectedListing ? (
               <PluginDetailView
                 listing={selectedListing}
@@ -1368,6 +1348,210 @@ export function PluginMarketplace({ open, onClose }: PluginMarketplaceProps) {
           ) : (
             <FontsContent />
           )}
+    </>
+  );
+
+  // ── Render ──────────────────────────────────────────────────────────────
+
+  if (isMobile) {
+    return (
+      <Overlay open={open} backdrop="dim" center onBackdropPress={handleClose} animationType="fade">
+        <View
+          style={{
+            width: windowWidth,
+            height: windowHeight,
+            flexDirection: 'column',
+            backgroundColor: isDark ? tc.background.raised : tc.background.canvas,
+          }}
+        >
+          {/* ── Mobile Header ── */}
+          <View
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              paddingHorizontal: 16,
+              paddingTop: 12 + safeInsets.top,
+              paddingBottom: 12,
+              borderBottomWidth: 1,
+              borderBottomColor: tc.border.subtle,
+              backgroundColor: isDark ? tc.background.surface : tc.background.sunken,
+            }}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <View style={{ width: 28, height: 28, borderRadius: 7, backgroundColor: '#F59E0B', alignItems: 'center', justifyContent: 'center' }}>
+                <ShoppingBagIcon size={14} color={tc.text.inverse} />
+              </View>
+              <RNText style={{ fontSize: 16, fontWeight: '700', color: tc.text.primary }}>Marketplace</RNText>
+            </View>
+            <Pressable
+              onPress={handleClose}
+              style={{ width: 32, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center' }}
+              accessibilityLabel="Close marketplace"
+            >
+              <XIcon size={18} color={tc.text.secondary} />
+            </Pressable>
+          </View>
+
+          {/* ── Horizontal Section Picker ── */}
+          <View
+            style={{
+              flexDirection: 'row',
+              borderBottomWidth: 1,
+              borderBottomColor: tc.border.subtle,
+              paddingHorizontal: 12,
+              paddingVertical: 8,
+              gap: 6,
+            }}
+          >
+            {SECTIONS.map((sec) => {
+              const isActive = activeSection === sec.id;
+              const Icon = sec.icon;
+              return (
+                <Pressable
+                  key={sec.id}
+                  onPress={() => { setActiveSection(sec.id); setSelectedListing(null); }}
+                  style={{
+                    flex: 1,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 6,
+                    paddingVertical: 8,
+                    borderRadius: 8,
+                    backgroundColor: isActive ? tc.accent.primary : tc.accent.highlight,
+                  }}
+                >
+                  <View
+                    style={{
+                      width: 20,
+                      height: 20,
+                      borderRadius: 5,
+                      backgroundColor: isActive ? sec.color : 'transparent',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                  >
+                    <Icon size={11} color={isActive ? tc.text.inverse : tc.text.secondary} />
+                  </View>
+                  <RNText
+                    style={{
+                      fontSize: 12,
+                      fontWeight: isActive ? '600' : '400',
+                      color: isActive ? tc.text.inverse : tc.text.secondary,
+                    }}
+                    numberOfLines={1}
+                  >
+                    {sec.label}
+                  </RNText>
+                </Pressable>
+              );
+            })}
+          </View>
+
+          {/* ── Content ── */}
+          <View style={{ flex: 1, paddingBottom: safeInsets.bottom }}>
+            {renderSectionContent()}
+          </View>
+        </View>
+      </Overlay>
+    );
+  }
+
+  // ── Desktop layout (unchanged) ──────────────────────────────────────────
+
+  return (
+    <Overlay open={open} backdrop="dim" center onBackdropPress={handleClose} animationType="fade">
+      <View
+        style={{
+          width: 860, maxWidth: '95%', height: 600, maxHeight: '90%',
+          flexDirection: 'row', borderRadius: 16, overflow: 'hidden',
+          backgroundColor: isDark ? tc.background.raised : tc.background.canvas,
+          borderWidth: 1,
+          borderColor: tc.border.subtle,
+          shadowColor: '#000', shadowOffset: { width: 0, height: 12 },
+          shadowOpacity: isDark ? 0.6 : 0.25, shadowRadius: 32, elevation: 12,
+        }}
+      >
+        {/* ── Left Sidebar ── */}
+        <View
+          style={{
+            width: 210,
+            backgroundColor: isDark ? tc.background.surface : tc.background.sunken,
+            borderRightWidth: 1,
+            borderRightColor: tc.border.subtle,
+            paddingVertical: 16, paddingHorizontal: 10,
+          }}
+        >
+          {/* Title */}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 8, marginBottom: 16 }}>
+            <View style={{ width: 30, height: 30, borderRadius: 8, backgroundColor: '#F59E0B', alignItems: 'center', justifyContent: 'center' }}>
+              <ShoppingBagIcon size={16} color={tc.text.inverse} />
+            </View>
+            <RNText style={{ fontSize: 15, fontWeight: '700', color: tc.text.primary }}>Marketplace</RNText>
+          </View>
+
+          {/* Section List */}
+          <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
+            {SECTIONS.map((sec) => {
+              const isActive = activeSection === sec.id;
+              const Icon = sec.icon;
+              return (
+                <Pressable
+                  key={sec.id}
+                  onPress={() => { setActiveSection(sec.id); setSelectedListing(null); }}
+                  style={({ pressed }) => ({
+                    flexDirection: 'row', alignItems: 'center', gap: 10,
+                    paddingVertical: 9, paddingHorizontal: 10, borderRadius: 8,
+                    backgroundColor: isActive ? tc.accent.primary : pressed ? tc.accent.highlight : 'transparent',
+                    marginBottom: 2,
+                  })}
+                >
+                  <View style={{ width: 24, height: 24, borderRadius: 6, backgroundColor: isActive ? sec.color : tc.accent.highlight, alignItems: 'center', justifyContent: 'center' }}>
+                    <Icon size={13} color={isActive ? tc.text.inverse : tc.text.secondary} />
+                  </View>
+                  <RNText style={{ fontSize: 13, fontWeight: isActive ? '600' : '400', color: isActive ? tc.text.inverse : tc.text.secondary, flex: 1 }} numberOfLines={1}>
+                    {sec.label}
+                  </RNText>
+                  {sec.id === 'plugins' && allPlugins.length > 0 && (
+                    <View style={{ paddingHorizontal: 6, paddingVertical: 1, borderRadius: 8, backgroundColor: isActive ? 'rgba(255,255,255,0.2)' : tc.accent.highlight }}>
+                      <RNText style={{ fontSize: 10, fontWeight: '600', color: isActive ? tc.text.inverse : tc.text.muted }}>{allPlugins.length}</RNText>
+                    </View>
+                  )}
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+
+          {/* Footer */}
+          <RNText style={{ fontSize: 11, color: tc.text.muted, textAlign: 'center', marginTop: 12 }}>
+            Umbra Marketplace
+          </RNText>
+        </View>
+
+        {/* ── Right Content ── */}
+        <View style={{ flex: 1 }}>
+          {/* Section Header */}
+          <View
+            style={{
+              flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+              paddingHorizontal: 28, paddingVertical: 16,
+              borderBottomWidth: 1,
+              borderBottomColor: tc.border.subtle,
+            }}
+          >
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: activeSectionInfo.color, alignItems: 'center', justifyContent: 'center' }}>
+                <activeSectionInfo.icon size={18} color={tc.text.inverse} />
+              </View>
+              <RNText style={{ fontSize: 18, fontWeight: '700', color: tc.text.primary }}>{activeSectionInfo.label}</RNText>
+            </View>
+            <Pressable onPress={handleClose} style={{ width: 28, height: 28, borderRadius: 6, alignItems: 'center', justifyContent: 'center' }} accessibilityLabel="Close marketplace">
+              <XIcon size={16} color={tc.text.secondary} />
+            </Pressable>
+          </View>
+
+          {renderSectionContent()}
         </View>
       </View>
     </Overlay>

@@ -11,7 +11,7 @@ use tokio::sync::mpsc;
 use uuid::Uuid;
 
 use crate::federation::Federation;
-use crate::protocol::{CallRoom, OfflineMessage, ServerMessage, SignalingSession};
+use crate::protocol::{CallRoom, OfflineMessage, PublishedInvite, ServerMessage, SignalingSession};
 
 /// Maximum number of offline messages to store per DID.
 const DEFAULT_MAX_OFFLINE_PER_DID: usize = 1000;
@@ -27,6 +27,9 @@ const DEFAULT_MAX_CALL_PARTICIPANTS: usize = 50;
 
 /// Default call room TTL in seconds (4 hours).
 const DEFAULT_CALL_ROOM_TTL_SECS: i64 = 4 * 3600;
+
+/// Default invite TTL in seconds (7 days).
+const DEFAULT_INVITE_TTL_SECS: i64 = 7 * 24 * 3600;
 
 /// Server configuration.
 #[derive(Debug, Clone)]
@@ -79,6 +82,11 @@ pub struct RelayState {
     /// Tracks active group call rooms and their participants.
     pub call_rooms: Arc<DashMap<String, CallRoom>>,
 
+    /// Invite code → published invite.
+    /// Community owners publish invites here so they can be resolved by
+    /// anyone on the network, even if the owner is offline.
+    pub published_invites: Arc<DashMap<String, PublishedInvite>>,
+
     /// Server configuration.
     pub config: RelayConfig,
 
@@ -95,6 +103,7 @@ impl RelayState {
             offline_queue: Arc::new(DashMap::new()),
             sessions: Arc::new(DashMap::new()),
             call_rooms: Arc::new(DashMap::new()),
+            published_invites: Arc::new(DashMap::new()),
             config,
             federation: None,
         }
@@ -107,6 +116,7 @@ impl RelayState {
             offline_queue: Arc::new(DashMap::new()),
             sessions: Arc::new(DashMap::new()),
             call_rooms: Arc::new(DashMap::new()),
+            published_invites: Arc::new(DashMap::new()),
             config,
             federation: Some(federation),
         }
@@ -523,6 +533,134 @@ impl RelayState {
         affected
     }
 
+    // ── Published Invites ──────────────────────────────────────────────
+
+    /// Publish a community invite so it can be resolved by other clients.
+    /// Replicates to federated peers.
+    pub fn publish_invite(
+        &self,
+        code: &str,
+        publisher_did: &str,
+        community_id: &str,
+        community_name: &str,
+        community_description: Option<&str>,
+        community_icon: Option<&str>,
+        member_count: u32,
+        max_uses: Option<i32>,
+        expires_at: Option<i64>,
+        invite_payload: &str,
+    ) {
+        let now = Utc::now();
+
+        let invite = PublishedInvite {
+            code: code.to_string(),
+            publisher_did: publisher_did.to_string(),
+            community_id: community_id.to_string(),
+            community_name: community_name.to_string(),
+            community_description: community_description.map(|s| s.to_string()),
+            community_icon: community_icon.map(|s| s.to_string()),
+            member_count,
+            max_uses,
+            use_count: 0,
+            expires_at,
+            invite_payload: invite_payload.to_string(),
+            published_at: now,
+        };
+
+        tracing::info!(
+            code = code,
+            community = community_name,
+            publisher = publisher_did,
+            "Published community invite"
+        );
+
+        self.published_invites.insert(code.to_string(), invite);
+
+        // Replicate to federated peers
+        if let Some(ref fed) = self.federation {
+            fed.broadcast_to_peers(crate::protocol::PeerMessage::InviteSync {
+                code: code.to_string(),
+                publisher_did: publisher_did.to_string(),
+                community_id: community_id.to_string(),
+                community_name: community_name.to_string(),
+                community_description: community_description.map(|s| s.to_string()),
+                community_icon: community_icon.map(|s| s.to_string()),
+                member_count,
+                max_uses,
+                expires_at,
+                invite_payload: invite_payload.to_string(),
+                published_at: now.timestamp(),
+            });
+        }
+    }
+
+    /// Import a published invite from a federated peer.
+    pub fn import_invite(&self, invite: PublishedInvite) {
+        // Don't overwrite existing invites
+        if self.published_invites.contains_key(&invite.code) {
+            return;
+        }
+
+        tracing::debug!(
+            code = invite.code.as_str(),
+            community = invite.community_name.as_str(),
+            "Imported federated invite"
+        );
+
+        self.published_invites.insert(invite.code.clone(), invite);
+    }
+
+    /// Resolve an invite code — look up published invite metadata.
+    pub fn resolve_invite(&self, code: &str) -> Option<PublishedInvite> {
+        if let Some(invite) = self.published_invites.get(code) {
+            let now = Utc::now().timestamp();
+
+            // Check expiration
+            if let Some(expires_at) = invite.expires_at {
+                if now * 1000 > expires_at {
+                    // Expired in millis — remove it
+                    drop(invite);
+                    self.published_invites.remove(code);
+                    return None;
+                }
+            }
+
+            // Check max uses
+            if let Some(max_uses) = invite.max_uses {
+                if invite.use_count >= max_uses {
+                    drop(invite);
+                    self.published_invites.remove(code);
+                    return None;
+                }
+            }
+
+            Some(invite.clone())
+        } else {
+            None
+        }
+    }
+
+    /// Revoke a published invite.
+    pub fn revoke_invite(&self, code: &str) {
+        if self.published_invites.remove(code).is_some() {
+            tracing::info!(code = code, "Revoked published invite");
+
+            // Propagate revocation to federation
+            if let Some(ref fed) = self.federation {
+                fed.broadcast_to_peers(crate::protocol::PeerMessage::InviteRevoke {
+                    code: code.to_string(),
+                });
+            }
+        }
+    }
+
+    /// Increment the use count for a published invite.
+    pub fn increment_invite_use_count(&self, code: &str) {
+        if let Some(mut invite) = self.published_invites.get_mut(code) {
+            invite.use_count += 1;
+        }
+    }
+
     /// Remove expired sessions and offline messages.
     /// Called periodically by the cleanup task.
     pub fn cleanup_expired(&self) {
@@ -590,6 +728,43 @@ impl RelayState {
             tracing::debug!(
                 count = expired_rooms.len(),
                 "Cleaned up expired call rooms"
+            );
+        }
+
+        // Clean expired published invites
+        let expired_invites: Vec<String> = self
+            .published_invites
+            .iter()
+            .filter(|entry| {
+                // Check TTL (7 days since publish)
+                if now - entry.published_at.timestamp() > DEFAULT_INVITE_TTL_SECS {
+                    return true;
+                }
+                // Check invite-specific expiration (millis)
+                if let Some(expires_at) = entry.expires_at {
+                    if now * 1000 > expires_at {
+                        return true;
+                    }
+                }
+                // Check max uses
+                if let Some(max_uses) = entry.max_uses {
+                    if entry.use_count >= max_uses {
+                        return true;
+                    }
+                }
+                false
+            })
+            .map(|entry| entry.key().clone())
+            .collect();
+
+        for code in &expired_invites {
+            self.published_invites.remove(code);
+        }
+
+        if !expired_invites.is_empty() {
+            tracing::debug!(
+                count = expired_invites.len(),
+                "Cleaned up expired published invites"
             );
         }
     }

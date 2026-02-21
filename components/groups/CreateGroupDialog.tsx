@@ -23,6 +23,7 @@ import {
 import type { UserPickerUser } from '@coexist/wisp-react-native';
 import { UsersIcon } from '@/components/icons';
 import { useFriends } from '@/hooks/useFriends';
+import { useNetwork } from '@/hooks/useNetwork';
 import { useGroups } from '@/hooks/useGroups';
 import type { Friend } from '@umbra/service';
 
@@ -35,6 +36,7 @@ export interface CreateGroupDialogProps {
 export function CreateGroupDialog({ open, onClose, onCreated }: CreateGroupDialogProps) {
   const theme = useTheme();
   const { friends } = useFriends();
+  const { onlineDids } = useNetwork();
   const { createGroup, sendInvite } = useGroups();
 
   const [name, setName] = useState('');
@@ -56,10 +58,10 @@ export function CreateGroupDialog({ open, onClose, onCreated }: CreateGroupDialo
         id: f.did,
         name: f.displayName,
         username: f.did.slice(0, 20) + '...',
-        avatar: <Avatar name={f.displayName} size="sm" status={f.online ? 'online' : 'offline'} />,
-        status: f.online ? 'online' as const : 'offline' as const,
+        avatar: <Avatar name={f.displayName} size="sm" status={onlineDids.has(f.did) ? 'online' : 'offline'} />,
+        status: onlineDids.has(f.did) ? 'online' as const : 'offline' as const,
       })),
-    [friends],
+    [friends, onlineDids],
   );
 
   const handleCreate = useCallback(async () => {

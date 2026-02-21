@@ -713,6 +713,187 @@ export async function deleteInvite(inviteId: string, actorDid: string): Promise<
   wasm().umbra_wasm_community_invite_delete(json);
 }
 
+/**
+ * Import community and invite data from a relay-resolved invite payload.
+ *
+ * When a user tries to join via an invite code that doesn't exist locally,
+ * the relay returns the community metadata and invite record. This function
+ * creates the community and invite in the local database so that `useInvite`
+ * can subsequently succeed.
+ *
+ * Note: `createCommunity` generates a new local community ID (UUIDs are local).
+ * The invite record must reference this new local ID, not the relay's remote
+ * community ID, so that `useInvite → join_community` succeeds.
+ */
+export async function importCommunityFromRelay(
+  _remoteCommunityId: string,
+  communityName: string,
+  description: string | null,
+  ownerDid: string,
+  _inviteCode: string,
+  maxUses?: number | null,
+  expiresAt?: number | null,
+): Promise<void> {
+  // Create the community locally (this also creates default spaces/channels)
+  let localCommunityId: string | undefined;
+  try {
+    const result = await createCommunity(communityName, ownerDid, description ?? undefined);
+    localCommunityId = result.communityId;
+  } catch (err: any) {
+    // If community already exists (e.g. re-resolving same invite), try to find it
+    const msg = err?.message || String(err);
+    if (msg.includes('already') || msg.includes('exists') || msg.includes('UNIQUE')) {
+      // Community already exists locally — try to find it by name + owner
+      try {
+        const communities = await getCommunities(ownerDid);
+        const match = communities.find((c) => c.name === communityName);
+        if (match) localCommunityId = match.id;
+      } catch { /* ignore */ }
+    } else {
+      throw err;
+    }
+  }
+
+  if (!localCommunityId) {
+    throw new Error('Failed to create or find local community record');
+  }
+
+  // Create the invite record locally — must use the LOCAL community ID
+  // so that useInvite → get_community_invite_by_code → join_community works
+  try {
+    const json = JSON.stringify({
+      community_id: localCommunityId,
+      creator_did: ownerDid,
+      max_uses: maxUses ?? null,
+      expires_at: expiresAt ?? null,
+    });
+    wasm().umbra_wasm_community_invite_create(json);
+  } catch (err: any) {
+    // If invite already exists, that's fine
+    const msg = err?.message || String(err);
+    if (!msg.includes('already') && !msg.includes('exists') && !msg.includes('UNIQUE')) {
+      throw err;
+    }
+  }
+}
+
+// =============================================================================
+// INVITE RELAY (PUBLISH / RESOLVE)
+// =============================================================================
+
+/**
+ * Metadata returned when resolving an invite via the relay HTTP API.
+ */
+export interface RelayInviteResolution {
+  code: string;
+  community_id: string;
+  community_name: string;
+  community_description: string | null;
+  community_icon: string | null;
+  member_count: number;
+  max_uses: number | null;
+  expires_at: number | null;
+  invite_payload: string;
+}
+
+/**
+ * Publish an invite to the relay server so it can be resolved by others.
+ *
+ * This is called after creating an invite locally. The relay stores the
+ * invite metadata and propagates it across the federation mesh so any
+ * client can resolve the code, even if the community owner is offline.
+ *
+ * @param relayWs - The active relay WebSocket connection
+ * @param invite - The local invite record just created
+ * @param communityName - Community display name
+ * @param communityDescription - Optional community description
+ * @param communityIcon - Optional community icon URL
+ * @param memberCount - Current member count
+ * @param invitePayload - The full invite bootstrap payload (community structure JSON)
+ */
+export function publishInviteToRelay(
+  relayWs: WebSocket | null,
+  invite: CommunityInvite,
+  communityName: string,
+  communityDescription?: string | null,
+  communityIcon?: string | null,
+  memberCount?: number,
+  invitePayload?: string,
+): void {
+  if (!relayWs || relayWs.readyState !== WebSocket.OPEN) return;
+
+  const msg = {
+    type: 'publish_invite',
+    code: invite.code,
+    community_id: invite.communityId,
+    community_name: communityName,
+    community_description: communityDescription ?? null,
+    community_icon: communityIcon ?? null,
+    member_count: memberCount ?? 1,
+    max_uses: invite.maxUses ?? null,
+    expires_at: invite.expiresAt ?? null,
+    invite_payload: invitePayload ?? '{}',
+  };
+
+  relayWs.send(JSON.stringify(msg));
+}
+
+/**
+ * Revoke a published invite on the relay.
+ */
+export function revokeInviteOnRelay(
+  relayWs: WebSocket | null,
+  code: string,
+): void {
+  if (!relayWs || relayWs.readyState !== WebSocket.OPEN) return;
+  relayWs.send(JSON.stringify({ type: 'revoke_invite', code }));
+}
+
+/**
+ * Resolve an invite code via the relay HTTP API.
+ *
+ * This is the fallback for when a user tries to join with a code that
+ * doesn't exist in their local database. The relay maintains a registry
+ * of published invites across the federation mesh.
+ *
+ * @param relayUrls - Array of relay WS URLs to try (e.g. DEFAULT_RELAY_SERVERS)
+ * @param code - The invite code to resolve
+ * @returns The invite metadata or null if not found
+ */
+export async function resolveInviteFromRelay(
+  relayUrls: readonly string[],
+  code: string,
+): Promise<RelayInviteResolution | null> {
+  for (const wsUrl of relayUrls) {
+    try {
+      const httpUrl = wsUrl
+        .replace('wss://', 'https://')
+        .replace('ws://', 'http://')
+        .replace(/\/ws\/?$/, `/api/invite/${encodeURIComponent(code)}`);
+
+      const res = await fetch(httpUrl, {
+        signal: AbortSignal.timeout(10000),
+        headers: { 'Accept': 'application/json' },
+      });
+
+      if (res.ok) {
+        const data: RelayInviteResolution = await res.json();
+        if (data.code && data.community_id) {
+          return data;
+        }
+      }
+
+      // 404 = not found on this relay, try next
+      if (res.status === 404) continue;
+    } catch {
+      // Network error — try next relay
+      continue;
+    }
+  }
+
+  return null;
+}
+
 // =============================================================================
 // MESSAGES
 // =============================================================================

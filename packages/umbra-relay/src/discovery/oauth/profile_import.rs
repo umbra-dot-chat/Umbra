@@ -5,7 +5,7 @@
 //! sends the profile data via postMessage to the opener window.
 
 use axum::{
-    extract::{Query, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::{Html, IntoResponse},
     Json,
@@ -93,11 +93,11 @@ fn profile_success_html(profile: &ImportedProfile) -> Html<String> {
         <h1>Profile Imported</h1>
         <div class="username">{}</div>
         <p>Your profile has been imported successfully.</p>
-        <p class="close-hint">This window will close automatically...</p>
+        <p class="close-hint">Returning to app...</p>
     </div>
     <script>
         const profile = {};
-        // Send profile to opener window
+        // Send profile to opener window (web popup flow)
         if (window.opener) {{
             window.opener.postMessage({{
                 type: 'UMBRA_PROFILE_IMPORT',
@@ -113,10 +113,16 @@ fn profile_success_html(profile: &ImportedProfile) -> Html<String> {
                 profile: profile
             }}, '*');
         }}
-        // Close after a short delay
+        // Close or redirect back to app
         setTimeout(() => {{
-            window.close();
-        }}, 2000);
+            if (window.opener) {{
+                // Web popup — close the window
+                window.close();
+            }} else {{
+                // In-app browser (mobile) — redirect to app scheme to dismiss
+                window.location.href = 'umbra://oauth/callback?success=true';
+            }}
+        }}, 1500);
     </script>
 </body>
 </html>"#,
@@ -197,6 +203,12 @@ fn profile_error_html(message: &str) -> Html<String> {
                 success: false,
                 error: error
             }}, '*');
+        }}
+        // On mobile in-app browser, redirect back to app after delay
+        if (!window.opener) {{
+            setTimeout(() => {{
+                window.location.href = 'umbra://oauth/callback?success=false';
+            }}, 2000);
         }}
     </script>
 </body>
@@ -482,6 +494,9 @@ pub async fn callback_discord(
         bio: user.bio.clone(),
         email: user.email.clone(),
     };
+
+    // Store result for mobile polling
+    store.store_profile_result(&query.state, profile.clone());
 
     profile_success_html(&profile).into_response()
 }
@@ -771,6 +786,9 @@ pub async fn callback_github(
         email: user.email,
     };
 
+    // Store result for mobile polling
+    store.store_profile_result(&query.state, profile.clone());
+
     profile_success_html(&profile).into_response()
 }
 
@@ -1043,6 +1061,9 @@ pub async fn callback_steam(
         bio: None,
         email: None,
     };
+
+    // Store result for mobile polling
+    store.store_profile_result(&state_nonce, profile.clone());
 
     profile_success_html(&profile).into_response()
 }
@@ -1432,6 +1453,9 @@ pub async fn callback_bluesky(
         email: None,
     };
 
+    // Store result for mobile polling
+    store.store_profile_result(&query.state, profile.clone());
+
     profile_success_html(&profile).into_response()
 }
 
@@ -1797,5 +1821,40 @@ pub async fn callback_xbox(
         email: None,
     };
 
+    // Store result for mobile polling
+    store.store_profile_result(&query.state, profile.clone());
+
     profile_success_html(&profile).into_response()
+}
+
+// ---------------------------------------------------------------------------
+// Profile Import Result Polling (for mobile clients)
+// ---------------------------------------------------------------------------
+
+/// Poll for a profile import result by state nonce.
+///
+/// Mobile clients call this after opening the OAuth URL in the system browser.
+/// Returns the profile data if the OAuth callback has completed, or 404 if pending.
+/// The result is consumed (deleted) on successful retrieval.
+pub async fn get_profile_result(
+    State((store, _config)): State<(DiscoveryStore, DiscoveryConfig)>,
+    Path(state): Path<String>,
+) -> impl IntoResponse {
+    match store.take_profile_result(&state) {
+        Some(profile) => {
+            tracing::info!(state = state.as_str(), "Profile import result retrieved");
+            Json(serde_json::json!({
+                "success": true,
+                "profile": profile,
+            }))
+            .into_response()
+        }
+        None => {
+            (StatusCode::NOT_FOUND, Json(serde_json::json!({
+                "success": false,
+                "error": "pending",
+            })))
+            .into_response()
+        }
+    }
 }

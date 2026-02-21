@@ -24,7 +24,7 @@ import { View, Image, Animated, Pressable } from 'react-native';
 import type { GestureResponderEvent } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import {
-  useTheme, Text, CombinedPicker,
+  useTheme, Text, Avatar, CombinedPicker,
   MemberList, MessageInput, MessageList, E2EEKeyExchangeUI, PinnedMessages,
   type MemberListSection, type MemberListMember, type MessageListEntry,
 } from '@coexist/wisp-react-native';
@@ -212,17 +212,20 @@ function VoiceChannelLobby({
           <Text size="sm" style={{ color: colors.text.muted }}>
             {connectedMembers.length} {connectedMembers.length === 1 ? 'person' : 'people'} connected
           </Text>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 6 }}>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 10 }}>
             {connectedMembers.map((m) => (
               <View
                 key={m.did}
                 style={{
+                  alignItems: 'center',
+                  gap: 4,
                   backgroundColor: colors.background.raised,
                   borderRadius: 12,
-                  paddingHorizontal: 10,
-                  paddingVertical: 4,
+                  paddingHorizontal: 12,
+                  paddingVertical: 8,
                 }}
               >
+                <Avatar name={m.name} size="sm" status="online" />
                 <Text size="xs" style={{ color: colors.text.secondary }}>{m.name}</Text>
               </View>
             ))}

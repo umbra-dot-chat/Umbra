@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import { View, Pressable, ScrollView, Text as RNText, Platform, Image, Linking } from 'react-native';
+import { View, Pressable, ScrollView, Text as RNText, Platform, Image, Linking, Modal, SafeAreaView } from 'react-native';
 import type { ViewStyle, TextStyle } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Overlay,
   Toggle,
@@ -22,6 +23,7 @@ import {
   SegmentedControl,
   useTheme,
 } from '@coexist/wisp-react-native';
+import { defaultRadii } from '@coexist/wisp-core/theme/create-theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'expo-router';
 import {
@@ -57,6 +59,7 @@ import {
   MessageIcon,
   VolumeIcon,
   MusicIcon,
+  ArrowLeftIcon,
 } from '@/components/icons';
 import { useNetwork } from '@/hooks/useNetwork';
 import { useCall } from '@/hooks/useCall';
@@ -69,7 +72,7 @@ import { VIDEO_QUALITY_PRESETS, AUDIO_QUALITY_PRESETS, DEFAULT_OPUS_CONFIG } fro
 import { useUmbra } from '@/contexts/UmbraContext';
 import { usePlugins } from '@/contexts/PluginContext';
 import { useFonts, FONT_REGISTRY } from '@/contexts/FontContext';
-import { useAppTheme } from '@/contexts/ThemeContext';
+import { useAppTheme, type TextSize } from '@/contexts/ThemeContext';
 import { useSound } from '@/contexts/SoundContext';
 import {
   SOUND_THEMES,
@@ -83,6 +86,7 @@ import type { MessageDisplayMode } from '@/contexts/MessagingContext';
 import { SlotRenderer } from '@/components/plugins/SlotRenderer';
 import { clearDatabaseExport, getSqlDatabase } from '@umbra/wasm';
 import { useAppUpdate } from '@/hooks/useAppUpdate';
+import { useIsMobile } from '@/hooks/useIsMobile';
 import { AllPlatformsDialog } from '@/components/modals/AllPlatformsDialog';
 import { HelpIndicator } from '@/components/ui/HelpIndicator';
 import { HelpPopoverHost } from '@/components/ui/HelpPopoverHost';
@@ -276,8 +280,9 @@ function InlineDropdown({
   const selected = options.find((o) => o.value === value);
   const triggerRef = useRef<View>(null);
   const [dropdownPos, setDropdownPos] = useState({ top: 0, left: 0, width: 0 });
+  const isNative = Platform.OS !== 'web';
 
-  // Measure trigger position when opening
+  // Measure trigger position when opening (web only)
   useEffect(() => {
     if (!open || Platform.OS !== 'web' || !triggerRef.current) return;
     const el = triggerRef.current as unknown as HTMLElement;
@@ -285,7 +290,51 @@ function InlineDropdown({
     setDropdownPos({ top: rect.bottom + 4, left: rect.left, width: rect.width });
   }, [open]);
 
-  const dropdownList = open && (
+  const optionsList = (
+    <ScrollView style={{ maxHeight: isNative ? 400 : 240 }} showsVerticalScrollIndicator={false} nestedScrollEnabled>
+      {options.map((opt) => {
+        const isActive = opt.value === value;
+        return (
+          <Pressable
+            key={opt.value}
+            onPress={() => { onChange(opt.value); setOpen(false); }}
+            style={({ pressed }) => ({
+              flexDirection: 'row' as const,
+              alignItems: 'center' as const,
+              paddingVertical: 12,
+              paddingHorizontal: 16,
+              backgroundColor: isActive
+                ? tc.accent.highlight
+                : pressed
+                  ? tc.background.sunken
+                  : 'transparent',
+            })}
+          >
+            <View style={{ flex: 1 }}>
+              <RNText style={{
+                fontSize: 14,
+                fontWeight: isActive ? '600' : '400',
+                color: isActive ? tc.accent.primary : (isNative ? tc.text.onRaised : tc.text.primary),
+              }}>
+                {opt.label}
+              </RNText>
+              {opt.description && (
+                <RNText style={{ fontSize: 12, color: isNative ? tc.text.onRaisedSecondary : tc.text.muted, marginTop: 2 }}>
+                  {opt.description}
+                </RNText>
+              )}
+            </View>
+            {isActive && (
+              <RNText style={{ fontSize: 14, color: tc.accent.primary, fontWeight: '600' }}>✓</RNText>
+            )}
+          </Pressable>
+        );
+      })}
+    </ScrollView>
+  );
+
+  // Web: portal-based positioned dropdown
+  const webDropdownList = open && (
     <>
       <Pressable
         onPress={() => setOpen(false)}
@@ -311,46 +360,7 @@ function InlineDropdown({
           overflow: 'hidden' as any,
         }}
       >
-        <ScrollView style={{ maxHeight: 240 }} showsVerticalScrollIndicator={false} nestedScrollEnabled>
-          {options.map((opt) => {
-            const isActive = opt.value === value;
-            return (
-              <Pressable
-                key={opt.value}
-                onPress={() => { onChange(opt.value); setOpen(false); }}
-                style={({ pressed }) => ({
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  paddingVertical: 10,
-                  paddingHorizontal: 14,
-                  backgroundColor: isActive
-                    ? tc.accent.highlight
-                    : pressed
-                      ? tc.background.sunken
-                      : 'transparent',
-                })}
-              >
-                <View style={{ flex: 1 }}>
-                  <RNText style={{
-                    fontSize: 13,
-                    fontWeight: isActive ? '600' : '400',
-                    color: isActive ? tc.accent.primary : tc.text.primary,
-                  }}>
-                    {opt.label}
-                  </RNText>
-                  {opt.description && (
-                    <RNText style={{ fontSize: 11, color: tc.text.muted }}>
-                      {opt.description}
-                    </RNText>
-                  )}
-                </View>
-                {isActive && (
-                  <RNText style={{ fontSize: 12, color: tc.accent.primary, fontWeight: '600' }}>✓</RNText>
-                )}
-              </Pressable>
-            );
-          })}
-        </ScrollView>
+        {optionsList}
       </View>
     </>
   );
@@ -385,10 +395,40 @@ function InlineDropdown({
         </View>
       </Pressable>
 
-      {/* Portal dropdown to document.body so it renders above everything */}
-      {Platform.OS === 'web' && _createPortal
-        ? _createPortal(dropdownList, document.body)
-        : dropdownList}
+      {/* Web: portal dropdown to document.body */}
+      {!isNative && _createPortal
+        ? _createPortal(webDropdownList, document.body)
+        : !isNative && webDropdownList}
+
+      {/* Native: Modal-based dropdown */}
+      {isNative && (
+        <Modal visible={open} transparent animationType="fade" onRequestClose={() => setOpen(false)} statusBarTranslucent>
+          <Pressable
+            style={{ flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center' }}
+            onPress={() => setOpen(false)}
+          >
+            <Pressable
+              style={{ width: '85%', maxWidth: 400 }}
+              onPress={(e) => e.stopPropagation()}
+            >
+              <View
+                style={{
+                  backgroundColor: tc.background.raised,
+                  borderRadius: defaultRadii.md,
+                  paddingVertical: 4,
+                  shadowColor: '#000',
+                  shadowOffset: { width: 0, height: 8 },
+                  shadowOpacity: 0.2,
+                  shadowRadius: 24,
+                  elevation: 8,
+                }}
+              >
+                {optionsList}
+              </View>
+            </Pressable>
+          </Pressable>
+        </Modal>
+      )}
     </View>
   );
 }
@@ -884,8 +924,7 @@ function ProfileSection() {
 
 function AppearanceSection() {
   const { mode, toggleMode, theme } = useTheme();
-  const { activeTheme, themes, installedThemeIds, setTheme, accentColor, setAccentColor, showModeToggle } = useAppTheme();
-  const [textSize, setTextSize] = useState('md');
+  const { activeTheme, themes, installedThemeIds, setTheme, accentColor, setAccentColor, showModeToggle, textSize, setTextSize } = useAppTheme();
   const tc = theme.colors;
 
   // Build theme dropdown options (only installed themes)
@@ -971,13 +1010,13 @@ function AppearanceSection() {
   );
 }
 
-function TextSizeSettingRow({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+function TextSizeSettingRow({ value, onChange }: { value: string; onChange: (v: TextSize) => void }) {
   return (
     <SettingRow label="Text Size" description="Adjust the base text size across the app." vertical>
       <InlineDropdown
         options={TEXT_SIZE_OPTIONS}
         value={value}
-        onChange={onChange}
+        onChange={(v) => onChange(v as TextSize)}
         placeholder="Select size"
       />
     </SettingRow>
@@ -3877,6 +3916,9 @@ export function SettingsDialog({ open, onClose, onOpenMarketplace, initialSectio
   const { theme, mode } = useTheme();
   const tc = theme.colors;
   const isDark = mode === 'dark';
+  const isMobile = useIsMobile();
+  const insets = Platform.OS !== 'web' ? useSafeAreaInsets() : { top: 0, bottom: 0, left: 0, right: 0 };
+  const [mobileShowSidebar, setMobileShowSidebar] = useState(true);
   const [activeSection, setActiveSection] = useState<SettingsSection>('account');
   const [activeSubsection, setActiveSubsection] = useState<string | null>(
     SUBCATEGORIES.account ? SUBCATEGORIES.account[0].id : null,
@@ -3888,10 +3930,13 @@ export function SettingsDialog({ open, onClose, onOpenMarketplace, initialSectio
     setActiveSection(sectionId);
     const subs = SUBCATEGORIES[sectionId];
     setActiveSubsection(subs ? subs[0].id : null);
-  }, []);
+    if (isMobile) setMobileShowSidebar(false);
+  }, [isMobile]);
 
   const handleSubsectionClick = useCallback((subId: string) => {
     setActiveSubsection(subId);
+    // On mobile, navigate from sidebar to content view
+    if (isMobile) setMobileShowSidebar(false);
     // On web, scroll the content area to the nativeID element
     if (Platform.OS === 'web') {
       requestAnimationFrame(() => {
@@ -3901,7 +3946,7 @@ export function SettingsDialog({ open, onClose, onOpenMarketplace, initialSectio
         }
       });
     }
-  }, []);
+  }, [isMobile]);
 
   // Jump to requested section when dialog opens with initialSection
   useEffect(() => {
@@ -3910,10 +3955,22 @@ export function SettingsDialog({ open, onClose, onOpenMarketplace, initialSectio
     }
   }, [open, initialSection, handleSectionChange]);
 
+  // Reset to sidebar view on mobile when dialog opens
+  useEffect(() => {
+    if (open && isMobile) {
+      setMobileShowSidebar(true);
+    }
+  }, [open, isMobile]);
+
   // -- Styles ----------------------------------------------------------------
 
   const modalStyle = useMemo<ViewStyle>(
-    () => ({
+    () => (isMobile ? {
+      width: '100%',
+      height: '100%',
+      flexDirection: 'row',
+      backgroundColor: isDark ? tc.background.raised : tc.background.canvas,
+    } : {
       width: 760,
       maxWidth: '95%',
       height: 520,
@@ -3930,11 +3987,18 @@ export function SettingsDialog({ open, onClose, onOpenMarketplace, initialSectio
       shadowRadius: 32,
       elevation: 12,
     }),
-    [tc, isDark],
+    [tc, isDark, isMobile, insets],
   );
 
   const sidebarStyle = useMemo<ViewStyle>(
-    () => ({
+    () => (isMobile ? {
+      flex: 1,
+      backgroundColor: isDark ? tc.background.surface : tc.background.sunken,
+      paddingTop: insets.top + 16,
+      paddingBottom: insets.bottom + 16,
+      paddingLeft: insets.left + 10,
+      paddingRight: insets.right + 10,
+    } : {
       width: 180,
       flexGrow: 0,
       flexShrink: 0,
@@ -3944,7 +4008,7 @@ export function SettingsDialog({ open, onClose, onOpenMarketplace, initialSectio
       paddingVertical: 16,
       paddingHorizontal: 10,
     }),
-    [tc, isDark],
+    [tc, isDark, isMobile, insets],
   );
 
   const sidebarTitleStyle = useMemo<TextStyle>(
@@ -3991,131 +4055,165 @@ export function SettingsDialog({ open, onClose, onOpenMarketplace, initialSectio
     }
   };
 
+  const sidebarContent = (
+    <ScrollView style={sidebarStyle} showsVerticalScrollIndicator={false}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: isMobile ? 8 : 0 }}>
+        <RNText style={sidebarTitleStyle}>Settings</RNText>
+        {isMobile && (
+          <Pressable onPress={onClose} style={{ padding: 8 }}>
+            <XIcon size={20} color={tc.text.secondary} />
+          </Pressable>
+        )}
+      </View>
+
+      {NAV_ITEMS.map((item) => {
+        const isActive = activeSection === item.id;
+        const Icon = item.icon;
+        const subs = SUBCATEGORIES[item.id];
+        const hasSubs = subs && subs.length > 1;
+
+        return (
+          <View key={item.id}>
+            {/* Top-level nav item */}
+            <Pressable
+              onPress={() => handleSectionChange(item.id)}
+              style={({ pressed }) => ({
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 10,
+                paddingVertical: 8,
+                paddingHorizontal: 10,
+                borderRadius: 8,
+                backgroundColor: isActive
+                  ? tc.accent.primary
+                  : pressed
+                    ? tc.accent.highlight
+                    : 'transparent',
+                marginBottom: 2,
+              })}
+            >
+              <Icon
+                size={18}
+                color={isActive ? tc.text.inverse : tc.text.secondary}
+              />
+              <RNText
+                style={{
+                  fontSize: 14,
+                  fontWeight: isActive ? '600' : '400',
+                  color: isActive ? tc.text.inverse : tc.text.secondary,
+                }}
+              >
+                {item.label}
+              </RNText>
+            </Pressable>
+
+            {/* Sub-items: show when section is active and has subcategories */}
+            {isActive && hasSubs && (
+              <View style={{ marginLeft: 20, marginBottom: 4 }}>
+                {subs.map((sub) => {
+                  const isSubActive = activeSubsection === sub.id;
+                  return (
+                    <View
+                      key={sub.id}
+                      style={{
+                        flexDirection: 'row',
+                        alignItems: 'stretch',
+                        marginBottom: 1,
+                      }}
+                    >
+                      <View
+                        style={{
+                          width: 2,
+                          borderRadius: 1,
+                          backgroundColor: isSubActive
+                            ? tc.accent.primary
+                            : 'rgba(255,255,255,0.18)',
+                        }}
+                      />
+                      <Pressable
+                        onPress={() => handleSubsectionClick(sub.id)}
+                        style={({ pressed, hovered }) => ({
+                          flex: 1,
+                          paddingVertical: 5,
+                          paddingHorizontal: 10,
+                          borderTopRightRadius: 4,
+                          borderBottomRightRadius: 4,
+                          backgroundColor: isSubActive
+                            ? 'rgba(255,255,255,0.06)'
+                            : (hovered as boolean)
+                              ? 'rgba(255,255,255,0.04)'
+                              : 'transparent',
+                        })}
+                      >
+                        <RNText
+                          style={{
+                            fontSize: 13,
+                            fontWeight: isSubActive ? '600' : '400',
+                            color: isSubActive
+                              ? tc.accent.primary
+                              : tc.text.secondary,
+                          }}
+                        >
+                          {sub.label}
+                        </RNText>
+                      </Pressable>
+                    </View>
+                  );
+                })}
+              </View>
+            )}
+          </View>
+        );
+      })}
+    </ScrollView>
+  );
+
+  const contentArea = (
+    <View style={{ flex: 1, paddingTop: isMobile ? insets.top : 0, paddingBottom: isMobile ? insets.bottom : 0, paddingLeft: isMobile ? insets.left : 0, paddingRight: isMobile ? insets.right : 0 }}>
+      {/* Mobile: back button + section title header */}
+      {isMobile && (
+        <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: tc.border.subtle }}>
+          <Pressable onPress={() => setMobileShowSidebar(true)} style={{ padding: 4, marginRight: 8 }}>
+            <ArrowLeftIcon size={20} color={tc.text.secondary} />
+          </Pressable>
+          <RNText style={{ fontSize: 16, fontWeight: '600', color: tc.text.primary }}>
+            {NAV_ITEMS.find((n) => n.id === activeSection)?.label ?? 'Settings'}
+          </RNText>
+        </View>
+      )}
+      <ScrollView
+        ref={contentScrollRef}
+        style={{ flex: 1 }}
+        contentContainerStyle={{ padding: isMobile ? 16 : 28 }}
+        showsVerticalScrollIndicator={false}
+      >
+        {renderSection()}
+      </ScrollView>
+    </View>
+  );
+
   return (
     <Overlay
       open={open}
-      backdrop="dim"
-      center
-      onBackdropPress={onClose}
+      backdrop={isMobile ? undefined : 'dim'}
+      center={!isMobile}
+      onBackdropPress={isMobile ? undefined : onClose}
       animationType="fade"
+      useModal={!isMobile}
     >
 
       <HelpPopoverHost />
       <View style={modalStyle}>
-        {/* ── Left Sidebar ── */}
-        <ScrollView style={sidebarStyle} showsVerticalScrollIndicator={false}>
-          <RNText style={sidebarTitleStyle}>Settings</RNText>
-
-          {NAV_ITEMS.map((item) => {
-            const isActive = activeSection === item.id;
-            const Icon = item.icon;
-            const subs = SUBCATEGORIES[item.id];
-            const hasSubs = subs && subs.length > 1;
-
-            return (
-              <View key={item.id}>
-                {/* Top-level nav item */}
-                <Pressable
-                  onPress={() => handleSectionChange(item.id)}
-                  style={({ pressed }) => ({
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    gap: 10,
-                    paddingVertical: 8,
-                    paddingHorizontal: 10,
-                    borderRadius: 8,
-                    backgroundColor: isActive
-                      ? tc.accent.primary
-                      : pressed
-                        ? tc.accent.highlight
-                        : 'transparent',
-                    marginBottom: 2,
-                  })}
-                >
-                  <Icon
-                    size={18}
-                    color={isActive ? tc.text.inverse : tc.text.secondary}
-                  />
-                  <RNText
-                    style={{
-                      fontSize: 14,
-                      fontWeight: isActive ? '600' : '400',
-                      color: isActive ? tc.text.inverse : tc.text.secondary,
-                    }}
-                  >
-                    {item.label}
-                  </RNText>
-                </Pressable>
-
-                {/* Sub-items: show when section is active and has subcategories */}
-                {isActive && hasSubs && (
-                  <View style={{ marginLeft: 20, marginBottom: 4 }}>
-                    {subs.map((sub) => {
-                      const isSubActive = activeSubsection === sub.id;
-                      return (
-                        <View
-                          key={sub.id}
-                          style={{
-                            flexDirection: 'row',
-                            alignItems: 'stretch',
-                            marginBottom: 1,
-                          }}
-                        >
-                          <View
-                            style={{
-                              width: 2,
-                              borderRadius: 1,
-                              backgroundColor: isSubActive
-                                ? tc.accent.primary
-                                : 'rgba(255,255,255,0.18)',
-                            }}
-                          />
-                          <Pressable
-                            onPress={() => handleSubsectionClick(sub.id)}
-                            style={({ pressed, hovered }) => ({
-                              flex: 1,
-                              paddingVertical: 5,
-                              paddingHorizontal: 10,
-                              borderTopRightRadius: 4,
-                              borderBottomRightRadius: 4,
-                              backgroundColor: isSubActive
-                                ? 'rgba(255,255,255,0.06)'
-                                : (hovered as boolean)
-                                  ? 'rgba(255,255,255,0.04)'
-                                  : 'transparent',
-                            })}
-                          >
-                            <RNText
-                              style={{
-                                fontSize: 13,
-                                fontWeight: isSubActive ? '600' : '400',
-                                color: isSubActive
-                                  ? tc.accent.primary
-                                  : tc.text.secondary,
-                              }}
-                            >
-                              {sub.label}
-                            </RNText>
-                          </Pressable>
-                        </View>
-                      );
-                    })}
-                  </View>
-                )}
-              </View>
-            );
-          })}
-        </ScrollView>
-
-        {/* ── Right Content Area ── */}
-        <ScrollView
-          ref={contentScrollRef}
-          style={{ flex: 1 }}
-          contentContainerStyle={{ padding: 28 }}
-          showsVerticalScrollIndicator={false}
-        >
-          {renderSection()}
-        </ScrollView>
+        {isMobile ? (
+          // Mobile: exclusive sidebar / content views
+          mobileShowSidebar ? sidebarContent : contentArea
+        ) : (
+          // Desktop: side-by-side
+          <>
+            {sidebarContent}
+            {contentArea}
+          </>
+        )}
       </View>
     </Overlay>
   );

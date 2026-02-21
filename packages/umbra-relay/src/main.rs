@@ -26,8 +26,8 @@ mod state;
 use std::time::Duration;
 
 use axum::{
-    extract::{State, WebSocketUpgrade},
-    http::Method,
+    extract::{Path, State, WebSocketUpgrade},
+    http::{Method, StatusCode},
     response::IntoResponse,
     routing::{delete, get, post, put},
     Json, Router,
@@ -303,6 +303,8 @@ async fn main() {
         .route("/profile/import/bluesky/callback", get(discovery::oauth::profile_import::callback_bluesky))
         .route("/profile/import/xbox/start", post(discovery::oauth::profile_import::start_xbox))
         .route("/profile/import/xbox/callback", get(discovery::oauth::profile_import::callback_xbox))
+        // Profile import result polling (for mobile clients)
+        .route("/profile/import/result/:state", get(discovery::oauth::profile_import::get_profile_result))
         // Community import OAuth routes (for importing Discord server structure)
         .route("/community/import/discord/start", post(discovery::oauth::community_import::start_discord_community_import))
         .route("/community/import/discord/callback", get(discovery::oauth::community_import::callback_discord_community_import))
@@ -343,6 +345,7 @@ async fn main() {
         .route("/health", get(health_handler))
         .route("/stats", get(stats_handler))
         .route("/info", get(info_handler))
+        .route("/api/invite/:code", get(invite_resolve_handler))
         .with_state(state)
         .merge(discovery_router)
         .merge(bridge_router)
@@ -396,6 +399,7 @@ async fn stats_handler(State(state): State<RelayState>) -> impl IntoResponse {
         "mesh_online_clients": state.mesh_online_count(),
         "offline_queue_size": state.offline_queue_size(),
         "active_sessions": state.sessions.len(),
+        "published_invites": state.published_invites.len(),
         "connected_peers": state.connected_peers(),
         "federation_enabled": state.federation.is_some(),
     }))
@@ -415,6 +419,39 @@ async fn info_handler(State(state): State<RelayState>) -> impl IntoResponse {
         "federation_enabled": state.federation.is_some(),
         "timestamp": chrono::Utc::now().timestamp_millis(),
     }))
+}
+
+/// HTTP invite resolution endpoint.
+/// Allows clients to resolve an invite code without a WebSocket connection.
+/// Returns invite preview metadata (community name, member count, etc.)
+/// and the invite payload needed to bootstrap the joiner's local DB.
+async fn invite_resolve_handler(
+    Path(code): Path<String>,
+    State(state): State<RelayState>,
+) -> impl IntoResponse {
+    match state.resolve_invite(&code) {
+        Some(invite) => {
+            let body = json!({
+                "code": invite.code,
+                "community_id": invite.community_id,
+                "community_name": invite.community_name,
+                "community_description": invite.community_description,
+                "community_icon": invite.community_icon,
+                "member_count": invite.member_count,
+                "max_uses": invite.max_uses,
+                "expires_at": invite.expires_at,
+                "invite_payload": invite.invite_payload,
+            });
+            (StatusCode::OK, Json(body)).into_response()
+        }
+        None => {
+            let body = json!({
+                "error": "invite_not_found",
+                "message": format!("Invite code '{}' not found or has expired", code),
+            });
+            (StatusCode::NOT_FOUND, Json(body)).into_response()
+        }
+    }
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────

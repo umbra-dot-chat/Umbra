@@ -37,10 +37,12 @@ import { createCommunityFromDiscordImport } from '@umbra/service';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUploadProgress } from '@/hooks/useUploadProgress';
 import { CommunityCreateOptionsDialog } from '@/components/community/CommunityCreateOptionsDialog';
+import { JoinCommunityModal } from '@/components/community/JoinCommunityModal';
 import { DiscordImportDialog } from '@/components/community/DiscordImportDialog';
 import { useSound } from '@/contexts/SoundContext';
 import { ResizeHandle } from '@/components/ui/ResizeHandle';
 import { useIsMobile } from '@/hooks/useIsMobile';
+import { useNetwork } from '@/hooks/useNetwork';
 
 // TODO: Remove mock community once real communities exist
 const MOCK_COMMUNITY: Community = {
@@ -88,6 +90,7 @@ function MainLayoutInner() {
   const { conversations, refresh: refreshConversations, isLoading: conversationsLoading } = useConversations();
   const { friends, incomingRequests } = useFriends();
   const { groups, pendingInvites, acceptInvite, declineInvite } = useGroups();
+  const { onlineDids } = useNetwork();
   const { communities: realCommunities, createCommunity, isLoading: communitiesLoading } = useCommunities();
 
   // Merge mock community with real ones (TODO: remove mock once real communities exist)
@@ -105,14 +108,14 @@ function MainLayoutInner() {
   // Call state for PiP widget
   const { activeCall, toggleMute, endCall } = useCallContext();
 
-  // Build a DID → friend map for efficient lookups
+  // Build a DID → friend map for efficient lookups, enriched with relay presence
   const friendMap = useMemo(() => {
     const map: Record<string, { displayName: string; online?: boolean }> = {};
     for (const f of friends) {
-      map[f.did] = { displayName: f.displayName, online: f.online };
+      map[f.did] = { displayName: f.displayName, online: onlineDids.has(f.did) };
     }
     return map;
-  }, [friends]);
+  }, [friends, onlineDids]);
 
   // Build a groupId → Group lookup
   const groupMap = useMemo(() => {
@@ -158,7 +161,7 @@ function MainLayoutInner() {
         online: friend?.online,
       };
     });
-  }, [conversations, friendMap, groupMap, lastMessages]);
+  }, [conversations, friendMap, groupMap, lastMessages, onlineDids]);
 
   // Resizable sidebar
   const SIDEBAR_MIN = 220;
@@ -187,6 +190,7 @@ function MainLayoutInner() {
   const [createCommunityOptionsOpen, setCreateCommunityOptionsOpen] = useState(false);
   const [createCommunityOpen, setCreateCommunityOpen] = useState(false);
   const [discordImportOpen, setDiscordImportOpen] = useState(false);
+  const [joinCommunityOpen, setJoinCommunityOpen] = useState(false);
   const [communitySubmitting, setCommunitySubmitting] = useState(false);
   const [communityError, setCommunityError] = useState<string | undefined>();
   const { open: cmdOpen, setOpen: setCmdOpen } = useCommandPalette();
@@ -321,6 +325,11 @@ function MainLayoutInner() {
   const handleSelectDiscord = useCallback(() => {
     setCreateCommunityOptionsOpen(false);
     setDiscordImportOpen(true);
+  }, []);
+
+  const handleSelectJoin = useCallback(() => {
+    setCreateCommunityOptionsOpen(false);
+    setJoinCommunityOpen(true);
   }, []);
 
   // Handle Discord import completion
@@ -554,6 +563,7 @@ function MainLayoutInner() {
         onClose={() => { playSound('dialog_close'); setCreateCommunityOptionsOpen(false); }}
         onSelectScratch={handleSelectScratch}
         onSelectDiscord={handleSelectDiscord}
+        onSelectJoin={handleSelectJoin}
       />
 
       <CommunityCreateDialog
@@ -562,6 +572,11 @@ function MainLayoutInner() {
         onSubmit={handleCommunityCreated}
         submitting={communitySubmitting}
         error={communityError}
+      />
+
+      <JoinCommunityModal
+        open={joinCommunityOpen}
+        onClose={() => { playSound('dialog_close'); setJoinCommunityOpen(false); }}
       />
 
       <DiscordImportDialog

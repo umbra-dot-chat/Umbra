@@ -34,6 +34,7 @@ import {
   vesperTheme,
   midnightTheme,
   emberTheme,
+  inkBlackTheme,
 } from './presets';
 
 /** All built-in theme presets, ordered for the selector dropdown. */
@@ -68,6 +69,7 @@ export const THEME_REGISTRY: ThemePreset[] = [
   vesperTheme,
   midnightTheme,
   emberTheme,
+  inkBlackTheme,
 ];
 
 /** Look up a theme by ID. Returns `undefined` if not found. */

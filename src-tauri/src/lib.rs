@@ -18,6 +18,7 @@ pub fn run() {
         .plugin(tauri_plugin_shell::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_deep_link::init())
         .manage(AppState::new())
         .invoke_handler(tauri::generate_handler![
             // Initialization
@@ -85,6 +86,12 @@ pub fn run() {
             // Crypto
             commands::crypto::sign,
             commands::crypto::verify,
+
+            // Plugin KV Storage
+            commands::storage::plugin_kv_get,
+            commands::storage::plugin_kv_set,
+            commands::storage::plugin_kv_delete,
+            commands::storage::plugin_kv_list,
         ])
         .run(tauri::generate_context!())
         .expect("error while running Umbra Desktop");

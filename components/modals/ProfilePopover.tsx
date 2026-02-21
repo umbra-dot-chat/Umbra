@@ -61,7 +61,7 @@ export function ProfilePopover({ selectedMember, anchor, onClose }: ProfilePopov
         <UserProfileCard
           name={selectedMember.name}
           username={`@${selectedMember.name.toLowerCase().replace(/\s/g, '')}`}
-          avatar={<Avatar name={selectedMember.name} size="lg" />}
+          avatar={<Avatar name={selectedMember.name} size="lg" status={status === 'online' ? 'online' : status === 'idle' ? 'away' : undefined} />}
           status={status as any}
           bannerColor={tc.accent.primary}
           onClose={onClose}

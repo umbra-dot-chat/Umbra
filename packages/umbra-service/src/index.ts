@@ -256,6 +256,15 @@ export {
 // Community import from Discord
 export { createCommunityFromDiscordImport } from './community';
 
+// Community invite relay operations
+export {
+  publishInviteToRelay,
+  revokeInviteOnRelay,
+  resolveInviteFromRelay,
+  importCommunityFromRelay,
+} from './community';
+export type { RelayInviteResolution } from './community';
+
 // Main service class
 export { UmbraService } from './service';
 

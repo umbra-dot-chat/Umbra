@@ -4,6 +4,7 @@ import { useTheme, MemberList, PinnedMessages, ThreadPanel } from '@coexist/wisp
 import type { RightPanel as RightPanelType } from '@/types/panels';
 import { PANEL_WIDTH } from '@/types/panels';
 import { useFriends } from '@/hooks/useFriends';
+import { useNetwork } from '@/hooks/useNetwork';
 import { SearchPanel } from './SearchPanel';
 import { DmSharedFilesPanel } from '@/components/messaging/DmSharedFilesPanel';
 import { useIsMobile } from '@/hooks/useIsMobile';
@@ -42,22 +43,23 @@ export function RightPanel({
 }: RightPanelProps) {
   const { theme } = useTheme();
   const { friends } = useFriends();
+  const { onlineDids } = useNetwork();
   const isMobile = useIsMobile();
 
-  // Build member sections from real friends data
+  // Build member sections from real friends data, enriched with relay presence
   const memberSections = useMemo(() => {
     const online = friends
-      .filter((f) => f.online)
+      .filter((f) => onlineDids.has(f.did))
       .map((f) => ({ id: f.did, name: f.displayName, status: 'online' as const }));
     const offline = friends
-      .filter((f) => !f.online)
+      .filter((f) => !onlineDids.has(f.did))
       .map((f) => ({ id: f.did, name: f.displayName, status: 'offline' as const }));
 
     return [
       { id: 'online', label: 'Online', members: online },
       { id: 'offline', label: 'Offline', members: offline, collapsed: true },
     ];
-  }, [friends]);
+  }, [friends, onlineDids]);
 
   const panelContent = (
     <>

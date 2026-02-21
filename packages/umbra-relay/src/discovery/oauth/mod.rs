@@ -102,13 +102,17 @@ pub fn success_html(platform: &str, username: &str) -> Html<String> {
         <h1><span class="platform">{}</span> Account Linked</h1>
         <div class="username">{}</div>
         <p>Your account has been successfully linked to Umbra.</p>
-        <p class="close-hint">You can close this window and return to the app.</p>
+        <p class="close-hint">Returning to app...</p>
     </div>
     <script>
-        // Try to close the window after a short delay
+        // Close or redirect back to app
         setTimeout(() => {{
-            window.close();
-        }}, 3000);
+            if (window.opener) {{
+                window.close();
+            }} else {{
+                window.location.href = 'umbra://oauth/callback?success=true';
+            }}
+        }}, 1500);
     </script>
 </body>
 </html>"#,
@@ -171,6 +175,14 @@ pub fn error_html(message: &str) -> Html<String> {
         <div class="error">{}</div>
         <p>Please close this window and try again.</p>
     </div>
+    <script>
+        // On mobile in-app browser, redirect back to app after delay
+        if (!window.opener) {{
+            setTimeout(() => {{
+                window.location.href = 'umbra://oauth/callback?success=false';
+            }}, 2000);
+        }}
+    </script>
 </body>
 </html>"#,
         message

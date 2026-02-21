@@ -4,6 +4,15 @@ use base64::Engine as _;
 use super::dispatcher::{DResult, err, json_parse, require_str, ok_json, ok_success, deterministic_conversation_id};
 use super::state::get_state;
 
+/// Convert hex-encoded ciphertext to base64, matching the WASM path.
+/// Falls back to original string if hex decoding fails.
+fn hex_to_base64_safe(hex_str: &str) -> String {
+    match hex::decode(hex_str) {
+        Ok(bytes) => base64::engine::general_purpose::STANDARD.encode(&bytes),
+        Err(_) => hex_str.to_string(),
+    }
+}
+
 pub fn messaging_get_conversations() -> DResult {
     let state = get_state().map_err(|e| err(100, e))?;
     let state = state.read();
@@ -45,7 +54,8 @@ pub fn messaging_get_messages(args: &str) -> DResult {
     let msgs = db.get_messages(conv_id, limit, offset).map_err(|e| err(e.code(), e))?;
     let arr: Vec<serde_json::Value> = msgs.iter().map(|m| serde_json::json!({
         "id": m.id, "conversation_id": m.conversation_id,
-        "sender_did": m.sender_did, "content_encrypted": m.content_encrypted,
+        "sender_did": m.sender_did,
+        "content_encrypted": hex_to_base64_safe(&m.content_encrypted),
         "nonce": m.nonce, "timestamp": m.timestamp,
         "delivered": m.delivered, "read": m.read,
     })).collect();
@@ -99,7 +109,16 @@ pub fn messaging_send(args: &str) -> DResult {
         }
     });
 
-    super::dispatcher::emit_event("message", &serde_json::json!({"type": "messageSent", "message_id": msg_id, "conversation_id": conv_id}));
+    super::dispatcher::emit_event("message", &serde_json::json!({
+        "type": "messageSent",
+        "message": {
+            "id": msg_id, "conversation_id": conv_id,
+            "sender_did": sender_did,
+            "content": { "type": "text", "text": content },
+            "timestamp": timestamp, "status": "sent",
+            "delivered": false, "read": false,
+        }
+    }));
 
     ok_json(serde_json::json!({
         "id": msg_id, "conversation_id": conv_id, "sender_did": sender_did,
@@ -187,7 +206,17 @@ pub fn messaging_store_incoming(args: &str) -> DResult {
     db.store_message(msg_id, conv_id, sender_did, &ciphertext, &nonce_bytes, timestamp)
         .map_err(|e| err(e.code(), e))?;
 
-    super::dispatcher::emit_event("message", &serde_json::json!({"type": "messageReceived", "message_id": msg_id, "conversation_id": conv_id, "sender_did": sender_did}));
+    super::dispatcher::emit_event("message", &serde_json::json!({
+        "type": "messageReceived",
+        "message": {
+            "id": msg_id, "conversation_id": conv_id,
+            "sender_did": sender_did,
+            "content_encrypted": ct_b64, "nonce": nonce_hex,
+            "status": "delivered",
+            "timestamp": timestamp,
+            "delivered": true, "read": false,
+        }
+    }));
 
     ok_success()
 }
@@ -458,6 +487,7 @@ pub fn messaging_update_status(args: &str) -> DResult {
     let state = state.read();
     let db = state.database.as_ref().ok_or_else(|| err(400, "Database not initialized"))?;
     match status {
+        "sent" => { db.mark_message_sent(msg_id).map_err(|e| err(e.code(), e))?; }
         "delivered" => { db.mark_message_delivered(msg_id).map_err(|e| err(e.code(), e))?; }
         "read" => { db.mark_message_read(msg_id).map_err(|e| err(e.code(), e))?; }
         _ => return Err(err(2, format!("Unknown status: {}", status))),

@@ -53,7 +53,7 @@
 //! ```
 
 /// Current schema version
-pub const SCHEMA_VERSION: i32 = 13;
+pub const SCHEMA_VERSION: i32 = 15;
 
 /// SQL to create all tables
 pub const CREATE_TABLES: &str = r#"
@@ -76,6 +76,8 @@ CREATE TABLE IF NOT EXISTS friends (
     encryption_key TEXT NOT NULL,
     -- Optional status message
     status TEXT,
+    -- Avatar (base64-encoded image data or URL)
+    avatar TEXT,
     -- When this friend was added
     created_at INTEGER NOT NULL,
     -- Last profile update
@@ -231,6 +233,7 @@ CREATE TABLE IF NOT EXISTS friend_requests (
     from_signing_key TEXT,
     from_encryption_key TEXT,
     from_display_name TEXT,
+    from_avatar TEXT,
     -- When the request was created
     created_at INTEGER NOT NULL,
     -- Status: 'pending', 'accepted', 'rejected', 'cancelled'
@@ -1638,6 +1641,24 @@ CREATE TABLE IF NOT EXISTS sticker_placements (
 CREATE INDEX IF NOT EXISTS idx_sticker_placements_channel_message ON sticker_placements(channel_id, message_id);
 
 UPDATE schema_version SET version = 13;
+"#;
+
+/// Migration v13 → v14:
+/// - Add avatar column to friends table for profile picture sync
+pub const MIGRATE_V13_TO_V14: &str = r#"
+-- Add avatar column to friends table (base64 image data or URL)
+ALTER TABLE friends ADD COLUMN avatar TEXT;
+
+UPDATE schema_version SET version = 14;
+"#;
+
+/// Migration v14 → v15:
+/// - Add from_avatar column to friend_requests table for profile picture sync
+pub const MIGRATE_V14_TO_V15: &str = r#"
+-- Add avatar column to friend_requests table
+ALTER TABLE friend_requests ADD COLUMN from_avatar TEXT;
+
+UPDATE schema_version SET version = 15;
 "#;
 
 /// SQL to drop all tables (for testing/reset)

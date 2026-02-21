@@ -102,6 +102,7 @@ export function VoiceChannelUsers({
                 name={name}
                 src={member?.avatarUrl}
                 size="xs"
+                status="online"
               />
             </View>
             <Text

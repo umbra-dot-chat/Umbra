@@ -1,15 +1,16 @@
 /**
  * @module CommunityCreateOptionsDialog
- * @description Dialog that lets users choose how to create a community:
+ * @description Dialog that lets users choose how to create or join a community:
  * - Create from scratch (name, description)
  * - Import from Discord (OAuth flow)
+ * - Join via invite code
  */
 
-import React, { useState, useCallback } from 'react';
+import React from 'react';
 import { View, Pressable } from 'react-native';
-import { Dialog, Button, Text, useTheme } from '@coexist/wisp-react-native';
+import { Dialog, Text, useTheme } from '@coexist/wisp-react-native';
 import { defaultSpacing, defaultRadii } from '@coexist/wisp-core/theme/create-theme';
-import Svg, { Path, Circle, Rect, Line, Polyline } from 'react-native-svg';
+import Svg, { Path, Circle, Line, Polyline } from 'react-native-svg';
 
 // ---------------------------------------------------------------------------
 // Icons
@@ -33,6 +34,15 @@ function DiscordIcon({ size, color }: { size: number; color: string }) {
   );
 }
 
+function LinkIcon({ size, color }: { size: number; color: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+      <Path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+    </Svg>
+  );
+}
+
 function ChevronRightIcon({ size, color }: { size: number; color: string }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
@@ -45,7 +55,7 @@ function ChevronRightIcon({ size, color }: { size: number; color: string }) {
 // Types
 // ---------------------------------------------------------------------------
 
-export type CreateOption = 'scratch' | 'discord';
+export type CreateOption = 'scratch' | 'discord' | 'join';
 
 export interface CommunityCreateOptionsDialogProps {
   /** Whether the dialog is visible. */
@@ -56,6 +66,8 @@ export interface CommunityCreateOptionsDialogProps {
   onSelectScratch: () => void;
   /** Called when user selects "Import from Discord". */
   onSelectDiscord: () => void;
+  /** Called when user selects "Join via invite". */
+  onSelectJoin: () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -67,6 +79,7 @@ export function CommunityCreateOptionsDialog({
   onClose,
   onSelectScratch,
   onSelectDiscord,
+  onSelectJoin,
 }: CommunityCreateOptionsDialogProps) {
   const { theme } = useTheme();
   const tc = theme.colors;
@@ -88,18 +101,26 @@ export function CommunityCreateOptionsDialog({
       iconBg: '#5865F2',
       onPress: onSelectDiscord,
     },
+    {
+      id: 'join' as const,
+      title: 'Join via Invite',
+      description: 'Have an invite code or link? Paste it to join an existing community.',
+      icon: LinkIcon,
+      iconBg: '#43b581',
+      onPress: onSelectJoin,
+    },
   ];
 
   return (
     <Dialog
       open={open}
       onClose={onClose}
-      title="Create Community"
+      title="Add Community"
       size="sm"
     >
       <View style={{ gap: defaultSpacing.md }}>
         <Text size="sm" style={{ color: tc.text.muted }}>
-          How would you like to create your community?
+          Create a new community or join an existing one.
         </Text>
 
         <View style={{ gap: defaultSpacing.sm }}>

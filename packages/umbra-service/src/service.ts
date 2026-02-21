@@ -328,6 +328,7 @@ export class UmbraService {
   processAcceptedFriendResponse(payload: {
     fromDid: string;
     fromDisplayName?: string;
+    fromAvatar?: string;
     fromSigningKey?: string;
     fromEncryptionKey?: string;
   }): Promise<void> {
@@ -975,6 +976,69 @@ export class UmbraService {
 
   deleteCommunityInvite(inviteId: string, actorDid: string): Promise<void> {
     return communityModule.deleteInvite(inviteId, actorDid);
+  }
+
+  /** Publish an invite to the relay so others can discover and join. */
+  publishCommunityInviteToRelay(
+    relayWs: WebSocket | null,
+    invite: CommunityInvite,
+    communityName: string,
+    communityDescription?: string | null,
+    communityIcon?: string | null,
+    memberCount?: number,
+    invitePayload?: string,
+  ): void {
+    communityModule.publishInviteToRelay(
+      relayWs, invite, communityName, communityDescription, communityIcon, memberCount, invitePayload,
+    );
+  }
+
+  /** Revoke a published invite on the relay. */
+  revokeCommunityInviteOnRelay(relayWs: WebSocket | null, code: string): void {
+    communityModule.revokeInviteOnRelay(relayWs, code);
+  }
+
+  /** Resolve an invite code from relay servers (fallback when local DB lookup fails). */
+  resolveInviteFromRelay(
+    relayUrls: readonly string[],
+    code: string,
+  ): Promise<communityModule.RelayInviteResolution | null> {
+    return communityModule.resolveInviteFromRelay(relayUrls, code);
+  }
+
+  /** Import community + invite from relay-resolved data into local DB. */
+  importCommunityFromRelay(
+    communityId: string,
+    communityName: string,
+    description: string | null,
+    ownerDid: string,
+    inviteCode: string,
+    maxUses?: number | null,
+    expiresAt?: number | null,
+  ): Promise<void> {
+    return communityModule.importCommunityFromRelay(
+      communityId, communityName, description, ownerDid, inviteCode, maxUses, expiresAt,
+    );
+  }
+
+  /** Import community from an invite payload JSON string (relay-resolved). */
+  async importCommunityFromInvitePayload(payload: string): Promise<void> {
+    try {
+      const data = JSON.parse(payload);
+      if (data.community_id && data.community_name && data.owner_did && data.invite_code) {
+        await communityModule.importCommunityFromRelay(
+          data.community_id,
+          data.community_name,
+          data.description ?? null,
+          data.owner_did,
+          data.invite_code,
+          data.max_uses,
+          data.expires_at,
+        );
+      }
+    } catch (err) {
+      console.warn('[UmbraService] importCommunityFromInvitePayload failed:', err);
+    }
   }
 
   // Messages
