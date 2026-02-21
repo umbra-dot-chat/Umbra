@@ -40,6 +40,45 @@
 mod types;
 
 #[cfg(feature = "ffi")]
+mod state;
+
+#[cfg(feature = "ffi")]
+mod events;
+
+#[cfg(feature = "ffi")]
+mod dispatcher;
+
+#[cfg(feature = "ffi")]
+mod dispatch_identity;
+
+#[cfg(feature = "ffi")]
+mod dispatch_friends;
+
+#[cfg(feature = "ffi")]
+mod dispatch_messaging;
+
+#[cfg(feature = "ffi")]
+mod dispatch_community;
+
+#[cfg(feature = "ffi")]
+mod dispatch_community_msg;
+
+#[cfg(feature = "ffi")]
+mod dispatch_community_ext;
+
+#[cfg(feature = "ffi")]
+mod dispatch_dm_files;
+
+#[cfg(feature = "ffi")]
+mod dispatch_secure_store;
+
+#[cfg(feature = "ffi")]
+mod dispatch_groups;
+
+#[cfg(feature = "ffi")]
+mod dispatch_stubs;
+
+#[cfg(feature = "ffi")]
 mod c_api;
 
 #[cfg(all(feature = "ffi", target_os = "android"))]

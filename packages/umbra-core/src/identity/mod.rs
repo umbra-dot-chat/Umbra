@@ -253,6 +253,29 @@ impl Identity {
     pub fn created_at(&self) -> i64 {
         self.created_at
     }
+
+    /// Create a safe copy of this identity for passing into service constructors.
+    ///
+    /// This reconstructs the keypair from the raw key bytes rather than using
+    /// `ptr::read` or `Clone` (which is intentionally not derived due to
+    /// `ZeroizeOnDrop`). The new identity is a fully independent copy that
+    /// owns its own key material.
+    pub fn clone_for_service(&self) -> Result<Self> {
+        let signing_bytes = self.keypair.signing.secret_bytes();
+        let encryption_bytes = self.keypair.encryption.secret_bytes();
+
+        let signing = crate::crypto::SigningKeyPair::from_bytes(&signing_bytes)?;
+        let encryption = crate::crypto::EncryptionKeyPair::from_bytes(&encryption_bytes);
+        let keypair = KeyPair { signing, encryption };
+        let did = Did::from_public_key(&keypair.signing.public_bytes());
+
+        Ok(Self {
+            keypair,
+            did,
+            profile: self.profile.clone(),
+            created_at: self.created_at,
+        })
+    }
 }
 
 /// Public portion of an identity that can be shared with others

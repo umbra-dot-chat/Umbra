@@ -244,7 +244,11 @@ wasm = []
 [profile.release]
 # Optimize for size on mobile platforms
 opt-level = "z"
-lto = true
+# LTO is intentionally disabled. Even "thin" LTO can strip #[no_mangle]
+# extern "C" symbols from staticlib crates because nothing inside Rust
+# references them — the linker treats them as dead code. These FFI entry
+# points (umbra_init, umbra_call, etc.) are only called from Swift/Kotlin.
+lto = false
 codegen-units = 1
 panic = "abort"
 

@@ -7,62 +7,57 @@
 use std::ffi::CStr;
 use std::os::raw::c_char;
 use std::sync::Arc;
-use parking_lot::RwLock;
-use once_cell::sync::OnceCell;
-use tokio::runtime::Runtime;
 
 use super::types::*;
+use super::state::{FfiState, get_runtime, get_state, init_state};
 use crate::identity::Identity;
 use crate::identity::RecoveryPhrase;
 use crate::friends::FriendsService;
 use crate::messaging::MessagingService;
 use crate::network::{NetworkService, NetworkConfig};
-use crate::discovery::{DiscoveryService, ConnectionInfo};
-use crate::storage::Database;
+use crate::discovery::ConnectionInfo;
 
 // ============================================================================
-// RUNTIME
+// HELPERS
 // ============================================================================
 
-/// Global async runtime for FFI calls
-static RUNTIME: OnceCell<Runtime> = OnceCell::new();
-
-/// Global state
-static STATE: OnceCell<Arc<RwLock<FfiState>>> = OnceCell::new();
-
-/// FFI state holding all services
-struct FfiState {
-    identity: Option<Identity>,
-    network: Option<Arc<NetworkService>>,
-    discovery: Option<Arc<DiscoveryService>>,
-    friends: Option<Arc<FriendsService>>,
-    messaging: Option<Arc<MessagingService>>,
-    database: Option<Arc<Database>>,
-    storage_path: String,
-}
-
-impl FfiState {
-    fn new(storage_path: String) -> Self {
-        Self {
-            identity: None,
-            network: None,
-            discovery: None,
-            friends: None,
-            messaging: None,
-            database: None,
-            storage_path,
-        }
+/// Safely create a FriendsService from the current state.
+///
+/// Falls back to creating a temporary service when `state.friends` is not
+/// cached. Uses the identity's keypair to construct a new `Identity` value
+/// (via recovery-free reconstruction) rather than the old `ptr::read` trick,
+/// which was unsound (double-free on `ZeroizeOnDrop` data).
+fn get_or_create_friends_service(
+    state: &FfiState,
+) -> Result<Arc<FriendsService>, FfiResult> {
+    if let Some(f) = &state.friends {
+        return Ok(f.clone());
     }
+    let identity = state.identity.as_ref()
+        .ok_or_else(|| FfiResult::err(200, "No identity loaded".to_string()))?;
+    let database = state.database.as_ref()
+        .ok_or_else(|| FfiResult::err(400, "Database not initialized".to_string()))?;
+    // Construct a standalone Identity clone using the keypair bytes.
+    // Identity::from_keypair_bytes duplicates key material safely.
+    let cloned = Identity::clone_for_service(identity)
+        .map_err(|e| FfiResult::err(200, format!("Failed to clone identity: {}", e)))?;
+    Ok(Arc::new(FriendsService::new(Arc::new(cloned), database.clone())))
 }
 
-fn get_runtime() -> &'static Runtime {
-    RUNTIME.get_or_init(|| {
-        Runtime::new().expect("Failed to create Tokio runtime")
-    })
-}
-
-fn get_state() -> crate::Result<Arc<RwLock<FfiState>>> {
-    STATE.get().cloned().ok_or(crate::Error::NotInitialized)
+/// Safely create a MessagingService from the current state.
+fn get_or_create_messaging_service(
+    state: &FfiState,
+) -> Result<Arc<MessagingService>, FfiResult> {
+    if let Some(m) = &state.messaging {
+        return Ok(m.clone());
+    }
+    let identity = state.identity.as_ref()
+        .ok_or_else(|| FfiResult::err(200, "No identity loaded".to_string()))?;
+    let database = state.database.as_ref()
+        .ok_or_else(|| FfiResult::err(400, "Database not initialized".to_string()))?;
+    let cloned = Identity::clone_for_service(identity)
+        .map_err(|e| FfiResult::err(200, format!("Failed to clone identity: {}", e)))?;
+    Ok(Arc::new(MessagingService::new(Arc::new(cloned), database.clone())))
 }
 
 // ============================================================================
@@ -93,12 +88,69 @@ pub unsafe extern "C" fn umbra_init(storage_path: *const c_char) -> FfiResult {
     let _ = get_runtime();
 
     // Initialize state
-    if STATE.set(Arc::new(RwLock::new(FfiState::new(path.clone())))).is_err() {
+    if init_state(FfiState::new(path.clone())).is_err() {
         return FfiResult::err(101, "Already initialized".to_string());
+    }
+
+    // Initialize SecureStore (iOS Keychain / Android Keystore / in-memory fallback)
+    {
+        let state = match get_state() {
+            Ok(s) => s,
+            Err(e) => return FfiResult::err(e.code(), e.to_string()),
+        };
+        let mut st = state.write();
+        st.secure_store = Some(crate::storage::SecureStore::new());
+        tracing::info!("SecureStore initialized");
     }
 
     tracing::info!("Umbra FFI initialized with storage path: {}", path);
     FfiResult::ok_empty()
+}
+
+/// Initialize the database.
+///
+/// Opens (or creates) an SQLite database at `<storage_path>/umbra.db`.
+/// Must be called after `umbra_init()` and before any data-access methods.
+///
+/// # Returns
+/// FfiResult with success/error status
+#[no_mangle]
+pub extern "C" fn umbra_init_database() -> FfiResult {
+    let rt = get_runtime();
+
+    rt.block_on(async {
+        let state = match get_state() {
+            Ok(s) => s,
+            Err(e) => return FfiResult::err(e.code(), e.to_string()),
+        };
+
+        // Check if database is already initialized
+        {
+            let st = state.read();
+            if st.database.is_some() {
+                tracing::info!("Database already initialized");
+                return FfiResult::ok_empty();
+            }
+        }
+
+        let db_path = {
+            let st = state.read();
+            format!("{}/umbra.db", st.storage_path)
+        };
+
+        match crate::storage::Database::open(Some(&db_path)).await {
+            Ok(database) => {
+                let mut st = state.write();
+                st.database = Some(Arc::new(database));
+                tracing::info!("Database initialized at: {}", db_path);
+                FfiResult::ok_empty()
+            }
+            Err(e) => {
+                tracing::error!("Failed to open database: {}", e);
+                FfiResult::err(400, format!("Failed to open database: {}", e))
+            }
+        }
+    })
 }
 
 /// Shutdown Umbra Core
@@ -599,25 +651,9 @@ pub unsafe extern "C" fn umbra_friends_send_request(
 
     let state = state.read();
 
-    let friends_service = match &state.friends {
-        Some(f) => f.clone(),
-        None => {
-            // Create FriendsService on demand if not cached
-            let identity = match &state.identity {
-                Some(i) => i,
-                None => return FfiResult::err(200, "No identity loaded".to_string()),
-            };
-            let database = match &state.database {
-                Some(d) => d,
-                None => return FfiResult::err(400, "Database not initialized".to_string()),
-            };
-            // Note: we can't cache here because we have a read lock.
-            // For now, create a temporary FriendsService.
-            Arc::new(FriendsService::new(
-                Arc::new(unsafe { std::ptr::read(identity as *const Identity) }),
-                database.clone(),
-            ))
-        }
+    let friends_service = match get_or_create_friends_service(&state) {
+        Ok(f) => f,
+        Err(e) => return e,
     };
 
     match friends_service.create_request(&did_str, msg) {
@@ -650,22 +686,9 @@ pub unsafe extern "C" fn umbra_friends_accept_request(request_id: *const c_char)
 
     let state = state.read();
 
-    let friends_service = match &state.friends {
-        Some(f) => f.clone(),
-        None => {
-            let identity = match &state.identity {
-                Some(i) => i,
-                None => return FfiResult::err(200, "No identity loaded".to_string()),
-            };
-            let database = match &state.database {
-                Some(d) => d,
-                None => return FfiResult::err(400, "Database not initialized".to_string()),
-            };
-            Arc::new(FriendsService::new(
-                Arc::new(unsafe { std::ptr::read(identity as *const Identity) }),
-                database.clone(),
-            ))
-        }
+    let friends_service = match get_or_create_friends_service(&state) {
+        Ok(f) => f,
+        Err(e) => return e,
     };
 
     match friends_service.accept_request(&id) {
@@ -695,22 +718,9 @@ pub unsafe extern "C" fn umbra_friends_reject_request(request_id: *const c_char)
 
     let state = state.read();
 
-    let friends_service = match &state.friends {
-        Some(f) => f.clone(),
-        None => {
-            let identity = match &state.identity {
-                Some(i) => i,
-                None => return FfiResult::err(200, "No identity loaded".to_string()),
-            };
-            let database = match &state.database {
-                Some(d) => d,
-                None => return FfiResult::err(400, "Database not initialized".to_string()),
-            };
-            Arc::new(FriendsService::new(
-                Arc::new(unsafe { std::ptr::read(identity as *const Identity) }),
-                database.clone(),
-            ))
-        }
+    let friends_service = match get_or_create_friends_service(&state) {
+        Ok(f) => f,
+        Err(e) => return e,
     };
 
     match friends_service.reject_request(&id) {
@@ -824,18 +834,9 @@ pub unsafe extern "C" fn umbra_messaging_send_text(
         Err(e) => return FfiResult::err(e.code(), e.to_string()),
     };
 
-    let messaging = match &state.messaging {
-        Some(m) => m.clone(),
-        None => {
-            let identity = match &state.identity {
-                Some(i) => i,
-                None => return FfiResult::err(200, "No identity loaded".to_string()),
-            };
-            Arc::new(MessagingService::new(
-                Arc::new(unsafe { std::ptr::read(identity as *const Identity) }),
-                database.clone(),
-            ))
-        }
+    let messaging = match get_or_create_messaging_service(&state) {
+        Ok(m) => m,
+        Err(e) => return e,
     };
 
     // Build a Friend from the database record for the messaging API
@@ -874,22 +875,9 @@ pub extern "C" fn umbra_messaging_get_conversations() -> FfiResult {
 
     let state = state.read();
 
-    let messaging = match &state.messaging {
-        Some(m) => m.clone(),
-        None => {
-            let identity = match &state.identity {
-                Some(i) => i,
-                None => return FfiResult::err(200, "No identity loaded".to_string()),
-            };
-            let database = match &state.database {
-                Some(d) => d,
-                None => return FfiResult::err(400, "Database not initialized".to_string()),
-            };
-            Arc::new(MessagingService::new(
-                Arc::new(unsafe { std::ptr::read(identity as *const Identity) }),
-                database.clone(),
-            ))
-        }
+    let messaging = match get_or_create_messaging_service(&state) {
+        Ok(m) => m,
+        Err(e) => return e,
     };
 
     let conversations = messaging.get_conversations();
@@ -953,5 +941,38 @@ pub unsafe extern "C" fn umbra_messaging_get_messages(
             FfiResult::ok(serde_json::to_string(&messages_json).unwrap_or_default())
         }
         Err(e) => FfiResult::err(e.code(), e.to_string()),
+    }
+}
+
+// ============================================================================
+// GENERIC DISPATCHER
+// ============================================================================
+
+/// Generic JSON-RPC style dispatcher for all operations.
+///
+/// This single FFI function replaces the need for 280+ individual `extern "C"`
+/// functions. The method name is matched internally and the appropriate service
+/// method is called with the JSON arguments.
+///
+/// # Arguments
+/// * `method` - Method name (e.g. "community_create", "messaging_edit")
+/// * `args` - JSON string with method arguments
+///
+/// # Returns
+/// FfiResult with JSON response data
+#[no_mangle]
+pub unsafe extern "C" fn umbra_call(
+    method: *const c_char,
+    args: *const c_char,
+) -> FfiResult {
+    let method_str = match cstr_to_string(method) {
+        Some(m) => m,
+        None => return FfiResult::err(1, "Invalid method name".to_string()),
+    };
+    let args_str = cstr_to_string(args).unwrap_or_else(|| "{}".to_string());
+
+    match super::dispatcher::dispatch(&method_str, &args_str) {
+        Ok(result) => FfiResult::ok(result),
+        Err((code, msg)) => FfiResult::err(code, msg),
     }
 }

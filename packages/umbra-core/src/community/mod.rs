@@ -50,6 +50,7 @@ mod member_experience;
 mod seats;
 
 pub use service::CommunityService;
+pub(crate) use service::generate_id;
 pub use seats::SeatInput;
 pub use permissions::{Permission, Permissions};
 pub use roles::RolePreset;
