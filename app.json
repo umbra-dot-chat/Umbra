@@ -2,7 +2,7 @@
   "expo": {
     "name": "Umbra",
     "slug": "Umbra",
-    "version": "1.0.0",
+    "version": "1.2.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "umbra",
@@ -15,8 +15,14 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.anonymous.Umbra",
-      "associatedDomains": ["applinks:umbra.chat"]
+      "bundleIdentifier": "chat.umbra.app",
+      "associatedDomains": [
+        "applinks:umbra.chat"
+      ],
+      "buildNumber": "1",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "adaptiveIcon": {
@@ -25,7 +31,7 @@
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
-      "package": "com.anonymous.Umbra",
+      "package": "chat.umbra.app",
       "intentFilters": [
         {
           "action": "VIEW",
@@ -37,7 +43,10 @@
               "pathPrefix": "/invite/"
             }
           ],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ]
     },
@@ -51,6 +60,12 @@
     ],
     "experiments": {
       "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "959a0873-4bf3-48f6-8baa-3fd074e9d87b"
+      }
     }
   }
 }

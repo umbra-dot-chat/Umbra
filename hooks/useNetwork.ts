@@ -526,6 +526,41 @@ export function useNetwork(): UseNetworkResult {
                   console.warn('[useNetwork] Failed to broadcast presence:', err);
                 });
 
+                // Re-publish all community invites to relay so they survive relay restarts.
+                // The relay stores invites in memory, so after a restart they're gone.
+                // Each connected community owner re-publishes their invites on reconnect.
+                if (identity?.did) {
+                  service.getCommunities(identity.did).then(async (communities) => {
+                    let published = 0;
+                    for (const community of communities) {
+                      if (community.ownerDid !== identity.did) continue;
+                      try {
+                        const invites = await service.getCommunityInvites(community.id);
+                        const members = await service.getCommunityMembers(community.id);
+                        for (const invite of invites) {
+                          if (ws.readyState !== WebSocket.OPEN) break;
+                          service.publishCommunityInviteToRelay(
+                            ws,
+                            invite,
+                            community.name,
+                            community.description,
+                            community.iconUrl,
+                            members.length,
+                          );
+                          published++;
+                        }
+                      } catch {
+                        // Best-effort — skip communities we can't read
+                      }
+                    }
+                    if (published > 0) {
+                      console.log('[useNetwork] Re-published', published, 'community invite(s) to relay');
+                    }
+                  }).catch((err) => {
+                    console.warn('[useNetwork] Failed to re-publish invites:', err);
+                  });
+                }
+
                 break;
               }
 

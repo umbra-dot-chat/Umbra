@@ -1,9 +1,11 @@
 {
   "cli": {
-    "version": ">= 14.0.0"
+    "version": ">= 14.0.0",
+    "appVersionSource": "remote"
   },
   "build": {
     "production": {
+      "autoIncrement": true,
       "ios": {
         "buildConfiguration": "Release",
         "distribution": "store"
@@ -14,6 +16,7 @@
       }
     },
     "preview": {
+      "autoIncrement": true,
       "ios": {
         "buildConfiguration": "Release",
         "distribution": "internal"
@@ -27,7 +30,9 @@
   "submit": {
     "production": {
       "ios": {
-        "appleId": "PLACEHOLDER"
+        "appleId": "6759507409",
+        "ascAppId": "chat.umbra.app",
+        "appleTeamId": "F6ZAL7ANAD"
       },
       "android": {
         "track": "internal"

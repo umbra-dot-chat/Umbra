@@ -730,7 +730,7 @@ export async function importCommunityFromRelay(
   communityName: string,
   description: string | null,
   ownerDid: string,
-  _inviteCode: string,
+  inviteCode: string,
   maxUses?: number | null,
   expiresAt?: number | null,
 ): Promise<void> {
@@ -758,16 +758,16 @@ export async function importCommunityFromRelay(
     throw new Error('Failed to create or find local community record');
   }
 
-  // Create the invite record locally — must use the LOCAL community ID
-  // so that useInvite → get_community_invite_by_code → join_community works
+  // Create the invite record locally with the ORIGINAL code from the relay.
+  // We use set_vanity_invite which lets us specify the exact code, so that
+  // the subsequent useInvite(code) call can find it by the same code.
   try {
     const json = JSON.stringify({
       community_id: localCommunityId,
+      vanity_code: inviteCode,
       creator_did: ownerDid,
-      max_uses: maxUses ?? null,
-      expires_at: expiresAt ?? null,
     });
-    wasm().umbra_wasm_community_invite_create(json);
+    wasm().umbra_wasm_community_invite_set_vanity(json);
   } catch (err: any) {
     // If invite already exists, that's fine
     const msg = err?.message || String(err);
@@ -820,7 +820,14 @@ export function publishInviteToRelay(
   memberCount?: number,
   invitePayload?: string,
 ): void {
-  if (!relayWs || relayWs.readyState !== WebSocket.OPEN) return;
+  if (!relayWs || relayWs.readyState !== WebSocket.OPEN) {
+    console.warn(
+      '[publishInviteToRelay] Relay WS not connected — invite not published:',
+      invite.code,
+      relayWs ? `readyState=${relayWs.readyState}` : 'ws=null',
+    );
+    return;
+  }
 
   const msg = {
     type: 'publish_invite',
@@ -835,6 +842,7 @@ export function publishInviteToRelay(
     invite_payload: invitePayload ?? '{}',
   };
 
+  console.log('[publishInviteToRelay] Publishing invite to relay:', invite.code);
   relayWs.send(JSON.stringify(msg));
 }
 
