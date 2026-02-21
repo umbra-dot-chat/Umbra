@@ -18,6 +18,7 @@
     "build:mobile:android": "./scripts/build-mobile.sh android",
     "prebuild": "npx expo prebuild --clean",
     "run:ios": "./scripts/build-mobile.sh ios && npx expo prebuild --clean && npx expo run:ios --device",
+    "run:ios:sim": "./scripts/build-mobile.sh ios-sim && npx expo prebuild --clean && npx expo run:ios",
     "run:android": "./scripts/build-mobile.sh android && npx expo prebuild --clean && npx expo run:android --device",
     "build:desktop": "./scripts/build-desktop.sh",
     "build:mac": "./scripts/build-mac.sh",
