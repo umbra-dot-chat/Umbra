@@ -148,7 +148,7 @@ export function ImportWalletFlow({ open, onClose }: ImportWalletFlowProps) {
       const result = await UmbraService.instance.restoreIdentity(words, displayName.trim());
       setIdentity(result);
     } catch (err: any) {
-      setError(err.message ?? 'Failed to restore wallet');
+      setError(err.message ?? 'Failed to restore account');
     } finally {
       setIsLoading(false);
     }
@@ -248,7 +248,7 @@ export function ImportWalletFlow({ open, onClose }: ImportWalletFlowProps) {
             <VStack gap="lg" style={{ alignItems: 'center', paddingVertical: 32 }}>
               <Spinner />
               <Text size="sm" color="muted">
-                Restoring your wallet...
+                Restoring your account...
               </Text>
             </VStack>
           );
@@ -278,7 +278,7 @@ export function ImportWalletFlow({ open, onClose }: ImportWalletFlowProps) {
             <Presence visible animation="fadeIn" duration={400}>
               <VStack gap="xs" style={{ alignItems: 'center' }}>
                 <Text size="xl" weight="bold">
-                  Wallet Restored!
+                  Account Restored!
                 </Text>
                 <Text size="sm" color="secondary" align="center">
                   Your identity has been recovered. Welcome back!

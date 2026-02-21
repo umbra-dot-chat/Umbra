@@ -1,7 +1,7 @@
 import 'react-native-gesture-handler';
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
-import { View } from 'react-native';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { Platform, View } from 'react-native';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import { Slot, useSegments, useRouter, useNavigationContainerRef } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { WispProvider, ToastProvider } from '@coexist/wisp-react-native';
@@ -150,8 +150,12 @@ function AuthGate() {
     setLoadingDismissed(true);
   }, []);
 
+  const isNative = Platform.OS !== 'web';
+  // Only apply SafeAreaView on the main (authenticated) layout — auth screens are edge-to-edge
+  const Wrapper = isNative && !inAuthGroup ? SafeAreaView : View;
+
   return (
-    <View style={{ flex: 1 }}>
+    <Wrapper style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
       <Slot />
       {showPinLock && <PinLockScreen />}
       {showLoading && (
@@ -160,7 +164,7 @@ function AuthGate() {
           onComplete={handleLoadingComplete}
         />
       )}
-    </View>
+    </Wrapper>
   );
 }
 

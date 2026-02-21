@@ -11,12 +11,12 @@ import { View, Animated, type ViewStyle } from 'react-native';
 import {
   Text,
   VStack,
-  PinInput,
   Presence,
   useTheme,
 } from '@coexist/wisp-react-native';
 import { ShieldIcon } from '@/components/icons';
 import { useAuth } from '@/contexts/AuthContext';
+import { GrowablePinInput } from './GrowablePinInput';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -24,6 +24,7 @@ import { useAuth } from '@/contexts/AuthContext';
 
 const MAX_ATTEMPTS = 5;
 const COOLDOWN_SECONDS = 30;
+const PIN_LENGTH = 5;
 
 // ---------------------------------------------------------------------------
 // Component
@@ -113,17 +114,16 @@ export function PinLockScreen() {
           </VStack>
 
           <Animated.View style={{ transform: [{ translateX: shakeAnim }] }}>
-            <PinInput
-              length={6}
+            <GrowablePinInput
+              minLength={PIN_LENGTH}
+              maxLength={PIN_LENGTH}
               value={value}
               onChange={setValue}
               onComplete={handleComplete}
               mask
               autoFocus
-              type="number"
-              size="lg"
               disabled={isLocked}
-              error={error ? true : undefined}
+              error={!!error}
             />
           </Animated.View>
 

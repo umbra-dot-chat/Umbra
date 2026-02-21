@@ -14,7 +14,6 @@
 
 import React from 'react';
 import { Image, Pressable, ScrollView, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle } from 'react-native-svg';
 import { Text, Skeleton, useTheme, NotificationBadge } from '@coexist/wisp-react-native';
 import { HomeIcon, FolderIcon, PlusIcon, SettingsIcon } from '@/components/icons';
@@ -58,6 +57,10 @@ export interface NavigationRailProps {
   loading?: boolean;
   /** Aggregated notification count for the home badge (shown when not on home) */
   homeNotificationCount?: number;
+  /** Safe area top inset passed from parent layout. @default 0 */
+  safeAreaTop?: number;
+  /** Safe area bottom inset passed from parent layout. @default 0 */
+  safeAreaBottom?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -77,9 +80,10 @@ export function NavigationRail({
   onOpenSettings,
   loading,
   homeNotificationCount,
+  safeAreaTop = 0,
+  safeAreaBottom = 0,
 }: NavigationRailProps) {
   const { theme } = useTheme();
-  const insets = useSafeAreaInsets();
 
   return (
     <View
@@ -88,7 +92,7 @@ export function NavigationRail({
         backgroundColor: theme.colors.background.surface,
         borderRightWidth: 1,
         borderRightColor: theme.colors.border.subtle,
-        paddingTop: Math.max(insets.top, 20),
+        paddingTop: safeAreaTop + 20,
         alignItems: 'center',
         flexShrink: 0,
       }}
@@ -199,7 +203,7 @@ export function NavigationRail({
 
       {/* Settings button — anchored to the bottom */}
       {onOpenSettings && (
-        <View style={{ paddingBottom: Math.max(insets.bottom, 16), paddingTop: 8, alignItems: 'center', width: '100%' }}>
+        <View style={{ paddingBottom: safeAreaBottom + 12, paddingTop: 8, alignItems: 'center', width: '100%' }}>
           <View
             style={{
               width: 28,

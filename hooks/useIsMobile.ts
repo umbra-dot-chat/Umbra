@@ -11,8 +11,12 @@ import { Platform } from 'react-native';
 export const MOBILE_BREAKPOINT = 768;
 
 export function useIsMobile(): boolean {
+  // Native platforms (iOS/Android) are always mobile
+  const isNative = Platform.OS !== 'web';
+
   const [isMobile, setIsMobile] = useState(() => {
-    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    if (isNative) return true;
+    if (typeof window !== 'undefined') {
       return window.innerWidth <= MOBILE_BREAKPOINT;
     }
     return false;

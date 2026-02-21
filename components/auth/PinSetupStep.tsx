@@ -2,7 +2,7 @@
  * Shared PIN creation step used by both CreateWalletFlow and ImportWalletFlow.
  *
  * Two sub-stages:
- *  1. Enter a 6-digit PIN
+ *  1. Enter a 5-digit PIN
  *  2. Confirm the PIN (re-enter to verify)
  *
  * Provides a "Skip for now" option so the PIN is optional.
@@ -13,11 +13,17 @@ import { Pressable } from 'react-native';
 import {
   Text,
   VStack,
-  PinInput,
   Alert,
   Presence,
 } from '@coexist/wisp-react-native';
 import { KeyIcon } from '@/components/icons';
+import { GrowablePinInput } from './GrowablePinInput';
+
+// ---------------------------------------------------------------------------
+// Constants
+// ---------------------------------------------------------------------------
+
+const PIN_LENGTH = 5;
 
 // ---------------------------------------------------------------------------
 // Props
@@ -85,7 +91,7 @@ export function PinSetupStep({ onComplete }: PinSetupStepProps) {
               Confirm Your PIN
             </Text>
             <Text size="sm" color="secondary" align="center">
-              Re-enter your 6-digit PIN to confirm.
+              Re-enter your PIN to confirm.
             </Text>
           </VStack>
 
@@ -93,16 +99,15 @@ export function PinSetupStep({ onComplete }: PinSetupStepProps) {
             <Alert variant="danger" description={error} />
           )}
 
-          <PinInput
-            length={6}
+          <GrowablePinInput
+            minLength={PIN_LENGTH}
+            maxLength={PIN_LENGTH}
             value={confirmValue}
             onChange={setConfirmValue}
             onComplete={handleConfirmComplete}
             mask
             autoFocus
-            type="number"
-            size="lg"
-            error={error ? true : undefined}
+            error={!!error}
           />
 
           <Pressable onPress={handleBack}>
@@ -124,18 +129,19 @@ export function PinSetupStep({ onComplete }: PinSetupStepProps) {
           Secure Your Account
         </Text>
         <Text size="sm" color="secondary" align="center">
-          Create a 6-digit PIN to lock the app and protect your keys.
+          Create a 5-digit PIN to lock the app and protect your keys.{'\n'}
           You'll need this PIN each time you open the app.
         </Text>
       </VStack>
 
-      <PinInput
-        length={6}
+      <GrowablePinInput
+        minLength={PIN_LENGTH}
+        maxLength={PIN_LENGTH}
+        value={enteredPin}
+        onChange={setEnteredPin}
         onComplete={handleEnterComplete}
         mask
         autoFocus
-        type="number"
-        size="lg"
       />
 
       <Pressable onPress={handleSkip}>

@@ -211,8 +211,10 @@ export function useDiscordCommunityImport(): UseDiscordCommunityImportState & Us
       }
     };
 
-    window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
+    if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+      window.addEventListener('message', handleMessage);
+      return () => window.removeEventListener('message', handleMessage);
+    }
   }, []);
 
   // Fetch guilds when we have an access token

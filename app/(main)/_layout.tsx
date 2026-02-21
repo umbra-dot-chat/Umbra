@@ -1,6 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Slot, usePathname, useRouter } from 'expo-router';
 import { HStack, useTheme } from '@coexist/wisp-react-native';
 
@@ -79,7 +78,6 @@ function MainLayoutInner() {
   const { selectedMember, popoverAnchor, closeProfile } = useProfilePopoverContext();
   const { playSound } = useSound();
   const isMobile = useIsMobile();
-  const insets = useSafeAreaInsets();
   const { activeChannelId: communityActiveChannelId } = useCommunityContext();
 
   // Service + data hooks
@@ -460,6 +458,8 @@ function MainLayoutInner() {
                   onOpenSettings={() => { playSound('dialog_open'); openSettings(); }}
                   loading={coreLoading || communitiesLoading}
                   homeNotificationCount={homeNotificationCount}
+                  safeAreaTop={0}
+                  safeAreaBottom={0}
                 />
                 <View style={{ width: isMobile ? undefined : sidebarWidth, flex: isMobile ? 1 : undefined, flexShrink: 0 }}>
                   {activeCommunityId ? (
@@ -494,7 +494,7 @@ function MainLayoutInner() {
             )}
             {!isMobile && <ResizeHandle onResize={handleSidebarResize} />}
             {showContent && (
-              <View style={{ flex: 1, paddingTop: isMobile ? insets.top : 0 }}>
+              <View style={{ flex: 1 }}>
                 <Slot />
               </View>
             )}

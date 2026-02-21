@@ -216,8 +216,10 @@ export function ProfileImportSelector({
       popupRef.current = null;
     };
 
-    window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
+    if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+      window.addEventListener('message', handleMessage);
+      return () => window.removeEventListener('message', handleMessage);
+    }
   }, [onProfileImported]);
 
   const handlePlatformPress = useCallback(async (platform: ImportPlatform) => {

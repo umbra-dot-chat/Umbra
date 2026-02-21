@@ -1,14 +1,17 @@
 /**
  * Read-only grid displaying 24 recovery seed words.
  *
- * Laid out as 4 columns × 6 rows. Each word is shown in a small outlined card
- * with a numbered label. Optionally shows a "Copy to clipboard" button.
+ * Laid out as 3 columns × 8 rows on mobile, 4 columns × 6 rows on web.
+ * Each word is shown in a compact outlined card with a numbered label.
+ * Optionally shows a "Copy to clipboard" button.
  */
 
 import React, { useCallback, useState } from 'react';
 import { View, Platform, type ViewStyle } from 'react-native';
 import { Text, Button, Card, HStack, Alert } from '@coexist/wisp-react-native';
 import { CopyIcon } from '@/components/icons';
+
+const isMobile = Platform.OS !== 'web';
 
 export interface SeedPhraseGridProps {
   words: string[];
@@ -34,16 +37,15 @@ export function SeedPhraseGrid({ words, showCopy = false }: SeedPhraseGridProps)
 
   return (
     <View>
-      {/* 4-column grid */}
       <View style={gridStyle}>
         {words.map((word, i) => (
           <View key={i} style={cellStyle}>
-            <Card variant="outlined" padding="sm" style={{ width: '100%' }}>
+            <Card variant="outlined" radius="sm" padding={isMobile ? 'none' : 'sm'} style={isMobile ? cardStyleMobile : { width: '100%' }}>
               <HStack gap="xs" style={{ alignItems: 'center' }}>
-                <Text size="xs" color="muted" style={{ minWidth: 20 }}>
+                <Text size="xs" color="muted" style={{ minWidth: isMobile ? 16 : 20 }}>
                   {i + 1}.
                 </Text>
-                <Text size="sm" weight="semibold">
+                <Text size="sm" weight="semibold" numberOfLines={1}>
                   {word}
                 </Text>
               </HStack>
@@ -75,11 +77,17 @@ export function SeedPhraseGrid({ words, showCopy = false }: SeedPhraseGridProps)
 const gridStyle: ViewStyle = {
   flexDirection: 'row',
   flexWrap: 'wrap',
-  marginHorizontal: -4,
+  marginHorizontal: isMobile ? -3 : -4,
 };
 
 const cellStyle: ViewStyle = {
-  width: '25%',
-  paddingHorizontal: 4,
-  paddingVertical: 4,
+  width: isMobile ? '33.33%' : '25%',
+  paddingHorizontal: isMobile ? 3 : 4,
+  paddingVertical: isMobile ? 3 : 4,
+};
+
+const cardStyleMobile: ViewStyle = {
+  width: '100%',
+  paddingHorizontal: 8,
+  paddingVertical: 6,
 };

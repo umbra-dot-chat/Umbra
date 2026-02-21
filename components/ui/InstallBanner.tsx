@@ -7,7 +7,7 @@
  */
 
 import React, { useState } from 'react';
-import { View, Pressable, Text as RNText, Linking } from 'react-native';
+import { Platform, View, Pressable, Text as RNText, Linking } from 'react-native';
 import { useTheme } from '@coexist/wisp-react-native';
 import { useAppUpdate } from '@/hooks/useAppUpdate';
 import { AllPlatformsDialog } from '@/components/modals/AllPlatformsDialog';
@@ -23,6 +23,11 @@ export function InstallBanner() {
   const tc = theme.colors;
   const update = useAppUpdate();
   const [showAllPlatforms, setShowAllPlatforms] = useState(false);
+
+  // Hide on mobile — the user is already running the native app
+  if (Platform.OS === 'ios' || Platform.OS === 'android') {
+    return null;
+  }
 
   // Don't show if dismissed, loading, or no update/install prompt needed
   if (update.isDismissed || update.isLoading || !update.hasUpdate) {

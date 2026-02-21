@@ -85,10 +85,58 @@ function useResponsiveTitleSize() {
 // ---------------------------------------------------------------------------
 
 const TAGLINES = [
+  // Original taglines
   'Private by math, not by promise.',
   'Messaging that forgets you exist.',
   'The chat app that can\u2019t read your chats.',
   'Zero-trust messaging for everyone.',
+  // Privacy & Encryption
+  'Encrypted before it leaves your fingertips.',
+  'Even we can\u2019t read your messages.',
+  '256-bit encryption. Zero compromises.',
+  'Your secrets, mathematically protected.',
+  'End-to-end encryption, no exceptions.',
+  'Where "private" actually means private.',
+  'Servers see ciphertext. You see conversations.',
+  'Privacy you don\u2019t have to trust\u2014you can verify.',
+  // Identity & Ownership
+  'No phone number. No email. No problem.',
+  '24 words. One identity. Total control.',
+  'Your keys live on your device. Always.',
+  'Self-sovereign identity for everyone.',
+  'Own your identity with a recovery phrase.',
+  'No accounts to hack. No passwords to leak.',
+  'Your identity, powered by cryptography.',
+  'Portable identity across every device.',
+  // Architecture & P2P
+  'Messages flow peer-to-peer, not through servers.',
+  'Direct connections. No middleman.',
+  'Decentralized by design, not by buzzword.',
+  'Your data stays on your devices.',
+  'No honeypot servers to breach.',
+  'P2P messaging with relay fallback.',
+  'The network gets stronger with every user.',
+  // Anti-Surveillance
+  'Mass surveillance? Architecturally impossible.',
+  'No metadata to mine. No graphs to build.',
+  'We can\u2019t comply with data requests\u2014we don\u2019t have the data.',
+  'Built for journalists, activists, and you.',
+  'Where SIM swap attacks can\u2019t follow.',
+  'No third-party SMS. No Twilio breaches.',
+  // File Sharing
+  'Share files of any size. No limits. No uploads.',
+  'P2P file transfers, encrypted per-file.',
+  'Your files never touch our servers.',
+  // Features
+  'Communities without corporate control.',
+  'Voice calls that stay between you.',
+  'Plugins built by community, not committees.',
+  'Discord features. Signal privacy.',
+  'Cross-platform: iOS, Android, Web, Desktop.',
+  // Philosophy
+  'Open source. Auditable. Trustless.',
+  'When the company dies, your data lives on.',
+  'No terms of service can delete your community.',
 ];
 
 const TAGLINE_INTERVAL = 3500; // ms between rotations
@@ -187,12 +235,12 @@ function AuthContent({ inverted, onCreateWallet, onImportWallet, fontLoaded, isW
                 {!inverted && (
                   <HelpIndicator
                     id="auth-create"
-                    title="Creating a Wallet"
+                    title="Creating an Account"
                     priority={85}
                     size={14}
                   >
                     <HelpText>
-                      Generate a new Ethereum wallet with a unique key pair. This becomes your identity on the Umbra network.
+                      Generate a new account with a unique key pair. This becomes your identity on the Umbra network.
                     </HelpText>
                     <HelpHighlight icon={<KeyIcon size={22} color="#6366f1" />}>
                       You'll receive a 12-word recovery phrase. Write it down and keep it safe — it's the only way to restore your identity.
@@ -208,7 +256,7 @@ function AuthContent({ inverted, onCreateWallet, onImportWallet, fontLoaded, isW
                 style={mutedColor ? { color: mutedColor } : undefined}
                 color={mutedColor ? undefined : 'secondary'}
               >
-                Generate a new Ethereum wallet to get started. Your keys, your messages.
+                Generate a new account to get started. Your keys, your messages.
               </Text>
             </VStack>
             <Button
@@ -220,7 +268,7 @@ function AuthContent({ inverted, onCreateWallet, onImportWallet, fontLoaded, isW
               style={invertedBtnStyle}
               iconLeft={<WalletIcon size={18} color={iconColor} />}
             >
-              Create New Wallet
+              Create New Account
             </Button>
           </VStack>
         </Card>
@@ -272,7 +320,7 @@ function AuthContent({ inverted, onCreateWallet, onImportWallet, fontLoaded, isW
                 {!inverted && (
                   <HelpIndicator
                     id="auth-import"
-                    title="Importing a Wallet"
+                    title="Importing an Account"
                     priority={90}
                     size={14}
                   >
@@ -282,7 +330,7 @@ function AuthContent({ inverted, onCreateWallet, onImportWallet, fontLoaded, isW
                     <HelpHighlight icon={<DownloadIcon size={22} color="#6366f1" />}>
                       This recovers your exact DID, keys, and identity — your friends will recognize you automatically.
                     </HelpHighlight>
-                    <HelpListItem>Use the same recovery phrase from wallet creation</HelpListItem>
+                    <HelpListItem>Use the same recovery phrase from account creation</HelpListItem>
                     <HelpListItem>Works across devices and platforms</HelpListItem>
                   </HelpIndicator>
                 )}
@@ -292,7 +340,7 @@ function AuthContent({ inverted, onCreateWallet, onImportWallet, fontLoaded, isW
                 style={mutedColor ? { color: mutedColor } : undefined}
                 color={mutedColor ? undefined : 'secondary'}
               >
-                Already have a wallet? Import your existing account to continue.
+                Already have an account? Import your existing account to continue.
               </Text>
             </VStack>
             <Button
@@ -304,7 +352,7 @@ function AuthContent({ inverted, onCreateWallet, onImportWallet, fontLoaded, isW
               style={invertedBtnStyle}
               iconLeft={<DownloadIcon size={18} color={iconColor} />}
             >
-              Import Existing Wallet
+              Import Existing Account
             </Button>
           </VStack>
         </Card>

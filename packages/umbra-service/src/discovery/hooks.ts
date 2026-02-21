@@ -120,8 +120,10 @@ export function useLinkedAccounts(did: string | null) {
       }
     };
 
-    window.addEventListener('message', handleMessage);
-    return () => window.removeEventListener('message', handleMessage);
+    if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
+      window.addEventListener('message', handleMessage);
+      return () => window.removeEventListener('message', handleMessage);
+    }
   }, [fetchStatus]);
 
   // Link account via profile import OAuth (relay auto-links when DID is provided)

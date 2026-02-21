@@ -192,7 +192,7 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
 
       setIdentity(finalIdentity);
     } catch (err: any) {
-      setError(err.message ?? 'Failed to create wallet');
+      setError(err.message ?? 'Failed to create account');
     } finally {
       setIsLoading(false);
     }
@@ -426,7 +426,7 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
               <View style={{ alignItems: 'center', paddingVertical: 32 }}>
                 <Spinner />
                 <Text size="sm" color="muted" style={{ marginTop: 12 }}>
-                  Generating your wallet...
+                  Generating your account...
                 </Text>
               </View>
             ) : error ? (
@@ -536,15 +536,17 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
 
       case 5:
         return (
-          <VStack gap="lg" style={{ alignItems: 'center', paddingVertical: 16 }}>
-            <Presence visible animation="scaleIn">
-              <CheckCircleIcon size={64} color="#22c55e" />
-            </Presence>
+          <VStack gap="lg" style={{ paddingVertical: 16 }}>
+            <View style={{ alignItems: 'center' }}>
+              <Presence visible animation="scaleIn">
+                <CheckCircleIcon size={64} color="#22c55e" />
+              </Presence>
+            </View>
 
             <Presence visible animation="fadeIn" duration={400}>
               <VStack gap="xs" style={{ alignItems: 'center' }}>
                 <Text size="xl" weight="bold">
-                  Wallet Created!
+                  Account Created!
                 </Text>
                 <Text size="sm" color="secondary" align="center">
                   Your identity has been created. You're ready to start using Umbra.
@@ -554,7 +556,7 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
 
             {identity && (
               <Presence visible animation="slideUp" duration={500}>
-                <Card variant="outlined" padding="md" style={{ width: '100%' }}>
+                <Card variant="outlined" padding="md">
                   <VStack gap="sm">
                     <HStack gap="sm" style={{ alignItems: 'center' }}>
                       <Text size="sm" color="muted">Name:</Text>

@@ -473,7 +473,7 @@ export function CommunitySettingsDialog({
     const handleMessage = async (event: MessageEvent) => {
       if (event.data?.type !== 'UMBRA_COMMUNITY_IMPORT' || !event.data.success || !event.data.token) return;
       bridgeAuthRef.current = true;
-      window.removeEventListener('message', handleMessage);
+      if (typeof window !== 'undefined') window.removeEventListener('message', handleMessage);
 
       const token = event.data.token;
       setBridgeSetupStatus('registering');
@@ -650,7 +650,7 @@ export function CommunitySettingsDialog({
       }
     };
 
-    window.addEventListener('message', handleMessage);
+    if (typeof window !== 'undefined') window.addEventListener('message', handleMessage);
 
     // Start OAuth flow
     fetch(`${RELAY}/community/import/discord/start`, { method: 'POST' })
@@ -665,7 +665,7 @@ export function CommunitySettingsDialog({
         bridgePopupRef.current?.close();
         setBridgeSetupStatus('error');
         setBridgeSetupError(err.message || 'Failed to start authentication');
-        window.removeEventListener('message', handleMessage);
+        if (typeof window !== 'undefined') window.removeEventListener('message', handleMessage);
       });
 
     // Poll for popup close
@@ -674,7 +674,7 @@ export function CommunitySettingsDialog({
         clearInterval(pollTimer);
         if (!bridgeAuthRef.current) {
           setBridgeSetupStatus((prev) => prev === 'connecting' ? 'idle' : prev);
-          window.removeEventListener('message', handleMessage);
+          if (typeof window !== 'undefined') window.removeEventListener('message', handleMessage);
         }
       }
     }, 500);
@@ -727,7 +727,7 @@ export function CommunitySettingsDialog({
     const handleMessage = async (event: MessageEvent) => {
       if (event.data?.type !== 'UMBRA_COMMUNITY_IMPORT' || !event.data.success || !event.data.token) return;
       fetchAuthRef.current = true;
-      window.removeEventListener('message', handleMessage);
+      if (typeof window !== 'undefined') window.removeEventListener('message', handleMessage);
 
       const token = event.data.token;
 
@@ -832,7 +832,7 @@ export function CommunitySettingsDialog({
       }
     };
 
-    window.addEventListener('message', handleMessage);
+    if (typeof window !== 'undefined') window.addEventListener('message', handleMessage);
 
     // Start OAuth flow
     fetch(`${RELAY}/community/import/discord/start`, { method: 'POST' })
@@ -846,7 +846,7 @@ export function CommunitySettingsDialog({
       .catch(() => {
         fetchPopupRef.current?.close();
         setFetchingUsers(false);
-        window.removeEventListener('message', handleMessage);
+        if (typeof window !== 'undefined') window.removeEventListener('message', handleMessage);
       });
 
     // Poll for popup close
@@ -855,7 +855,7 @@ export function CommunitySettingsDialog({
         clearInterval(pollTimer);
         if (!fetchAuthRef.current) {
           setFetchingUsers(false);
-          window.removeEventListener('message', handleMessage);
+          if (typeof window !== 'undefined') window.removeEventListener('message', handleMessage);
         }
       }
     }, 500);
