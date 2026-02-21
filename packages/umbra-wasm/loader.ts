@@ -587,8 +587,14 @@ async function doInitWasm(did?: string): Promise<UmbraWasmModule> {
     // Dynamic import from the public directory (served at root by Expo web).
     // This bypasses Metro bundling entirely — the browser loads the ES module
     // directly, which is exactly what wasm-bindgen expects.
-    // @ts-expect-error — runtime URL import from public directory, not a real module
-    wasmPkg = await import(/* webpackIgnore: true */ '/umbra_core.js');
+    //
+    // We wrap the import() in new Function() so that Hermes (React Native's
+    // JS engine) never sees the import() expression during parsing. Hermes
+    // doesn't support import() syntax and will fail at parse time even for
+    // code paths that never execute on mobile. new Function() defers parsing
+    // to runtime, and this code path only runs on web where import() works.
+    const dynamicImport = new Function('url', 'return import(url)');
+    wasmPkg = await dynamicImport('/umbra_core.js');
 
     // Initialize the WASM binary with an explicit URL to avoid import.meta.url
     // issues. The wasm-bindgen init function accepts a URL/string path.
