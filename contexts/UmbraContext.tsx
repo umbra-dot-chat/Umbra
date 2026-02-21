@@ -76,7 +76,7 @@ export function UmbraProvider({ children, config }: UmbraProviderProps) {
   const [error, setError] = useState<Error | null>(null);
   const [version, setVersion] = useState('');
   const [initStage, setInitStage] = useState<InitStage>('booting');
-  const { identity, recoveryPhrase } = useAuth();
+  const { identity, recoveryPhrase, isHydrated } = useAuth();
 
   useEffect(() => {
     let cancelled = false;
@@ -128,7 +128,7 @@ export function UmbraProvider({ children, config }: UmbraProviderProps) {
   //
   // On Tauri, identity_set works via IPC to configure the backend.
   useEffect(() => {
-    if (!isReady || !identity) return;
+    if (!isReady || !isHydrated || !identity) return;
 
     const currentIdentity = identity;
     const currentPhrase = recoveryPhrase;
@@ -189,7 +189,7 @@ export function UmbraProvider({ children, config }: UmbraProviderProps) {
     }
 
     hydrateIdentity();
-  }, [isReady, identity, recoveryPhrase]);
+  }, [isReady, isHydrated, identity, recoveryPhrase]);
 
   const value = useMemo<UmbraContextValue>(() => {
     let service: UmbraService | null = null;

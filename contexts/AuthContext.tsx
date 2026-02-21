@@ -3,7 +3,7 @@ import { Platform } from 'react-native';
 import type { Identity } from '@/packages/umbra-service/src';
 
 // ---------------------------------------------------------------------------
-// localStorage helpers (web-only)
+// Storage keys
 // ---------------------------------------------------------------------------
 
 const STORAGE_KEY_IDENTITY = 'umbra_identity';
@@ -11,19 +11,87 @@ const STORAGE_KEY_REMEMBER = 'umbra_remember_me';
 const STORAGE_KEY_PIN = 'umbra_pin';
 const STORAGE_KEY_RECOVERY = 'umbra_recovery';
 
-function getStorageItem(key: string): string | null {
-  if (Platform.OS !== 'web' || typeof window === 'undefined') return null;
+// ---------------------------------------------------------------------------
+// Platform-aware async storage helpers
+// ---------------------------------------------------------------------------
+// On web: localStorage (synchronous, wrapped in async)
+// On native: Rust SecureStore via expo-umbra-core native.call('secure_*', ...)
+// ---------------------------------------------------------------------------
+
+const isWeb = Platform.OS === 'web';
+
+/** Get the native module for SecureStore calls (lazy, cached) */
+let _nativeModule: any = null;
+function getNative(): any {
+  if (_nativeModule) return _nativeModule;
+  try {
+    const { getExpoUmbraCore } = require('@/modules/expo-umbra-core/src');
+    _nativeModule = getExpoUmbraCore();
+    return _nativeModule;
+  } catch {
+    return null;
+  }
+}
+
+async function getStorageItem(key: string): Promise<string | null> {
+  if (isWeb) {
+    if (typeof window === 'undefined') return null;
+    try { return localStorage.getItem(key); } catch { return null; }
+  }
+
+  // Native: use Rust SecureStore via dispatcher
+  const native = getNative();
+  if (!native) return null;
+  try {
+    const resultJson = await native.call('secure_retrieve', JSON.stringify({ key }));
+    const result = JSON.parse(resultJson);
+    return result.value ?? null;
+  } catch {
+    return null;
+  }
+}
+
+async function setStorageItem(key: string, value: string): Promise<void> {
+  if (isWeb) {
+    if (typeof window === 'undefined') return;
+    try { localStorage.setItem(key, value); } catch { /* ignore */ }
+    return;
+  }
+
+  // Native: use Rust SecureStore via dispatcher
+  const native = getNative();
+  if (!native) return;
+  try {
+    await native.call('secure_store', JSON.stringify({ key, value }));
+  } catch (e) {
+    console.warn('[AuthContext] SecureStore write failed:', e);
+  }
+}
+
+async function removeStorageItem(key: string): Promise<void> {
+  if (isWeb) {
+    if (typeof window === 'undefined') return;
+    try { localStorage.removeItem(key); } catch { /* ignore */ }
+    return;
+  }
+
+  // Native: use Rust SecureStore via dispatcher
+  const native = getNative();
+  if (!native) return;
+  try {
+    await native.call('secure_delete', JSON.stringify({ key }));
+  } catch (e) {
+    console.warn('[AuthContext] SecureStore delete failed:', e);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Synchronous web-only helpers for useState initializers (web only)
+// ---------------------------------------------------------------------------
+
+function getWebStorageItem(key: string): string | null {
+  if (!isWeb || typeof window === 'undefined') return null;
   try { return localStorage.getItem(key); } catch { return null; }
-}
-
-function setStorageItem(key: string, value: string): void {
-  if (Platform.OS !== 'web' || typeof window === 'undefined') return;
-  try { localStorage.setItem(key, value); } catch { /* ignore */ }
-}
-
-function removeStorageItem(key: string): void {
-  if (Platform.OS !== 'web' || typeof window === 'undefined') return;
-  try { localStorage.removeItem(key); } catch { /* ignore */ }
 }
 
 // ---------------------------------------------------------------------------
@@ -35,6 +103,8 @@ interface AuthContextValue {
   identity: Identity | null;
   /** Derived from identity !== null */
   isAuthenticated: boolean;
+  /** Whether persisted auth state has been loaded (always true on web, async on native) */
+  isHydrated: boolean;
   /** Set the identity after a successful create or import */
   login: (identity: Identity) => void;
   /** Directly update the identity in state (and persist if rememberMe is on) */
@@ -72,11 +142,15 @@ interface AuthContextValue {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  // Restore persisted identity on mount
+  // ─── State ──────────────────────────────────────────────────────────────
+  // On web, we can initialize synchronously from localStorage.
+  // On native, we start with defaults and hydrate asynchronously from SecureStore.
+
   const [identity, setIdentity] = useState<Identity | null>(() => {
-    const remembered = getStorageItem(STORAGE_KEY_REMEMBER);
+    if (!isWeb) return null; // Will be hydrated async
+    const remembered = getWebStorageItem(STORAGE_KEY_REMEMBER);
     if (remembered === 'true') {
-      const saved = getStorageItem(STORAGE_KEY_IDENTITY);
+      const saved = getWebStorageItem(STORAGE_KEY_IDENTITY);
       if (saved) {
         try { return JSON.parse(saved) as Identity; } catch { /* ignore */ }
       }
@@ -85,16 +159,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   });
 
   const [rememberMe, setRememberMeState] = useState<boolean>(() => {
-    return getStorageItem(STORAGE_KEY_REMEMBER) === 'true';
+    if (!isWeb) return false; // Will be hydrated async
+    return getWebStorageItem(STORAGE_KEY_REMEMBER) === 'true';
   });
 
   const [pin, setPinState] = useState<string | null>(() => {
-    return getStorageItem(STORAGE_KEY_PIN);
+    if (!isWeb) return null; // Will be hydrated async
+    return getWebStorageItem(STORAGE_KEY_PIN);
   });
 
-  // Recovery phrase — persisted so WASM identity can be restored on page refresh
   const [recoveryPhrase, setRecoveryPhraseState] = useState<string[] | null>(() => {
-    const saved = getStorageItem(STORAGE_KEY_RECOVERY);
+    if (!isWeb) return null; // Will be hydrated async
+    const saved = getWebStorageItem(STORAGE_KEY_RECOVERY);
     if (saved) {
       try { return JSON.parse(saved) as string[]; } catch { /* ignore */ }
     }
@@ -103,9 +179,62 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const [isPinVerified, setIsPinVerified] = useState(false);
 
-  // Keep a ref so login() can read the latest value without re-creating
+  // On web, hydration is immediate (synchronous localStorage). On native, async.
+  const [isHydrated, setIsHydrated] = useState(isWeb);
+
+  // ─── Native async hydration ─────────────────────────────────────────────
+  useEffect(() => {
+    if (isWeb) return; // Already hydrated synchronously
+
+    let cancelled = false;
+
+    async function hydrate() {
+      try {
+        const [rememberedStr, identityStr, pinStr, recoveryStr] = await Promise.all([
+          getStorageItem(STORAGE_KEY_REMEMBER),
+          getStorageItem(STORAGE_KEY_IDENTITY),
+          getStorageItem(STORAGE_KEY_PIN),
+          getStorageItem(STORAGE_KEY_RECOVERY),
+        ]);
+
+        if (cancelled) return;
+
+        const remembered = rememberedStr === 'true';
+        setRememberMeState(remembered);
+
+        if (remembered && identityStr) {
+          try {
+            setIdentity(JSON.parse(identityStr) as Identity);
+          } catch { /* ignore malformed JSON */ }
+        }
+
+        if (pinStr) {
+          setPinState(pinStr);
+        }
+
+        if (recoveryStr) {
+          try {
+            setRecoveryPhraseState(JSON.parse(recoveryStr) as string[]);
+          } catch { /* ignore */ }
+        }
+      } catch (e) {
+        console.warn('[AuthContext] Native hydration failed:', e);
+      }
+
+      if (!cancelled) {
+        setIsHydrated(true);
+      }
+    }
+
+    hydrate();
+    return () => { cancelled = true; };
+  }, []);
+
+  // ─── Ref for rememberMe ─────────────────────────────────────────────────
   const rememberMeRef = useRef(rememberMe);
   rememberMeRef.current = rememberMe;
+
+  // ─── Callbacks ──────────────────────────────────────────────────────────
 
   const setRememberMe = useCallback((value: boolean) => {
     setRememberMeState(value);
@@ -186,6 +315,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     () => ({
       identity,
       isAuthenticated: identity !== null,
+      isHydrated,
       login,
       setIdentity: updateIdentity,
       logout,
@@ -200,7 +330,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       verifyPin,
       lockApp,
     }),
-    [identity, login, updateIdentity, logout, rememberMe, setRememberMe, recoveryPhrase, setRecoveryPhrase, pin, isPinVerified, setPin, verifyPin, lockApp],
+    [identity, isHydrated, login, updateIdentity, logout, rememberMe, setRememberMe, recoveryPhrase, setRecoveryPhrase, pin, isPinVerified, setPin, verifyPin, lockApp],
   );
 
   return (

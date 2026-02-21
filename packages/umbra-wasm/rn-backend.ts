@@ -5,34 +5,24 @@
  *
  * ## Architecture
  *
- * This adapter mirrors the Tauri backend pattern but routes calls to the
- * Expo Module (`expo-umbra-core`) which wraps the native Rust FFI.
+ * Routes calls through the Expo Module (`expo-umbra-core`) which wraps
+ * the native Rust FFI. Core methods (identity, network) use direct
+ * native bindings. Everything else routes through `native.call(method, args)`
+ * which hits the Rust dispatcher (`umbra_call` → `dispatcher.rs`).
  *
- * When the native module is linked (after compiling Rust with
- * `scripts/build-mobile.sh`), all operations go through native Rust.
- * Otherwise, stub implementations let the app boot for UI development.
- *
- * ## Phases
- *
- * 1. **Stub** — App boots, auth screen renders, operations throw
- * 2. **Native** — Expo Module calls native Rust via C FFI (identity, crypto, etc.)
+ * When the native module is not linked, falls back to stubs that let
+ * the app boot for UI development.
  */
 
 import type { UmbraWasmModule } from './loader';
-
-// ─────────────────────────────────────────────────────────────────────────
-// Native module interface (provided by expo-umbra-core)
-// ─────────────────────────────────────────────────────────────────────────
-
 import type { NativeUmbraCore } from '../../modules/expo-umbra-core/src';
 
-/**
- * Try to load the native Expo module.
- * Returns null if not yet compiled and linked.
- */
+// ─────────────────────────────────────────────────────────────────────────
+// Native module loader
+// ─────────────────────────────────────────────────────────────────────────
+
 function getNativeModule(): NativeUmbraCore | null {
   try {
-    // Dynamic require to avoid hard crash if module isn't linked
     const { getExpoUmbraCore } = require('../../modules/expo-umbra-core/src');
     return getExpoUmbraCore();
   } catch {
@@ -61,23 +51,412 @@ function ensureJsonString(value: unknown): string {
 // Backend factory
 // ─────────────────────────────────────────────────────────────────────────
 
-/**
- * Create a React Native backend that implements UmbraWasmModule.
- *
- * If the native Expo Module is available, delegates to it.
- * Otherwise, provides stubs that let the app boot but throw
- * descriptive errors when operations are attempted.
- */
 export function createReactNativeBackend(): UmbraWasmModule {
   const native = getNativeModule();
 
-  // If native module is available, use it
   if (native) {
+    console.log('[rn-backend] Native Expo module detected — using native Rust backend');
     return createNativeBackend(native);
   }
 
-  // Otherwise, return stubs
+  console.log('[rn-backend] No native module — using stub backend');
   return createStubBackend();
+}
+
+// ─────────────────────────────────────────────────────────────────────────
+// Native backend — routes all methods through Rust FFI
+// ─────────────────────────────────────────────────────────────────────────
+
+function createNativeBackend(native: NativeUmbraCore): UmbraWasmModule {
+  /**
+   * Route a method through the generic Rust dispatcher.
+   * `native.call(method, args)` → Swift `umbra_call` → Rust `dispatch()`.
+   */
+  const call = (method: string, args: Record<string, any> = {}): any => {
+    return native.call(method, JSON.stringify(args));
+  };
+
+  return {
+    // ── Initialization ──────────────────────────────────────────────────
+    umbra_wasm_init: () => {
+      try {
+        // Pass empty string to use the platform-default storage path.
+        // Note: "init" is reserved in Swift, so the native function is
+        // named "initialize" to avoid Expo Modules type coercion issues.
+        native.initialize('');
+        console.log('[rn-backend] Native Rust backend initialized');
+      } catch (e: any) {
+        // Rust returns error code 101 if already initialized — that's fine,
+        // it means a previous HMR cycle or double-mount already ran init.
+        const msg = e?.message ?? String(e);
+        if (msg.includes('Already initialized') || msg.includes('101')) {
+          console.log('[rn-backend] Native backend already initialized (OK)');
+        } else {
+          console.error('[rn-backend] Native init failed:', e);
+        }
+      }
+    },
+
+    umbra_wasm_init_database: async () => {
+      try {
+        native.initDatabase();
+        console.log('[rn-backend] Database initialized');
+        return true;
+      } catch (e: any) {
+        console.error('[rn-backend] Database init failed:', e);
+        return false;
+      }
+    },
+
+    umbra_wasm_version: () => {
+      try { return native.version(); } catch { return '0.1.0 (react-native)'; }
+    },
+
+    // ── Identity (direct native calls) ──────────────────────────────────
+    umbra_wasm_identity_create: (display_name: string) =>
+      ensureJsonString(native.identityCreate(display_name)),
+
+    umbra_wasm_identity_restore: (recovery_phrase: string, display_name: string) =>
+      ensureJsonString(native.identityRestore(recovery_phrase, display_name)),
+
+    umbra_wasm_identity_set: (_json: string) => {
+      console.debug('[rn-backend] identity_set — no-op on native');
+    },
+
+    umbra_wasm_identity_get_did: () => native.identityGetDid(),
+    umbra_wasm_identity_get_profile: () => ensureJsonString(native.identityGetProfile()),
+    umbra_wasm_identity_update_profile: (json: string) => ensureJsonString(native.identityUpdateProfile(json)),
+
+    // ── Discovery (direct native calls) ─────────────────────────────────
+    umbra_wasm_discovery_get_connection_info: () => ensureJsonString(native.discoveryGetConnectionInfo()),
+    umbra_wasm_discovery_parse_connection_info: (info: string) => info,
+
+    // ── Friends (via dispatcher) ────────────────────────────────────────
+    umbra_wasm_friends_send_request: (did: string, message?: string) =>
+      call('friends_send_request', { did, message }),
+    umbra_wasm_friends_accept_request: (request_id: string) =>
+      call('friends_accept_request', { request_id }),
+    umbra_wasm_friends_reject_request: (request_id: string) =>
+      call('friends_reject_request', { request_id }),
+    umbra_wasm_friends_list: () => call('friends_list'),
+    umbra_wasm_friends_pending_requests: (direction?: string) =>
+      call('friends_pending_requests', { direction: direction ?? 'incoming' }),
+    umbra_wasm_friends_remove: (did: string) => call('friends_remove', { did }),
+    umbra_wasm_friends_block: (did: string, reason?: string) => call('friends_block', { did, reason }),
+    umbra_wasm_friends_unblock: (did: string) => call('friends_unblock', { did }),
+    umbra_wasm_friends_store_incoming: (json: string) => call('friends_store_incoming', JSON.parse(json)),
+    umbra_wasm_friends_accept_from_relay: (json: string) => call('friends_accept_from_relay', JSON.parse(json)),
+    umbra_wasm_friends_build_accept_ack: (json: string) => call('friends_build_accept_ack', JSON.parse(json)),
+
+    // ── Messaging (via dispatcher) ──────────────────────────────────────
+    umbra_wasm_messaging_get_conversations: () => call('messaging_get_conversations'),
+    umbra_wasm_messaging_create_dm_conversation: (friend_did: string) =>
+      call('messaging_create_dm_conversation', { friend_did }),
+    umbra_wasm_messaging_get_messages: (conversation_id: string, limit?: number, offset?: any) =>
+      call('messaging_get_messages', { conversation_id, limit: limit ?? 50, offset: offset ?? 0 }),
+    umbra_wasm_messaging_send: (conversation_id: string, content: string) =>
+      call('messaging_send', { conversation_id, content }),
+    umbra_wasm_messaging_mark_read: (conversation_id: string) =>
+      call('messaging_mark_read', { conversation_id }),
+    umbra_wasm_messaging_decrypt: (conversation_id: string, content_encrypted_b64: string, nonce_hex: string, sender_did: string, timestamp: number) =>
+      call('messaging_decrypt', { conversation_id, content_encrypted_b64, nonce_hex, sender_did, timestamp }),
+    umbra_wasm_messaging_store_incoming: (json: string) => call('messaging_store_incoming', JSON.parse(json)),
+    umbra_wasm_messaging_build_typing_envelope: (json: string) => call('messaging_build_typing_envelope', JSON.parse(json)),
+    umbra_wasm_messaging_build_receipt_envelope: (json: string) => call('messaging_build_receipt_envelope', JSON.parse(json)),
+
+    // ── Messaging Extended (via dispatcher) ─────────────────────────────
+    umbra_wasm_messaging_edit: (json: string) => call('messaging_edit', JSON.parse(json)),
+    umbra_wasm_messaging_delete: (json: string) => call('messaging_delete', JSON.parse(json)),
+    umbra_wasm_messaging_pin: (json: string) => call('messaging_pin', JSON.parse(json)),
+    umbra_wasm_messaging_unpin: (json: string) => call('messaging_unpin', JSON.parse(json)),
+    umbra_wasm_messaging_add_reaction: (json: string) => call('messaging_add_reaction', JSON.parse(json)),
+    umbra_wasm_messaging_remove_reaction: (json: string) => call('messaging_remove_reaction', JSON.parse(json)),
+    umbra_wasm_messaging_forward: (json: string) => call('messaging_forward', JSON.parse(json)),
+    umbra_wasm_messaging_get_thread: (json: string) => call('messaging_get_thread', JSON.parse(json)),
+    umbra_wasm_messaging_reply_thread: (json: string) => call('messaging_reply_thread', JSON.parse(json)),
+    umbra_wasm_messaging_get_pinned: (json: string) => call('messaging_get_pinned', JSON.parse(json)),
+    umbra_wasm_messaging_update_status: (json: string) => call('messaging_update_status', JSON.parse(json)),
+
+    // ── Groups (via dispatcher) ─────────────────────────────────────────
+    umbra_wasm_groups_create: (json: string) => call('groups_create', JSON.parse(json)),
+    umbra_wasm_groups_get: (group_id: string) => call('groups_get', { group_id }),
+    umbra_wasm_groups_list: () => call('groups_list'),
+    umbra_wasm_groups_update: (json: string) => call('groups_update', JSON.parse(json)),
+    umbra_wasm_groups_delete: (group_id: string) => call('groups_delete', { group_id }),
+    umbra_wasm_groups_add_member: (json: string) => call('groups_add_member', JSON.parse(json)),
+    umbra_wasm_groups_remove_member: (json: string) => call('groups_remove_member', JSON.parse(json)),
+    umbra_wasm_groups_get_members: (group_id: string) => call('groups_get_members', { group_id }),
+    umbra_wasm_groups_generate_key: (group_id: string) => call('groups_generate_key', { group_id }),
+    umbra_wasm_groups_rotate_key: (group_id: string) => call('groups_rotate_key', { group_id }),
+    umbra_wasm_groups_import_key: (json: string) => call('groups_import_key', JSON.parse(json)),
+    umbra_wasm_groups_encrypt_message: (json: string) => call('groups_encrypt_message', JSON.parse(json)),
+    umbra_wasm_groups_decrypt_message: (json: string) => call('groups_decrypt_message', JSON.parse(json)),
+    umbra_wasm_groups_encrypt_key_for_member: (json: string) => call('groups_encrypt_key_for_member', JSON.parse(json)),
+    umbra_wasm_groups_store_invite: (json: string) => call('groups_store_invite', JSON.parse(json)),
+    umbra_wasm_groups_get_pending_invites: () => call('groups_get_pending_invites'),
+    umbra_wasm_groups_accept_invite: (invite_id: string) => call('groups_accept_invite', { invite_id }),
+    umbra_wasm_groups_decline_invite: (invite_id: string) => call('groups_decline_invite', { invite_id }),
+
+    // ── Network (direct native calls) ───────────────────────────────────
+    umbra_wasm_network_status: () => {
+      try { return ensureJsonString(native.networkStatus()); }
+      catch { return JSON.stringify({ connected: false, peers: 0 }); }
+    },
+    umbra_wasm_network_start: async () => {
+      try { await native.networkStart(null); return true; }
+      catch (e) { console.warn('[rn-backend] network_start failed:', e); return false; }
+    },
+    umbra_wasm_network_stop: async () => {
+      try { await native.networkStop(); return true; }
+      catch (e) { console.warn('[rn-backend] network_stop failed:', e); return false; }
+    },
+    umbra_wasm_network_create_offer: () => call('network_create_offer'),
+    umbra_wasm_network_accept_offer: (offer: string) => call('network_accept_offer', { offer }),
+    umbra_wasm_network_complete_handshake: (answer: string) => call('network_complete_handshake', { answer }),
+    umbra_wasm_network_complete_answerer: () => call('network_complete_answerer'),
+
+    // ── Relay (via dispatcher) ──────────────────────────────────────────
+    umbra_wasm_relay_connect: (relay_url: string) => call('relay_connect', { relay_url }),
+    umbra_wasm_relay_disconnect: async () => {},
+    umbra_wasm_relay_create_session: (relay_url: string) => call('relay_create_session', { relay_url }),
+    umbra_wasm_relay_accept_session: (session_id: string, offer_payload: string) =>
+      call('relay_accept_session', { session_id, offer_payload }),
+    umbra_wasm_relay_send: (to_did: string, payload: string) => call('relay_send', { to_did, payload }),
+    umbra_wasm_relay_fetch_offline: async () => JSON.stringify({ type: 'fetch_offline' }),
+
+    // ── Events ──────────────────────────────────────────────────────────
+    umbra_wasm_subscribe_events: (callback: (event_json: string) => void) => {
+      try {
+        const { addUmbraCoreEventListener } = require('../../modules/expo-umbra-core/src');
+        const sub = addUmbraCoreEventListener((event: { type: string; data: string }) => {
+          // event.data is the full JSON string from Rust's emit_event
+          callback(event.data);
+        });
+        if (sub) {
+          console.log('[rn-backend] Event subscription wired to native events');
+        } else {
+          console.warn('[rn-backend] Event subscription: native emitter not available');
+        }
+      } catch (e) {
+        console.warn('[rn-backend] Failed to wire native events:', e);
+      }
+    },
+
+    // ── Calls (via dispatcher) ──────────────────────────────────────────
+    umbra_wasm_calls_store: (json: string) => call('calls_store', JSON.parse(json)),
+    umbra_wasm_calls_end: (json: string) => call('calls_end', JSON.parse(json)),
+    umbra_wasm_calls_get_history: (json: string) => call('calls_get_history', JSON.parse(json)),
+    umbra_wasm_calls_get_all_history: (json?: string) => call('calls_get_all_history', json ? JSON.parse(json) : {}),
+
+    // ── Crypto (via dispatcher) ─────────────────────────────────────────
+    umbra_wasm_crypto_sign: (data: any) => call('crypto_sign', { data }),
+    umbra_wasm_crypto_verify: (public_key_hex: string, data: any, signature: any) =>
+      call('crypto_verify', { public_key_hex, data, signature }),
+    umbra_wasm_crypto_encrypt_for_peer: (json: string) => call('crypto_encrypt_for_peer', JSON.parse(json)),
+    umbra_wasm_crypto_decrypt_from_peer: (json: string) => call('crypto_decrypt_from_peer', JSON.parse(json)),
+
+    // ── File Encryption (via dispatcher) ────────────────────────────────
+    umbra_wasm_file_derive_key: (json: string) => call('file_derive_key', JSON.parse(json)),
+    umbra_wasm_file_encrypt_chunk: (json: string) => call('file_encrypt_chunk', JSON.parse(json)),
+    umbra_wasm_file_decrypt_chunk: (json: string) => call('file_decrypt_chunk', JSON.parse(json)),
+    umbra_wasm_channel_file_derive_key: (json: string) => call('channel_file_derive_key', JSON.parse(json)),
+    umbra_wasm_compute_key_fingerprint: (json: string) => call('compute_key_fingerprint', JSON.parse(json)),
+    umbra_wasm_verify_key_fingerprint: (json: string) => call('verify_key_fingerprint', JSON.parse(json)),
+    umbra_wasm_mark_files_for_reencryption: (json: string) => call('mark_files_for_reencryption', JSON.parse(json)),
+    umbra_wasm_get_files_needing_reencryption: (json: string) => call('get_files_needing_reencryption', JSON.parse(json)),
+    umbra_wasm_clear_reencryption_flag: (json: string) => call('clear_reencryption_flag', JSON.parse(json)),
+
+    // ── Community — Core (via dispatcher) ───────────────────────────────
+    umbra_wasm_community_create: (json: string) => call('community_create', JSON.parse(json)),
+    umbra_wasm_community_get: (community_id: string) => call('community_get', { community_id }),
+    umbra_wasm_community_get_mine: (member_did: string) => call('community_get_mine', { member_did }),
+    umbra_wasm_community_update: (json: string) => call('community_update', JSON.parse(json)),
+    umbra_wasm_community_delete: (json: string) => call('community_delete', JSON.parse(json)),
+    umbra_wasm_community_transfer_ownership: (json: string) => call('community_transfer_ownership', JSON.parse(json)),
+    umbra_wasm_community_update_branding: (json: string) => call('community_update_branding', JSON.parse(json)),
+
+    // ── Community — Spaces (via dispatcher) ─────────────────────────────
+    umbra_wasm_community_space_create: (json: string) => call('community_space_create', JSON.parse(json)),
+    umbra_wasm_community_space_list: (community_id: string) => call('community_space_list', { community_id }),
+    umbra_wasm_community_space_update: (json: string) => call('community_space_update', JSON.parse(json)),
+    umbra_wasm_community_space_reorder: (json: string) => call('community_space_reorder', JSON.parse(json)),
+    umbra_wasm_community_space_delete: (json: string) => call('community_space_delete', JSON.parse(json)),
+
+    // ── Community — Categories (via dispatcher) ─────────────────────────
+    umbra_wasm_community_category_create: (json: string) => call('community_category_create', JSON.parse(json)),
+    umbra_wasm_community_category_list: (space_id: string) => call('community_category_list', { space_id }),
+    umbra_wasm_community_category_list_all: (community_id: string) => call('community_category_list_all', { community_id }),
+    umbra_wasm_community_category_update: (json: string) => call('community_category_update', JSON.parse(json)),
+    umbra_wasm_community_category_reorder: (json: string) => call('community_category_reorder', JSON.parse(json)),
+    umbra_wasm_community_category_delete: (json: string) => call('community_category_delete', JSON.parse(json)),
+    umbra_wasm_community_channel_move_category: (json: string) => call('community_channel_move_category', JSON.parse(json)),
+
+    // ── Community — Channels (via dispatcher) ───────────────────────────
+    umbra_wasm_community_channel_create: (json: string) => call('community_channel_create', JSON.parse(json)),
+    umbra_wasm_community_channel_list: (space_id: string) => call('community_channel_list', { space_id }),
+    umbra_wasm_community_channel_list_all: (community_id: string) => call('community_channel_list_all', { community_id }),
+    umbra_wasm_community_channel_get: (channel_id: string) => call('community_channel_get', { channel_id }),
+    umbra_wasm_community_channel_update: (json: string) => call('community_channel_update', JSON.parse(json)),
+    umbra_wasm_community_channel_set_slow_mode: (json: string) => call('community_channel_set_slow_mode', JSON.parse(json)),
+    umbra_wasm_community_channel_set_e2ee: (json: string) => call('community_channel_set_e2ee', JSON.parse(json)),
+    umbra_wasm_community_channel_delete: (json: string) => call('community_channel_delete', JSON.parse(json)),
+    umbra_wasm_community_channel_reorder: (json: string) => call('community_channel_reorder', JSON.parse(json)),
+
+    // ── Community — Members (via dispatcher) ────────────────────────────
+    umbra_wasm_community_join: (json: string) => call('community_join', JSON.parse(json)),
+    umbra_wasm_community_leave: (json: string) => call('community_leave', JSON.parse(json)),
+    umbra_wasm_community_kick: (json: string) => call('community_kick', JSON.parse(json)),
+    umbra_wasm_community_ban: (json: string) => call('community_ban', JSON.parse(json)),
+    umbra_wasm_community_unban: (json: string) => call('community_unban', JSON.parse(json)),
+    umbra_wasm_community_member_list: (community_id: string) => call('community_member_list', { community_id }),
+    umbra_wasm_community_member_get: (community_id: string, member_did: string) =>
+      call('community_member_get', { community_id, member_did }),
+    umbra_wasm_community_member_update_profile: (json: string) => call('community_member_update_profile', JSON.parse(json)),
+    umbra_wasm_community_ban_list: (community_id: string) => call('community_ban_list', { community_id }),
+
+    // ── Community — Roles (via dispatcher) ──────────────────────────────
+    umbra_wasm_community_role_list: (community_id: string) => call('community_role_list', { community_id }),
+    umbra_wasm_community_member_roles: (community_id: string, member_did: string) =>
+      call('community_member_roles', { community_id, member_did }),
+    umbra_wasm_community_role_assign: (json: string) => call('community_role_assign', JSON.parse(json)),
+    umbra_wasm_community_role_unassign: (json: string) => call('community_role_unassign', JSON.parse(json)),
+    umbra_wasm_community_custom_role_create: (json: string) => call('community_custom_role_create', JSON.parse(json)),
+    umbra_wasm_community_role_update: (json: string) => call('community_role_update', JSON.parse(json)),
+    umbra_wasm_community_role_update_permissions: (json: string) => call('community_role_update_permissions', JSON.parse(json)),
+    umbra_wasm_community_role_delete: (json: string) => call('community_role_delete', JSON.parse(json)),
+
+    // ── Community — Invites (via dispatcher) ────────────────────────────
+    umbra_wasm_community_invite_create: (json: string) => call('community_invite_create', JSON.parse(json)),
+    umbra_wasm_community_invite_use: (json: string) => call('community_invite_use', JSON.parse(json)),
+    umbra_wasm_community_invite_list: (community_id: string) => call('community_invite_list', { community_id }),
+    umbra_wasm_community_invite_delete: (json: string) => call('community_invite_delete', JSON.parse(json)),
+    umbra_wasm_community_invite_set_vanity: (json: string) => call('community_invite_set_vanity', JSON.parse(json)),
+
+    // ── Community — Messages (via dispatcher) ───────────────────────────
+    umbra_wasm_community_message_send: (json: string) => call('community_message_send', JSON.parse(json)),
+    umbra_wasm_community_message_store_received: (json: string) => call('community_message_store_received', JSON.parse(json)),
+    umbra_wasm_community_message_list: (json: string) => call('community_message_list', JSON.parse(json)),
+    umbra_wasm_community_message_get: (message_id: string) => call('community_message_get', { message_id }),
+    umbra_wasm_community_message_edit: (json: string) => call('community_message_edit', JSON.parse(json)),
+    umbra_wasm_community_message_delete: (message_id: string) => call('community_message_delete', { message_id }),
+
+    // ── Community — Reactions (via dispatcher) ──────────────────────────
+    umbra_wasm_community_reaction_add: (json: string) => call('community_reaction_add', JSON.parse(json)),
+    umbra_wasm_community_reaction_remove: (json: string) => call('community_reaction_remove', JSON.parse(json)),
+    umbra_wasm_community_reaction_list: (message_id: string) => call('community_reaction_list', { message_id }),
+
+    // ── Community — Emoji (via dispatcher) ──────────────────────────────
+    umbra_wasm_community_emoji_create: (json: string) => call('community_emoji_create', JSON.parse(json)),
+    umbra_wasm_community_emoji_list: (community_id: string) => call('community_emoji_list', { community_id }),
+    umbra_wasm_community_emoji_delete: (json: string) => call('community_emoji_delete', JSON.parse(json)),
+    umbra_wasm_community_emoji_rename: (json: string) => call('community_emoji_rename', JSON.parse(json)),
+
+    // ── Community — Stickers (via dispatcher) ───────────────────────────
+    umbra_wasm_community_sticker_create: (json: string) => call('community_sticker_create', JSON.parse(json)),
+    umbra_wasm_community_sticker_list: (community_id: string) => call('community_sticker_list', { community_id }),
+    umbra_wasm_community_sticker_delete: (sticker_id: string) => call('community_sticker_delete', { sticker_id }),
+
+    // ── Community — Sticker Packs (via dispatcher) ──────────────────────
+    umbra_wasm_community_sticker_pack_create: (json: string) => call('community_sticker_pack_create', JSON.parse(json)),
+    umbra_wasm_community_sticker_pack_list: (community_id: string) => call('community_sticker_pack_list', { community_id }),
+    umbra_wasm_community_sticker_pack_delete: (pack_id: string) => call('community_sticker_pack_delete', { pack_id }),
+    umbra_wasm_community_sticker_pack_rename: (json: string) => call('community_sticker_pack_rename', JSON.parse(json)),
+
+    // ── Community — Pins (via dispatcher) ───────────────────────────────
+    umbra_wasm_community_pin_message: (json: string) => call('community_pin_message', JSON.parse(json)),
+    umbra_wasm_community_unpin_message: (json: string) => call('community_unpin_message', JSON.parse(json)),
+    umbra_wasm_community_pin_list: (channel_id: string) => call('community_pin_list', { channel_id }),
+
+    // ── Community — Threads (via dispatcher) ────────────────────────────
+    umbra_wasm_community_thread_create: (json: string) => call('community_thread_create', JSON.parse(json)),
+    umbra_wasm_community_thread_get: (thread_id: string) => call('community_thread_get', { thread_id }),
+    umbra_wasm_community_thread_list: (channel_id: string) => call('community_thread_list', { channel_id }),
+    umbra_wasm_community_thread_messages: (json: string) => call('community_thread_messages', JSON.parse(json)),
+
+    // ── Community — Read Receipts (via dispatcher) ──────────────────────
+    umbra_wasm_community_mark_read: (json: string) => call('community_mark_read', JSON.parse(json)),
+
+    // ── Community — Files (via dispatcher) ──────────────────────────────
+    umbra_wasm_community_upload_file: (json: string) => call('community_upload_file', JSON.parse(json)),
+    umbra_wasm_community_get_files: (json: string) => call('community_get_files', JSON.parse(json)),
+    umbra_wasm_community_get_file: (file_id: string) => call('community_get_file', { file_id }),
+    umbra_wasm_community_delete_file: (json: string) => call('community_delete_file', JSON.parse(json)),
+    umbra_wasm_community_record_file_download: (file_id: string) => call('community_record_file_download', { file_id }),
+    umbra_wasm_community_create_folder: (json: string) => call('community_create_folder', JSON.parse(json)),
+    umbra_wasm_community_get_folders: (json: string) => call('community_get_folders', JSON.parse(json)),
+    umbra_wasm_community_delete_folder: (folder_id: string) => call('community_delete_folder', { folder_id }),
+
+    // ── DM — Files (via dispatcher) ─────────────────────────────────────
+    umbra_wasm_dm_upload_file: (json: string) => call('dm_upload_file', JSON.parse(json)),
+    umbra_wasm_dm_get_files: (json: string) => call('dm_get_files', JSON.parse(json)),
+    umbra_wasm_dm_get_file: (file_id: string) => call('dm_get_file', { file_id }),
+    umbra_wasm_dm_delete_file: (json: string) => call('dm_delete_file', JSON.parse(json)),
+    umbra_wasm_dm_record_file_download: (file_id: string) => call('dm_record_file_download', { file_id }),
+    umbra_wasm_dm_move_file: (json: string) => call('dm_move_file', JSON.parse(json)),
+    umbra_wasm_dm_create_folder: (json: string) => call('dm_create_folder', JSON.parse(json)),
+    umbra_wasm_dm_get_folders: (json: string) => call('dm_get_folders', JSON.parse(json)),
+    umbra_wasm_dm_delete_folder: (folder_id: string) => call('dm_delete_folder', { folder_id }),
+    umbra_wasm_dm_rename_folder: (json: string) => call('dm_rename_folder', JSON.parse(json)),
+
+    // ── Groups — Relay (via dispatcher) ─────────────────────────────────
+    umbra_wasm_groups_send_invite: (json: string) => call('groups_send_invite', JSON.parse(json)),
+    umbra_wasm_groups_build_invite_accept_envelope: (json: string) => call('groups_build_invite_accept_envelope', JSON.parse(json)),
+    umbra_wasm_groups_build_invite_decline_envelope: (json: string) => call('groups_build_invite_decline_envelope', JSON.parse(json)),
+    umbra_wasm_groups_send_message: (json: string) => call('groups_send_message', JSON.parse(json)),
+    umbra_wasm_groups_remove_member_with_rotation: (json: string) => call('groups_remove_member_with_rotation', JSON.parse(json)),
+
+    // ── Relay Envelope Builders (via dispatcher) ────────────────────────
+    umbra_wasm_community_build_event_relay_batch: (json: string) => call('community_build_event_relay_batch', JSON.parse(json)),
+    umbra_wasm_build_dm_file_event_envelope: (json: string) => call('build_dm_file_event_envelope', JSON.parse(json)),
+    umbra_wasm_build_metadata_envelope: (json: string) => call('build_metadata_envelope', JSON.parse(json)),
+
+    // ── File Chunking (via dispatcher) ──────────────────────────────────
+    umbra_wasm_chunk_file: (json: string) => call('chunk_file', JSON.parse(json)),
+    umbra_wasm_reassemble_file: (json: string) => call('reassemble_file', JSON.parse(json)),
+    umbra_wasm_get_file_manifest: (file_id: string) => call('get_file_manifest', { file_id }),
+
+    // ── File Transfer Control ───────────────────────────────────────────
+    umbra_wasm_transfer_initiate: (json: string) => call('transfer_initiate', JSON.parse(json)),
+    umbra_wasm_transfer_accept: (json: string) => call('transfer_accept', JSON.parse(json)),
+    umbra_wasm_transfer_pause: (transfer_id: string) => call('transfer_pause', { transfer_id }),
+    umbra_wasm_transfer_resume: (transfer_id: string) => call('transfer_resume', { transfer_id }),
+    umbra_wasm_transfer_cancel: (transfer_id: string) => call('transfer_cancel', { transfer_id }),
+    umbra_wasm_transfer_on_message: (json: string) => call('transfer_on_message', JSON.parse(json)),
+    umbra_wasm_transfer_list: () => { try { return call('transfer_list'); } catch { return JSON.stringify([]); } },
+    umbra_wasm_transfer_get: (transfer_id: string) => call('transfer_get', { transfer_id }),
+    umbra_wasm_transfer_get_incomplete: () => { try { return call('transfer_get_incomplete'); } catch { return JSON.stringify([]); } },
+    umbra_wasm_transfer_chunks_to_send: (transfer_id: string) => call('transfer_chunks_to_send', { transfer_id }),
+    umbra_wasm_transfer_mark_chunk_sent: (json: string) => call('transfer_mark_chunk_sent', JSON.parse(json)),
+
+    // ── DHT (via dispatcher) ────────────────────────────────────────────
+    umbra_wasm_dht_start_providing: (json: string) => call('dht_start_providing', JSON.parse(json)),
+    umbra_wasm_dht_get_providers: (json: string) => call('dht_get_providers', JSON.parse(json)),
+    umbra_wasm_dht_stop_providing: (json: string) => call('dht_stop_providing', JSON.parse(json)),
+
+    // ── Plugin Storage (via dispatcher) ─────────────────────────────────
+    umbra_wasm_plugin_kv_get: (plugin_id: string, key: string) => call('plugin_kv_get', { plugin_id, key }),
+    umbra_wasm_plugin_kv_set: (plugin_id: string, key: string, value: string) => call('plugin_kv_set', { plugin_id, key, value }),
+    umbra_wasm_plugin_kv_delete: (plugin_id: string, key: string) => call('plugin_kv_delete', { plugin_id, key }),
+    umbra_wasm_plugin_kv_list: (plugin_id: string, prefix: string) => call('plugin_kv_list', { plugin_id, prefix }),
+    umbra_wasm_plugin_bundle_save: (plugin_id: string, manifest: string, bundle: string) =>
+      call('plugin_bundle_save', { plugin_id, manifest, bundle }),
+    umbra_wasm_plugin_bundle_load: (plugin_id: string) => call('plugin_bundle_load', { plugin_id }),
+    umbra_wasm_plugin_bundle_delete: (plugin_id: string) => call('plugin_bundle_delete', { plugin_id }),
+    umbra_wasm_plugin_bundle_list: () => call('plugin_bundle_list'),
+
+    // ── Community Seats (via dispatcher) ────────────────────────────────
+    umbra_wasm_community_seat_list: (community_id: string) => call('community_seat_list', { community_id }),
+    umbra_wasm_community_seat_list_unclaimed: (community_id: string) => call('community_seat_list_unclaimed', { community_id }),
+    umbra_wasm_community_seat_find_match: (json: string) => call('community_seat_find_match', JSON.parse(json)),
+    umbra_wasm_community_seat_claim: (json: string) => call('community_seat_claim', JSON.parse(json)),
+    umbra_wasm_community_seat_delete: (json: string) => call('community_seat_delete', JSON.parse(json)),
+    umbra_wasm_community_seat_create_batch: (json: string) => call('community_seat_create_batch', JSON.parse(json)),
+    umbra_wasm_community_seat_count: (community_id: string) => call('community_seat_count', { community_id }),
+
+    // ── Community Audit Log (via dispatcher) ────────────────────────────
+    umbra_wasm_community_audit_log_create_batch: (json: string) => call('community_audit_log_create_batch', JSON.parse(json)),
+    umbra_wasm_community_audit_log_list: (json: string) => call('community_audit_log_list', JSON.parse(json)),
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────
@@ -86,33 +465,17 @@ export function createReactNativeBackend(): UmbraWasmModule {
 
 function createStubBackend(): UmbraWasmModule {
   return {
-    // ── Initialization (no-ops so the app boots) ──────────────────────
-    umbra_wasm_init: () => {
-      console.log('[rn-backend] Init (stub — native module not yet linked)');
-    },
-
-    umbra_wasm_init_database: async () => {
-      console.log('[rn-backend] Database init (stub — no persistence)');
-      return true;
-    },
-
+    umbra_wasm_init: () => { console.log('[rn-backend] Init (stub)'); },
+    umbra_wasm_init_database: async () => true,
     umbra_wasm_version: () => '0.1.0 (react-native-stub)',
-
-    // ── Identity ──────────────────────────────────────────────────────
     umbra_wasm_identity_create: () => notImplemented('identity_create'),
     umbra_wasm_identity_restore: () => notImplemented('identity_restore'),
-    umbra_wasm_identity_set: (_json: string) => {
-      console.debug('[rn-backend] identity_set called (no-op stub)');
-    },
+    umbra_wasm_identity_set: () => {},
     umbra_wasm_identity_get_did: () => notImplemented('identity_get_did'),
     umbra_wasm_identity_get_profile: () => notImplemented('identity_get_profile'),
     umbra_wasm_identity_update_profile: () => notImplemented('identity_update_profile'),
-
-    // ── Discovery ────────────────────────────────────────────────────
     umbra_wasm_discovery_get_connection_info: () => notImplemented('discovery_get_connection_info'),
     umbra_wasm_discovery_parse_connection_info: () => notImplemented('discovery_parse_connection_info'),
-
-    // ── Friends ──────────────────────────────────────────────────────
     umbra_wasm_friends_send_request: () => notImplemented('friends_send_request'),
     umbra_wasm_friends_accept_request: () => notImplemented('friends_accept_request'),
     umbra_wasm_friends_reject_request: () => notImplemented('friends_reject_request'),
@@ -124,8 +487,6 @@ function createStubBackend(): UmbraWasmModule {
     umbra_wasm_friends_store_incoming: () => notImplemented('friends_store_incoming'),
     umbra_wasm_friends_accept_from_relay: () => notImplemented('friends_accept_from_relay'),
     umbra_wasm_friends_build_accept_ack: () => notImplemented('friends_build_accept_ack'),
-
-    // ── Messaging (core) ─────────────────────────────────────────────
     umbra_wasm_messaging_get_conversations: () => notImplemented('messaging_get_conversations'),
     umbra_wasm_messaging_create_dm_conversation: () => notImplemented('messaging_create_dm_conversation'),
     umbra_wasm_messaging_get_messages: () => notImplemented('messaging_get_messages'),
@@ -135,8 +496,6 @@ function createStubBackend(): UmbraWasmModule {
     umbra_wasm_messaging_store_incoming: () => notImplemented('messaging_store_incoming'),
     umbra_wasm_messaging_build_typing_envelope: () => notImplemented('messaging_build_typing_envelope'),
     umbra_wasm_messaging_build_receipt_envelope: () => notImplemented('messaging_build_receipt_envelope'),
-
-    // ── Messaging (extended) ─────────────────────────────────────────
     umbra_wasm_messaging_edit: () => notImplemented('messaging_edit'),
     umbra_wasm_messaging_delete: () => notImplemented('messaging_delete'),
     umbra_wasm_messaging_pin: () => notImplemented('messaging_pin'),
@@ -147,8 +506,6 @@ function createStubBackend(): UmbraWasmModule {
     umbra_wasm_messaging_get_thread: () => notImplemented('messaging_get_thread'),
     umbra_wasm_messaging_reply_thread: () => notImplemented('messaging_reply_thread'),
     umbra_wasm_messaging_get_pinned: () => notImplemented('messaging_get_pinned'),
-
-    // ── Groups ───────────────────────────────────────────────────────
     umbra_wasm_groups_create: () => notImplemented('groups_create'),
     umbra_wasm_groups_get: () => notImplemented('groups_get'),
     umbra_wasm_groups_list: () => notImplemented('groups_list'),
@@ -167,11 +524,7 @@ function createStubBackend(): UmbraWasmModule {
     umbra_wasm_groups_get_pending_invites: () => notImplemented('groups_get_pending_invites'),
     umbra_wasm_groups_accept_invite: () => notImplemented('groups_accept_invite'),
     umbra_wasm_groups_decline_invite: () => notImplemented('groups_decline_invite'),
-
-    // ── Messaging — Delivery status ──────────────────────────────────
     umbra_wasm_messaging_update_status: () => notImplemented('messaging_update_status'),
-
-    // ── Network ──────────────────────────────────────────────────────
     umbra_wasm_network_status: () => JSON.stringify({ connected: false, peers: 0 }),
     umbra_wasm_network_start: async () => false,
     umbra_wasm_network_stop: async () => true,
@@ -179,34 +532,21 @@ function createStubBackend(): UmbraWasmModule {
     umbra_wasm_network_accept_offer: () => notImplemented('network_accept_offer'),
     umbra_wasm_network_complete_handshake: () => notImplemented('network_complete_handshake'),
     umbra_wasm_network_complete_answerer: () => notImplemented('network_complete_answerer'),
-
-    // ── Relay ────────────────────────────────────────────────────────
     umbra_wasm_relay_connect: () => notImplemented('relay_connect'),
     umbra_wasm_relay_disconnect: async () => {},
     umbra_wasm_relay_create_session: () => notImplemented('relay_create_session'),
     umbra_wasm_relay_accept_session: () => notImplemented('relay_accept_session'),
     umbra_wasm_relay_send: () => notImplemented('relay_send'),
-    umbra_wasm_relay_fetch_offline: async () => JSON.stringify([]),
-
-    // ── Events ───────────────────────────────────────────────────────
-    umbra_wasm_subscribe_events: (callback: (event_json: string) => void) => {
-      console.log('[rn-backend] Event subscription registered (stub)');
-      // When native module is linked, forward native events to this callback
-    },
-
-    // ── Calls ────────────────────────────────────────────────────────
+    umbra_wasm_relay_fetch_offline: async () => JSON.stringify({ type: 'fetch_offline' }),
+    umbra_wasm_subscribe_events: () => { console.log('[rn-backend] Event subscription (stub)'); },
     umbra_wasm_calls_store: () => notImplemented('calls_store'),
     umbra_wasm_calls_end: () => notImplemented('calls_end'),
     umbra_wasm_calls_get_history: () => JSON.stringify([]),
     umbra_wasm_calls_get_all_history: () => JSON.stringify([]),
-
-    // ── Crypto ───────────────────────────────────────────────────────
     umbra_wasm_crypto_sign: () => notImplemented('crypto_sign'),
     umbra_wasm_crypto_verify: () => notImplemented('crypto_verify'),
     umbra_wasm_crypto_encrypt_for_peer: () => notImplemented('crypto_encrypt_for_peer'),
     umbra_wasm_crypto_decrypt_from_peer: () => notImplemented('crypto_decrypt_from_peer'),
-
-    // ── File Encryption ──────────────────────────────────────────────
     umbra_wasm_file_derive_key: () => notImplemented('file_derive_key'),
     umbra_wasm_file_encrypt_chunk: () => notImplemented('file_encrypt_chunk'),
     umbra_wasm_file_decrypt_chunk: () => notImplemented('file_decrypt_chunk'),
@@ -216,8 +556,6 @@ function createStubBackend(): UmbraWasmModule {
     umbra_wasm_mark_files_for_reencryption: () => notImplemented('mark_files_for_reencryption'),
     umbra_wasm_get_files_needing_reencryption: () => notImplemented('get_files_needing_reencryption'),
     umbra_wasm_clear_reencryption_flag: () => notImplemented('clear_reencryption_flag'),
-
-    // ── Community — Core ─────────────────────────────────────────────
     umbra_wasm_community_create: () => notImplemented('community_create'),
     umbra_wasm_community_get: () => notImplemented('community_get'),
     umbra_wasm_community_get_mine: () => notImplemented('community_get_mine'),
@@ -225,15 +563,11 @@ function createStubBackend(): UmbraWasmModule {
     umbra_wasm_community_delete: () => notImplemented('community_delete'),
     umbra_wasm_community_transfer_ownership: () => notImplemented('community_transfer_ownership'),
     umbra_wasm_community_update_branding: () => notImplemented('community_update_branding'),
-
-    // ── Community — Spaces ───────────────────────────────────────────
     umbra_wasm_community_space_create: () => notImplemented('community_space_create'),
     umbra_wasm_community_space_list: () => notImplemented('community_space_list'),
     umbra_wasm_community_space_update: () => notImplemented('community_space_update'),
     umbra_wasm_community_space_reorder: () => notImplemented('community_space_reorder'),
     umbra_wasm_community_space_delete: () => notImplemented('community_space_delete'),
-
-    // ── Community — Categories ───────────────────────────────────────
     umbra_wasm_community_category_create: () => notImplemented('community_category_create'),
     umbra_wasm_community_category_list: () => notImplemented('community_category_list'),
     umbra_wasm_community_category_list_all: () => notImplemented('community_category_list_all'),
@@ -241,8 +575,6 @@ function createStubBackend(): UmbraWasmModule {
     umbra_wasm_community_category_reorder: () => notImplemented('community_category_reorder'),
     umbra_wasm_community_category_delete: () => notImplemented('community_category_delete'),
     umbra_wasm_community_channel_move_category: () => notImplemented('community_channel_move_category'),
-
-    // ── Community — Channels ─────────────────────────────────────────
     umbra_wasm_community_channel_create: () => notImplemented('community_channel_create'),
     umbra_wasm_community_channel_list: () => notImplemented('community_channel_list'),
     umbra_wasm_community_channel_list_all: () => notImplemented('community_channel_list_all'),
@@ -252,8 +584,6 @@ function createStubBackend(): UmbraWasmModule {
     umbra_wasm_community_channel_set_e2ee: () => notImplemented('community_channel_set_e2ee'),
     umbra_wasm_community_channel_delete: () => notImplemented('community_channel_delete'),
     umbra_wasm_community_channel_reorder: () => notImplemented('community_channel_reorder'),
-
-    // ── Community — Members ──────────────────────────────────────────
     umbra_wasm_community_join: () => notImplemented('community_join'),
     umbra_wasm_community_leave: () => notImplemented('community_leave'),
     umbra_wasm_community_kick: () => notImplemented('community_kick'),
@@ -263,8 +593,6 @@ function createStubBackend(): UmbraWasmModule {
     umbra_wasm_community_member_get: () => notImplemented('community_member_get'),
     umbra_wasm_community_member_update_profile: () => notImplemented('community_member_update_profile'),
     umbra_wasm_community_ban_list: () => notImplemented('community_ban_list'),
-
-    // ── Community — Roles ────────────────────────────────────────────
     umbra_wasm_community_role_list: () => notImplemented('community_role_list'),
     umbra_wasm_community_member_roles: () => notImplemented('community_member_roles'),
     umbra_wasm_community_role_assign: () => notImplemented('community_role_assign'),
@@ -273,59 +601,39 @@ function createStubBackend(): UmbraWasmModule {
     umbra_wasm_community_role_update: () => notImplemented('community_role_update'),
     umbra_wasm_community_role_update_permissions: () => notImplemented('community_role_update_permissions'),
     umbra_wasm_community_role_delete: () => notImplemented('community_role_delete'),
-
-    // ── Community — Invites ──────────────────────────────────────────
     umbra_wasm_community_invite_create: () => notImplemented('community_invite_create'),
     umbra_wasm_community_invite_use: () => notImplemented('community_invite_use'),
     umbra_wasm_community_invite_list: () => notImplemented('community_invite_list'),
     umbra_wasm_community_invite_delete: () => notImplemented('community_invite_delete'),
     umbra_wasm_community_invite_set_vanity: () => notImplemented('community_invite_set_vanity'),
-
-    // ── Community — Messages ─────────────────────────────────────────
     umbra_wasm_community_message_send: () => notImplemented('community_message_send'),
     umbra_wasm_community_message_store_received: () => notImplemented('community_message_store_received'),
     umbra_wasm_community_message_list: () => notImplemented('community_message_list'),
     umbra_wasm_community_message_get: () => notImplemented('community_message_get'),
     umbra_wasm_community_message_edit: () => notImplemented('community_message_edit'),
     umbra_wasm_community_message_delete: () => notImplemented('community_message_delete'),
-
-    // ── Community — Reactions ────────────────────────────────────────
     umbra_wasm_community_reaction_add: () => notImplemented('community_reaction_add'),
     umbra_wasm_community_reaction_remove: () => notImplemented('community_reaction_remove'),
     umbra_wasm_community_reaction_list: () => notImplemented('community_reaction_list'),
-
-    // ── Community — Emoji ────────────────────────────────────────────
     umbra_wasm_community_emoji_create: () => notImplemented('community_emoji_create'),
     umbra_wasm_community_emoji_list: () => notImplemented('community_emoji_list'),
     umbra_wasm_community_emoji_delete: () => notImplemented('community_emoji_delete'),
     umbra_wasm_community_emoji_rename: () => notImplemented('community_emoji_rename'),
-
-    // ── Community — Stickers ─────────────────────────────────────────
     umbra_wasm_community_sticker_create: () => notImplemented('community_sticker_create'),
     umbra_wasm_community_sticker_list: () => notImplemented('community_sticker_list'),
     umbra_wasm_community_sticker_delete: () => notImplemented('community_sticker_delete'),
-
-    // ── Community — Sticker Packs ────────────────────────────────────
     umbra_wasm_community_sticker_pack_create: () => notImplemented('community_sticker_pack_create'),
     umbra_wasm_community_sticker_pack_list: () => notImplemented('community_sticker_pack_list'),
     umbra_wasm_community_sticker_pack_delete: () => notImplemented('community_sticker_pack_delete'),
     umbra_wasm_community_sticker_pack_rename: () => notImplemented('community_sticker_pack_rename'),
-
-    // ── Community — Pins ─────────────────────────────────────────────
     umbra_wasm_community_pin_message: () => notImplemented('community_pin_message'),
     umbra_wasm_community_unpin_message: () => notImplemented('community_unpin_message'),
     umbra_wasm_community_pin_list: () => notImplemented('community_pin_list'),
-
-    // ── Community — Threads ──────────────────────────────────────────
     umbra_wasm_community_thread_create: () => notImplemented('community_thread_create'),
     umbra_wasm_community_thread_get: () => notImplemented('community_thread_get'),
     umbra_wasm_community_thread_list: () => notImplemented('community_thread_list'),
     umbra_wasm_community_thread_messages: () => notImplemented('community_thread_messages'),
-
-    // ── Community — Read Receipts ────────────────────────────────────
     umbra_wasm_community_mark_read: () => notImplemented('community_mark_read'),
-
-    // ── Community — Files ────────────────────────────────────────────
     umbra_wasm_community_upload_file: () => notImplemented('community_upload_file'),
     umbra_wasm_community_get_files: () => notImplemented('community_get_files'),
     umbra_wasm_community_get_file: () => notImplemented('community_get_file'),
@@ -334,8 +642,6 @@ function createStubBackend(): UmbraWasmModule {
     umbra_wasm_community_create_folder: () => notImplemented('community_create_folder'),
     umbra_wasm_community_get_folders: () => notImplemented('community_get_folders'),
     umbra_wasm_community_delete_folder: () => notImplemented('community_delete_folder'),
-
-    // ── DM — Files ───────────────────────────────────────────────────
     umbra_wasm_dm_upload_file: () => notImplemented('dm_upload_file'),
     umbra_wasm_dm_get_files: () => notImplemented('dm_get_files'),
     umbra_wasm_dm_get_file: () => notImplemented('dm_get_file'),
@@ -346,25 +652,17 @@ function createStubBackend(): UmbraWasmModule {
     umbra_wasm_dm_get_folders: () => notImplemented('dm_get_folders'),
     umbra_wasm_dm_delete_folder: () => notImplemented('dm_delete_folder'),
     umbra_wasm_dm_rename_folder: () => notImplemented('dm_rename_folder'),
-
-    // ── Groups — Relay envelope builders ─────────────────────────────
     umbra_wasm_groups_send_invite: () => notImplemented('groups_send_invite'),
     umbra_wasm_groups_build_invite_accept_envelope: () => notImplemented('groups_build_invite_accept_envelope'),
     umbra_wasm_groups_build_invite_decline_envelope: () => notImplemented('groups_build_invite_decline_envelope'),
     umbra_wasm_groups_send_message: () => notImplemented('groups_send_message'),
     umbra_wasm_groups_remove_member_with_rotation: () => notImplemented('groups_remove_member_with_rotation'),
-
-    // ── Relay envelope builders ──────────────────────────────────────
     umbra_wasm_community_build_event_relay_batch: () => notImplemented('community_build_event_relay_batch'),
     umbra_wasm_build_dm_file_event_envelope: () => notImplemented('build_dm_file_event_envelope'),
     umbra_wasm_build_metadata_envelope: () => notImplemented('build_metadata_envelope'),
-
-    // ── File Chunking ────────────────────────────────────────────────
     umbra_wasm_chunk_file: () => notImplemented('chunk_file'),
     umbra_wasm_reassemble_file: () => notImplemented('reassemble_file'),
     umbra_wasm_get_file_manifest: () => notImplemented('get_file_manifest'),
-
-    // ── File Transfer Control ────────────────────────────────────────
     umbra_wasm_transfer_initiate: () => notImplemented('transfer_initiate'),
     umbra_wasm_transfer_accept: () => notImplemented('transfer_accept'),
     umbra_wasm_transfer_pause: () => notImplemented('transfer_pause'),
@@ -376,13 +674,9 @@ function createStubBackend(): UmbraWasmModule {
     umbra_wasm_transfer_get_incomplete: () => JSON.stringify([]),
     umbra_wasm_transfer_chunks_to_send: () => notImplemented('transfer_chunks_to_send'),
     umbra_wasm_transfer_mark_chunk_sent: () => notImplemented('transfer_mark_chunk_sent'),
-
-    // ── DHT ──────────────────────────────────────────────────────────
     umbra_wasm_dht_start_providing: () => notImplemented('dht_start_providing'),
     umbra_wasm_dht_get_providers: () => notImplemented('dht_get_providers'),
     umbra_wasm_dht_stop_providing: () => notImplemented('dht_stop_providing'),
-
-    // ── Plugin Storage ───────────────────────────────────────────────
     umbra_wasm_plugin_kv_get: () => JSON.stringify({ value: null }),
     umbra_wasm_plugin_kv_set: () => JSON.stringify({ ok: true }),
     umbra_wasm_plugin_kv_delete: () => JSON.stringify({ ok: true }),
@@ -391,8 +685,6 @@ function createStubBackend(): UmbraWasmModule {
     umbra_wasm_plugin_bundle_load: () => JSON.stringify({ error: 'not_found' }),
     umbra_wasm_plugin_bundle_delete: () => JSON.stringify({ ok: true }),
     umbra_wasm_plugin_bundle_list: () => JSON.stringify({ plugins: [] }),
-
-    // ── Community Seats ──────────────────────────────────────────────
     umbra_wasm_community_seat_list: () => notImplemented('community_seat_list'),
     umbra_wasm_community_seat_list_unclaimed: () => notImplemented('community_seat_list_unclaimed'),
     umbra_wasm_community_seat_find_match: () => notImplemented('community_seat_find_match'),
@@ -400,166 +692,7 @@ function createStubBackend(): UmbraWasmModule {
     umbra_wasm_community_seat_delete: () => notImplemented('community_seat_delete'),
     umbra_wasm_community_seat_create_batch: () => notImplemented('community_seat_create_batch'),
     umbra_wasm_community_seat_count: () => notImplemented('community_seat_count'),
-
-    // ── Community Audit Log ──────────────────────────────────────────
     umbra_wasm_community_audit_log_create_batch: () => notImplemented('community_audit_log_create_batch'),
     umbra_wasm_community_audit_log_list: () => notImplemented('community_audit_log_list'),
   };
-}
-
-// ─────────────────────────────────────────────────────────────────────────
-// Native backend — delegates to Expo Module (expo-umbra-core)
-// ─────────────────────────────────────────────────────────────────────────
-
-/**
- * Create a backend that delegates to the native Expo module.
- *
- * The native module exposes the 23 C FFI functions from Rust. Methods
- * that don't have a native FFI equivalent yet fall through to stubs.
- * As the C FFI is expanded (Phase 3), more methods will be wired up.
- */
-function createNativeBackend(native: NativeUmbraCore): UmbraWasmModule {
-  // Start with the stub backend, then override methods that have native support
-  const stub = createStubBackend();
-
-  return {
-    ...stub,
-
-    // ── Initialization ──────────────────────────────────────────────────
-    umbra_wasm_init: () => {
-      console.log('[rn-backend] Initializing native Rust backend...');
-      native.init(getDocumentsPath());
-    },
-
-    umbra_wasm_init_database: async () => {
-      // The native Rust backend initializes its own SQLite database
-      // via rusqlite during init(). No separate step needed.
-      return true;
-    },
-
-    umbra_wasm_version: () => {
-      try {
-        return native.version();
-      } catch {
-        return '0.1.0 (react-native)';
-      }
-    },
-
-    // ── Identity ────────────────────────────────────────────────────────
-    umbra_wasm_identity_create: (display_name: string) => {
-      return ensureJsonString(native.identityCreate(display_name));
-    },
-
-    umbra_wasm_identity_restore: (recovery_phrase: string, display_name: string) => {
-      return ensureJsonString(native.identityRestore(recovery_phrase, display_name));
-    },
-
-    umbra_wasm_identity_set: (_json: string) => {
-      // identity_set is used to restore identity state without re-deriving keys.
-      // On native, we use identityRestore instead. This is a compatibility no-op.
-      console.debug('[rn-backend] identity_set called — no-op on native');
-    },
-
-    umbra_wasm_identity_get_did: () => {
-      return native.identityGetDid();
-    },
-
-    umbra_wasm_identity_get_profile: () => {
-      return ensureJsonString(native.identityGetProfile());
-    },
-
-    umbra_wasm_identity_update_profile: (json: string) => {
-      return ensureJsonString(native.identityUpdateProfile(json));
-    },
-
-    // ── Network ─────────────────────────────────────────────────────────
-    umbra_wasm_network_status: () => {
-      try {
-        return ensureJsonString(native.networkStatus());
-      } catch {
-        return JSON.stringify({ connected: false, peers: 0 });
-      }
-    },
-
-    umbra_wasm_network_start: async () => {
-      try {
-        await native.networkStart(null);
-        return true;
-      } catch (e) {
-        console.warn('[rn-backend] network_start failed:', e);
-        return false;
-      }
-    },
-
-    umbra_wasm_network_stop: async () => {
-      try {
-        await native.networkStop();
-        return true;
-      } catch (e) {
-        console.warn('[rn-backend] network_stop failed:', e);
-        return false;
-      }
-    },
-
-    // ── Discovery ───────────────────────────────────────────────────────
-    umbra_wasm_discovery_get_connection_info: () => {
-      return ensureJsonString(native.discoveryGetConnectionInfo());
-    },
-
-    umbra_wasm_discovery_parse_connection_info: (info: string) => {
-      // The native FFI uses discoveryConnectWithInfo which both parses AND connects.
-      // For just parsing, we'd need a separate FFI function. For now, return the info.
-      return info;
-    },
-
-    // ── Friends ─────────────────────────────────────────────────────────
-    umbra_wasm_friends_send_request: (did: string, message?: string) => {
-      return ensureJsonString(native.friendsSendRequest(did, message ?? null));
-    },
-
-    umbra_wasm_friends_accept_request: (request_id: string) => {
-      return ensureJsonString(native.friendsAcceptRequest(request_id));
-    },
-
-    umbra_wasm_friends_reject_request: (request_id: string) => {
-      return ensureJsonString(native.friendsRejectRequest(request_id));
-    },
-
-    umbra_wasm_friends_list: () => {
-      return ensureJsonString(native.friendsList());
-    },
-
-    umbra_wasm_friends_pending_requests: () => {
-      return ensureJsonString(native.friendsPendingRequests());
-    },
-
-    // ── Messaging ───────────────────────────────────────────────────────
-    umbra_wasm_messaging_get_conversations: () => {
-      return ensureJsonString(native.messagingGetConversations());
-    },
-
-    umbra_wasm_messaging_send: async (recipient_did: string, text: string) => {
-      return ensureJsonString(await native.messagingSendText(recipient_did, text));
-    },
-
-    umbra_wasm_messaging_get_messages: (conversation_id: string, limit?: number, before_id?: string) => {
-      return ensureJsonString(
-        native.messagingGetMessages(conversation_id, limit ?? 50, before_id ?? null)
-      );
-    },
-  };
-}
-
-// ─────────────────────────────────────────────────────────────────────────
-// Helpers
-// ─────────────────────────────────────────────────────────────────────────
-
-/**
- * Get the app's documents directory for Rust storage.
- * On React Native, we use the default which lets the native side determine it.
- */
-function getDocumentsPath(): string {
-  // The Expo module's init() function determines the correct storage path
-  // if we pass an empty/default value. This is handled natively.
-  return '';
 }
