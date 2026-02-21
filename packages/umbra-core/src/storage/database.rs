@@ -3011,6 +3011,59 @@ impl Database {
         Ok(())
     }
 
+    // ── File Re-encryption ────────────────────────────────────────────────
+
+    /// Mark all community files in a channel for re-encryption after key rotation.
+    pub fn mark_channel_files_for_reencryption(
+        &self,
+        channel_id: &str,
+        new_key_version: i32,
+    ) -> Result<u32> {
+        let conn = self.conn.lock();
+        let count = conn.execute(
+            "UPDATE community_files SET needs_reencryption = 1, key_version = ? WHERE channel_id = ? AND needs_reencryption = 0",
+            params![new_key_version, channel_id],
+        ).map_err(|e| Error::DatabaseError(format!("Failed to mark files for reencryption: {}", e)))?;
+        Ok(count as u32)
+    }
+
+    /// Get community files that need re-encryption in a channel.
+    pub fn get_files_needing_reencryption(
+        &self,
+        channel_id: &str,
+        limit: usize,
+    ) -> Result<Vec<CommunityFileRecord>> {
+        let conn = self.conn.lock();
+        let mut stmt = conn.prepare(
+            "SELECT id, channel_id, folder_id, filename, description, file_size, mime_type, storage_chunks_json, uploaded_by, version, previous_version_id, download_count, created_at FROM community_files WHERE channel_id = ? AND needs_reencryption = 1 LIMIT ?",
+        ).map_err(|e| Error::DatabaseError(e.to_string()))?;
+        let rows = stmt.query_map(params![channel_id, limit as i64], |row| Ok(CommunityFileRecord {
+            id: row.get(0)?, channel_id: row.get(1)?, folder_id: row.get(2)?,
+            filename: row.get(3)?, description: row.get(4)?, file_size: row.get(5)?,
+            mime_type: row.get(6)?, storage_chunks_json: row.get(7)?, uploaded_by: row.get(8)?,
+            version: row.get(9)?, previous_version_id: row.get(10)?, download_count: row.get(11)?,
+            created_at: row.get(12)?,
+        })).map_err(|e| Error::DatabaseError(e.to_string()))?;
+
+        let mut files = Vec::new();
+        for row in rows { files.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?); }
+        Ok(files)
+    }
+
+    /// Clear the re-encryption flag after a file has been re-encrypted.
+    pub fn clear_reencryption_flag(
+        &self,
+        file_id: &str,
+        new_fingerprint: Option<&str>,
+    ) -> Result<()> {
+        let conn = self.conn.lock();
+        conn.execute(
+            "UPDATE community_files SET needs_reencryption = 0, encryption_fingerprint = ? WHERE id = ?",
+            params![new_fingerprint, file_id],
+        ).map_err(|e| Error::DatabaseError(format!("Failed to clear reencryption flag: {}", e)))?;
+        Ok(())
+    }
+
     /// Create a folder
     pub fn create_community_file_folder(&self, id: &str, channel_id: &str, parent_folder_id: Option<&str>, name: &str, created_by: &str, created_at: i64) -> Result<()> {
         let conn = self.conn.lock();
