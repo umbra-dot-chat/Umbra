@@ -80,6 +80,12 @@ build_ios() {
 
     cd "$CORE_DIR"
 
+    # Set minimum deployment target to match the app's Podfile / podspec (15.1).
+    # Without this, Cargo uses the Xcode SDK's latest version (e.g. 26.x),
+    # producing linker warnings when linking against an app targeting 15.1.
+    export IPHONEOS_DEPLOYMENT_TARGET="${IOS_DEPLOYMENT_TARGET:-15.1}"
+    echo "iOS deployment target: $IPHONEOS_DEPLOYMENT_TARGET"
+
     # Build both targets
     echo "Building for device (aarch64-apple-ios)..."
     cargo build --release --target aarch64-apple-ios --features ffi --lib
@@ -122,6 +128,10 @@ build_ios_sim() {
     check_rust_target "aarch64-apple-ios-sim"
 
     cd "$CORE_DIR"
+
+    # Match deployment target with Podfile / podspec
+    export IPHONEOS_DEPLOYMENT_TARGET="${IOS_DEPLOYMENT_TARGET:-15.1}"
+    echo "iOS deployment target: $IPHONEOS_DEPLOYMENT_TARGET"
 
     cargo build --release \
         --target aarch64-apple-ios-sim \
