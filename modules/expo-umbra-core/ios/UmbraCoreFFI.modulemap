@@ -1,0 +1,4 @@
+module UmbraCoreFFI {
+    header "UmbraCore.h"
+    export *
+}

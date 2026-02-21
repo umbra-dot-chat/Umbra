@@ -8,15 +8,21 @@
  * so rn-backend.ts can map them 1:1 to the UmbraWasmModule contract.
  */
 
-import { requireNativeModule } from 'expo-modules-core';
+import { requireNativeModule, EventEmitter, type Subscription } from 'expo-modules-core';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────────────────────────────────────
 
+export interface UmbraCoreEvent {
+  type: string;
+  data: string;
+}
+
 export interface NativeUmbraCore {
   // ── Lifecycle ──────────────────────────────────────────────────────────────
-  init(storagePath: string): string; // JSON FfiResult
+  initialize(storagePath: string): string; // JSON FfiResult
+  initDatabase(): string; // Opens SQLite DB at <storage_path>/umbra.db
   shutdown(): string;
   version(): string;
 
@@ -49,6 +55,10 @@ export interface NativeUmbraCore {
   messagingSendText(recipientDid: string, text: string): Promise<string>;
   messagingGetConversations(): string; // JSON array
   messagingGetMessages(conversationId: string, limit: number, beforeId: string | null): string;
+
+  // ── Generic Dispatcher ───────────────────────────────────────────────────
+  /** Route any method through the Rust dispatcher. JSON in, JSON out. */
+  call(method: string, args: string): Promise<string>;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -75,6 +85,40 @@ export function getExpoUmbraCore(): NativeUmbraCore | null {
     );
     return null;
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Event Listener
+// ─────────────────────────────────────────────────────────────────────────────
+
+let _emitter: EventEmitter | null = null;
+
+function getEmitter(): EventEmitter | null {
+  if (_emitter) return _emitter;
+  const mod = getExpoUmbraCore();
+  if (!mod) return null;
+  try {
+    // The EventEmitter constructor takes the native module instance
+    _emitter = new EventEmitter(mod as any);
+    return _emitter;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Subscribe to events from the Rust core (messages, friend requests, etc.).
+ *
+ * Events are emitted by Rust → C callback → Swift → Expo EventEmitter → here.
+ *
+ * @returns A Subscription that should be removed when no longer needed.
+ */
+export function addUmbraCoreEventListener(
+  callback: (event: UmbraCoreEvent) => void
+): Subscription | null {
+  const emitter = getEmitter();
+  if (!emitter) return null;
+  return emitter.addListener('onUmbraCoreEvent', callback);
 }
 
 export default getExpoUmbraCore;

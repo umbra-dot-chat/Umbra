@@ -1,119 +1,46 @@
 import ExpoModulesCore
 
 // ─────────────────────────────────────────────────────────────────────────────
-// C FFI declarations — these match the Rust `#[no_mangle] extern "C"` functions
-// in umbra-core/src/ffi/c_api.rs and types.rs
-// ─────────────────────────────────────────────────────────────────────────────
-
-// FfiResult struct — mirrors the Rust #[repr(C)] FfiResult
-struct FfiResult {
-    let success: Int32
-    let errorCode: Int32
-    let errorMessage: UnsafeMutablePointer<CChar>?
-    let data: UnsafeMutablePointer<CChar>?
-}
-
-// ── Lifecycle ────────────────────────────────────────────────────────────────
-@_silgen_name("umbra_init")
-func umbra_init(_ storagePath: UnsafePointer<CChar>?) -> FfiResult
-
-@_silgen_name("umbra_shutdown")
-func umbra_shutdown() -> FfiResult
-
-@_silgen_name("umbra_version")
-func umbra_version() -> UnsafeMutablePointer<CChar>?
-
-// ── Identity ─────────────────────────────────────────────────────────────────
-@_silgen_name("umbra_identity_create")
-func umbra_identity_create(_ displayName: UnsafePointer<CChar>?) -> FfiResult
-
-@_silgen_name("umbra_identity_restore")
-func umbra_identity_restore(_ recoveryPhrase: UnsafePointer<CChar>?, _ displayName: UnsafePointer<CChar>?) -> FfiResult
-
-@_silgen_name("umbra_identity_get_did")
-func umbra_identity_get_did() -> FfiResult
-
-@_silgen_name("umbra_identity_get_profile")
-func umbra_identity_get_profile() -> FfiResult
-
-@_silgen_name("umbra_identity_update_profile")
-func umbra_identity_update_profile(_ json: UnsafePointer<CChar>?) -> FfiResult
-
-// ── Network ──────────────────────────────────────────────────────────────────
-@_silgen_name("umbra_network_start")
-func umbra_network_start(_ configJson: UnsafePointer<CChar>?) -> FfiResult
-
-@_silgen_name("umbra_network_stop")
-func umbra_network_stop() -> FfiResult
-
-@_silgen_name("umbra_network_status")
-func umbra_network_status() -> FfiResult
-
-@_silgen_name("umbra_network_connect")
-func umbra_network_connect(_ addr: UnsafePointer<CChar>?) -> FfiResult
-
-// ── Discovery ────────────────────────────────────────────────────────────────
-@_silgen_name("umbra_discovery_get_connection_info")
-func umbra_discovery_get_connection_info() -> FfiResult
-
-@_silgen_name("umbra_discovery_connect_with_info")
-func umbra_discovery_connect_with_info(_ info: UnsafePointer<CChar>?) -> FfiResult
-
-@_silgen_name("umbra_discovery_lookup_peer")
-func umbra_discovery_lookup_peer(_ did: UnsafePointer<CChar>?) -> FfiResult
-
-// ── Friends ──────────────────────────────────────────────────────────────────
-@_silgen_name("umbra_friends_send_request")
-func umbra_friends_send_request(_ did: UnsafePointer<CChar>?, _ message: UnsafePointer<CChar>?) -> FfiResult
-
-@_silgen_name("umbra_friends_accept_request")
-func umbra_friends_accept_request(_ requestId: UnsafePointer<CChar>?) -> FfiResult
-
-@_silgen_name("umbra_friends_reject_request")
-func umbra_friends_reject_request(_ requestId: UnsafePointer<CChar>?) -> FfiResult
-
-@_silgen_name("umbra_friends_list")
-func umbra_friends_list() -> FfiResult
-
-@_silgen_name("umbra_friends_pending_requests")
-func umbra_friends_pending_requests() -> FfiResult
-
-// ── Messaging ────────────────────────────────────────────────────────────────
-@_silgen_name("umbra_messaging_send_text")
-func umbra_messaging_send_text(_ recipientDid: UnsafePointer<CChar>?, _ text: UnsafePointer<CChar>?) -> FfiResult
-
-@_silgen_name("umbra_messaging_get_conversations")
-func umbra_messaging_get_conversations() -> FfiResult
-
-@_silgen_name("umbra_messaging_get_messages")
-func umbra_messaging_get_messages(_ conversationId: UnsafePointer<CChar>?, _ limit: Int32, _ beforeId: UnsafePointer<CChar>?) -> FfiResult
-
-// ── Memory Management ────────────────────────────────────────────────────────
-@_silgen_name("umbra_free_result")
-func umbra_free_result(_ result: FfiResult)
-
-@_silgen_name("umbra_free_string")
-func umbra_free_string(_ ptr: UnsafeMutablePointer<CChar>?)
-
-
-// ─────────────────────────────────────────────────────────────────────────────
 // Expo Module Definition
+//
+// All C FFI declarations (UmbraCoreResult, umbra_init, umbra_call, etc.)
+// come from UmbraCore.h which CocoaPods includes in the umbrella header.
+// The C header guarantees the struct layout matches Rust's #[repr(C)] FfiResult
+// and uses the correct C calling convention for struct returns.
 // ─────────────────────────────────────────────────────────────────────────────
+
+// Global weak reference to the module so the C callback can reach it.
+// This is safe because the module lives for the entire app lifetime.
+private weak var sharedModule: ExpoUmbraCoreModule?
+
+// C-compatible callback for Rust events.
+// Called from Rust's async runtime thread — must dispatch to main for Expo.
+private let umbraEventCallback: UmbraEventCallback = { eventType, data in
+    guard let eventType = eventType, let data = data else { return }
+    let typeStr = String(cString: eventType)
+    let dataStr = String(cString: data)
+
+    DispatchQueue.main.async {
+        sharedModule?.sendEvent("onUmbraCoreEvent", [
+            "type": typeStr,
+            "data": dataStr,
+        ])
+    }
+}
 
 public class ExpoUmbraCoreModule: Module {
 
     // MARK: - Helpers
 
-    /// Convert FfiResult to a Swift String, freeing the C memory.
+    /// Convert UmbraCoreResult (C struct) to a Swift String, freeing C memory.
     /// Throws if the FFI call returned an error.
-    private func processResult(_ result: FfiResult) throws -> String {
+    private func processResult(_ result: UmbraCoreResult) throws -> String {
         defer {
-            // Free the C-allocated strings
-            if let errMsg = result.errorMessage {
-                umbra_free_string(errMsg)
+            if result.error_message != nil {
+                umbra_free_string(result.error_message)
             }
-            if let data = result.data {
-                umbra_free_string(data)
+            if result.data != nil {
+                umbra_free_string(result.data)
             }
         }
 
@@ -123,10 +50,15 @@ public class ExpoUmbraCoreModule: Module {
             }
             return "{}"
         } else {
-            let errorMessage = result.errorMessage.map { String(cString: $0) } ?? "Unknown error"
+            let errorMessage: String
+            if let errMsg = result.error_message {
+                errorMessage = String(cString: errMsg)
+            } else {
+                errorMessage = "Unknown error"
+            }
             throw NSError(
                 domain: "UmbraCore",
-                code: Int(result.errorCode),
+                code: Int(result.error_code),
                 userInfo: [NSLocalizedDescriptionKey: errorMessage]
             )
         }
@@ -143,12 +75,22 @@ public class ExpoUmbraCoreModule: Module {
     public func definition() -> ModuleDefinition {
         Name("ExpoUmbraCore")
 
+        // ── Events ──────────────────────────────────────────────────────────
+        Events("onUmbraCoreEvent")
+
+        OnCreate {
+            // Store weak reference so the C callback can reach sendEvent
+            sharedModule = self
+
+            // Register C callback with Rust event system
+            umbra_register_event_callback(umbraEventCallback)
+        }
+
         // ── Lifecycle ────────────────────────────────────────────────────────
 
-        Function("init") { (storagePath: String?) -> String in
-            let path = storagePath ?? self.getStoragePath()
+        Function("initialize") { (storagePath: String) -> String in
+            let path = storagePath.isEmpty ? self.getStoragePath() : storagePath
 
-            // Ensure the storage directory exists
             try? FileManager.default.createDirectory(
                 atPath: path,
                 withIntermediateDirectories: true,
@@ -158,6 +100,11 @@ public class ExpoUmbraCoreModule: Module {
             let result = path.withCString { cPath in
                 umbra_init(cPath)
             }
+            return try self.processResult(result)
+        }
+
+        Function("initDatabase") { () -> String in
+            let result = umbra_init_database()
             return try self.processResult(result)
         }
 
@@ -212,7 +159,6 @@ public class ExpoUmbraCoreModule: Module {
 
         // ── Network ──────────────────────────────────────────────────────────
 
-        // Network operations are async because they involve Tokio runtime
         AsyncFunction("networkStart") { (configJson: String?) -> String in
             if let config = configJson {
                 let result = config.withCString { cConfig in
@@ -266,7 +212,7 @@ public class ExpoUmbraCoreModule: Module {
         // ── Friends ──────────────────────────────────────────────────────────
 
         Function("friendsSendRequest") { (did: String, message: String?) -> String in
-            let result: FfiResult
+            let result: UmbraCoreResult
             if let msg = message {
                 result = did.withCString { cDid in
                     msg.withCString { cMsg in
@@ -322,7 +268,7 @@ public class ExpoUmbraCoreModule: Module {
         }
 
         Function("messagingGetMessages") { (conversationId: String, limit: Int, beforeId: String?) -> String in
-            let result: FfiResult
+            let result: UmbraCoreResult
             if let before = beforeId {
                 result = conversationId.withCString { cId in
                     before.withCString { cBefore in
@@ -332,6 +278,17 @@ public class ExpoUmbraCoreModule: Module {
             } else {
                 result = conversationId.withCString { cId in
                     umbra_messaging_get_messages(cId, Int32(limit), nil)
+                }
+            }
+            return try self.processResult(result)
+        }
+
+        // ── Generic Dispatcher ───────────────────────────────────────────
+
+        AsyncFunction("call") { (method: String, args: String) -> String in
+            let result = method.withCString { cMethod in
+                args.withCString { cArgs in
+                    umbra_call(cMethod, cArgs)
                 }
             }
             return try self.processResult(result)

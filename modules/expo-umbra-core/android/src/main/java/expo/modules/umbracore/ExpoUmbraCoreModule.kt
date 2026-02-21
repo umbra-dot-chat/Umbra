@@ -69,6 +69,9 @@ class ExpoUmbraCoreModule : Module() {
     private external fun nativeMessagingGetConversations(): String
     private external fun nativeMessagingGetMessages(conversationId: String, limit: Int, beforeId: String?): String
 
+    // ── Generic Dispatcher ──────────────────────────────────────────────────
+    private external fun nativeCall(method: String, args: String): String
+
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     private val context: Context
@@ -91,8 +94,8 @@ class ExpoUmbraCoreModule : Module() {
 
         // ── Lifecycle ────────────────────────────────────────────────────────
 
-        Function("init") { storagePath: String? ->
-            val path = storagePath ?: getStoragePath()
+        Function("initialize") { storagePath: String ->
+            val path = if (storagePath.isEmpty()) getStoragePath() else storagePath
             nativeInit(path)
         }
 
@@ -192,6 +195,12 @@ class ExpoUmbraCoreModule : Module() {
 
         Function("messagingGetMessages") { conversationId: String, limit: Int, beforeId: String? ->
             nativeMessagingGetMessages(conversationId, limit, beforeId)
+        }
+
+        // ── Generic Dispatcher ───────────────────────────────────────────
+
+        AsyncFunction("call") { method: String, args: String ->
+            nativeCall(method, args)
         }
     }
 }
