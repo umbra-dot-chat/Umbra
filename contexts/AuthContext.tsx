@@ -33,6 +33,34 @@ function getNative(): any {
   }
 }
 
+/**
+ * Ensure the Rust FFI backend is initialized before we try to use SecureStore.
+ *
+ * AuthProvider mounts *above* UmbraProvider in the tree, so its hydration
+ * useEffect can fire before UmbraService.initialize() has called umbra_init().
+ * Without a running Rust backend, `native.call('secure_retrieve', ...)` throws
+ * and hydration silently returns null → the user appears logged out.
+ *
+ * `umbra_init()` is idempotent: if UmbraProvider later calls it again, Rust
+ * returns "Already initialized" (error code 101) which is handled gracefully.
+ */
+let _rustInitPromise: Promise<void> | null = null;
+function ensureRustInit(native: any): Promise<void> {
+  if (_rustInitPromise) return _rustInitPromise;
+  _rustInitPromise = (async () => {
+    try {
+      native.initialize('');
+    } catch (e: any) {
+      // 101 = already initialized — that's fine
+      const msg = e?.message ?? String(e);
+      if (!msg.includes('Already initialized') && !msg.includes('101')) {
+        console.warn('[AuthContext] Rust init failed:', e);
+      }
+    }
+  })();
+  return _rustInitPromise;
+}
+
 async function getStorageItem(key: string): Promise<string | null> {
   if (isWeb) {
     if (typeof window === 'undefined') return null;
@@ -43,6 +71,7 @@ async function getStorageItem(key: string): Promise<string | null> {
   const native = getNative();
   if (!native) return null;
   try {
+    await ensureRustInit(native);
     const resultJson = await native.call('secure_retrieve', JSON.stringify({ key }));
     const result = JSON.parse(resultJson);
     return result.value ?? null;
@@ -62,6 +91,7 @@ async function setStorageItem(key: string, value: string): Promise<void> {
   const native = getNative();
   if (!native) return;
   try {
+    await ensureRustInit(native);
     await native.call('secure_store', JSON.stringify({ key, value }));
   } catch (e) {
     console.warn('[AuthContext] SecureStore write failed:', e);
@@ -79,6 +109,7 @@ async function removeStorageItem(key: string): Promise<void> {
   const native = getNative();
   if (!native) return;
   try {
+    await ensureRustInit(native);
     await native.call('secure_delete', JSON.stringify({ key }));
   } catch (e) {
     console.warn('[AuthContext] SecureStore delete failed:', e);
