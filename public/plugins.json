@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "updatedAt": "2025-01-15T00:00:00Z",
+  "plugins": [
+    {
+      "id": "com.umbra.translator",
+      "name": "Message Translator",
+      "description": "Translate messages to any language with one click. Supports 100+ languages via a free translation API.",
+      "author": { "name": "Umbra Team", "url": "https://umbra.chat" },
+      "version": "1.0.0",
+      "downloadUrl": "/plugins/translator/bundle.js",
+      "size": 24576,
+      "downloads": 1240,
+      "rating": 4.5,
+      "tags": ["translation", "messages", "language", "utility"],
+      "platforms": ["web", "desktop", "mobile"],
+      "permissions": ["messages:read", "network:local", "storage:kv", "commands", "notifications"],
+      "slots": [
+        { "slot": "message-actions", "component": "TranslateAction", "priority": 50 },
+        { "slot": "message-decorator", "component": "TranslationDecorator", "priority": 50 }
+      ],
+      "storage": { "kv": true }
+    },
+    {
+      "id": "com.umbra.system-monitor",
+      "name": "System Monitor",
+      "description": "View real-time system stats (CPU, memory, disk) in the sidebar. Simulated data for demo purposes.",
+      "author": { "name": "Umbra Team", "url": "https://umbra.chat" },
+      "version": "1.0.0",
+      "downloadUrl": "/plugins/system-monitor/bundle.js",
+      "size": 102400,
+      "downloads": 310,
+      "rating": 4.0,
+      "tags": ["system", "monitor", "utility"],
+      "platforms": ["web", "desktop", "mobile"],
+      "permissions": ["storage:kv", "commands", "notifications"],
+      "slots": [
+        { "slot": "sidebar-section", "component": "MiniStats", "priority": 80 }
+      ],
+      "storage": { "kv": true }
+    }
+  ],
+  "categories": [
+    "utility",
+    "system"
+  ]
+}
