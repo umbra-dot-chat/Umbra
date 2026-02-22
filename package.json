@@ -3,6 +3,7 @@
   "main": "expo-router/entry",
   "version": "1.2.0",
   "scripts": {
+    "eas-build-pre-install": "bash eas-hooks/eas-build-pre-install.sh",
     "postinstall": "node scripts/postinstall.js",
     "patch": "./scripts/patch-wisp.sh",
     "presync": "node scripts/postinstall.js",
