@@ -33,8 +33,8 @@
 //! └─────────────────────────────────────────────────────────────────────────┘
 //! ```
 
-use serde::{Deserialize, Serialize};
 use crate::storage::chunking::ChunkManifest;
+use serde::{Deserialize, Serialize};
 
 // ============================================================================
 // TRANSFER STATE
@@ -67,7 +67,10 @@ impl TransferState {
 
     /// Whether the transfer is active (not terminal and not paused).
     pub fn is_active(&self) -> bool {
-        matches!(self, Self::Requesting | Self::Negotiating | Self::Transferring)
+        matches!(
+            self,
+            Self::Requesting | Self::Negotiating | Self::Transferring
+        )
     }
 }
 
@@ -545,7 +548,11 @@ impl TransportConfig {
     ///
     /// The `is_peer_directly_reachable` parameter should be `true` if the
     /// swarm currently has an established connection to the peer.
-    pub fn select_transport(&self, is_peer_directly_reachable: bool, is_wasm: bool) -> TransportType {
+    pub fn select_transport(
+        &self,
+        is_peer_directly_reachable: bool,
+        is_wasm: bool,
+    ) -> TransportType {
         if self.prefer_direct && is_peer_directly_reachable {
             if is_wasm {
                 TransportType::WebRtcDirect
@@ -682,7 +689,8 @@ impl TransferManager {
     /// or fall back to relay.
     pub fn select_transport(&self, is_peer_directly_reachable: bool) -> TransportType {
         let is_wasm = cfg!(target_arch = "wasm32");
-        self.transport_config.select_transport(is_peer_directly_reachable, is_wasm)
+        self.transport_config
+            .select_transport(is_peer_directly_reachable, is_wasm)
     }
 
     /// Get a reference to a transfer session by ID.
@@ -697,7 +705,8 @@ impl TransferManager {
 
     /// List all active (non-terminal) sessions.
     pub fn active_sessions(&self) -> Vec<&TransferSession> {
-        self.sessions.values()
+        self.sessions
+            .values()
             .filter(|s| !s.state.is_terminal())
             .collect()
     }
@@ -709,14 +718,16 @@ impl TransferManager {
 
     /// Count active uploads.
     pub fn active_upload_count(&self) -> u32 {
-        self.sessions.values()
+        self.sessions
+            .values()
             .filter(|s| s.direction == TransferDirection::Upload && s.state.is_active())
             .count() as u32
     }
 
     /// Count active downloads.
     pub fn active_download_count(&self) -> u32 {
-        self.sessions.values()
+        self.sessions
+            .values()
             .filter(|s| s.direction == TransferDirection::Download && s.state.is_active())
             .count() as u32
     }
@@ -745,7 +756,8 @@ impl TransferManager {
             self.queue.push((transfer_id.clone(), priority));
             return Err(format!(
                 "Upload limit reached ({}/{}). Transfer queued.",
-                self.active_upload_count(), self.limits.max_uploads
+                self.active_upload_count(),
+                self.limits.max_uploads
             ));
         }
 
@@ -766,9 +778,12 @@ impl TransferManager {
         };
 
         self.sessions.insert(transfer_id.clone(), session);
-        self.flow_controls.insert(transfer_id.clone(), FlowControl::new());
-        self.speed_trackers.insert(transfer_id.clone(), SpeedTracker::default());
-        self.in_flight.insert(transfer_id.clone(), std::collections::HashMap::new());
+        self.flow_controls
+            .insert(transfer_id.clone(), FlowControl::new());
+        self.speed_trackers
+            .insert(transfer_id.clone(), SpeedTracker::default());
+        self.in_flight
+            .insert(transfer_id.clone(), std::collections::HashMap::new());
 
         Ok((transfer_id, msg))
     }
@@ -783,12 +798,15 @@ impl TransferManager {
     ) -> Result<FileTransferMessage, String> {
         // Check state and direction before mutable borrow
         {
-            let session = self.sessions.get(transfer_id)
+            let session = self
+                .sessions
+                .get(transfer_id)
                 .ok_or_else(|| format!("Transfer {} not found", transfer_id))?;
 
             if session.state != TransferState::Requesting {
                 return Err(format!(
-                    "Cannot accept transfer in state {:?}", session.state
+                    "Cannot accept transfer in state {:?}",
+                    session.state
                 ));
             }
 
@@ -798,7 +816,8 @@ impl TransferManager {
             {
                 return Err(format!(
                     "Download limit reached ({}/{})",
-                    self.active_download_count(), self.limits.max_downloads
+                    self.active_download_count(),
+                    self.limits.max_downloads
                 ));
             }
         }
@@ -834,7 +853,9 @@ impl TransferManager {
         reason: String,
         now_ms: i64,
     ) -> Result<FileTransferMessage, String> {
-        let session = self.sessions.get_mut(transfer_id)
+        let session = self
+            .sessions
+            .get_mut(transfer_id)
             .ok_or_else(|| format!("Transfer {} not found", transfer_id))?;
 
         let old_state = session.state;
@@ -862,12 +883,15 @@ impl TransferManager {
         transfer_id: &str,
         now_ms: i64,
     ) -> Result<FileTransferMessage, String> {
-        let session = self.sessions.get_mut(transfer_id)
+        let session = self
+            .sessions
+            .get_mut(transfer_id)
             .ok_or_else(|| format!("Transfer {} not found", transfer_id))?;
 
         if !session.state.is_active() {
             return Err(format!(
-                "Cannot pause transfer in state {:?}", session.state
+                "Cannot pause transfer in state {:?}",
+                session.state
             ));
         }
 
@@ -895,12 +919,15 @@ impl TransferManager {
         transfer_id: &str,
         now_ms: i64,
     ) -> Result<FileTransferMessage, String> {
-        let session = self.sessions.get_mut(transfer_id)
+        let session = self
+            .sessions
+            .get_mut(transfer_id)
             .ok_or_else(|| format!("Transfer {} not found", transfer_id))?;
 
         if session.state != TransferState::Paused {
             return Err(format!(
-                "Cannot resume transfer in state {:?}", session.state
+                "Cannot resume transfer in state {:?}",
+                session.state
             ));
         }
 
@@ -909,10 +936,14 @@ impl TransferManager {
         session.updated_at = now_ms;
 
         // Reset flow control for fresh start
-        self.flow_controls.insert(transfer_id.to_string(), FlowControl::new());
-        self.in_flight.insert(transfer_id.to_string(), std::collections::HashMap::new());
+        self.flow_controls
+            .insert(transfer_id.to_string(), FlowControl::new());
+        self.in_flight
+            .insert(transfer_id.to_string(), std::collections::HashMap::new());
 
-        let existing: Vec<u32> = session.chunks_bitfield.iter()
+        let existing: Vec<u32> = session
+            .chunks_bitfield
+            .iter()
             .enumerate()
             .filter(|(_, &done)| done)
             .map(|(i, _)| i as u32)
@@ -937,12 +968,15 @@ impl TransferManager {
         reason: Option<String>,
         now_ms: i64,
     ) -> Result<FileTransferMessage, String> {
-        let session = self.sessions.get_mut(transfer_id)
+        let session = self
+            .sessions
+            .get_mut(transfer_id)
             .ok_or_else(|| format!("Transfer {} not found", transfer_id))?;
 
         if session.state.is_terminal() {
             return Err(format!(
-                "Cannot cancel transfer in terminal state {:?}", session.state
+                "Cannot cancel transfer in terminal state {:?}",
+                session.state
             ));
         }
 
@@ -987,41 +1021,31 @@ impl TransferManager {
                 file_id,
                 sender_did,
                 manifest,
-            } => {
-                self.handle_transfer_request(transfer_id, file_id, sender_did, manifest, now_ms)
-            }
+            } => self.handle_transfer_request(transfer_id, file_id, sender_did, manifest, now_ms),
 
             FileTransferMessage::TransferAccept {
                 transfer_id,
                 existing_chunks,
-            } => {
-                self.handle_transfer_accept(&transfer_id, existing_chunks, now_ms)
-            }
+            } => self.handle_transfer_accept(&transfer_id, existing_chunks, now_ms),
 
             FileTransferMessage::TransferReject {
                 transfer_id,
                 reason,
-            } => {
-                self.handle_transfer_reject(&transfer_id, &reason, now_ms)
-            }
+            } => self.handle_transfer_reject(&transfer_id, &reason, now_ms),
 
             FileTransferMessage::ChunkData {
                 transfer_id,
                 chunk_index,
                 data_b64,
                 hash,
-            } => {
-                self.handle_chunk_data(&transfer_id, chunk_index, &data_b64, &hash, now_ms)
-            }
+            } => self.handle_chunk_data(&transfer_id, chunk_index, &data_b64, &hash, now_ms),
 
             FileTransferMessage::ChunkAck {
                 transfer_id,
                 chunk_index,
                 success,
                 error,
-            } => {
-                self.handle_chunk_ack(&transfer_id, chunk_index, success, error, now_ms)
-            }
+            } => self.handle_chunk_ack(&transfer_id, chunk_index, success, error, now_ms),
 
             FileTransferMessage::PauseTransfer { transfer_id } => {
                 self.handle_pause(&transfer_id, now_ms)
@@ -1030,30 +1054,22 @@ impl TransferManager {
             FileTransferMessage::ResumeTransfer {
                 transfer_id,
                 existing_chunks,
-            } => {
-                self.handle_resume(&transfer_id, existing_chunks, now_ms)
-            }
+            } => self.handle_resume(&transfer_id, existing_chunks, now_ms),
 
             FileTransferMessage::CancelTransfer {
                 transfer_id,
                 reason,
-            } => {
-                self.handle_cancel(&transfer_id, reason, from_did, now_ms)
-            }
+            } => self.handle_cancel(&transfer_id, reason, from_did, now_ms),
 
             FileTransferMessage::TransferComplete {
                 transfer_id,
                 file_hash,
-            } => {
-                self.handle_transfer_complete(&transfer_id, &file_hash, now_ms)
-            }
+            } => self.handle_transfer_complete(&transfer_id, &file_hash, now_ms),
 
             FileTransferMessage::ChunkAvailability {
                 transfer_id,
                 available_chunks,
-            } => {
-                self.handle_chunk_availability(&transfer_id, available_chunks, now_ms)
-            }
+            } => self.handle_chunk_availability(&transfer_id, available_chunks, now_ms),
         }
     }
 
@@ -1071,7 +1087,9 @@ impl TransferManager {
             None => return Vec::new(),
         };
 
-        let in_flight_count = self.in_flight.get(transfer_id)
+        let in_flight_count = self
+            .in_flight
+            .get(transfer_id)
             .map(|m| m.len() as u32)
             .unwrap_or(0);
 
@@ -1080,11 +1098,13 @@ impl TransferManager {
             return Vec::new();
         }
 
-        session.pending_chunks()
+        session
+            .pending_chunks()
             .into_iter()
             .filter(|idx| {
                 // Skip chunks that are already in-flight
-                self.in_flight.get(transfer_id)
+                self.in_flight
+                    .get(transfer_id)
                     .map(|m| !m.contains_key(idx))
                     .unwrap_or(true)
             })
@@ -1102,7 +1122,9 @@ impl TransferManager {
 
     /// Remove completed/terminal sessions.
     pub fn clear_completed(&mut self) {
-        let to_remove: Vec<String> = self.sessions.iter()
+        let to_remove: Vec<String> = self
+            .sessions
+            .iter()
             .filter(|(_, s)| s.state.is_terminal())
             .map(|(id, _)| id.clone())
             .collect();
@@ -1135,9 +1157,12 @@ impl TransferManager {
         );
 
         self.sessions.insert(transfer_id.clone(), session);
-        self.flow_controls.insert(transfer_id.clone(), FlowControl::new());
-        self.speed_trackers.insert(transfer_id.clone(), SpeedTracker::default());
-        self.in_flight.insert(transfer_id.clone(), std::collections::HashMap::new());
+        self.flow_controls
+            .insert(transfer_id.clone(), FlowControl::new());
+        self.speed_trackers
+            .insert(transfer_id.clone(), SpeedTracker::default());
+        self.in_flight
+            .insert(transfer_id.clone(), std::collections::HashMap::new());
 
         // Emit incoming request event
         self.pending_events.push(TransferEvent::IncomingRequest {
@@ -1159,7 +1184,9 @@ impl TransferManager {
         existing_chunks: Vec<u32>,
         now_ms: i64,
     ) -> Result<Option<FileTransferMessage>, String> {
-        let session = self.sessions.get_mut(transfer_id)
+        let session = self
+            .sessions
+            .get_mut(transfer_id)
             .ok_or_else(|| format!("Transfer {} not found", transfer_id))?;
 
         let old_state = session.state;
@@ -1188,7 +1215,9 @@ impl TransferManager {
         reason: &str,
         now_ms: i64,
     ) -> Result<Option<FileTransferMessage>, String> {
-        let session = self.sessions.get_mut(transfer_id)
+        let session = self
+            .sessions
+            .get_mut(transfer_id)
             .ok_or_else(|| format!("Transfer {} not found", transfer_id))?;
 
         let old_state = session.state;
@@ -1219,10 +1248,12 @@ impl TransferManager {
         expected_hash: &str,
         now_ms: i64,
     ) -> Result<Option<FileTransferMessage>, String> {
-        use base64::{Engine as _, engine::general_purpose::STANDARD};
-        use sha2::{Sha256, Digest};
+        use base64::{engine::general_purpose::STANDARD, Engine as _};
+        use sha2::{Digest, Sha256};
 
-        let session = self.sessions.get_mut(transfer_id)
+        let session = self
+            .sessions
+            .get_mut(transfer_id)
             .ok_or_else(|| format!("Transfer {} not found", transfer_id))?;
 
         if session.state != TransferState::Transferring {
@@ -1230,7 +1261,9 @@ impl TransferManager {
         }
 
         // Decode and verify chunk
-        let data = STANDARD.decode(data_b64).map_err(|e| format!("Base64 decode error: {}", e))?;
+        let data = STANDARD
+            .decode(data_b64)
+            .map_err(|e| format!("Base64 decode error: {}", e))?;
         let actual_hash = hex::encode(Sha256::digest(&data));
 
         if actual_hash != expected_hash {
@@ -1239,7 +1272,10 @@ impl TransferManager {
                 transfer_id: transfer_id.to_string(),
                 chunk_index,
                 success: false,
-                error: Some(format!("Hash mismatch: expected {}, got {}", expected_hash, actual_hash)),
+                error: Some(format!(
+                    "Hash mismatch: expected {}, got {}",
+                    expected_hash, actual_hash
+                )),
             }));
         }
 
@@ -1326,7 +1362,9 @@ impl TransferManager {
                     session.mark_chunk_completed(chunk_index, chunk_size, now_ms);
 
                     // Update speed
-                    if let (Some(tracker), Some(rtt)) = (self.speed_trackers.get_mut(transfer_id), rtt_ms) {
+                    if let (Some(tracker), Some(rtt)) =
+                        (self.speed_trackers.get_mut(transfer_id), rtt_ms)
+                    {
                         tracker.record(chunk_size, rtt);
                         session.speed_bps = tracker.speed_bps();
                     }
@@ -1419,8 +1457,10 @@ impl TransferManager {
                     }
                 }
 
-                self.flow_controls.insert(transfer_id.to_string(), FlowControl::new());
-                self.in_flight.insert(transfer_id.to_string(), std::collections::HashMap::new());
+                self.flow_controls
+                    .insert(transfer_id.to_string(), FlowControl::new());
+                self.in_flight
+                    .insert(transfer_id.to_string(), std::collections::HashMap::new());
 
                 self.pending_events.push(TransferEvent::StateChanged {
                     transfer_id: transfer_id.to_string(),
@@ -1535,8 +1575,14 @@ impl TransferManager {
         }
 
         // Check if we have capacity for uploads
-        let upload_capacity = self.limits.max_uploads.saturating_sub(self.active_upload_count());
-        let download_capacity = self.limits.max_downloads.saturating_sub(self.active_download_count());
+        let upload_capacity = self
+            .limits
+            .max_uploads
+            .saturating_sub(self.active_upload_count());
+        let download_capacity = self
+            .limits
+            .max_downloads
+            .saturating_sub(self.active_download_count());
 
         if upload_capacity == 0 && download_capacity == 0 {
             return;
@@ -1570,10 +1616,30 @@ mod tests {
             chunk_size: 256,
             total_chunks: 4,
             chunks: vec![
-                ChunkRef { chunk_id: "c1".to_string(), chunk_index: 0, size: 256, hash: "h1".to_string() },
-                ChunkRef { chunk_id: "c2".to_string(), chunk_index: 1, size: 256, hash: "h2".to_string() },
-                ChunkRef { chunk_id: "c3".to_string(), chunk_index: 2, size: 256, hash: "h3".to_string() },
-                ChunkRef { chunk_id: "c4".to_string(), chunk_index: 3, size: 256, hash: "h4".to_string() },
+                ChunkRef {
+                    chunk_id: "c1".to_string(),
+                    chunk_index: 0,
+                    size: 256,
+                    hash: "h1".to_string(),
+                },
+                ChunkRef {
+                    chunk_id: "c2".to_string(),
+                    chunk_index: 1,
+                    size: 256,
+                    hash: "h2".to_string(),
+                },
+                ChunkRef {
+                    chunk_id: "c3".to_string(),
+                    chunk_index: 2,
+                    size: 256,
+                    hash: "h3".to_string(),
+                },
+                ChunkRef {
+                    chunk_id: "c4".to_string(),
+                    chunk_index: 3,
+                    size: 256,
+                    hash: "h4".to_string(),
+                },
             ],
             file_hash: "filehash".to_string(),
         }
@@ -1829,7 +1895,11 @@ mod tests {
         let restored: FileTransferMessage = serde_json::from_str(&json).unwrap();
 
         match restored {
-            FileTransferMessage::ChunkData { chunk_index, data_b64, .. } => {
+            FileTransferMessage::ChunkData {
+                chunk_index,
+                data_b64,
+                ..
+            } => {
                 assert_eq!(chunk_index, 3);
                 assert_eq!(data_b64, "SGVsbG8gV29ybGQ=");
             }
@@ -2000,17 +2070,23 @@ mod tests {
 
     #[test]
     fn test_manager_concurrent_limit() {
-        let limits = TransferLimits { max_uploads: 2, max_downloads: 2 };
+        let limits = TransferLimits {
+            max_uploads: 2,
+            max_downloads: 2,
+        };
         let mut mgr = TransferManager::with_limits(limits);
 
         // First two uploads succeed
-        let r1 = mgr.initiate_transfer("f1".to_string(), "peer1".to_string(), test_manifest(), 1000);
+        let r1 =
+            mgr.initiate_transfer("f1".to_string(), "peer1".to_string(), test_manifest(), 1000);
         assert!(r1.is_ok());
-        let r2 = mgr.initiate_transfer("f2".to_string(), "peer2".to_string(), test_manifest(), 2000);
+        let r2 =
+            mgr.initiate_transfer("f2".to_string(), "peer2".to_string(), test_manifest(), 2000);
         assert!(r2.is_ok());
 
         // Third upload should be queued (returns Err)
-        let r3 = mgr.initiate_transfer("f3".to_string(), "peer3".to_string(), test_manifest(), 3000);
+        let r3 =
+            mgr.initiate_transfer("f3".to_string(), "peer3".to_string(), test_manifest(), 3000);
         assert!(r3.is_err());
         assert!(r3.unwrap_err().contains("Upload limit reached"));
     }
@@ -2073,7 +2149,11 @@ mod tests {
         let events = mgr.drain_events();
         assert_eq!(events.len(), 1);
         match &events[0] {
-            TransferEvent::StateChanged { from_state, to_state, .. } => {
+            TransferEvent::StateChanged {
+                from_state,
+                to_state,
+                ..
+            } => {
                 assert_eq!(*from_state, TransferState::Requesting);
                 assert_eq!(*to_state, TransferState::Negotiating);
             }
@@ -2086,9 +2166,9 @@ mod tests {
         let mut mgr = TransferManager::new();
         let manifest = test_manifest();
 
-        let (tid, _) = mgr.initiate_transfer(
-            "file-123".to_string(), "peer1".to_string(), manifest, 1000
-        ).unwrap();
+        let (tid, _) = mgr
+            .initiate_transfer("file-123".to_string(), "peer1".to_string(), manifest, 1000)
+            .unwrap();
 
         // Move to transferring state
         mgr.sessions.get_mut(&tid).unwrap().state = TransferState::Transferring;
@@ -2101,7 +2181,10 @@ mod tests {
         // Resume
         let resume_result = mgr.resume_transfer(&tid, 3000);
         assert!(resume_result.is_ok());
-        assert_eq!(mgr.get_session(&tid).unwrap().state, TransferState::Transferring);
+        assert_eq!(
+            mgr.get_session(&tid).unwrap().state,
+            TransferState::Transferring
+        );
     }
 
     #[test]
@@ -2109,9 +2192,9 @@ mod tests {
         let mut mgr = TransferManager::new();
         let manifest = test_manifest();
 
-        let (tid, _) = mgr.initiate_transfer(
-            "file-123".to_string(), "peer1".to_string(), manifest, 1000
-        ).unwrap();
+        let (tid, _) = mgr
+            .initiate_transfer("file-123".to_string(), "peer1".to_string(), manifest, 1000)
+            .unwrap();
 
         let result = mgr.cancel_transfer(&tid, Some("user cancelled".to_string()), 2000);
         assert!(result.is_ok());
@@ -2126,9 +2209,9 @@ mod tests {
         let mut mgr = TransferManager::new();
         let manifest = test_manifest();
 
-        let (tid, _) = mgr.initiate_transfer(
-            "file-123".to_string(), "peer1".to_string(), manifest, 1000
-        ).unwrap();
+        let (tid, _) = mgr
+            .initiate_transfer("file-123".to_string(), "peer1".to_string(), manifest, 1000)
+            .unwrap();
 
         // Not in transferring state yet — should return empty
         assert!(mgr.chunks_to_send(&tid).is_empty());
@@ -2155,9 +2238,9 @@ mod tests {
         let mut mgr = TransferManager::new();
         let manifest = test_manifest();
 
-        let (tid, _) = mgr.initiate_transfer(
-            "file-123".to_string(), "peer1".to_string(), manifest, 1000
-        ).unwrap();
+        let (tid, _) = mgr
+            .initiate_transfer("file-123".to_string(), "peer1".to_string(), manifest, 1000)
+            .unwrap();
         mgr.sessions.get_mut(&tid).unwrap().state = TransferState::Completed;
 
         assert_eq!(mgr.all_sessions().len(), 1);

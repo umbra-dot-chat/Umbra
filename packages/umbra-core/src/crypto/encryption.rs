@@ -224,11 +224,7 @@ impl EncryptionKey {
 /// let key = EncryptionKey::from_bytes([0u8; 32]);
 /// let (nonce, ciphertext) = encrypt(&key, b"Hello, Bob!", b"context")?;
 /// ```
-pub fn encrypt(
-    key: &EncryptionKey,
-    plaintext: &[u8],
-    aad: &[u8],
-) -> Result<(Nonce, Vec<u8>)> {
+pub fn encrypt(key: &EncryptionKey, plaintext: &[u8], aad: &[u8]) -> Result<(Nonce, Vec<u8>)> {
     let nonce = Nonce::random()?;
     let cipher = Aes256Gcm::new_from_slice(&key.0)
         .map_err(|e| Error::EncryptionFailed(format!("Invalid key: {}", e)))?;
@@ -281,7 +277,9 @@ pub fn decrypt(
 
     cipher
         .decrypt(AesNonce::from_slice(&nonce.0), payload)
-        .map_err(|_| Error::DecryptionFailed("Decryption failed: authentication tag mismatch".into()))
+        .map_err(|_| {
+            Error::DecryptionFailed("Decryption failed: authentication tag mismatch".into())
+        })
 }
 
 /// Encrypt a message for a specific recipient
@@ -497,13 +495,9 @@ mod tests {
         let aad = b"alice-did|bob-did|timestamp";
 
         // Alice encrypts for Bob
-        let (nonce, ciphertext) = encrypt_for_recipient(
-            &alice,
-            &bob.public_bytes(),
-            conversation_id,
-            plaintext,
-            aad,
-        ).unwrap();
+        let (nonce, ciphertext) =
+            encrypt_for_recipient(&alice, &bob.public_bytes(), conversation_id, plaintext, aad)
+                .unwrap();
 
         // Bob decrypts from Alice
         let decrypted = decrypt_from_sender(
@@ -513,7 +507,8 @@ mod tests {
             &nonce,
             &ciphertext,
             aad,
-        ).unwrap();
+        )
+        .unwrap();
 
         assert_eq!(decrypted, plaintext);
     }

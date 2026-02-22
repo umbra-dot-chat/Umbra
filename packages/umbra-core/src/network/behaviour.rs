@@ -81,21 +81,21 @@ impl UmbraBehaviour {
         let store = kad::store::MemoryStore::new(local_peer_id);
         let mut kademlia_config = kad::Config::new(
             libp2p::StreamProtocol::try_from_owned("/umbra/kad/1.0.0".to_string())
-                .expect("valid protocol name")
+                .expect("valid protocol name"),
         );
 
         kademlia_config
             .set_query_timeout(Duration::from_secs(60))
             .set_record_ttl(Some(Duration::from_secs(24 * 60 * 60))) // 24 hours
             .set_replication_factor(
-                std::num::NonZeroUsize::new(20).expect("replication factor > 0")
+                std::num::NonZeroUsize::new(20).expect("replication factor > 0"),
             );
 
         let kademlia = kad::Behaviour::with_config(local_peer_id, store, kademlia_config);
 
         // Request-Response configuration
-        let rr_config = request_response::Config::default()
-            .with_request_timeout(Duration::from_secs(30));
+        let rr_config =
+            request_response::Config::default().with_request_timeout(Duration::from_secs(30));
 
         let request_response = request_response::Behaviour::new(
             [(UmbraCodec::protocol(), ProtocolSupport::Full)],

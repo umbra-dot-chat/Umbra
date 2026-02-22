@@ -14,22 +14,14 @@ use serde::{Deserialize, Serialize};
 pub enum ClientMessage {
     /// Register this WebSocket connection with a DID.
     /// Must be sent first after connecting.
-    Register {
-        did: String,
-    },
+    Register { did: String },
 
     /// Forward a signaling payload (SDP offer/answer) to another peer.
-    Signal {
-        to_did: String,
-        payload: String,
-    },
+    Signal { to_did: String, payload: String },
 
     /// Send an encrypted message to another peer.
     /// If the peer is offline, the relay queues it for later delivery.
-    Send {
-        to_did: String,
-        payload: String,
-    },
+    Send { to_did: String, payload: String },
 
     /// Create a signaling session for single-scan friend adding.
     /// Returns a session_id that can be shared via QR code/link.
@@ -72,30 +64,20 @@ pub enum ClientMessage {
     },
 
     /// Revoke a previously published invite.
-    RevokeInvite {
-        code: String,
-    },
+    RevokeInvite { code: String },
 
     /// Resolve an invite code — request the relay to return invite details.
-    ResolveInvite {
-        code: String,
-    },
+    ResolveInvite { code: String },
 
     /// Create a call room for group calling.
     /// Returns a room_id that participants can join.
-    CreateCallRoom {
-        group_id: String,
-    },
+    CreateCallRoom { group_id: String },
 
     /// Join an existing call room.
-    JoinCallRoom {
-        room_id: String,
-    },
+    JoinCallRoom { room_id: String },
 
     /// Leave a call room.
-    LeaveCallRoom {
-        room_id: String,
-    },
+    LeaveCallRoom { room_id: String },
 
     /// Forward a call signaling payload (SDP offer/answer/ICE) to a specific
     /// participant within a call room.
@@ -113,15 +95,10 @@ pub enum ClientMessage {
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum ServerMessage {
     /// Acknowledgement of successful registration.
-    Registered {
-        did: String,
-    },
+    Registered { did: String },
 
     /// A signaling payload forwarded from another peer.
-    Signal {
-        from_did: String,
-        payload: String,
-    },
+    Signal { from_did: String, payload: String },
 
     /// An encrypted message forwarded from another peer (or delivered from offline queue).
     Message {
@@ -131,9 +108,7 @@ pub enum ServerMessage {
     },
 
     /// Response to CreateSession — contains the session ID to share.
-    SessionCreated {
-        session_id: String,
-    },
+    SessionCreated { session_id: String },
 
     /// Notification that someone joined your session and sent an answer.
     SessionJoined {
@@ -150,22 +125,16 @@ pub enum ServerMessage {
     },
 
     /// All queued offline messages, delivered in response to FetchOffline.
-    OfflineMessages {
-        messages: Vec<OfflineMessage>,
-    },
+    OfflineMessages { messages: Vec<OfflineMessage> },
 
     /// Pong response to keep connection alive.
     Pong,
 
     /// Error response.
-    Error {
-        message: String,
-    },
+    Error { message: String },
 
     /// Generic acknowledgement.
-    Ack {
-        id: String,
-    },
+    Ack { id: String },
 
     /// Response to ResolveInvite — the invite was found.
     InviteResolved {
@@ -182,27 +151,16 @@ pub enum ServerMessage {
     },
 
     /// Response to ResolveInvite — the invite was not found.
-    InviteNotFound {
-        code: String,
-    },
+    InviteNotFound { code: String },
 
     /// A call room was successfully created.
-    CallRoomCreated {
-        room_id: String,
-        group_id: String,
-    },
+    CallRoomCreated { room_id: String, group_id: String },
 
     /// A participant joined the call room.
-    CallParticipantJoined {
-        room_id: String,
-        did: String,
-    },
+    CallParticipantJoined { room_id: String, did: String },
 
     /// A participant left the call room.
-    CallParticipantLeft {
-        room_id: String,
-        did: String,
-    },
+    CallParticipantLeft { room_id: String, did: String },
 
     /// A call signaling payload forwarded from another participant.
     CallSignalForward {
@@ -243,16 +201,10 @@ pub enum PeerMessage {
     },
 
     /// A single DID just came online at the sending relay.
-    PresenceOnline {
-        relay_id: String,
-        did: String,
-    },
+    PresenceOnline { relay_id: String, did: String },
 
     /// A single DID just went offline at the sending relay.
-    PresenceOffline {
-        relay_id: String,
-        did: String,
-    },
+    PresenceOffline { relay_id: String, did: String },
 
     /// Forward a signaling payload through the mesh to a DID on another relay.
     ForwardSignal {
@@ -308,15 +260,10 @@ pub enum PeerMessage {
     },
 
     /// Revoke a published invite across the federation mesh.
-    InviteRevoke {
-        code: String,
-    },
+    InviteRevoke { code: String },
 
     /// Forward an invite resolution request to peer relays.
-    ForwardResolveInvite {
-        code: String,
-        requester_did: String,
-    },
+    ForwardResolveInvite { code: String, requester_did: String },
 
     /// Forward an invite resolution response from a peer relay.
     ForwardInviteResolved {
@@ -564,11 +511,24 @@ mod tests {
     #[test]
     fn test_all_client_message_variants_round_trip() {
         let messages = vec![
-            ClientMessage::Register { did: "did:key:z6MkTest".to_string() },
-            ClientMessage::Signal { to_did: "did:key:z6MkBob".to_string(), payload: "offer".to_string() },
-            ClientMessage::Send { to_did: "did:key:z6MkBob".to_string(), payload: "msg".to_string() },
-            ClientMessage::CreateSession { offer_payload: "offer".to_string() },
-            ClientMessage::JoinSession { session_id: "s1".to_string(), answer_payload: "answer".to_string() },
+            ClientMessage::Register {
+                did: "did:key:z6MkTest".to_string(),
+            },
+            ClientMessage::Signal {
+                to_did: "did:key:z6MkBob".to_string(),
+                payload: "offer".to_string(),
+            },
+            ClientMessage::Send {
+                to_did: "did:key:z6MkBob".to_string(),
+                payload: "msg".to_string(),
+            },
+            ClientMessage::CreateSession {
+                offer_payload: "offer".to_string(),
+            },
+            ClientMessage::JoinSession {
+                session_id: "s1".to_string(),
+                answer_payload: "answer".to_string(),
+            },
             ClientMessage::FetchOffline,
             ClientMessage::Ping,
             ClientMessage::PublishInvite {
@@ -582,12 +542,26 @@ mod tests {
                 expires_at: None,
                 invite_payload: "{}".to_string(),
             },
-            ClientMessage::RevokeInvite { code: "abc123".to_string() },
-            ClientMessage::ResolveInvite { code: "abc123".to_string() },
-            ClientMessage::CreateCallRoom { group_id: "group-1".to_string() },
-            ClientMessage::JoinCallRoom { room_id: "room-1".to_string() },
-            ClientMessage::LeaveCallRoom { room_id: "room-1".to_string() },
-            ClientMessage::CallSignal { room_id: "room-1".to_string(), to_did: "did:key:z6MkBob".to_string(), payload: "sdp".to_string() },
+            ClientMessage::RevokeInvite {
+                code: "abc123".to_string(),
+            },
+            ClientMessage::ResolveInvite {
+                code: "abc123".to_string(),
+            },
+            ClientMessage::CreateCallRoom {
+                group_id: "group-1".to_string(),
+            },
+            ClientMessage::JoinCallRoom {
+                room_id: "room-1".to_string(),
+            },
+            ClientMessage::LeaveCallRoom {
+                room_id: "room-1".to_string(),
+            },
+            ClientMessage::CallSignal {
+                room_id: "room-1".to_string(),
+                to_did: "did:key:z6MkBob".to_string(),
+                payload: "sdp".to_string(),
+            },
         ];
 
         for msg in messages {
@@ -626,7 +600,11 @@ mod tests {
 
         let parsed: ClientMessage = serde_json::from_str(&json).unwrap();
         match parsed {
-            ClientMessage::CallSignal { room_id, to_did, payload } => {
+            ClientMessage::CallSignal {
+                room_id,
+                to_did,
+                payload,
+            } => {
                 assert_eq!(room_id, "room-1");
                 assert_eq!(to_did, "did:key:z6MkBob");
                 assert!(payload.contains("sdp"));
@@ -694,7 +672,10 @@ mod tests {
     fn test_peer_message_presence_sync_serialization() {
         let msg = PeerMessage::PresenceSync {
             relay_id: "relay-1".to_string(),
-            online_dids: vec!["did:key:z6MkAlice".to_string(), "did:key:z6MkBob".to_string()],
+            online_dids: vec![
+                "did:key:z6MkAlice".to_string(),
+                "did:key:z6MkBob".to_string(),
+            ],
         };
         let json = serde_json::to_string(&msg).unwrap();
         assert!(json.contains("\"type\":\"presence_sync\""));
@@ -719,7 +700,9 @@ mod tests {
 
         let parsed: PeerMessage = serde_json::from_str(&json).unwrap();
         match parsed {
-            PeerMessage::ForwardMessage { from_did, to_did, .. } => {
+            PeerMessage::ForwardMessage {
+                from_did, to_did, ..
+            } => {
                 assert_eq!(from_did, "did:key:z6MkAlice");
                 assert_eq!(to_did, "did:key:z6MkBob");
             }
@@ -789,7 +772,9 @@ mod tests {
                 invite_payload: "{}".to_string(),
                 published_at: 100,
             },
-            PeerMessage::InviteRevoke { code: "test123".to_string() },
+            PeerMessage::InviteRevoke {
+                code: "test123".to_string(),
+            },
             PeerMessage::ForwardResolveInvite {
                 code: "test123".to_string(),
                 requester_did: "did:key:z6MkB".to_string(),

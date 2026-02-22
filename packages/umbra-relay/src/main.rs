@@ -131,10 +131,12 @@ async fn main() {
         .collect();
 
     let state = if !peer_urls.is_empty() {
-        let relay_id = args.relay_id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
-        let public_url = args.public_url.unwrap_or_else(|| {
-            format!("ws://0.0.0.0:{}/ws", args.port)
-        });
+        let relay_id = args
+            .relay_id
+            .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+        let public_url = args
+            .public_url
+            .unwrap_or_else(|| format!("ws://0.0.0.0:{}/ws", args.port));
 
         tracing::info!(
             relay_id = relay_id.as_str(),
@@ -240,20 +242,14 @@ async fn main() {
     let bridge_store = BridgeStore::new(data_dir.as_deref());
     let bridge_loaded = bridge_store.load_from_disk();
     if bridge_loaded > 0 {
-        tracing::info!(
-            bridges = bridge_loaded,
-            "Loaded bridge configs from disk"
-        );
+        tracing::info!(bridges = bridge_loaded, "Loaded bridge configs from disk");
     }
 
     // ── Asset Store Setup ────────────────────────────────────────────────
     let asset_store = asset::store::AssetStore::new(data_dir.as_deref());
     let assets_loaded = asset_store.load_from_disk();
     if assets_loaded > 0 {
-        tracing::info!(
-            assets = assets_loaded,
-            "Loaded community assets from disk"
-        );
+        tracing::info!(assets = assets_loaded, "Loaded community assets from disk");
     }
 
     // Build asset router
@@ -282,39 +278,114 @@ async fn main() {
     let discovery_router = Router::new()
         // OAuth routes (account linking)
         .route("/auth/discord/start", get(discovery::oauth::discord::start))
-        .route("/auth/discord/callback", get(discovery::oauth::discord::callback))
+        .route(
+            "/auth/discord/callback",
+            get(discovery::oauth::discord::callback),
+        )
         .route("/auth/github/start", get(discovery::oauth::github::start))
-        .route("/auth/github/callback", get(discovery::oauth::github::callback))
+        .route(
+            "/auth/github/callback",
+            get(discovery::oauth::github::callback),
+        )
         .route("/auth/steam/start", get(discovery::oauth::steam::start))
-        .route("/auth/steam/callback", get(discovery::oauth::steam::callback))
+        .route(
+            "/auth/steam/callback",
+            get(discovery::oauth::steam::callback),
+        )
         .route("/auth/bluesky/start", get(discovery::oauth::bluesky::start))
-        .route("/auth/bluesky/callback", get(discovery::oauth::bluesky::callback))
+        .route(
+            "/auth/bluesky/callback",
+            get(discovery::oauth::bluesky::callback),
+        )
         .route("/auth/xbox/start", get(discovery::oauth::xbox::start))
         .route("/auth/xbox/callback", get(discovery::oauth::xbox::callback))
         // Profile import OAuth routes (returns JSON with profile data)
-        .route("/profile/import/discord/start", post(discovery::oauth::profile_import::start_discord))
-        .route("/profile/import/discord/callback", get(discovery::oauth::profile_import::callback_discord))
-        .route("/profile/import/github/start", post(discovery::oauth::profile_import::start_github))
-        .route("/profile/import/github/callback", get(discovery::oauth::profile_import::callback_github))
-        .route("/profile/import/steam/start", post(discovery::oauth::profile_import::start_steam))
-        .route("/profile/import/steam/callback", get(discovery::oauth::profile_import::callback_steam))
-        .route("/profile/import/bluesky/start", post(discovery::oauth::profile_import::start_bluesky))
-        .route("/profile/import/bluesky/verify", get(discovery::oauth::profile_import::verify_bluesky_page))
-        .route("/profile/import/bluesky/callback", get(discovery::oauth::profile_import::callback_bluesky))
-        .route("/profile/import/xbox/start", post(discovery::oauth::profile_import::start_xbox))
-        .route("/profile/import/xbox/callback", get(discovery::oauth::profile_import::callback_xbox))
+        .route(
+            "/profile/import/discord/start",
+            post(discovery::oauth::profile_import::start_discord),
+        )
+        .route(
+            "/profile/import/discord/callback",
+            get(discovery::oauth::profile_import::callback_discord),
+        )
+        .route(
+            "/profile/import/github/start",
+            post(discovery::oauth::profile_import::start_github),
+        )
+        .route(
+            "/profile/import/github/callback",
+            get(discovery::oauth::profile_import::callback_github),
+        )
+        .route(
+            "/profile/import/steam/start",
+            post(discovery::oauth::profile_import::start_steam),
+        )
+        .route(
+            "/profile/import/steam/callback",
+            get(discovery::oauth::profile_import::callback_steam),
+        )
+        .route(
+            "/profile/import/bluesky/start",
+            post(discovery::oauth::profile_import::start_bluesky),
+        )
+        .route(
+            "/profile/import/bluesky/verify",
+            get(discovery::oauth::profile_import::verify_bluesky_page),
+        )
+        .route(
+            "/profile/import/bluesky/callback",
+            get(discovery::oauth::profile_import::callback_bluesky),
+        )
+        .route(
+            "/profile/import/xbox/start",
+            post(discovery::oauth::profile_import::start_xbox),
+        )
+        .route(
+            "/profile/import/xbox/callback",
+            get(discovery::oauth::profile_import::callback_xbox),
+        )
         // Profile import result polling (for mobile clients)
-        .route("/profile/import/result/:state", get(discovery::oauth::profile_import::get_profile_result))
+        .route(
+            "/profile/import/result/:state",
+            get(discovery::oauth::profile_import::get_profile_result),
+        )
         // Community import OAuth routes (for importing Discord server structure)
-        .route("/community/import/discord/start", post(discovery::oauth::community_import::start_discord_community_import))
-        .route("/community/import/discord/callback", get(discovery::oauth::community_import::callback_discord_community_import))
-        .route("/community/import/discord/guilds", get(discovery::oauth::community_import::get_discord_guilds))
-        .route("/community/import/discord/guild/:id/structure", get(discovery::oauth::community_import::get_discord_guild_structure))
-        .route("/community/import/discord/bot-invite", get(discovery::oauth::community_import::get_bot_invite_url))
-        .route("/community/import/discord/bot-status", get(discovery::oauth::community_import::check_bot_in_guild))
-        .route("/community/import/discord/guild/:id/members", get(discovery::oauth::community_import::get_discord_guild_members))
-        .route("/community/import/discord/channel/:id/pins", get(discovery::oauth::community_import::get_discord_channel_pins))
-        .route("/community/import/discord/guild/:id/audit-log", get(discovery::oauth::community_import::get_discord_guild_audit_log))
+        .route(
+            "/community/import/discord/start",
+            post(discovery::oauth::community_import::start_discord_community_import),
+        )
+        .route(
+            "/community/import/discord/callback",
+            get(discovery::oauth::community_import::callback_discord_community_import),
+        )
+        .route(
+            "/community/import/discord/guilds",
+            get(discovery::oauth::community_import::get_discord_guilds),
+        )
+        .route(
+            "/community/import/discord/guild/:id/structure",
+            get(discovery::oauth::community_import::get_discord_guild_structure),
+        )
+        .route(
+            "/community/import/discord/bot-invite",
+            get(discovery::oauth::community_import::get_bot_invite_url),
+        )
+        .route(
+            "/community/import/discord/bot-status",
+            get(discovery::oauth::community_import::check_bot_in_guild),
+        )
+        .route(
+            "/community/import/discord/guild/:id/members",
+            get(discovery::oauth::community_import::get_discord_guild_members),
+        )
+        .route(
+            "/community/import/discord/channel/:id/pins",
+            get(discovery::oauth::community_import::get_discord_channel_pins),
+        )
+        .route(
+            "/community/import/discord/guild/:id/audit-log",
+            get(discovery::oauth::community_import::get_discord_guild_audit_log),
+        )
         // API routes
         .route("/discovery/status", get(discovery::api::get_status))
         .route("/discovery/settings", post(discovery::api::update_settings))
@@ -326,11 +397,26 @@ async fn main() {
         .route("/discovery/search", get(discovery::api::search_by_username))
         // Username routes
         .route("/discovery/username", get(discovery::api::get_username))
-        .route("/discovery/username/register", post(discovery::api::register_username))
-        .route("/discovery/username/lookup", get(discovery::api::lookup_username))
-        .route("/discovery/username/search", get(discovery::api::search_usernames))
-        .route("/discovery/username/change", post(discovery::api::change_username))
-        .route("/discovery/username/release", delete(discovery::api::release_username))
+        .route(
+            "/discovery/username/register",
+            post(discovery::api::register_username),
+        )
+        .route(
+            "/discovery/username/lookup",
+            get(discovery::api::lookup_username),
+        )
+        .route(
+            "/discovery/username/search",
+            get(discovery::api::search_usernames),
+        )
+        .route(
+            "/discovery/username/change",
+            post(discovery::api::change_username),
+        )
+        .route(
+            "/discovery/username/release",
+            delete(discovery::api::release_username),
+        )
         .with_state((discovery_store, discovery_config));
 
     // Build main router
@@ -360,18 +446,13 @@ async fn main() {
         .await
         .expect("Failed to bind address");
 
-    axum::serve(listener, app)
-        .await
-        .expect("Server error");
+    axum::serve(listener, app).await.expect("Server error");
 }
 
 // ── Route Handlers ────────────────────────────────────────────────────────────
 
 /// WebSocket upgrade handler for client connections.
-async fn ws_handler(
-    ws: WebSocketUpgrade,
-    State(state): State<RelayState>,
-) -> impl IntoResponse {
+async fn ws_handler(ws: WebSocketUpgrade, State(state): State<RelayState>) -> impl IntoResponse {
     ws.on_upgrade(move |socket| handler::handle_websocket(socket, state))
 }
 

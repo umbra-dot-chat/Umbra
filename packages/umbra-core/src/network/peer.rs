@@ -2,7 +2,7 @@
 //!
 //! Types and utilities for managing peer information.
 
-use libp2p::{PeerId, Multiaddr};
+use libp2p::{Multiaddr, PeerId};
 use serde::{Deserialize, Serialize};
 
 /// State of a peer connection

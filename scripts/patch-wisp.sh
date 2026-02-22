@@ -188,4 +188,58 @@ if [ -d "$RN_DEST/src/components/message-search" ]; then
   echo "  Added SearchResult type exports"
 fi
 
+# ---------------------------------------------------------------------------
+# Fix Wisp internal type errors (theme token renames not yet applied upstream)
+# ---------------------------------------------------------------------------
+echo "  Applying Wisp type-error fixups..."
+
+# Fix background.base → background.canvas, background.secondary → background.surface,
+# background.primary → background.canvas, border.default → border.subtle,
+# status.error → status.danger, text.onAccent → brand.text,
+# typography.sizes.md → typography.sizes.base
+fix_wisp_types() {
+  local file="$1"
+  [ -f "$file" ] || return 0
+  sed -i '' \
+    -e 's/\.background\.base/\.background\.canvas/g' \
+    -e 's/\.background\.secondary/\.background\.surface/g' \
+    -e 's/\.background\.primary/\.background\.canvas/g' \
+    -e 's/\.border\.default/\.border\.subtle/g' \
+    -e 's/\.text\.onAccent/\.brand\.text/g' \
+    -e 's/sizes\.md\./sizes\.base\./g' \
+    -e 's/status\.error/status\.danger/g' \
+    -e 's/status?\.error/status?\.danger/g' \
+    "$file"
+}
+
+# Apply to all known affected components
+for component in \
+  "$RN_DEST/src/components/conflict-resolution-dialog/ConflictResolutionDialog.tsx" \
+  "$RN_DEST/src/components/file-channel-view/FileChannelView.tsx" \
+  "$RN_DEST/src/components/file-context-menu/FileContextMenu.tsx" \
+  "$RN_DEST/src/components/file-detail-panel/FileDetailPanel.tsx" \
+  "$RN_DEST/src/components/file-upload-zone/FileUploadZone.tsx" \
+  "$RN_DEST/src/components/folder-card/FolderCard.tsx" \
+  "$RN_DEST/src/components/message-list/MessageList.tsx" \
+  "$RN_DEST/src/components/emoji-management-panel/EmojiManagementPanel.tsx" \
+  "$RN_DEST/src/components/sticker-management-panel/StickerManagementPanel.tsx"; do
+  fix_wisp_types "$component"
+done
+
+# Fix wisp-core TextEffectPicker styles (Theme import)
+# The source imports { Theme } from create-theme, but Theme is not exported.
+# The actual type is WispTheme, exported from ./types.
+TEPS="$CORE_DEST/src/styles/TextEffectPicker.styles.ts"
+if [ -f "$TEPS" ]; then
+  sed -i '' "s|import type { Theme } from '../theme/create-theme'|import type { WispTheme as Theme } from '../theme/types'|" "$TEPS"
+  # Also handle if it was already partially patched
+  sed -i '' "s|import type { Theme } from '../theme/types'|import type { WispTheme as Theme } from '../theme/types'|" "$TEPS"
+fi
+
+# Fix FileUploadZone.tsx — string not assignable to DimensionValue (cast percentage)
+FUPZ="$RN_DEST/src/components/file-upload-zone/FileUploadZone.tsx"
+if [ -f "$FUPZ" ]; then
+  sed -i '' "s/(uploadProgress ?? 0) + '%'/(\`\${uploadProgress ?? 0}%\` as any)/" "$FUPZ"
+fi
+
 echo "Done. Wisp packages patched successfully."

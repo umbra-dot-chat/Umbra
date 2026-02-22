@@ -5,7 +5,7 @@
 //! As each domain is implemented, move the handler into the appropriate
 //! dispatch_*.rs module and remove it from here.
 
-use super::dispatcher::{DResult, err};
+use super::dispatcher::{err, DResult};
 
 // ── Network / Relay ─────────────────────────────────────────────────────────
 // Network status is available via c_api.rs `umbra_network_status`, but the
@@ -18,8 +18,16 @@ pub fn network_status() -> DResult {
     let state = state.read();
     match &state.network {
         Some(network) => {
-            let addrs: Vec<String> = network.listen_addrs().iter().map(|a| a.to_string()).collect();
-            let peers: Vec<String> = network.connected_peers().iter().map(|p| p.peer_id.to_string()).collect();
+            let addrs: Vec<String> = network
+                .listen_addrs()
+                .iter()
+                .map(|a| a.to_string())
+                .collect();
+            let peers: Vec<String> = network
+                .connected_peers()
+                .iter()
+                .map(|p| p.peer_id.to_string())
+                .collect();
             super::dispatcher::ok_json(serde_json::json!({
                 "started": network.is_running(),
                 "peer_id": network.peer_id().to_string(),
@@ -35,7 +43,7 @@ pub fn network_status() -> DResult {
 }
 
 pub fn relay_connect(args: &str) -> DResult {
-    use super::dispatcher::{json_parse, require_str, ok_json};
+    use super::dispatcher::{json_parse, ok_json, require_str};
     use super::state::get_state;
 
     let data = json_parse(args)?;
@@ -43,7 +51,10 @@ pub fn relay_connect(args: &str) -> DResult {
 
     let state = get_state().map_err(|e| err(100, e))?;
     let state = state.read();
-    let identity = state.identity.as_ref().ok_or_else(|| err(200, "No identity loaded"))?;
+    let identity = state
+        .identity
+        .as_ref()
+        .ok_or_else(|| err(200, "No identity loaded"))?;
     let did = identity.did_string();
 
     let register_msg = serde_json::json!({
@@ -60,7 +71,7 @@ pub fn relay_connect(args: &str) -> DResult {
 }
 
 pub fn relay_create_session(args: &str) -> DResult {
-    use super::dispatcher::{json_parse, require_str, ok_json};
+    use super::dispatcher::{json_parse, ok_json, require_str};
     use super::state::get_state;
 
     let data = json_parse(args)?;
@@ -68,7 +79,10 @@ pub fn relay_create_session(args: &str) -> DResult {
 
     let state = get_state().map_err(|e| err(100, e))?;
     let state = state.read();
-    let identity = state.identity.as_ref().ok_or_else(|| err(200, "No identity loaded"))?;
+    let identity = state
+        .identity
+        .as_ref()
+        .ok_or_else(|| err(200, "No identity loaded"))?;
     let did = identity.did_string();
 
     // On native (non-wasm), create a mock offer for direct P2P
@@ -76,7 +90,8 @@ pub fn relay_create_session(args: &str) -> DResult {
         "sdp": "native_direct_p2p",
         "sdp_type": "offer",
         "did": did,
-    }).to_string();
+    })
+    .to_string();
 
     let create_session_msg = serde_json::json!({
         "type": "create_session",
@@ -92,7 +107,7 @@ pub fn relay_create_session(args: &str) -> DResult {
 }
 
 pub fn relay_accept_session(args: &str) -> DResult {
-    use super::dispatcher::{json_parse, require_str, ok_json};
+    use super::dispatcher::{json_parse, ok_json, require_str};
     use super::state::get_state;
 
     let data = json_parse(args)?;
@@ -101,7 +116,10 @@ pub fn relay_accept_session(args: &str) -> DResult {
 
     let state = get_state().map_err(|e| err(100, e))?;
     let state = state.read();
-    let identity = state.identity.as_ref().ok_or_else(|| err(200, "No identity loaded"))?;
+    let identity = state
+        .identity
+        .as_ref()
+        .ok_or_else(|| err(200, "No identity loaded"))?;
     let did = identity.did_string();
 
     // On native, create a mock answer for direct P2P
@@ -109,7 +127,8 @@ pub fn relay_accept_session(args: &str) -> DResult {
         "sdp": "native_direct_p2p_answer",
         "sdp_type": "answer",
         "did": did,
-    }).to_string();
+    })
+    .to_string();
 
     let join_session_msg = serde_json::json!({
         "type": "join_session",
@@ -126,7 +145,7 @@ pub fn relay_accept_session(args: &str) -> DResult {
 }
 
 pub fn relay_send(args: &str) -> DResult {
-    use super::dispatcher::{json_parse, require_str, ok_json};
+    use super::dispatcher::{json_parse, ok_json, require_str};
     use super::state::get_state;
 
     let data = json_parse(args)?;
@@ -135,7 +154,10 @@ pub fn relay_send(args: &str) -> DResult {
 
     let state = get_state().map_err(|e| err(100, e))?;
     let state = state.read();
-    let identity = state.identity.as_ref().ok_or_else(|| err(200, "No identity loaded"))?;
+    let identity = state
+        .identity
+        .as_ref()
+        .ok_or_else(|| err(200, "No identity loaded"))?;
     let did = identity.did_string();
 
     let send_msg = serde_json::json!({
@@ -165,7 +187,10 @@ pub fn crypto_sign(args: &str) -> DResult {
 
     let state = get_state().map_err(|e| err(100, e))?;
     let state = state.read();
-    let identity = state.identity.as_ref().ok_or_else(|| err(200, "No identity loaded"))?;
+    let identity = state
+        .identity
+        .as_ref()
+        .ok_or_else(|| err(200, "No identity loaded"))?;
     let signature = crate::crypto::sign(&identity.keypair().signing, &bytes);
     super::dispatcher::ok_json(serde_json::json!({
         "signature": hex::encode(signature.as_bytes()),
@@ -180,12 +205,19 @@ pub fn crypto_verify(args: &str) -> DResult {
     let data_hex = require_str(&data, "data")?;
     let signature_hex = require_str(&data, "signature")?;
 
-    let key_bytes = hex::decode(signing_key_hex).map_err(|e| err(704, format!("Invalid key hex: {}", e)))?;
-    let data_bytes = hex::decode(data_hex).map_err(|e| err(704, format!("Invalid data hex: {}", e)))?;
-    let sig_bytes = hex::decode(signature_hex).map_err(|e| err(704, format!("Invalid sig hex: {}", e)))?;
+    let key_bytes =
+        hex::decode(signing_key_hex).map_err(|e| err(704, format!("Invalid key hex: {}", e)))?;
+    let data_bytes =
+        hex::decode(data_hex).map_err(|e| err(704, format!("Invalid data hex: {}", e)))?;
+    let sig_bytes =
+        hex::decode(signature_hex).map_err(|e| err(704, format!("Invalid sig hex: {}", e)))?;
 
-    if key_bytes.len() != 32 { return Err(err(704, "Signing key must be 32 bytes")); }
-    if sig_bytes.len() != 64 { return Err(err(704, "Signature must be 64 bytes")); }
+    if key_bytes.len() != 32 {
+        return Err(err(704, "Signing key must be 32 bytes"));
+    }
+    if sig_bytes.len() != 64 {
+        return Err(err(704, "Signature must be 64 bytes"));
+    }
 
     let mut pk = [0u8; 32];
     pk.copy_from_slice(&key_bytes);
@@ -197,7 +229,7 @@ pub fn crypto_verify(args: &str) -> DResult {
 }
 
 pub fn crypto_encrypt_for_peer(args: &str) -> DResult {
-    use super::dispatcher::{json_parse, require_str, ok_json};
+    use super::dispatcher::{json_parse, ok_json, require_str};
     use super::state::get_state;
     use base64::Engine as _;
 
@@ -208,19 +240,30 @@ pub fn crypto_encrypt_for_peer(args: &str) -> DResult {
 
     let state = get_state().map_err(|e| err(100, e))?;
     let state = state.read();
-    let identity = state.identity.as_ref().ok_or_else(|| err(200, "No identity loaded"))?;
-    let db = state.database.as_ref().ok_or_else(|| err(400, "Database not initialized"))?;
+    let identity = state
+        .identity
+        .as_ref()
+        .ok_or_else(|| err(200, "No identity loaded"))?;
+    let db = state
+        .database
+        .as_ref()
+        .ok_or_else(|| err(400, "Database not initialized"))?;
 
-    let friend_rec = db.get_friend(peer_did).map_err(|e| err(704, format!("DB error: {}", e)))?
+    let friend_rec = db
+        .get_friend(peer_did)
+        .map_err(|e| err(704, format!("DB error: {}", e)))?
         .ok_or_else(|| err(704, "Peer not found in friends"))?;
 
     let friend_enc_bytes = hex::decode(&friend_rec.encryption_key)
         .map_err(|e| err(704, format!("Invalid key hex: {}", e)))?;
-    if friend_enc_bytes.len() != 32 { return Err(err(704, "Encryption key must be 32 bytes")); }
+    if friend_enc_bytes.len() != 32 {
+        return Err(err(704, "Encryption key must be 32 bytes"));
+    }
     let mut friend_enc_key = [0u8; 32];
     friend_enc_key.copy_from_slice(&friend_enc_bytes);
 
-    let plaintext = base64::engine::general_purpose::STANDARD.decode(plaintext_b64)
+    let plaintext = base64::engine::general_purpose::STANDARD
+        .decode(plaintext_b64)
         .map_err(|e| err(704, format!("Invalid base64 plaintext: {}", e)))?;
 
     let our_did = identity.did_string();
@@ -228,9 +271,13 @@ pub fn crypto_encrypt_for_peer(args: &str) -> DResult {
     let aad = format!("{}{}{}", our_did, peer_did, timestamp);
 
     let (nonce, ciphertext) = crate::crypto::encrypt_for_recipient(
-        &identity.keypair().encryption, &friend_enc_key,
-        context.as_bytes(), &plaintext, aad.as_bytes(),
-    ).map_err(|e| err(704, format!("Encryption failed: {}", e)))?;
+        &identity.keypair().encryption,
+        &friend_enc_key,
+        context.as_bytes(),
+        &plaintext,
+        aad.as_bytes(),
+    )
+    .map_err(|e| err(704, format!("Encryption failed: {}", e)))?;
 
     ok_json(serde_json::json!({
         "ciphertext_b64": base64::engine::general_purpose::STANDARD.encode(&ciphertext),
@@ -240,7 +287,7 @@ pub fn crypto_encrypt_for_peer(args: &str) -> DResult {
 }
 
 pub fn crypto_decrypt_from_peer(args: &str) -> DResult {
-    use super::dispatcher::{json_parse, require_str, ok_json};
+    use super::dispatcher::{json_parse, ok_json, require_str};
     use super::state::get_state;
     use base64::Engine as _;
 
@@ -248,29 +295,44 @@ pub fn crypto_decrypt_from_peer(args: &str) -> DResult {
     let peer_did = require_str(&data, "peer_did")?;
     let ciphertext_b64 = require_str(&data, "ciphertext_b64")?;
     let nonce_hex = require_str(&data, "nonce_hex")?;
-    let timestamp = data["timestamp"].as_i64().ok_or_else(|| err(2, "Missing timestamp"))?;
+    let timestamp = data["timestamp"]
+        .as_i64()
+        .ok_or_else(|| err(2, "Missing timestamp"))?;
     let context = data["context"].as_str().unwrap_or("");
 
     let state = get_state().map_err(|e| err(100, e))?;
     let state = state.read();
-    let identity = state.identity.as_ref().ok_or_else(|| err(200, "No identity loaded"))?;
-    let db = state.database.as_ref().ok_or_else(|| err(400, "Database not initialized"))?;
+    let identity = state
+        .identity
+        .as_ref()
+        .ok_or_else(|| err(200, "No identity loaded"))?;
+    let db = state
+        .database
+        .as_ref()
+        .ok_or_else(|| err(400, "Database not initialized"))?;
 
-    let friend_rec = db.get_friend(peer_did).map_err(|e| err(704, format!("DB error: {}", e)))?
+    let friend_rec = db
+        .get_friend(peer_did)
+        .map_err(|e| err(704, format!("DB error: {}", e)))?
         .ok_or_else(|| err(704, "Peer not found in friends"))?;
 
     let friend_enc_bytes = hex::decode(&friend_rec.encryption_key)
         .map_err(|e| err(704, format!("Invalid key hex: {}", e)))?;
-    if friend_enc_bytes.len() != 32 { return Err(err(704, "Encryption key must be 32 bytes")); }
+    if friend_enc_bytes.len() != 32 {
+        return Err(err(704, "Encryption key must be 32 bytes"));
+    }
     let mut friend_enc_key = [0u8; 32];
     friend_enc_key.copy_from_slice(&friend_enc_bytes);
 
-    let ciphertext = base64::engine::general_purpose::STANDARD.decode(ciphertext_b64)
+    let ciphertext = base64::engine::general_purpose::STANDARD
+        .decode(ciphertext_b64)
         .map_err(|e| err(704, format!("Invalid base64 ciphertext: {}", e)))?;
 
-    let nonce_bytes = hex::decode(nonce_hex)
-        .map_err(|e| err(704, format!("Invalid nonce hex: {}", e)))?;
-    if nonce_bytes.len() != 12 { return Err(err(704, "Nonce must be 12 bytes")); }
+    let nonce_bytes =
+        hex::decode(nonce_hex).map_err(|e| err(704, format!("Invalid nonce hex: {}", e)))?;
+    if nonce_bytes.len() != 12 {
+        return Err(err(704, "Nonce must be 12 bytes"));
+    }
     let mut nonce_arr = [0u8; 12];
     nonce_arr.copy_from_slice(&nonce_bytes);
     let nonce = crate::crypto::Nonce::from_bytes(nonce_arr);
@@ -279,9 +341,14 @@ pub fn crypto_decrypt_from_peer(args: &str) -> DResult {
     let aad = format!("{}{}{}", peer_did, our_did, timestamp);
 
     let plaintext = crate::crypto::decrypt_from_sender(
-        &identity.keypair().encryption, &friend_enc_key,
-        context.as_bytes(), &nonce, &ciphertext, aad.as_bytes(),
-    ).map_err(|e| err(704, format!("Decryption failed: {}", e)))?;
+        &identity.keypair().encryption,
+        &friend_enc_key,
+        context.as_bytes(),
+        &nonce,
+        &ciphertext,
+        aad.as_bytes(),
+    )
+    .map_err(|e| err(704, format!("Decryption failed: {}", e)))?;
 
     ok_json(serde_json::json!({
         "plaintext_b64": base64::engine::general_purpose::STANDARD.encode(&plaintext),
@@ -293,7 +360,7 @@ pub fn crypto_decrypt_from_peer(args: &str) -> DResult {
 // schema is added.
 
 pub fn calls_store(args: &str) -> DResult {
-    use super::dispatcher::{json_parse, require_str, ok_json};
+    use super::dispatcher::{json_parse, ok_json, require_str};
     use super::state::get_state;
 
     let data = json_parse(args)?;
@@ -307,10 +374,21 @@ pub fn calls_store(args: &str) -> DResult {
 
     let state = get_state().map_err(|e| err(100, e))?;
     let state = state.read();
-    let db = state.database.as_ref().ok_or_else(|| err(400, "Database not initialized"))?;
+    let db = state
+        .database
+        .as_ref()
+        .ok_or_else(|| err(400, "Database not initialized"))?;
 
-    db.store_call_record(id, conversation_id, call_type, direction, "active", participants, started_at)
-        .map_err(|e| err(e.code(), e))?;
+    db.store_call_record(
+        id,
+        conversation_id,
+        call_type,
+        direction,
+        "active",
+        participants,
+        started_at,
+    )
+    .map_err(|e| err(e.code(), e))?;
 
     ok_json(serde_json::json!({
         "id": id,
@@ -319,7 +397,7 @@ pub fn calls_store(args: &str) -> DResult {
 }
 
 pub fn calls_end(args: &str) -> DResult {
-    use super::dispatcher::{json_parse, require_str, ok_json};
+    use super::dispatcher::{json_parse, ok_json, require_str};
     use super::state::get_state;
 
     let data = json_parse(args)?;
@@ -328,11 +406,17 @@ pub fn calls_end(args: &str) -> DResult {
 
     let state = get_state().map_err(|e| err(100, e))?;
     let state = state.read();
-    let db = state.database.as_ref().ok_or_else(|| err(400, "Database not initialized"))?;
+    let db = state
+        .database
+        .as_ref()
+        .ok_or_else(|| err(400, "Database not initialized"))?;
 
-    let calls = db.get_all_call_history(1000, 0)
+    let calls = db
+        .get_all_call_history(1000, 0)
         .map_err(|e| err(e.code(), e))?;
-    let call = calls.iter().find(|c| c.id == id)
+    let call = calls
+        .iter()
+        .find(|c| c.id == id)
         .ok_or_else(|| err(404, "Call record not found"))?;
 
     let ended_at = crate::time::now_timestamp_millis();
@@ -359,23 +443,32 @@ pub fn calls_get_history(args: &str) -> DResult {
 
     let state = get_state().map_err(|e| err(100, e))?;
     let state = state.read();
-    let db = state.database.as_ref().ok_or_else(|| err(400, "Database not initialized"))?;
+    let db = state
+        .database
+        .as_ref()
+        .ok_or_else(|| err(400, "Database not initialized"))?;
 
-    let records = db.get_call_history(conversation_id, limit, offset)
+    let records = db
+        .get_call_history(conversation_id, limit, offset)
         .map_err(|e| err(e.code(), e))?;
 
-    let arr: Vec<serde_json::Value> = records.iter().map(|c| serde_json::json!({
-        "id": c.id,
-        "conversation_id": c.conversation_id,
-        "call_type": c.call_type,
-        "direction": c.direction,
-        "status": c.status,
-        "participants": c.participants,
-        "started_at": c.started_at,
-        "ended_at": c.ended_at,
-        "duration_ms": c.duration_ms,
-        "created_at": c.created_at,
-    })).collect();
+    let arr: Vec<serde_json::Value> = records
+        .iter()
+        .map(|c| {
+            serde_json::json!({
+                "id": c.id,
+                "conversation_id": c.conversation_id,
+                "call_type": c.call_type,
+                "direction": c.direction,
+                "status": c.status,
+                "participants": c.participants,
+                "started_at": c.started_at,
+                "ended_at": c.ended_at,
+                "duration_ms": c.duration_ms,
+                "created_at": c.created_at,
+            })
+        })
+        .collect();
 
     Ok(serde_json::to_string(&arr).unwrap_or_default())
 }
@@ -383,30 +476,39 @@ pub fn calls_get_history(args: &str) -> DResult {
 pub fn calls_get_all_history(args: &str) -> DResult {
     use super::state::get_state;
 
-    let data: serde_json::Value = serde_json::from_str(args)
-        .map_err(|e| err(700, format!("Invalid JSON: {}", e)))?;
+    let data: serde_json::Value =
+        serde_json::from_str(args).map_err(|e| err(700, format!("Invalid JSON: {}", e)))?;
     let limit = data["limit"].as_i64().unwrap_or(50) as usize;
     let offset = data["offset"].as_i64().unwrap_or(0) as usize;
 
     let state = get_state().map_err(|e| err(100, e))?;
     let state = state.read();
-    let db = state.database.as_ref().ok_or_else(|| err(400, "Database not initialized"))?;
+    let db = state
+        .database
+        .as_ref()
+        .ok_or_else(|| err(400, "Database not initialized"))?;
 
-    let records = db.get_all_call_history(limit, offset)
+    let records = db
+        .get_all_call_history(limit, offset)
         .map_err(|e| err(e.code(), e))?;
 
-    let arr: Vec<serde_json::Value> = records.iter().map(|c| serde_json::json!({
-        "id": c.id,
-        "conversation_id": c.conversation_id,
-        "call_type": c.call_type,
-        "direction": c.direction,
-        "status": c.status,
-        "participants": c.participants,
-        "started_at": c.started_at,
-        "ended_at": c.ended_at,
-        "duration_ms": c.duration_ms,
-        "created_at": c.created_at,
-    })).collect();
+    let arr: Vec<serde_json::Value> = records
+        .iter()
+        .map(|c| {
+            serde_json::json!({
+                "id": c.id,
+                "conversation_id": c.conversation_id,
+                "call_type": c.call_type,
+                "direction": c.direction,
+                "status": c.status,
+                "participants": c.participants,
+                "started_at": c.started_at,
+                "ended_at": c.ended_at,
+                "duration_ms": c.duration_ms,
+                "created_at": c.created_at,
+            })
+        })
+        .collect();
 
     Ok(serde_json::to_string(&arr).unwrap_or_default())
 }
@@ -415,20 +517,25 @@ pub fn calls_get_all_history(args: &str) -> DResult {
 // Plugin KV store and bundle storage backed by the SQLite database.
 
 pub fn plugin_kv_get(args: &str) -> DResult {
-    use super::dispatcher::{json_parse, require_str, ok_json};
+    use super::dispatcher::{json_parse, ok_json, require_str};
     use super::state::get_state;
     let data = json_parse(args)?;
     let plugin_id = require_str(&data, "plugin_id")?;
     let key = require_str(&data, "key")?;
     let state = get_state().map_err(|e| err(100, e))?;
     let state = state.read();
-    let db = state.database.as_ref().ok_or_else(|| err(400, "Database not initialized"))?;
-    let value = db.plugin_kv_get(plugin_id, key).map_err(|e| err(e.code(), e))?;
+    let db = state
+        .database
+        .as_ref()
+        .ok_or_else(|| err(400, "Database not initialized"))?;
+    let value = db
+        .plugin_kv_get(plugin_id, key)
+        .map_err(|e| err(e.code(), e))?;
     ok_json(serde_json::json!({ "value": value }))
 }
 
 pub fn plugin_kv_set(args: &str) -> DResult {
-    use super::dispatcher::{json_parse, require_str, ok_json};
+    use super::dispatcher::{json_parse, ok_json, require_str};
     use super::state::get_state;
     let data = json_parse(args)?;
     let plugin_id = require_str(&data, "plugin_id")?;
@@ -436,39 +543,53 @@ pub fn plugin_kv_set(args: &str) -> DResult {
     let value = require_str(&data, "value")?;
     let state = get_state().map_err(|e| err(100, e))?;
     let state = state.read();
-    let db = state.database.as_ref().ok_or_else(|| err(400, "Database not initialized"))?;
-    db.plugin_kv_set(plugin_id, key, value).map_err(|e| err(e.code(), e))?;
+    let db = state
+        .database
+        .as_ref()
+        .ok_or_else(|| err(400, "Database not initialized"))?;
+    db.plugin_kv_set(plugin_id, key, value)
+        .map_err(|e| err(e.code(), e))?;
     ok_json(serde_json::json!({"ok": true}))
 }
 
 pub fn plugin_kv_delete(args: &str) -> DResult {
-    use super::dispatcher::{json_parse, require_str, ok_json};
+    use super::dispatcher::{json_parse, ok_json, require_str};
     use super::state::get_state;
     let data = json_parse(args)?;
     let plugin_id = require_str(&data, "plugin_id")?;
     let key = require_str(&data, "key")?;
     let state = get_state().map_err(|e| err(100, e))?;
     let state = state.read();
-    let db = state.database.as_ref().ok_or_else(|| err(400, "Database not initialized"))?;
-    let deleted = db.plugin_kv_delete(plugin_id, key).map_err(|e| err(e.code(), e))?;
+    let db = state
+        .database
+        .as_ref()
+        .ok_or_else(|| err(400, "Database not initialized"))?;
+    let deleted = db
+        .plugin_kv_delete(plugin_id, key)
+        .map_err(|e| err(e.code(), e))?;
     ok_json(serde_json::json!({ "deleted": deleted }))
 }
 
 pub fn plugin_kv_list(args: &str) -> DResult {
-    use super::dispatcher::{json_parse, require_str, ok_json};
+    use super::dispatcher::{json_parse, ok_json, require_str};
     use super::state::get_state;
     let data = json_parse(args)?;
     let plugin_id = require_str(&data, "plugin_id")?;
     let prefix = data["prefix"].as_str().unwrap_or("");
     let state = get_state().map_err(|e| err(100, e))?;
     let state = state.read();
-    let db = state.database.as_ref().ok_or_else(|| err(400, "Database not initialized"))?;
-    let keys = db.plugin_kv_list(plugin_id, prefix).map_err(|e| err(e.code(), e))?;
+    let db = state
+        .database
+        .as_ref()
+        .ok_or_else(|| err(400, "Database not initialized"))?;
+    let keys = db
+        .plugin_kv_list(plugin_id, prefix)
+        .map_err(|e| err(e.code(), e))?;
     ok_json(serde_json::json!({ "keys": keys }))
 }
 
 pub fn plugin_bundle_save(args: &str) -> DResult {
-    use super::dispatcher::{json_parse, require_str, ok_json};
+    use super::dispatcher::{json_parse, ok_json, require_str};
     use super::state::get_state;
     let data = json_parse(args)?;
     let plugin_id = require_str(&data, "plugin_id")?;
@@ -476,20 +597,29 @@ pub fn plugin_bundle_save(args: &str) -> DResult {
     let bundle = require_str(&data, "bundle")?;
     let state = get_state().map_err(|e| err(100, e))?;
     let state = state.read();
-    let db = state.database.as_ref().ok_or_else(|| err(400, "Database not initialized"))?;
-    db.plugin_bundle_save(plugin_id, manifest, bundle).map_err(|e| err(e.code(), e))?;
+    let db = state
+        .database
+        .as_ref()
+        .ok_or_else(|| err(400, "Database not initialized"))?;
+    db.plugin_bundle_save(plugin_id, manifest, bundle)
+        .map_err(|e| err(e.code(), e))?;
     ok_json(serde_json::json!({"ok": true}))
 }
 
 pub fn plugin_bundle_load(args: &str) -> DResult {
-    use super::dispatcher::{json_parse, require_str, ok_json};
+    use super::dispatcher::{json_parse, ok_json, require_str};
     use super::state::get_state;
     let data = json_parse(args)?;
     let plugin_id = require_str(&data, "plugin_id")?;
     let state = get_state().map_err(|e| err(100, e))?;
     let state = state.read();
-    let db = state.database.as_ref().ok_or_else(|| err(400, "Database not initialized"))?;
-    let record = db.plugin_bundle_load(plugin_id).map_err(|e| err(e.code(), e))?;
+    let db = state
+        .database
+        .as_ref()
+        .ok_or_else(|| err(400, "Database not initialized"))?;
+    let record = db
+        .plugin_bundle_load(plugin_id)
+        .map_err(|e| err(e.code(), e))?;
     match record {
         Some(r) => ok_json(serde_json::json!({
             "plugin_id": r.plugin_id,
@@ -502,14 +632,19 @@ pub fn plugin_bundle_load(args: &str) -> DResult {
 }
 
 pub fn plugin_bundle_delete(args: &str) -> DResult {
-    use super::dispatcher::{json_parse, require_str, ok_json};
+    use super::dispatcher::{json_parse, ok_json, require_str};
     use super::state::get_state;
     let data = json_parse(args)?;
     let plugin_id = require_str(&data, "plugin_id")?;
     let state = get_state().map_err(|e| err(100, e))?;
     let state = state.read();
-    let db = state.database.as_ref().ok_or_else(|| err(400, "Database not initialized"))?;
-    let deleted = db.plugin_bundle_delete(plugin_id).map_err(|e| err(e.code(), e))?;
+    let db = state
+        .database
+        .as_ref()
+        .ok_or_else(|| err(400, "Database not initialized"))?;
+    let deleted = db
+        .plugin_bundle_delete(plugin_id)
+        .map_err(|e| err(e.code(), e))?;
     ok_json(serde_json::json!({ "deleted": deleted }))
 }
 
@@ -517,13 +652,21 @@ pub fn plugin_bundle_list() -> DResult {
     use super::state::get_state;
     let state = get_state().map_err(|e| err(100, e))?;
     let state = state.read();
-    let db = state.database.as_ref().ok_or_else(|| err(400, "Database not initialized"))?;
+    let db = state
+        .database
+        .as_ref()
+        .ok_or_else(|| err(400, "Database not initialized"))?;
     let bundles = db.plugin_bundle_list().map_err(|e| err(e.code(), e))?;
-    let arr: Vec<serde_json::Value> = bundles.iter().map(|b| serde_json::json!({
-        "plugin_id": b.plugin_id,
-        "manifest": b.manifest,
-        "installed_at": b.installed_at,
-    })).collect();
+    let arr: Vec<serde_json::Value> = bundles
+        .iter()
+        .map(|b| {
+            serde_json::json!({
+                "plugin_id": b.plugin_id,
+                "manifest": b.manifest,
+                "installed_at": b.installed_at,
+            })
+        })
+        .collect();
     Ok(serde_json::Value::Array(arr).to_string())
 }
 
@@ -532,7 +675,7 @@ pub fn plugin_bundle_list() -> DResult {
 // The primitives exist in crate::crypto but need FFI-safe wrappers.
 
 pub fn file_derive_key(args: &str) -> DResult {
-    use super::dispatcher::{json_parse, require_str, ok_json};
+    use super::dispatcher::{json_parse, ok_json, require_str};
     use super::state::get_state;
 
     let data = json_parse(args)?;
@@ -541,10 +684,17 @@ pub fn file_derive_key(args: &str) -> DResult {
 
     let state = get_state().map_err(|e| err(100, e))?;
     let state = state.read();
-    let identity = state.identity.as_ref().ok_or_else(|| err(200, "No identity loaded"))?;
-    let database = state.database.as_ref().ok_or_else(|| err(400, "Database not initialized"))?;
+    let identity = state
+        .identity
+        .as_ref()
+        .ok_or_else(|| err(200, "No identity loaded"))?;
+    let database = state
+        .database
+        .as_ref()
+        .ok_or_else(|| err(400, "Database not initialized"))?;
 
-    let friend = database.get_friend(peer_did)
+    let friend = database
+        .get_friend(peer_did)
         .map_err(|e| err(400, format!("DB error: {}", e)))?
         .ok_or_else(|| err(400, format!("Friend not found: {}", peer_did)))?;
 
@@ -556,7 +706,10 @@ pub fn file_derive_key(args: &str) -> DResult {
     let mut friend_enc_key = [0u8; 32];
     friend_enc_key.copy_from_slice(&friend_enc_bytes);
 
-    let dh_output = identity.keypair().encryption.diffie_hellman(&friend_enc_key);
+    let dh_output = identity
+        .keypair()
+        .encryption
+        .diffie_hellman(&friend_enc_key);
     let key = crate::crypto::derive_file_key(&dh_output, file_id.as_bytes())
         .map_err(|e| err(704, format!("Key derivation failed: {}", e)))?;
 
@@ -564,18 +717,19 @@ pub fn file_derive_key(args: &str) -> DResult {
 }
 
 pub fn file_encrypt_chunk(args: &str) -> DResult {
-    use super::dispatcher::{json_parse, require_str, ok_json};
+    use super::dispatcher::{json_parse, ok_json, require_str};
     use base64::Engine as _;
 
     let data = json_parse(args)?;
     let key_hex = require_str(&data, "key_hex")?;
     let chunk_data_b64 = require_str(&data, "chunk_data_b64")?;
     let file_id = require_str(&data, "file_id")?;
-    let chunk_index = data["chunk_index"].as_u64()
+    let chunk_index = data["chunk_index"]
+        .as_u64()
         .ok_or_else(|| err(2, "Missing chunk_index"))? as u32;
 
-    let key_bytes = hex::decode(key_hex)
-        .map_err(|e| err(704, format!("Invalid key hex: {}", e)))?;
+    let key_bytes =
+        hex::decode(key_hex).map_err(|e| err(704, format!("Invalid key hex: {}", e)))?;
     if key_bytes.len() != 32 {
         return Err(err(704, "Key must be 32 bytes"));
     }
@@ -583,11 +737,13 @@ pub fn file_encrypt_chunk(args: &str) -> DResult {
     key_arr.copy_from_slice(&key_bytes);
     let encryption_key = crate::crypto::EncryptionKey::from_bytes(key_arr);
 
-    let chunk_data = base64::engine::general_purpose::STANDARD.decode(chunk_data_b64)
+    let chunk_data = base64::engine::general_purpose::STANDARD
+        .decode(chunk_data_b64)
         .map_err(|e| err(704, format!("Invalid base64: {}", e)))?;
 
-    let (nonce, ciphertext) = crate::crypto::encrypt_chunk(&encryption_key, &chunk_data, file_id, chunk_index)
-        .map_err(|e| err(704, format!("Encryption failed: {}", e)))?;
+    let (nonce, ciphertext) =
+        crate::crypto::encrypt_chunk(&encryption_key, &chunk_data, file_id, chunk_index)
+            .map_err(|e| err(704, format!("Encryption failed: {}", e)))?;
 
     ok_json(serde_json::json!({
         "nonce_hex": hex::encode(&nonce.0),
@@ -596,7 +752,7 @@ pub fn file_encrypt_chunk(args: &str) -> DResult {
 }
 
 pub fn file_decrypt_chunk(args: &str) -> DResult {
-    use super::dispatcher::{json_parse, require_str, ok_json};
+    use super::dispatcher::{json_parse, ok_json, require_str};
     use base64::Engine as _;
 
     let data = json_parse(args)?;
@@ -604,11 +760,12 @@ pub fn file_decrypt_chunk(args: &str) -> DResult {
     let nonce_hex = require_str(&data, "nonce_hex")?;
     let encrypted_data_b64 = require_str(&data, "encrypted_data_b64")?;
     let file_id = require_str(&data, "file_id")?;
-    let chunk_index = data["chunk_index"].as_u64()
+    let chunk_index = data["chunk_index"]
+        .as_u64()
         .ok_or_else(|| err(2, "Missing chunk_index"))? as u32;
 
-    let key_bytes = hex::decode(key_hex)
-        .map_err(|e| err(704, format!("Invalid key hex: {}", e)))?;
+    let key_bytes =
+        hex::decode(key_hex).map_err(|e| err(704, format!("Invalid key hex: {}", e)))?;
     if key_bytes.len() != 32 {
         return Err(err(704, "Key must be 32 bytes"));
     }
@@ -616,8 +773,8 @@ pub fn file_decrypt_chunk(args: &str) -> DResult {
     key_arr.copy_from_slice(&key_bytes);
     let encryption_key = crate::crypto::EncryptionKey::from_bytes(key_arr);
 
-    let nonce_bytes = hex::decode(nonce_hex)
-        .map_err(|e| err(704, format!("Invalid nonce hex: {}", e)))?;
+    let nonce_bytes =
+        hex::decode(nonce_hex).map_err(|e| err(704, format!("Invalid nonce hex: {}", e)))?;
     if nonce_bytes.len() != 12 {
         return Err(err(704, "Nonce must be 12 bytes"));
     }
@@ -625,11 +782,18 @@ pub fn file_decrypt_chunk(args: &str) -> DResult {
     nonce_arr.copy_from_slice(&nonce_bytes);
     let nonce = crate::crypto::Nonce::from_bytes(nonce_arr);
 
-    let encrypted_data = base64::engine::general_purpose::STANDARD.decode(encrypted_data_b64)
+    let encrypted_data = base64::engine::general_purpose::STANDARD
+        .decode(encrypted_data_b64)
         .map_err(|e| err(704, format!("Invalid base64: {}", e)))?;
 
-    let decrypted = crate::crypto::decrypt_chunk(&encryption_key, &nonce, &encrypted_data, file_id, chunk_index)
-        .map_err(|e| err(704, format!("Decryption failed: {}", e)))?;
+    let decrypted = crate::crypto::decrypt_chunk(
+        &encryption_key,
+        &nonce,
+        &encrypted_data,
+        file_id,
+        chunk_index,
+    )
+    .map_err(|e| err(704, format!("Decryption failed: {}", e)))?;
 
     ok_json(serde_json::json!({
         "chunk_data_b64": base64::engine::general_purpose::STANDARD.encode(&decrypted),
@@ -637,12 +801,13 @@ pub fn file_decrypt_chunk(args: &str) -> DResult {
 }
 
 pub fn channel_file_derive_key(args: &str) -> DResult {
-    use super::dispatcher::{json_parse, require_str, ok_json};
+    use super::dispatcher::{json_parse, ok_json, require_str};
 
     let data = json_parse(args)?;
     let channel_key_hex = require_str(&data, "channel_key_hex")?;
     let file_id = require_str(&data, "file_id")?;
-    let key_version = data["key_version"].as_u64()
+    let key_version = data["key_version"]
+        .as_u64()
         .ok_or_else(|| err(2, "Missing key_version"))? as u32;
 
     let channel_key_bytes = hex::decode(channel_key_hex)
@@ -660,13 +825,13 @@ pub fn channel_file_derive_key(args: &str) -> DResult {
 }
 
 pub fn compute_key_fingerprint(args: &str) -> DResult {
-    use super::dispatcher::{json_parse, require_str, ok_json};
+    use super::dispatcher::{json_parse, ok_json, require_str};
 
     let data = json_parse(args)?;
     let key_hex = require_str(&data, "key_hex")?;
 
-    let key_bytes = hex::decode(key_hex)
-        .map_err(|e| err(704, format!("Invalid key hex: {}", e)))?;
+    let key_bytes =
+        hex::decode(key_hex).map_err(|e| err(704, format!("Invalid key hex: {}", e)))?;
     if key_bytes.len() != 32 {
         return Err(err(704, "Key must be 32 bytes"));
     }
@@ -680,14 +845,14 @@ pub fn compute_key_fingerprint(args: &str) -> DResult {
 }
 
 pub fn verify_key_fingerprint(args: &str) -> DResult {
-    use super::dispatcher::{json_parse, require_str, ok_json};
+    use super::dispatcher::{json_parse, ok_json, require_str};
 
     let data = json_parse(args)?;
     let key_hex = require_str(&data, "key_hex")?;
     let expected = require_str(&data, "expected_fingerprint")?;
 
-    let key_bytes = hex::decode(key_hex)
-        .map_err(|e| err(704, format!("Invalid key hex: {}", e)))?;
+    let key_bytes =
+        hex::decode(key_hex).map_err(|e| err(704, format!("Invalid key hex: {}", e)))?;
     if key_bytes.len() != 32 {
         return Err(err(704, "Key must be 32 bytes"));
     }
@@ -703,7 +868,7 @@ pub fn verify_key_fingerprint(args: &str) -> DResult {
 // ── File Chunking ───────────────────────────────────────────────────────────
 
 pub fn chunk_file(args: &str) -> DResult {
-    use super::dispatcher::{json_parse, require_str, err};
+    use super::dispatcher::{err, json_parse, require_str};
     use super::state::get_state;
     use base64::Engine as _;
 
@@ -726,7 +891,10 @@ pub fn chunk_file(args: &str) -> DResult {
 
     let state = get_state().map_err(|e| err(100, e))?;
     let state = state.read();
-    let database = state.database.as_ref().ok_or_else(|| err(400, "Database not initialized"))?;
+    let database = state
+        .database
+        .as_ref()
+        .ok_or_else(|| err(400, "Database not initialized"))?;
     let now = crate::time::now_timestamp();
 
     for chunk in &chunks {
@@ -766,7 +934,7 @@ pub fn chunk_file(args: &str) -> DResult {
 }
 
 pub fn reassemble_file(args: &str) -> DResult {
-    use super::dispatcher::{json_parse, require_str, ok_json, err};
+    use super::dispatcher::{err, json_parse, ok_json, require_str};
     use super::state::get_state;
     use base64::Engine as _;
 
@@ -775,7 +943,10 @@ pub fn reassemble_file(args: &str) -> DResult {
 
     let state = get_state().map_err(|e| err(100, e))?;
     let state = state.read();
-    let database = state.database.as_ref().ok_or_else(|| err(400, "Database not initialized"))?;
+    let database = state
+        .database
+        .as_ref()
+        .ok_or_else(|| err(400, "Database not initialized"))?;
 
     let manifest_record = database
         .get_manifest(file_id)
@@ -825,7 +996,7 @@ pub fn reassemble_file(args: &str) -> DResult {
 }
 
 pub fn get_file_manifest(args: &str) -> DResult {
-    use super::dispatcher::{json_parse, require_str, ok_json, err};
+    use super::dispatcher::{err, json_parse, ok_json, require_str};
     use super::state::get_state;
 
     let data = json_parse(args)?;
@@ -833,7 +1004,10 @@ pub fn get_file_manifest(args: &str) -> DResult {
 
     let state = get_state().map_err(|e| err(100, e))?;
     let state = state.read();
-    let database = state.database.as_ref().ok_or_else(|| err(400, "Database not initialized"))?;
+    let database = state
+        .database
+        .as_ref()
+        .ok_or_else(|| err(400, "Database not initialized"))?;
 
     let manifest_record = database
         .get_manifest(file_id)
@@ -868,7 +1042,10 @@ pub fn community_build_event_relay_batch(args: &str) -> DResult {
 
     let state = get_state().map_err(|e| err(100, e))?;
     let state = state.read();
-    let database = state.database.as_ref().ok_or_else(|| err(400, "Database not initialized"))?;
+    let database = state
+        .database
+        .as_ref()
+        .ok_or_else(|| err(400, "Database not initialized"))?;
 
     let timestamp = crate::time::now_timestamp_millis();
 
@@ -884,22 +1061,26 @@ pub fn community_build_event_relay_batch(args: &str) -> DResult {
     });
     let envelope_str = envelope.to_string();
 
-    let members = database.get_community_members(community_id)
+    let members = database
+        .get_community_members(community_id)
         .map_err(|e| err(400, format!("DB error: {}", e)))?;
 
-    let relay_messages: Vec<serde_json::Value> = members.iter()
+    let relay_messages: Vec<serde_json::Value> = members
+        .iter()
         .filter(|m| m.member_did != sender_did)
-        .map(|m| serde_json::json!({
-            "to_did": m.member_did,
-            "payload": envelope_str,
-        }))
+        .map(|m| {
+            serde_json::json!({
+                "to_did": m.member_did,
+                "payload": envelope_str,
+            })
+        })
         .collect();
 
     Ok(serde_json::to_string(&relay_messages).unwrap_or_default())
 }
 
 pub fn build_dm_file_event_envelope(args: &str) -> DResult {
-    use super::dispatcher::{json_parse, require_str, ok_json};
+    use super::dispatcher::{json_parse, ok_json, require_str};
 
     let data = json_parse(args)?;
     let conversation_id = require_str(&data, "conversation_id")?;
@@ -925,7 +1106,7 @@ pub fn build_dm_file_event_envelope(args: &str) -> DResult {
 }
 
 pub fn build_metadata_envelope(args: &str) -> DResult {
-    use super::dispatcher::{json_parse, require_str, ok_json};
+    use super::dispatcher::{json_parse, ok_json, require_str};
 
     let data = json_parse(args)?;
     let sender_did = require_str(&data, "sender_did")?;
@@ -954,64 +1135,93 @@ pub fn build_metadata_envelope(args: &str) -> DResult {
 // ── DHT ─────────────────────────────────────────────────────────────────────
 
 pub fn dht_start_providing(args: &str) -> DResult {
-    use super::dispatcher::{json_parse, require_str, ok_json};
-    use super::state::{get_state, get_runtime};
+    use super::dispatcher::{json_parse, ok_json, require_str};
+    use super::state::{get_runtime, get_state};
 
     let data = json_parse(args)?;
     let file_id = require_str(&data, "file_id")?;
 
     let state = get_state().map_err(|e| err(100, e))?;
     let state = state.read();
-    let network = state.network.as_ref()
+    let network = state
+        .network
+        .as_ref()
         .ok_or_else(|| err(300, "Network not started"))?;
 
-    get_runtime().block_on(network.start_providing(file_id.to_string()))
+    get_runtime()
+        .block_on(network.start_providing(file_id.to_string()))
         .map_err(|e| err(500, format!("DHT start_providing failed: {}", e)))?;
 
     ok_json(serde_json::json!({"ok": true}))
 }
 
 pub fn dht_get_providers(args: &str) -> DResult {
-    use super::dispatcher::{json_parse, require_str, ok_json};
-    use super::state::{get_state, get_runtime};
+    use super::dispatcher::{json_parse, ok_json, require_str};
+    use super::state::{get_runtime, get_state};
 
     let data = json_parse(args)?;
     let file_id = require_str(&data, "file_id")?;
 
     let state = get_state().map_err(|e| err(100, e))?;
     let state = state.read();
-    let network = state.network.as_ref()
+    let network = state
+        .network
+        .as_ref()
         .ok_or_else(|| err(300, "Network not started"))?;
 
-    get_runtime().block_on(network.get_providers(file_id.to_string()))
+    get_runtime()
+        .block_on(network.get_providers(file_id.to_string()))
         .map_err(|e| err(500, format!("DHT get_providers failed: {}", e)))?;
 
     ok_json(serde_json::json!({"ok": true}))
 }
 
 pub fn dht_stop_providing(args: &str) -> DResult {
-    use super::dispatcher::{json_parse, require_str, ok_json};
-    use super::state::{get_state, get_runtime};
+    use super::dispatcher::{json_parse, ok_json, require_str};
+    use super::state::{get_runtime, get_state};
 
     let data = json_parse(args)?;
     let file_id = require_str(&data, "file_id")?;
 
     let state = get_state().map_err(|e| err(100, e))?;
     let state = state.read();
-    let network = state.network.as_ref()
+    let network = state
+        .network
+        .as_ref()
         .ok_or_else(|| err(300, "Network not started"))?;
 
-    get_runtime().block_on(network.stop_providing(file_id.to_string()))
+    get_runtime()
+        .block_on(network.stop_providing(file_id.to_string()))
         .map_err(|e| err(500, format!("DHT stop_providing failed: {}", e)))?;
 
     ok_json(serde_json::json!({"ok": true}))
 }
 
 // ── Network — WebRTC (N/A on native — direct P2P used) ─────────────────────
-pub fn network_create_offer() -> DResult { Err(err(501, "network_create_offer: Not applicable on native — direct P2P used")) }
-pub fn network_accept_offer(_args: &str) -> DResult { Err(err(501, "network_accept_offer: Not applicable on native — direct P2P used")) }
-pub fn network_complete_handshake(_args: &str) -> DResult { Err(err(501, "network_complete_handshake: Not applicable on native — direct P2P used")) }
-pub fn network_complete_answerer() -> DResult { Err(err(501, "network_complete_answerer: Not applicable on native — direct P2P used")) }
+pub fn network_create_offer() -> DResult {
+    Err(err(
+        501,
+        "network_create_offer: Not applicable on native — direct P2P used",
+    ))
+}
+pub fn network_accept_offer(_args: &str) -> DResult {
+    Err(err(
+        501,
+        "network_accept_offer: Not applicable on native — direct P2P used",
+    ))
+}
+pub fn network_complete_handshake(_args: &str) -> DResult {
+    Err(err(
+        501,
+        "network_complete_handshake: Not applicable on native — direct P2P used",
+    ))
+}
+pub fn network_complete_answerer() -> DResult {
+    Err(err(
+        501,
+        "network_complete_answerer: Not applicable on native — direct P2P used",
+    ))
+}
 
 // ── File Transfer Control ───────────────────────────────────────────────────
 
@@ -1032,25 +1242,21 @@ fn drain_transfer_events(mgr: &mut crate::network::TransferManager) {
 }
 
 pub fn transfer_initiate(args: &str) -> DResult {
-    use super::dispatcher::{json_parse, require_str, ok_json};
+    use super::dispatcher::{json_parse, ok_json, require_str};
 
     let data = json_parse(args)?;
     let file_id = require_str(&data, "file_id")?;
     let peer_did = require_str(&data, "peer_did")?;
     let manifest_json = require_str(&data, "manifest_json")?;
 
-    let manifest: crate::storage::chunking::ChunkManifest =
-        serde_json::from_str(manifest_json)
-            .map_err(|e| err(2, format!("Invalid manifest JSON: {}", e)))?;
+    let manifest: crate::storage::chunking::ChunkManifest = serde_json::from_str(manifest_json)
+        .map_err(|e| err(2, format!("Invalid manifest JSON: {}", e)))?;
 
     let now = crate::time::now_timestamp_millis();
     let mut mgr = TRANSFER_MGR.lock();
-    let (transfer_id, msg) = mgr.initiate_transfer(
-        file_id.to_string(),
-        peer_did.to_string(),
-        manifest,
-        now,
-    ).map_err(|e| err(500, e))?;
+    let (transfer_id, msg) = mgr
+        .initiate_transfer(file_id.to_string(), peer_did.to_string(), manifest, now)
+        .map_err(|e| err(500, e))?;
 
     drain_transfer_events(&mut mgr);
 
@@ -1062,18 +1268,23 @@ pub fn transfer_initiate(args: &str) -> DResult {
 }
 
 pub fn transfer_accept(args: &str) -> DResult {
-    use super::dispatcher::{json_parse, require_str, ok_json};
+    use super::dispatcher::{json_parse, ok_json, require_str};
 
     let data = json_parse(args)?;
     let transfer_id = require_str(&data, "transfer_id")?;
     let existing_chunks: Vec<u32> = data["existing_chunks"]
         .as_array()
-        .map(|arr| arr.iter().filter_map(|v| v.as_u64().map(|n| n as u32)).collect())
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_u64().map(|n| n as u32))
+                .collect()
+        })
         .unwrap_or_default();
 
     let now = crate::time::now_timestamp_millis();
     let mut mgr = TRANSFER_MGR.lock();
-    let msg = mgr.accept_transfer(transfer_id, existing_chunks, now)
+    let msg = mgr
+        .accept_transfer(transfer_id, existing_chunks, now)
         .map_err(|e| err(500, e))?;
 
     drain_transfer_events(&mut mgr);
@@ -1085,14 +1296,15 @@ pub fn transfer_accept(args: &str) -> DResult {
 }
 
 pub fn transfer_pause(args: &str) -> DResult {
-    use super::dispatcher::{json_parse, require_str, ok_json};
+    use super::dispatcher::{json_parse, ok_json, require_str};
 
     let data = json_parse(args)?;
     let transfer_id = require_str(&data, "transfer_id")?;
 
     let now = crate::time::now_timestamp_millis();
     let mut mgr = TRANSFER_MGR.lock();
-    let msg = mgr.pause_transfer(transfer_id, now)
+    let msg = mgr
+        .pause_transfer(transfer_id, now)
         .map_err(|e| err(500, e))?;
 
     drain_transfer_events(&mut mgr);
@@ -1104,14 +1316,15 @@ pub fn transfer_pause(args: &str) -> DResult {
 }
 
 pub fn transfer_resume(args: &str) -> DResult {
-    use super::dispatcher::{json_parse, require_str, ok_json};
+    use super::dispatcher::{json_parse, ok_json, require_str};
 
     let data = json_parse(args)?;
     let transfer_id = require_str(&data, "transfer_id")?;
 
     let now = crate::time::now_timestamp_millis();
     let mut mgr = TRANSFER_MGR.lock();
-    let msg = mgr.resume_transfer(transfer_id, now)
+    let msg = mgr
+        .resume_transfer(transfer_id, now)
         .map_err(|e| err(500, e))?;
 
     drain_transfer_events(&mut mgr);
@@ -1123,7 +1336,7 @@ pub fn transfer_resume(args: &str) -> DResult {
 }
 
 pub fn transfer_cancel(args: &str) -> DResult {
-    use super::dispatcher::{json_parse, require_str, ok_json};
+    use super::dispatcher::{json_parse, ok_json, require_str};
 
     let data = json_parse(args)?;
     let transfer_id = require_str(&data, "transfer_id")?;
@@ -1131,7 +1344,8 @@ pub fn transfer_cancel(args: &str) -> DResult {
 
     let now = crate::time::now_timestamp_millis();
     let mut mgr = TRANSFER_MGR.lock();
-    let msg = mgr.cancel_transfer(transfer_id, reason, now)
+    let msg = mgr
+        .cancel_transfer(transfer_id, reason, now)
         .map_err(|e| err(500, e))?;
 
     drain_transfer_events(&mut mgr);
@@ -1143,19 +1357,19 @@ pub fn transfer_cancel(args: &str) -> DResult {
 }
 
 pub fn transfer_on_message(args: &str) -> DResult {
-    use super::dispatcher::{json_parse, require_str, ok_json};
+    use super::dispatcher::{json_parse, ok_json, require_str};
 
     let data = json_parse(args)?;
     let from_did = require_str(&data, "from_did")?;
     let message_val = require_str(&data, "message")?;
 
-    let message: crate::network::FileTransferMessage =
-        serde_json::from_str(message_val)
-            .map_err(|e| err(2, format!("Invalid message JSON: {}", e)))?;
+    let message: crate::network::FileTransferMessage = serde_json::from_str(message_val)
+        .map_err(|e| err(2, format!("Invalid message JSON: {}", e)))?;
 
     let now = crate::time::now_timestamp_millis();
     let mut mgr = TRANSFER_MGR.lock();
-    let response = mgr.on_message(from_did, message, now)
+    let response = mgr
+        .on_message(from_did, message, now)
         .map_err(|e| err(500, e))?;
 
     drain_transfer_events(&mut mgr);
@@ -1174,7 +1388,8 @@ pub fn transfer_on_message(args: &str) -> DResult {
 pub fn transfer_list() -> DResult {
     let mgr = TRANSFER_MGR.lock();
     let sessions = mgr.all_sessions();
-    let arr: Vec<serde_json::Value> = sessions.iter()
+    let arr: Vec<serde_json::Value> = sessions
+        .iter()
         .map(|s| serde_json::to_value(s).unwrap_or_default())
         .collect();
     Ok(serde_json::to_string(&arr).unwrap_or_else(|_| "[]".to_string()))
@@ -1196,14 +1411,15 @@ pub fn transfer_get(args: &str) -> DResult {
 pub fn transfer_get_incomplete() -> DResult {
     let mgr = TRANSFER_MGR.lock();
     let sessions = mgr.active_sessions();
-    let arr: Vec<serde_json::Value> = sessions.iter()
+    let arr: Vec<serde_json::Value> = sessions
+        .iter()
         .map(|s| serde_json::to_value(s).unwrap_or_default())
         .collect();
     Ok(serde_json::to_string(&arr).unwrap_or_else(|_| "[]".to_string()))
 }
 
 pub fn transfer_chunks_to_send(args: &str) -> DResult {
-    use super::dispatcher::{json_parse, require_str, ok_json};
+    use super::dispatcher::{json_parse, ok_json, require_str};
 
     let data = json_parse(args)?;
     let transfer_id = require_str(&data, "transfer_id")?;
@@ -1218,11 +1434,12 @@ pub fn transfer_chunks_to_send(args: &str) -> DResult {
 }
 
 pub fn transfer_mark_chunk_sent(args: &str) -> DResult {
-    use super::dispatcher::{json_parse, require_str, ok_json};
+    use super::dispatcher::{json_parse, ok_json, require_str};
 
     let data = json_parse(args)?;
     let transfer_id = require_str(&data, "transfer_id")?;
-    let chunk_index = data["chunk_index"].as_u64()
+    let chunk_index = data["chunk_index"]
+        .as_u64()
         .ok_or_else(|| err(2, "Missing chunk_index"))? as u32;
 
     let now = crate::time::now_timestamp_millis();
@@ -1237,7 +1454,7 @@ pub fn transfer_mark_chunk_sent(args: &str) -> DResult {
 // ── File Reencryption ───────────────────────────────────────────────────────
 
 pub fn mark_files_for_reencryption(args: &str) -> DResult {
-    use super::dispatcher::{json_parse, require_str, ok_json};
+    use super::dispatcher::{json_parse, ok_json, require_str};
     use super::state::get_state;
 
     let data = json_parse(args)?;
@@ -1246,10 +1463,13 @@ pub fn mark_files_for_reencryption(args: &str) -> DResult {
 
     let state = get_state().map_err(|e| err(100, e))?;
     let state = state.read();
-    let db = state.database.as_ref()
+    let db = state
+        .database
+        .as_ref()
         .ok_or_else(|| err(400, "Database not initialized"))?;
 
-    let count = db.mark_channel_files_for_reencryption(channel_id, new_key_version)
+    let count = db
+        .mark_channel_files_for_reencryption(channel_id, new_key_version)
         .map_err(|e| err(400, format!("Failed to mark files for reencryption: {}", e)))?;
 
     ok_json(serde_json::json!({"ok": true, "count": count}))
@@ -1265,33 +1485,46 @@ pub fn get_files_needing_reencryption(args: &str) -> DResult {
 
     let state = get_state().map_err(|e| err(100, e))?;
     let state = state.read();
-    let db = state.database.as_ref()
+    let db = state
+        .database
+        .as_ref()
         .ok_or_else(|| err(400, "Database not initialized"))?;
 
-    let files = db.get_files_needing_reencryption(channel_id, limit)
-        .map_err(|e| err(400, format!("Failed to get files needing reencryption: {}", e)))?;
+    let files = db
+        .get_files_needing_reencryption(channel_id, limit)
+        .map_err(|e| {
+            err(
+                400,
+                format!("Failed to get files needing reencryption: {}", e),
+            )
+        })?;
 
-    let arr: Vec<serde_json::Value> = files.iter().map(|f| serde_json::json!({
-        "id": f.id,
-        "channel_id": f.channel_id,
-        "folder_id": f.folder_id,
-        "filename": f.filename,
-        "description": f.description,
-        "file_size": f.file_size,
-        "mime_type": f.mime_type,
-        "storage_chunks_json": f.storage_chunks_json,
-        "uploaded_by": f.uploaded_by,
-        "version": f.version,
-        "previous_version_id": f.previous_version_id,
-        "download_count": f.download_count,
-        "created_at": f.created_at,
-    })).collect();
+    let arr: Vec<serde_json::Value> = files
+        .iter()
+        .map(|f| {
+            serde_json::json!({
+                "id": f.id,
+                "channel_id": f.channel_id,
+                "folder_id": f.folder_id,
+                "filename": f.filename,
+                "description": f.description,
+                "file_size": f.file_size,
+                "mime_type": f.mime_type,
+                "storage_chunks_json": f.storage_chunks_json,
+                "uploaded_by": f.uploaded_by,
+                "version": f.version,
+                "previous_version_id": f.previous_version_id,
+                "download_count": f.download_count,
+                "created_at": f.created_at,
+            })
+        })
+        .collect();
 
     Ok(serde_json::to_string(&arr).unwrap_or_else(|_| "[]".to_string()))
 }
 
 pub fn clear_reencryption_flag(args: &str) -> DResult {
-    use super::dispatcher::{json_parse, require_str, ok_json};
+    use super::dispatcher::{json_parse, ok_json, require_str};
     use super::state::get_state;
 
     let data = json_parse(args)?;
@@ -1300,7 +1533,9 @@ pub fn clear_reencryption_flag(args: &str) -> DResult {
 
     let state = get_state().map_err(|e| err(100, e))?;
     let state = state.read();
-    let db = state.database.as_ref()
+    let db = state
+        .database
+        .as_ref()
         .ok_or_else(|| err(400, "Database not initialized"))?;
 
     db.clear_reencryption_flag(file_id, new_fingerprint)

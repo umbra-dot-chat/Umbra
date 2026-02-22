@@ -277,7 +277,7 @@ export class GroupCallManager {
       }
     }
     this.setupLocalAudioAnalysis();
-    return this.localStream;
+    return this.localStream!;
   }
 
   /**

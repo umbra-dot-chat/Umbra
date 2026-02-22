@@ -272,7 +272,7 @@ export function UsernameSettings({ did, style }: UsernameSettingsProps) {
             <HStack gap="sm" style={{ justifyContent: 'flex-end' }}>
               {username && (
                 <Button
-                  variant="danger"
+                  variant="destructive"
                   size="sm"
                   onPress={handleRelease}
                   disabled={isLoading}

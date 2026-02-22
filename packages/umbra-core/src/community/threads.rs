@@ -3,9 +3,11 @@
 //! Threaded conversations, thread follow/unfollow, message search,
 //! and advanced search with filters.
 
-use crate::error::{Error, Result};
-use crate::storage::{CommunityThreadRecord, CommunityMessageRecord, CommunityThreadFollowerRecord};
 use super::service::generate_id;
+use crate::error::{Error, Result};
+use crate::storage::{
+    CommunityMessageRecord, CommunityThreadFollowerRecord, CommunityThreadRecord,
+};
 
 impl super::CommunityService {
     // ── Threads ─────────────────────────────────────────────────────────
@@ -22,11 +24,18 @@ impl super::CommunityService {
         let id = generate_id();
 
         // Verify parent message exists
-        let _msg = self.db().get_community_message(parent_message_id)?
+        let _msg = self
+            .db()
+            .get_community_message(parent_message_id)?
             .ok_or(Error::MessageNotFound)?;
 
         self.db().create_community_thread(
-            &id, channel_id, parent_message_id, name, created_by, now,
+            &id,
+            channel_id,
+            parent_message_id,
+            name,
+            created_by,
+            now,
         )?;
 
         // Auto-follow the creator
@@ -46,8 +55,11 @@ impl super::CommunityService {
 
     /// Get a thread by ID.
     pub fn get_thread(&self, id: &str) -> Result<CommunityThreadRecord> {
-        self.db().get_community_thread(id)?
-            .ok_or(Error::InvalidCommunityOperation("Thread not found".to_string()))
+        self.db()
+            .get_community_thread(id)?
+            .ok_or(Error::InvalidCommunityOperation(
+                "Thread not found".to_string(),
+            ))
     }
 
     /// Get all threads in a channel.
@@ -62,7 +74,8 @@ impl super::CommunityService {
         limit: usize,
         before_timestamp: Option<i64>,
     ) -> Result<Vec<CommunityMessageRecord>> {
-        self.db().get_thread_messages_direct(thread_id, limit, before_timestamp)
+        self.db()
+            .get_thread_messages_direct(thread_id, limit, before_timestamp)
     }
 
     // ── Thread Follow/Unfollow ──────────────────────────────────────────
@@ -81,7 +94,10 @@ impl super::CommunityService {
     }
 
     /// Get all followers of a thread.
-    pub fn get_thread_followers(&self, thread_id: &str) -> Result<Vec<CommunityThreadFollowerRecord>> {
+    pub fn get_thread_followers(
+        &self,
+        thread_id: &str,
+    ) -> Result<Vec<CommunityThreadFollowerRecord>> {
         self.db().get_thread_followers(thread_id)
     }
 
@@ -99,7 +115,8 @@ impl super::CommunityService {
         query: &str,
         limit: usize,
     ) -> Result<Vec<CommunityMessageRecord>> {
-        self.db().search_community_messages(channel_id, query, limit)
+        self.db()
+            .search_community_messages(channel_id, query, limit)
     }
 
     /// Search messages across all channels in a community.
@@ -113,7 +130,9 @@ impl super::CommunityService {
         let mut results = Vec::new();
 
         for channel in &channels {
-            let mut channel_results = self.db().search_community_messages(&channel.id, query, limit)?;
+            let mut channel_results =
+                self.db()
+                    .search_community_messages(&channel.id, query, limit)?;
             results.append(&mut channel_results);
         }
 
@@ -175,8 +194,16 @@ impl super::CommunityService {
         };
 
         self.db().search_community_messages_advanced(
-            &channel_ids, query, from_did, before, after,
-            has_file, has_reaction, is_pinned, &pinned_ids, limit,
+            &channel_ids,
+            query,
+            from_did,
+            before,
+            after,
+            has_file,
+            has_reaction,
+            is_pinned,
+            &pinned_ids,
+            limit,
         )
     }
 }

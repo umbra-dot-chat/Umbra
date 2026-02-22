@@ -12,8 +12,7 @@
 //! ```
 
 use umbra_core::discovery::{
-    ConnectionInfo, DiscoveryConfig, DiscoveryService,
-    CONNECTION_INFO_VERSION,
+    ConnectionInfo, DiscoveryConfig, DiscoveryService, CONNECTION_INFO_VERSION,
 };
 
 fn main() {
@@ -70,7 +69,9 @@ fn main() {
     // =========================================================================
     println!("3. Generating base64 encoding...\n");
 
-    let base64 = connection_info.to_base64().expect("Failed to generate base64");
+    let base64 = connection_info
+        .to_base64()
+        .expect("Failed to generate base64");
 
     println!("   Base64: {}...", &base64[..60]);
     println!("   Base64 length: {} characters", base64.len());
@@ -85,8 +86,14 @@ fn main() {
 
     println!("   Parsed successfully!");
     println!("   DID matches: {}", parsed.did == connection_info.did);
-    println!("   Peer ID matches: {}", parsed.peer_id == connection_info.peer_id);
-    println!("   Name matches: {}", parsed.display_name == connection_info.display_name);
+    println!(
+        "   Peer ID matches: {}",
+        parsed.peer_id == connection_info.peer_id
+    );
+    println!(
+        "   Name matches: {}",
+        parsed.display_name == connection_info.display_name
+    );
     println!();
 
     // =========================================================================
@@ -94,7 +101,9 @@ fn main() {
     // =========================================================================
     println!("5. JSON serialization...\n");
 
-    let json = connection_info.to_json().expect("Failed to serialize to JSON");
+    let json = connection_info
+        .to_json()
+        .expect("Failed to serialize to JSON");
 
     println!("   JSON (pretty-printed):");
     let pretty: serde_json::Value = serde_json::from_str(&json).unwrap();
@@ -109,9 +118,15 @@ fn main() {
     // Current info should not be expired
     let max_age = 3600; // 1 hour
     if connection_info.is_expired(max_age) {
-        println!("   Connection info has expired (older than {} seconds)", max_age);
+        println!(
+            "   Connection info has expired (older than {} seconds)",
+            max_age
+        );
     } else {
-        println!("   Connection info is still valid (within {} seconds)", max_age);
+        println!(
+            "   Connection info is still valid (within {} seconds)",
+            max_age
+        );
     }
     println!();
 
@@ -157,9 +172,15 @@ fn main() {
     };
 
     println!("   Custom configuration:");
-    println!("   - Bootstrap nodes: {} configured", custom_config.bootstrap_nodes.len());
+    println!(
+        "   - Bootstrap nodes: {} configured",
+        custom_config.bootstrap_nodes.len()
+    );
     println!("   - DHT enabled: {}", custom_config.enable_dht);
-    println!("   - mDNS enabled: {} (local network discovery)", custom_config.enable_mdns);
+    println!(
+        "   - mDNS enabled: {} (local network discovery)",
+        custom_config.enable_mdns
+    );
     println!("   - Auto-announce: {}", custom_config.auto_announce);
     println!();
 
@@ -170,7 +191,10 @@ fn main() {
     println!("                    SUMMARY");
     println!("=================================================\n");
     println!("  Connection Info:");
-    println!("  - Version {} format for forward compatibility", CONNECTION_INFO_VERSION);
+    println!(
+        "  - Version {} format for forward compatibility",
+        CONNECTION_INFO_VERSION
+    );
     println!("  - Contains DID, PeerId, and multiaddresses");
     println!("  - Can be shared as QR codes or umbra:// links");
     println!();

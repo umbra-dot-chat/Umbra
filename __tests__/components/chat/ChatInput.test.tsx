@@ -32,6 +32,40 @@ jest.mock('@/contexts/UmbraContext', () => ({
   }),
 }));
 
+jest.mock('@/contexts/AuthContext', () => ({
+  useAuth: () => ({
+    identity: { did: 'did:key:z6MkMe', displayName: 'Me', createdAt: Date.now() / 1000 },
+    isAuthenticated: true,
+    hasPin: false,
+    isPinVerified: false,
+    rememberMe: false,
+    login: jest.fn(),
+    logout: jest.fn(),
+    setRememberMe: jest.fn(),
+    setPin: jest.fn(),
+    verifyPin: jest.fn(),
+    lockApp: jest.fn(),
+  }),
+  AuthProvider: ({ children }: any) => children,
+}));
+
+jest.mock('@/hooks/useNetwork', () => ({
+  useNetwork: jest.fn(() => ({
+    isConnected: false,
+    peerCount: 0,
+    listenAddresses: [],
+    startNetwork: jest.fn(),
+    stopNetwork: jest.fn(),
+    getRelayWs: jest.fn(() => null),
+    relayConnected: false,
+    relayUrl: null,
+    sendSignal: jest.fn(),
+    error: null,
+    onlineDids: new Set<string>(),
+  })),
+  pushPendingRelayAck: jest.fn(),
+}));
+
 describe('ChatInput', () => {
   const defaultProps = {
     message: '',
@@ -57,14 +91,15 @@ describe('ChatInput', () => {
     const { getByTestId } = render(
       <ChatInput {...defaultProps} emojiOpen={true} />,
     );
-    expect(getByTestId('EmojiPicker')).toBeTruthy();
+    // ChatInput now uses CombinedPicker (emoji + stickers) instead of standalone EmojiPicker
+    expect(getByTestId('CombinedPicker')).toBeTruthy();
   });
 
   test('does not render emoji picker when emojiOpen is false', () => {
     const { queryByTestId } = render(
       <ChatInput {...defaultProps} emojiOpen={false} />,
     );
-    expect(queryByTestId('EmojiPicker')).toBeNull();
+    expect(queryByTestId('CombinedPicker')).toBeNull();
   });
 
   // ── Edit mode tests ──

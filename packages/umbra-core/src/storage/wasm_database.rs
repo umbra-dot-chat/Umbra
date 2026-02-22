@@ -7,10 +7,10 @@
 //! of using `rusqlite` directly (which requires C compilation and won't
 //! target `wasm32-unknown-unknown`).
 
-use crate::error::{Error, Result};
 use super::schema;
-use wasm_bindgen::prelude::*;
+use crate::error::{Error, Result};
 use serde_json::json;
+use wasm_bindgen::prelude::*;
 
 // ============================================================================
 // JAVASCRIPT BRIDGE — extern functions provided by sql-bridge.ts
@@ -31,7 +31,8 @@ extern "C" {
     fn sql_bridge_execute_batch(sql: &str) -> std::result::Result<bool, JsValue>;
 
     #[wasm_bindgen(js_namespace = ["globalThis", "__umbra_sql"], js_name = "queryValue", catch)]
-    fn sql_bridge_query_value(sql: &str, params_json: &str) -> std::result::Result<String, JsValue>;
+    fn sql_bridge_query_value(sql: &str, params_json: &str)
+        -> std::result::Result<String, JsValue>;
 }
 
 // ============================================================================
@@ -75,22 +76,28 @@ impl Database {
     }
 
     fn init_schema(&self) -> Result<()> {
-        let version: Option<i32> = self.query_scalar_raw(
-            "SELECT version FROM schema_version LIMIT 1", "[]",
-        ).ok().flatten();
+        let version: Option<i32> = self
+            .query_scalar_raw("SELECT version FROM schema_version LIMIT 1", "[]")
+            .ok()
+            .flatten();
 
         match version {
             None => {
                 sql_bridge_execute_batch(schema::CREATE_TABLES).map_err(js_err)?;
                 let params = json!([schema::SCHEMA_VERSION]).to_string();
-                sql_bridge_execute(
-                    "INSERT INTO schema_version (version) VALUES (?)",
-                    &params,
-                ).map_err(js_err)?;
-                tracing::info!("Database schema created (version {})", schema::SCHEMA_VERSION);
+                sql_bridge_execute("INSERT INTO schema_version (version) VALUES (?)", &params)
+                    .map_err(js_err)?;
+                tracing::info!(
+                    "Database schema created (version {})",
+                    schema::SCHEMA_VERSION
+                );
             }
             Some(v) if v < schema::SCHEMA_VERSION => {
-                tracing::info!("Schema version {} < current {}, running migrations", v, schema::SCHEMA_VERSION);
+                tracing::info!(
+                    "Schema version {} < current {}, running migrations",
+                    v,
+                    schema::SCHEMA_VERSION
+                );
                 self.run_migrations(v)?;
             }
             Some(v) => {
@@ -148,7 +155,9 @@ impl Database {
             tracing::info!("Migration v9 → v10 complete");
         }
         if from_version < 11 {
-            tracing::info!("Running migration v10 → v11 (encryption metadata, re-encryption flags)");
+            tracing::info!(
+                "Running migration v10 → v11 (encryption metadata, re-encryption flags)"
+            );
             sql_bridge_execute_batch(schema::MIGRATE_V10_TO_V11).map_err(js_err)?;
             tracing::info!("Migration v10 → v11 complete");
         }
@@ -189,7 +198,11 @@ impl Database {
             .map_err(|e| Error::DatabaseError(format!("Failed to parse query: {}", e)))
     }
 
-    fn query_scalar_raw<T: serde::de::DeserializeOwned>(&self, sql: &str, params_json: &str) -> Result<Option<T>> {
+    fn query_scalar_raw<T: serde::de::DeserializeOwned>(
+        &self,
+        sql: &str,
+        params_json: &str,
+    ) -> Result<Option<T>> {
         let json_str = sql_bridge_query_value(sql, params_json).map_err(js_err)?;
         if json_str == "null" || json_str.is_empty() {
             return Ok(None);
@@ -199,7 +212,11 @@ impl Database {
             .map_err(|e| Error::DatabaseError(format!("Failed to parse scalar: {}", e)))
     }
 
-    fn query_scalar<T: serde::de::DeserializeOwned>(&self, sql: &str, params: serde_json::Value) -> Result<Option<T>> {
+    fn query_scalar<T: serde::de::DeserializeOwned>(
+        &self,
+        sql: &str,
+        params: serde_json::Value,
+    ) -> Result<Option<T>> {
         self.query_scalar_raw(sql, &params.to_string())
     }
 
@@ -290,7 +307,8 @@ impl Database {
         GroupKeyRecord {
             group_id: row["group_id"].as_str().unwrap_or("").to_string(),
             key_version: row["key_version"].as_i64().unwrap_or(0) as i32,
-            encrypted_key: row["encrypted_key"].as_str()
+            encrypted_key: row["encrypted_key"]
+                .as_str()
                 .map(|s| hex::decode(s).unwrap_or_default())
                 .unwrap_or_default(),
             created_at: row["created_at"].as_i64().unwrap_or(0),
@@ -305,7 +323,10 @@ impl Database {
             description: row["description"].as_str().map(|s| s.to_string()),
             inviter_did: row["inviter_did"].as_str().unwrap_or("").to_string(),
             inviter_name: row["inviter_name"].as_str().unwrap_or("").to_string(),
-            encrypted_group_key: row["encrypted_group_key"].as_str().unwrap_or("").to_string(),
+            encrypted_group_key: row["encrypted_group_key"]
+                .as_str()
+                .unwrap_or("")
+                .to_string(),
             nonce: row["nonce"].as_str().unwrap_or("").to_string(),
             members_json: row["members_json"].as_str().unwrap_or("[]").to_string(),
             status: row["status"].as_str().unwrap_or("pending").to_string(),
@@ -334,14 +355,27 @@ impl Database {
     // ========================================================================
 
     /// Add a new friend to the database
-    pub fn add_friend(&self, did: &str, display_name: &str, signing_key: &[u8; 32],
-                      encryption_key: &[u8; 32], status: Option<&str>) -> Result<i64> {
+    pub fn add_friend(
+        &self,
+        did: &str,
+        display_name: &str,
+        signing_key: &[u8; 32],
+        encryption_key: &[u8; 32],
+        status: Option<&str>,
+    ) -> Result<i64> {
         self.add_friend_with_avatar(did, display_name, signing_key, encryption_key, status, None)
     }
 
     /// Add a new friend with optional avatar
-    pub fn add_friend_with_avatar(&self, did: &str, display_name: &str, signing_key: &[u8; 32],
-                      encryption_key: &[u8; 32], status: Option<&str>, avatar: Option<&str>) -> Result<i64> {
+    pub fn add_friend_with_avatar(
+        &self,
+        did: &str,
+        display_name: &str,
+        signing_key: &[u8; 32],
+        encryption_key: &[u8; 32],
+        status: Option<&str>,
+        avatar: Option<&str>,
+    ) -> Result<i64> {
         let now = crate::time::now_timestamp();
         self.exec(
             "INSERT INTO friends (did, display_name, signing_key, encryption_key, status, avatar, created_at, updated_at)
@@ -376,14 +410,23 @@ impl Database {
     }
 
     /// Update a friend's profile
-    pub fn update_friend(&self, did: &str, display_name: Option<&str>, status: Option<&str>) -> Result<bool> {
+    pub fn update_friend(
+        &self,
+        did: &str,
+        display_name: Option<&str>,
+        status: Option<&str>,
+    ) -> Result<bool> {
         let now = crate::time::now_timestamp();
         let affected = if let Some(name) = display_name {
-            self.exec("UPDATE friends SET display_name = ?, status = ?, updated_at = ? WHERE did = ?",
-                json!([name, status, now, did]))?
+            self.exec(
+                "UPDATE friends SET display_name = ?, status = ?, updated_at = ? WHERE did = ?",
+                json!([name, status, now, did]),
+            )?
         } else {
-            self.exec("UPDATE friends SET status = ?, updated_at = ? WHERE did = ?",
-                json!([status, now, did]))?
+            self.exec(
+                "UPDATE friends SET status = ?, updated_at = ? WHERE did = ?",
+                json!([status, now, did]),
+            )?
         };
         Ok(affected > 0)
     }
@@ -420,7 +463,10 @@ impl Database {
     }
 
     /// Get conversation by friend DID
-    pub fn get_conversation_by_friend(&self, friend_did: &str) -> Result<Option<ConversationRecord>> {
+    pub fn get_conversation_by_friend(
+        &self,
+        friend_did: &str,
+    ) -> Result<Option<ConversationRecord>> {
         let rows = self.query(
             "SELECT id, friend_did, type, group_id, created_at, last_message_at, unread_count FROM conversations WHERE friend_did = ?",
             json!([friend_did]),
@@ -442,19 +488,33 @@ impl Database {
     // ========================================================================
 
     /// Store an encrypted message
-    pub fn store_message(&self, id: &str, conversation_id: &str, sender_did: &str,
-                         content_encrypted: &[u8], nonce: &[u8], timestamp: i64) -> Result<()> {
+    pub fn store_message(
+        &self,
+        id: &str,
+        conversation_id: &str,
+        sender_did: &str,
+        content_encrypted: &[u8],
+        nonce: &[u8],
+        timestamp: i64,
+    ) -> Result<()> {
         self.exec(
             "INSERT INTO messages (id, conversation_id, sender_did, content_encrypted, nonce, timestamp) VALUES (?, ?, ?, ?, ?, ?)",
             json!([id, conversation_id, sender_did, hex::encode(content_encrypted), hex::encode(nonce), timestamp]),
         )?;
-        self.exec("UPDATE conversations SET last_message_at = ? WHERE id = ?",
-            json!([timestamp, conversation_id]))?;
+        self.exec(
+            "UPDATE conversations SET last_message_at = ? WHERE id = ?",
+            json!([timestamp, conversation_id]),
+        )?;
         Ok(())
     }
 
     /// Get messages for a conversation
-    pub fn get_messages(&self, conversation_id: &str, limit: usize, offset: usize) -> Result<Vec<MessageRecord>> {
+    pub fn get_messages(
+        &self,
+        conversation_id: &str,
+        limit: usize,
+        offset: usize,
+    ) -> Result<Vec<MessageRecord>> {
         let rows = self.query(
             "SELECT id, conversation_id, sender_did, content_encrypted, nonce, timestamp, delivered, read, \
              edited, edited_at, deleted, deleted_at, pinned, pinned_by, pinned_at, reply_to_id, thread_id, forwarded_from \
@@ -467,7 +527,10 @@ impl Database {
     }
 
     /// Get the thread reply count for a list of message IDs
-    pub fn get_thread_reply_counts(&self, message_ids: &[String]) -> Result<std::collections::HashMap<String, i64>> {
+    pub fn get_thread_reply_counts(
+        &self,
+        message_ids: &[String],
+    ) -> Result<std::collections::HashMap<String, i64>> {
         let mut counts = std::collections::HashMap::new();
         for id in message_ids {
             let rows = self.query(
@@ -492,35 +555,47 @@ impl Database {
 
     /// Mark a single message as delivered
     pub fn mark_message_delivered(&self, message_id: &str) -> Result<bool> {
-        Ok(self.exec("UPDATE messages SET delivered = 1 WHERE id = ? AND delivered = 0",
-            json!([message_id]))? > 0)
+        Ok(self.exec(
+            "UPDATE messages SET delivered = 1 WHERE id = ? AND delivered = 0",
+            json!([message_id]),
+        )? > 0)
     }
 
     /// Mark a single message as read
     pub fn mark_message_read(&self, message_id: &str) -> Result<bool> {
-        Ok(self.exec("UPDATE messages SET delivered = 1, read = 1 WHERE id = ? AND read = 0",
-            json!([message_id]))? > 0)
+        Ok(self.exec(
+            "UPDATE messages SET delivered = 1, read = 1 WHERE id = ? AND read = 0",
+            json!([message_id]),
+        )? > 0)
     }
 
     /// Mark messages as read
     pub fn mark_messages_read(&self, conversation_id: &str) -> Result<i32> {
-        let count = self.exec("UPDATE messages SET read = 1 WHERE conversation_id = ? AND read = 0",
-            json!([conversation_id]))?;
-        self.exec("UPDATE conversations SET unread_count = 0 WHERE id = ?",
-            json!([conversation_id]))?;
+        let count = self.exec(
+            "UPDATE messages SET read = 1 WHERE conversation_id = ? AND read = 0",
+            json!([conversation_id]),
+        )?;
+        self.exec(
+            "UPDATE conversations SET unread_count = 0 WHERE id = ?",
+            json!([conversation_id]),
+        )?;
         Ok(count)
     }
 
     /// Increment unread count for a conversation
     pub fn increment_unread_count(&self, conversation_id: &str) -> Result<i32> {
-        self.exec("UPDATE conversations SET unread_count = unread_count + 1 WHERE id = ?",
-            json!([conversation_id]))
+        self.exec(
+            "UPDATE conversations SET unread_count = unread_count + 1 WHERE id = ?",
+            json!([conversation_id]),
+        )
     }
 
     /// Update last_message_at timestamp for a conversation
     pub fn update_last_message_at(&self, conversation_id: &str, timestamp: i64) -> Result<i32> {
-        self.exec("UPDATE conversations SET last_message_at = ? WHERE id = ?",
-            json!([timestamp, conversation_id]))
+        self.exec(
+            "UPDATE conversations SET last_message_at = ? WHERE id = ?",
+            json!([timestamp, conversation_id]),
+        )
     }
 
     /// Get a single message by ID
@@ -535,7 +610,13 @@ impl Database {
     }
 
     /// Edit a message — update encrypted content
-    pub fn edit_message(&self, message_id: &str, new_content_encrypted: &[u8], new_nonce: &[u8], edited_at: i64) -> Result<i32> {
+    pub fn edit_message(
+        &self,
+        message_id: &str,
+        new_content_encrypted: &[u8],
+        new_nonce: &[u8],
+        edited_at: i64,
+    ) -> Result<i32> {
         let ct_hex = hex::encode(new_content_encrypted);
         let nonce_hex = hex::encode(new_nonce);
         self.exec(
@@ -612,8 +693,10 @@ impl Database {
                    reply_to_id, thread_id, forwarded_from]),
         )?;
         // Update last_message_at
-        self.exec("UPDATE conversations SET last_message_at = ? WHERE id = ?",
-            json!([timestamp, conversation_id]))?;
+        self.exec(
+            "UPDATE conversations SET last_message_at = ? WHERE id = ?",
+            json!([timestamp, conversation_id]),
+        )?;
         Ok(())
     }
 
@@ -622,7 +705,14 @@ impl Database {
     // ========================================================================
 
     /// Add a reaction to a message
-    pub fn add_reaction(&self, id: &str, message_id: &str, user_did: &str, emoji: &str, created_at: i64) -> Result<()> {
+    pub fn add_reaction(
+        &self,
+        id: &str,
+        message_id: &str,
+        user_did: &str,
+        emoji: &str,
+        created_at: i64,
+    ) -> Result<()> {
         self.exec(
             "INSERT OR IGNORE INTO reactions (id, message_id, user_did, emoji, created_at) VALUES (?, ?, ?, ?, ?)",
             json!([id, message_id, user_did, emoji, created_at]),
@@ -652,7 +742,14 @@ impl Database {
     // ========================================================================
 
     /// Create a new group
-    pub fn create_group(&self, id: &str, name: &str, description: Option<&str>, created_by: &str, created_at: i64) -> Result<()> {
+    pub fn create_group(
+        &self,
+        id: &str,
+        name: &str,
+        description: Option<&str>,
+        created_by: &str,
+        created_at: i64,
+    ) -> Result<()> {
         self.exec(
             "INSERT INTO groups (id, name, description, avatar, created_by, created_at, updated_at) VALUES (?, ?, ?, NULL, ?, ?, ?)",
             json!([id, name, description, created_by, created_at, created_at]),
@@ -679,7 +776,13 @@ impl Database {
     }
 
     /// Update a group
-    pub fn update_group(&self, group_id: &str, name: &str, description: Option<&str>, updated_at: i64) -> Result<i32> {
+    pub fn update_group(
+        &self,
+        group_id: &str,
+        name: &str,
+        description: Option<&str>,
+        updated_at: i64,
+    ) -> Result<i32> {
         self.exec(
             "UPDATE groups SET name = ?, description = ?, updated_at = ? WHERE id = ?",
             json!([name, description, updated_at, group_id]),
@@ -692,7 +795,14 @@ impl Database {
     }
 
     /// Add a member to a group
-    pub fn add_group_member(&self, group_id: &str, member_did: &str, display_name: Option<&str>, role: &str, joined_at: i64) -> Result<()> {
+    pub fn add_group_member(
+        &self,
+        group_id: &str,
+        member_did: &str,
+        display_name: Option<&str>,
+        role: &str,
+        joined_at: i64,
+    ) -> Result<()> {
         self.exec(
             "INSERT OR IGNORE INTO group_members (group_id, member_did, display_name, role, joined_at) VALUES (?, ?, ?, ?, ?)",
             json!([group_id, member_did, display_name, role, joined_at]),
@@ -741,7 +851,13 @@ impl Database {
     // ========================================================================
 
     /// Store a group encryption key
-    pub fn store_group_key(&self, group_id: &str, key_version: i32, encrypted_key: &[u8], created_at: i64) -> Result<()> {
+    pub fn store_group_key(
+        &self,
+        group_id: &str,
+        key_version: i32,
+        encrypted_key: &[u8],
+        created_at: i64,
+    ) -> Result<()> {
         self.exec(
             "INSERT OR REPLACE INTO group_keys (group_id, key_version, encrypted_key, created_at) VALUES (?, ?, ?, ?)",
             json!([group_id, key_version, hex::encode(encrypted_key), created_at]),
@@ -759,7 +875,11 @@ impl Database {
     }
 
     /// Get a specific group key version
-    pub fn get_group_key(&self, group_id: &str, key_version: i32) -> Result<Option<GroupKeyRecord>> {
+    pub fn get_group_key(
+        &self,
+        group_id: &str,
+        key_version: i32,
+    ) -> Result<Option<GroupKeyRecord>> {
         let rows = self.query(
             "SELECT group_id, key_version, encrypted_key, created_at FROM group_keys WHERE group_id = ? AND key_version = ?",
             json!([group_id, key_version]),
@@ -800,7 +920,10 @@ impl Database {
 
     /// Update group invite status
     pub fn update_group_invite_status(&self, id: &str, status: &str) -> Result<bool> {
-        Ok(self.exec("UPDATE group_invites SET status = ? WHERE id = ?", json!([status, id]))? > 0)
+        Ok(self.exec(
+            "UPDATE group_invites SET status = ? WHERE id = ?",
+            json!([status, id]),
+        )? > 0)
     }
 
     // ========================================================================
@@ -838,7 +961,10 @@ impl Database {
 
     /// Update friend request status
     pub fn update_request_status(&self, id: &str, status: &str) -> Result<bool> {
-        Ok(self.exec("UPDATE friend_requests SET status = ? WHERE id = ?", json!([status, id]))? > 0)
+        Ok(self.exec(
+            "UPDATE friend_requests SET status = ? WHERE id = ?",
+            json!([status, id]),
+        )? > 0)
     }
 
     // ========================================================================
@@ -848,8 +974,10 @@ impl Database {
     /// Block a user
     pub fn block_user(&self, did: &str, reason: Option<&str>) -> Result<()> {
         let now = crate::time::now_timestamp();
-        self.exec("INSERT OR REPLACE INTO blocked_users (did, blocked_at, reason) VALUES (?, ?, ?)",
-            json!([did, now, reason]))?;
+        self.exec(
+            "INSERT OR REPLACE INTO blocked_users (did, blocked_at, reason) VALUES (?, ?, ?)",
+            json!([did, now, reason]),
+        )?;
         Ok(())
     }
 
@@ -860,7 +988,10 @@ impl Database {
 
     /// Check if a user is blocked
     pub fn is_blocked(&self, did: &str) -> Result<bool> {
-        let count: Option<i64> = self.query_scalar("SELECT COUNT(*) FROM blocked_users WHERE did = ?", json!([did]))?;
+        let count: Option<i64> = self.query_scalar(
+            "SELECT COUNT(*) FROM blocked_users WHERE did = ?",
+            json!([did]),
+        )?;
         Ok(count.unwrap_or(0) > 0)
     }
 
@@ -876,8 +1007,10 @@ impl Database {
     /// Set a setting value
     pub fn set_setting(&self, key: &str, value: &str) -> Result<()> {
         let now = crate::time::now_timestamp();
-        self.exec("INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, ?)",
-            json!([key, value, now]))?;
+        self.exec(
+            "INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, ?)",
+            json!([key, value, now]),
+        )?;
         Ok(())
     }
 
@@ -929,12 +1062,18 @@ impl Database {
             )?
         };
 
-        Ok(rows.iter().filter_map(|r| r.get(0).and_then(|v| v.as_str().map(|s| s.to_string()))).collect())
+        Ok(rows
+            .iter()
+            .filter_map(|r| r.get(0).and_then(|v| v.as_str().map(|s| s.to_string())))
+            .collect())
     }
 
     /// Delete all KV entries for a plugin
     pub fn plugin_kv_delete_all(&self, plugin_id: &str) -> Result<i32> {
-        self.exec("DELETE FROM plugin_kv WHERE plugin_id = ?", json!([plugin_id]))
+        self.exec(
+            "DELETE FROM plugin_kv WHERE plugin_id = ?",
+            json!([plugin_id]),
+        )
     }
 
     // ── Plugin Bundle Storage ─────────────────────────────────────────────
@@ -962,9 +1101,21 @@ impl Database {
 
         let row = &rows[0];
         Ok(Some(PluginBundleRecord {
-            plugin_id: row.get(0).and_then(|v| v.as_str()).unwrap_or_default().to_string(),
-            manifest: row.get(1).and_then(|v| v.as_str()).unwrap_or_default().to_string(),
-            bundle: row.get(2).and_then(|v| v.as_str()).unwrap_or_default().to_string(),
+            plugin_id: row
+                .get(0)
+                .and_then(|v| v.as_str())
+                .unwrap_or_default()
+                .to_string(),
+            manifest: row
+                .get(1)
+                .and_then(|v| v.as_str())
+                .unwrap_or_default()
+                .to_string(),
+            bundle: row
+                .get(2)
+                .and_then(|v| v.as_str())
+                .unwrap_or_default()
+                .to_string(),
             installed_at: row.get(3).and_then(|v| v.as_i64()).unwrap_or(0),
         }))
     }
@@ -973,7 +1124,10 @@ impl Database {
     pub fn plugin_bundle_delete(&self, plugin_id: &str) -> Result<bool> {
         // Also clean up KV storage
         let _ = self.plugin_kv_delete_all(plugin_id);
-        Ok(self.exec("DELETE FROM plugin_bundles WHERE plugin_id = ?", json!([plugin_id]))? > 0)
+        Ok(self.exec(
+            "DELETE FROM plugin_bundles WHERE plugin_id = ?",
+            json!([plugin_id]),
+        )? > 0)
     }
 
     /// List all installed plugin bundles
@@ -983,14 +1137,23 @@ impl Database {
             json!([]),
         )?;
 
-        Ok(rows.iter().map(|row| {
-            PluginBundleRecord {
-                plugin_id: row.get(0).and_then(|v| v.as_str()).unwrap_or_default().to_string(),
-                manifest: row.get(1).and_then(|v| v.as_str()).unwrap_or_default().to_string(),
+        Ok(rows
+            .iter()
+            .map(|row| PluginBundleRecord {
+                plugin_id: row
+                    .get(0)
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default()
+                    .to_string(),
+                manifest: row
+                    .get(1)
+                    .and_then(|v| v.as_str())
+                    .unwrap_or_default()
+                    .to_string(),
                 bundle: String::new(),
                 installed_at: row.get(3).and_then(|v| v.as_i64()).unwrap_or(0),
-            }
-        }).collect())
+            })
+            .collect())
     }
 
     // ========================================================================
@@ -999,7 +1162,16 @@ impl Database {
 
     /// Store a call record
     #[allow(clippy::too_many_arguments)]
-    pub fn store_call_record(&self, id: &str, conversation_id: &str, call_type: &str, direction: &str, status: &str, participants: &str, started_at: i64) -> Result<()> {
+    pub fn store_call_record(
+        &self,
+        id: &str,
+        conversation_id: &str,
+        call_type: &str,
+        direction: &str,
+        status: &str,
+        participants: &str,
+        started_at: i64,
+    ) -> Result<()> {
         let now = crate::time::now_timestamp();
         self.exec(
             "INSERT INTO call_history (id, conversation_id, call_type, direction, status, participants_json, started_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
@@ -1009,7 +1181,13 @@ impl Database {
     }
 
     /// End a call record
-    pub fn end_call_record(&self, id: &str, status: &str, ended_at: i64, duration_ms: i64) -> Result<bool> {
+    pub fn end_call_record(
+        &self,
+        id: &str,
+        status: &str,
+        ended_at: i64,
+        duration_ms: i64,
+    ) -> Result<bool> {
         let affected = self.exec(
             "UPDATE call_history SET status = ?, ended_at = ?, duration_ms = ? WHERE id = ?",
             json!([status, ended_at, duration_ms, id]),
@@ -1018,7 +1196,12 @@ impl Database {
     }
 
     /// Get call history for a conversation
-    pub fn get_call_history(&self, conversation_id: &str, limit: usize, offset: usize) -> Result<Vec<CallHistoryRecord>> {
+    pub fn get_call_history(
+        &self,
+        conversation_id: &str,
+        limit: usize,
+        offset: usize,
+    ) -> Result<Vec<CallHistoryRecord>> {
         let rows = self.query(
             "SELECT id, conversation_id, call_type, direction, status, participants_json, started_at, ended_at, duration_ms, created_at FROM call_history WHERE conversation_id = ? ORDER BY started_at DESC LIMIT ? OFFSET ?",
             json!([conversation_id, limit as i64, offset as i64]),
@@ -1027,7 +1210,11 @@ impl Database {
     }
 
     /// Get all call history
-    pub fn get_all_call_history(&self, limit: usize, offset: usize) -> Result<Vec<CallHistoryRecord>> {
+    pub fn get_all_call_history(
+        &self,
+        limit: usize,
+        offset: usize,
+    ) -> Result<Vec<CallHistoryRecord>> {
         let rows = self.query(
             "SELECT id, conversation_id, call_type, direction, status, participants_json, started_at, ended_at, duration_ms, created_at FROM call_history ORDER BY started_at DESC LIMIT ? OFFSET ?",
             json!([limit as i64, offset as i64]),
@@ -1042,7 +1229,10 @@ impl Database {
             call_type: row["call_type"].as_str().unwrap_or("").to_string(),
             direction: row["direction"].as_str().unwrap_or("").to_string(),
             status: row["status"].as_str().unwrap_or("").to_string(),
-            participants: row["participants_json"].as_str().unwrap_or("[]").to_string(),
+            participants: row["participants_json"]
+                .as_str()
+                .unwrap_or("[]")
+                .to_string(),
             started_at: row["started_at"].as_i64().unwrap_or(0),
             ended_at: row["ended_at"].as_i64(),
             duration_ms: row["duration_ms"].as_i64(),
@@ -1126,7 +1316,10 @@ impl Database {
             hoisted: row["hoisted"].as_i64().unwrap_or(0) != 0,
             mentionable: row["mentionable"].as_i64().unwrap_or(0) != 0,
             is_preset: row["is_preset"].as_i64().unwrap_or(0) != 0,
-            permissions_bitfield: row["permissions_bitfield"].as_str().unwrap_or("0").to_string(),
+            permissions_bitfield: row["permissions_bitfield"]
+                .as_str()
+                .unwrap_or("0")
+                .to_string(),
             created_at: row["created_at"].as_i64().unwrap_or(0),
             updated_at: row["updated_at"].as_i64().unwrap_or(0),
         }
@@ -1148,7 +1341,9 @@ impl Database {
             id: row["id"].as_str().unwrap_or("").to_string(),
             channel_id: row["channel_id"].as_str().unwrap_or("").to_string(),
             sender_did: row["sender_did"].as_str().unwrap_or("").to_string(),
-            content_encrypted: row["content_encrypted"].as_str().map(|s| hex::decode(s).unwrap_or_default()),
+            content_encrypted: row["content_encrypted"]
+                .as_str()
+                .map(|s| hex::decode(s).unwrap_or_default()),
             content_plaintext: row["content_plaintext"].as_str().map(|s| s.to_string()),
             nonce: row["nonce"].as_str().map(|s| s.to_string()),
             key_version: row["key_version"].as_i64().map(|v| v as i32),
@@ -1194,7 +1389,14 @@ impl Database {
     // ── Communities (Core) ──────────────────────────────────────────────
 
     /// Create a community record
-    pub fn create_community_record(&self, id: &str, name: &str, description: Option<&str>, owner_did: &str, created_at: i64) -> Result<()> {
+    pub fn create_community_record(
+        &self,
+        id: &str,
+        name: &str,
+        description: Option<&str>,
+        owner_did: &str,
+        created_at: i64,
+    ) -> Result<()> {
         self.exec(
             "INSERT INTO communities (id, name, description, owner_did, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
             json!([id, name, description, owner_did, created_at, created_at]),
@@ -1221,18 +1423,38 @@ impl Database {
     }
 
     /// Update a community
-    pub fn update_community(&self, id: &str, name: Option<&str>, description: Option<&str>, updated_at: i64) -> Result<()> {
+    pub fn update_community(
+        &self,
+        id: &str,
+        name: Option<&str>,
+        description: Option<&str>,
+        updated_at: i64,
+    ) -> Result<()> {
         if let Some(name) = name {
-            self.exec("UPDATE communities SET name = ?, description = ?, updated_at = ? WHERE id = ?", json!([name, description, updated_at, id]))?;
+            self.exec(
+                "UPDATE communities SET name = ?, description = ?, updated_at = ? WHERE id = ?",
+                json!([name, description, updated_at, id]),
+            )?;
         } else {
-            self.exec("UPDATE communities SET description = ?, updated_at = ? WHERE id = ?", json!([description, updated_at, id]))?;
+            self.exec(
+                "UPDATE communities SET description = ?, updated_at = ? WHERE id = ?",
+                json!([description, updated_at, id]),
+            )?;
         }
         Ok(())
     }
 
     /// Update community owner
-    pub fn update_community_owner(&self, id: &str, new_owner_did: &str, updated_at: i64) -> Result<()> {
-        self.exec("UPDATE communities SET owner_did = ?, updated_at = ? WHERE id = ?", json!([new_owner_did, updated_at, id]))?;
+    pub fn update_community_owner(
+        &self,
+        id: &str,
+        new_owner_did: &str,
+        updated_at: i64,
+    ) -> Result<()> {
+        self.exec(
+            "UPDATE communities SET owner_did = ?, updated_at = ? WHERE id = ?",
+            json!([new_owner_did, updated_at, id]),
+        )?;
         Ok(())
     }
 
@@ -1244,7 +1466,16 @@ impl Database {
 
     /// Update community branding
     #[allow(clippy::too_many_arguments)]
-    pub fn update_community_branding(&self, id: &str, icon_url: Option<&str>, banner_url: Option<&str>, splash_url: Option<&str>, accent_color: Option<&str>, custom_css: Option<&str>, updated_at: i64) -> Result<()> {
+    pub fn update_community_branding(
+        &self,
+        id: &str,
+        icon_url: Option<&str>,
+        banner_url: Option<&str>,
+        splash_url: Option<&str>,
+        accent_color: Option<&str>,
+        custom_css: Option<&str>,
+        updated_at: i64,
+    ) -> Result<()> {
         self.exec(
             "UPDATE communities SET icon_url = ?, banner_url = ?, splash_url = ?, accent_color = ?, custom_css = ?, updated_at = ? WHERE id = ?",
             json!([icon_url, banner_url, splash_url, accent_color, custom_css, updated_at, id]),
@@ -1253,15 +1484,30 @@ impl Database {
     }
 
     /// Update community vanity URL
-    pub fn update_community_vanity_url(&self, id: &str, vanity_url: &str, updated_at: i64) -> Result<()> {
-        self.exec("UPDATE communities SET vanity_url = ?, updated_at = ? WHERE id = ?", json!([vanity_url, updated_at, id]))?;
+    pub fn update_community_vanity_url(
+        &self,
+        id: &str,
+        vanity_url: &str,
+        updated_at: i64,
+    ) -> Result<()> {
+        self.exec(
+            "UPDATE communities SET vanity_url = ?, updated_at = ? WHERE id = ?",
+            json!([vanity_url, updated_at, id]),
+        )?;
         Ok(())
     }
 
     // ── Spaces ───────────────────────────────────────────────────────────
 
     /// Create a community space
-    pub fn create_community_space(&self, id: &str, community_id: &str, name: &str, position: i32, created_at: i64) -> Result<()> {
+    pub fn create_community_space(
+        &self,
+        id: &str,
+        community_id: &str,
+        name: &str,
+        position: i32,
+        created_at: i64,
+    ) -> Result<()> {
         self.exec(
             "INSERT INTO community_spaces (id, community_id, name, position, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
             json!([id, community_id, name, position, created_at, created_at]),
@@ -1289,13 +1535,24 @@ impl Database {
 
     /// Update a space name
     pub fn update_community_space(&self, id: &str, name: &str, updated_at: i64) -> Result<()> {
-        self.exec("UPDATE community_spaces SET name = ?, updated_at = ? WHERE id = ?", json!([name, updated_at, id]))?;
+        self.exec(
+            "UPDATE community_spaces SET name = ?, updated_at = ? WHERE id = ?",
+            json!([name, updated_at, id]),
+        )?;
         Ok(())
     }
 
     /// Update a space position
-    pub fn update_community_space_position(&self, id: &str, position: i32, updated_at: i64) -> Result<()> {
-        self.exec("UPDATE community_spaces SET position = ?, updated_at = ? WHERE id = ?", json!([position, updated_at, id]))?;
+    pub fn update_community_space_position(
+        &self,
+        id: &str,
+        position: i32,
+        updated_at: i64,
+    ) -> Result<()> {
+        self.exec(
+            "UPDATE community_spaces SET position = ?, updated_at = ? WHERE id = ?",
+            json!([position, updated_at, id]),
+        )?;
         Ok(())
     }
 
@@ -1308,7 +1565,15 @@ impl Database {
     // ── Category CRUD ────────────────────────────────────────────────
 
     /// Create a new category
-    pub fn create_community_category(&self, id: &str, community_id: &str, space_id: &str, name: &str, position: i32, created_at: i64) -> Result<()> {
+    pub fn create_community_category(
+        &self,
+        id: &str,
+        community_id: &str,
+        space_id: &str,
+        name: &str,
+        position: i32,
+        created_at: i64,
+    ) -> Result<()> {
         self.exec(
             "INSERT INTO community_categories (id, community_id, space_id, name, position, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
             json!([id, community_id, space_id, name, position, created_at, created_at]),
@@ -1326,7 +1591,10 @@ impl Database {
     }
 
     /// Get all categories for a community (across all spaces)
-    pub fn get_community_categories_by_community(&self, community_id: &str) -> Result<Vec<CommunityCategoryRecord>> {
+    pub fn get_community_categories_by_community(
+        &self,
+        community_id: &str,
+    ) -> Result<Vec<CommunityCategoryRecord>> {
         let rows = self.query(
             "SELECT id, community_id, space_id, name, position, created_at, updated_at FROM community_categories WHERE community_id = ? ORDER BY position",
             json!([community_id]),
@@ -1345,13 +1613,24 @@ impl Database {
 
     /// Update a category name
     pub fn update_community_category(&self, id: &str, name: &str, updated_at: i64) -> Result<()> {
-        self.exec("UPDATE community_categories SET name = ?, updated_at = ? WHERE id = ?", json!([name, updated_at, id]))?;
+        self.exec(
+            "UPDATE community_categories SET name = ?, updated_at = ? WHERE id = ?",
+            json!([name, updated_at, id]),
+        )?;
         Ok(())
     }
 
     /// Update a category position
-    pub fn update_community_category_position(&self, id: &str, position: i32, updated_at: i64) -> Result<()> {
-        self.exec("UPDATE community_categories SET position = ?, updated_at = ? WHERE id = ?", json!([position, updated_at, id]))?;
+    pub fn update_community_category_position(
+        &self,
+        id: &str,
+        position: i32,
+        updated_at: i64,
+    ) -> Result<()> {
+        self.exec(
+            "UPDATE community_categories SET position = ?, updated_at = ? WHERE id = ?",
+            json!([position, updated_at, id]),
+        )?;
         Ok(())
     }
 
@@ -1362,7 +1641,12 @@ impl Database {
     }
 
     /// Update a channel's category assignment
-    pub fn update_channel_category(&self, channel_id: &str, category_id: Option<&str>, updated_at: i64) -> Result<()> {
+    pub fn update_channel_category(
+        &self,
+        channel_id: &str,
+        category_id: Option<&str>,
+        updated_at: i64,
+    ) -> Result<()> {
         self.exec(
             "UPDATE community_channels SET category_id = ?, updated_at = ? WHERE id = ?",
             json!([category_id, updated_at, channel_id]),
@@ -1374,7 +1658,18 @@ impl Database {
 
     /// Create a community channel
     #[allow(clippy::too_many_arguments)]
-    pub fn create_community_channel(&self, id: &str, community_id: &str, space_id: &str, category_id: Option<&str>, name: &str, channel_type: &str, topic: Option<&str>, position: i32, created_at: i64) -> Result<()> {
+    pub fn create_community_channel(
+        &self,
+        id: &str,
+        community_id: &str,
+        space_id: &str,
+        category_id: Option<&str>,
+        name: &str,
+        channel_type: &str,
+        topic: Option<&str>,
+        position: i32,
+        created_at: i64,
+    ) -> Result<()> {
         self.exec(
             "INSERT INTO community_channels (id, community_id, space_id, category_id, name, type, topic, position, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             json!([id, community_id, space_id, category_id, name, channel_type, topic, position, created_at, created_at]),
@@ -1383,7 +1678,10 @@ impl Database {
     }
 
     /// Get channels for a community
-    pub fn get_community_channels(&self, community_id: &str) -> Result<Vec<CommunityChannelRecord>> {
+    pub fn get_community_channels(
+        &self,
+        community_id: &str,
+    ) -> Result<Vec<CommunityChannelRecord>> {
         let rows = self.query(
             "SELECT id, community_id, space_id, category_id, name, type, topic, position, slow_mode_seconds, e2ee_enabled, pin_limit, created_at, updated_at FROM community_channels WHERE community_id = ? ORDER BY position",
             json!([community_id]),
@@ -1392,7 +1690,10 @@ impl Database {
     }
 
     /// Get channels by space
-    pub fn get_community_channels_by_space(&self, space_id: &str) -> Result<Vec<CommunityChannelRecord>> {
+    pub fn get_community_channels_by_space(
+        &self,
+        space_id: &str,
+    ) -> Result<Vec<CommunityChannelRecord>> {
         let rows = self.query(
             "SELECT id, community_id, space_id, category_id, name, type, topic, position, slow_mode_seconds, e2ee_enabled, pin_limit, created_at, updated_at FROM community_channels WHERE space_id = ? ORDER BY position",
             json!([space_id]),
@@ -1410,11 +1711,23 @@ impl Database {
     }
 
     /// Update a channel
-    pub fn update_community_channel(&self, id: &str, name: Option<&str>, topic: Option<&str>, updated_at: i64) -> Result<()> {
+    pub fn update_community_channel(
+        &self,
+        id: &str,
+        name: Option<&str>,
+        topic: Option<&str>,
+        updated_at: i64,
+    ) -> Result<()> {
         if let Some(name) = name {
-            self.exec("UPDATE community_channels SET name = ?, topic = ?, updated_at = ? WHERE id = ?", json!([name, topic, updated_at, id]))?;
+            self.exec(
+                "UPDATE community_channels SET name = ?, topic = ?, updated_at = ? WHERE id = ?",
+                json!([name, topic, updated_at, id]),
+            )?;
         } else {
-            self.exec("UPDATE community_channels SET topic = ?, updated_at = ? WHERE id = ?", json!([topic, updated_at, id]))?;
+            self.exec(
+                "UPDATE community_channels SET topic = ?, updated_at = ? WHERE id = ?",
+                json!([topic, updated_at, id]),
+            )?;
         }
         Ok(())
     }
@@ -1427,19 +1740,28 @@ impl Database {
 
     /// Update channel slow mode
     pub fn update_channel_slow_mode(&self, id: &str, seconds: i32, updated_at: i64) -> Result<()> {
-        self.exec("UPDATE community_channels SET slow_mode_seconds = ?, updated_at = ? WHERE id = ?", json!([seconds, updated_at, id]))?;
+        self.exec(
+            "UPDATE community_channels SET slow_mode_seconds = ?, updated_at = ? WHERE id = ?",
+            json!([seconds, updated_at, id]),
+        )?;
         Ok(())
     }
 
     /// Update channel position
     pub fn update_channel_position(&self, id: &str, position: i32, updated_at: i64) -> Result<()> {
-        self.exec("UPDATE community_channels SET position = ?, updated_at = ? WHERE id = ?", json!([position, updated_at, id]))?;
+        self.exec(
+            "UPDATE community_channels SET position = ?, updated_at = ? WHERE id = ?",
+            json!([position, updated_at, id]),
+        )?;
         Ok(())
     }
 
     /// Update channel E2EE setting
     pub fn update_channel_e2ee(&self, id: &str, e2ee_enabled: bool, updated_at: i64) -> Result<()> {
-        self.exec("UPDATE community_channels SET e2ee_enabled = ?, updated_at = ? WHERE id = ?", json!([e2ee_enabled as i32, updated_at, id]))?;
+        self.exec(
+            "UPDATE community_channels SET e2ee_enabled = ?, updated_at = ? WHERE id = ?",
+            json!([e2ee_enabled as i32, updated_at, id]),
+        )?;
         Ok(())
     }
 
@@ -1447,7 +1769,19 @@ impl Database {
 
     /// Create a community role
     #[allow(clippy::too_many_arguments)]
-    pub fn create_community_role(&self, id: &str, community_id: &str, name: &str, color: Option<&str>, position: i32, hoisted: bool, mentionable: bool, is_preset: bool, permissions_bitfield: &str, created_at: i64) -> Result<()> {
+    pub fn create_community_role(
+        &self,
+        id: &str,
+        community_id: &str,
+        name: &str,
+        color: Option<&str>,
+        position: i32,
+        hoisted: bool,
+        mentionable: bool,
+        is_preset: bool,
+        permissions_bitfield: &str,
+        created_at: i64,
+    ) -> Result<()> {
         self.exec(
             "INSERT INTO community_roles (id, community_id, name, color, position, hoisted, mentionable, is_preset, permissions_bitfield, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             json!([id, community_id, name, color, position, hoisted as i32, mentionable as i32, is_preset as i32, permissions_bitfield, created_at, created_at]),
@@ -1483,25 +1817,61 @@ impl Database {
     }
 
     /// Update a role's permissions
-    pub fn update_community_role_permissions(&self, role_id: &str, permissions_bitfield: &str, updated_at: i64) -> Result<()> {
-        self.exec("UPDATE community_roles SET permissions_bitfield = ?, updated_at = ? WHERE id = ?", json!([permissions_bitfield, updated_at, role_id]))?;
+    pub fn update_community_role_permissions(
+        &self,
+        role_id: &str,
+        permissions_bitfield: &str,
+        updated_at: i64,
+    ) -> Result<()> {
+        self.exec(
+            "UPDATE community_roles SET permissions_bitfield = ?, updated_at = ? WHERE id = ?",
+            json!([permissions_bitfield, updated_at, role_id]),
+        )?;
         Ok(())
     }
 
     /// Update a role
     #[allow(clippy::too_many_arguments)]
-    pub fn update_community_role(&self, role_id: &str, name: Option<&str>, color: Option<&str>, hoisted: Option<bool>, mentionable: Option<bool>, position: Option<i32>, updated_at: i64) -> Result<()> {
+    pub fn update_community_role(
+        &self,
+        role_id: &str,
+        name: Option<&str>,
+        color: Option<&str>,
+        hoisted: Option<bool>,
+        mentionable: Option<bool>,
+        position: Option<i32>,
+        updated_at: i64,
+    ) -> Result<()> {
         // Build dynamic SET clause
         let mut sets = Vec::new();
         let mut params: Vec<serde_json::Value> = Vec::new();
-        sets.push("updated_at = ?"); params.push(json!(updated_at));
-        if let Some(v) = name { sets.push("name = ?"); params.push(json!(v)); }
-        if let Some(v) = color { sets.push("color = ?"); params.push(json!(v)); }
-        if let Some(v) = hoisted { sets.push("hoisted = ?"); params.push(json!(v as i32)); }
-        if let Some(v) = mentionable { sets.push("mentionable = ?"); params.push(json!(v as i32)); }
-        if let Some(v) = position { sets.push("position = ?"); params.push(json!(v)); }
+        sets.push("updated_at = ?");
+        params.push(json!(updated_at));
+        if let Some(v) = name {
+            sets.push("name = ?");
+            params.push(json!(v));
+        }
+        if let Some(v) = color {
+            sets.push("color = ?");
+            params.push(json!(v));
+        }
+        if let Some(v) = hoisted {
+            sets.push("hoisted = ?");
+            params.push(json!(v as i32));
+        }
+        if let Some(v) = mentionable {
+            sets.push("mentionable = ?");
+            params.push(json!(v as i32));
+        }
+        if let Some(v) = position {
+            sets.push("position = ?");
+            params.push(json!(v));
+        }
         params.push(json!(role_id));
-        let sql = format!("UPDATE community_roles SET {} WHERE id = ?", sets.join(", "));
+        let sql = format!(
+            "UPDATE community_roles SET {} WHERE id = ?",
+            sets.join(", ")
+        );
         self.exec(&sql, serde_json::Value::Array(params))?;
         Ok(())
     }
@@ -1515,7 +1885,14 @@ impl Database {
     // ── Role Assignments ─────────────────────────────────────────────────
 
     /// Assign a role to a member
-    pub fn assign_community_role(&self, community_id: &str, member_did: &str, role_id: &str, assigned_at: i64, assigned_by: Option<&str>) -> Result<()> {
+    pub fn assign_community_role(
+        &self,
+        community_id: &str,
+        member_did: &str,
+        role_id: &str,
+        assigned_at: i64,
+        assigned_by: Option<&str>,
+    ) -> Result<()> {
         self.exec(
             "INSERT OR IGNORE INTO community_member_roles (community_id, member_did, role_id, assigned_at, assigned_by) VALUES (?, ?, ?, ?, ?)",
             json!([community_id, member_did, role_id, assigned_at, assigned_by]),
@@ -1524,7 +1901,12 @@ impl Database {
     }
 
     /// Unassign a role from a member
-    pub fn unassign_community_role(&self, community_id: &str, member_did: &str, role_id: &str) -> Result<()> {
+    pub fn unassign_community_role(
+        &self,
+        community_id: &str,
+        member_did: &str,
+        role_id: &str,
+    ) -> Result<()> {
         self.exec(
             "DELETE FROM community_member_roles WHERE community_id = ? AND member_did = ? AND role_id = ?",
             json!([community_id, member_did, role_id]),
@@ -1533,7 +1915,11 @@ impl Database {
     }
 
     /// Get roles for a specific member in a community
-    pub fn get_member_community_roles(&self, community_id: &str, member_did: &str) -> Result<Vec<CommunityRoleRecord>> {
+    pub fn get_member_community_roles(
+        &self,
+        community_id: &str,
+        member_did: &str,
+    ) -> Result<Vec<CommunityRoleRecord>> {
         let rows = self.query(
             "SELECT r.id, r.community_id, r.name, r.color, r.icon, r.badge, r.position, r.hoisted, r.mentionable, r.is_preset, r.permissions_bitfield, r.created_at, r.updated_at FROM community_roles r INNER JOIN community_member_roles mr ON r.id = mr.role_id WHERE mr.community_id = ? AND mr.member_did = ? ORDER BY r.position",
             json!([community_id, member_did]),
@@ -1544,7 +1930,13 @@ impl Database {
     // ── Members ──────────────────────────────────────────────────────────
 
     /// Add a member to a community
-    pub fn add_community_member(&self, community_id: &str, member_did: &str, joined_at: i64, nickname: Option<&str>) -> Result<()> {
+    pub fn add_community_member(
+        &self,
+        community_id: &str,
+        member_did: &str,
+        joined_at: i64,
+        nickname: Option<&str>,
+    ) -> Result<()> {
         self.exec(
             "INSERT OR IGNORE INTO community_members (community_id, member_did, nickname, joined_at) VALUES (?, ?, ?, ?)",
             json!([community_id, member_did, nickname, joined_at]),
@@ -1554,13 +1946,23 @@ impl Database {
 
     /// Remove a member from a community
     pub fn remove_community_member(&self, community_id: &str, member_did: &str) -> Result<()> {
-        self.exec("DELETE FROM community_member_roles WHERE community_id = ? AND member_did = ?", json!([community_id, member_did]))?;
-        self.exec("DELETE FROM community_members WHERE community_id = ? AND member_did = ?", json!([community_id, member_did]))?;
+        self.exec(
+            "DELETE FROM community_member_roles WHERE community_id = ? AND member_did = ?",
+            json!([community_id, member_did]),
+        )?;
+        self.exec(
+            "DELETE FROM community_members WHERE community_id = ? AND member_did = ?",
+            json!([community_id, member_did]),
+        )?;
         Ok(())
     }
 
     /// Get a specific community member
-    pub fn get_community_member(&self, community_id: &str, member_did: &str) -> Result<Option<CommunityMemberRecord>> {
+    pub fn get_community_member(
+        &self,
+        community_id: &str,
+        member_did: &str,
+    ) -> Result<Option<CommunityMemberRecord>> {
         let rows = self.query(
             "SELECT community_id, member_did, nickname, avatar_url, bio, joined_at FROM community_members WHERE community_id = ? AND member_did = ?",
             json!([community_id, member_did]),
@@ -1578,7 +1980,14 @@ impl Database {
     }
 
     /// Update a member's community profile
-    pub fn update_community_member_profile(&self, community_id: &str, member_did: &str, nickname: Option<&str>, avatar_url: Option<&str>, bio: Option<&str>) -> Result<()> {
+    pub fn update_community_member_profile(
+        &self,
+        community_id: &str,
+        member_did: &str,
+        nickname: Option<&str>,
+        avatar_url: Option<&str>,
+        bio: Option<&str>,
+    ) -> Result<()> {
         self.exec(
             "UPDATE community_members SET nickname = ?, avatar_url = ?, bio = ? WHERE community_id = ? AND member_did = ?",
             json!([nickname, avatar_url, bio, community_id, member_did]),
@@ -1590,7 +1999,24 @@ impl Database {
 
     /// Store a community message
     #[allow(clippy::too_many_arguments)]
-    pub fn store_community_message(&self, id: &str, channel_id: &str, sender_did: &str, content_encrypted: Option<&[u8]>, content_plaintext: Option<&str>, nonce: Option<&str>, key_version: Option<i32>, is_e2ee: bool, reply_to_id: Option<&str>, thread_id: Option<&str>, has_embed: bool, has_attachment: bool, content_warning: Option<&str>, created_at: i64, metadata_json: Option<&str>) -> Result<()> {
+    pub fn store_community_message(
+        &self,
+        id: &str,
+        channel_id: &str,
+        sender_did: &str,
+        content_encrypted: Option<&[u8]>,
+        content_plaintext: Option<&str>,
+        nonce: Option<&str>,
+        key_version: Option<i32>,
+        is_e2ee: bool,
+        reply_to_id: Option<&str>,
+        thread_id: Option<&str>,
+        has_embed: bool,
+        has_attachment: bool,
+        content_warning: Option<&str>,
+        created_at: i64,
+        metadata_json: Option<&str>,
+    ) -> Result<()> {
         let ct_hex = content_encrypted.map(hex::encode);
         self.exec(
             "INSERT INTO community_messages (id, channel_id, sender_did, content_encrypted, content_plaintext, nonce, key_version, is_e2ee, reply_to_id, thread_id, has_embed, has_attachment, content_warning, created_at, metadata_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -1602,7 +2028,24 @@ impl Database {
     /// Store a community message only if it doesn't already exist (INSERT OR IGNORE).
     /// Used for persisting messages received from the relay / bridge.
     #[allow(clippy::too_many_arguments)]
-    pub fn store_community_message_if_not_exists(&self, id: &str, channel_id: &str, sender_did: &str, content_encrypted: Option<&[u8]>, content_plaintext: Option<&str>, nonce: Option<&str>, key_version: Option<i32>, is_e2ee: bool, reply_to_id: Option<&str>, thread_id: Option<&str>, has_embed: bool, has_attachment: bool, content_warning: Option<&str>, created_at: i64, metadata_json: Option<&str>) -> Result<()> {
+    pub fn store_community_message_if_not_exists(
+        &self,
+        id: &str,
+        channel_id: &str,
+        sender_did: &str,
+        content_encrypted: Option<&[u8]>,
+        content_plaintext: Option<&str>,
+        nonce: Option<&str>,
+        key_version: Option<i32>,
+        is_e2ee: bool,
+        reply_to_id: Option<&str>,
+        thread_id: Option<&str>,
+        has_embed: bool,
+        has_attachment: bool,
+        content_warning: Option<&str>,
+        created_at: i64,
+        metadata_json: Option<&str>,
+    ) -> Result<()> {
         let ct_hex = content_encrypted.map(hex::encode);
         self.exec(
             "INSERT OR IGNORE INTO community_messages (id, channel_id, sender_did, content_encrypted, content_plaintext, nonce, key_version, is_e2ee, reply_to_id, thread_id, has_embed, has_attachment, content_warning, created_at, metadata_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -1612,7 +2055,12 @@ impl Database {
     }
 
     /// Get community messages for a channel
-    pub fn get_community_messages(&self, channel_id: &str, limit: usize, before_timestamp: Option<i64>) -> Result<Vec<CommunityMessageRecord>> {
+    pub fn get_community_messages(
+        &self,
+        channel_id: &str,
+        limit: usize,
+        before_timestamp: Option<i64>,
+    ) -> Result<Vec<CommunityMessageRecord>> {
         let rows = if let Some(before) = before_timestamp {
             self.query(
                 "SELECT id, channel_id, sender_did, content_encrypted, content_plaintext, nonce, key_version, is_e2ee, reply_to_id, thread_id, has_embed, has_attachment, content_warning, edited_at, deleted_for_everyone, created_at, metadata_json FROM community_messages WHERE channel_id = ? AND created_at < ? ORDER BY created_at DESC LIMIT ?",
@@ -1624,7 +2072,8 @@ impl Database {
                 json!([channel_id, limit as i64]),
             )?
         };
-        let mut messages: Vec<CommunityMessageRecord> = rows.iter().map(Self::parse_community_message).collect();
+        let mut messages: Vec<CommunityMessageRecord> =
+            rows.iter().map(Self::parse_community_message).collect();
         messages.reverse();
         Ok(messages)
     }
@@ -1639,7 +2088,14 @@ impl Database {
     }
 
     /// Edit a community message
-    pub fn edit_community_message(&self, id: &str, content_plaintext: Option<&str>, content_encrypted: Option<&[u8]>, nonce: Option<&str>, edited_at: i64) -> Result<()> {
+    pub fn edit_community_message(
+        &self,
+        id: &str,
+        content_plaintext: Option<&str>,
+        content_encrypted: Option<&[u8]>,
+        nonce: Option<&str>,
+        edited_at: i64,
+    ) -> Result<()> {
         let ct_hex = content_encrypted.map(hex::encode);
         self.exec(
             "UPDATE community_messages SET content_plaintext = ?, content_encrypted = ?, nonce = ?, edited_at = ? WHERE id = ?",
@@ -1650,12 +2106,20 @@ impl Database {
 
     /// Delete a community message for everyone
     pub fn delete_community_message_for_everyone(&self, id: &str) -> Result<()> {
-        self.exec("UPDATE community_messages SET deleted_for_everyone = 1 WHERE id = ?", json!([id]))?;
+        self.exec(
+            "UPDATE community_messages SET deleted_for_everyone = 1 WHERE id = ?",
+            json!([id]),
+        )?;
         Ok(())
     }
 
     /// Delete a community message for the current user only
-    pub fn delete_community_message_for_me(&self, message_id: &str, member_did: &str, deleted_at: i64) -> Result<()> {
+    pub fn delete_community_message_for_me(
+        &self,
+        message_id: &str,
+        member_did: &str,
+        deleted_at: i64,
+    ) -> Result<()> {
         self.exec(
             "INSERT OR IGNORE INTO community_deleted_messages (message_id, member_did, deleted_at) VALUES (?, ?, ?)",
             json!([message_id, member_did, deleted_at]),
@@ -1664,7 +2128,12 @@ impl Database {
     }
 
     /// Search community messages in a channel
-    pub fn search_community_messages(&self, channel_id: &str, query: &str, limit: usize) -> Result<Vec<CommunityMessageRecord>> {
+    pub fn search_community_messages(
+        &self,
+        channel_id: &str,
+        query: &str,
+        limit: usize,
+    ) -> Result<Vec<CommunityMessageRecord>> {
         let like_query = format!("%{}%", query);
         let rows = self.query(
             "SELECT id, channel_id, sender_did, content_encrypted, content_plaintext, nonce, key_version, is_e2ee, reply_to_id, thread_id, has_embed, has_attachment, content_warning, edited_at, deleted_for_everyone, created_at FROM community_messages WHERE channel_id = ? AND content_plaintext LIKE ? ORDER BY created_at DESC LIMIT ?",
@@ -1722,7 +2191,8 @@ impl Database {
             conditions.push("has_attachment = 1".to_string());
         }
         if let Some(true) = has_reaction {
-            conditions.push("id IN (SELECT DISTINCT message_id FROM community_reactions)".to_string());
+            conditions
+                .push("id IN (SELECT DISTINCT message_id FROM community_reactions)".to_string());
         }
         if let Some(true) = is_pinned {
             if !pinned_message_ids.is_empty() {
@@ -1754,7 +2224,14 @@ impl Database {
     // ── Reactions ────────────────────────────────────────────────────────
 
     /// Add a community reaction
-    pub fn add_community_reaction(&self, message_id: &str, member_did: &str, emoji: &str, is_custom: bool, created_at: i64) -> Result<()> {
+    pub fn add_community_reaction(
+        &self,
+        message_id: &str,
+        member_did: &str,
+        emoji: &str,
+        is_custom: bool,
+        created_at: i64,
+    ) -> Result<()> {
         self.exec(
             "INSERT OR IGNORE INTO community_reactions (message_id, member_did, emoji, is_custom, created_at) VALUES (?, ?, ?, ?, ?)",
             json!([message_id, member_did, emoji, is_custom as i32, created_at]),
@@ -1763,7 +2240,12 @@ impl Database {
     }
 
     /// Remove a community reaction
-    pub fn remove_community_reaction(&self, message_id: &str, member_did: &str, emoji: &str) -> Result<()> {
+    pub fn remove_community_reaction(
+        &self,
+        message_id: &str,
+        member_did: &str,
+        emoji: &str,
+    ) -> Result<()> {
         self.exec(
             "DELETE FROM community_reactions WHERE message_id = ? AND member_did = ? AND emoji = ?",
             json!([message_id, member_did, emoji]),
@@ -1772,7 +2254,10 @@ impl Database {
     }
 
     /// Get reactions for a message
-    pub fn get_community_reactions(&self, message_id: &str) -> Result<Vec<CommunityReactionRecord>> {
+    pub fn get_community_reactions(
+        &self,
+        message_id: &str,
+    ) -> Result<Vec<CommunityReactionRecord>> {
         let rows = self.query(
             "SELECT message_id, member_did, emoji, is_custom, created_at FROM community_reactions WHERE message_id = ? ORDER BY created_at",
             json!([message_id]),
@@ -1783,7 +2268,13 @@ impl Database {
     // ── Read Receipts ────────────────────────────────────────────────────
 
     /// Update a read receipt
-    pub fn update_read_receipt(&self, channel_id: &str, member_did: &str, last_read_message_id: &str, read_at: i64) -> Result<()> {
+    pub fn update_read_receipt(
+        &self,
+        channel_id: &str,
+        member_did: &str,
+        last_read_message_id: &str,
+        read_at: i64,
+    ) -> Result<()> {
         self.exec(
             "INSERT OR REPLACE INTO community_read_receipts (channel_id, member_did, last_read_message_id, read_at) VALUES (?, ?, ?, ?)",
             json!([channel_id, member_did, last_read_message_id, read_at]),
@@ -1797,18 +2288,30 @@ impl Database {
             "SELECT channel_id, member_did, last_read_message_id, read_at FROM community_read_receipts WHERE channel_id = ?",
             json!([channel_id]),
         )?;
-        Ok(rows.iter().map(|row| CommunityReadReceiptRecord {
-            channel_id: row["channel_id"].as_str().unwrap_or("").to_string(),
-            member_did: row["member_did"].as_str().unwrap_or("").to_string(),
-            last_read_message_id: row["last_read_message_id"].as_str().unwrap_or("").to_string(),
-            read_at: row["read_at"].as_i64().unwrap_or(0),
-        }).collect())
+        Ok(rows
+            .iter()
+            .map(|row| CommunityReadReceiptRecord {
+                channel_id: row["channel_id"].as_str().unwrap_or("").to_string(),
+                member_did: row["member_did"].as_str().unwrap_or("").to_string(),
+                last_read_message_id: row["last_read_message_id"]
+                    .as_str()
+                    .unwrap_or("")
+                    .to_string(),
+                read_at: row["read_at"].as_i64().unwrap_or(0),
+            })
+            .collect())
     }
 
     // ── Pins ─────────────────────────────────────────────────────────────
 
     /// Pin a community message
-    pub fn pin_community_message(&self, channel_id: &str, message_id: &str, pinned_by: &str, pinned_at: i64) -> Result<()> {
+    pub fn pin_community_message(
+        &self,
+        channel_id: &str,
+        message_id: &str,
+        pinned_by: &str,
+        pinned_at: i64,
+    ) -> Result<()> {
         self.exec(
             "INSERT OR IGNORE INTO community_pins (channel_id, message_id, pinned_by, pinned_at) VALUES (?, ?, ?, ?)",
             json!([channel_id, message_id, pinned_by, pinned_at]),
@@ -1818,7 +2321,10 @@ impl Database {
 
     /// Unpin a community message
     pub fn unpin_community_message(&self, channel_id: &str, message_id: &str) -> Result<()> {
-        self.exec("DELETE FROM community_pins WHERE channel_id = ? AND message_id = ?", json!([channel_id, message_id]))?;
+        self.exec(
+            "DELETE FROM community_pins WHERE channel_id = ? AND message_id = ?",
+            json!([channel_id, message_id]),
+        )?;
         Ok(())
     }
 
@@ -1828,31 +2334,52 @@ impl Database {
             "SELECT channel_id, message_id, pinned_by, pinned_at FROM community_pins WHERE channel_id = ? ORDER BY pinned_at DESC",
             json!([channel_id]),
         )?;
-        Ok(rows.iter().map(|row| CommunityPinRecord {
-            channel_id: row["channel_id"].as_str().unwrap_or("").to_string(),
-            message_id: row["message_id"].as_str().unwrap_or("").to_string(),
-            pinned_by: row["pinned_by"].as_str().unwrap_or("").to_string(),
-            pinned_at: row["pinned_at"].as_i64().unwrap_or(0),
-        }).collect())
+        Ok(rows
+            .iter()
+            .map(|row| CommunityPinRecord {
+                channel_id: row["channel_id"].as_str().unwrap_or("").to_string(),
+                message_id: row["message_id"].as_str().unwrap_or("").to_string(),
+                pinned_by: row["pinned_by"].as_str().unwrap_or("").to_string(),
+                pinned_at: row["pinned_at"].as_i64().unwrap_or(0),
+            })
+            .collect())
     }
 
     /// Get pin count for a channel
     pub fn get_community_pin_count(&self, channel_id: &str) -> Result<i32> {
-        let count: Option<i64> = self.query_scalar("SELECT COUNT(*) FROM community_pins WHERE channel_id = ?", json!([channel_id]))?;
+        let count: Option<i64> = self.query_scalar(
+            "SELECT COUNT(*) FROM community_pins WHERE channel_id = ?",
+            json!([channel_id]),
+        )?;
         Ok(count.unwrap_or(0) as i32)
     }
 
     /// Get pinned message IDs for a channel
     pub fn get_pinned_message_ids(&self, channel_id: &str) -> Result<Vec<String>> {
-        let rows = self.query("SELECT message_id FROM community_pins WHERE channel_id = ?", json!([channel_id]))?;
-        Ok(rows.iter().filter_map(|r| r["message_id"].as_str().map(|s| s.to_string())).collect())
+        let rows = self.query(
+            "SELECT message_id FROM community_pins WHERE channel_id = ?",
+            json!([channel_id]),
+        )?;
+        Ok(rows
+            .iter()
+            .filter_map(|r| r["message_id"].as_str().map(|s| s.to_string()))
+            .collect())
     }
 
     // ── Bans ─────────────────────────────────────────────────────────────
 
     /// Create a ban record
     #[allow(clippy::too_many_arguments)]
-    pub fn create_community_ban(&self, community_id: &str, banned_did: &str, reason: Option<&str>, banned_by: &str, device_fingerprint: Option<&str>, expires_at: Option<i64>, created_at: i64) -> Result<()> {
+    pub fn create_community_ban(
+        &self,
+        community_id: &str,
+        banned_did: &str,
+        reason: Option<&str>,
+        banned_by: &str,
+        device_fingerprint: Option<&str>,
+        expires_at: Option<i64>,
+        created_at: i64,
+    ) -> Result<()> {
         self.exec(
             "INSERT OR REPLACE INTO community_bans (community_id, banned_did, reason, banned_by, device_fingerprint, expires_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
             json!([community_id, banned_did, reason, banned_by, device_fingerprint, expires_at, created_at]),
@@ -1862,13 +2389,19 @@ impl Database {
 
     /// Check if a user is banned
     pub fn is_community_banned(&self, community_id: &str, did: &str) -> Result<bool> {
-        let count: Option<i64> = self.query_scalar("SELECT COUNT(*) FROM community_bans WHERE community_id = ? AND banned_did = ?", json!([community_id, did]))?;
+        let count: Option<i64> = self.query_scalar(
+            "SELECT COUNT(*) FROM community_bans WHERE community_id = ? AND banned_did = ?",
+            json!([community_id, did]),
+        )?;
         Ok(count.unwrap_or(0) > 0)
     }
 
     /// Remove a ban
     pub fn remove_community_ban(&self, community_id: &str, banned_did: &str) -> Result<()> {
-        self.exec("DELETE FROM community_bans WHERE community_id = ? AND banned_did = ?", json!([community_id, banned_did]))?;
+        self.exec(
+            "DELETE FROM community_bans WHERE community_id = ? AND banned_did = ?",
+            json!([community_id, banned_did]),
+        )?;
         Ok(())
     }
 
@@ -1878,22 +2411,35 @@ impl Database {
             "SELECT community_id, banned_did, reason, banned_by, device_fingerprint, expires_at, created_at FROM community_bans WHERE community_id = ? ORDER BY created_at DESC",
             json!([community_id]),
         )?;
-        Ok(rows.iter().map(|row| CommunityBanRecord {
-            community_id: row["community_id"].as_str().unwrap_or("").to_string(),
-            banned_did: row["banned_did"].as_str().unwrap_or("").to_string(),
-            reason: row["reason"].as_str().map(|s| s.to_string()),
-            banned_by: row["banned_by"].as_str().unwrap_or("").to_string(),
-            device_fingerprint: row["device_fingerprint"].as_str().map(|s| s.to_string()),
-            expires_at: row["expires_at"].as_i64(),
-            created_at: row["created_at"].as_i64().unwrap_or(0),
-        }).collect())
+        Ok(rows
+            .iter()
+            .map(|row| CommunityBanRecord {
+                community_id: row["community_id"].as_str().unwrap_or("").to_string(),
+                banned_did: row["banned_did"].as_str().unwrap_or("").to_string(),
+                reason: row["reason"].as_str().map(|s| s.to_string()),
+                banned_by: row["banned_by"].as_str().unwrap_or("").to_string(),
+                device_fingerprint: row["device_fingerprint"].as_str().map(|s| s.to_string()),
+                expires_at: row["expires_at"].as_i64(),
+                created_at: row["created_at"].as_i64().unwrap_or(0),
+            })
+            .collect())
     }
 
     // ── Invites ──────────────────────────────────────────────────────────
 
     /// Create a community invite
     #[allow(clippy::too_many_arguments)]
-    pub fn create_community_invite(&self, id: &str, community_id: &str, code: &str, vanity: bool, creator_did: &str, max_uses: Option<i32>, expires_at: Option<i64>, created_at: i64) -> Result<()> {
+    pub fn create_community_invite(
+        &self,
+        id: &str,
+        community_id: &str,
+        code: &str,
+        vanity: bool,
+        creator_did: &str,
+        max_uses: Option<i32>,
+        expires_at: Option<i64>,
+        created_at: i64,
+    ) -> Result<()> {
         self.exec(
             "INSERT INTO community_invites (id, community_id, code, vanity, creator_did, max_uses, use_count, expires_at, created_at) VALUES (?, ?, ?, ?, ?, ?, 0, ?, ?)",
             json!([id, community_id, code, vanity as i32, creator_did, max_uses, expires_at, created_at]),
@@ -1902,7 +2448,10 @@ impl Database {
     }
 
     /// Get an invite by code
-    pub fn get_community_invite_by_code(&self, code: &str) -> Result<Option<CommunityInviteRecord>> {
+    pub fn get_community_invite_by_code(
+        &self,
+        code: &str,
+    ) -> Result<Option<CommunityInviteRecord>> {
         let rows = self.query(
             "SELECT id, community_id, code, vanity, creator_did, max_uses, use_count, expires_at, created_at FROM community_invites WHERE code = ?",
             json!([code]),
@@ -1925,7 +2474,10 @@ impl Database {
             "SELECT id, community_id, code, vanity, creator_did, max_uses, use_count, expires_at, created_at FROM community_invites WHERE community_id = ? ORDER BY created_at DESC",
             json!([community_id]),
         )?;
-        Ok(rows.iter().map(|row| Self::parse_community_invite(row)).collect())
+        Ok(rows
+            .iter()
+            .map(|row| Self::parse_community_invite(row))
+            .collect())
     }
 
     /// Delete an invite
@@ -1936,7 +2488,10 @@ impl Database {
 
     /// Increment invite use count
     pub fn increment_invite_use_count(&self, id: &str) -> Result<()> {
-        self.exec("UPDATE community_invites SET use_count = use_count + 1 WHERE id = ?", json!([id]))?;
+        self.exec(
+            "UPDATE community_invites SET use_count = use_count + 1 WHERE id = ?",
+            json!([id]),
+        )?;
         Ok(())
     }
 
@@ -1958,7 +2513,16 @@ impl Database {
 
     /// Create a community warning
     #[allow(clippy::too_many_arguments)]
-    pub fn create_community_warning(&self, id: &str, community_id: &str, member_did: &str, reason: &str, warned_by: &str, expires_at: Option<i64>, created_at: i64) -> Result<()> {
+    pub fn create_community_warning(
+        &self,
+        id: &str,
+        community_id: &str,
+        member_did: &str,
+        reason: &str,
+        warned_by: &str,
+        expires_at: Option<i64>,
+        created_at: i64,
+    ) -> Result<()> {
         self.exec(
             "INSERT INTO community_warnings (id, community_id, member_did, reason, warned_by, expires_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
             json!([id, community_id, member_did, reason, warned_by, expires_at, created_at]),
@@ -1967,41 +2531,61 @@ impl Database {
     }
 
     /// Get warnings for a specific member
-    pub fn get_community_member_warnings(&self, community_id: &str, member_did: &str) -> Result<Vec<CommunityWarningRecord>> {
+    pub fn get_community_member_warnings(
+        &self,
+        community_id: &str,
+        member_did: &str,
+    ) -> Result<Vec<CommunityWarningRecord>> {
         let rows = self.query(
             "SELECT id, community_id, member_did, reason, warned_by, expires_at, created_at FROM community_warnings WHERE community_id = ? AND member_did = ? ORDER BY created_at DESC",
             json!([community_id, member_did]),
         )?;
-        Ok(rows.iter().map(|row| CommunityWarningRecord {
-            id: row["id"].as_str().unwrap_or("").to_string(),
-            community_id: row["community_id"].as_str().unwrap_or("").to_string(),
-            member_did: row["member_did"].as_str().unwrap_or("").to_string(),
-            reason: row["reason"].as_str().unwrap_or("").to_string(),
-            warned_by: row["warned_by"].as_str().unwrap_or("").to_string(),
-            expires_at: row["expires_at"].as_i64(),
-            created_at: row["created_at"].as_i64().unwrap_or(0),
-        }).collect())
+        Ok(rows
+            .iter()
+            .map(|row| CommunityWarningRecord {
+                id: row["id"].as_str().unwrap_or("").to_string(),
+                community_id: row["community_id"].as_str().unwrap_or("").to_string(),
+                member_did: row["member_did"].as_str().unwrap_or("").to_string(),
+                reason: row["reason"].as_str().unwrap_or("").to_string(),
+                warned_by: row["warned_by"].as_str().unwrap_or("").to_string(),
+                expires_at: row["expires_at"].as_i64(),
+                created_at: row["created_at"].as_i64().unwrap_or(0),
+            })
+            .collect())
     }
 
     /// Get all warnings for a community
-    pub fn get_community_warnings(&self, community_id: &str, limit: usize, offset: usize) -> Result<Vec<CommunityWarningRecord>> {
+    pub fn get_community_warnings(
+        &self,
+        community_id: &str,
+        limit: usize,
+        offset: usize,
+    ) -> Result<Vec<CommunityWarningRecord>> {
         let rows = self.query(
             "SELECT id, community_id, member_did, reason, warned_by, expires_at, created_at FROM community_warnings WHERE community_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
             json!([community_id, limit as i64, offset as i64]),
         )?;
-        Ok(rows.iter().map(|row| CommunityWarningRecord {
-            id: row["id"].as_str().unwrap_or("").to_string(),
-            community_id: row["community_id"].as_str().unwrap_or("").to_string(),
-            member_did: row["member_did"].as_str().unwrap_or("").to_string(),
-            reason: row["reason"].as_str().unwrap_or("").to_string(),
-            warned_by: row["warned_by"].as_str().unwrap_or("").to_string(),
-            expires_at: row["expires_at"].as_i64(),
-            created_at: row["created_at"].as_i64().unwrap_or(0),
-        }).collect())
+        Ok(rows
+            .iter()
+            .map(|row| CommunityWarningRecord {
+                id: row["id"].as_str().unwrap_or("").to_string(),
+                community_id: row["community_id"].as_str().unwrap_or("").to_string(),
+                member_did: row["member_did"].as_str().unwrap_or("").to_string(),
+                reason: row["reason"].as_str().unwrap_or("").to_string(),
+                warned_by: row["warned_by"].as_str().unwrap_or("").to_string(),
+                expires_at: row["expires_at"].as_i64(),
+                created_at: row["created_at"].as_i64().unwrap_or(0),
+            })
+            .collect())
     }
 
     /// Get active warning count for a member
-    pub fn get_active_warning_count(&self, community_id: &str, member_did: &str, now: i64) -> Result<i32> {
+    pub fn get_active_warning_count(
+        &self,
+        community_id: &str,
+        member_did: &str,
+        now: i64,
+    ) -> Result<i32> {
         let count: Option<i64> = self.query_scalar(
             "SELECT COUNT(*) FROM community_warnings WHERE community_id = ? AND member_did = ? AND (expires_at IS NULL OR expires_at > ?)",
             json!([community_id, member_did, now]),
@@ -2019,7 +2603,17 @@ impl Database {
 
     /// Insert an audit log entry
     #[allow(clippy::too_many_arguments)]
-    pub fn insert_audit_log(&self, id: &str, community_id: &str, actor_did: &str, action_type: &str, target_type: Option<&str>, target_id: Option<&str>, metadata_json: Option<&str>, created_at: i64) -> Result<()> {
+    pub fn insert_audit_log(
+        &self,
+        id: &str,
+        community_id: &str,
+        actor_did: &str,
+        action_type: &str,
+        target_type: Option<&str>,
+        target_id: Option<&str>,
+        metadata_json: Option<&str>,
+        created_at: i64,
+    ) -> Result<()> {
         self.exec(
             "INSERT INTO community_audit_log (id, community_id, actor_did, action_type, target_type, target_id, metadata_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             json!([id, community_id, actor_did, action_type, target_type, target_id, metadata_json, created_at]),
@@ -2028,28 +2622,44 @@ impl Database {
     }
 
     /// Get audit log entries
-    pub fn get_audit_log(&self, community_id: &str, limit: usize, offset: usize) -> Result<Vec<CommunityAuditLogRecord>> {
+    pub fn get_audit_log(
+        &self,
+        community_id: &str,
+        limit: usize,
+        offset: usize,
+    ) -> Result<Vec<CommunityAuditLogRecord>> {
         let rows = self.query(
             "SELECT id, community_id, actor_did, action_type, target_type, target_id, metadata_json, content_detail, created_at FROM community_audit_log WHERE community_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
             json!([community_id, limit as i64, offset as i64]),
         )?;
-        Ok(rows.iter().map(|row| CommunityAuditLogRecord {
-            id: row["id"].as_str().unwrap_or("").to_string(),
-            community_id: row["community_id"].as_str().unwrap_or("").to_string(),
-            actor_did: row["actor_did"].as_str().unwrap_or("").to_string(),
-            action_type: row["action_type"].as_str().unwrap_or("").to_string(),
-            target_type: row["target_type"].as_str().map(|s| s.to_string()),
-            target_id: row["target_id"].as_str().map(|s| s.to_string()),
-            metadata_json: row["metadata_json"].as_str().map(|s| s.to_string()),
-            content_detail: row["content_detail"].as_str().map(|s| s.to_string()),
-            created_at: row["created_at"].as_i64().unwrap_or(0),
-        }).collect())
+        Ok(rows
+            .iter()
+            .map(|row| CommunityAuditLogRecord {
+                id: row["id"].as_str().unwrap_or("").to_string(),
+                community_id: row["community_id"].as_str().unwrap_or("").to_string(),
+                actor_did: row["actor_did"].as_str().unwrap_or("").to_string(),
+                action_type: row["action_type"].as_str().unwrap_or("").to_string(),
+                target_type: row["target_type"].as_str().map(|s| s.to_string()),
+                target_id: row["target_id"].as_str().map(|s| s.to_string()),
+                metadata_json: row["metadata_json"].as_str().map(|s| s.to_string()),
+                content_detail: row["content_detail"].as_str().map(|s| s.to_string()),
+                created_at: row["created_at"].as_i64().unwrap_or(0),
+            })
+            .collect())
     }
 
     // ── Threads ──────────────────────────────────────────────────────────
 
     /// Create a community thread
-    pub fn create_community_thread(&self, id: &str, channel_id: &str, parent_message_id: &str, name: Option<&str>, created_by: &str, created_at: i64) -> Result<()> {
+    pub fn create_community_thread(
+        &self,
+        id: &str,
+        channel_id: &str,
+        parent_message_id: &str,
+        name: Option<&str>,
+        created_by: &str,
+        created_at: i64,
+    ) -> Result<()> {
         self.exec(
             "INSERT INTO community_threads (id, channel_id, parent_message_id, name, created_by, message_count, created_at) VALUES (?, ?, ?, ?, ?, 0, ?)",
             json!([id, channel_id, parent_message_id, name, created_by, created_at]),
@@ -2081,20 +2691,27 @@ impl Database {
             "SELECT id, channel_id, parent_message_id, name, created_by, message_count, last_message_at, created_at FROM community_threads WHERE channel_id = ? ORDER BY last_message_at DESC",
             json!([channel_id]),
         )?;
-        Ok(rows.iter().map(|row| CommunityThreadRecord {
-            id: row["id"].as_str().unwrap_or("").to_string(),
-            channel_id: row["channel_id"].as_str().unwrap_or("").to_string(),
-            parent_message_id: row["parent_message_id"].as_str().unwrap_or("").to_string(),
-            name: row["name"].as_str().map(|s| s.to_string()),
-            created_by: row["created_by"].as_str().unwrap_or("").to_string(),
-            message_count: row["message_count"].as_i64().unwrap_or(0) as i32,
-            last_message_at: row["last_message_at"].as_i64(),
-            created_at: row["created_at"].as_i64().unwrap_or(0),
-        }).collect())
+        Ok(rows
+            .iter()
+            .map(|row| CommunityThreadRecord {
+                id: row["id"].as_str().unwrap_or("").to_string(),
+                channel_id: row["channel_id"].as_str().unwrap_or("").to_string(),
+                parent_message_id: row["parent_message_id"].as_str().unwrap_or("").to_string(),
+                name: row["name"].as_str().map(|s| s.to_string()),
+                created_by: row["created_by"].as_str().unwrap_or("").to_string(),
+                message_count: row["message_count"].as_i64().unwrap_or(0) as i32,
+                last_message_at: row["last_message_at"].as_i64(),
+                created_at: row["created_at"].as_i64().unwrap_or(0),
+            })
+            .collect())
     }
 
     /// Increment thread message count
-    pub fn increment_thread_message_count(&self, thread_id: &str, last_message_at: i64) -> Result<()> {
+    pub fn increment_thread_message_count(
+        &self,
+        thread_id: &str,
+        last_message_at: i64,
+    ) -> Result<()> {
         self.exec(
             "UPDATE community_threads SET message_count = message_count + 1, last_message_at = ? WHERE id = ?",
             json!([last_message_at, thread_id]),
@@ -2103,7 +2720,12 @@ impl Database {
     }
 
     /// Get thread messages directly (messages with thread_id = given id)
-    pub fn get_thread_messages_direct(&self, thread_id: &str, limit: usize, before_timestamp: Option<i64>) -> Result<Vec<CommunityMessageRecord>> {
+    pub fn get_thread_messages_direct(
+        &self,
+        thread_id: &str,
+        limit: usize,
+        before_timestamp: Option<i64>,
+    ) -> Result<Vec<CommunityMessageRecord>> {
         let rows = if let Some(before) = before_timestamp {
             self.query(
                 "SELECT id, channel_id, sender_did, content_encrypted, content_plaintext, nonce, key_version, is_e2ee, reply_to_id, thread_id, has_embed, has_attachment, content_warning, edited_at, deleted_for_everyone, created_at FROM community_messages WHERE thread_id = ? AND created_at < ? ORDER BY created_at DESC LIMIT ?",
@@ -2115,7 +2737,8 @@ impl Database {
                 json!([thread_id, limit as i64]),
             )?
         };
-        let mut messages: Vec<CommunityMessageRecord> = rows.iter().map(Self::parse_community_message).collect();
+        let mut messages: Vec<CommunityMessageRecord> =
+            rows.iter().map(Self::parse_community_message).collect();
         messages.reverse();
         Ok(messages)
     }
@@ -2131,7 +2754,10 @@ impl Database {
 
     /// Unfollow a thread
     pub fn unfollow_thread(&self, thread_id: &str, member_did: &str) -> Result<()> {
-        self.exec("DELETE FROM community_thread_followers WHERE thread_id = ? AND member_did = ?", json!([thread_id, member_did]))?;
+        self.exec(
+            "DELETE FROM community_thread_followers WHERE thread_id = ? AND member_did = ?",
+            json!([thread_id, member_did]),
+        )?;
         Ok(())
     }
 
@@ -2145,23 +2771,39 @@ impl Database {
     }
 
     /// Get thread followers
-    pub fn get_thread_followers(&self, thread_id: &str) -> Result<Vec<CommunityThreadFollowerRecord>> {
+    pub fn get_thread_followers(
+        &self,
+        thread_id: &str,
+    ) -> Result<Vec<CommunityThreadFollowerRecord>> {
         let rows = self.query(
             "SELECT thread_id, member_did, followed_at FROM community_thread_followers WHERE thread_id = ?",
             json!([thread_id]),
         )?;
-        Ok(rows.iter().map(|row| CommunityThreadFollowerRecord {
-            thread_id: row["thread_id"].as_str().unwrap_or("").to_string(),
-            member_did: row["member_did"].as_str().unwrap_or("").to_string(),
-            followed_at: row["followed_at"].as_i64().unwrap_or(0),
-        }).collect())
+        Ok(rows
+            .iter()
+            .map(|row| CommunityThreadFollowerRecord {
+                thread_id: row["thread_id"].as_str().unwrap_or("").to_string(),
+                member_did: row["member_did"].as_str().unwrap_or("").to_string(),
+                followed_at: row["followed_at"].as_i64().unwrap_or(0),
+            })
+            .collect())
     }
 
     // ── Timeouts ─────────────────────────────────────────────────────────
 
     /// Create a community timeout
     #[allow(clippy::too_many_arguments)]
-    pub fn create_community_timeout(&self, id: &str, community_id: &str, member_did: &str, reason: Option<&str>, timeout_type: &str, issued_by: &str, expires_at: i64, created_at: i64) -> Result<()> {
+    pub fn create_community_timeout(
+        &self,
+        id: &str,
+        community_id: &str,
+        member_did: &str,
+        reason: Option<&str>,
+        timeout_type: &str,
+        issued_by: &str,
+        expires_at: i64,
+        created_at: i64,
+    ) -> Result<()> {
         self.exec(
             "INSERT INTO community_timeouts (id, community_id, member_did, reason, timeout_type, issued_by, expires_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
             json!([id, community_id, member_did, reason, timeout_type, issued_by, expires_at, created_at]),
@@ -2170,39 +2812,53 @@ impl Database {
     }
 
     /// Get active timeouts for a member
-    pub fn get_active_timeouts(&self, community_id: &str, member_did: &str, now: i64) -> Result<Vec<CommunityTimeoutRecord>> {
+    pub fn get_active_timeouts(
+        &self,
+        community_id: &str,
+        member_did: &str,
+        now: i64,
+    ) -> Result<Vec<CommunityTimeoutRecord>> {
         let rows = self.query(
             "SELECT id, community_id, member_did, reason, timeout_type, issued_by, expires_at, created_at FROM community_timeouts WHERE community_id = ? AND member_did = ? AND expires_at > ? ORDER BY created_at DESC",
             json!([community_id, member_did, now]),
         )?;
-        Ok(rows.iter().map(|row| CommunityTimeoutRecord {
-            id: row["id"].as_str().unwrap_or("").to_string(),
-            community_id: row["community_id"].as_str().unwrap_or("").to_string(),
-            member_did: row["member_did"].as_str().unwrap_or("").to_string(),
-            reason: row["reason"].as_str().map(|s| s.to_string()),
-            timeout_type: row["timeout_type"].as_str().unwrap_or("mute").to_string(),
-            issued_by: row["issued_by"].as_str().unwrap_or("").to_string(),
-            expires_at: row["expires_at"].as_i64().unwrap_or(0),
-            created_at: row["created_at"].as_i64().unwrap_or(0),
-        }).collect())
+        Ok(rows
+            .iter()
+            .map(|row| CommunityTimeoutRecord {
+                id: row["id"].as_str().unwrap_or("").to_string(),
+                community_id: row["community_id"].as_str().unwrap_or("").to_string(),
+                member_did: row["member_did"].as_str().unwrap_or("").to_string(),
+                reason: row["reason"].as_str().map(|s| s.to_string()),
+                timeout_type: row["timeout_type"].as_str().unwrap_or("mute").to_string(),
+                issued_by: row["issued_by"].as_str().unwrap_or("").to_string(),
+                expires_at: row["expires_at"].as_i64().unwrap_or(0),
+                created_at: row["created_at"].as_i64().unwrap_or(0),
+            })
+            .collect())
     }
 
     /// Get all timeouts for a community
-    pub fn get_community_timeouts(&self, community_id: &str) -> Result<Vec<CommunityTimeoutRecord>> {
+    pub fn get_community_timeouts(
+        &self,
+        community_id: &str,
+    ) -> Result<Vec<CommunityTimeoutRecord>> {
         let rows = self.query(
             "SELECT id, community_id, member_did, reason, timeout_type, issued_by, expires_at, created_at FROM community_timeouts WHERE community_id = ? ORDER BY created_at DESC",
             json!([community_id]),
         )?;
-        Ok(rows.iter().map(|row| CommunityTimeoutRecord {
-            id: row["id"].as_str().unwrap_or("").to_string(),
-            community_id: row["community_id"].as_str().unwrap_or("").to_string(),
-            member_did: row["member_did"].as_str().unwrap_or("").to_string(),
-            reason: row["reason"].as_str().map(|s| s.to_string()),
-            timeout_type: row["timeout_type"].as_str().unwrap_or("mute").to_string(),
-            issued_by: row["issued_by"].as_str().unwrap_or("").to_string(),
-            expires_at: row["expires_at"].as_i64().unwrap_or(0),
-            created_at: row["created_at"].as_i64().unwrap_or(0),
-        }).collect())
+        Ok(rows
+            .iter()
+            .map(|row| CommunityTimeoutRecord {
+                id: row["id"].as_str().unwrap_or("").to_string(),
+                community_id: row["community_id"].as_str().unwrap_or("").to_string(),
+                member_did: row["member_did"].as_str().unwrap_or("").to_string(),
+                reason: row["reason"].as_str().map(|s| s.to_string()),
+                timeout_type: row["timeout_type"].as_str().unwrap_or("mute").to_string(),
+                issued_by: row["issued_by"].as_str().unwrap_or("").to_string(),
+                expires_at: row["expires_at"].as_i64().unwrap_or(0),
+                created_at: row["created_at"].as_i64().unwrap_or(0),
+            })
+            .collect())
     }
 
     /// Remove a timeout
@@ -2212,7 +2868,13 @@ impl Database {
     }
 
     /// Check if a member is timed out
-    pub fn is_member_timed_out(&self, community_id: &str, member_did: &str, timeout_type: &str, now: i64) -> Result<bool> {
+    pub fn is_member_timed_out(
+        &self,
+        community_id: &str,
+        member_did: &str,
+        timeout_type: &str,
+        now: i64,
+    ) -> Result<bool> {
         let count: Option<i64> = self.query_scalar(
             "SELECT COUNT(*) FROM community_timeouts WHERE community_id = ? AND member_did = ? AND timeout_type = ? AND expires_at > ?",
             json!([community_id, member_did, timeout_type, now]),
@@ -2224,7 +2886,19 @@ impl Database {
 
     /// Store a community file
     #[allow(clippy::too_many_arguments)]
-    pub fn store_community_file(&self, id: &str, channel_id: &str, folder_id: Option<&str>, filename: &str, description: Option<&str>, file_size: i64, mime_type: Option<&str>, storage_chunks_json: &str, uploaded_by: &str, created_at: i64) -> Result<()> {
+    pub fn store_community_file(
+        &self,
+        id: &str,
+        channel_id: &str,
+        folder_id: Option<&str>,
+        filename: &str,
+        description: Option<&str>,
+        file_size: i64,
+        mime_type: Option<&str>,
+        storage_chunks_json: &str,
+        uploaded_by: &str,
+        created_at: i64,
+    ) -> Result<()> {
         self.exec(
             "INSERT INTO community_files (id, channel_id, folder_id, filename, description, file_size, mime_type, storage_chunks_json, uploaded_by, version, download_count, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?)",
             json!([id, channel_id, folder_id, filename, description, file_size, mime_type, storage_chunks_json, uploaded_by, created_at]),
@@ -2233,7 +2907,13 @@ impl Database {
     }
 
     /// Get files in a channel/folder
-    pub fn get_community_files(&self, channel_id: &str, folder_id: Option<&str>, limit: usize, offset: usize) -> Result<Vec<CommunityFileRecord>> {
+    pub fn get_community_files(
+        &self,
+        channel_id: &str,
+        folder_id: Option<&str>,
+        limit: usize,
+        offset: usize,
+    ) -> Result<Vec<CommunityFileRecord>> {
         let rows = if let Some(fid) = folder_id {
             self.query(
                 "SELECT id, channel_id, folder_id, filename, description, file_size, mime_type, storage_chunks_json, uploaded_by, version, previous_version_id, download_count, created_at FROM community_files WHERE channel_id = ? AND folder_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
@@ -2245,21 +2925,27 @@ impl Database {
                 json!([channel_id, limit as i64, offset as i64]),
             )?
         };
-        Ok(rows.iter().map(|row| CommunityFileRecord {
-            id: row["id"].as_str().unwrap_or("").to_string(),
-            channel_id: row["channel_id"].as_str().unwrap_or("").to_string(),
-            folder_id: row["folder_id"].as_str().map(|s| s.to_string()),
-            filename: row["filename"].as_str().unwrap_or("").to_string(),
-            description: row["description"].as_str().map(|s| s.to_string()),
-            file_size: row["file_size"].as_i64().unwrap_or(0),
-            mime_type: row["mime_type"].as_str().map(|s| s.to_string()),
-            storage_chunks_json: row["storage_chunks_json"].as_str().unwrap_or("[]").to_string(),
-            uploaded_by: row["uploaded_by"].as_str().unwrap_or("").to_string(),
-            version: row["version"].as_i64().unwrap_or(1) as i32,
-            previous_version_id: row["previous_version_id"].as_str().map(|s| s.to_string()),
-            download_count: row["download_count"].as_i64().unwrap_or(0) as i32,
-            created_at: row["created_at"].as_i64().unwrap_or(0),
-        }).collect())
+        Ok(rows
+            .iter()
+            .map(|row| CommunityFileRecord {
+                id: row["id"].as_str().unwrap_or("").to_string(),
+                channel_id: row["channel_id"].as_str().unwrap_or("").to_string(),
+                folder_id: row["folder_id"].as_str().map(|s| s.to_string()),
+                filename: row["filename"].as_str().unwrap_or("").to_string(),
+                description: row["description"].as_str().map(|s| s.to_string()),
+                file_size: row["file_size"].as_i64().unwrap_or(0),
+                mime_type: row["mime_type"].as_str().map(|s| s.to_string()),
+                storage_chunks_json: row["storage_chunks_json"]
+                    .as_str()
+                    .unwrap_or("[]")
+                    .to_string(),
+                uploaded_by: row["uploaded_by"].as_str().unwrap_or("").to_string(),
+                version: row["version"].as_i64().unwrap_or(1) as i32,
+                previous_version_id: row["previous_version_id"].as_str().map(|s| s.to_string()),
+                download_count: row["download_count"].as_i64().unwrap_or(0) as i32,
+                created_at: row["created_at"].as_i64().unwrap_or(0),
+            })
+            .collect())
     }
 
     /// Get a file by ID
@@ -2276,7 +2962,10 @@ impl Database {
             description: row["description"].as_str().map(|s| s.to_string()),
             file_size: row["file_size"].as_i64().unwrap_or(0),
             mime_type: row["mime_type"].as_str().map(|s| s.to_string()),
-            storage_chunks_json: row["storage_chunks_json"].as_str().unwrap_or("[]").to_string(),
+            storage_chunks_json: row["storage_chunks_json"]
+                .as_str()
+                .unwrap_or("[]")
+                .to_string(),
             uploaded_by: row["uploaded_by"].as_str().unwrap_or("").to_string(),
             version: row["version"].as_i64().unwrap_or(1) as i32,
             previous_version_id: row["previous_version_id"].as_str().map(|s| s.to_string()),
@@ -2293,12 +2982,23 @@ impl Database {
 
     /// Increment file download count
     pub fn increment_file_download_count(&self, id: &str) -> Result<()> {
-        self.exec("UPDATE community_files SET download_count = download_count + 1 WHERE id = ?", json!([id]))?;
+        self.exec(
+            "UPDATE community_files SET download_count = download_count + 1 WHERE id = ?",
+            json!([id]),
+        )?;
         Ok(())
     }
 
     /// Create a file folder
-    pub fn create_community_file_folder(&self, id: &str, channel_id: &str, parent_folder_id: Option<&str>, name: &str, created_by: &str, created_at: i64) -> Result<()> {
+    pub fn create_community_file_folder(
+        &self,
+        id: &str,
+        channel_id: &str,
+        parent_folder_id: Option<&str>,
+        name: &str,
+        created_by: &str,
+        created_at: i64,
+    ) -> Result<()> {
         self.exec(
             "INSERT INTO community_file_folders (id, channel_id, parent_folder_id, name, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?)",
             json!([id, channel_id, parent_folder_id, name, created_by, created_at]),
@@ -2307,7 +3007,11 @@ impl Database {
     }
 
     /// Get file folders
-    pub fn get_community_file_folders(&self, channel_id: &str, parent_folder_id: Option<&str>) -> Result<Vec<CommunityFileFolderRecord>> {
+    pub fn get_community_file_folders(
+        &self,
+        channel_id: &str,
+        parent_folder_id: Option<&str>,
+    ) -> Result<Vec<CommunityFileFolderRecord>> {
         let rows = if let Some(pid) = parent_folder_id {
             self.query(
                 "SELECT id, channel_id, parent_folder_id, name, created_by, created_at FROM community_file_folders WHERE channel_id = ? AND parent_folder_id = ? ORDER BY name",
@@ -2319,19 +3023,25 @@ impl Database {
                 json!([channel_id]),
             )?
         };
-        Ok(rows.iter().map(|row| CommunityFileFolderRecord {
-            id: row["id"].as_str().unwrap_or("").to_string(),
-            channel_id: row["channel_id"].as_str().unwrap_or("").to_string(),
-            parent_folder_id: row["parent_folder_id"].as_str().map(|s| s.to_string()),
-            name: row["name"].as_str().unwrap_or("").to_string(),
-            created_by: row["created_by"].as_str().unwrap_or("").to_string(),
-            created_at: row["created_at"].as_i64().unwrap_or(0),
-        }).collect())
+        Ok(rows
+            .iter()
+            .map(|row| CommunityFileFolderRecord {
+                id: row["id"].as_str().unwrap_or("").to_string(),
+                channel_id: row["channel_id"].as_str().unwrap_or("").to_string(),
+                parent_folder_id: row["parent_folder_id"].as_str().map(|s| s.to_string()),
+                name: row["name"].as_str().unwrap_or("").to_string(),
+                created_by: row["created_by"].as_str().unwrap_or("").to_string(),
+                created_at: row["created_at"].as_i64().unwrap_or(0),
+            })
+            .collect())
     }
 
     /// Delete a file folder
     pub fn delete_community_file_folder(&self, id: &str) -> Result<()> {
-        self.exec("DELETE FROM community_file_folders WHERE id = ?", json!([id]))?;
+        self.exec(
+            "DELETE FROM community_file_folders WHERE id = ?",
+            json!([id]),
+        )?;
         Ok(())
     }
 
@@ -2475,21 +3185,27 @@ impl Database {
             "SELECT id, channel_id, folder_id, filename, description, file_size, mime_type, storage_chunks_json, uploaded_by, version, previous_version_id, download_count, created_at FROM community_files WHERE channel_id = ? AND needs_reencryption = 1 LIMIT ?",
             json!([channel_id, limit as i64]),
         )?;
-        Ok(rows.iter().map(|row| CommunityFileRecord {
-            id: row["id"].as_str().unwrap_or("").to_string(),
-            channel_id: row["channel_id"].as_str().unwrap_or("").to_string(),
-            folder_id: row["folder_id"].as_str().map(|s| s.to_string()),
-            filename: row["filename"].as_str().unwrap_or("").to_string(),
-            description: row["description"].as_str().map(|s| s.to_string()),
-            file_size: row["file_size"].as_i64().unwrap_or(0),
-            mime_type: row["mime_type"].as_str().map(|s| s.to_string()),
-            storage_chunks_json: row["storage_chunks_json"].as_str().unwrap_or("[]").to_string(),
-            uploaded_by: row["uploaded_by"].as_str().unwrap_or("").to_string(),
-            version: row["version"].as_i64().unwrap_or(1) as i32,
-            previous_version_id: row["previous_version_id"].as_str().map(|s| s.to_string()),
-            download_count: row["download_count"].as_i64().unwrap_or(0) as i32,
-            created_at: row["created_at"].as_i64().unwrap_or(0),
-        }).collect())
+        Ok(rows
+            .iter()
+            .map(|row| CommunityFileRecord {
+                id: row["id"].as_str().unwrap_or("").to_string(),
+                channel_id: row["channel_id"].as_str().unwrap_or("").to_string(),
+                folder_id: row["folder_id"].as_str().map(|s| s.to_string()),
+                filename: row["filename"].as_str().unwrap_or("").to_string(),
+                description: row["description"].as_str().map(|s| s.to_string()),
+                file_size: row["file_size"].as_i64().unwrap_or(0),
+                mime_type: row["mime_type"].as_str().map(|s| s.to_string()),
+                storage_chunks_json: row["storage_chunks_json"]
+                    .as_str()
+                    .unwrap_or("[]")
+                    .to_string(),
+                uploaded_by: row["uploaded_by"].as_str().unwrap_or("").to_string(),
+                version: row["version"].as_i64().unwrap_or(1) as i32,
+                previous_version_id: row["previous_version_id"].as_str().map(|s| s.to_string()),
+                download_count: row["download_count"].as_i64().unwrap_or(0) as i32,
+                created_at: row["created_at"].as_i64().unwrap_or(0),
+            })
+            .collect())
     }
 
     /// Clear the re-encryption flag after a file has been re-encrypted.
@@ -2512,7 +3228,10 @@ impl Database {
         fingerprint: &str,
         table: &str,
     ) -> Result<()> {
-        let sql = format!("UPDATE {} SET encryption_fingerprint = ? WHERE id = ?", table);
+        let sql = format!(
+            "UPDATE {} SET encryption_fingerprint = ? WHERE id = ?",
+            table
+        );
         self.exec(&sql, json!([fingerprint, file_id]))?;
         Ok(())
     }
@@ -2521,7 +3240,16 @@ impl Database {
 
     /// Create a custom emoji
     #[allow(clippy::too_many_arguments)]
-    pub fn create_community_emoji(&self, id: &str, community_id: &str, name: &str, image_url: &str, animated: bool, uploaded_by: &str, created_at: i64) -> Result<()> {
+    pub fn create_community_emoji(
+        &self,
+        id: &str,
+        community_id: &str,
+        name: &str,
+        image_url: &str,
+        animated: bool,
+        uploaded_by: &str,
+        created_at: i64,
+    ) -> Result<()> {
         self.exec(
             "INSERT INTO community_emoji (id, community_id, name, image_url, animated, uploaded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
             json!([id, community_id, name, image_url, animated as i32, uploaded_by, created_at]),
@@ -2535,20 +3263,26 @@ impl Database {
             "SELECT id, community_id, name, image_url, animated, uploaded_by, created_at FROM community_emoji WHERE community_id = ? ORDER BY name",
             json!([community_id]),
         )?;
-        Ok(rows.iter().map(|row| CommunityEmojiRecord {
-            id: row["id"].as_str().unwrap_or("").to_string(),
-            community_id: row["community_id"].as_str().unwrap_or("").to_string(),
-            name: row["name"].as_str().unwrap_or("").to_string(),
-            image_url: row["image_url"].as_str().unwrap_or("").to_string(),
-            animated: row["animated"].as_i64().unwrap_or(0) != 0,
-            uploaded_by: row["uploaded_by"].as_str().unwrap_or("").to_string(),
-            created_at: row["created_at"].as_i64().unwrap_or(0),
-        }).collect())
+        Ok(rows
+            .iter()
+            .map(|row| CommunityEmojiRecord {
+                id: row["id"].as_str().unwrap_or("").to_string(),
+                community_id: row["community_id"].as_str().unwrap_or("").to_string(),
+                name: row["name"].as_str().unwrap_or("").to_string(),
+                image_url: row["image_url"].as_str().unwrap_or("").to_string(),
+                animated: row["animated"].as_i64().unwrap_or(0) != 0,
+                uploaded_by: row["uploaded_by"].as_str().unwrap_or("").to_string(),
+                created_at: row["created_at"].as_i64().unwrap_or(0),
+            })
+            .collect())
     }
 
     /// Rename a custom emoji
     pub fn rename_community_emoji(&self, id: &str, new_name: &str) -> Result<()> {
-        self.exec("UPDATE community_emoji SET name = ? WHERE id = ?", json!([new_name, id]))?;
+        self.exec(
+            "UPDATE community_emoji SET name = ? WHERE id = ?",
+            json!([new_name, id]),
+        )?;
         Ok(())
     }
 
@@ -2560,7 +3294,18 @@ impl Database {
 
     /// Create a custom sticker
     #[allow(clippy::too_many_arguments)]
-    pub fn create_community_sticker(&self, id: &str, community_id: &str, pack_id: Option<&str>, name: &str, image_url: &str, animated: bool, format: &str, uploaded_by: &str, created_at: i64) -> Result<()> {
+    pub fn create_community_sticker(
+        &self,
+        id: &str,
+        community_id: &str,
+        pack_id: Option<&str>,
+        name: &str,
+        image_url: &str,
+        animated: bool,
+        format: &str,
+        uploaded_by: &str,
+        created_at: i64,
+    ) -> Result<()> {
         self.exec(
             "INSERT INTO community_stickers (id, community_id, pack_id, name, image_url, animated, format, uploaded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             json!([id, community_id, pack_id, name, image_url, animated as i32, format, uploaded_by, created_at]),
@@ -2569,22 +3314,28 @@ impl Database {
     }
 
     /// Get all stickers for a community
-    pub fn get_community_stickers(&self, community_id: &str) -> Result<Vec<CommunityStickerRecord>> {
+    pub fn get_community_stickers(
+        &self,
+        community_id: &str,
+    ) -> Result<Vec<CommunityStickerRecord>> {
         let rows = self.query(
             "SELECT id, community_id, pack_id, name, image_url, animated, format, uploaded_by, created_at FROM community_stickers WHERE community_id = ? ORDER BY name",
             json!([community_id]),
         )?;
-        Ok(rows.iter().map(|row| CommunityStickerRecord {
-            id: row["id"].as_str().unwrap_or("").to_string(),
-            community_id: row["community_id"].as_str().unwrap_or("").to_string(),
-            pack_id: row["pack_id"].as_str().map(|s| s.to_string()),
-            name: row["name"].as_str().unwrap_or("").to_string(),
-            image_url: row["image_url"].as_str().unwrap_or("").to_string(),
-            animated: row["animated"].as_i64().unwrap_or(0) != 0,
-            format: row["format"].as_str().unwrap_or("png").to_string(),
-            uploaded_by: row["uploaded_by"].as_str().unwrap_or("").to_string(),
-            created_at: row["created_at"].as_i64().unwrap_or(0),
-        }).collect())
+        Ok(rows
+            .iter()
+            .map(|row| CommunityStickerRecord {
+                id: row["id"].as_str().unwrap_or("").to_string(),
+                community_id: row["community_id"].as_str().unwrap_or("").to_string(),
+                pack_id: row["pack_id"].as_str().map(|s| s.to_string()),
+                name: row["name"].as_str().unwrap_or("").to_string(),
+                image_url: row["image_url"].as_str().unwrap_or("").to_string(),
+                animated: row["animated"].as_i64().unwrap_or(0) != 0,
+                format: row["format"].as_str().unwrap_or("png").to_string(),
+                uploaded_by: row["uploaded_by"].as_str().unwrap_or("").to_string(),
+                created_at: row["created_at"].as_i64().unwrap_or(0),
+            })
+            .collect())
     }
 
     /// Delete a sticker
@@ -2597,7 +3348,16 @@ impl Database {
 
     /// Create a sticker pack
     #[allow(clippy::too_many_arguments)]
-    pub fn create_community_sticker_pack(&self, id: &str, community_id: &str, name: &str, description: Option<&str>, cover_sticker_id: Option<&str>, created_by: &str, created_at: i64) -> Result<()> {
+    pub fn create_community_sticker_pack(
+        &self,
+        id: &str,
+        community_id: &str,
+        name: &str,
+        description: Option<&str>,
+        cover_sticker_id: Option<&str>,
+        created_by: &str,
+        created_at: i64,
+    ) -> Result<()> {
         self.exec(
             "INSERT INTO community_sticker_packs (id, community_id, name, description, cover_sticker_id, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
             json!([id, community_id, name, description, cover_sticker_id, created_by, created_at]),
@@ -2606,33 +3366,48 @@ impl Database {
     }
 
     /// Get all sticker packs for a community
-    pub fn get_community_sticker_packs(&self, community_id: &str) -> Result<Vec<CommunityStickerPackRecord>> {
+    pub fn get_community_sticker_packs(
+        &self,
+        community_id: &str,
+    ) -> Result<Vec<CommunityStickerPackRecord>> {
         let rows = self.query(
             "SELECT id, community_id, name, description, cover_sticker_id, created_by, created_at FROM community_sticker_packs WHERE community_id = ? ORDER BY name",
             json!([community_id]),
         )?;
-        Ok(rows.iter().map(|row| CommunityStickerPackRecord {
-            id: row["id"].as_str().unwrap_or("").to_string(),
-            community_id: row["community_id"].as_str().unwrap_or("").to_string(),
-            name: row["name"].as_str().unwrap_or("").to_string(),
-            description: row["description"].as_str().map(|s| s.to_string()),
-            cover_sticker_id: row["cover_sticker_id"].as_str().map(|s| s.to_string()),
-            created_by: row["created_by"].as_str().unwrap_or("").to_string(),
-            created_at: row["created_at"].as_i64().unwrap_or(0),
-        }).collect())
+        Ok(rows
+            .iter()
+            .map(|row| CommunityStickerPackRecord {
+                id: row["id"].as_str().unwrap_or("").to_string(),
+                community_id: row["community_id"].as_str().unwrap_or("").to_string(),
+                name: row["name"].as_str().unwrap_or("").to_string(),
+                description: row["description"].as_str().map(|s| s.to_string()),
+                cover_sticker_id: row["cover_sticker_id"].as_str().map(|s| s.to_string()),
+                created_by: row["created_by"].as_str().unwrap_or("").to_string(),
+                created_at: row["created_at"].as_i64().unwrap_or(0),
+            })
+            .collect())
     }
 
     /// Delete a sticker pack
     pub fn delete_community_sticker_pack(&self, id: &str) -> Result<()> {
         // First nullify pack_id on stickers referencing this pack
-        self.exec("UPDATE community_stickers SET pack_id = NULL WHERE pack_id = ?", json!([id]))?;
-        self.exec("DELETE FROM community_sticker_packs WHERE id = ?", json!([id]))?;
+        self.exec(
+            "UPDATE community_stickers SET pack_id = NULL WHERE pack_id = ?",
+            json!([id]),
+        )?;
+        self.exec(
+            "DELETE FROM community_sticker_packs WHERE id = ?",
+            json!([id]),
+        )?;
         Ok(())
     }
 
     /// Rename a sticker pack
     pub fn rename_community_sticker_pack(&self, id: &str, new_name: &str) -> Result<()> {
-        self.exec("UPDATE community_sticker_packs SET name = ? WHERE id = ?", json!([new_name, id]))?;
+        self.exec(
+            "UPDATE community_sticker_packs SET name = ? WHERE id = ?",
+            json!([new_name, id]),
+        )?;
         Ok(())
     }
 
@@ -2640,7 +3415,16 @@ impl Database {
 
     /// Create a webhook
     #[allow(clippy::too_many_arguments)]
-    pub fn create_community_webhook(&self, id: &str, channel_id: &str, name: &str, avatar_url: Option<&str>, token: &str, creator_did: &str, created_at: i64) -> Result<()> {
+    pub fn create_community_webhook(
+        &self,
+        id: &str,
+        channel_id: &str,
+        name: &str,
+        avatar_url: Option<&str>,
+        token: &str,
+        creator_did: &str,
+        created_at: i64,
+    ) -> Result<()> {
         self.exec(
             "INSERT INTO community_webhooks (id, channel_id, name, avatar_url, token, creator_did, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
             json!([id, channel_id, name, avatar_url, token, creator_did, created_at]),
@@ -2654,15 +3438,18 @@ impl Database {
             "SELECT id, channel_id, name, avatar_url, token, creator_did, created_at FROM community_webhooks WHERE channel_id = ? ORDER BY created_at",
             json!([channel_id]),
         )?;
-        Ok(rows.iter().map(|row| CommunityWebhookRecord {
-            id: row["id"].as_str().unwrap_or("").to_string(),
-            channel_id: row["channel_id"].as_str().unwrap_or("").to_string(),
-            name: row["name"].as_str().unwrap_or("").to_string(),
-            avatar_url: row["avatar_url"].as_str().map(|s| s.to_string()),
-            token: row["token"].as_str().unwrap_or("").to_string(),
-            creator_did: row["creator_did"].as_str().unwrap_or("").to_string(),
-            created_at: row["created_at"].as_i64().unwrap_or(0),
-        }).collect())
+        Ok(rows
+            .iter()
+            .map(|row| CommunityWebhookRecord {
+                id: row["id"].as_str().unwrap_or("").to_string(),
+                channel_id: row["channel_id"].as_str().unwrap_or("").to_string(),
+                name: row["name"].as_str().unwrap_or("").to_string(),
+                avatar_url: row["avatar_url"].as_str().map(|s| s.to_string()),
+                token: row["token"].as_str().unwrap_or("").to_string(),
+                creator_did: row["creator_did"].as_str().unwrap_or("").to_string(),
+                created_at: row["created_at"].as_i64().unwrap_or(0),
+            })
+            .collect())
     }
 
     /// Get a webhook by ID
@@ -2683,7 +3470,12 @@ impl Database {
     }
 
     /// Update a webhook
-    pub fn update_community_webhook(&self, id: &str, name: Option<&str>, avatar_url: Option<&str>) -> Result<()> {
+    pub fn update_community_webhook(
+        &self,
+        id: &str,
+        name: Option<&str>,
+        avatar_url: Option<&str>,
+    ) -> Result<()> {
         self.exec(
             "UPDATE community_webhooks SET name = COALESCE(?, name), avatar_url = ? WHERE id = ?",
             json!([name, avatar_url, id]),
@@ -2700,7 +3492,13 @@ impl Database {
     // ── Channel Keys (E2EE) ──────────────────────────────────────────────
 
     /// Store a channel encryption key
-    pub fn store_channel_key(&self, channel_id: &str, key_version: i32, encrypted_key: &[u8], created_at: i64) -> Result<()> {
+    pub fn store_channel_key(
+        &self,
+        channel_id: &str,
+        key_version: i32,
+        encrypted_key: &[u8],
+        created_at: i64,
+    ) -> Result<()> {
         self.exec(
             "INSERT OR REPLACE INTO community_channel_keys (channel_id, key_version, encrypted_key, created_at) VALUES (?, ?, ?, ?)",
             json!([channel_id, key_version, hex::encode(encrypted_key), created_at]),
@@ -2717,7 +3515,10 @@ impl Database {
         Ok(rows.first().map(|row| ChannelKeyRecord {
             channel_id: row["channel_id"].as_str().unwrap_or("").to_string(),
             key_version: row["key_version"].as_i64().unwrap_or(0) as i32,
-            encrypted_key: row["encrypted_key"].as_str().map(|s| hex::decode(s).unwrap_or_default()).unwrap_or_default(),
+            encrypted_key: row["encrypted_key"]
+                .as_str()
+                .map(|s| hex::decode(s).unwrap_or_default())
+                .unwrap_or_default(),
             created_at: row["created_at"].as_i64().unwrap_or(0),
         }))
     }
@@ -2725,7 +3526,15 @@ impl Database {
     // ── Channel Permission Overrides ─────────────────────────────────────
 
     /// Set a channel permission override
-    pub fn set_channel_permission_override(&self, id: &str, channel_id: &str, target_type: &str, target_id: &str, allow_bitfield: &str, deny_bitfield: &str) -> Result<()> {
+    pub fn set_channel_permission_override(
+        &self,
+        id: &str,
+        channel_id: &str,
+        target_type: &str,
+        target_id: &str,
+        allow_bitfield: &str,
+        deny_bitfield: &str,
+    ) -> Result<()> {
         self.exec(
             "INSERT OR REPLACE INTO channel_permission_overrides (id, channel_id, target_type, target_id, allow_bitfield, deny_bitfield) VALUES (?, ?, ?, ?, ?, ?)",
             json!([id, channel_id, target_type, target_id, allow_bitfield, deny_bitfield]),
@@ -2735,30 +3544,47 @@ impl Database {
 
     /// Remove a channel permission override
     pub fn remove_channel_permission_override(&self, id: &str) -> Result<()> {
-        self.exec("DELETE FROM channel_permission_overrides WHERE id = ?", json!([id]))?;
+        self.exec(
+            "DELETE FROM channel_permission_overrides WHERE id = ?",
+            json!([id]),
+        )?;
         Ok(())
     }
 
     /// Get channel permission overrides
-    pub fn get_channel_permission_overrides(&self, channel_id: &str) -> Result<Vec<ChannelPermissionOverrideRecord>> {
+    pub fn get_channel_permission_overrides(
+        &self,
+        channel_id: &str,
+    ) -> Result<Vec<ChannelPermissionOverrideRecord>> {
         let rows = self.query(
             "SELECT id, channel_id, target_type, target_id, allow_bitfield, deny_bitfield FROM channel_permission_overrides WHERE channel_id = ?",
             json!([channel_id]),
         )?;
-        Ok(rows.iter().map(|row| ChannelPermissionOverrideRecord {
-            id: row["id"].as_str().unwrap_or("").to_string(),
-            channel_id: row["channel_id"].as_str().unwrap_or("").to_string(),
-            target_type: row["target_type"].as_str().unwrap_or("").to_string(),
-            target_id: row["target_id"].as_str().unwrap_or("").to_string(),
-            allow_bitfield: row["allow_bitfield"].as_str().unwrap_or("0").to_string(),
-            deny_bitfield: row["deny_bitfield"].as_str().unwrap_or("0").to_string(),
-        }).collect())
+        Ok(rows
+            .iter()
+            .map(|row| ChannelPermissionOverrideRecord {
+                id: row["id"].as_str().unwrap_or("").to_string(),
+                channel_id: row["channel_id"].as_str().unwrap_or("").to_string(),
+                target_type: row["target_type"].as_str().unwrap_or("").to_string(),
+                target_id: row["target_id"].as_str().unwrap_or("").to_string(),
+                allow_bitfield: row["allow_bitfield"].as_str().unwrap_or("0").to_string(),
+                deny_bitfield: row["deny_bitfield"].as_str().unwrap_or("0").to_string(),
+            })
+            .collect())
     }
 
     // ── Member Status ────────────────────────────────────────────────────
 
     /// Set a member's custom status
-    pub fn set_member_status(&self, community_id: &str, member_did: &str, status_text: Option<&str>, status_emoji: Option<&str>, expires_at: Option<i64>, updated_at: i64) -> Result<()> {
+    pub fn set_member_status(
+        &self,
+        community_id: &str,
+        member_did: &str,
+        status_text: Option<&str>,
+        status_emoji: Option<&str>,
+        expires_at: Option<i64>,
+        updated_at: i64,
+    ) -> Result<()> {
         self.exec(
             "INSERT OR REPLACE INTO community_member_status (community_id, member_did, status_text, status_emoji, expires_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
             json!([community_id, member_did, status_text, status_emoji, expires_at, updated_at]),
@@ -2767,7 +3593,11 @@ impl Database {
     }
 
     /// Get a member's status
-    pub fn get_member_status(&self, community_id: &str, member_did: &str) -> Result<Option<CommunityMemberStatusRecord>> {
+    pub fn get_member_status(
+        &self,
+        community_id: &str,
+        member_did: &str,
+    ) -> Result<Option<CommunityMemberStatusRecord>> {
         let rows = self.query(
             "SELECT community_id, member_did, status_text, status_emoji, expires_at, updated_at FROM community_member_status WHERE community_id = ? AND member_did = ?",
             json!([community_id, member_did]),
@@ -2784,7 +3614,10 @@ impl Database {
 
     /// Clear a member's status
     pub fn clear_member_status(&self, community_id: &str, member_did: &str) -> Result<()> {
-        self.exec("DELETE FROM community_member_status WHERE community_id = ? AND member_did = ?", json!([community_id, member_did]))?;
+        self.exec(
+            "DELETE FROM community_member_status WHERE community_id = ? AND member_did = ?",
+            json!([community_id, member_did]),
+        )?;
         Ok(())
     }
 
@@ -2792,7 +3625,19 @@ impl Database {
 
     /// Upsert a notification setting
     #[allow(clippy::too_many_arguments)]
-    pub fn upsert_notification_setting(&self, id: &str, community_id: &str, member_did: &str, target_type: &str, target_id: &str, mute_until: Option<i64>, suppress_everyone: bool, suppress_roles: bool, level: &str, updated_at: i64) -> Result<()> {
+    pub fn upsert_notification_setting(
+        &self,
+        id: &str,
+        community_id: &str,
+        member_did: &str,
+        target_type: &str,
+        target_id: &str,
+        mute_until: Option<i64>,
+        suppress_everyone: bool,
+        suppress_roles: bool,
+        level: &str,
+        updated_at: i64,
+    ) -> Result<()> {
         self.exec(
             "INSERT OR REPLACE INTO community_notification_settings (id, community_id, member_did, target_type, target_id, mute_until, suppress_everyone, suppress_roles, level, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             json!([id, community_id, member_did, target_type, target_id, mute_until, suppress_everyone as i32, suppress_roles as i32, level, updated_at]),
@@ -2802,35 +3647,61 @@ impl Database {
 
     /// Delete a notification setting
     pub fn delete_notification_setting(&self, id: &str) -> Result<()> {
-        self.exec("DELETE FROM community_notification_settings WHERE id = ?", json!([id]))?;
+        self.exec(
+            "DELETE FROM community_notification_settings WHERE id = ?",
+            json!([id]),
+        )?;
         Ok(())
     }
 
     /// Get notification settings for a member in a community
-    pub fn get_notification_settings(&self, community_id: &str, member_did: &str) -> Result<Vec<CommunityNotificationSettingRecord>> {
+    pub fn get_notification_settings(
+        &self,
+        community_id: &str,
+        member_did: &str,
+    ) -> Result<Vec<CommunityNotificationSettingRecord>> {
         let rows = self.query(
             "SELECT id, community_id, member_did, target_type, target_id, mute_until, suppress_everyone, suppress_roles, level, updated_at FROM community_notification_settings WHERE community_id = ? AND member_did = ?",
             json!([community_id, member_did]),
         )?;
-        Ok(rows.iter().map(|row| CommunityNotificationSettingRecord {
-            id: row["id"].as_str().unwrap_or("").to_string(),
-            community_id: row["community_id"].as_str().unwrap_or("").to_string(),
-            member_did: row["member_did"].as_str().unwrap_or("").to_string(),
-            target_type: row["target_type"].as_str().unwrap_or("").to_string(),
-            target_id: row["target_id"].as_str().unwrap_or("").to_string(),
-            mute_until: row["mute_until"].as_i64(),
-            suppress_everyone: row["suppress_everyone"].as_i64().unwrap_or(0) != 0,
-            suppress_roles: row["suppress_roles"].as_i64().unwrap_or(0) != 0,
-            level: row["level"].as_str().unwrap_or("all").to_string(),
-            updated_at: row["updated_at"].as_i64().unwrap_or(0),
-        }).collect())
+        Ok(rows
+            .iter()
+            .map(|row| CommunityNotificationSettingRecord {
+                id: row["id"].as_str().unwrap_or("").to_string(),
+                community_id: row["community_id"].as_str().unwrap_or("").to_string(),
+                member_did: row["member_did"].as_str().unwrap_or("").to_string(),
+                target_type: row["target_type"].as_str().unwrap_or("").to_string(),
+                target_id: row["target_id"].as_str().unwrap_or("").to_string(),
+                mute_until: row["mute_until"].as_i64(),
+                suppress_everyone: row["suppress_everyone"].as_i64().unwrap_or(0) != 0,
+                suppress_roles: row["suppress_roles"].as_i64().unwrap_or(0) != 0,
+                level: row["level"].as_str().unwrap_or("all").to_string(),
+                updated_at: row["updated_at"].as_i64().unwrap_or(0),
+            })
+            .collect())
     }
 
     // ── Boost Nodes ──────────────────────────────────────────────────────
 
     /// Upsert a boost node
     #[allow(clippy::too_many_arguments)]
-    pub fn upsert_boost_node(&self, id: &str, owner_did: &str, node_type: &str, node_public_key: &str, name: &str, enabled: bool, max_storage_bytes: i64, max_bandwidth_mbps: i32, auto_start: bool, prioritized_communities: Option<&str>, pairing_token: Option<&str>, remote_address: Option<&str>, created_at: i64, updated_at: i64) -> Result<()> {
+    pub fn upsert_boost_node(
+        &self,
+        id: &str,
+        owner_did: &str,
+        node_type: &str,
+        node_public_key: &str,
+        name: &str,
+        enabled: bool,
+        max_storage_bytes: i64,
+        max_bandwidth_mbps: i32,
+        auto_start: bool,
+        prioritized_communities: Option<&str>,
+        pairing_token: Option<&str>,
+        remote_address: Option<&str>,
+        created_at: i64,
+        updated_at: i64,
+    ) -> Result<()> {
         self.exec(
             "INSERT OR REPLACE INTO boost_nodes (id, owner_did, node_type, node_public_key, name, enabled, max_storage_bytes, max_bandwidth_mbps, auto_start, prioritized_communities, pairing_token, remote_address, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             json!([id, owner_did, node_type, node_public_key, name, enabled as i32, max_storage_bytes, max_bandwidth_mbps, auto_start as i32, prioritized_communities, pairing_token, remote_address, created_at, updated_at]),
@@ -2864,22 +3735,54 @@ impl Database {
 
     /// Update boost node last seen
     pub fn update_boost_node_last_seen(&self, id: &str, last_seen_at: i64) -> Result<()> {
-        self.exec("UPDATE boost_nodes SET last_seen_at = ?, updated_at = ? WHERE id = ?", json!([last_seen_at, last_seen_at, id]))?;
+        self.exec(
+            "UPDATE boost_nodes SET last_seen_at = ?, updated_at = ? WHERE id = ?",
+            json!([last_seen_at, last_seen_at, id]),
+        )?;
         Ok(())
     }
 
     /// Update boost node config
     #[allow(clippy::too_many_arguments)]
-    pub fn update_boost_node_config(&self, id: &str, name: Option<&str>, enabled: Option<bool>, max_storage_bytes: Option<i64>, max_bandwidth_mbps: Option<i32>, auto_start: Option<bool>, prioritized_communities: Option<&str>, updated_at: i64) -> Result<()> {
+    pub fn update_boost_node_config(
+        &self,
+        id: &str,
+        name: Option<&str>,
+        enabled: Option<bool>,
+        max_storage_bytes: Option<i64>,
+        max_bandwidth_mbps: Option<i32>,
+        auto_start: Option<bool>,
+        prioritized_communities: Option<&str>,
+        updated_at: i64,
+    ) -> Result<()> {
         let mut sets = Vec::new();
         let mut params: Vec<serde_json::Value> = Vec::new();
-        if let Some(v) = name { sets.push("name = ?"); params.push(json!(v)); }
-        if let Some(v) = enabled { sets.push("enabled = ?"); params.push(json!(v as i32)); }
-        if let Some(v) = max_storage_bytes { sets.push("max_storage_bytes = ?"); params.push(json!(v)); }
-        if let Some(v) = max_bandwidth_mbps { sets.push("max_bandwidth_mbps = ?"); params.push(json!(v)); }
-        if let Some(v) = auto_start { sets.push("auto_start = ?"); params.push(json!(v as i32)); }
-        if let Some(v) = prioritized_communities { sets.push("prioritized_communities = ?"); params.push(json!(v)); }
-        sets.push("updated_at = ?"); params.push(json!(updated_at));
+        if let Some(v) = name {
+            sets.push("name = ?");
+            params.push(json!(v));
+        }
+        if let Some(v) = enabled {
+            sets.push("enabled = ?");
+            params.push(json!(v as i32));
+        }
+        if let Some(v) = max_storage_bytes {
+            sets.push("max_storage_bytes = ?");
+            params.push(json!(v));
+        }
+        if let Some(v) = max_bandwidth_mbps {
+            sets.push("max_bandwidth_mbps = ?");
+            params.push(json!(v));
+        }
+        if let Some(v) = auto_start {
+            sets.push("auto_start = ?");
+            params.push(json!(v as i32));
+        }
+        if let Some(v) = prioritized_communities {
+            sets.push("prioritized_communities = ?");
+            params.push(json!(v));
+        }
+        sets.push("updated_at = ?");
+        params.push(json!(updated_at));
         params.push(json!(id));
         if !sets.is_empty() {
             let sql = format!("UPDATE boost_nodes SET {} WHERE id = ?", sets.join(", "));
@@ -2899,7 +3802,9 @@ impl Database {
             max_storage_bytes: row["max_storage_bytes"].as_i64().unwrap_or(0),
             max_bandwidth_mbps: row["max_bandwidth_mbps"].as_i64().unwrap_or(0) as i32,
             auto_start: row["auto_start"].as_i64().unwrap_or(0) != 0,
-            prioritized_communities: row["prioritized_communities"].as_str().map(|s| s.to_string()),
+            prioritized_communities: row["prioritized_communities"]
+                .as_str()
+                .map(|s| s.to_string()),
             pairing_token: row["pairing_token"].as_str().map(|s| s.to_string()),
             remote_address: row["remote_address"].as_str().map(|s| s.to_string()),
             last_seen_at: row["last_seen_at"].as_i64(),
@@ -2911,7 +3816,15 @@ impl Database {
     // ── File Chunk Storage ───────────────────────────────────────────────
 
     /// Store a file chunk (data stored as base64 text in WASM)
-    pub fn store_chunk(&self, chunk_id: &str, file_id: &str, chunk_index: i32, data: &[u8], size: i64, created_at: i64) -> Result<()> {
+    pub fn store_chunk(
+        &self,
+        chunk_id: &str,
+        file_id: &str,
+        chunk_index: i32,
+        data: &[u8],
+        size: i64,
+        created_at: i64,
+    ) -> Result<()> {
         use base64::Engine as _;
         let data_b64 = base64::engine::general_purpose::STANDARD.encode(data);
         self.exec(
@@ -2930,7 +3843,9 @@ impl Database {
         )?;
         Ok(rows.first().map(|row| {
             let data_b64 = row["data"].as_str().unwrap_or("");
-            let data = base64::engine::general_purpose::STANDARD.decode(data_b64).unwrap_or_default();
+            let data = base64::engine::general_purpose::STANDARD
+                .decode(data_b64)
+                .unwrap_or_default();
             FileChunkRecord {
                 chunk_id: row["chunk_id"].as_str().unwrap_or("").to_string(),
                 file_id: row["file_id"].as_str().unwrap_or("").to_string(),
@@ -2949,29 +3864,49 @@ impl Database {
             "SELECT chunk_id, file_id, chunk_index, data, size, created_at FROM file_chunks WHERE file_id = ? ORDER BY chunk_index",
             json!([file_id]),
         )?;
-        Ok(rows.iter().map(|row| {
-            let data_b64 = row["data"].as_str().unwrap_or("");
-            let data = base64::engine::general_purpose::STANDARD.decode(data_b64).unwrap_or_default();
-            FileChunkRecord {
-                chunk_id: row["chunk_id"].as_str().unwrap_or("").to_string(),
-                file_id: row["file_id"].as_str().unwrap_or("").to_string(),
-                chunk_index: row["chunk_index"].as_i64().unwrap_or(0) as i32,
-                data,
-                size: row["size"].as_i64().unwrap_or(0),
-                created_at: row["created_at"].as_i64().unwrap_or(0),
-            }
-        }).collect())
+        Ok(rows
+            .iter()
+            .map(|row| {
+                let data_b64 = row["data"].as_str().unwrap_or("");
+                let data = base64::engine::general_purpose::STANDARD
+                    .decode(data_b64)
+                    .unwrap_or_default();
+                FileChunkRecord {
+                    chunk_id: row["chunk_id"].as_str().unwrap_or("").to_string(),
+                    file_id: row["file_id"].as_str().unwrap_or("").to_string(),
+                    chunk_index: row["chunk_index"].as_i64().unwrap_or(0) as i32,
+                    data,
+                    size: row["size"].as_i64().unwrap_or(0),
+                    created_at: row["created_at"].as_i64().unwrap_or(0),
+                }
+            })
+            .collect())
     }
 
     /// Delete all chunks for a file
     pub fn delete_chunks_for_file(&self, file_id: &str) -> Result<()> {
-        self.exec("DELETE FROM file_chunks WHERE file_id = ?", json!([file_id]))?;
+        self.exec(
+            "DELETE FROM file_chunks WHERE file_id = ?",
+            json!([file_id]),
+        )?;
         Ok(())
     }
 
     /// Store a file manifest
     #[allow(clippy::too_many_arguments)]
-    pub fn store_manifest(&self, file_id: &str, filename: &str, total_size: i64, chunk_size: i64, total_chunks: i32, chunks_json: &str, file_hash: &str, encrypted: bool, encryption_key_id: Option<&str>, created_at: i64) -> Result<()> {
+    pub fn store_manifest(
+        &self,
+        file_id: &str,
+        filename: &str,
+        total_size: i64,
+        chunk_size: i64,
+        total_chunks: i32,
+        chunks_json: &str,
+        file_hash: &str,
+        encrypted: bool,
+        encryption_key_id: Option<&str>,
+        created_at: i64,
+    ) -> Result<()> {
         self.exec(
             "INSERT OR REPLACE INTO file_manifests (file_id, filename, total_size, chunk_size, total_chunks, chunks_json, file_hash, encrypted, encryption_key_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             json!([file_id, filename, total_size, chunk_size, total_chunks, chunks_json, file_hash, encrypted as i32, encryption_key_id, created_at]),
@@ -3001,7 +3936,10 @@ impl Database {
 
     /// Delete a file manifest
     pub fn delete_manifest(&self, file_id: &str) -> Result<()> {
-        self.exec("DELETE FROM file_manifests WHERE file_id = ?", json!([file_id]))?;
+        self.exec(
+            "DELETE FROM file_manifests WHERE file_id = ?",
+            json!([file_id]),
+        )?;
         Ok(())
     }
 
@@ -3009,7 +3947,21 @@ impl Database {
 
     /// Store a DM shared file
     #[allow(clippy::too_many_arguments)]
-    pub fn store_dm_shared_file(&self, id: &str, conversation_id: &str, folder_id: Option<&str>, filename: &str, description: Option<&str>, file_size: i64, mime_type: Option<&str>, storage_chunks_json: &str, uploaded_by: &str, encrypted_metadata: Option<&str>, encryption_nonce: Option<&str>, created_at: i64) -> Result<()> {
+    pub fn store_dm_shared_file(
+        &self,
+        id: &str,
+        conversation_id: &str,
+        folder_id: Option<&str>,
+        filename: &str,
+        description: Option<&str>,
+        file_size: i64,
+        mime_type: Option<&str>,
+        storage_chunks_json: &str,
+        uploaded_by: &str,
+        encrypted_metadata: Option<&str>,
+        encryption_nonce: Option<&str>,
+        created_at: i64,
+    ) -> Result<()> {
         self.exec(
             "INSERT INTO dm_shared_files (id, conversation_id, folder_id, filename, description, file_size, mime_type, storage_chunks_json, uploaded_by, version, download_count, encrypted_metadata, encryption_nonce, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, ?, ?, ?)",
             json!([id, conversation_id, folder_id, filename, description, file_size, mime_type, storage_chunks_json, uploaded_by, encrypted_metadata, encryption_nonce, created_at]),
@@ -3018,7 +3970,13 @@ impl Database {
     }
 
     /// Get DM shared files in a conversation (optionally within a folder)
-    pub fn get_dm_shared_files(&self, conversation_id: &str, folder_id: Option<&str>, limit: usize, offset: usize) -> Result<Vec<DmSharedFileRecord>> {
+    pub fn get_dm_shared_files(
+        &self,
+        conversation_id: &str,
+        folder_id: Option<&str>,
+        limit: usize,
+        offset: usize,
+    ) -> Result<Vec<DmSharedFileRecord>> {
         let rows = if let Some(fid) = folder_id {
             self.query(
                 "SELECT id, conversation_id, folder_id, filename, description, file_size, mime_type, storage_chunks_json, uploaded_by, version, download_count, encrypted_metadata, encryption_nonce, created_at FROM dm_shared_files WHERE conversation_id = ? AND folder_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
@@ -3030,22 +3988,28 @@ impl Database {
                 json!([conversation_id, limit as i64, offset as i64]),
             )?
         };
-        Ok(rows.iter().map(|row| DmSharedFileRecord {
-            id: row["id"].as_str().unwrap_or("").to_string(),
-            conversation_id: row["conversation_id"].as_str().unwrap_or("").to_string(),
-            folder_id: row["folder_id"].as_str().map(|s| s.to_string()),
-            filename: row["filename"].as_str().unwrap_or("").to_string(),
-            description: row["description"].as_str().map(|s| s.to_string()),
-            file_size: row["file_size"].as_i64().unwrap_or(0),
-            mime_type: row["mime_type"].as_str().map(|s| s.to_string()),
-            storage_chunks_json: row["storage_chunks_json"].as_str().unwrap_or("[]").to_string(),
-            uploaded_by: row["uploaded_by"].as_str().unwrap_or("").to_string(),
-            version: row["version"].as_i64().unwrap_or(1) as i32,
-            download_count: row["download_count"].as_i64().unwrap_or(0) as i32,
-            encrypted_metadata: row["encrypted_metadata"].as_str().map(|s| s.to_string()),
-            encryption_nonce: row["encryption_nonce"].as_str().map(|s| s.to_string()),
-            created_at: row["created_at"].as_i64().unwrap_or(0),
-        }).collect())
+        Ok(rows
+            .iter()
+            .map(|row| DmSharedFileRecord {
+                id: row["id"].as_str().unwrap_or("").to_string(),
+                conversation_id: row["conversation_id"].as_str().unwrap_or("").to_string(),
+                folder_id: row["folder_id"].as_str().map(|s| s.to_string()),
+                filename: row["filename"].as_str().unwrap_or("").to_string(),
+                description: row["description"].as_str().map(|s| s.to_string()),
+                file_size: row["file_size"].as_i64().unwrap_or(0),
+                mime_type: row["mime_type"].as_str().map(|s| s.to_string()),
+                storage_chunks_json: row["storage_chunks_json"]
+                    .as_str()
+                    .unwrap_or("[]")
+                    .to_string(),
+                uploaded_by: row["uploaded_by"].as_str().unwrap_or("").to_string(),
+                version: row["version"].as_i64().unwrap_or(1) as i32,
+                download_count: row["download_count"].as_i64().unwrap_or(0) as i32,
+                encrypted_metadata: row["encrypted_metadata"].as_str().map(|s| s.to_string()),
+                encryption_nonce: row["encryption_nonce"].as_str().map(|s| s.to_string()),
+                created_at: row["created_at"].as_i64().unwrap_or(0),
+            })
+            .collect())
     }
 
     /// Get a single DM shared file by ID
@@ -3062,7 +4026,10 @@ impl Database {
             description: row["description"].as_str().map(|s| s.to_string()),
             file_size: row["file_size"].as_i64().unwrap_or(0),
             mime_type: row["mime_type"].as_str().map(|s| s.to_string()),
-            storage_chunks_json: row["storage_chunks_json"].as_str().unwrap_or("[]").to_string(),
+            storage_chunks_json: row["storage_chunks_json"]
+                .as_str()
+                .unwrap_or("[]")
+                .to_string(),
             uploaded_by: row["uploaded_by"].as_str().unwrap_or("").to_string(),
             version: row["version"].as_i64().unwrap_or(1) as i32,
             download_count: row["download_count"].as_i64().unwrap_or(0) as i32,
@@ -3074,7 +4041,10 @@ impl Database {
 
     /// Increment download count for a DM shared file
     pub fn increment_dm_file_download_count(&self, id: &str) -> Result<()> {
-        self.exec("UPDATE dm_shared_files SET download_count = download_count + 1 WHERE id = ?", json!([id]))?;
+        self.exec(
+            "UPDATE dm_shared_files SET download_count = download_count + 1 WHERE id = ?",
+            json!([id]),
+        )?;
         Ok(())
     }
 
@@ -3086,14 +4056,25 @@ impl Database {
 
     /// Move a DM shared file to a different folder
     pub fn move_dm_shared_file(&self, id: &str, target_folder_id: Option<&str>) -> Result<()> {
-        self.exec("UPDATE dm_shared_files SET folder_id = ? WHERE id = ?", json!([target_folder_id, id]))?;
+        self.exec(
+            "UPDATE dm_shared_files SET folder_id = ? WHERE id = ?",
+            json!([target_folder_id, id]),
+        )?;
         Ok(())
     }
 
     // ── DM Shared Folders ────────────────────────────────────────────────
 
     /// Create a DM shared folder
-    pub fn create_dm_shared_folder(&self, id: &str, conversation_id: &str, parent_folder_id: Option<&str>, name: &str, created_by: &str, created_at: i64) -> Result<()> {
+    pub fn create_dm_shared_folder(
+        &self,
+        id: &str,
+        conversation_id: &str,
+        parent_folder_id: Option<&str>,
+        name: &str,
+        created_by: &str,
+        created_at: i64,
+    ) -> Result<()> {
         self.exec(
             "INSERT INTO dm_shared_folders (id, conversation_id, parent_folder_id, name, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?)",
             json!([id, conversation_id, parent_folder_id, name, created_by, created_at]),
@@ -3102,7 +4083,11 @@ impl Database {
     }
 
     /// Get DM shared folders
-    pub fn get_dm_shared_folders(&self, conversation_id: &str, parent_folder_id: Option<&str>) -> Result<Vec<DmSharedFolderRecord>> {
+    pub fn get_dm_shared_folders(
+        &self,
+        conversation_id: &str,
+        parent_folder_id: Option<&str>,
+    ) -> Result<Vec<DmSharedFolderRecord>> {
         let rows = if let Some(pid) = parent_folder_id {
             self.query(
                 "SELECT id, conversation_id, parent_folder_id, name, created_by, created_at FROM dm_shared_folders WHERE conversation_id = ? AND parent_folder_id = ? ORDER BY name",
@@ -3114,14 +4099,17 @@ impl Database {
                 json!([conversation_id]),
             )?
         };
-        Ok(rows.iter().map(|row| DmSharedFolderRecord {
-            id: row["id"].as_str().unwrap_or("").to_string(),
-            conversation_id: row["conversation_id"].as_str().unwrap_or("").to_string(),
-            parent_folder_id: row["parent_folder_id"].as_str().map(|s| s.to_string()),
-            name: row["name"].as_str().unwrap_or("").to_string(),
-            created_by: row["created_by"].as_str().unwrap_or("").to_string(),
-            created_at: row["created_at"].as_i64().unwrap_or(0),
-        }).collect())
+        Ok(rows
+            .iter()
+            .map(|row| DmSharedFolderRecord {
+                id: row["id"].as_str().unwrap_or("").to_string(),
+                conversation_id: row["conversation_id"].as_str().unwrap_or("").to_string(),
+                parent_folder_id: row["parent_folder_id"].as_str().map(|s| s.to_string()),
+                name: row["name"].as_str().unwrap_or("").to_string(),
+                created_by: row["created_by"].as_str().unwrap_or("").to_string(),
+                created_at: row["created_at"].as_i64().unwrap_or(0),
+            })
+            .collect())
     }
 
     /// Delete a DM shared folder
@@ -3132,7 +4120,10 @@ impl Database {
 
     /// Rename a DM shared folder
     pub fn rename_dm_shared_folder(&self, id: &str, name: &str) -> Result<()> {
-        self.exec("UPDATE dm_shared_folders SET name = ? WHERE id = ?", json!([name, id]))?;
+        self.exec(
+            "UPDATE dm_shared_folders SET name = ? WHERE id = ?",
+            json!([name, id]),
+        )?;
         Ok(())
     }
 
@@ -3191,23 +4182,26 @@ impl Database {
             "SELECT transfer_id, file_id, manifest_json, direction, peer_did, state, chunks_completed, total_chunks, bytes_transferred, total_bytes, chunks_bitfield, transport_type, error, started_at, updated_at FROM transfer_sessions WHERE state NOT IN ('completed', 'failed', 'cancelled') ORDER BY updated_at DESC",
             json!([]),
         )?;
-        Ok(rows.iter().map(|row| TransferSessionRecord {
-            transfer_id: row["transfer_id"].as_str().unwrap_or("").to_string(),
-            file_id: row["file_id"].as_str().unwrap_or("").to_string(),
-            manifest_json: row["manifest_json"].as_str().unwrap_or("").to_string(),
-            direction: row["direction"].as_str().unwrap_or("").to_string(),
-            peer_did: row["peer_did"].as_str().unwrap_or("").to_string(),
-            state: row["state"].as_str().unwrap_or("").to_string(),
-            chunks_completed: row["chunks_completed"].as_i64().unwrap_or(0) as i32,
-            total_chunks: row["total_chunks"].as_i64().unwrap_or(0) as i32,
-            bytes_transferred: row["bytes_transferred"].as_i64().unwrap_or(0),
-            total_bytes: row["total_bytes"].as_i64().unwrap_or(0),
-            chunks_bitfield: row["chunks_bitfield"].as_str().unwrap_or("").to_string(),
-            transport_type: row["transport_type"].as_str().unwrap_or("").to_string(),
-            error: row["error"].as_str().map(|s| s.to_string()),
-            started_at: row["started_at"].as_i64().unwrap_or(0),
-            updated_at: row["updated_at"].as_i64().unwrap_or(0),
-        }).collect())
+        Ok(rows
+            .iter()
+            .map(|row| TransferSessionRecord {
+                transfer_id: row["transfer_id"].as_str().unwrap_or("").to_string(),
+                file_id: row["file_id"].as_str().unwrap_or("").to_string(),
+                manifest_json: row["manifest_json"].as_str().unwrap_or("").to_string(),
+                direction: row["direction"].as_str().unwrap_or("").to_string(),
+                peer_did: row["peer_did"].as_str().unwrap_or("").to_string(),
+                state: row["state"].as_str().unwrap_or("").to_string(),
+                chunks_completed: row["chunks_completed"].as_i64().unwrap_or(0) as i32,
+                total_chunks: row["total_chunks"].as_i64().unwrap_or(0) as i32,
+                bytes_transferred: row["bytes_transferred"].as_i64().unwrap_or(0),
+                total_bytes: row["total_bytes"].as_i64().unwrap_or(0),
+                chunks_bitfield: row["chunks_bitfield"].as_str().unwrap_or("").to_string(),
+                transport_type: row["transport_type"].as_str().unwrap_or("").to_string(),
+                error: row["error"].as_str().map(|s| s.to_string()),
+                started_at: row["started_at"].as_i64().unwrap_or(0),
+                updated_at: row["updated_at"].as_i64().unwrap_or(0),
+            })
+            .collect())
     }
 
     /// Update transfer session progress (chunk received/sent)
@@ -3228,7 +4222,12 @@ impl Database {
     }
 
     /// Update transfer session state with optional error
-    pub fn update_transfer_state(&self, transfer_id: &str, state: &str, error: Option<&str>) -> Result<()> {
+    pub fn update_transfer_state(
+        &self,
+        transfer_id: &str,
+        state: &str,
+        error: Option<&str>,
+    ) -> Result<()> {
         let now = js_sys::Date::now() as i64;
         self.exec(
             "UPDATE transfer_sessions SET state = ?, error = ?, updated_at = ? WHERE transfer_id = ?",
@@ -3239,7 +4238,10 @@ impl Database {
 
     /// Delete a transfer session
     pub fn delete_transfer_session(&self, transfer_id: &str) -> Result<()> {
-        self.exec("DELETE FROM transfer_sessions WHERE transfer_id = ?", json!([transfer_id]))?;
+        self.exec(
+            "DELETE FROM transfer_sessions WHERE transfer_id = ?",
+            json!([transfer_id]),
+        )?;
         Ok(())
     }
 
@@ -3249,23 +4251,26 @@ impl Database {
             "SELECT transfer_id, file_id, manifest_json, direction, peer_did, state, chunks_completed, total_chunks, bytes_transferred, total_bytes, chunks_bitfield, transport_type, error, started_at, updated_at FROM transfer_sessions WHERE file_id = ? ORDER BY started_at DESC",
             json!([file_id]),
         )?;
-        Ok(rows.iter().map(|row| TransferSessionRecord {
-            transfer_id: row["transfer_id"].as_str().unwrap_or("").to_string(),
-            file_id: row["file_id"].as_str().unwrap_or("").to_string(),
-            manifest_json: row["manifest_json"].as_str().unwrap_or("").to_string(),
-            direction: row["direction"].as_str().unwrap_or("").to_string(),
-            peer_did: row["peer_did"].as_str().unwrap_or("").to_string(),
-            state: row["state"].as_str().unwrap_or("").to_string(),
-            chunks_completed: row["chunks_completed"].as_i64().unwrap_or(0) as i32,
-            total_chunks: row["total_chunks"].as_i64().unwrap_or(0) as i32,
-            bytes_transferred: row["bytes_transferred"].as_i64().unwrap_or(0),
-            total_bytes: row["total_bytes"].as_i64().unwrap_or(0),
-            chunks_bitfield: row["chunks_bitfield"].as_str().unwrap_or("").to_string(),
-            transport_type: row["transport_type"].as_str().unwrap_or("").to_string(),
-            error: row["error"].as_str().map(|s| s.to_string()),
-            started_at: row["started_at"].as_i64().unwrap_or(0),
-            updated_at: row["updated_at"].as_i64().unwrap_or(0),
-        }).collect())
+        Ok(rows
+            .iter()
+            .map(|row| TransferSessionRecord {
+                transfer_id: row["transfer_id"].as_str().unwrap_or("").to_string(),
+                file_id: row["file_id"].as_str().unwrap_or("").to_string(),
+                manifest_json: row["manifest_json"].as_str().unwrap_or("").to_string(),
+                direction: row["direction"].as_str().unwrap_or("").to_string(),
+                peer_did: row["peer_did"].as_str().unwrap_or("").to_string(),
+                state: row["state"].as_str().unwrap_or("").to_string(),
+                chunks_completed: row["chunks_completed"].as_i64().unwrap_or(0) as i32,
+                total_chunks: row["total_chunks"].as_i64().unwrap_or(0) as i32,
+                bytes_transferred: row["bytes_transferred"].as_i64().unwrap_or(0),
+                total_bytes: row["total_bytes"].as_i64().unwrap_or(0),
+                chunks_bitfield: row["chunks_bitfield"].as_str().unwrap_or("").to_string(),
+                transport_type: row["transport_type"].as_str().unwrap_or("").to_string(),
+                error: row["error"].as_str().map(|s| s.to_string()),
+                started_at: row["started_at"].as_i64().unwrap_or(0),
+                updated_at: row["updated_at"].as_i64().unwrap_or(0),
+            })
+            .collect())
     }
 
     // ── Community Seats ────────────────────────────────────────────────
@@ -3314,7 +4319,10 @@ impl Database {
     }
 
     /// Get unclaimed seats for a community
-    pub fn get_unclaimed_community_seats(&self, community_id: &str) -> Result<Vec<CommunitySeatRecord>> {
+    pub fn get_unclaimed_community_seats(
+        &self,
+        community_id: &str,
+    ) -> Result<Vec<CommunitySeatRecord>> {
         let rows = self.query(
             "SELECT id, community_id, platform, platform_user_id, platform_username, nickname, avatar_url, role_ids_json, claimed_by_did, claimed_at, created_at FROM community_seats WHERE community_id = ? AND claimed_by_did IS NULL ORDER BY platform_username",
             json!([community_id]),
@@ -3346,13 +4354,20 @@ impl Database {
     }
 
     /// Claim a seat (set claimed_by_did and claimed_at)
-    pub fn claim_community_seat(&self, seat_id: &str, claimed_by_did: &str, claimed_at: i64) -> Result<()> {
+    pub fn claim_community_seat(
+        &self,
+        seat_id: &str,
+        claimed_by_did: &str,
+        claimed_at: i64,
+    ) -> Result<()> {
         let updated = self.exec(
             "UPDATE community_seats SET claimed_by_did = ?, claimed_at = ? WHERE id = ? AND claimed_by_did IS NULL",
             json!([claimed_by_did, claimed_at, seat_id]),
         )?;
         if updated == 0 {
-            return Err(Error::DatabaseError("Seat not found or already claimed".to_string()));
+            return Err(Error::DatabaseError(
+                "Seat not found or already claimed".to_string(),
+            ));
         }
         Ok(())
     }
@@ -3365,10 +4380,12 @@ impl Database {
 
     /// Count seats for a community (total and unclaimed)
     pub fn count_community_seats(&self, community_id: &str) -> Result<(i64, i64)> {
-        let total: i64 = self.query_scalar(
-            "SELECT COUNT(*) FROM community_seats WHERE community_id = ?",
-            json!([community_id]),
-        )?.unwrap_or(0);
+        let total: i64 = self
+            .query_scalar(
+                "SELECT COUNT(*) FROM community_seats WHERE community_id = ?",
+                json!([community_id]),
+            )?
+            .unwrap_or(0);
 
         let unclaimed: i64 = self.query_scalar(
             "SELECT COUNT(*) FROM community_seats WHERE community_id = ? AND claimed_by_did IS NULL",

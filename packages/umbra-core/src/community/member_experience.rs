@@ -2,11 +2,9 @@
 //!
 //! Custom status, notification settings, presence, and typing indicators.
 
-use crate::error::{Error, Result};
-use crate::storage::{
-    CommunityMemberStatusRecord, CommunityNotificationSettingRecord,
-};
 use super::service::generate_id;
+use crate::error::{Error, Result};
+use crate::storage::{CommunityMemberStatusRecord, CommunityNotificationSettingRecord};
 
 impl super::CommunityService {
     // ── Custom Status ───────────────────────────────────────────────────
@@ -22,7 +20,12 @@ impl super::CommunityService {
     ) -> Result<CommunityMemberStatusRecord> {
         let now = crate::time::now_timestamp();
         self.db().set_member_status(
-            community_id, member_did, status_text, status_emoji, expires_at, now,
+            community_id,
+            member_did,
+            status_text,
+            status_emoji,
+            expires_at,
+            now,
         )?;
 
         Ok(CommunityMemberStatusRecord {
@@ -45,11 +48,7 @@ impl super::CommunityService {
     }
 
     /// Clear a member's custom status.
-    pub fn clear_member_status(
-        &self,
-        community_id: &str,
-        member_did: &str,
-    ) -> Result<()> {
+    pub fn clear_member_status(&self, community_id: &str, member_did: &str) -> Result<()> {
         self.db().clear_member_status(community_id, member_did)
     }
 
@@ -85,8 +84,16 @@ impl super::CommunityService {
         let id = generate_id();
 
         self.db().upsert_notification_setting(
-            &id, community_id, member_did, target_type, target_id,
-            mute_until, suppress_everyone, suppress_roles, level, now,
+            &id,
+            community_id,
+            member_did,
+            target_type,
+            target_id,
+            mute_until,
+            suppress_everyone,
+            suppress_roles,
+            level,
+            now,
         )?;
 
         Ok(CommunityNotificationSettingRecord {
@@ -109,7 +116,8 @@ impl super::CommunityService {
         community_id: &str,
         member_did: &str,
     ) -> Result<Vec<CommunityNotificationSettingRecord>> {
-        self.db().get_notification_settings(community_id, member_did)
+        self.db()
+            .get_notification_settings(community_id, member_did)
     }
 
     /// Delete a notification setting.

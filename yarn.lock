@@ -3411,6 +3411,10 @@ expo-status-bar@~3.0.9:
   version "0.1.0"
   resolved "file:modules/expo-umbra-core"
 
+"expo-video-effects@file:modules/expo-video-effects":
+  version "0.1.0"
+  resolved "file:modules/expo-video-effects"
+
 expo-web-browser@~15.0.10:
   version "15.0.10"
   resolved "https://registry.npmjs.org/expo-web-browser/-/expo-web-browser-15.0.10.tgz"

@@ -28,89 +28,89 @@
 pub enum Permission {
     // ── General ──────────────────────────────────────────────────────────
     /// View channels and read messages
-    ViewChannels         = 1 << 0,
+    ViewChannels = 1 << 0,
     /// Manage community settings (name, description, icon)
-    ManageCommunity      = 1 << 1,
+    ManageCommunity = 1 << 1,
     /// Manage channels (create, edit, delete)
-    ManageChannels       = 1 << 2,
+    ManageChannels = 1 << 2,
     /// Manage roles (create, edit, delete, assign)
-    ManageRoles          = 1 << 3,
+    ManageRoles = 1 << 3,
     /// Create invite links
-    CreateInvites        = 1 << 4,
+    CreateInvites = 1 << 4,
     /// Manage invites (delete others' invites)
-    ManageInvites        = 1 << 5,
+    ManageInvites = 1 << 5,
 
     // ── Members ──────────────────────────────────────────────────────────
     /// Kick members
-    KickMembers          = 1 << 6,
+    KickMembers = 1 << 6,
     /// Ban members
-    BanMembers           = 1 << 7,
+    BanMembers = 1 << 7,
     /// Timeout members (mute)
-    TimeoutMembers       = 1 << 8,
+    TimeoutMembers = 1 << 8,
     /// Change own nickname
-    ChangeNickname       = 1 << 9,
+    ChangeNickname = 1 << 9,
     /// Change other members' nicknames
-    ManageNicknames      = 1 << 10,
+    ManageNicknames = 1 << 10,
 
     // ── Messages ─────────────────────────────────────────────────────────
     /// Send messages in text channels
-    SendMessages         = 1 << 11,
+    SendMessages = 1 << 11,
     /// Embed links (URL previews)
-    EmbedLinks           = 1 << 12,
+    EmbedLinks = 1 << 12,
     /// Attach files
-    AttachFiles          = 1 << 13,
+    AttachFiles = 1 << 13,
     /// Add reactions
-    AddReactions         = 1 << 14,
+    AddReactions = 1 << 14,
     /// Use external emoji
-    UseExternalEmoji     = 1 << 15,
+    UseExternalEmoji = 1 << 15,
     /// Mention @everyone and @here
-    MentionEveryone      = 1 << 16,
+    MentionEveryone = 1 << 16,
     /// Manage messages (delete/pin others' messages)
-    ManageMessages       = 1 << 17,
+    ManageMessages = 1 << 17,
     /// Read message history
-    ReadMessageHistory   = 1 << 18,
+    ReadMessageHistory = 1 << 18,
 
     // ── Threads ──────────────────────────────────────────────────────────
     /// Create threads
-    CreateThreads        = 1 << 19,
+    CreateThreads = 1 << 19,
     /// Send messages in threads
-    SendThreadMessages   = 1 << 20,
+    SendThreadMessages = 1 << 20,
     /// Manage threads (archive, delete, lock)
-    ManageThreads        = 1 << 21,
+    ManageThreads = 1 << 21,
 
     // ── Voice ────────────────────────────────────────────────────────────
     /// Connect to voice channels
-    VoiceConnect         = 1 << 22,
+    VoiceConnect = 1 << 22,
     /// Speak in voice channels
-    VoiceSpeak           = 1 << 23,
+    VoiceSpeak = 1 << 23,
     /// Stream video/screen share
-    VoiceStream          = 1 << 24,
+    VoiceStream = 1 << 24,
     /// Mute other members in voice
-    VoiceMuteMembers     = 1 << 25,
+    VoiceMuteMembers = 1 << 25,
     /// Deafen other members in voice
-    VoiceDeafenMembers   = 1 << 26,
+    VoiceDeafenMembers = 1 << 26,
     /// Move members between voice channels
-    VoiceMoveMembers     = 1 << 27,
+    VoiceMoveMembers = 1 << 27,
 
     // ── Moderation ───────────────────────────────────────────────────────
     /// View audit log
-    ViewAuditLog         = 1 << 28,
+    ViewAuditLog = 1 << 28,
     /// Manage webhooks
-    ManageWebhooks       = 1 << 29,
+    ManageWebhooks = 1 << 29,
     /// Manage emoji and stickers
-    ManageEmoji          = 1 << 30,
+    ManageEmoji = 1 << 30,
     /// Manage community branding (banner, splash, accent)
-    ManageBranding       = 1 << 31,
+    ManageBranding = 1 << 31,
 
     // ── Files ────────────────────────────────────────────────────────────
     /// Upload files to file channels
-    UploadFiles          = 1 << 32,
+    UploadFiles = 1 << 32,
     /// Manage files (delete, organize)
-    ManageFiles          = 1 << 33,
+    ManageFiles = 1 << 33,
 
     // ── Administrator ────────────────────────────────────────────────────
     /// Full administrator access (bypasses all permission checks)
-    Administrator        = 1 << 63,
+    Administrator = 1 << 63,
 }
 
 /// A set of permissions represented as a bitfield.
@@ -176,7 +176,7 @@ impl Permissions {
     /// 3. Apply member-specific channel overrides (deny removes, allow adds)
     pub fn compute_channel_permissions(
         base: &Permissions,
-        role_overrides: &[(Permissions, Permissions)],   // (allow, deny) per role
+        role_overrides: &[(Permissions, Permissions)], // (allow, deny) per role
         member_override: Option<&(Permissions, Permissions)>, // (allow, deny) for member
     ) -> Permissions {
         // Administrator bypasses everything
@@ -312,11 +312,7 @@ mod tests {
         // Role override: deny SendMessages
         let deny = Permissions::from_bits(Permission::SendMessages as u64);
         let allow = Permissions::NONE;
-        let result = Permissions::compute_channel_permissions(
-            &base,
-            &[(allow, deny)],
-            None,
-        );
+        let result = Permissions::compute_channel_permissions(&base, &[(allow, deny)], None);
         assert!(!result.has(Permission::SendMessages));
         assert!(result.has(Permission::ViewChannels));
     }

@@ -31,27 +31,27 @@
 //! └─────────────────────────────────────────────────────────────────────────┘
 //! ```
 
-mod service;
-mod spaces;
-mod channels;
+mod boost_nodes;
 mod categories;
+mod channels;
+mod customization;
+mod files;
+mod integrations;
+mod invites;
+mod member_experience;
+mod members;
+mod messaging;
+mod moderation;
 mod permissions;
 mod roles;
-mod members;
-mod invites;
-mod messaging;
-mod threads;
-mod moderation;
-mod files;
-mod customization;
-mod integrations;
-mod boost_nodes;
-mod member_experience;
 mod seats;
+mod service;
+mod spaces;
+mod threads;
 
-pub use service::CommunityService;
-pub(crate) use service::generate_id;
-pub use seats::SeatInput;
+pub use messaging::{parse_mentions, MentionType};
 pub use permissions::{Permission, Permissions};
 pub use roles::RolePreset;
-pub use messaging::{MentionType, parse_mentions};
+pub use seats::SeatInput;
+pub(crate) use service::generate_id;
+pub use service::CommunityService;

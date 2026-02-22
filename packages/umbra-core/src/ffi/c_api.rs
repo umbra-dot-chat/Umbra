@@ -8,14 +8,14 @@ use std::ffi::CStr;
 use std::os::raw::c_char;
 use std::sync::Arc;
 
+use super::state::{get_runtime, get_state, init_state, FfiState};
 use super::types::*;
-use super::state::{FfiState, get_runtime, get_state, init_state};
+use crate::discovery::ConnectionInfo;
+use crate::friends::FriendsService;
 use crate::identity::Identity;
 use crate::identity::RecoveryPhrase;
-use crate::friends::FriendsService;
 use crate::messaging::MessagingService;
-use crate::network::{NetworkService, NetworkConfig};
-use crate::discovery::ConnectionInfo;
+use crate::network::{NetworkConfig, NetworkService};
 
 // ============================================================================
 // HELPERS
@@ -27,37 +27,47 @@ use crate::discovery::ConnectionInfo;
 /// cached. Uses the identity's keypair to construct a new `Identity` value
 /// (via recovery-free reconstruction) rather than the old `ptr::read` trick,
 /// which was unsound (double-free on `ZeroizeOnDrop` data).
-fn get_or_create_friends_service(
-    state: &FfiState,
-) -> Result<Arc<FriendsService>, FfiResult> {
+fn get_or_create_friends_service(state: &FfiState) -> Result<Arc<FriendsService>, FfiResult> {
     if let Some(f) = &state.friends {
         return Ok(f.clone());
     }
-    let identity = state.identity.as_ref()
+    let identity = state
+        .identity
+        .as_ref()
         .ok_or_else(|| FfiResult::err(200, "No identity loaded".to_string()))?;
-    let database = state.database.as_ref()
+    let database = state
+        .database
+        .as_ref()
         .ok_or_else(|| FfiResult::err(400, "Database not initialized".to_string()))?;
     // Construct a standalone Identity clone using the keypair bytes.
     // Identity::from_keypair_bytes duplicates key material safely.
     let cloned = Identity::clone_for_service(identity)
         .map_err(|e| FfiResult::err(200, format!("Failed to clone identity: {}", e)))?;
-    Ok(Arc::new(FriendsService::new(Arc::new(cloned), database.clone())))
+    Ok(Arc::new(FriendsService::new(
+        Arc::new(cloned),
+        database.clone(),
+    )))
 }
 
 /// Safely create a MessagingService from the current state.
-fn get_or_create_messaging_service(
-    state: &FfiState,
-) -> Result<Arc<MessagingService>, FfiResult> {
+fn get_or_create_messaging_service(state: &FfiState) -> Result<Arc<MessagingService>, FfiResult> {
     if let Some(m) = &state.messaging {
         return Ok(m.clone());
     }
-    let identity = state.identity.as_ref()
+    let identity = state
+        .identity
+        .as_ref()
         .ok_or_else(|| FfiResult::err(200, "No identity loaded".to_string()))?;
-    let database = state.database.as_ref()
+    let database = state
+        .database
+        .as_ref()
         .ok_or_else(|| FfiResult::err(400, "Database not initialized".to_string()))?;
     let cloned = Identity::clone_for_service(identity)
         .map_err(|e| FfiResult::err(200, format!("Failed to clone identity: {}", e)))?;
-    Ok(Arc::new(MessagingService::new(Arc::new(cloned), database.clone())))
+    Ok(Arc::new(MessagingService::new(
+        Arc::new(cloned),
+        database.clone(),
+    )))
 }
 
 // ============================================================================
@@ -184,9 +194,7 @@ pub extern "C" fn umbra_shutdown() -> FfiResult {
 /// Get Umbra Core version
 #[no_mangle]
 pub extern "C" fn umbra_version() -> *mut c_char {
-    std::ffi::CString::new(crate::version())
-        .unwrap()
-        .into_raw()
+    std::ffi::CString::new(crate::version()).unwrap().into_raw()
 }
 
 // ============================================================================
@@ -345,12 +353,14 @@ pub unsafe extern "C" fn umbra_identity_update_profile(json: *const c_char) -> F
         }
     }
     if let Some(status) = updates.get("status").and_then(|v| v.as_str()) {
-        if let Err(e) = profile.apply_update(crate::ProfileUpdate::Status(Some(status.to_string()))) {
+        if let Err(e) = profile.apply_update(crate::ProfileUpdate::Status(Some(status.to_string())))
+        {
             return FfiResult::err(205, format!("Failed to update status: {}", e));
         }
     }
     if let Some(avatar) = updates.get("avatar").and_then(|v| v.as_str()) {
-        if let Err(e) = profile.apply_update(crate::ProfileUpdate::Avatar(Some(avatar.to_string()))) {
+        if let Err(e) = profile.apply_update(crate::ProfileUpdate::Avatar(Some(avatar.to_string())))
+        {
             return FfiResult::err(205, format!("Failed to update avatar: {}", e));
         }
     }
@@ -387,24 +397,41 @@ pub unsafe extern "C" fn umbra_network_start(config_json: *const c_char) -> FfiR
             NetworkConfig::default()
         } else {
             match cstr_to_string(config_json) {
-                Some(json) => {
-                    match serde_json::from_str::<serde_json::Value>(&json) {
-                        Ok(v) => NetworkConfig {
-                            listen_addrs: v.get("listen_addrs")
-                                .and_then(|a| a.as_array())
-                                .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
-                                .unwrap_or_else(|| vec!["/ip4/0.0.0.0/tcp/0".to_string()]),
-                            bootstrap_peers: v.get("bootstrap_peers")
-                                .and_then(|a| a.as_array())
-                                .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
-                                .unwrap_or_default(),
-                            enable_dht: v.get("enable_dht").and_then(|v| v.as_bool()).unwrap_or(true),
-                            enable_relay: v.get("enable_relay").and_then(|v| v.as_bool()).unwrap_or(false),
-                            relay_url: v.get("relay_url").and_then(|v| v.as_str()).map(String::from),
-                        },
-                        Err(e) => return FfiResult::err(504, format!("Invalid config JSON: {}", e)),
-                    }
-                }
+                Some(json) => match serde_json::from_str::<serde_json::Value>(&json) {
+                    Ok(v) => NetworkConfig {
+                        listen_addrs: v
+                            .get("listen_addrs")
+                            .and_then(|a| a.as_array())
+                            .map(|arr| {
+                                arr.iter()
+                                    .filter_map(|v| v.as_str().map(String::from))
+                                    .collect()
+                            })
+                            .unwrap_or_else(|| vec!["/ip4/0.0.0.0/tcp/0".to_string()]),
+                        bootstrap_peers: v
+                            .get("bootstrap_peers")
+                            .and_then(|a| a.as_array())
+                            .map(|arr| {
+                                arr.iter()
+                                    .filter_map(|v| v.as_str().map(String::from))
+                                    .collect()
+                            })
+                            .unwrap_or_default(),
+                        enable_dht: v
+                            .get("enable_dht")
+                            .and_then(|v| v.as_bool())
+                            .unwrap_or(true),
+                        enable_relay: v
+                            .get("enable_relay")
+                            .and_then(|v| v.as_bool())
+                            .unwrap_or(false),
+                        relay_url: v
+                            .get("relay_url")
+                            .and_then(|v| v.as_str())
+                            .map(String::from),
+                    },
+                    Err(e) => return FfiResult::err(504, format!("Invalid config JSON: {}", e)),
+                },
                 None => NetworkConfig::default(),
             }
         };
@@ -461,7 +488,11 @@ pub extern "C" fn umbra_network_status() -> FfiResult {
     let state = state.read();
     match &state.network {
         Some(network) => {
-            let addrs: Vec<String> = network.listen_addrs().iter().map(|a| a.to_string()).collect();
+            let addrs: Vec<String> = network
+                .listen_addrs()
+                .iter()
+                .map(|a| a.to_string())
+                .collect();
             let json = serde_json::json!({
                 "is_running": network.is_running(),
                 "peer_id": network.peer_id().to_string(),
@@ -623,7 +654,10 @@ pub unsafe extern "C" fn umbra_discovery_lookup_peer(did: *const c_char) -> FfiR
         };
 
         // TODO: Wire up discovery lookup when DiscoveryService API is confirmed
-        FfiResult::err(503, format!("Peer lookup not yet implemented for DID: {}", did_str))
+        FfiResult::err(
+            503,
+            format!("Peer lookup not yet implemented for DID: {}", did_str),
+        )
     })
 }
 
@@ -746,14 +780,17 @@ pub extern "C" fn umbra_friends_list() -> FfiResult {
 
     match database.get_all_friends() {
         Ok(friends) => {
-            let friends_json: Vec<serde_json::Value> = friends.iter().map(|f| {
-                serde_json::json!({
-                    "did": f.did,
-                    "display_name": f.display_name,
-                    "status": f.status,
-                    "created_at": f.created_at,
+            let friends_json: Vec<serde_json::Value> = friends
+                .iter()
+                .map(|f| {
+                    serde_json::json!({
+                        "did": f.did,
+                        "display_name": f.display_name,
+                        "status": f.status,
+                        "created_at": f.created_at,
+                    })
                 })
-            }).collect();
+                .collect();
 
             FfiResult::ok(serde_json::to_string(&friends_json).unwrap_or_default())
         }
@@ -779,15 +816,18 @@ pub extern "C" fn umbra_friends_pending_requests() -> FfiResult {
     // Get both incoming and outgoing pending requests
     match database.get_pending_requests("incoming") {
         Ok(requests) => {
-            let requests_json: Vec<serde_json::Value> = requests.iter().map(|r| {
-                serde_json::json!({
-                    "id": r.id,
-                    "from_did": r.from_did,
-                    "to_did": r.to_did,
-                    "message": r.message,
-                    "created_at": r.created_at,
+            let requests_json: Vec<serde_json::Value> = requests
+                .iter()
+                .map(|r| {
+                    serde_json::json!({
+                        "id": r.id,
+                        "from_did": r.from_did,
+                        "to_did": r.to_did,
+                        "message": r.message,
+                        "created_at": r.created_at,
+                    })
                 })
-            }).collect();
+                .collect();
 
             FfiResult::ok(serde_json::to_string(&requests_json).unwrap_or_default())
         }
@@ -881,17 +921,20 @@ pub extern "C" fn umbra_messaging_get_conversations() -> FfiResult {
     };
 
     let conversations = messaging.get_conversations();
-    let conv_json: Vec<serde_json::Value> = conversations.iter().map(|c| {
-        serde_json::json!({
-            "id": c.id,
-            "friend_did": c.friend_did,
-            "conv_type": c.conv_type,
-            "friend_name": c.friend_name,
-            "last_message_preview": c.last_message_preview,
-            "last_message_at": c.last_message_at,
-            "unread_count": c.unread_count,
+    let conv_json: Vec<serde_json::Value> = conversations
+        .iter()
+        .map(|c| {
+            serde_json::json!({
+                "id": c.id,
+                "friend_did": c.friend_did,
+                "conv_type": c.conv_type,
+                "friend_name": c.friend_name,
+                "last_message_preview": c.last_message_preview,
+                "last_message_at": c.last_message_at,
+                "unread_count": c.unread_count,
+            })
         })
-    }).collect();
+        .collect();
 
     FfiResult::ok(serde_json::to_string(&conv_json).unwrap_or_default())
 }
@@ -925,18 +968,21 @@ pub unsafe extern "C" fn umbra_messaging_get_messages(
 
     match database.get_messages(&conv_id, limit, offset) {
         Ok(messages) => {
-            let messages_json: Vec<serde_json::Value> = messages.iter().map(|m| {
-                serde_json::json!({
-                    "id": m.id,
-                    "conversation_id": m.conversation_id,
-                    "sender_did": m.sender_did,
-                    "content_encrypted": m.content_encrypted,
-                    "nonce": m.nonce,
-                    "timestamp": m.timestamp,
-                    "delivered": m.delivered,
-                    "read": m.read,
+            let messages_json: Vec<serde_json::Value> = messages
+                .iter()
+                .map(|m| {
+                    serde_json::json!({
+                        "id": m.id,
+                        "conversation_id": m.conversation_id,
+                        "sender_did": m.sender_did,
+                        "content_encrypted": m.content_encrypted,
+                        "nonce": m.nonce,
+                        "timestamp": m.timestamp,
+                        "delivered": m.delivered,
+                        "read": m.read,
+                    })
                 })
-            }).collect();
+                .collect();
 
             FfiResult::ok(serde_json::to_string(&messages_json).unwrap_or_default())
         }
@@ -961,10 +1007,7 @@ pub unsafe extern "C" fn umbra_messaging_get_messages(
 /// # Returns
 /// FfiResult with JSON response data
 #[no_mangle]
-pub unsafe extern "C" fn umbra_call(
-    method: *const c_char,
-    args: *const c_char,
-) -> FfiResult {
+pub unsafe extern "C" fn umbra_call(method: *const c_char, args: *const c_char) -> FfiResult {
     let method_str = match cstr_to_string(method) {
         Some(m) => m,
         None => return FfiResult::err(1, "Invalid method name".to_string()),

@@ -321,7 +321,11 @@ mod tests {
         let json = r#"{"type":"message","from_did":"did:key:z6MkAlice","payload":"encrypted","timestamp":12345}"#;
         let msg: RelayServerMessage = serde_json::from_str(json).unwrap();
         match msg {
-            RelayServerMessage::Message { from_did, payload, timestamp } => {
+            RelayServerMessage::Message {
+                from_did,
+                payload,
+                timestamp,
+            } => {
                 assert_eq!(from_did, "did:key:z6MkAlice");
                 assert_eq!(payload, "encrypted");
                 assert_eq!(timestamp, 12345);
@@ -347,7 +351,11 @@ mod tests {
         let json = r#"{"type":"session_joined","session_id":"sess-abc","from_did":"did:key:z6MkBob","answer_payload":"answer"}"#;
         let msg: RelayServerMessage = serde_json::from_str(json).unwrap();
         match msg {
-            RelayServerMessage::SessionJoined { session_id, from_did, answer_payload } => {
+            RelayServerMessage::SessionJoined {
+                session_id,
+                from_did,
+                answer_payload,
+            } => {
                 assert_eq!(session_id, "sess-abc");
                 assert_eq!(from_did, "did:key:z6MkBob");
                 assert_eq!(answer_payload, "answer");
@@ -361,7 +369,11 @@ mod tests {
         let json = r#"{"type":"session_offer","session_id":"sess-abc","from_did":"did:key:z6MkAlice","offer_payload":"offer"}"#;
         let msg: RelayServerMessage = serde_json::from_str(json).unwrap();
         match msg {
-            RelayServerMessage::SessionOffer { session_id, from_did, offer_payload } => {
+            RelayServerMessage::SessionOffer {
+                session_id,
+                from_did,
+                offer_payload,
+            } => {
                 assert_eq!(session_id, "sess-abc");
                 assert_eq!(from_did, "did:key:z6MkAlice");
                 assert_eq!(offer_payload, "offer");
@@ -415,17 +427,40 @@ mod tests {
     #[test]
     fn test_all_client_messages_round_trip() {
         let messages = vec![
-            RelayClientMessage::Register { did: "did:key:z6MkTest".to_string() },
-            RelayClientMessage::Signal { to_did: "did:key:z6MkBob".to_string(), payload: "offer".to_string() },
-            RelayClientMessage::Send { to_did: "did:key:z6MkBob".to_string(), payload: "msg".to_string() },
-            RelayClientMessage::CreateSession { offer_payload: "offer".to_string() },
-            RelayClientMessage::JoinSession { session_id: "s1".to_string(), answer_payload: "answer".to_string() },
+            RelayClientMessage::Register {
+                did: "did:key:z6MkTest".to_string(),
+            },
+            RelayClientMessage::Signal {
+                to_did: "did:key:z6MkBob".to_string(),
+                payload: "offer".to_string(),
+            },
+            RelayClientMessage::Send {
+                to_did: "did:key:z6MkBob".to_string(),
+                payload: "msg".to_string(),
+            },
+            RelayClientMessage::CreateSession {
+                offer_payload: "offer".to_string(),
+            },
+            RelayClientMessage::JoinSession {
+                session_id: "s1".to_string(),
+                answer_payload: "answer".to_string(),
+            },
             RelayClientMessage::FetchOffline,
             RelayClientMessage::Ping,
-            RelayClientMessage::CreateCallRoom { group_id: "group-1".to_string() },
-            RelayClientMessage::JoinCallRoom { room_id: "room-1".to_string() },
-            RelayClientMessage::LeaveCallRoom { room_id: "room-1".to_string() },
-            RelayClientMessage::CallSignal { room_id: "room-1".to_string(), to_did: "did:key:z6MkBob".to_string(), payload: "sdp".to_string() },
+            RelayClientMessage::CreateCallRoom {
+                group_id: "group-1".to_string(),
+            },
+            RelayClientMessage::JoinCallRoom {
+                room_id: "room-1".to_string(),
+            },
+            RelayClientMessage::LeaveCallRoom {
+                room_id: "room-1".to_string(),
+            },
+            RelayClientMessage::CallSignal {
+                room_id: "room-1".to_string(),
+                to_did: "did:key:z6MkBob".to_string(),
+                payload: "sdp".to_string(),
+            },
         ];
 
         for msg in messages {
@@ -451,7 +486,8 @@ mod tests {
 
     #[test]
     fn test_relay_server_message_call_participant_joined() {
-        let json = r#"{"type":"call_participant_joined","room_id":"room-1","did":"did:key:z6MkAlice"}"#;
+        let json =
+            r#"{"type":"call_participant_joined","room_id":"room-1","did":"did:key:z6MkAlice"}"#;
         let msg: RelayServerMessage = serde_json::from_str(json).unwrap();
         match msg {
             RelayServerMessage::CallParticipantJoined { room_id, did } => {
@@ -480,7 +516,11 @@ mod tests {
         let json = r#"{"type":"call_signal_forward","room_id":"room-1","from_did":"did:key:z6MkAlice","payload":"sdp_offer"}"#;
         let msg: RelayServerMessage = serde_json::from_str(json).unwrap();
         match msg {
-            RelayServerMessage::CallSignalForward { room_id, from_did, payload } => {
+            RelayServerMessage::CallSignalForward {
+                room_id,
+                from_did,
+                payload,
+            } => {
                 assert_eq!(room_id, "room-1");
                 assert_eq!(from_did, "did:key:z6MkAlice");
                 assert_eq!(payload, "sdp_offer");

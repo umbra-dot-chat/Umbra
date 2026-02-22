@@ -307,8 +307,8 @@ impl<T: Serialize + for<'de> Deserialize<'de>> Signed<T> {
     ///
     /// Signs the serialized form of the data.
     pub fn new(data: T, keypair: &SigningKeyPair) -> Result<Self> {
-        let serialized = bincode::serialize(&data)
-            .map_err(|e| Error::SerializationError(e.to_string()))?;
+        let serialized =
+            bincode::serialize(&data).map_err(|e| Error::SerializationError(e.to_string()))?;
 
         let signature = sign(keypair, &serialized);
 
@@ -321,8 +321,8 @@ impl<T: Serialize + for<'de> Deserialize<'de>> Signed<T> {
 
     /// Verify the signature and return the data if valid
     pub fn verify(&self) -> Result<&T> {
-        let serialized = bincode::serialize(&self.data)
-            .map_err(|e| Error::SerializationError(e.to_string()))?;
+        let serialized =
+            bincode::serialize(&self.data).map_err(|e| Error::SerializationError(e.to_string()))?;
 
         verify(&self.signer_public_key, &serialized, &self.signature)?;
 

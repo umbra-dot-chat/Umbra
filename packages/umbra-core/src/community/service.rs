@@ -2,9 +2,9 @@
 //!
 //! Core service struct for community CRUD operations.
 
-use std::sync::Arc;
 use crate::error::{Error, Result};
 use crate::storage::Database;
+use std::sync::Arc;
 
 /// The main community service — coordinates all community operations.
 ///
@@ -45,23 +45,13 @@ impl CommunityService {
         let community_id = generate_id();
 
         // 1. Create community record
-        self.db().create_community_record(
-            &community_id,
-            name,
-            description,
-            owner_did,
-            now,
-        )?;
+        self.db()
+            .create_community_record(&community_id, name, description, owner_did, now)?;
 
         // 2. Create default space
         let space_id = generate_id();
-        self.db().create_community_space(
-            &space_id,
-            &community_id,
-            "General",
-            0,
-            now,
-        )?;
+        self.db()
+            .create_community_space(&space_id, &community_id, "General", 0, now)?;
 
         // 3. Create default category
         let category_id = generate_id();
@@ -105,19 +95,10 @@ impl CommunityService {
         let role_ids = super::roles::create_preset_roles(self.db(), &community_id, now)?;
 
         // 6. Add creator as member with owner role
-        self.db().add_community_member(
-            &community_id,
-            owner_did,
-            now,
-            owner_nickname,
-        )?;
-        self.db().assign_community_role(
-            &community_id,
-            owner_did,
-            &role_ids.owner,
-            now,
-            None,
-        )?;
+        self.db()
+            .add_community_member(&community_id, owner_did, now, owner_nickname)?;
+        self.db()
+            .assign_community_role(&community_id, owner_did, &role_ids.owner, now, None)?;
 
         // 7. Audit log
         self.db().insert_audit_log(
@@ -142,12 +123,14 @@ impl CommunityService {
 
     /// Get a community by ID.
     pub fn get_community(&self, id: &str) -> Result<crate::storage::CommunityRecord> {
-        self.db().get_community(id)?
-            .ok_or(Error::CommunityNotFound)
+        self.db().get_community(id)?.ok_or(Error::CommunityNotFound)
     }
 
     /// Get all communities the user is a member of.
-    pub fn get_my_communities(&self, member_did: &str) -> Result<Vec<crate::storage::CommunityRecord>> {
+    pub fn get_my_communities(
+        &self,
+        member_did: &str,
+    ) -> Result<Vec<crate::storage::CommunityRecord>> {
         self.db().get_communities_for_member(member_did)
     }
 
@@ -205,13 +188,21 @@ impl CommunityService {
         }
 
         let now = crate::time::now_timestamp();
-        self.db().update_community_owner(community_id, new_owner_did, now)?;
+        self.db()
+            .update_community_owner(community_id, new_owner_did, now)?;
 
         // Swap owner roles
         let owner_role = self.db().get_owner_role(community_id)?;
         if let Some(role) = owner_role {
-            self.db().unassign_community_role(community_id, current_owner_did, &role.id)?;
-            self.db().assign_community_role(community_id, new_owner_did, &role.id, now, Some(current_owner_did))?;
+            self.db()
+                .unassign_community_role(community_id, current_owner_did, &role.id)?;
+            self.db().assign_community_role(
+                community_id,
+                new_owner_did,
+                &role.id,
+                now,
+                Some(current_owner_did),
+            )?;
         }
 
         self.db().insert_audit_log(

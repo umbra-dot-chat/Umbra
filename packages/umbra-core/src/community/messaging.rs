@@ -3,12 +3,11 @@
 //! Message CRUD, reactions, read receipts, pins, slow mode enforcement,
 //! channel type enforcement, and @mention parsing.
 
+use super::service::generate_id;
 use crate::error::{Error, Result};
 use crate::storage::{
-    CommunityMessageRecord, CommunityReactionRecord,
-    CommunityReadReceiptRecord, CommunityPinRecord,
+    CommunityMessageRecord, CommunityPinRecord, CommunityReactionRecord, CommunityReadReceiptRecord,
 };
-use super::service::generate_id;
 
 /// Parsed mention types from message content.
 #[derive(Debug, Clone, PartialEq)]
@@ -33,7 +32,9 @@ pub fn parse_mentions(content: &str) -> Vec<MentionType> {
     let mut mentions = Vec::new();
 
     for word in content.split_whitespace() {
-        let trimmed = word.trim_matches(|c: char| !c.is_alphanumeric() && c != '@' && c != ':' && c != '_' && c != '-');
+        let trimmed = word.trim_matches(|c: char| {
+            !c.is_alphanumeric() && c != '@' && c != ':' && c != '_' && c != '-'
+        });
         if trimmed.eq_ignore_ascii_case("@everyone") {
             mentions.push(MentionType::Everyone);
         } else if trimmed.eq_ignore_ascii_case("@here") {
@@ -75,7 +76,9 @@ impl super::CommunityService {
         let id = generate_id();
 
         // Get channel and enforce type restrictions
-        let channel = self.db().get_community_channel(channel_id)?
+        let channel = self
+            .db()
+            .get_community_channel(channel_id)?
             .ok_or(Error::ChannelNotFound)?;
 
         // Voice channels don't support text messages
@@ -94,7 +97,9 @@ impl super::CommunityService {
                 // Check if member has ManageChannels permission via roles
                 // For now, only community owner can post in announcement channels
                 // Full permission check would integrate with the permission bitfield system
-                let member_roles = self.db().get_member_community_roles(&channel.community_id, sender_did)?;
+                let member_roles = self
+                    .db()
+                    .get_member_community_roles(&channel.community_id, sender_did)?;
                 let has_announce_perm = member_roles.iter().any(|r| {
                     let bits: u64 = r.permissions_bitfield.parse().unwrap_or(0);
                     // Administrator (bit 0) or ManageChannels (bit 4)
@@ -102,14 +107,18 @@ impl super::CommunityService {
                 });
                 if !has_announce_perm {
                     return Err(Error::ChannelTypeRestriction(
-                        "Only administrators and moderators can post in announcement channels".to_string(),
+                        "Only administrators and moderators can post in announcement channels"
+                            .to_string(),
                     ));
                 }
             }
         }
 
         // Check mute timeout
-        if self.db().is_member_timed_out(&channel.community_id, sender_did, "mute", now)? {
+        if self
+            .db()
+            .is_member_timed_out(&channel.community_id, sender_did, "mute", now)?
+        {
             return Err(Error::MemberTimedOut(
                 "You are currently muted in this community".to_string(),
             ));
@@ -123,19 +132,31 @@ impl super::CommunityService {
                 if last.sender_did == sender_did {
                     let cooldown = channel.slow_mode_seconds as i64;
                     if now - last.created_at < cooldown {
-                        return Err(Error::InvalidCommunityOperation(
-                            format!("Slow mode: wait {} seconds between messages", channel.slow_mode_seconds),
-                        ));
+                        return Err(Error::InvalidCommunityOperation(format!(
+                            "Slow mode: wait {} seconds between messages",
+                            channel.slow_mode_seconds
+                        )));
                     }
                 }
             }
         }
 
         self.db().store_community_message(
-            &id, channel_id, sender_did,
-            None, Some(content), None, None, false,
-            reply_to_id, thread_id, false, false,
-            content_warning, now, metadata_json,
+            &id,
+            channel_id,
+            sender_did,
+            None,
+            Some(content),
+            None,
+            None,
+            false,
+            reply_to_id,
+            thread_id,
+            false,
+            false,
+            content_warning,
+            now,
+            metadata_json,
         )?;
 
         // If this is a thread reply, update thread counters
@@ -180,9 +201,21 @@ impl super::CommunityService {
         let id = generate_id();
 
         self.db().store_community_message(
-            &id, channel_id, sender_did,
-            Some(content_encrypted), None, Some(nonce), Some(key_version), true,
-            reply_to_id, thread_id, false, false, None, now, None,
+            &id,
+            channel_id,
+            sender_did,
+            Some(content_encrypted),
+            None,
+            Some(nonce),
+            Some(key_version),
+            true,
+            reply_to_id,
+            thread_id,
+            false,
+            false,
+            None,
+            now,
+            None,
         )?;
 
         if let Some(tid) = thread_id {
@@ -207,10 +240,21 @@ impl super::CommunityService {
         metadata_json: Option<&str>,
     ) -> Result<()> {
         self.db().store_community_message_if_not_exists(
-            id, channel_id, sender_did,
-            None, Some(content), None, None, false,
-            None, None, false, false,
-            None, created_at, metadata_json,
+            id,
+            channel_id,
+            sender_did,
+            None,
+            Some(content),
+            None,
+            None,
+            false,
+            None,
+            None,
+            false,
+            false,
+            None,
+            created_at,
+            metadata_json,
         )
     }
 
@@ -221,22 +265,19 @@ impl super::CommunityService {
         limit: usize,
         before_timestamp: Option<i64>,
     ) -> Result<Vec<CommunityMessageRecord>> {
-        self.db().get_community_messages(channel_id, limit, before_timestamp)
+        self.db()
+            .get_community_messages(channel_id, limit, before_timestamp)
     }
 
     /// Get a single message.
     pub fn get_message(&self, id: &str) -> Result<CommunityMessageRecord> {
-        self.db().get_community_message(id)?
+        self.db()
+            .get_community_message(id)?
             .ok_or(Error::MessageNotFound)
     }
 
     /// Edit a message.
-    pub fn edit_message(
-        &self,
-        id: &str,
-        new_content: &str,
-        editor_did: &str,
-    ) -> Result<()> {
+    pub fn edit_message(&self, id: &str, new_content: &str, editor_did: &str) -> Result<()> {
         let msg = self.get_message(id)?;
         if msg.sender_did != editor_did {
             return Err(Error::InsufficientPermissions(
@@ -244,7 +285,8 @@ impl super::CommunityService {
             ));
         }
         let now = crate::time::now_timestamp();
-        self.db().edit_community_message(id, Some(new_content), None, None, now)
+        self.db()
+            .edit_community_message(id, Some(new_content), None, None, now)
     }
 
     /// Delete a message for everyone (mod/admin or sender).
@@ -255,7 +297,8 @@ impl super::CommunityService {
     /// Delete a message for the current user only.
     pub fn delete_message_for_me(&self, message_id: &str, member_did: &str) -> Result<()> {
         let now = crate::time::now_timestamp();
-        self.db().delete_community_message_for_me(message_id, member_did, now)
+        self.db()
+            .delete_community_message_for_me(message_id, member_did, now)
     }
 
     // ── Reactions ───────────────────────────────────────────────────────
@@ -269,17 +312,14 @@ impl super::CommunityService {
         is_custom: bool,
     ) -> Result<()> {
         let now = crate::time::now_timestamp();
-        self.db().add_community_reaction(message_id, member_did, emoji, is_custom, now)
+        self.db()
+            .add_community_reaction(message_id, member_did, emoji, is_custom, now)
     }
 
     /// Remove a reaction from a message.
-    pub fn remove_reaction(
-        &self,
-        message_id: &str,
-        member_did: &str,
-        emoji: &str,
-    ) -> Result<()> {
-        self.db().remove_community_reaction(message_id, member_did, emoji)
+    pub fn remove_reaction(&self, message_id: &str, member_did: &str, emoji: &str) -> Result<()> {
+        self.db()
+            .remove_community_reaction(message_id, member_did, emoji)
     }
 
     /// Get reactions for a message.
@@ -297,7 +337,8 @@ impl super::CommunityService {
         last_read_message_id: &str,
     ) -> Result<()> {
         let now = crate::time::now_timestamp();
-        self.db().update_read_receipt(channel_id, member_did, last_read_message_id, now)
+        self.db()
+            .update_read_receipt(channel_id, member_did, last_read_message_id, now)
     }
 
     /// Get read receipts for a channel.
@@ -308,24 +349,23 @@ impl super::CommunityService {
     // ── Pins ────────────────────────────────────────────────────────────
 
     /// Pin a message in a channel (respects pin limit).
-    pub fn pin_message(
-        &self,
-        channel_id: &str,
-        message_id: &str,
-        pinned_by: &str,
-    ) -> Result<()> {
+    pub fn pin_message(&self, channel_id: &str, message_id: &str, pinned_by: &str) -> Result<()> {
         // Check pin limit
-        let channel = self.db().get_community_channel(channel_id)?
+        let channel = self
+            .db()
+            .get_community_channel(channel_id)?
             .ok_or(Error::ChannelNotFound)?;
         let count = self.db().get_community_pin_count(channel_id)?;
         if count >= channel.pin_limit {
-            return Err(Error::InvalidCommunityOperation(
-                format!("Pin limit reached ({}/{})", count, channel.pin_limit),
-            ));
+            return Err(Error::InvalidCommunityOperation(format!(
+                "Pin limit reached ({}/{})",
+                count, channel.pin_limit
+            )));
         }
 
         let now = crate::time::now_timestamp();
-        self.db().pin_community_message(channel_id, message_id, pinned_by, now)
+        self.db()
+            .pin_community_message(channel_id, message_id, pinned_by, now)
     }
 
     /// Unpin a message.
@@ -348,11 +388,15 @@ impl super::CommunityService {
         encrypted_key: &[u8],
     ) -> Result<()> {
         let now = crate::time::now_timestamp();
-        self.db().store_channel_key(channel_id, key_version, encrypted_key, now)
+        self.db()
+            .store_channel_key(channel_id, key_version, encrypted_key, now)
     }
 
     /// Get the latest channel key.
-    pub fn get_latest_channel_key(&self, channel_id: &str) -> Result<Option<crate::storage::ChannelKeyRecord>> {
+    pub fn get_latest_channel_key(
+        &self,
+        channel_id: &str,
+    ) -> Result<Option<crate::storage::ChannelKeyRecord>> {
         self.db().get_latest_channel_key(channel_id)
     }
 
@@ -370,9 +414,21 @@ impl super::CommunityService {
         let id = generate_id();
 
         self.db().store_community_message(
-            &id, channel_id, "system",
-            None, Some(content), None, None, false,
-            None, None, false, false, None, now, None,
+            &id,
+            channel_id,
+            "system",
+            None,
+            Some(content),
+            None,
+            None,
+            false,
+            None,
+            None,
+            false,
+            false,
+            None,
+            now,
+            None,
         )?;
 
         Ok(CommunityMessageRecord {

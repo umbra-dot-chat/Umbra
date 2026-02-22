@@ -8,7 +8,7 @@
 //! cargo run --example encryption_demo
 //! ```
 
-use umbra_core::crypto::{KeyPair, encrypt, decrypt, SharedSecret};
+use umbra_core::crypto::{decrypt, encrypt, KeyPair, SharedSecret};
 
 fn main() {
     println!("=== Umbra Core: End-to-End Encryption Demo ===\n");
@@ -22,10 +22,14 @@ fn main() {
     let alice = KeyPair::from_seed(&alice_seed).expect("Failed to create Alice's keypair");
     let bob = KeyPair::from_seed(&bob_seed).expect("Failed to create Bob's keypair");
 
-    println!("  Alice's public encryption key: {}...",
-        hex::encode(&alice.encryption.public_bytes()[..8]));
-    println!("  Bob's public encryption key: {}...",
-        hex::encode(&bob.encryption.public_bytes()[..8]));
+    println!(
+        "  Alice's public encryption key: {}...",
+        hex::encode(&alice.encryption.public_bytes()[..8])
+    );
+    println!(
+        "  Bob's public encryption key: {}...",
+        hex::encode(&bob.encryption.public_bytes()[..8])
+    );
     println!();
 
     // Step 2: Derive shared secret using ECDH (X25519)
@@ -59,17 +63,25 @@ fn main() {
     println!();
 
     // Alice computes shared secret with Bob's public key
-    let alice_dh_output = alice.encryption.diffie_hellman(&bob.encryption.public_bytes());
+    let alice_dh_output = alice
+        .encryption
+        .diffie_hellman(&bob.encryption.public_bytes());
     let alice_shared = SharedSecret::from_bytes(alice_dh_output);
 
     // Bob computes shared secret with Alice's public key
-    let bob_dh_output = bob.encryption.diffie_hellman(&alice.encryption.public_bytes());
+    let bob_dh_output = bob
+        .encryption
+        .diffie_hellman(&alice.encryption.public_bytes());
     let bob_shared = SharedSecret::from_bytes(bob_dh_output);
 
-    println!("  Alice's computed DH output: {}...",
-        hex::encode(&alice_dh_output[..8]));
-    println!("  Bob's computed DH output:   {}...",
-        hex::encode(&bob_dh_output[..8]));
+    println!(
+        "  Alice's computed DH output: {}...",
+        hex::encode(&alice_dh_output[..8])
+    );
+    println!(
+        "  Bob's computed DH output:   {}...",
+        hex::encode(&bob_dh_output[..8])
+    );
 
     if alice_dh_output == bob_dh_output {
         println!("  [OK] DH outputs match!");
@@ -86,27 +98,35 @@ fn main() {
     let conversation_id = b"alice-bob-conversation-001";
 
     println!("  Plaintext: \"{}\"", String::from_utf8_lossy(message));
-    println!("  Conversation ID: {:?}", String::from_utf8_lossy(conversation_id));
+    println!(
+        "  Conversation ID: {:?}",
+        String::from_utf8_lossy(conversation_id)
+    );
 
     // Derive encryption key from shared secret using conversation ID
-    let alice_encryption_key = alice_shared.derive_key(conversation_id)
+    let alice_encryption_key = alice_shared
+        .derive_key(conversation_id)
         .expect("Failed to derive encryption key");
 
-    let (nonce, ciphertext) = encrypt(&alice_encryption_key, message, conversation_id)
-        .expect("Encryption failed");
+    let (nonce, ciphertext) =
+        encrypt(&alice_encryption_key, message, conversation_id).expect("Encryption failed");
 
     println!();
     println!("  Ciphertext (hex): {}", hex::encode(&ciphertext));
     println!("  Nonce (hex): {}", hex::encode(nonce.as_bytes()));
-    println!("  Ciphertext length: {} bytes (plaintext: {} bytes)",
-        ciphertext.len(), message.len());
+    println!(
+        "  Ciphertext length: {} bytes (plaintext: {} bytes)",
+        ciphertext.len(),
+        message.len()
+    );
     println!();
 
     // Step 4: Bob decrypts the message
     println!("Step 4: Bob decrypts the message...");
 
     // Bob derives the same encryption key
-    let bob_encryption_key = bob_shared.derive_key(conversation_id)
+    let bob_encryption_key = bob_shared
+        .derive_key(conversation_id)
         .expect("Failed to derive encryption key");
 
     let decrypted = decrypt(&bob_encryption_key, &nonce, &ciphertext, conversation_id)
@@ -129,7 +149,12 @@ fn main() {
         tampered_ciphertext[0] ^= 0xFF; // Flip bits in first byte
     }
 
-    match decrypt(&bob_encryption_key, &nonce, &tampered_ciphertext, conversation_id) {
+    match decrypt(
+        &bob_encryption_key,
+        &nonce,
+        &tampered_ciphertext,
+        conversation_id,
+    ) {
         Ok(_) => println!("  [FAILED] Tampered message was accepted!"),
         Err(_) => println!("  [OK] Tampered message detected and rejected!"),
     }

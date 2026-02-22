@@ -191,10 +191,7 @@ impl Identity {
     }
 
     /// Restore an identity from a recovery phrase
-    pub fn from_recovery_phrase(
-        recovery: &RecoveryPhrase,
-        display_name: String,
-    ) -> Result<Self> {
+    pub fn from_recovery_phrase(recovery: &RecoveryPhrase, display_name: String) -> Result<Self> {
         let seed = recovery.to_seed()?;
         let keypair = KeyPair::from_seed(&seed)?;
         let did = Did::from_public_key(&keypair.signing.public_bytes());
@@ -266,7 +263,10 @@ impl Identity {
 
         let signing = crate::crypto::SigningKeyPair::from_bytes(&signing_bytes)?;
         let encryption = crate::crypto::EncryptionKeyPair::from_bytes(&encryption_bytes);
-        let keypair = KeyPair { signing, encryption };
+        let keypair = KeyPair {
+            signing,
+            encryption,
+        };
         let did = Did::from_public_key(&keypair.signing.public_bytes());
 
         Ok(Self {

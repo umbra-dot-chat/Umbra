@@ -131,7 +131,8 @@ fn main() {
 
     // With passphrase
     println!("  With passphrase \"secret\":");
-    let seed_with_pass = phrase.to_seed_with_passphrase("secret")
+    let seed_with_pass = phrase
+        .to_seed_with_passphrase("secret")
         .expect("Failed to derive seed with passphrase");
     println!("  Seed (hex): {}", hex::encode(seed_with_pass));
 

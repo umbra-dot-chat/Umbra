@@ -74,12 +74,12 @@
 //! └─────────────────────────────────────────────────────────────────────────┘
 //! ```
 
-use std::collections::HashMap;
 use parking_lot::RwLock;
+use std::collections::HashMap;
 use zeroize::Zeroizing;
 
+use crate::crypto::{decrypt, encrypt, EncryptionKey, Nonce};
 use crate::error::{Error, Result};
-use crate::crypto::{encrypt, decrypt, EncryptionKey, Nonce};
 
 /// Key names for secure storage
 #[allow(dead_code)]
@@ -245,7 +245,10 @@ impl SecureStore {
                 if err_str.contains("not found") || err_str.contains("-25300") {
                     Ok(None)
                 } else {
-                    Err(Error::StorageReadError(format!("Keychain read failed: {}", e)))
+                    Err(Error::StorageReadError(format!(
+                        "Keychain read failed: {}",
+                        e
+                    )))
                 }
             }
         }
@@ -265,7 +268,10 @@ impl SecureStore {
                 if err_str.contains("not found") || err_str.contains("-25300") {
                     Ok(false)
                 } else {
-                    Err(Error::StorageWriteError(format!("Keychain delete failed: {}", e)))
+                    Err(Error::StorageWriteError(format!(
+                        "Keychain delete failed: {}",
+                        e
+                    )))
                 }
             }
         }
@@ -299,19 +305,22 @@ impl SecureStore {
 
         // Get the JNI environment
         // Note: This requires the Android app to have set up the JNI context
-        let ctx = android_context::get_context()
-            .map_err(|e| Error::StorageWriteError(format!("Failed to get Android context: {}", e)))?;
+        let ctx = android_context::get_context().map_err(|e| {
+            Error::StorageWriteError(format!("Failed to get Android context: {}", e))
+        })?;
 
         let env = ctx.env();
         let activity = ctx.activity();
 
         // Convert key and value to Java objects
-        let j_key = env.new_string(key)
+        let j_key = env
+            .new_string(key)
             .map_err(|e| Error::StorageWriteError(format!("JNI string creation failed: {}", e)))?;
 
         // Encode value as base64 for easier Java interop
         let value_b64 = base64::engine::general_purpose::STANDARD.encode(value);
-        let j_value = env.new_string(&value_b64)
+        let j_value = env
+            .new_string(&value_b64)
             .map_err(|e| Error::StorageWriteError(format!("JNI string creation failed: {}", e)))?;
 
         // Call the secure storage method on the activity
@@ -321,7 +330,8 @@ impl SecureStore {
             "secureStore",
             "(Ljava/lang/String;Ljava/lang/String;)V",
             &[JValue::Object(&j_key), JValue::Object(&j_value)],
-        ).map_err(|e| Error::StorageWriteError(format!("JNI call failed: {}", e)))?;
+        )
+        .map_err(|e| Error::StorageWriteError(format!("JNI call failed: {}", e)))?;
 
         Ok(())
     }
@@ -331,38 +341,45 @@ impl SecureStore {
         use jni::objects::{JObject, JString, JValue};
         use jni::JNIEnv;
 
-        let ctx = android_context::get_context()
-            .map_err(|e| Error::StorageReadError(format!("Failed to get Android context: {}", e)))?;
+        let ctx = android_context::get_context().map_err(|e| {
+            Error::StorageReadError(format!("Failed to get Android context: {}", e))
+        })?;
 
         let env = ctx.env();
         let activity = ctx.activity();
 
-        let j_key = env.new_string(key)
+        let j_key = env
+            .new_string(key)
             .map_err(|e| Error::StorageReadError(format!("JNI string creation failed: {}", e)))?;
 
         // Call the secure retrieval method
         // The Android side must implement: String secureRetrieve(String key)
-        let result = env.call_method(
-            activity,
-            "secureRetrieve",
-            "(Ljava/lang/String;)Ljava/lang/String;",
-            &[JValue::Object(&j_key)],
-        ).map_err(|e| Error::StorageReadError(format!("JNI call failed: {}", e)))?;
+        let result = env
+            .call_method(
+                activity,
+                "secureRetrieve",
+                "(Ljava/lang/String;)Ljava/lang/String;",
+                &[JValue::Object(&j_key)],
+            )
+            .map_err(|e| Error::StorageReadError(format!("JNI call failed: {}", e)))?;
 
         // Convert the result
-        let j_result: JObject = result.l()
+        let j_result: JObject = result
+            .l()
             .map_err(|e| Error::StorageReadError(format!("JNI result conversion failed: {}", e)))?;
 
         if j_result.is_null() {
             return Ok(None);
         }
 
-        let result_str: String = env.get_string(&JString::from(j_result))
+        let result_str: String = env
+            .get_string(&JString::from(j_result))
             .map_err(|e| Error::StorageReadError(format!("JNI string conversion failed: {}", e)))?
             .into();
 
         // Decode from base64
-        let decoded = base64::engine::general_purpose::STANDARD.decode(&result_str)
+        let decoded = base64::engine::general_purpose::STANDARD
+            .decode(&result_str)
             .map_err(|e| Error::StorageReadError(format!("Base64 decode failed: {}", e)))?;
 
         Ok(Some(decoded))
@@ -373,26 +390,31 @@ impl SecureStore {
         use jni::objects::{JObject, JString, JValue};
         use jni::JNIEnv;
 
-        let ctx = android_context::get_context()
-            .map_err(|e| Error::StorageWriteError(format!("Failed to get Android context: {}", e)))?;
+        let ctx = android_context::get_context().map_err(|e| {
+            Error::StorageWriteError(format!("Failed to get Android context: {}", e))
+        })?;
 
         let env = ctx.env();
         let activity = ctx.activity();
 
-        let j_key = env.new_string(key)
+        let j_key = env
+            .new_string(key)
             .map_err(|e| Error::StorageWriteError(format!("JNI string creation failed: {}", e)))?;
 
         // Call the secure delete method
         // The Android side must implement: boolean secureDelete(String key)
-        let result = env.call_method(
-            activity,
-            "secureDelete",
-            "(Ljava/lang/String;)Z",
-            &[JValue::Object(&j_key)],
-        ).map_err(|e| Error::StorageWriteError(format!("JNI call failed: {}", e)))?;
+        let result = env
+            .call_method(
+                activity,
+                "secureDelete",
+                "(Ljava/lang/String;)Z",
+                &[JValue::Object(&j_key)],
+            )
+            .map_err(|e| Error::StorageWriteError(format!("JNI call failed: {}", e)))?;
 
-        let deleted = result.z()
-            .map_err(|e| Error::StorageWriteError(format!("JNI result conversion failed: {}", e)))?;
+        let deleted = result.z().map_err(|e| {
+            Error::StorageWriteError(format!("JNI result conversion failed: {}", e))
+        })?;
 
         Ok(deleted)
     }
@@ -402,25 +424,30 @@ impl SecureStore {
         use jni::objects::{JObject, JString, JValue};
         use jni::JNIEnv;
 
-        let ctx = android_context::get_context()
-            .map_err(|e| Error::StorageReadError(format!("Failed to get Android context: {}", e)))?;
+        let ctx = android_context::get_context().map_err(|e| {
+            Error::StorageReadError(format!("Failed to get Android context: {}", e))
+        })?;
 
         let env = ctx.env();
         let activity = ctx.activity();
 
-        let j_key = env.new_string(key)
+        let j_key = env
+            .new_string(key)
             .map_err(|e| Error::StorageReadError(format!("JNI string creation failed: {}", e)))?;
 
         // Call the secure exists method
         // The Android side must implement: boolean secureExists(String key)
-        let result = env.call_method(
-            activity,
-            "secureExists",
-            "(Ljava/lang/String;)Z",
-            &[JValue::Object(&j_key)],
-        ).map_err(|e| Error::StorageReadError(format!("JNI call failed: {}", e)))?;
+        let result = env
+            .call_method(
+                activity,
+                "secureExists",
+                "(Ljava/lang/String;)Z",
+                &[JValue::Object(&j_key)],
+            )
+            .map_err(|e| Error::StorageReadError(format!("JNI call failed: {}", e)))?;
 
-        let exists = result.z()
+        let exists = result
+            .z()
             .map_err(|e| Error::StorageReadError(format!("JNI result conversion failed: {}", e)))?;
 
         Ok(exists)
@@ -434,9 +461,9 @@ impl SecureStore {
 /// Android context helper module for JNI access
 #[cfg(target_os = "android")]
 mod android_context {
-    use std::sync::OnceLock;
-    use jni::{JNIEnv, JavaVM};
     use jni::objects::JObject;
+    use jni::{JNIEnv, JavaVM};
+    use std::sync::OnceLock;
 
     static JAVA_VM: OnceLock<JavaVM> = OnceLock::new();
     static ACTIVITY: OnceLock<jni::objects::GlobalRef> = OnceLock::new();
@@ -470,7 +497,8 @@ mod android_context {
         let vm = JAVA_VM.get().ok_or("JavaVM not initialized")?;
         let activity = ACTIVITY.get().ok_or("Activity not initialized")?;
 
-        let env = vm.attach_current_thread()
+        let env = vm
+            .attach_current_thread()
             .map_err(|_| "Failed to attach to JNI thread")?;
 
         // This is a simplified version - actual implementation would need

@@ -1202,7 +1202,7 @@ function SoundsSection() {
                             paddingHorizontal: 8,
                             paddingVertical: 4,
                             borderRadius: 6,
-                            backgroundColor: tc.background.secondary,
+                            backgroundColor: tc.background.surface,
                           }}
                         >
                           <VolumeIcon size={14} color={tc.accent.primary} />
@@ -3785,7 +3785,7 @@ function MessageDisplayPreview({
   return (
     <Pressable
       onPress={onSelect}
-      style={({ hovered }) => ({
+      style={({ pressed }) => ({
         flex: 1,
         borderRadius: 12,
         borderWidth: 2,
@@ -3794,7 +3794,7 @@ function MessageDisplayPreview({
           ? (isDark ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)')
           : 'transparent',
         overflow: 'hidden',
-        opacity: (hovered as boolean) && !selected ? 0.85 : 1,
+        opacity: pressed && !selected ? 0.85 : 1,
       })}
     >
       {/* Preview card header */}
@@ -4249,7 +4249,7 @@ export function SettingsDialog({ open, onClose, onOpenMarketplace, initialSectio
                       />
                       <Pressable
                         onPress={() => handleSubsectionClick(sub.id)}
-                        style={({ pressed, hovered }) => ({
+                        style={({ pressed }) => ({
                           flex: 1,
                           paddingVertical: 5,
                           paddingHorizontal: 10,
@@ -4257,7 +4257,7 @@ export function SettingsDialog({ open, onClose, onOpenMarketplace, initialSectio
                           borderBottomRightRadius: 4,
                           backgroundColor: isSubActive
                             ? 'rgba(255,255,255,0.06)'
-                            : (hovered as boolean)
+                            : pressed
                               ? 'rgba(255,255,255,0.04)'
                               : 'transparent',
                         })}

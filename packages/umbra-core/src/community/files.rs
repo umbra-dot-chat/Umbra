@@ -2,9 +2,9 @@
 //!
 //! File and folder CRUD for file-type channels.
 
-use crate::error::{Error, Result};
-use crate::storage::{CommunityFileRecord, CommunityFileFolderRecord};
 use super::service::generate_id;
+use crate::error::{Error, Result};
+use crate::storage::{CommunityFileFolderRecord, CommunityFileRecord};
 
 impl super::CommunityService {
     // ── Files ───────────────────────────────────────────────────────────
@@ -28,18 +28,29 @@ impl super::CommunityService {
         let id = generate_id();
 
         // Verify channel exists
-        let _channel = self.db().get_community_channel(channel_id)?
+        let _channel = self
+            .db()
+            .get_community_channel(channel_id)?
             .ok_or(Error::ChannelNotFound)?;
 
         // Auto-versioning: check for existing file with same name in same folder
         let version = self.db().store_community_file_versioned(
-            &id, channel_id, folder_id, filename, description,
-            file_size, mime_type, storage_chunks_json, uploaded_by, now,
+            &id,
+            channel_id,
+            folder_id,
+            filename,
+            description,
+            file_size,
+            mime_type,
+            storage_chunks_json,
+            uploaded_by,
+            now,
         )?;
 
         // Get the previous_version_id that was set by store_community_file_versioned
         let previous_version_id = if version > 1 {
-            self.db().find_existing_community_file(channel_id, folder_id, filename)?
+            self.db()
+                .find_existing_community_file(channel_id, folder_id, filename)?
                 .filter(|(found_id, _)| found_id != &id)
                 .map(|(found_id, _)| found_id)
         } else {
@@ -71,13 +82,17 @@ impl super::CommunityService {
         limit: usize,
         offset: usize,
     ) -> Result<Vec<CommunityFileRecord>> {
-        self.db().get_community_files(channel_id, folder_id, limit, offset)
+        self.db()
+            .get_community_files(channel_id, folder_id, limit, offset)
     }
 
     /// Get a file by ID.
     pub fn get_file(&self, id: &str) -> Result<CommunityFileRecord> {
-        self.db().get_community_file(id)?
-            .ok_or(Error::InvalidCommunityOperation("File not found".to_string()))
+        self.db()
+            .get_community_file(id)?
+            .ok_or(Error::InvalidCommunityOperation(
+                "File not found".to_string(),
+            ))
     }
 
     /// Increment download count for a file.
@@ -94,8 +109,12 @@ impl super::CommunityService {
         if let Some(channel) = self.db().get_community_channel(&file.channel_id)? {
             let now = crate::time::now_timestamp();
             self.db().insert_audit_log(
-                &generate_id(), &channel.community_id, actor_did, "file_delete",
-                Some("file"), Some(id),
+                &generate_id(),
+                &channel.community_id,
+                actor_did,
+                "file_delete",
+                Some("file"),
+                Some(id),
                 Some(&serde_json::json!({"filename": file.filename}).to_string()),
                 now,
             )?;
@@ -118,7 +137,12 @@ impl super::CommunityService {
         let id = generate_id();
 
         self.db().create_community_file_folder(
-            &id, channel_id, parent_folder_id, name, created_by, now,
+            &id,
+            channel_id,
+            parent_folder_id,
+            name,
+            created_by,
+            now,
         )?;
 
         Ok(CommunityFileFolderRecord {
@@ -137,7 +161,8 @@ impl super::CommunityService {
         channel_id: &str,
         parent_folder_id: Option<&str>,
     ) -> Result<Vec<CommunityFileFolderRecord>> {
-        self.db().get_community_file_folders(channel_id, parent_folder_id)
+        self.db()
+            .get_community_file_folders(channel_id, parent_folder_id)
     }
 
     /// Delete a folder (cascades to subfolders and files).

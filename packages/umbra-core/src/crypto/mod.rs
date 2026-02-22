@@ -95,15 +95,21 @@
 //! 3. **Secure Random**: Using `rand::rngs::OsRng` for cryptographic randomness
 //! 4. **No Key Reuse**: Unique nonces for every encryption operation
 
-mod keys;
 mod encryption;
-mod signing;
 mod kdf;
+mod keys;
+mod signing;
 
-pub use keys::{KeyPair, PublicKey, SigningKeyPair, EncryptionKeyPair};
-pub use encryption::{encrypt, decrypt, encrypt_for_recipient, decrypt_from_sender, encrypt_chunk, decrypt_chunk, EncryptedChunkInfo, SharedSecret, Nonce, EncryptionKey, NONCE_SIZE};
+pub use encryption::{
+    decrypt, decrypt_chunk, decrypt_from_sender, encrypt, encrypt_chunk, encrypt_for_recipient,
+    EncryptedChunkInfo, EncryptionKey, Nonce, SharedSecret, NONCE_SIZE,
+};
+pub use kdf::{
+    compute_key_fingerprint, derive_channel_file_key, derive_file_key, derive_keys_from_seed,
+    derive_shared_secret, verify_key_fingerprint, DerivedKeys,
+};
+pub use keys::{EncryptionKeyPair, KeyPair, PublicKey, SigningKeyPair};
 pub use signing::{sign, verify, Signature, SIGNATURE_SIZE};
-pub use kdf::{derive_keys_from_seed, derive_shared_secret, derive_file_key, derive_channel_file_key, compute_key_fingerprint, verify_key_fingerprint, DerivedKeys};
 
 /// Size of encryption keys in bytes (256 bits)
 pub const ENCRYPTION_KEY_SIZE: usize = 32;

@@ -2,9 +2,9 @@
 //!
 //! Community branding, custom emoji, stickers, sticker packs, and vanity URLs.
 
-use crate::error::Result;
-use crate::storage::{CommunityEmojiRecord, CommunityStickerRecord, CommunityStickerPackRecord};
 use super::service::generate_id;
+use crate::error::Result;
+use crate::storage::{CommunityEmojiRecord, CommunityStickerPackRecord, CommunityStickerRecord};
 
 impl super::CommunityService {
     // ── Branding ────────────────────────────────────────────────────────
@@ -23,13 +23,24 @@ impl super::CommunityService {
     ) -> Result<()> {
         let now = crate::time::now_timestamp();
         self.db().update_community_branding(
-            community_id, icon_url, banner_url, splash_url,
-            accent_color, custom_css, now,
+            community_id,
+            icon_url,
+            banner_url,
+            splash_url,
+            accent_color,
+            custom_css,
+            now,
         )?;
 
         self.db().insert_audit_log(
-            &generate_id(), community_id, actor_did, "branding_update",
-            Some("community"), Some(community_id), None, now,
+            &generate_id(),
+            community_id,
+            actor_did,
+            "branding_update",
+            Some("community"),
+            Some(community_id),
+            None,
+            now,
         )?;
 
         Ok(())
@@ -43,11 +54,16 @@ impl super::CommunityService {
         actor_did: &str,
     ) -> Result<()> {
         let now = crate::time::now_timestamp();
-        self.db().update_community_vanity_url(community_id, vanity_url, now)?;
+        self.db()
+            .update_community_vanity_url(community_id, vanity_url, now)?;
 
         self.db().insert_audit_log(
-            &generate_id(), community_id, actor_did, "vanity_url_update",
-            Some("community"), Some(community_id),
+            &generate_id(),
+            community_id,
+            actor_did,
+            "vanity_url_update",
+            Some("community"),
+            Some(community_id),
             Some(&serde_json::json!({"vanity_url": vanity_url}).to_string()),
             now,
         )?;
@@ -70,12 +86,22 @@ impl super::CommunityService {
         let id = generate_id();
 
         self.db().create_community_emoji(
-            &id, community_id, name, image_url, animated, uploaded_by, now,
+            &id,
+            community_id,
+            name,
+            image_url,
+            animated,
+            uploaded_by,
+            now,
         )?;
 
         self.db().insert_audit_log(
-            &generate_id(), community_id, uploaded_by, "emoji_create",
-            Some("emoji"), Some(&id),
+            &generate_id(),
+            community_id,
+            uploaded_by,
+            "emoji_create",
+            Some("emoji"),
+            Some(&id),
             Some(&serde_json::json!({"name": name}).to_string()),
             now,
         )?;
@@ -124,12 +150,24 @@ impl super::CommunityService {
         let id = generate_id();
 
         self.db().create_community_sticker(
-            &id, community_id, pack_id, name, image_url, animated, format, uploaded_by, now,
+            &id,
+            community_id,
+            pack_id,
+            name,
+            image_url,
+            animated,
+            format,
+            uploaded_by,
+            now,
         )?;
 
         self.db().insert_audit_log(
-            &generate_id(), community_id, uploaded_by, "sticker_create",
-            Some("sticker"), Some(&id),
+            &generate_id(),
+            community_id,
+            uploaded_by,
+            "sticker_create",
+            Some("sticker"),
+            Some(&id),
             Some(&serde_json::json!({"name": name, "format": format}).to_string()),
             now,
         )?;
@@ -173,12 +211,22 @@ impl super::CommunityService {
         let id = generate_id();
 
         self.db().create_community_sticker_pack(
-            &id, community_id, name, description, cover_sticker_id, created_by, now,
+            &id,
+            community_id,
+            name,
+            description,
+            cover_sticker_id,
+            created_by,
+            now,
         )?;
 
         self.db().insert_audit_log(
-            &generate_id(), community_id, created_by, "sticker_pack_create",
-            Some("sticker_pack"), Some(&id),
+            &generate_id(),
+            community_id,
+            created_by,
+            "sticker_pack_create",
+            Some("sticker_pack"),
+            Some(&id),
             Some(&serde_json::json!({"name": name}).to_string()),
             now,
         )?;

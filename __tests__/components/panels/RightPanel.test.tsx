@@ -60,8 +60,9 @@ describe('RightPanel', () => {
   };
 
   test('renders without crashing when no panel visible', () => {
+    // On mobile (Jest Platform.OS='ios'), RightPanel returns null when visiblePanel is null
     const { toJSON } = render(<RightPanel {...defaultProps} />);
-    expect(toJSON()).toBeTruthy();
+    expect(toJSON()).toBeNull();
   });
 
   test('renders MemberList when visiblePanel is members', () => {

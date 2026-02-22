@@ -1780,14 +1780,12 @@ mod tests {
         // Simulate a v4 database by running CREATE_TABLES minus call_history,
         // but it's simpler to just create the schema_version table and run migration
         conn.execute_batch(CREATE_TABLES).unwrap();
-        conn.execute(
-            "INSERT INTO schema_version (version) VALUES (4)",
-            [],
-        )
-        .unwrap();
+        conn.execute("INSERT INTO schema_version (version) VALUES (4)", [])
+            .unwrap();
 
         // Drop call_history so we can test the migration creates it
-        conn.execute_batch("DROP TABLE IF EXISTS call_history;").unwrap();
+        conn.execute_batch("DROP TABLE IF EXISTS call_history;")
+            .unwrap();
 
         // Run the migration
         conn.execute_batch(MIGRATE_V4_TO_V5).unwrap();
@@ -1824,11 +1822,8 @@ mod tests {
         let conn = Connection::open_in_memory().unwrap();
         // Create a v5 database
         conn.execute_batch(CREATE_TABLES).unwrap();
-        conn.execute(
-            "INSERT INTO schema_version (version) VALUES (5)",
-            [],
-        )
-        .unwrap();
+        conn.execute("INSERT INTO schema_version (version) VALUES (5)", [])
+            .unwrap();
 
         // Drop all community tables so we can test the migration creates them
         conn.execute_batch(
@@ -1856,8 +1851,9 @@ mod tests {
              DROP TABLE IF EXISTS community_channels;
              DROP TABLE IF EXISTS community_categories;
              DROP TABLE IF EXISTS community_spaces;
-             DROP TABLE IF EXISTS communities;"
-        ).unwrap();
+             DROP TABLE IF EXISTS communities;",
+        )
+        .unwrap();
 
         // Run the migration
         conn.execute_batch(MIGRATE_V5_TO_V6).unwrap();
@@ -1927,19 +1923,17 @@ mod tests {
     fn test_migrate_v6_to_v7_sql_is_valid() {
         let conn = Connection::open_in_memory().unwrap();
         conn.execute_batch(CREATE_TABLES).unwrap();
-        conn.execute(
-            "INSERT INTO schema_version (version) VALUES (6)",
-            [],
-        )
-        .unwrap();
+        conn.execute("INSERT INTO schema_version (version) VALUES (6)", [])
+            .unwrap();
 
         // Drop v7 tables so we can test the migration creates them
         conn.execute_batch(
             "DROP TABLE IF EXISTS community_notification_settings;
              DROP TABLE IF EXISTS community_member_status;
              DROP TABLE IF EXISTS community_thread_followers;
-             DROP TABLE IF EXISTS community_timeouts;"
-        ).unwrap();
+             DROP TABLE IF EXISTS community_timeouts;",
+        )
+        .unwrap();
 
         // Run the migration
         conn.execute_batch(MIGRATE_V6_TO_V7).unwrap();
@@ -1978,7 +1972,8 @@ mod tests {
             "INSERT INTO community_messages (id, channel_id, sender_did, is_e2ee, created_at)
              VALUES ('msg-1', 'chan-1', 'did:key:z6MkMember', 0, 1000)",
             [],
-        ).unwrap();
+        )
+        .unwrap();
         conn.execute(
             "INSERT INTO community_threads (id, channel_id, parent_message_id, created_by, created_at)
              VALUES ('thread-1', 'chan-1', 'msg-1', 'did:key:z6MkMember', 1000)",
@@ -1988,7 +1983,8 @@ mod tests {
             "INSERT INTO community_thread_followers (thread_id, member_did, followed_at)
              VALUES ('thread-1', 'did:key:z6MkMember', 1000)",
             [],
-        ).unwrap();
+        )
+        .unwrap();
 
         // Verify member_status table
         conn.execute(
@@ -2005,13 +2001,33 @@ mod tests {
         ).unwrap();
 
         // Verify counts
-        let timeout_count: i32 = conn.query_row("SELECT COUNT(*) FROM community_timeouts", [], |row| row.get(0)).unwrap();
+        let timeout_count: i32 = conn
+            .query_row("SELECT COUNT(*) FROM community_timeouts", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
         assert_eq!(timeout_count, 1);
-        let follower_count: i32 = conn.query_row("SELECT COUNT(*) FROM community_thread_followers", [], |row| row.get(0)).unwrap();
+        let follower_count: i32 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM community_thread_followers",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
         assert_eq!(follower_count, 1);
-        let status_count: i32 = conn.query_row("SELECT COUNT(*) FROM community_member_status", [], |row| row.get(0)).unwrap();
+        let status_count: i32 = conn
+            .query_row("SELECT COUNT(*) FROM community_member_status", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
         assert_eq!(status_count, 1);
-        let notif_count: i32 = conn.query_row("SELECT COUNT(*) FROM community_notification_settings", [], |row| row.get(0)).unwrap();
+        let notif_count: i32 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM community_notification_settings",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
         assert_eq!(notif_count, 1);
     }
 

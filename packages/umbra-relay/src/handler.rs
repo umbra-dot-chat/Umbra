@@ -113,26 +113,24 @@ pub async fn handle_websocket(socket: WebSocket, state: RelayState) {
 
     while let Some(msg_result) = ws_receiver.next().await {
         match msg_result {
-            Ok(Message::Text(text)) => {
-                match serde_json::from_str::<ClientMessage>(&text) {
-                    Ok(client_msg) => {
-                        handle_client_message(&state, &client_did, client_msg).await;
-                    }
-                    Err(e) => {
-                        tracing::warn!(
-                            did = client_did.as_str(),
-                            error = %e,
-                            "Failed to parse client message"
-                        );
-                        state.send_to_client(
-                            &client_did,
-                            ServerMessage::Error {
-                                message: format!("Invalid message format: {}", e),
-                            },
-                        );
-                    }
+            Ok(Message::Text(text)) => match serde_json::from_str::<ClientMessage>(&text) {
+                Ok(client_msg) => {
+                    handle_client_message(&state, &client_did, client_msg).await;
                 }
-            }
+                Err(e) => {
+                    tracing::warn!(
+                        did = client_did.as_str(),
+                        error = %e,
+                        "Failed to parse client message"
+                    );
+                    state.send_to_client(
+                        &client_did,
+                        ServerMessage::Error {
+                            message: format!("Invalid message format: {}", e),
+                        },
+                    );
+                }
+            },
             Ok(Message::Ping(_data)) => {
                 // Axum handles ping/pong at the protocol level,
                 // but if we need to respond manually:
@@ -276,11 +274,7 @@ async fn handle_client_message(state: &RelayState, from_did: &str, msg: ClientMe
 /// Forward a signaling payload (SDP offer/answer) to a peer.
 /// Tries local delivery first, then federation, then offline queue.
 fn handle_signal(state: &RelayState, from_did: &str, to_did: &str, payload: &str) {
-    tracing::debug!(
-        from = from_did,
-        to = to_did,
-        "Forwarding signal"
-    );
+    tracing::debug!(from = from_did, to = to_did, "Forwarding signal");
 
     // Try local + federation routing
     if state.route_signal(from_did, to_did, payload) {
@@ -333,12 +327,7 @@ fn handle_send(state: &RelayState, from_did: &str, to_did: &str, payload: &str) 
 fn handle_create_session(state: &RelayState, creator_did: &str, offer_payload: &str) {
     let session_id = state.create_session(creator_did, offer_payload);
 
-    state.send_to_client(
-        creator_did,
-        ServerMessage::SessionCreated {
-            session_id,
-        },
-    );
+    state.send_to_client(creator_did, ServerMessage::SessionCreated { session_id });
 }
 
 /// Join an existing signaling session.
@@ -387,12 +376,7 @@ fn handle_join_session(
     if !answer_sent {
         // Try federation
         let fed_sent = if let Some(ref fed) = state.federation {
-            fed.forward_session_join(
-                &session.creator_did,
-                session_id,
-                joiner_did,
-                answer_payload,
-            )
+            fed.forward_session_join(&session.creator_did, session_id, joiner_did, answer_payload)
         } else {
             false
         };
@@ -422,10 +406,7 @@ fn handle_fetch_offline(state: &RelayState, did: &str) {
         "Delivering offline messages"
     );
 
-    state.send_to_client(
-        did,
-        ServerMessage::OfflineMessages { messages },
-    );
+    state.send_to_client(did, ServerMessage::OfflineMessages { messages });
 }
 
 // ── Invite Handlers ──────────────────────────────────────────────────────────
@@ -757,10 +738,7 @@ pub async fn handle_federation_inbound(
                     "Delivering federated signal"
                 );
 
-                let server_msg = ServerMessage::Signal {
-                    from_did,
-                    payload,
-                };
+                let server_msg = ServerMessage::Signal { from_did, payload };
                 if !state.send_to_client(&to_did, server_msg) {
                     // Target went offline between routing lookup and delivery
                     tracing::debug!(to = to_did.as_str(), "Federated signal target offline");

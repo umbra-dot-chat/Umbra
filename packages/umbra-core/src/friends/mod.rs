@@ -94,9 +94,9 @@
 //! └─────────────────────────────────────────────────────────────────────────┘
 //! ```
 
+use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use parking_lot::RwLock;
 use uuid::Uuid;
 
 use crate::crypto::{sign, verify, Signature};
@@ -126,11 +126,7 @@ pub struct FriendRequest {
 
 impl FriendRequest {
     /// Create a new signed friend request
-    pub fn create(
-        identity: &Identity,
-        to_did: String,
-        message: Option<String>,
-    ) -> Result<Self> {
+    pub fn create(identity: &Identity, to_did: String, message: Option<String>) -> Result<Self> {
         // Validate we're not sending to ourselves
         if identity.did_string() == to_did {
             return Err(Error::CannotAddSelf);
@@ -148,8 +144,8 @@ impl FriendRequest {
             created_at,
         };
 
-        let serialized = bincode::serialize(&sign_data)
-            .map_err(|e| Error::SerializationError(e.to_string()))?;
+        let serialized =
+            bincode::serialize(&sign_data).map_err(|e| Error::SerializationError(e.to_string()))?;
 
         let signature = sign(&identity.keypair().signing, &serialized);
 
@@ -173,8 +169,8 @@ impl FriendRequest {
             created_at: self.created_at,
         };
 
-        let serialized = bincode::serialize(&sign_data)
-            .map_err(|e| Error::SerializationError(e.to_string()))?;
+        let serialized =
+            bincode::serialize(&sign_data).map_err(|e| Error::SerializationError(e.to_string()))?;
 
         verify(&self.from.public_keys.signing, &serialized, &self.signature)?;
 
@@ -192,14 +188,12 @@ impl FriendRequest {
 
     /// Encode to JSON
     pub fn to_json(&self) -> Result<String> {
-        serde_json::to_string(self)
-            .map_err(|e| Error::SerializationError(e.to_string()))
+        serde_json::to_string(self).map_err(|e| Error::SerializationError(e.to_string()))
     }
 
     /// Decode from JSON
     pub fn from_json(json: &str) -> Result<Self> {
-        serde_json::from_str(json)
-            .map_err(|e| Error::DeserializationError(e.to_string()))
+        serde_json::from_str(json).map_err(|e| Error::DeserializationError(e.to_string()))
     }
 }
 
@@ -240,8 +234,8 @@ impl FriendResponse {
             created_at,
         };
 
-        let serialized = bincode::serialize(&sign_data)
-            .map_err(|e| Error::SerializationError(e.to_string()))?;
+        let serialized =
+            bincode::serialize(&sign_data).map_err(|e| Error::SerializationError(e.to_string()))?;
 
         let signature = sign(&identity.keypair().signing, &serialized);
 
@@ -265,8 +259,8 @@ impl FriendResponse {
             created_at,
         };
 
-        let serialized = bincode::serialize(&sign_data)
-            .map_err(|e| Error::SerializationError(e.to_string()))?;
+        let serialized =
+            bincode::serialize(&sign_data).map_err(|e| Error::SerializationError(e.to_string()))?;
 
         let signature = sign(&identity.keypair().signing, &serialized);
 
@@ -288,8 +282,9 @@ impl FriendResponse {
             return Ok(());
         }
 
-        let responder = self.responder.as_ref()
-            .ok_or(Error::InvalidFriendRequest("Acceptance must include responder identity".into()))?;
+        let responder = self.responder.as_ref().ok_or(Error::InvalidFriendRequest(
+            "Acceptance must include responder identity".into(),
+        ))?;
 
         // Verify DID matches expected
         if responder.did != expected_did {
@@ -303,8 +298,8 @@ impl FriendResponse {
             created_at: self.created_at,
         };
 
-        let serialized = bincode::serialize(&sign_data)
-            .map_err(|e| Error::SerializationError(e.to_string()))?;
+        let serialized =
+            bincode::serialize(&sign_data).map_err(|e| Error::SerializationError(e.to_string()))?;
 
         verify(&responder.public_keys.signing, &serialized, &self.signature)?;
 
@@ -316,14 +311,12 @@ impl FriendResponse {
 
     /// Encode to JSON
     pub fn to_json(&self) -> Result<String> {
-        serde_json::to_string(self)
-            .map_err(|e| Error::SerializationError(e.to_string()))
+        serde_json::to_string(self).map_err(|e| Error::SerializationError(e.to_string()))
     }
 
     /// Decode from JSON
     pub fn from_json(json: &str) -> Result<Self> {
-        serde_json::from_str(json)
-            .map_err(|e| Error::DeserializationError(e.to_string()))
+        serde_json::from_str(json).map_err(|e| Error::DeserializationError(e.to_string()))
     }
 }
 
@@ -478,9 +471,11 @@ impl FriendsService {
             let encryption_key = hex::decode(&record.encryption_key)
                 .map_err(|e| Error::DatabaseError(format!("Invalid encryption key: {}", e)))?;
 
-            let signing_key: [u8; 32] = signing_key.try_into()
+            let signing_key: [u8; 32] = signing_key
+                .try_into()
                 .map_err(|_| Error::DatabaseError("Invalid signing key length".into()))?;
-            let encryption_key: [u8; 32] = encryption_key.try_into()
+            let encryption_key: [u8; 32] = encryption_key
+                .try_into()
                 .map_err(|_| Error::DatabaseError("Invalid encryption key length".into()))?;
 
             friends.push(Friend {
@@ -613,7 +608,8 @@ impl FriendsService {
     /// Accept a friend request
     pub fn accept_request(&self, request_id: &str) -> Result<(Friend, FriendResponse)> {
         // Find the request
-        let request = self.get_incoming_request(request_id)?
+        let request = self
+            .get_incoming_request(request_id)?
             .ok_or(Error::RequestNotFound)?;
 
         // Create the friend
@@ -629,18 +625,22 @@ impl FriendsService {
         )?;
 
         // Update request status
-        self.database.update_request_status(request_id, "accepted")?;
+        self.database
+            .update_request_status(request_id, "accepted")?;
 
         // Create response
         let response = FriendResponse::accept(request_id.to_string(), &self.identity)?;
 
         // Update caches
         self.friends_cache.write().push(friend.clone());
-        self.incoming_requests.write().retain(|r| r.id != request_id);
+        self.incoming_requests
+            .write()
+            .retain(|r| r.id != request_id);
 
         // Create conversation for this friend
         let conversation_id = Uuid::new_v4().to_string();
-        self.database.create_conversation(&conversation_id, &friend.did)?;
+        self.database
+            .create_conversation(&conversation_id, &friend.did)?;
 
         tracing::info!("Accepted friend request from {}", friend.did);
         Ok((friend, response))
@@ -649,17 +649,21 @@ impl FriendsService {
     /// Reject a friend request
     pub fn reject_request(&self, request_id: &str) -> Result<FriendResponse> {
         // Find the request
-        let _request = self.get_incoming_request(request_id)?
+        let _request = self
+            .get_incoming_request(request_id)?
             .ok_or(Error::RequestNotFound)?;
 
         // Update request status
-        self.database.update_request_status(request_id, "rejected")?;
+        self.database
+            .update_request_status(request_id, "rejected")?;
 
         // Create response
         let response = FriendResponse::reject(request_id.to_string(), &self.identity)?;
 
         // Update cache
-        self.incoming_requests.write().retain(|r| r.id != request_id);
+        self.incoming_requests
+            .write()
+            .retain(|r| r.id != request_id);
 
         tracing::info!("Rejected friend request {}", request_id);
         Ok(response)
@@ -668,7 +672,8 @@ impl FriendsService {
     /// Handle a response to our friend request
     pub fn handle_response(&self, response: FriendResponse) -> Result<Option<Friend>> {
         // Find our outgoing request
-        let request = self.get_outgoing_request(&response.request_id)?
+        let request = self
+            .get_outgoing_request(&response.request_id)?
             .ok_or(Error::RequestNotFound)?;
 
         // Verify the response (for acceptances)
@@ -676,8 +681,12 @@ impl FriendsService {
 
         if response.accepted {
             // Get the responder's identity
-            let responder = response.responder.as_ref()
-                .ok_or(Error::InvalidFriendRequest("Acceptance missing responder".into()))?;
+            let responder = response
+                .responder
+                .as_ref()
+                .ok_or(Error::InvalidFriendRequest(
+                    "Acceptance missing responder".into(),
+                ))?;
 
             // Create the friend
             let friend = Friend::from_public_identity(responder);
@@ -692,22 +701,29 @@ impl FriendsService {
             )?;
 
             // Update request status
-            self.database.update_request_status(&response.request_id, "accepted")?;
+            self.database
+                .update_request_status(&response.request_id, "accepted")?;
 
             // Update caches
             self.friends_cache.write().push(friend.clone());
-            self.outgoing_requests.write().retain(|r| r.id != response.request_id);
+            self.outgoing_requests
+                .write()
+                .retain(|r| r.id != response.request_id);
 
             // Create conversation for this friend
             let conversation_id = Uuid::new_v4().to_string();
-            self.database.create_conversation(&conversation_id, &friend.did)?;
+            self.database
+                .create_conversation(&conversation_id, &friend.did)?;
 
             tracing::info!("Friend request to {} was accepted", friend.did);
             Ok(Some(friend))
         } else {
             // Request was rejected
-            self.database.update_request_status(&response.request_id, "rejected")?;
-            self.outgoing_requests.write().retain(|r| r.id != response.request_id);
+            self.database
+                .update_request_status(&response.request_id, "rejected")?;
+            self.outgoing_requests
+                .write()
+                .retain(|r| r.id != response.request_id);
 
             tracing::info!("Friend request {} was rejected", response.request_id);
             Ok(None)
@@ -717,14 +733,18 @@ impl FriendsService {
     /// Cancel an outgoing request
     pub fn cancel_request(&self, request_id: &str) -> Result<()> {
         // Verify the request exists and is ours
-        let _request = self.get_outgoing_request(request_id)?
+        let _request = self
+            .get_outgoing_request(request_id)?
             .ok_or(Error::RequestNotFound)?;
 
         // Update status
-        self.database.update_request_status(request_id, "cancelled")?;
+        self.database
+            .update_request_status(request_id, "cancelled")?;
 
         // Update cache
-        self.outgoing_requests.write().retain(|r| r.id != request_id);
+        self.outgoing_requests
+            .write()
+            .retain(|r| r.id != request_id);
 
         tracing::info!("Cancelled friend request {}", request_id);
         Ok(())
@@ -782,7 +802,9 @@ impl FriendsService {
 
     /// Get a friend by DID
     pub fn get_friend(&self, did: &str) -> Option<Friend> {
-        self.friends_cache.read().iter()
+        self.friends_cache
+            .read()
+            .iter()
             .find(|f| f.did == did)
             .cloned()
     }
@@ -807,20 +829,25 @@ impl FriendsService {
         let outgoing = self.outgoing_requests.read();
         let incoming = self.incoming_requests.read();
 
-        outgoing.iter().any(|r| r.to_did == did) ||
-        incoming.iter().any(|r| r.from.did == did)
+        outgoing.iter().any(|r| r.to_did == did) || incoming.iter().any(|r| r.from.did == did)
     }
 
     // Helper methods
 
     fn get_incoming_request(&self, id: &str) -> Result<Option<FriendRequest>> {
-        Ok(self.incoming_requests.read().iter()
+        Ok(self
+            .incoming_requests
+            .read()
+            .iter()
             .find(|r| r.id == id)
             .cloned())
     }
 
     fn get_outgoing_request(&self, id: &str) -> Result<Option<FriendRequest>> {
-        Ok(self.outgoing_requests.read().iter()
+        Ok(self
+            .outgoing_requests
+            .read()
+            .iter()
             .find(|r| r.id == id)
             .cloned())
     }
@@ -848,7 +875,8 @@ mod tests {
             &alice,
             bob.did_string(),
             Some("Let's be friends!".to_string()),
-        ).unwrap();
+        )
+        .unwrap();
 
         assert_eq!(request.from.did, alice.did_string());
         assert_eq!(request.to_did, bob.did_string());
@@ -861,11 +889,7 @@ mod tests {
         let alice = create_test_identity("Alice");
         let bob = create_test_identity("Bob");
 
-        let request = FriendRequest::create(
-            &alice,
-            bob.did_string(),
-            None,
-        ).unwrap();
+        let request = FriendRequest::create(&alice, bob.did_string(), None).unwrap();
 
         // Verification should succeed
         assert!(request.verify().is_ok());
@@ -876,11 +900,7 @@ mod tests {
         let alice = create_test_identity("Alice");
         let bob = create_test_identity("Bob");
 
-        let mut request = FriendRequest::create(
-            &alice,
-            bob.did_string(),
-            None,
-        ).unwrap();
+        let mut request = FriendRequest::create(&alice, bob.did_string(), None).unwrap();
 
         // Tamper with the message
         request.message = Some("Tampered!".to_string());
@@ -893,11 +913,7 @@ mod tests {
     fn test_cannot_add_self() {
         let alice = create_test_identity("Alice");
 
-        let result = FriendRequest::create(
-            &alice,
-            alice.did_string(),
-            None,
-        );
+        let result = FriendRequest::create(&alice, alice.did_string(), None);
 
         assert!(matches!(result, Err(Error::CannotAddSelf)));
     }
@@ -907,11 +923,7 @@ mod tests {
         let alice = create_test_identity("Alice");
         let bob = create_test_identity("Bob");
 
-        let request = FriendRequest::create(
-            &alice,
-            bob.did_string(),
-            None,
-        ).unwrap();
+        let request = FriendRequest::create(&alice, bob.did_string(), None).unwrap();
 
         let response = FriendResponse::accept(request.id.clone(), &bob).unwrap();
 
@@ -925,11 +937,7 @@ mod tests {
         let alice = create_test_identity("Alice");
         let bob = create_test_identity("Bob");
 
-        let request = FriendRequest::create(
-            &alice,
-            bob.did_string(),
-            None,
-        ).unwrap();
+        let request = FriendRequest::create(&alice, bob.did_string(), None).unwrap();
 
         let response = FriendResponse::accept(request.id.clone(), &bob).unwrap();
 
@@ -958,11 +966,7 @@ mod tests {
         let alice = create_test_identity("Alice");
         let bob = create_test_identity("Bob");
 
-        let mut request = FriendRequest::create(
-            &alice,
-            bob.did_string(),
-            None,
-        ).unwrap();
+        let mut request = FriendRequest::create(&alice, bob.did_string(), None).unwrap();
 
         // Not expired when fresh
         assert!(!request.is_expired());
@@ -977,11 +981,8 @@ mod tests {
         let alice = create_test_identity("Alice");
         let bob = create_test_identity("Bob");
 
-        let request = FriendRequest::create(
-            &alice,
-            bob.did_string(),
-            Some("Hi!".to_string()),
-        ).unwrap();
+        let request =
+            FriendRequest::create(&alice, bob.did_string(), Some("Hi!".to_string())).unwrap();
 
         let json = request.to_json().unwrap();
         let restored = FriendRequest::from_json(&json).unwrap();
@@ -995,7 +996,10 @@ mod tests {
     fn test_request_status() {
         assert_eq!(RequestStatus::Pending.as_str(), "pending");
         assert_eq!(RequestStatus::Accepted.as_str(), "accepted");
-        assert_eq!(RequestStatus::parse("pending"), Some(RequestStatus::Pending));
+        assert_eq!(
+            RequestStatus::parse("pending"),
+            Some(RequestStatus::Pending)
+        );
         assert_eq!(RequestStatus::parse("invalid"), None);
     }
 
@@ -1020,10 +1024,9 @@ mod tests {
 
         let service = FriendsService::new(alice.clone(), database);
 
-        let request = service.create_request(
-            &bob.did_string(),
-            Some("Hi Bob!".to_string()),
-        ).unwrap();
+        let request = service
+            .create_request(&bob.did_string(), Some("Hi Bob!".to_string()))
+            .unwrap();
 
         assert_eq!(request.to_did, bob.did_string());
         assert!(service.has_pending_request(&bob.did_string()));
@@ -1038,11 +1041,8 @@ mod tests {
         let service = FriendsService::new(bob.clone(), database);
 
         // Create request from Alice
-        let request = FriendRequest::create(
-            &alice,
-            bob.did_string(),
-            Some("Hi!".to_string()),
-        ).unwrap();
+        let request =
+            FriendRequest::create(&alice, bob.did_string(), Some("Hi!".to_string())).unwrap();
 
         // Handle it
         service.handle_incoming_request(request.clone()).unwrap();
@@ -1060,11 +1060,7 @@ mod tests {
         let service = FriendsService::new(bob.clone(), database);
 
         // Create and handle incoming request
-        let request = FriendRequest::create(
-            &alice,
-            bob.did_string(),
-            None,
-        ).unwrap();
+        let request = FriendRequest::create(&alice, bob.did_string(), None).unwrap();
         service.handle_incoming_request(request.clone()).unwrap();
 
         // Accept it

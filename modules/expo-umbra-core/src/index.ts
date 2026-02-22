@@ -8,7 +8,7 @@
  * so rn-backend.ts can map them 1:1 to the UmbraWasmModule contract.
  */
 
-import { requireNativeModule, EventEmitter, type Subscription } from 'expo-modules-core';
+import { requireNativeModule, EventEmitter, type EventSubscription } from 'expo-modules-core';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -91,14 +91,16 @@ export function getExpoUmbraCore(): NativeUmbraCore | null {
 // Event Listener
 // ─────────────────────────────────────────────────────────────────────────────
 
-let _emitter: EventEmitter | null = null;
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let _emitter: any = null;
 
-function getEmitter(): EventEmitter | null {
+function getEmitter(): { addListener(name: string, cb: (event: UmbraCoreEvent) => void): EventSubscription } | null {
   if (_emitter) return _emitter;
   const mod = getExpoUmbraCore();
   if (!mod) return null;
   try {
-    // The EventEmitter constructor takes the native module instance
+    // As of Expo SDK 52+ the native module itself is an EventEmitter,
+    // but we still call the constructor for backward compatibility.
     _emitter = new EventEmitter(mod as any);
     return _emitter;
   } catch {
@@ -115,7 +117,7 @@ function getEmitter(): EventEmitter | null {
  */
 export function addUmbraCoreEventListener(
   callback: (event: UmbraCoreEvent) => void
-): Subscription | null {
+): EventSubscription | null {
   const emitter = getEmitter();
   if (!emitter) return null;
   return emitter.addListener('onUmbraCoreEvent', callback);

@@ -162,10 +162,13 @@ impl AssetStore {
     /// Check if an upload is rate-limited.
     pub fn check_rate_limit(&self, did: &str) -> bool {
         let now = chrono::Utc::now().timestamp();
-        let mut entry = self.rate_limits.entry(did.to_string()).or_insert(RateEntry {
-            count: 0,
-            window_start: now,
-        });
+        let mut entry = self
+            .rate_limits
+            .entry(did.to_string())
+            .or_insert(RateEntry {
+                count: 0,
+                window_start: now,
+            });
 
         // Reset window if expired
         if now - entry.window_start >= RATE_LIMIT_WINDOW_SECS {

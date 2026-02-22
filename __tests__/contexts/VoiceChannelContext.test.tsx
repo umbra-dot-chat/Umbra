@@ -31,6 +31,24 @@ jest.mock('@/contexts/AuthContext', () => ({
   }),
 }));
 
+jest.mock('@/contexts/SoundContext', () => ({
+  useSound: () => ({
+    playSound: jest.fn(),
+    masterVolume: 0.8,
+    setMasterVolume: jest.fn(),
+    muted: false,
+    setMuted: jest.fn(),
+    categoryVolumes: {},
+    setCategoryVolume: jest.fn(),
+    categoryEnabled: {},
+    setCategoryEnabled: jest.fn(),
+    activeTheme: 'playful',
+    setActiveTheme: jest.fn(),
+    preferencesLoaded: true,
+  }),
+  SoundProvider: ({ children }: any) => children,
+}));
+
 // Mock GroupCallManager
 const mockToggleMute = jest.fn(() => true);
 const mockGetUserMedia = jest.fn(() => Promise.resolve());

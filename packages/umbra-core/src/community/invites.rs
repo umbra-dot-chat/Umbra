@@ -2,9 +2,9 @@
 //!
 //! Invite codes with optional expiration, max uses, and vanity URLs.
 
+use super::service::generate_id;
 use crate::error::{Error, Result};
 use crate::storage::CommunityInviteRecord;
-use super::service::generate_id;
 
 impl super::CommunityService {
     /// Create an invite link for a community.
@@ -61,7 +61,9 @@ impl super::CommunityService {
         member_did: &str,
         nickname: Option<&str>,
     ) -> Result<String> {
-        let invite = self.db().get_community_invite_by_code(code)?
+        let invite = self
+            .db()
+            .get_community_invite_by_code(code)?
             .ok_or(Error::InviteNotFound)?;
 
         let now = crate::time::now_timestamp();
@@ -95,12 +97,10 @@ impl super::CommunityService {
     }
 
     /// Delete an invite.
-    pub fn delete_invite(
-        &self,
-        invite_id: &str,
-        actor_did: &str,
-    ) -> Result<()> {
-        let invite = self.db().get_community_invite(invite_id)?
+    pub fn delete_invite(&self, invite_id: &str, actor_did: &str) -> Result<()> {
+        let invite = self
+            .db()
+            .get_community_invite(invite_id)?
             .ok_or(Error::InviteNotFound)?;
 
         let now = crate::time::now_timestamp();

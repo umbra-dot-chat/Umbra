@@ -105,13 +105,13 @@ export function GrowablePinInput({
   // Colors
   const colors = theme.colors;
   const borderColor = error
-    ? colors.border.danger
-    : colors.border.default;
+    ? colors.status.dangerBorder
+    : colors.border.subtle;
   const focusBorderColor = error
-    ? colors.border.danger
+    ? colors.status.dangerBorder
     : colors.border.focus;
   const textColor = colors.text.primary;
-  const bgColor = colors.background.input;
+  const bgColor = colors.background.sunken;
   const radius = theme.radii.md;
 
   // Active cell index (cursor position)

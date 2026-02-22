@@ -2,7 +2,7 @@
 //!
 //! Events emitted by the network layer for the application to handle.
 
-use libp2p::{PeerId, Multiaddr};
+use libp2p::{Multiaddr, PeerId};
 
 use super::file_transfer::TransferEvent;
 
@@ -116,9 +116,9 @@ impl NetworkEvent {
             Self::PeerIdentified { peer_id, .. } => Some(*peer_id),
             Self::PeerDiscovered { peer_id, .. } => Some(*peer_id),
             Self::Listening { .. }
-                | Self::DhtUpdated { .. }
-                | Self::FileTransferEvent(_)
-                | Self::FileProviders { .. } => None,
+            | Self::DhtUpdated { .. }
+            | Self::FileTransferEvent(_)
+            | Self::FileProviders { .. } => None,
         }
     }
 
@@ -216,8 +216,16 @@ mod tests {
         ];
 
         for event in &connection_events {
-            assert!(event.is_connection_event(), "Should be connection event: {:?}", event);
-            assert!(!event.is_message_event(), "Should not be message event: {:?}", event);
+            assert!(
+                event.is_connection_event(),
+                "Should be connection event: {:?}",
+                event
+            );
+            assert!(
+                !event.is_message_event(),
+                "Should not be message event: {:?}",
+                event
+            );
         }
     }
 
@@ -242,8 +250,16 @@ mod tests {
         ];
 
         for event in &message_events {
-            assert!(event.is_message_event(), "Should be message event: {:?}", event);
-            assert!(!event.is_connection_event(), "Should not be connection event: {:?}", event);
+            assert!(
+                event.is_message_event(),
+                "Should be message event: {:?}",
+                event
+            );
+            assert!(
+                !event.is_connection_event(),
+                "Should not be connection event: {:?}",
+                event
+            );
         }
     }
 

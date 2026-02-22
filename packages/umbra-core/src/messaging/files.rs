@@ -2,9 +2,9 @@
 //!
 //! File and folder CRUD for DM shared files between users.
 
-use std::sync::Arc;
 use crate::error::{Error, Result};
 use crate::storage::{Database, DmSharedFileRecord, DmSharedFolderRecord};
+use std::sync::Arc;
 
 /// Generate a unique ID for DM files.
 fn generate_id() -> String {
@@ -63,9 +63,18 @@ impl DmFileService {
         let id = generate_id();
 
         self.db().store_dm_shared_file(
-            &id, conversation_id, folder_id, filename, description,
-            file_size, mime_type, storage_chunks_json, uploaded_by,
-            encrypted_metadata, encryption_nonce, now,
+            &id,
+            conversation_id,
+            folder_id,
+            filename,
+            description,
+            file_size,
+            mime_type,
+            storage_chunks_json,
+            uploaded_by,
+            encrypted_metadata,
+            encryption_nonce,
+            now,
         )?;
 
         Ok(DmSharedFileRecord {
@@ -94,13 +103,17 @@ impl DmFileService {
         limit: usize,
         offset: usize,
     ) -> Result<Vec<DmSharedFileRecord>> {
-        self.db().get_dm_shared_files(conversation_id, folder_id, limit, offset)
+        self.db()
+            .get_dm_shared_files(conversation_id, folder_id, limit, offset)
     }
 
     /// Get a DM file by ID.
     pub fn get_file(&self, id: &str) -> Result<DmSharedFileRecord> {
-        self.db().get_dm_shared_file(id)?
-            .ok_or(Error::InvalidCommunityOperation("DM file not found".to_string()))
+        self.db()
+            .get_dm_shared_file(id)?
+            .ok_or(Error::InvalidCommunityOperation(
+                "DM file not found".to_string(),
+            ))
     }
 
     /// Increment download count for a DM file.
@@ -132,7 +145,12 @@ impl DmFileService {
         let id = generate_id();
 
         self.db().create_dm_shared_folder(
-            &id, conversation_id, parent_folder_id, name, created_by, now,
+            &id,
+            conversation_id,
+            parent_folder_id,
+            name,
+            created_by,
+            now,
         )?;
 
         Ok(DmSharedFolderRecord {
@@ -151,7 +169,8 @@ impl DmFileService {
         conversation_id: &str,
         parent_folder_id: Option<&str>,
     ) -> Result<Vec<DmSharedFolderRecord>> {
-        self.db().get_dm_shared_folders(conversation_id, parent_folder_id)
+        self.db()
+            .get_dm_shared_folders(conversation_id, parent_folder_id)
     }
 
     /// Delete a DM folder.

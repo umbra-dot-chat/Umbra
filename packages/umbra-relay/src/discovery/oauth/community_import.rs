@@ -18,9 +18,10 @@ use uuid::Uuid;
 use crate::discovery::{
     config::DISCORD_COMMUNITY_IMPORT_SCOPES,
     types::{
-        DiscordChannelType, DiscordEmoji, DiscordGuildInfo, DiscordGuildsResponse, DiscordGuildStructureResponse,
-        DiscordImportedChannel, DiscordImportedRole, DiscordImportedStructure,
-        DiscordPermissionOverwrite, DiscordSticker, OAuthState, Platform, StartAuthResponse,
+        DiscordChannelType, DiscordEmoji, DiscordGuildInfo, DiscordGuildStructureResponse,
+        DiscordGuildsResponse, DiscordImportedChannel, DiscordImportedRole,
+        DiscordImportedStructure, DiscordPermissionOverwrite, DiscordSticker, OAuthState, Platform,
+        StartAuthResponse,
     },
     DiscoveryConfig, DiscoveryStore,
 };
@@ -369,7 +370,10 @@ pub async fn start_discord_community_import(
         (Some(id), Some(uri)) => (id.clone(), uri.clone()),
         (Some(id), None) => {
             // Fall back to constructing from base URL
-            let uri = format!("{}/community/import/discord/callback", config.relay_base_url);
+            let uri = format!(
+                "{}/community/import/discord/callback",
+                config.relay_base_url
+            );
             (id.clone(), uri)
         }
         _ => {
@@ -446,8 +450,10 @@ pub async fn callback_discord_community_import(
                 community_import = s.community_import,
                 "OAuth state found but doesn't match expected criteria"
             );
-            return community_import_error_html("Invalid OAuth state (not a community import flow)")
-                .into_response();
+            return community_import_error_html(
+                "Invalid OAuth state (not a community import flow)",
+            )
+            .into_response();
         }
         None => {
             tracing::warn!(state = query.state.as_str(), "OAuth state not found");
@@ -463,7 +469,10 @@ pub async fn callback_discord_community_import(
     ) {
         (Some(id), Some(secret), Some(uri)) => (id.clone(), secret.clone(), uri.clone()),
         (Some(id), Some(secret), None) => {
-            let uri = format!("{}/community/import/discord/callback", config.relay_base_url);
+            let uri = format!(
+                "{}/community/import/discord/callback",
+                config.relay_base_url
+            );
             (id.clone(), secret.clone(), uri)
         }
         _ => {
@@ -724,7 +733,9 @@ pub async fn get_discord_guild_structure(
             let body = resp.text().await.unwrap_or_default();
             tracing::warn!(
                 "Discord channels fetch returned {} (auth={}): {}",
-                status, auth_type, body
+                status,
+                auth_type,
+                body
             );
             Vec::new()
         }
@@ -741,32 +752,36 @@ pub async fn get_discord_guild_structure(
         .send()
         .await;
 
-    let (roles, full_guild_info): (Vec<DiscordRoleApiResponse>, Option<DiscordFullGuildApiResponse>) =
-        match guild_response {
-            Ok(resp) if resp.status().is_success() => match resp.json().await {
-                Ok(g) => {
-                    let g: DiscordFullGuildApiResponse = g;
-                    (g.roles.clone(), Some(g))
-                }
-                Err(e) => {
-                    tracing::error!("Failed to parse Discord guild response: {}", e);
-                    (Vec::new(), None)
-                }
-            },
-            Ok(resp) => {
-                let status = resp.status();
-                let body = resp.text().await.unwrap_or_default();
-                tracing::warn!(
-                    "Discord guild fetch returned {} (auth={}): {}",
-                    status, auth_type, body
-                );
-                (Vec::new(), None)
+    let (roles, full_guild_info): (
+        Vec<DiscordRoleApiResponse>,
+        Option<DiscordFullGuildApiResponse>,
+    ) = match guild_response {
+        Ok(resp) if resp.status().is_success() => match resp.json().await {
+            Ok(g) => {
+                let g: DiscordFullGuildApiResponse = g;
+                (g.roles.clone(), Some(g))
             }
             Err(e) => {
-                tracing::error!("Discord guild request failed: {}", e);
+                tracing::error!("Failed to parse Discord guild response: {}", e);
                 (Vec::new(), None)
             }
-        };
+        },
+        Ok(resp) => {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            tracing::warn!(
+                "Discord guild fetch returned {} (auth={}): {}",
+                status,
+                auth_type,
+                body
+            );
+            (Vec::new(), None)
+        }
+        Err(e) => {
+            tracing::error!("Discord guild request failed: {}", e);
+            (Vec::new(), None)
+        }
+    };
 
     // Convert channels to our format
     let imported_channels: Vec<DiscordImportedChannel> = channels
@@ -1000,10 +1015,7 @@ pub async fn check_bot_in_guild(
         Ok(resp) => {
             let status = resp.status();
             if status.is_success() {
-                tracing::info!(
-                    guild_id = query.guild_id.as_str(),
-                    "Bot confirmed in guild"
-                );
+                tracing::info!(guild_id = query.guild_id.as_str(), "Bot confirmed in guild");
                 true
             } else {
                 tracing::debug!(
@@ -1180,8 +1192,7 @@ pub async fn get_discord_guild_members(
 
         match response {
             Ok(resp) if resp.status().is_success() => {
-                let members: Vec<DiscordMemberApiResponse> =
-                    resp.json().await.unwrap_or_default();
+                let members: Vec<DiscordMemberApiResponse> = resp.json().await.unwrap_or_default();
 
                 if members.is_empty() {
                     break;
@@ -1210,7 +1221,8 @@ pub async fn get_discord_guild_members(
                 if status.as_u16() == 403 {
                     tracing::warn!(
                         "Bot lacks GUILD_MEMBERS intent for guild {}: {}",
-                        guild_id, body
+                        guild_id,
+                        body
                     );
                     return Json(serde_json::json!({
                         "members": [],
@@ -1221,10 +1233,7 @@ pub async fn get_discord_guild_members(
                     .into_response();
                 }
 
-                tracing::error!(
-                    "Discord members fetch failed: {} - {}",
-                    status, body
-                );
+                tracing::error!("Discord members fetch failed: {} - {}", status, body);
                 break;
             }
             Err(e) => {
@@ -1334,7 +1343,9 @@ pub async fn get_discord_channel_pins(
             let body = resp.text().await.unwrap_or_default();
             tracing::warn!(
                 "Discord pins fetch failed for channel {}: {} - {}",
-                channel_id, status, body
+                channel_id,
+                status,
+                body
             );
             Vec::new()
         }
@@ -1505,7 +1516,9 @@ pub async fn get_discord_guild_audit_log(
 
                     // Get user info from the lookup map
                     let user = user_map.get(user_id);
-                    let username = user.and_then(|u| u["username"].as_str()).unwrap_or("Unknown");
+                    let username = user
+                        .and_then(|u| u["username"].as_str())
+                        .unwrap_or("Unknown");
                     let avatar = user.and_then(|u| u["avatar"].as_str());
 
                     // Map Discord action types to Umbra action types
@@ -1534,7 +1547,8 @@ pub async fn get_discord_guild_audit_log(
             if status.as_u16() == 403 {
                 tracing::warn!(
                     "Bot lacks VIEW_AUDIT_LOG permission for guild {}: {}",
-                    guild_id, body
+                    guild_id,
+                    body
                 );
                 return Json(serde_json::json!({
                     "entries": [],
@@ -1545,7 +1559,9 @@ pub async fn get_discord_guild_audit_log(
 
             tracing::warn!(
                 "Discord audit log fetch failed for guild {}: {} - {}",
-                guild_id, status, body
+                guild_id,
+                status,
+                body
             );
             Vec::new()
         }

@@ -2,9 +2,9 @@
 //!
 //! Webhooks, notification settings, and advanced channel features.
 
-use crate::error::{Error, Result};
-use crate::storage::{CommunityWebhookRecord, ChannelPermissionOverrideRecord};
 use super::service::generate_id;
+use crate::error::{Error, Result};
+use crate::storage::{ChannelPermissionOverrideRecord, CommunityWebhookRecord};
 
 impl super::CommunityService {
     // ── Webhooks ────────────────────────────────────────────────────────
@@ -22,14 +22,24 @@ impl super::CommunityService {
         let token = generate_webhook_token();
 
         self.db().create_community_webhook(
-            &id, channel_id, name, avatar_url, &token, creator_did, now,
+            &id,
+            channel_id,
+            name,
+            avatar_url,
+            &token,
+            creator_did,
+            now,
         )?;
 
         // Audit log — need channel to get community
         if let Some(channel) = self.db().get_community_channel(channel_id)? {
             self.db().insert_audit_log(
-                &generate_id(), &channel.community_id, creator_did, "webhook_create",
-                Some("webhook"), Some(&id),
+                &generate_id(),
+                &channel.community_id,
+                creator_did,
+                "webhook_create",
+                Some("webhook"),
+                Some(&id),
                 Some(&serde_json::json!({"name": name}).to_string()),
                 now,
             )?;
@@ -53,8 +63,11 @@ impl super::CommunityService {
 
     /// Get a webhook by ID.
     pub fn get_webhook(&self, id: &str) -> Result<CommunityWebhookRecord> {
-        self.db().get_community_webhook(id)?
-            .ok_or(Error::InvalidCommunityOperation("Webhook not found".to_string()))
+        self.db()
+            .get_community_webhook(id)?
+            .ok_or(Error::InvalidCommunityOperation(
+                "Webhook not found".to_string(),
+            ))
     }
 
     /// Update a webhook's name and/or avatar.
@@ -75,8 +88,14 @@ impl super::CommunityService {
         if let Some(channel) = self.db().get_community_channel(&webhook.channel_id)? {
             let now = crate::time::now_timestamp();
             self.db().insert_audit_log(
-                &generate_id(), &channel.community_id, actor_did, "webhook_delete",
-                Some("webhook"), Some(id), None, now,
+                &generate_id(),
+                &channel.community_id,
+                actor_did,
+                "webhook_delete",
+                Some("webhook"),
+                Some(id),
+                None,
+                now,
             )?;
         }
 
@@ -97,18 +116,30 @@ impl super::CommunityService {
     ) -> Result<()> {
         let id = generate_id();
         self.db().set_channel_permission_override(
-            &id, channel_id, target_type, target_id, allow_bitfield, deny_bitfield,
+            &id,
+            channel_id,
+            target_type,
+            target_id,
+            allow_bitfield,
+            deny_bitfield,
         )?;
 
         if let Some(channel) = self.db().get_community_channel(channel_id)? {
             let now = crate::time::now_timestamp();
             self.db().insert_audit_log(
-                &generate_id(), &channel.community_id, actor_did, "permission_override_set",
-                Some("channel"), Some(channel_id),
-                Some(&serde_json::json!({
-                    "target_type": target_type,
-                    "target_id": target_id,
-                }).to_string()),
+                &generate_id(),
+                &channel.community_id,
+                actor_did,
+                "permission_override_set",
+                Some("channel"),
+                Some(channel_id),
+                Some(
+                    &serde_json::json!({
+                        "target_type": target_type,
+                        "target_id": target_id,
+                    })
+                    .to_string(),
+                ),
                 now,
             )?;
         }
@@ -148,14 +179,25 @@ impl super::CommunityService {
         let id = generate_id();
 
         self.db().create_community_role(
-            &id, community_id, name, color, position, hoisted, mentionable,
+            &id,
+            community_id,
+            name,
+            color,
+            position,
+            hoisted,
+            mentionable,
             false, // not preset
-            permissions_bitfield, now,
+            permissions_bitfield,
+            now,
         )?;
 
         self.db().insert_audit_log(
-            &generate_id(), community_id, actor_did, "role_create",
-            Some("role"), Some(&id),
+            &generate_id(),
+            community_id,
+            actor_did,
+            "role_create",
+            Some("role"),
+            Some(&id),
             Some(&serde_json::json!({"name": name}).to_string()),
             now,
         )?;
@@ -190,7 +232,15 @@ impl super::CommunityService {
         actor_did: &str,
     ) -> Result<()> {
         let now = crate::time::now_timestamp();
-        self.db().update_community_role(role_id, name, color, hoisted, mentionable, position, now)?;
+        self.db().update_community_role(
+            role_id,
+            name,
+            color,
+            hoisted,
+            mentionable,
+            position,
+            now,
+        )?;
         let _ = actor_did; // for future audit
         Ok(())
     }
@@ -203,7 +253,8 @@ impl super::CommunityService {
         actor_did: &str,
     ) -> Result<()> {
         let now = crate::time::now_timestamp();
-        self.db().update_community_role_permissions(role_id, permissions_bitfield, now)?;
+        self.db()
+            .update_community_role_permissions(role_id, permissions_bitfield, now)?;
         let _ = actor_did;
         Ok(())
     }

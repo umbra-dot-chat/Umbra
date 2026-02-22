@@ -15,8 +15,8 @@ fn main() {
 
     // Step 1: Create a new identity
     println!("Step 1: Creating new identity...");
-    let (identity, recovery_phrase) = Identity::create("Alice".to_string())
-        .expect("Failed to create identity");
+    let (identity, recovery_phrase) =
+        Identity::create("Alice".to_string()).expect("Failed to create identity");
 
     println!("  Identity created successfully!");
     println!("  Display Name: {}", identity.profile().display_name);
@@ -44,8 +44,9 @@ fn main() {
 
     // Step 3: Demonstrate recovery
     println!("Step 3: Recovering identity from phrase...");
-    let recovered_identity = Identity::from_recovery_phrase(&recovery_phrase, "Alice (Recovered)".to_string())
-        .expect("Failed to recover identity");
+    let recovered_identity =
+        Identity::from_recovery_phrase(&recovery_phrase, "Alice (Recovered)".to_string())
+            .expect("Failed to recover identity");
 
     println!("  Identity recovered successfully!");
     println!("  Original DID:  {}", identity.did());
@@ -65,8 +66,14 @@ fn main() {
     let public_identity = identity.public_identity();
     println!("  DID: {}", public_identity.did);
     println!("  Display Name: {}", public_identity.display_name);
-    println!("  Signing Key (hex): {}", hex::encode(public_identity.public_keys.signing));
-    println!("  Encryption Key (hex): {}", hex::encode(public_identity.public_keys.encryption));
+    println!(
+        "  Signing Key (hex): {}",
+        hex::encode(public_identity.public_keys.signing)
+    );
+    println!(
+        "  Encryption Key (hex): {}",
+        hex::encode(public_identity.public_keys.encryption)
+    );
     println!();
 
     println!("=== Example Complete ===");

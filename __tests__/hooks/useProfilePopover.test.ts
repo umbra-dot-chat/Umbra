@@ -8,7 +8,7 @@ describe('useProfilePopover', () => {
     expect(result.current.popoverAnchor).toBeNull();
   });
 
-  test('showProfile sets selectedMember with name and default online status', () => {
+  test('showProfile sets selectedMember with name and default offline status', () => {
     const { result } = renderHook(() => useProfilePopover());
     const mockEvent = { nativeEvent: { pageX: 100, pageY: 200 } };
 
@@ -19,7 +19,7 @@ describe('useProfilePopover', () => {
     expect(result.current.selectedMember).toEqual({
       id: 'Alice',
       name: 'Alice',
-      status: 'online',
+      status: 'offline',
     });
     expect(result.current.popoverAnchor).toEqual({ x: 100, y: 200 });
   });
@@ -35,7 +35,7 @@ describe('useProfilePopover', () => {
     expect(result.current.selectedMember).toEqual({
       id: 'Unknown Person',
       name: 'Unknown Person',
-      status: 'online',
+      status: 'offline',
     });
     expect(result.current.popoverAnchor).toEqual({ x: 50, y: 75 });
   });

@@ -249,9 +249,10 @@ impl DiscoveryStore {
         let platform_id = account.platform_id.clone();
 
         // Update the entry
-        let mut entry = self.by_did.entry(did.to_string()).or_insert_with(|| {
-            DiscoveryEntry::new(did.to_string())
-        });
+        let mut entry = self
+            .by_did
+            .entry(did.to_string())
+            .or_insert_with(|| DiscoveryEntry::new(did.to_string()));
         entry.add_account(account);
 
         // Update lookup index if discoverable
@@ -271,9 +272,7 @@ impl DiscoveryStore {
     pub fn unlink_account(&self, did: &str, platform: Platform) -> bool {
         let result = if let Some(mut entry) = self.by_did.get_mut(did) {
             // Get the platform ID before removing (for index cleanup)
-            let platform_id = entry
-                .get_account(platform)
-                .map(|a| a.platform_id.clone());
+            let platform_id = entry.get_account(platform).map(|a| a.platform_id.clone());
 
             if entry.remove_account(platform) {
                 // Remove from lookup index
@@ -300,9 +299,10 @@ impl DiscoveryStore {
     /// Updates the lookup index accordingly.
     pub fn set_discoverable(&self, did: &str, discoverable: bool) {
         {
-            let mut entry = self.by_did.entry(did.to_string()).or_insert_with(|| {
-                DiscoveryEntry::new(did.to_string())
-            });
+            let mut entry = self
+                .by_did
+                .entry(did.to_string())
+                .or_insert_with(|| DiscoveryEntry::new(did.to_string()));
 
             let was_discoverable = entry.discoverable;
             entry.discoverable = discoverable;
@@ -381,8 +381,7 @@ impl DiscoveryStore {
                 continue;
             }
             if let Some(account) = entry.accounts.iter().find(|a| {
-                a.platform == platform
-                    && a.platform_username.to_lowercase().contains(&query_lower)
+                a.platform == platform && a.platform_username.to_lowercase().contains(&query_lower)
             }) {
                 results.push((
                     entry.did.clone(),
@@ -637,12 +636,19 @@ impl DiscoveryStore {
     // ── Profile Import Results ────────────────────────────────────────────────
 
     /// Store a profile import result for mobile polling.
-    pub fn store_profile_result(&self, state: &str, profile: crate::discovery::types::ImportedProfile) {
+    pub fn store_profile_result(
+        &self,
+        state: &str,
+        profile: crate::discovery::types::ImportedProfile,
+    ) {
         self.profile_results.insert(state.to_string(), profile);
     }
 
     /// Retrieve and remove a profile import result.
-    pub fn take_profile_result(&self, state: &str) -> Option<crate::discovery::types::ImportedProfile> {
+    pub fn take_profile_result(
+        &self,
+        state: &str,
+    ) -> Option<crate::discovery::types::ImportedProfile> {
         self.profile_results.remove(state).map(|(_, p)| p)
     }
 
@@ -860,7 +866,9 @@ mod tests {
     #[test]
     fn test_lookup_username_exact() {
         let store = DiscoveryStore::new(test_config());
-        store.register_username("did:key:z6MkAlice", "Alice").unwrap();
+        store
+            .register_username("did:key:z6MkAlice", "Alice")
+            .unwrap();
 
         // Exact lookup (case-insensitive)
         assert_eq!(
@@ -883,8 +891,12 @@ mod tests {
     #[test]
     fn test_search_usernames() {
         let store = DiscoveryStore::new(test_config());
-        store.register_username("did:key:z6Mk1", "MattCool").unwrap();
-        store.register_username("did:key:z6Mk2", "MattAwesome").unwrap();
+        store
+            .register_username("did:key:z6Mk1", "MattCool")
+            .unwrap();
+        store
+            .register_username("did:key:z6Mk2", "MattAwesome")
+            .unwrap();
         store.register_username("did:key:z6Mk3", "Bob").unwrap();
 
         // Search for "matt" should match 2
@@ -903,7 +915,9 @@ mod tests {
     #[test]
     fn test_release_username() {
         let store = DiscoveryStore::new(test_config());
-        store.register_username("did:key:z6MkAlice", "Alice").unwrap();
+        store
+            .register_username("did:key:z6MkAlice", "Alice")
+            .unwrap();
 
         // Verify it exists
         assert!(store.lookup_username("Alice#00001").is_some());
@@ -922,7 +936,9 @@ mod tests {
     #[test]
     fn test_change_username() {
         let store = DiscoveryStore::new(test_config());
-        store.register_username("did:key:z6MkAlice", "Alice").unwrap();
+        store
+            .register_username("did:key:z6MkAlice", "Alice")
+            .unwrap();
 
         // Change to a new name
         let result = store.register_username("did:key:z6MkAlice", "NewAlice");
@@ -949,12 +965,18 @@ mod tests {
         assert!(store.register_username("did:key:z6Mk1", "").is_err());
 
         // Invalid chars
-        assert!(store.register_username("did:key:z6Mk1", "hello world").is_err());
-        assert!(store.register_username("did:key:z6Mk1", "user@name").is_err());
+        assert!(store
+            .register_username("did:key:z6Mk1", "hello world")
+            .is_err());
+        assert!(store
+            .register_username("did:key:z6Mk1", "user@name")
+            .is_err());
 
         // Too long
         let long_name = "a".repeat(33);
-        assert!(store.register_username("did:key:z6Mk1", &long_name).is_err());
+        assert!(store
+            .register_username("did:key:z6Mk1", &long_name)
+            .is_err());
     }
 
     #[test]

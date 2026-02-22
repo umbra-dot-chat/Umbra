@@ -1,6 +1,8 @@
 //! Community core + spaces + categories + channels + members + roles + invites dispatch handlers.
 
-use super::dispatcher::{DResult, err, json_parse, require_str, ok_json, ok_success, community_service, emit_event};
+use super::dispatcher::{
+    community_service, emit_event, err, json_parse, ok_json, ok_success, require_str, DResult,
+};
 
 // ── Community — Core ────────────────────────────────────────────────────────
 
@@ -12,10 +14,14 @@ pub fn community_create(args: &str) -> DResult {
     let owner_nickname = data["owner_nickname"].as_str();
 
     let svc = community_service()?;
-    let result = svc.create_community(name, description, owner_did, owner_nickname)
+    let result = svc
+        .create_community(name, description, owner_did, owner_nickname)
         .map_err(|e| err(e.code(), e))?;
 
-    emit_event("community", &serde_json::json!({"type": "communityCreated", "community_id": result.community_id}));
+    emit_event(
+        "community",
+        &serde_json::json!({"type": "communityCreated", "community_id": result.community_id}),
+    );
 
     ok_json(serde_json::json!({
         "community_id": result.community_id,
@@ -43,7 +49,9 @@ pub fn community_get_mine(args: &str) -> DResult {
     let data = json_parse(args)?;
     let member_did = require_str(&data, "member_did")?;
     let svc = community_service()?;
-    let communities = svc.get_my_communities(member_did).map_err(|e| err(e.code(), e))?;
+    let communities = svc
+        .get_my_communities(member_did)
+        .map_err(|e| err(e.code(), e))?;
     let arr: Vec<serde_json::Value> = communities.iter().map(community_record_json).collect();
     Ok(serde_json::to_string(&arr).unwrap_or_default())
 }
@@ -55,8 +63,12 @@ pub fn community_update(args: &str) -> DResult {
     let description = data["description"].as_str();
     let actor_did = require_str(&data, "actor_did")?;
     let svc = community_service()?;
-    svc.update_community(id, name, description, actor_did).map_err(|e| err(e.code(), e))?;
-    emit_event("community", &serde_json::json!({"type": "communityUpdated", "id": id}));
+    svc.update_community(id, name, description, actor_did)
+        .map_err(|e| err(e.code(), e))?;
+    emit_event(
+        "community",
+        &serde_json::json!({"type": "communityUpdated", "id": id}),
+    );
     ok_success()
 }
 
@@ -65,8 +77,12 @@ pub fn community_delete(args: &str) -> DResult {
     let id = require_str(&data, "id")?;
     let actor_did = require_str(&data, "actor_did")?;
     let svc = community_service()?;
-    svc.delete_community(id, actor_did).map_err(|e| err(e.code(), e))?;
-    emit_event("community", &serde_json::json!({"type": "communityDeleted", "id": id}));
+    svc.delete_community(id, actor_did)
+        .map_err(|e| err(e.code(), e))?;
+    emit_event(
+        "community",
+        &serde_json::json!({"type": "communityDeleted", "id": id}),
+    );
     ok_success()
 }
 
@@ -78,7 +94,10 @@ pub fn community_transfer_ownership(args: &str) -> DResult {
     let svc = community_service()?;
     svc.transfer_ownership(community_id, current_owner_did, new_owner_did)
         .map_err(|e| err(e.code(), e))?;
-    emit_event("community", &serde_json::json!({"type": "ownershipTransferred", "community_id": community_id, "new_owner_did": new_owner_did}));
+    emit_event(
+        "community",
+        &serde_json::json!({"type": "ownershipTransferred", "community_id": community_id, "new_owner_did": new_owner_did}),
+    );
     ok_success()
 }
 
@@ -92,9 +111,20 @@ pub fn community_update_branding(args: &str) -> DResult {
     let custom_css = data["custom_css"].as_str();
     let actor_did = require_str(&data, "actor_did")?;
     let svc = community_service()?;
-    svc.update_branding(community_id, icon_url, banner_url, splash_url, accent_color, custom_css, actor_did)
-        .map_err(|e| err(e.code(), e))?;
-    emit_event("community", &serde_json::json!({"type": "brandingUpdated", "community_id": community_id}));
+    svc.update_branding(
+        community_id,
+        icon_url,
+        banner_url,
+        splash_url,
+        accent_color,
+        custom_css,
+        actor_did,
+    )
+    .map_err(|e| err(e.code(), e))?;
+    emit_event(
+        "community",
+        &serde_json::json!({"type": "brandingUpdated", "community_id": community_id}),
+    );
     ok_success()
 }
 
@@ -107,9 +137,13 @@ pub fn community_space_create(args: &str) -> DResult {
     let position = data["position"].as_i64().unwrap_or(0) as i32;
     let actor_did = require_str(&data, "actor_did")?;
     let svc = community_service()?;
-    let space = svc.create_space(community_id, name, position, actor_did)
+    let space = svc
+        .create_space(community_id, name, position, actor_did)
         .map_err(|e| err(e.code(), e))?;
-    emit_event("community", &serde_json::json!({"type": "spaceCreated", "space_id": space.id}));
+    emit_event(
+        "community",
+        &serde_json::json!({"type": "spaceCreated", "space_id": space.id}),
+    );
     ok_json(space_record_json(&space))
 }
 
@@ -128,8 +162,12 @@ pub fn community_space_update(args: &str) -> DResult {
     let name = require_str(&data, "name")?;
     let actor_did = require_str(&data, "actor_did")?;
     let svc = community_service()?;
-    svc.update_space(space_id, name, actor_did).map_err(|e| err(e.code(), e))?;
-    emit_event("community", &serde_json::json!({"type": "spaceUpdated", "space_id": space_id}));
+    svc.update_space(space_id, name, actor_did)
+        .map_err(|e| err(e.code(), e))?;
+    emit_event(
+        "community",
+        &serde_json::json!({"type": "spaceUpdated", "space_id": space_id}),
+    );
     ok_success()
 }
 
@@ -137,11 +175,17 @@ pub fn community_space_reorder(args: &str) -> DResult {
     let data = json_parse(args)?;
     let community_id = require_str(&data, "community_id")?;
     let actor_did = require_str(&data, "actor_did")?;
-    let space_ids: Vec<String> = data["space_ids"].as_array()
-        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+    let space_ids: Vec<String> = data["space_ids"]
+        .as_array()
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
         .unwrap_or_default();
     let svc = community_service()?;
-    svc.reorder_spaces(community_id, &space_ids, actor_did).map_err(|e| err(e.code(), e))?;
+    svc.reorder_spaces(community_id, &space_ids, actor_did)
+        .map_err(|e| err(e.code(), e))?;
     ok_success()
 }
 
@@ -150,8 +194,12 @@ pub fn community_space_delete(args: &str) -> DResult {
     let space_id = require_str(&data, "space_id")?;
     let actor_did = require_str(&data, "actor_did")?;
     let svc = community_service()?;
-    svc.delete_space(space_id, actor_did).map_err(|e| err(e.code(), e))?;
-    emit_event("community", &serde_json::json!({"type": "spaceDeleted", "space_id": space_id}));
+    svc.delete_space(space_id, actor_did)
+        .map_err(|e| err(e.code(), e))?;
+    emit_event(
+        "community",
+        &serde_json::json!({"type": "spaceDeleted", "space_id": space_id}),
+    );
     ok_success()
 }
 
@@ -165,9 +213,13 @@ pub fn community_category_create(args: &str) -> DResult {
     let position = data["position"].as_i64().unwrap_or(0) as i32;
     let actor_did = require_str(&data, "actor_did")?;
     let svc = community_service()?;
-    let cat = svc.create_category(community_id, space_id, name, position, actor_did)
+    let cat = svc
+        .create_category(community_id, space_id, name, position, actor_did)
         .map_err(|e| err(e.code(), e))?;
-    emit_event("community", &serde_json::json!({"type": "categoryCreated", "category_id": cat.id}));
+    emit_event(
+        "community",
+        &serde_json::json!({"type": "categoryCreated", "category_id": cat.id}),
+    );
     ok_json(category_record_json(&cat))
 }
 
@@ -184,7 +236,9 @@ pub fn community_category_list_all(args: &str) -> DResult {
     let data = json_parse(args)?;
     let community_id = require_str(&data, "community_id")?;
     let svc = community_service()?;
-    let cats = svc.get_all_categories(community_id).map_err(|e| err(e.code(), e))?;
+    let cats = svc
+        .get_all_categories(community_id)
+        .map_err(|e| err(e.code(), e))?;
     let arr: Vec<serde_json::Value> = cats.iter().map(category_record_json).collect();
     Ok(serde_json::to_string(&arr).unwrap_or_default())
 }
@@ -195,19 +249,29 @@ pub fn community_category_update(args: &str) -> DResult {
     let name = require_str(&data, "name")?;
     let actor_did = require_str(&data, "actor_did")?;
     let svc = community_service()?;
-    svc.update_category(category_id, name, actor_did).map_err(|e| err(e.code(), e))?;
-    emit_event("community", &serde_json::json!({"type": "categoryUpdated", "category_id": category_id}));
+    svc.update_category(category_id, name, actor_did)
+        .map_err(|e| err(e.code(), e))?;
+    emit_event(
+        "community",
+        &serde_json::json!({"type": "categoryUpdated", "category_id": category_id}),
+    );
     ok_success()
 }
 
 pub fn community_category_reorder(args: &str) -> DResult {
     let data = json_parse(args)?;
     let space_id = require_str(&data, "space_id")?;
-    let category_ids: Vec<String> = data["category_ids"].as_array()
-        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+    let category_ids: Vec<String> = data["category_ids"]
+        .as_array()
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
         .unwrap_or_default();
     let svc = community_service()?;
-    svc.reorder_categories(space_id, &category_ids).map_err(|e| err(e.code(), e))?;
+    svc.reorder_categories(space_id, &category_ids)
+        .map_err(|e| err(e.code(), e))?;
     ok_success()
 }
 
@@ -216,8 +280,12 @@ pub fn community_category_delete(args: &str) -> DResult {
     let category_id = require_str(&data, "category_id")?;
     let actor_did = require_str(&data, "actor_did")?;
     let svc = community_service()?;
-    svc.delete_category(category_id, actor_did).map_err(|e| err(e.code(), e))?;
-    emit_event("community", &serde_json::json!({"type": "categoryDeleted", "category_id": category_id}));
+    svc.delete_category(category_id, actor_did)
+        .map_err(|e| err(e.code(), e))?;
+    emit_event(
+        "community",
+        &serde_json::json!({"type": "categoryDeleted", "category_id": category_id}),
+    );
     ok_success()
 }
 
@@ -245,9 +313,22 @@ pub fn community_channel_create(args: &str) -> DResult {
     let actor_did = require_str(&data, "actor_did")?;
     let category_id = data["category_id"].as_str();
     let svc = community_service()?;
-    let ch = svc.create_channel(community_id, space_id, name, channel_type, topic, position, actor_did, category_id)
+    let ch = svc
+        .create_channel(
+            community_id,
+            space_id,
+            name,
+            channel_type,
+            topic,
+            position,
+            actor_did,
+            category_id,
+        )
         .map_err(|e| err(e.code(), e))?;
-    emit_event("community", &serde_json::json!({"type": "channelCreated", "channel_id": ch.id}));
+    emit_event(
+        "community",
+        &serde_json::json!({"type": "channelCreated", "channel_id": ch.id}),
+    );
     ok_json(channel_record_json(&ch))
 }
 
@@ -264,7 +345,9 @@ pub fn community_channel_list_all(args: &str) -> DResult {
     let data = json_parse(args)?;
     let community_id = require_str(&data, "community_id")?;
     let svc = community_service()?;
-    let chs = svc.get_all_channels(community_id).map_err(|e| err(e.code(), e))?;
+    let chs = svc
+        .get_all_channels(community_id)
+        .map_err(|e| err(e.code(), e))?;
     let arr: Vec<serde_json::Value> = chs.iter().map(channel_record_json).collect();
     Ok(serde_json::to_string(&arr).unwrap_or_default())
 }
@@ -284,8 +367,12 @@ pub fn community_channel_update(args: &str) -> DResult {
     let topic = data["topic"].as_str();
     let actor_did = require_str(&data, "actor_did")?;
     let svc = community_service()?;
-    svc.update_channel(channel_id, name, topic, actor_did).map_err(|e| err(e.code(), e))?;
-    emit_event("community", &serde_json::json!({"type": "channelUpdated", "channel_id": channel_id}));
+    svc.update_channel(channel_id, name, topic, actor_did)
+        .map_err(|e| err(e.code(), e))?;
+    emit_event(
+        "community",
+        &serde_json::json!({"type": "channelUpdated", "channel_id": channel_id}),
+    );
     ok_success()
 }
 
@@ -295,7 +382,8 @@ pub fn community_channel_set_slow_mode(args: &str) -> DResult {
     let seconds = data["seconds"].as_i64().unwrap_or(0) as i32;
     let actor_did = require_str(&data, "actor_did")?;
     let svc = community_service()?;
-    svc.set_slow_mode(channel_id, seconds, actor_did).map_err(|e| err(e.code(), e))?;
+    svc.set_slow_mode(channel_id, seconds, actor_did)
+        .map_err(|e| err(e.code(), e))?;
     ok_success()
 }
 
@@ -305,7 +393,8 @@ pub fn community_channel_set_e2ee(args: &str) -> DResult {
     let enabled = data["enabled"].as_bool().unwrap_or(false);
     let actor_did = require_str(&data, "actor_did")?;
     let svc = community_service()?;
-    svc.set_channel_e2ee(channel_id, enabled, actor_did).map_err(|e| err(e.code(), e))?;
+    svc.set_channel_e2ee(channel_id, enabled, actor_did)
+        .map_err(|e| err(e.code(), e))?;
     ok_success()
 }
 
@@ -314,19 +403,29 @@ pub fn community_channel_delete(args: &str) -> DResult {
     let channel_id = require_str(&data, "channel_id")?;
     let actor_did = require_str(&data, "actor_did")?;
     let svc = community_service()?;
-    svc.delete_channel(channel_id, actor_did).map_err(|e| err(e.code(), e))?;
-    emit_event("community", &serde_json::json!({"type": "channelDeleted", "channel_id": channel_id}));
+    svc.delete_channel(channel_id, actor_did)
+        .map_err(|e| err(e.code(), e))?;
+    emit_event(
+        "community",
+        &serde_json::json!({"type": "channelDeleted", "channel_id": channel_id}),
+    );
     ok_success()
 }
 
 pub fn community_channel_reorder(args: &str) -> DResult {
     let data = json_parse(args)?;
     let space_id = require_str(&data, "space_id")?;
-    let channel_ids: Vec<String> = data["channel_ids"].as_array()
-        .map(|arr| arr.iter().filter_map(|v| v.as_str().map(String::from)).collect())
+    let channel_ids: Vec<String> = data["channel_ids"]
+        .as_array()
+        .map(|arr| {
+            arr.iter()
+                .filter_map(|v| v.as_str().map(String::from))
+                .collect()
+        })
         .unwrap_or_default();
     let svc = community_service()?;
-    svc.reorder_channels(space_id, &channel_ids).map_err(|e| err(e.code(), e))?;
+    svc.reorder_channels(space_id, &channel_ids)
+        .map_err(|e| err(e.code(), e))?;
     ok_success()
 }
 
@@ -338,8 +437,12 @@ pub fn community_join(args: &str) -> DResult {
     let member_did = require_str(&data, "member_did")?;
     let nickname = data["nickname"].as_str();
     let svc = community_service()?;
-    svc.join_community(community_id, member_did, nickname).map_err(|e| err(e.code(), e))?;
-    emit_event("community", &serde_json::json!({"type": "memberJoined", "community_id": community_id, "member_did": member_did}));
+    svc.join_community(community_id, member_did, nickname)
+        .map_err(|e| err(e.code(), e))?;
+    emit_event(
+        "community",
+        &serde_json::json!({"type": "memberJoined", "community_id": community_id, "member_did": member_did}),
+    );
     ok_success()
 }
 
@@ -348,8 +451,12 @@ pub fn community_leave(args: &str) -> DResult {
     let community_id = require_str(&data, "community_id")?;
     let member_did = require_str(&data, "member_did")?;
     let svc = community_service()?;
-    svc.leave_community(community_id, member_did).map_err(|e| err(e.code(), e))?;
-    emit_event("community", &serde_json::json!({"type": "memberLeft", "community_id": community_id, "member_did": member_did}));
+    svc.leave_community(community_id, member_did)
+        .map_err(|e| err(e.code(), e))?;
+    emit_event(
+        "community",
+        &serde_json::json!({"type": "memberLeft", "community_id": community_id, "member_did": member_did}),
+    );
     ok_success()
 }
 
@@ -359,8 +466,12 @@ pub fn community_kick(args: &str) -> DResult {
     let target_did = require_str(&data, "target_did")?;
     let actor_did = require_str(&data, "actor_did")?;
     let svc = community_service()?;
-    svc.kick_member(community_id, target_did, actor_did).map_err(|e| err(e.code(), e))?;
-    emit_event("community", &serde_json::json!({"type": "memberKicked", "community_id": community_id, "target_did": target_did}));
+    svc.kick_member(community_id, target_did, actor_did)
+        .map_err(|e| err(e.code(), e))?;
+    emit_event(
+        "community",
+        &serde_json::json!({"type": "memberKicked", "community_id": community_id, "target_did": target_did}),
+    );
     ok_success()
 }
 
@@ -373,9 +484,19 @@ pub fn community_ban(args: &str) -> DResult {
     let device_fingerprint = data["device_fingerprint"].as_str();
     let actor_did = require_str(&data, "actor_did")?;
     let svc = community_service()?;
-    svc.ban_member(community_id, target_did, reason, expires_at, device_fingerprint, actor_did)
-        .map_err(|e| err(e.code(), e))?;
-    emit_event("community", &serde_json::json!({"type": "memberBanned", "community_id": community_id, "target_did": target_did}));
+    svc.ban_member(
+        community_id,
+        target_did,
+        reason,
+        expires_at,
+        device_fingerprint,
+        actor_did,
+    )
+    .map_err(|e| err(e.code(), e))?;
+    emit_event(
+        "community",
+        &serde_json::json!({"type": "memberBanned", "community_id": community_id, "target_did": target_did}),
+    );
     ok_success()
 }
 
@@ -385,8 +506,12 @@ pub fn community_unban(args: &str) -> DResult {
     let target_did = require_str(&data, "target_did")?;
     let actor_did = require_str(&data, "actor_did")?;
     let svc = community_service()?;
-    svc.unban_member(community_id, target_did, actor_did).map_err(|e| err(e.code(), e))?;
-    emit_event("community", &serde_json::json!({"type": "memberUnbanned", "community_id": community_id, "target_did": target_did}));
+    svc.unban_member(community_id, target_did, actor_did)
+        .map_err(|e| err(e.code(), e))?;
+    emit_event(
+        "community",
+        &serde_json::json!({"type": "memberUnbanned", "community_id": community_id, "target_did": target_did}),
+    );
     ok_success()
 }
 
@@ -394,7 +519,9 @@ pub fn community_member_list(args: &str) -> DResult {
     let data = json_parse(args)?;
     let community_id = require_str(&data, "community_id")?;
     let svc = community_service()?;
-    let members = svc.get_members(community_id).map_err(|e| err(e.code(), e))?;
+    let members = svc
+        .get_members(community_id)
+        .map_err(|e| err(e.code(), e))?;
     let arr: Vec<serde_json::Value> = members.iter().map(member_record_json).collect();
     Ok(serde_json::to_string(&arr).unwrap_or_default())
 }
@@ -404,7 +531,9 @@ pub fn community_member_get(args: &str) -> DResult {
     let community_id = require_str(&data, "community_id")?;
     let member_did = require_str(&data, "member_did")?;
     let svc = community_service()?;
-    let m = svc.get_member(community_id, member_did).map_err(|e| err(e.code(), e))?;
+    let m = svc
+        .get_member(community_id, member_did)
+        .map_err(|e| err(e.code(), e))?;
     ok_json(member_record_json(&m))
 }
 
@@ -426,12 +555,17 @@ pub fn community_ban_list(args: &str) -> DResult {
     let community_id = require_str(&data, "community_id")?;
     let svc = community_service()?;
     let bans = svc.get_bans(community_id).map_err(|e| err(e.code(), e))?;
-    let arr: Vec<serde_json::Value> = bans.iter().map(|b| serde_json::json!({
-        "community_id": b.community_id, "banned_did": b.banned_did,
-        "reason": b.reason, "banned_by": b.banned_by,
-        "expires_at": b.expires_at, "device_fingerprint": b.device_fingerprint,
-        "created_at": b.created_at,
-    })).collect();
+    let arr: Vec<serde_json::Value> = bans
+        .iter()
+        .map(|b| {
+            serde_json::json!({
+                "community_id": b.community_id, "banned_did": b.banned_did,
+                "reason": b.reason, "banned_by": b.banned_by,
+                "expires_at": b.expires_at, "device_fingerprint": b.device_fingerprint,
+                "created_at": b.created_at,
+            })
+        })
+        .collect();
     Ok(serde_json::to_string(&arr).unwrap_or_default())
 }
 
@@ -451,7 +585,9 @@ pub fn community_member_roles(args: &str) -> DResult {
     let community_id = require_str(&data, "community_id")?;
     let member_did = require_str(&data, "member_did")?;
     let svc = community_service()?;
-    let roles = svc.get_member_roles(community_id, member_did).map_err(|e| err(e.code(), e))?;
+    let roles = svc
+        .get_member_roles(community_id, member_did)
+        .map_err(|e| err(e.code(), e))?;
     let arr: Vec<serde_json::Value> = roles.iter().map(role_record_json).collect();
     Ok(serde_json::to_string(&arr).unwrap_or_default())
 }
@@ -463,8 +599,12 @@ pub fn community_role_assign(args: &str) -> DResult {
     let role_id = require_str(&data, "role_id")?;
     let actor_did = require_str(&data, "actor_did")?;
     let svc = community_service()?;
-    svc.assign_role(community_id, member_did, role_id, actor_did).map_err(|e| err(e.code(), e))?;
-    emit_event("community", &serde_json::json!({"type": "roleAssigned", "community_id": community_id, "member_did": member_did, "role_id": role_id}));
+    svc.assign_role(community_id, member_did, role_id, actor_did)
+        .map_err(|e| err(e.code(), e))?;
+    emit_event(
+        "community",
+        &serde_json::json!({"type": "roleAssigned", "community_id": community_id, "member_did": member_did, "role_id": role_id}),
+    );
     ok_success()
 }
 
@@ -475,8 +615,12 @@ pub fn community_role_unassign(args: &str) -> DResult {
     let role_id = require_str(&data, "role_id")?;
     let actor_did = require_str(&data, "actor_did")?;
     let svc = community_service()?;
-    svc.unassign_role(community_id, member_did, role_id, actor_did).map_err(|e| err(e.code(), e))?;
-    emit_event("community", &serde_json::json!({"type": "roleUnassigned", "community_id": community_id, "member_did": member_did, "role_id": role_id}));
+    svc.unassign_role(community_id, member_did, role_id, actor_did)
+        .map_err(|e| err(e.code(), e))?;
+    emit_event(
+        "community",
+        &serde_json::json!({"type": "roleUnassigned", "community_id": community_id, "member_did": member_did, "role_id": role_id}),
+    );
     ok_success()
 }
 
@@ -491,9 +635,22 @@ pub fn community_custom_role_create(args: &str) -> DResult {
     let permissions_bitfield = data["permissions_bitfield"].as_str().unwrap_or("0");
     let actor_did = require_str(&data, "actor_did")?;
     let svc = community_service()?;
-    let role = svc.create_custom_role(community_id, name, color, position, hoisted, mentionable, permissions_bitfield, actor_did)
+    let role = svc
+        .create_custom_role(
+            community_id,
+            name,
+            color,
+            position,
+            hoisted,
+            mentionable,
+            permissions_bitfield,
+            actor_did,
+        )
         .map_err(|e| err(e.code(), e))?;
-    emit_event("community", &serde_json::json!({"type": "roleCreated", "role_id": role.id}));
+    emit_event(
+        "community",
+        &serde_json::json!({"type": "roleCreated", "role_id": role.id}),
+    );
     ok_json(role_record_json(&role))
 }
 
@@ -507,9 +664,20 @@ pub fn community_role_update(args: &str) -> DResult {
     let position = data["position"].as_i64().map(|v| v as i32);
     let actor_did = require_str(&data, "actor_did")?;
     let svc = community_service()?;
-    svc.update_role(role_id, name, color, hoisted, mentionable, position, actor_did)
-        .map_err(|e| err(e.code(), e))?;
-    emit_event("community", &serde_json::json!({"type": "roleUpdated", "role_id": role_id}));
+    svc.update_role(
+        role_id,
+        name,
+        color,
+        hoisted,
+        mentionable,
+        position,
+        actor_did,
+    )
+    .map_err(|e| err(e.code(), e))?;
+    emit_event(
+        "community",
+        &serde_json::json!({"type": "roleUpdated", "role_id": role_id}),
+    );
     ok_success()
 }
 
@@ -529,8 +697,12 @@ pub fn community_role_delete(args: &str) -> DResult {
     let role_id = require_str(&data, "role_id")?;
     let actor_did = require_str(&data, "actor_did")?;
     let svc = community_service()?;
-    svc.delete_role(role_id, actor_did).map_err(|e| err(e.code(), e))?;
-    emit_event("community", &serde_json::json!({"type": "roleDeleted", "role_id": role_id}));
+    svc.delete_role(role_id, actor_did)
+        .map_err(|e| err(e.code(), e))?;
+    emit_event(
+        "community",
+        &serde_json::json!({"type": "roleDeleted", "role_id": role_id}),
+    );
     ok_success()
 }
 
@@ -543,9 +715,13 @@ pub fn community_invite_create(args: &str) -> DResult {
     let max_uses = data["max_uses"].as_i64().map(|v| v as i32);
     let expires_at = data["expires_at"].as_i64();
     let svc = community_service()?;
-    let invite = svc.create_invite(community_id, creator_did, max_uses, expires_at)
+    let invite = svc
+        .create_invite(community_id, creator_did, max_uses, expires_at)
         .map_err(|e| err(e.code(), e))?;
-    emit_event("community", &serde_json::json!({"type": "inviteCreated", "invite_id": invite.id}));
+    emit_event(
+        "community",
+        &serde_json::json!({"type": "inviteCreated", "invite_id": invite.id}),
+    );
     ok_json(invite_record_json(&invite))
 }
 
@@ -555,9 +731,13 @@ pub fn community_invite_use(args: &str) -> DResult {
     let member_did = require_str(&data, "member_did")?;
     let nickname = data["nickname"].as_str();
     let svc = community_service()?;
-    let community_id = svc.use_invite(code, member_did, nickname)
+    let community_id = svc
+        .use_invite(code, member_did, nickname)
         .map_err(|e| err(e.code(), e))?;
-    emit_event("community", &serde_json::json!({"type": "inviteUsed", "community_id": community_id, "member_did": member_did}));
+    emit_event(
+        "community",
+        &serde_json::json!({"type": "inviteUsed", "community_id": community_id, "member_did": member_did}),
+    );
     ok_json(serde_json::json!({ "community_id": community_id }))
 }
 
@@ -565,7 +745,9 @@ pub fn community_invite_list(args: &str) -> DResult {
     let data = json_parse(args)?;
     let community_id = require_str(&data, "community_id")?;
     let svc = community_service()?;
-    let invites = svc.get_invites(community_id).map_err(|e| err(e.code(), e))?;
+    let invites = svc
+        .get_invites(community_id)
+        .map_err(|e| err(e.code(), e))?;
     let arr: Vec<serde_json::Value> = invites.iter().map(invite_record_json).collect();
     Ok(serde_json::to_string(&arr).unwrap_or_default())
 }
@@ -575,8 +757,12 @@ pub fn community_invite_delete(args: &str) -> DResult {
     let invite_id = require_str(&data, "invite_id")?;
     let actor_did = require_str(&data, "actor_did")?;
     let svc = community_service()?;
-    svc.delete_invite(invite_id, actor_did).map_err(|e| err(e.code(), e))?;
-    emit_event("community", &serde_json::json!({"type": "inviteDeleted", "invite_id": invite_id}));
+    svc.delete_invite(invite_id, actor_did)
+        .map_err(|e| err(e.code(), e))?;
+    emit_event(
+        "community",
+        &serde_json::json!({"type": "inviteDeleted", "invite_id": invite_id}),
+    );
     ok_success()
 }
 
@@ -586,7 +772,8 @@ pub fn community_invite_set_vanity(args: &str) -> DResult {
     let vanity_code = require_str(&data, "vanity_code")?;
     let creator_did = require_str(&data, "creator_did")?;
     let svc = community_service()?;
-    let invite = svc.set_vanity_invite(community_id, vanity_code, creator_did)
+    let invite = svc
+        .set_vanity_invite(community_id, vanity_code, creator_did)
         .map_err(|e| err(e.code(), e))?;
     ok_json(invite_record_json(&invite))
 }

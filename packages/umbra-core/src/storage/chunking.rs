@@ -27,9 +27,9 @@
 //! └─────────────────────────────────────────────────────────────────────────┘
 //! ```
 
-use sha2::{Sha256, Digest};
-use serde::{Serialize, Deserialize};
 use crate::error::{Error, Result};
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 
 /// Default chunk size: 256 KB
 pub const DEFAULT_CHUNK_SIZE: usize = 256 * 1024;
@@ -201,10 +201,7 @@ pub fn chunk_file(
 /// # Arguments
 /// * `manifest` - The chunk manifest describing the file
 /// * `chunks` - The chunk data (can be in any order; sorted by index internally)
-pub fn reassemble_file(
-    manifest: &ChunkManifest,
-    chunks: &[FileChunk],
-) -> Result<Vec<u8>> {
+pub fn reassemble_file(manifest: &ChunkManifest, chunks: &[FileChunk]) -> Result<Vec<u8>> {
     if chunks.len() != manifest.total_chunks as usize {
         return Err(Error::InvalidCommunityOperation(format!(
             "Expected {} chunks, got {}",
@@ -302,7 +299,8 @@ mod tests {
     #[test]
     fn test_empty_file() {
         let data = b"";
-        let (manifest, chunks) = chunk_file("file-empty", "empty.bin", data, DEFAULT_CHUNK_SIZE).unwrap();
+        let (manifest, chunks) =
+            chunk_file("file-empty", "empty.bin", data, DEFAULT_CHUNK_SIZE).unwrap();
 
         assert_eq!(manifest.total_size, 0);
         assert_eq!(manifest.total_chunks, 0);
@@ -328,7 +326,8 @@ mod tests {
     #[test]
     fn test_single_chunk_file() {
         let data = b"small";
-        let (manifest, chunks) = chunk_file("file-small", "small.txt", data, DEFAULT_CHUNK_SIZE).unwrap();
+        let (manifest, chunks) =
+            chunk_file("file-small", "small.txt", data, DEFAULT_CHUNK_SIZE).unwrap();
 
         assert_eq!(manifest.total_chunks, 1);
         assert_eq!(chunks.len(), 1);
@@ -341,7 +340,8 @@ mod tests {
     fn test_large_file() {
         // 1 MB file with 256 KB chunks = 4 chunks
         let data = vec![0x42u8; 1024 * 1024];
-        let (manifest, chunks) = chunk_file("file-large", "large.bin", &data, DEFAULT_CHUNK_SIZE).unwrap();
+        let (manifest, chunks) =
+            chunk_file("file-large", "large.bin", &data, DEFAULT_CHUNK_SIZE).unwrap();
 
         assert_eq!(manifest.total_chunks, 4);
         assert_eq!(manifest.total_size, 1024 * 1024);
@@ -384,7 +384,10 @@ mod tests {
         let hash = hex::encode(Sha256::digest(data));
 
         assert!(verify_chunk_hash(data, &hash));
-        assert!(!verify_chunk_hash(data, "0000000000000000000000000000000000000000000000000000000000000000"));
+        assert!(!verify_chunk_hash(
+            data,
+            "0000000000000000000000000000000000000000000000000000000000000000"
+        ));
     }
 
     #[test]

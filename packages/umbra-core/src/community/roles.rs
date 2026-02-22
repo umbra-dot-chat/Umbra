@@ -2,10 +2,10 @@
 //!
 //! Role management with preset role templates and custom role creation.
 
-use crate::error::Result;
-use crate::storage::Database;
 use super::permissions::Permissions;
 use super::service::generate_id;
+use crate::error::Result;
+use crate::storage::Database;
 
 /// Preset role types.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -63,7 +63,10 @@ impl RolePreset {
 
     /// Whether this role should be shown separately in the member list.
     pub fn hoisted(&self) -> bool {
-        matches!(self, RolePreset::Owner | RolePreset::Admin | RolePreset::Moderator)
+        matches!(
+            self,
+            RolePreset::Owner | RolePreset::Admin | RolePreset::Moderator
+        )
     }
 }
 

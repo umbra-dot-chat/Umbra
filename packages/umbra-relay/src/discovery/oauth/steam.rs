@@ -16,8 +16,7 @@ use uuid::Uuid;
 
 use super::{error_html, success_html, StartAuthQuery};
 use crate::discovery::{
-    types::StartAuthResponse, DiscoveryConfig, DiscoveryStore,
-    LinkedAccount, OAuthState, Platform,
+    types::StartAuthResponse, DiscoveryConfig, DiscoveryStore, LinkedAccount, OAuthState, Platform,
 };
 
 /// Steam player summary from GetPlayerSummaries API.
@@ -100,7 +99,10 @@ pub async fn start(
     store.store_oauth_state(state);
 
     // Build Steam OpenID 2.0 redirect URL
-    let return_to = format!("{}/auth/steam/callback?state={}", config.relay_base_url, nonce);
+    let return_to = format!(
+        "{}/auth/steam/callback?state={}",
+        config.relay_base_url, nonce
+    );
 
     let auth_url = format!(
         "{}?openid.ns=http://specs.openid.net/auth/2.0&openid.mode=checkid_setup&openid.return_to={}&openid.realm={}&openid.identity=http://specs.openid.net/auth/2.0/identifier_select&openid.claimed_id=http://specs.openid.net/auth/2.0/identifier_select",
@@ -176,23 +178,16 @@ pub async fn callback(
         steam_id,
     );
 
-    let profile_response = client
-        .get(&profile_url)
-        .send()
-        .await;
+    let profile_response = client.get(&profile_url).send().await;
 
     let player = match profile_response {
-        Ok(resp) if resp.status().is_success() => {
-            match resp.json::<SteamApiResponse>().await {
-                Ok(api_resp) => {
-                    api_resp.response.players.into_iter().next()
-                }
-                Err(e) => {
-                    tracing::error!("Failed to parse Steam API response: {}", e);
-                    None
-                }
+        Ok(resp) if resp.status().is_success() => match resp.json::<SteamApiResponse>().await {
+            Ok(api_resp) => api_resp.response.players.into_iter().next(),
+            Err(e) => {
+                tracing::error!("Failed to parse Steam API response: {}", e);
+                None
             }
-        }
+        },
         Ok(resp) => {
             tracing::error!("Steam API request failed: {}", resp.status());
             None
@@ -241,12 +236,30 @@ async fn verify_steam_openid(
         ("openid.mode", "check_authentication".to_string()),
         ("openid.sig", query.sig.clone().unwrap_or_default()),
         ("openid.signed", query.signed.clone().unwrap_or_default()),
-        ("openid.assoc_handle", query.assoc_handle.clone().unwrap_or_default()),
-        ("openid.claimed_id", query.claimed_id.clone().unwrap_or_default()),
-        ("openid.identity", query.identity.clone().unwrap_or_default()),
-        ("openid.op_endpoint", query.op_endpoint.clone().unwrap_or_default()),
-        ("openid.response_nonce", query.response_nonce.clone().unwrap_or_default()),
-        ("openid.return_to", query.return_to.clone().unwrap_or_default()),
+        (
+            "openid.assoc_handle",
+            query.assoc_handle.clone().unwrap_or_default(),
+        ),
+        (
+            "openid.claimed_id",
+            query.claimed_id.clone().unwrap_or_default(),
+        ),
+        (
+            "openid.identity",
+            query.identity.clone().unwrap_or_default(),
+        ),
+        (
+            "openid.op_endpoint",
+            query.op_endpoint.clone().unwrap_or_default(),
+        ),
+        (
+            "openid.response_nonce",
+            query.response_nonce.clone().unwrap_or_default(),
+        ),
+        (
+            "openid.return_to",
+            query.return_to.clone().unwrap_or_default(),
+        ),
     ];
 
     match client

@@ -866,7 +866,7 @@ export function validateImportStructure(
  */
 export interface CommunityImportProgress {
   /** Current phase of import. */
-  phase: 'creating_community' | 'creating_categories' | 'creating_channels' | 'creating_roles' | 'creating_seats' | 'importing_pins' | 'importing_audit_log' | 'importing_emoji' | 'importing_stickers' | 'complete';
+  phase: 'creating_community' | 'downloading_branding' | 'creating_categories' | 'creating_channels' | 'creating_roles' | 'creating_seats' | 'importing_pins' | 'importing_audit_log' | 'importing_emoji' | 'importing_stickers' | 'complete';
   /** Progress percentage (0-100). */
   percent: number;
   /** Current item being created. */

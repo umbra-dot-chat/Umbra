@@ -48,7 +48,10 @@ extern "C" {
     /// Store a chunk in OPFS. Data is base64-encoded.
     /// Returns a promise that resolves to true on success.
     #[wasm_bindgen(js_namespace = ["globalThis", "__umbra_opfs"], js_name = "store", catch)]
-    fn opfs_bridge_store(chunk_id: &str, data_b64: &str) -> std::result::Result<js_sys::Promise, JsValue>;
+    fn opfs_bridge_store(
+        chunk_id: &str,
+        data_b64: &str,
+    ) -> std::result::Result<js_sys::Promise, JsValue>;
 
     /// Get a chunk from OPFS. Returns a promise that resolves to base64 string, or null if not found.
     #[wasm_bindgen(js_namespace = ["globalThis", "__umbra_opfs"], js_name = "get", catch)]
@@ -69,7 +72,9 @@ extern "C" {
     /// Delete all chunks for a given file_id. Chunk IDs are passed as JSON array.
     /// Returns a promise resolving to the number of chunks deleted.
     #[wasm_bindgen(js_namespace = ["globalThis", "__umbra_opfs"], js_name = "deleteMany", catch)]
-    fn opfs_bridge_delete_many(chunk_ids_json: &str) -> std::result::Result<js_sys::Promise, JsValue>;
+    fn opfs_bridge_delete_many(
+        chunk_ids_json: &str,
+    ) -> std::result::Result<js_sys::Promise, JsValue>;
 }
 
 // ============================================================================
@@ -98,7 +103,7 @@ pub fn is_opfs_available() -> bool {
 /// * `chunk_id` - Content-addressed chunk ID (SHA-256 hex)
 /// * `data` - Raw chunk bytes
 pub async fn store_chunk_opfs(chunk_id: &str, data: &[u8]) -> Result<()> {
-    use base64::{Engine as _, engine::general_purpose::STANDARD};
+    use base64::{engine::general_purpose::STANDARD, Engine as _};
     let data_b64 = STANDARD.encode(data);
 
     let promise = opfs_bridge_store(chunk_id, &data_b64).map_err(opfs_err)?;
@@ -111,7 +116,7 @@ pub async fn store_chunk_opfs(chunk_id: &str, data: &[u8]) -> Result<()> {
 ///
 /// Returns `None` if the chunk doesn't exist.
 pub async fn get_chunk_opfs(chunk_id: &str) -> Result<Option<Vec<u8>>> {
-    use base64::{Engine as _, engine::general_purpose::STANDARD};
+    use base64::{engine::general_purpose::STANDARD, Engine as _};
 
     let promise = opfs_bridge_get(chunk_id).map_err(opfs_err)?;
     let result = JsFuture::from(promise).await.map_err(opfs_err)?;
@@ -120,13 +125,13 @@ pub async fn get_chunk_opfs(chunk_id: &str) -> Result<Option<Vec<u8>>> {
         return Ok(None);
     }
 
-    let b64_str = result.as_string().ok_or_else(|| {
-        Error::DatabaseError("OPFS get returned non-string value".to_string())
-    })?;
+    let b64_str = result
+        .as_string()
+        .ok_or_else(|| Error::DatabaseError("OPFS get returned non-string value".to_string()))?;
 
-    let bytes = STANDARD.decode(&b64_str).map_err(|e| {
-        Error::DatabaseError(format!("OPFS base64 decode error: {}", e))
-    })?;
+    let bytes = STANDARD
+        .decode(&b64_str)
+        .map_err(|e| Error::DatabaseError(format!("OPFS base64 decode error: {}", e)))?;
 
     Ok(Some(bytes))
 }
@@ -158,9 +163,8 @@ pub async fn chunk_exists_opfs(chunk_id: &str) -> Result<bool> {
 /// Delete multiple chunks from OPFS at once.
 /// Returns the number of chunks deleted.
 pub async fn delete_chunks_opfs(chunk_ids: &[String]) -> Result<u32> {
-    let json = serde_json::to_string(chunk_ids).map_err(|e| {
-        Error::DatabaseError(format!("Failed to serialize chunk IDs: {}", e))
-    })?;
+    let json = serde_json::to_string(chunk_ids)
+        .map_err(|e| Error::DatabaseError(format!("Failed to serialize chunk IDs: {}", e)))?;
 
     let promise = opfs_bridge_delete_many(&json).map_err(opfs_err)?;
     let result = JsFuture::from(promise).await.map_err(opfs_err)?;

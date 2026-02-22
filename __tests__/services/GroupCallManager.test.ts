@@ -74,6 +74,16 @@ Object.defineProperty(global, 'navigator', {
   writable: true,
 });
 
+// Force Platform.OS = 'web' so GroupCallManager uses navigator.mediaDevices (mocked above)
+// instead of dynamic import('react-native-webrtc') which isn't available in test env
+import { Platform } from 'react-native';
+beforeAll(() => {
+  (Platform as any).OS = 'web';
+});
+afterAll(() => {
+  (Platform as any).OS = 'ios';
+});
+
 import { GroupCallManager } from '@/services/GroupCallManager';
 
 describe('GroupCallManager', () => {

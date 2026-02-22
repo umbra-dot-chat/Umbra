@@ -33,6 +33,24 @@ jest.mock('@/contexts/AuthContext', () => ({
   AuthProvider: ({ children }: any) => children,
 }));
 
+jest.mock('@/contexts/SoundContext', () => ({
+  useSound: () => ({
+    playSound: jest.fn(),
+    masterVolume: 0.8,
+    setMasterVolume: jest.fn(),
+    muted: false,
+    setMuted: jest.fn(),
+    categoryVolumes: {},
+    setCategoryVolume: jest.fn(),
+    categoryEnabled: {},
+    setCategoryEnabled: jest.fn(),
+    activeTheme: 'playful',
+    setActiveTheme: jest.fn(),
+    preferencesLoaded: true,
+  }),
+  SoundProvider: ({ children }: any) => children,
+}));
+
 const { useUmbra } = require('@/contexts/UmbraContext');
 
 const mockMessages = [

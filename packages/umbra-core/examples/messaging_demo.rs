@@ -12,11 +12,10 @@
 //! cargo run --example messaging_demo
 //! ```
 
-use umbra_core::identity::Identity;
 use umbra_core::friends::Friend;
+use umbra_core::identity::Identity;
 use umbra_core::messaging::{
-    Message, MessageContent, MessageEnvelope, MessageType, Conversation,
-    MESSAGE_PROTOCOL_VERSION,
+    Conversation, Message, MessageContent, MessageEnvelope, MessageType, MESSAGE_PROTOCOL_VERSION,
 };
 
 fn main() {
@@ -29,11 +28,11 @@ fn main() {
     // =========================================================================
     println!("1. Creating identities for Alice and Bob...\n");
 
-    let (alice_identity, _alice_recovery) = Identity::create("Alice".to_string())
-        .expect("Failed to create Alice's identity");
+    let (alice_identity, _alice_recovery) =
+        Identity::create("Alice".to_string()).expect("Failed to create Alice's identity");
 
-    let (bob_identity, _bob_recovery) = Identity::create("Bob".to_string())
-        .expect("Failed to create Bob's identity");
+    let (bob_identity, _bob_recovery) =
+        Identity::create("Bob".to_string()).expect("Failed to create Bob's identity");
 
     println!("   Alice's DID: {}", alice_identity.did_string());
     println!("   Bob's DID:   {}", bob_identity.did_string());
@@ -51,12 +50,24 @@ fn main() {
     let alice_as_friend = Friend::from_public_identity(&alice_identity.public_identity());
 
     println!("   Alice has Bob's:");
-    println!("   - Signing key: {}...", hex::encode(&bob_as_friend.signing_public_key[..8]));
-    println!("   - Encryption key: {}...", hex::encode(&bob_as_friend.encryption_public_key[..8]));
+    println!(
+        "   - Signing key: {}...",
+        hex::encode(&bob_as_friend.signing_public_key[..8])
+    );
+    println!(
+        "   - Encryption key: {}...",
+        hex::encode(&bob_as_friend.encryption_public_key[..8])
+    );
     println!();
     println!("   Bob has Alice's:");
-    println!("   - Signing key: {}...", hex::encode(&alice_as_friend.signing_public_key[..8]));
-    println!("   - Encryption key: {}...", hex::encode(&alice_as_friend.encryption_public_key[..8]));
+    println!(
+        "   - Signing key: {}...",
+        hex::encode(&alice_as_friend.signing_public_key[..8])
+    );
+    println!(
+        "   - Encryption key: {}...",
+        hex::encode(&alice_as_friend.encryption_public_key[..8])
+    );
     println!();
 
     // =========================================================================
@@ -64,19 +75,15 @@ fn main() {
     // =========================================================================
     println!("3. Creating conversation between Alice and Bob...\n");
 
-    let conversation_id = Conversation::generate_id(
-        &alice_identity.did_string(),
-        &bob_identity.did_string(),
-    );
+    let conversation_id =
+        Conversation::generate_id(&alice_identity.did_string(), &bob_identity.did_string());
 
     println!("   Conversation ID: {}", conversation_id);
     println!("   (Deterministic: same ID regardless of who initiates)");
 
     // Verify determinism
-    let reverse_id = Conversation::generate_id(
-        &bob_identity.did_string(),
-        &alice_identity.did_string(),
-    );
+    let reverse_id =
+        Conversation::generate_id(&bob_identity.did_string(), &alice_identity.did_string());
     println!("   Reverse order ID: {}", reverse_id);
     println!("   IDs match: {}", conversation_id == reverse_id);
     println!();
@@ -107,7 +114,8 @@ fn main() {
         &message,
         &alice_identity,
         &bob_as_friend.encryption_public_key,
-    ).expect("Failed to encrypt message");
+    )
+    .expect("Failed to encrypt message");
 
     println!("   Envelope version: {}", envelope.version);
     println!("   Message type: {:?}", envelope.msg_type);
@@ -138,11 +146,11 @@ fn main() {
     println!("7. Bob receives and decrypts the message...\n");
 
     // Parse the received envelope
-    let received = MessageEnvelope::from_json(&envelope_json)
-        .expect("Failed to parse envelope");
+    let received = MessageEnvelope::from_json(&envelope_json).expect("Failed to parse envelope");
 
     // Decrypt using Bob's private key and Alice's public key
-    let decrypted = received.decrypt(&bob_identity, &alice_as_friend)
+    let decrypted = received
+        .decrypt(&bob_identity, &alice_as_friend)
         .expect("Failed to decrypt message");
 
     println!("   Decryption successful!");
@@ -188,7 +196,8 @@ fn main() {
         &test_message,
         &alice_identity,
         &bob_as_friend.encryption_public_key,
-    ).expect("Failed to encrypt");
+    )
+    .expect("Failed to encrypt");
 
     // Tamper with the ciphertext
     let original_ciphertext = tampered_envelope.ciphertext.clone();
@@ -215,8 +224,8 @@ fn main() {
     println!("10. Wrong recipient detection...\n");
 
     // Create a third user
-    let (eve_identity, _) = Identity::create("Eve".to_string())
-        .expect("Failed to create Eve's identity");
+    let (eve_identity, _) =
+        Identity::create("Eve".to_string()).expect("Failed to create Eve's identity");
 
     // Eve tries to decrypt a message meant for Bob
     let eve_as_friend = Friend::from_public_identity(&alice_identity.public_identity());
@@ -232,7 +241,8 @@ fn main() {
         &message_for_bob,
         &alice_identity,
         &bob_as_friend.encryption_public_key,
-    ).expect("Failed to encrypt");
+    )
+    .expect("Failed to encrypt");
 
     match envelope_for_bob.decrypt(&eve_identity, &eve_as_friend) {
         Ok(_) => println!("   [FAIL] Eve decrypted Bob's message!"),

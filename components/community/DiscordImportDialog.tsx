@@ -502,7 +502,7 @@ function PreviewScreen({
                   height: 48,
                   borderRadius: 24,
                   borderWidth: 3,
-                  borderColor: tc.background.base,
+                  borderColor: tc.background.canvas,
                   overflow: 'hidden',
                 }}
               >

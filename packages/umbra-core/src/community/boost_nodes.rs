@@ -3,9 +3,9 @@
 //! Boost node CRUD and configuration management.
 //! The actual node runtime is in the separate `umbra-boost-node` crate.
 
+use super::service::generate_id;
 use crate::error::{Error, Result};
 use crate::storage::BoostNodeRecord;
-use super::service::generate_id;
 
 impl super::CommunityService {
     // ── Boost Node CRUD ─────────────────────────────────────────────────
@@ -35,11 +35,20 @@ impl super::CommunityService {
         let id = generate_id();
 
         self.db().upsert_boost_node(
-            &id, owner_did, node_type, node_public_key, name,
+            &id,
+            owner_did,
+            node_type,
+            node_public_key,
+            name,
             false, // not enabled initially
-            max_storage_bytes, max_bandwidth_mbps, auto_start,
-            prioritized_communities, pairing_token, remote_address,
-            now, now,
+            max_storage_bytes,
+            max_bandwidth_mbps,
+            auto_start,
+            prioritized_communities,
+            pairing_token,
+            remote_address,
+            now,
+            now,
         )?;
 
         Ok(BoostNodeRecord {
@@ -68,8 +77,11 @@ impl super::CommunityService {
 
     /// Get a specific boost node.
     pub fn get_boost_node(&self, id: &str) -> Result<BoostNodeRecord> {
-        self.db().get_boost_node(id)?
-            .ok_or(Error::InvalidCommunityOperation("Boost node not found".to_string()))
+        self.db()
+            .get_boost_node(id)?
+            .ok_or(Error::InvalidCommunityOperation(
+                "Boost node not found".to_string(),
+            ))
     }
 
     /// Update boost node configuration.
@@ -86,8 +98,14 @@ impl super::CommunityService {
     ) -> Result<()> {
         let now = crate::time::now_timestamp();
         self.db().update_boost_node_config(
-            id, name, enabled, max_storage_bytes, max_bandwidth_mbps,
-            auto_start, prioritized_communities, now,
+            id,
+            name,
+            enabled,
+            max_storage_bytes,
+            max_bandwidth_mbps,
+            auto_start,
+            prioritized_communities,
+            now,
         )
     }
 

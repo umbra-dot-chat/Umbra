@@ -38,12 +38,12 @@
 //! └─────────────────────────────────────────────────────────────────────────┘
 //! ```
 
-use rusqlite::{Connection, params};
 use parking_lot::Mutex;
+use rusqlite::{params, Connection};
 use std::sync::Arc;
 
-use crate::error::{Error, Result};
 use super::schema;
+use crate::error::{Error, Result};
 
 /// Database configuration
 #[derive(Debug, Clone, Default)]
@@ -69,8 +69,9 @@ impl Database {
         let conn = match path {
             Some(p) => Connection::open(p)
                 .map_err(|e| Error::DatabaseError(format!("Failed to open database: {}", e)))?,
-            None => Connection::open_in_memory()
-                .map_err(|e| Error::DatabaseError(format!("Failed to create in-memory database: {}", e)))?,
+            None => Connection::open_in_memory().map_err(|e| {
+                Error::DatabaseError(format!("Failed to create in-memory database: {}", e))
+            })?,
         };
 
         let db = Self {
@@ -89,11 +90,9 @@ impl Database {
 
         // Check current schema version
         let version: Option<i32> = conn
-            .query_row(
-                "SELECT version FROM schema_version LIMIT 1",
-                [],
-                |row| row.get(0),
-            )
+            .query_row("SELECT version FROM schema_version LIMIT 1", [], |row| {
+                row.get(0)
+            })
             .ok();
 
         match version {
@@ -107,9 +106,14 @@ impl Database {
                     "INSERT INTO schema_version (version) VALUES (?)",
                     params![schema::SCHEMA_VERSION],
                 )
-                .map_err(|e| Error::DatabaseError(format!("Failed to set schema version: {}", e)))?;
+                .map_err(|e| {
+                    Error::DatabaseError(format!("Failed to set schema version: {}", e))
+                })?;
 
-                tracing::info!("Database schema created (version {})", schema::SCHEMA_VERSION);
+                tracing::info!(
+                    "Database schema created (version {})",
+                    schema::SCHEMA_VERSION
+                );
             }
             Some(v) if v < schema::SCHEMA_VERSION => {
                 tracing::info!(
@@ -120,76 +124,104 @@ impl Database {
 
                 if v < 2 {
                     tracing::info!("Running migration v1 → v2");
-                    conn.execute_batch(schema::MIGRATE_V1_TO_V2)
-                        .map_err(|e| Error::DatabaseError(format!("Migration v1→v2 failed: {}", e)))?;
+                    conn.execute_batch(schema::MIGRATE_V1_TO_V2).map_err(|e| {
+                        Error::DatabaseError(format!("Migration v1→v2 failed: {}", e))
+                    })?;
                 }
                 if v < 3 {
                     tracing::info!("Running migration v2 → v3");
-                    conn.execute_batch(schema::MIGRATE_V2_TO_V3)
-                        .map_err(|e| Error::DatabaseError(format!("Migration v2→v3 failed: {}", e)))?;
+                    conn.execute_batch(schema::MIGRATE_V2_TO_V3).map_err(|e| {
+                        Error::DatabaseError(format!("Migration v2→v3 failed: {}", e))
+                    })?;
                 }
                 if v < 4 {
                     tracing::info!("Running migration v3 → v4 (plugin KV, plugin bundles)");
-                    conn.execute_batch(schema::MIGRATE_V3_TO_V4)
-                        .map_err(|e| Error::DatabaseError(format!("Migration v3→v4 failed: {}", e)))?;
+                    conn.execute_batch(schema::MIGRATE_V3_TO_V4).map_err(|e| {
+                        Error::DatabaseError(format!("Migration v3→v4 failed: {}", e))
+                    })?;
                 }
                 if v < 5 {
                     tracing::info!("Running migration v4 → v5 (call history)");
-                    conn.execute_batch(schema::MIGRATE_V4_TO_V5)
-                        .map_err(|e| Error::DatabaseError(format!("Migration v4→v5 failed: {}", e)))?;
+                    conn.execute_batch(schema::MIGRATE_V4_TO_V5).map_err(|e| {
+                        Error::DatabaseError(format!("Migration v4→v5 failed: {}", e))
+                    })?;
                 }
                 if v < 6 {
                     tracing::info!("Running migration v5 → v6 (communities)");
-                    conn.execute_batch(schema::MIGRATE_V5_TO_V6)
-                        .map_err(|e| Error::DatabaseError(format!("Migration v5→v6 failed: {}", e)))?;
+                    conn.execute_batch(schema::MIGRATE_V5_TO_V6).map_err(|e| {
+                        Error::DatabaseError(format!("Migration v5→v6 failed: {}", e))
+                    })?;
                 }
                 if v < 7 {
                     tracing::info!("Running migration v6 → v7 (timeouts, thread followers, member status, notifications)");
-                    conn.execute_batch(schema::MIGRATE_V6_TO_V7)
-                        .map_err(|e| Error::DatabaseError(format!("Migration v6→v7 failed: {}", e)))?;
+                    conn.execute_batch(schema::MIGRATE_V6_TO_V7).map_err(|e| {
+                        Error::DatabaseError(format!("Migration v6→v7 failed: {}", e))
+                    })?;
                 }
                 if v < 8 {
                     tracing::info!("Running migration v7 → v8 (categories)");
-                    conn.execute_batch(schema::MIGRATE_V7_TO_V8)
-                        .map_err(|e| Error::DatabaseError(format!("Migration v7→v8 failed: {}", e)))?;
+                    conn.execute_batch(schema::MIGRATE_V7_TO_V8).map_err(|e| {
+                        Error::DatabaseError(format!("Migration v7→v8 failed: {}", e))
+                    })?;
                 }
                 if v < 9 {
                     tracing::info!("Running migration v8 → v9 (file chunks, manifests, DM files)");
-                    conn.execute_batch(schema::MIGRATE_V8_TO_V9)
-                        .map_err(|e| Error::DatabaseError(format!("Migration v8→v9 failed: {}", e)))?;
+                    conn.execute_batch(schema::MIGRATE_V8_TO_V9).map_err(|e| {
+                        Error::DatabaseError(format!("Migration v8→v9 failed: {}", e))
+                    })?;
                 }
                 if v < 10 {
-                    tracing::info!("Running migration v9 → v10 (transfer sessions, file versioning)");
-                    conn.execute_batch(schema::MIGRATE_V9_TO_V10)
-                        .map_err(|e| Error::DatabaseError(format!("Migration v9→v10 failed: {}", e)))?;
+                    tracing::info!(
+                        "Running migration v9 → v10 (transfer sessions, file versioning)"
+                    );
+                    conn.execute_batch(schema::MIGRATE_V9_TO_V10).map_err(|e| {
+                        Error::DatabaseError(format!("Migration v9→v10 failed: {}", e))
+                    })?;
                 }
                 if v < 11 {
-                    tracing::info!("Running migration v10 → v11 (encryption metadata, re-encryption)");
+                    tracing::info!(
+                        "Running migration v10 → v11 (encryption metadata, re-encryption)"
+                    );
                     conn.execute_batch(schema::MIGRATE_V10_TO_V11)
-                        .map_err(|e| Error::DatabaseError(format!("Migration v10→v11 failed: {}", e)))?;
+                        .map_err(|e| {
+                            Error::DatabaseError(format!("Migration v10→v11 failed: {}", e))
+                        })?;
                 }
                 if v < 12 {
                     tracing::info!("Running migration v11 → v12 (community seats)");
                     conn.execute_batch(schema::MIGRATE_V11_TO_V12)
-                        .map_err(|e| Error::DatabaseError(format!("Migration v11→v12 failed: {}", e)))?;
+                        .map_err(|e| {
+                            Error::DatabaseError(format!("Migration v11→v12 failed: {}", e))
+                        })?;
                 }
                 if v < 13 {
-                    tracing::info!("Running migration v12 → v13 (sticker packs, metadata, placements)");
+                    tracing::info!(
+                        "Running migration v12 → v13 (sticker packs, metadata, placements)"
+                    );
                     conn.execute_batch(schema::MIGRATE_V12_TO_V13)
-                        .map_err(|e| Error::DatabaseError(format!("Migration v12→v13 failed: {}", e)))?;
+                        .map_err(|e| {
+                            Error::DatabaseError(format!("Migration v12→v13 failed: {}", e))
+                        })?;
                 }
                 if v < 14 {
                     tracing::info!("Running migration v13 → v14 (friend avatars)");
                     conn.execute_batch(schema::MIGRATE_V13_TO_V14)
-                        .map_err(|e| Error::DatabaseError(format!("Migration v13→v14 failed: {}", e)))?;
+                        .map_err(|e| {
+                            Error::DatabaseError(format!("Migration v13→v14 failed: {}", e))
+                        })?;
                 }
                 if v < 15 {
                     tracing::info!("Running migration v14 → v15 (friend request avatars)");
                     conn.execute_batch(schema::MIGRATE_V14_TO_V15)
-                        .map_err(|e| Error::DatabaseError(format!("Migration v14→v15 failed: {}", e)))?;
+                        .map_err(|e| {
+                            Error::DatabaseError(format!("Migration v14→v15 failed: {}", e))
+                        })?;
                 }
 
-                tracing::info!("All migrations complete (now at version {})", schema::SCHEMA_VERSION);
+                tracing::info!(
+                    "All migrations complete (now at version {})",
+                    schema::SCHEMA_VERSION
+                );
             }
             Some(v) => {
                 tracing::debug!("Database schema version: {}", v);
@@ -213,8 +245,9 @@ impl Database {
                 manifest TEXT NOT NULL,
                 bundle TEXT NOT NULL,
                 installed_at INTEGER NOT NULL
-            );"
-        ).map_err(|e| Error::DatabaseError(format!("Failed to ensure plugin tables: {}", e)))?;
+            );",
+        )
+        .map_err(|e| Error::DatabaseError(format!("Failed to ensure plugin tables: {}", e)))?;
 
         Ok(())
     }
@@ -325,7 +358,9 @@ impl Database {
 
         let mut friends = Vec::new();
         for row in rows {
-            friends.push(row.map_err(|e| Error::DatabaseError(format!("Failed to read friend: {}", e)))?);
+            friends.push(
+                row.map_err(|e| Error::DatabaseError(format!("Failed to read friend: {}", e)))?,
+            );
         }
 
         Ok(friends)
@@ -342,7 +377,12 @@ impl Database {
     }
 
     /// Update a friend's profile
-    pub fn update_friend(&self, did: &str, display_name: Option<&str>, status: Option<&str>) -> Result<bool> {
+    pub fn update_friend(
+        &self,
+        did: &str,
+        display_name: Option<&str>,
+        status: Option<&str>,
+    ) -> Result<bool> {
         let conn = self.conn.lock();
         let now = crate::time::now_timestamp();
 
@@ -448,12 +488,18 @@ impl Database {
         match result {
             Ok(record) => Ok(Some(record)),
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-            Err(e) => Err(Error::DatabaseError(format!("Failed to get conversation: {}", e))),
+            Err(e) => Err(Error::DatabaseError(format!(
+                "Failed to get conversation: {}",
+                e
+            ))),
         }
     }
 
     /// Get conversation by friend DID
-    pub fn get_conversation_by_friend(&self, friend_did: &str) -> Result<Option<ConversationRecord>> {
+    pub fn get_conversation_by_friend(
+        &self,
+        friend_did: &str,
+    ) -> Result<Option<ConversationRecord>> {
         let conn = self.conn.lock();
 
         let result = conn.query_row(
@@ -476,7 +522,10 @@ impl Database {
         match result {
             Ok(record) => Ok(Some(record)),
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-            Err(e) => Err(Error::DatabaseError(format!("Failed to get conversation: {}", e))),
+            Err(e) => Err(Error::DatabaseError(format!(
+                "Failed to get conversation: {}",
+                e
+            ))),
         }
     }
 
@@ -506,7 +555,9 @@ impl Database {
 
         let mut conversations = Vec::new();
         for row in rows {
-            conversations.push(row.map_err(|e| Error::DatabaseError(format!("Failed to read conversation: {}", e)))?);
+            conversations.push(row.map_err(|e| {
+                Error::DatabaseError(format!("Failed to read conversation: {}", e))
+            })?);
         }
 
         Ok(conversations)
@@ -553,7 +604,12 @@ impl Database {
     }
 
     /// Get messages for a conversation
-    pub fn get_messages(&self, conversation_id: &str, limit: usize, offset: usize) -> Result<Vec<MessageRecord>> {
+    pub fn get_messages(
+        &self,
+        conversation_id: &str,
+        limit: usize,
+        offset: usize,
+    ) -> Result<Vec<MessageRecord>> {
         let conn = self.conn.lock();
         let mut stmt = conn
             .prepare(
@@ -564,23 +620,28 @@ impl Database {
             .map_err(|e| Error::DatabaseError(format!("Failed to prepare query: {}", e)))?;
 
         let rows = stmt
-            .query_map(params![conversation_id, limit as i64, offset as i64], |row| {
-                Ok(MessageRecord {
-                    id: row.get(0)?,
-                    conversation_id: row.get(1)?,
-                    sender_did: row.get(2)?,
-                    content_encrypted: row.get(3)?,
-                    nonce: row.get(4)?,
-                    timestamp: row.get(5)?,
-                    delivered: row.get(6)?,
-                    read: row.get(7)?,
-                })
-            })
+            .query_map(
+                params![conversation_id, limit as i64, offset as i64],
+                |row| {
+                    Ok(MessageRecord {
+                        id: row.get(0)?,
+                        conversation_id: row.get(1)?,
+                        sender_did: row.get(2)?,
+                        content_encrypted: row.get(3)?,
+                        nonce: row.get(4)?,
+                        timestamp: row.get(5)?,
+                        delivered: row.get(6)?,
+                        read: row.get(7)?,
+                    })
+                },
+            )
             .map_err(|e| Error::DatabaseError(format!("Failed to query messages: {}", e)))?;
 
         let mut messages = Vec::new();
         for row in rows {
-            messages.push(row.map_err(|e| Error::DatabaseError(format!("Failed to read message: {}", e)))?);
+            messages.push(
+                row.map_err(|e| Error::DatabaseError(format!("Failed to read message: {}", e)))?,
+            );
         }
 
         // Reverse to get chronological order
@@ -614,12 +675,21 @@ impl Database {
         match result {
             Ok(record) => Ok(Some(record)),
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-            Err(e) => Err(Error::DatabaseError(format!("Failed to get message: {}", e))),
+            Err(e) => Err(Error::DatabaseError(format!(
+                "Failed to get message: {}",
+                e
+            ))),
         }
     }
 
     /// Edit a message's encrypted content
-    pub fn edit_message(&self, id: &str, new_content: &[u8], new_nonce: &[u8], edited_at: i64) -> Result<bool> {
+    pub fn edit_message(
+        &self,
+        id: &str,
+        new_content: &[u8],
+        new_nonce: &[u8],
+        edited_at: i64,
+    ) -> Result<bool> {
         let conn = self.conn.lock();
         let rows = conn
             .execute(
@@ -698,13 +768,21 @@ impl Database {
 
         let mut messages = Vec::new();
         for row in rows {
-            messages.push(row.map_err(|e| Error::DatabaseError(format!("Failed to read message: {}", e)))?);
+            messages.push(
+                row.map_err(|e| Error::DatabaseError(format!("Failed to read message: {}", e)))?,
+            );
         }
         Ok(messages)
     }
 
     /// Add a reaction to a message
-    pub fn add_reaction(&self, id: &str, message_id: &str, user_did: &str, emoji: &str) -> Result<()> {
+    pub fn add_reaction(
+        &self,
+        id: &str,
+        message_id: &str,
+        user_did: &str,
+        emoji: &str,
+    ) -> Result<()> {
         let conn = self.conn.lock();
         let now = crate::time::now_timestamp();
 
@@ -755,7 +833,9 @@ impl Database {
 
         let mut reactions = Vec::new();
         for row in rows {
-            reactions.push(row.map_err(|e| Error::DatabaseError(format!("Failed to read reaction: {}", e)))?);
+            reactions.push(
+                row.map_err(|e| Error::DatabaseError(format!("Failed to read reaction: {}", e)))?,
+            );
         }
         Ok(reactions)
     }
@@ -916,14 +996,22 @@ impl Database {
 
         let mut groups = Vec::new();
         for row in rows {
-            groups.push(row.map_err(|e| Error::DatabaseError(format!("Failed to read group: {}", e)))?);
+            groups.push(
+                row.map_err(|e| Error::DatabaseError(format!("Failed to read group: {}", e)))?,
+            );
         }
 
         Ok(groups)
     }
 
     /// Update a group's name and description
-    pub fn update_group(&self, id: &str, name: &str, description: Option<&str>, updated_at: i64) -> Result<bool> {
+    pub fn update_group(
+        &self,
+        id: &str,
+        name: &str,
+        description: Option<&str>,
+        updated_at: i64,
+    ) -> Result<bool> {
         let conn = self.conn.lock();
         let rows = conn
             .execute(
@@ -1008,7 +1096,9 @@ impl Database {
 
         let mut members = Vec::new();
         for row in rows {
-            members.push(row.map_err(|e| Error::DatabaseError(format!("Failed to read member: {}", e)))?);
+            members.push(
+                row.map_err(|e| Error::DatabaseError(format!("Failed to read member: {}", e)))?,
+            );
         }
 
         Ok(members)
@@ -1060,12 +1150,19 @@ impl Database {
         match result {
             Ok(record) => Ok(Some(record)),
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-            Err(e) => Err(Error::DatabaseError(format!("Failed to get group key: {}", e))),
+            Err(e) => Err(Error::DatabaseError(format!(
+                "Failed to get group key: {}",
+                e
+            ))),
         }
     }
 
     /// Get a specific group key version
-    pub fn get_group_key(&self, group_id: &str, key_version: i32) -> Result<Option<GroupKeyRecord>> {
+    pub fn get_group_key(
+        &self,
+        group_id: &str,
+        key_version: i32,
+    ) -> Result<Option<GroupKeyRecord>> {
         let conn = self.conn.lock();
 
         let result = conn.query_row(
@@ -1085,7 +1182,10 @@ impl Database {
         match result {
             Ok(record) => Ok(Some(record)),
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-            Err(e) => Err(Error::DatabaseError(format!("Failed to get group key: {}", e))),
+            Err(e) => Err(Error::DatabaseError(format!(
+                "Failed to get group key: {}",
+                e
+            ))),
         }
     }
 
@@ -1153,7 +1253,9 @@ impl Database {
 
         let mut invites = Vec::new();
         for row in rows {
-            invites.push(row.map_err(|e| Error::DatabaseError(format!("Failed to read invite: {}", e)))?);
+            invites.push(
+                row.map_err(|e| Error::DatabaseError(format!("Failed to read invite: {}", e)))?,
+            );
         }
         Ok(invites)
     }
@@ -1266,7 +1368,9 @@ impl Database {
 
         let mut requests = Vec::new();
         for row in rows {
-            requests.push(row.map_err(|e| Error::DatabaseError(format!("Failed to read request: {}", e)))?);
+            requests.push(
+                row.map_err(|e| Error::DatabaseError(format!("Failed to read request: {}", e)))?,
+            );
         }
 
         Ok(requests)
@@ -1301,7 +1405,9 @@ impl Database {
             .map_err(|e| Error::DatabaseError(format!("Failed to query request: {}", e)))?;
 
         match rows.next() {
-            Some(row) => Ok(Some(row.map_err(|e| Error::DatabaseError(format!("Failed to read request: {}", e)))?)),
+            Some(row) => Ok(Some(row.map_err(|e| {
+                Error::DatabaseError(format!("Failed to read request: {}", e))
+            })?)),
             None => Ok(None),
         }
     }
@@ -1378,7 +1484,10 @@ impl Database {
         match result {
             Ok(value) => Ok(Some(value)),
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-            Err(e) => Err(Error::DatabaseError(format!("Failed to get setting: {}", e))),
+            Err(e) => Err(Error::DatabaseError(format!(
+                "Failed to get setting: {}",
+                e
+            ))),
         }
     }
 
@@ -1419,7 +1528,10 @@ impl Database {
         match result {
             Ok(value) => Ok(Some(value)),
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-            Err(e) => Err(Error::DatabaseError(format!("Failed to get plugin KV: {}", e))),
+            Err(e) => Err(Error::DatabaseError(format!(
+                "Failed to get plugin KV: {}",
+                e
+            ))),
         }
     }
 
@@ -1456,7 +1568,9 @@ impl Database {
                 .map_err(|e| Error::DatabaseError(format!("Failed to prepare query: {}", e)))?;
             let rows = stmt
                 .query_map(params![plugin_id], |row| row.get(0))
-                .map_err(|e| Error::DatabaseError(format!("Failed to query plugin KV keys: {}", e)))?;
+                .map_err(|e| {
+                    Error::DatabaseError(format!("Failed to query plugin KV keys: {}", e))
+                })?;
             let mut keys = Vec::new();
             for row in rows {
                 keys.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?);
@@ -1465,11 +1579,15 @@ impl Database {
         } else {
             let like_pattern = format!("{}%", prefix);
             let mut stmt = conn
-                .prepare("SELECT key FROM plugin_kv WHERE plugin_id = ? AND key LIKE ? ORDER BY key")
+                .prepare(
+                    "SELECT key FROM plugin_kv WHERE plugin_id = ? AND key LIKE ? ORDER BY key",
+                )
                 .map_err(|e| Error::DatabaseError(format!("Failed to prepare query: {}", e)))?;
             let rows = stmt
                 .query_map(params![plugin_id, like_pattern], |row| row.get(0))
-                .map_err(|e| Error::DatabaseError(format!("Failed to query plugin KV keys: {}", e)))?;
+                .map_err(|e| {
+                    Error::DatabaseError(format!("Failed to query plugin KV keys: {}", e))
+                })?;
             let mut keys = Vec::new();
             for row in rows {
                 keys.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?);
@@ -1482,7 +1600,10 @@ impl Database {
     pub fn plugin_kv_delete_all(&self, plugin_id: &str) -> Result<usize> {
         let conn = self.conn.lock();
         let rows = conn
-            .execute("DELETE FROM plugin_kv WHERE plugin_id = ?", params![plugin_id])
+            .execute(
+                "DELETE FROM plugin_kv WHERE plugin_id = ?",
+                params![plugin_id],
+            )
             .map_err(|e| Error::DatabaseError(format!("Failed to delete plugin KV: {}", e)))?;
         Ok(rows)
     }
@@ -1519,7 +1640,10 @@ impl Database {
         match result {
             Ok(record) => Ok(Some(record)),
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-            Err(e) => Err(Error::DatabaseError(format!("Failed to load plugin bundle: {}", e))),
+            Err(e) => Err(Error::DatabaseError(format!(
+                "Failed to load plugin bundle: {}",
+                e
+            ))),
         }
     }
 
@@ -1528,7 +1652,10 @@ impl Database {
         let _ = self.plugin_kv_delete_all(plugin_id);
         let conn = self.conn.lock();
         let rows = conn
-            .execute("DELETE FROM plugin_bundles WHERE plugin_id = ?", params![plugin_id])
+            .execute(
+                "DELETE FROM plugin_bundles WHERE plugin_id = ?",
+                params![plugin_id],
+            )
             .map_err(|e| Error::DatabaseError(format!("Failed to delete plugin bundle: {}", e)))?;
         Ok(rows > 0)
     }
@@ -1631,25 +1758,32 @@ impl Database {
             .map_err(|e| Error::DatabaseError(format!("Failed to prepare query: {}", e)))?;
 
         let rows = stmt
-            .query_map(params![conversation_id, limit as i64, offset as i64], |row| {
-                Ok(CallHistoryRecord {
-                    id: row.get(0)?,
-                    conversation_id: row.get(1)?,
-                    call_type: row.get(2)?,
-                    direction: row.get(3)?,
-                    status: row.get(4)?,
-                    participants: row.get(5)?,
-                    started_at: row.get(6)?,
-                    ended_at: row.get(7)?,
-                    duration_ms: row.get(8)?,
-                    created_at: row.get(9)?,
-                })
-            })
+            .query_map(
+                params![conversation_id, limit as i64, offset as i64],
+                |row| {
+                    Ok(CallHistoryRecord {
+                        id: row.get(0)?,
+                        conversation_id: row.get(1)?,
+                        call_type: row.get(2)?,
+                        direction: row.get(3)?,
+                        status: row.get(4)?,
+                        participants: row.get(5)?,
+                        started_at: row.get(6)?,
+                        ended_at: row.get(7)?,
+                        duration_ms: row.get(8)?,
+                        created_at: row.get(9)?,
+                    })
+                },
+            )
             .map_err(|e| Error::DatabaseError(format!("Failed to query call history: {}", e)))?;
 
         let mut records = Vec::new();
         for row in rows {
-            records.push(row.map_err(|e| Error::DatabaseError(format!("Failed to read call record: {}", e)))?);
+            records.push(
+                row.map_err(|e| {
+                    Error::DatabaseError(format!("Failed to read call record: {}", e))
+                })?,
+            );
         }
 
         Ok(records)
@@ -1685,11 +1819,17 @@ impl Database {
                     created_at: row.get(9)?,
                 })
             })
-            .map_err(|e| Error::DatabaseError(format!("Failed to query all call history: {}", e)))?;
+            .map_err(|e| {
+                Error::DatabaseError(format!("Failed to query all call history: {}", e))
+            })?;
 
         let mut records = Vec::new();
         for row in rows {
-            records.push(row.map_err(|e| Error::DatabaseError(format!("Failed to read call record: {}", e)))?);
+            records.push(
+                row.map_err(|e| {
+                    Error::DatabaseError(format!("Failed to read call record: {}", e))
+                })?,
+            );
         }
 
         Ok(records)
@@ -1735,7 +1875,10 @@ impl Database {
         match result {
             Ok(r) => Ok(Some(r)),
             Err(rusqlite::Error::QueryReturnedNoRows) => Ok(None),
-            Err(e) => Err(Error::DatabaseError(format!("Failed to get community: {}", e))),
+            Err(e) => Err(Error::DatabaseError(format!(
+                "Failed to get community: {}",
+                e
+            ))),
         }
     }
 
@@ -1750,12 +1893,24 @@ impl Database {
              ORDER BY c.name",
         ).map_err(|e| Error::DatabaseError(format!("Failed to prepare query: {}", e)))?;
 
-        let rows = stmt.query_map(params![member_did], |row| Ok(CommunityRecord {
-            id: row.get(0)?, name: row.get(1)?, description: row.get(2)?,
-            icon_url: row.get(3)?, banner_url: row.get(4)?, splash_url: row.get(5)?,
-            accent_color: row.get(6)?, custom_css: row.get(7)?, owner_did: row.get(8)?,
-            vanity_url: row.get(9)?, created_at: row.get(10)?, updated_at: row.get(11)?,
-        })).map_err(|e| Error::DatabaseError(format!("Failed to query communities: {}", e)))?;
+        let rows = stmt
+            .query_map(params![member_did], |row| {
+                Ok(CommunityRecord {
+                    id: row.get(0)?,
+                    name: row.get(1)?,
+                    description: row.get(2)?,
+                    icon_url: row.get(3)?,
+                    banner_url: row.get(4)?,
+                    splash_url: row.get(5)?,
+                    accent_color: row.get(6)?,
+                    custom_css: row.get(7)?,
+                    owner_did: row.get(8)?,
+                    vanity_url: row.get(9)?,
+                    created_at: row.get(10)?,
+                    updated_at: row.get(11)?,
+                })
+            })
+            .map_err(|e| Error::DatabaseError(format!("Failed to query communities: {}", e)))?;
 
         let mut communities = Vec::new();
         for row in rows {
@@ -1765,29 +1920,43 @@ impl Database {
     }
 
     /// Update a community
-    pub fn update_community(&self, id: &str, name: Option<&str>, description: Option<&str>, updated_at: i64) -> Result<()> {
+    pub fn update_community(
+        &self,
+        id: &str,
+        name: Option<&str>,
+        description: Option<&str>,
+        updated_at: i64,
+    ) -> Result<()> {
         let conn = self.conn.lock();
         if let Some(name) = name {
             conn.execute(
                 "UPDATE communities SET name = ?, description = ?, updated_at = ? WHERE id = ?",
                 params![name, description, updated_at, id],
-            ).map_err(|e| Error::DatabaseError(format!("Failed to update community: {}", e)))?;
+            )
+            .map_err(|e| Error::DatabaseError(format!("Failed to update community: {}", e)))?;
         } else {
             conn.execute(
                 "UPDATE communities SET description = ?, updated_at = ? WHERE id = ?",
                 params![description, updated_at, id],
-            ).map_err(|e| Error::DatabaseError(format!("Failed to update community: {}", e)))?;
+            )
+            .map_err(|e| Error::DatabaseError(format!("Failed to update community: {}", e)))?;
         }
         Ok(())
     }
 
     /// Update community owner
-    pub fn update_community_owner(&self, id: &str, new_owner_did: &str, updated_at: i64) -> Result<()> {
+    pub fn update_community_owner(
+        &self,
+        id: &str,
+        new_owner_did: &str,
+        updated_at: i64,
+    ) -> Result<()> {
         let conn = self.conn.lock();
         conn.execute(
             "UPDATE communities SET owner_did = ?, updated_at = ? WHERE id = ?",
             params![new_owner_did, updated_at, id],
-        ).map_err(|e| Error::DatabaseError(format!("Failed to update community owner: {}", e)))?;
+        )
+        .map_err(|e| Error::DatabaseError(format!("Failed to update community owner: {}", e)))?;
         Ok(())
     }
 
@@ -1802,7 +1971,14 @@ impl Database {
     // ── Spaces ───────────────────────────────────────────────────────────
 
     /// Create a community space
-    pub fn create_community_space(&self, id: &str, community_id: &str, name: &str, position: i32, created_at: i64) -> Result<()> {
+    pub fn create_community_space(
+        &self,
+        id: &str,
+        community_id: &str,
+        name: &str,
+        position: i32,
+        created_at: i64,
+    ) -> Result<()> {
         let conn = self.conn.lock();
         conn.execute(
             "INSERT INTO community_spaces (id, community_id, name, position, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
@@ -1818,13 +1994,23 @@ impl Database {
             "SELECT id, community_id, name, position, created_at, updated_at FROM community_spaces WHERE community_id = ? ORDER BY position",
         ).map_err(|e| Error::DatabaseError(format!("Failed to prepare query: {}", e)))?;
 
-        let rows = stmt.query_map(params![community_id], |row| Ok(CommunitySpaceRecord {
-            id: row.get(0)?, community_id: row.get(1)?, name: row.get(2)?,
-            position: row.get(3)?, created_at: row.get(4)?, updated_at: row.get(5)?,
-        })).map_err(|e| Error::DatabaseError(e.to_string()))?;
+        let rows = stmt
+            .query_map(params![community_id], |row| {
+                Ok(CommunitySpaceRecord {
+                    id: row.get(0)?,
+                    community_id: row.get(1)?,
+                    name: row.get(2)?,
+                    position: row.get(3)?,
+                    created_at: row.get(4)?,
+                    updated_at: row.get(5)?,
+                })
+            })
+            .map_err(|e| Error::DatabaseError(e.to_string()))?;
 
         let mut spaces = Vec::new();
-        for row in rows { spaces.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?); }
+        for row in rows {
+            spaces.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?);
+        }
         Ok(spaces)
     }
 
@@ -1849,16 +2035,27 @@ impl Database {
     /// Update a space name
     pub fn update_community_space(&self, id: &str, name: &str, updated_at: i64) -> Result<()> {
         let conn = self.conn.lock();
-        conn.execute("UPDATE community_spaces SET name = ?, updated_at = ? WHERE id = ?", params![name, updated_at, id])
-            .map_err(|e| Error::DatabaseError(e.to_string()))?;
+        conn.execute(
+            "UPDATE community_spaces SET name = ?, updated_at = ? WHERE id = ?",
+            params![name, updated_at, id],
+        )
+        .map_err(|e| Error::DatabaseError(e.to_string()))?;
         Ok(())
     }
 
     /// Update a space position
-    pub fn update_community_space_position(&self, id: &str, position: i32, updated_at: i64) -> Result<()> {
+    pub fn update_community_space_position(
+        &self,
+        id: &str,
+        position: i32,
+        updated_at: i64,
+    ) -> Result<()> {
         let conn = self.conn.lock();
-        conn.execute("UPDATE community_spaces SET position = ?, updated_at = ? WHERE id = ?", params![position, updated_at, id])
-            .map_err(|e| Error::DatabaseError(e.to_string()))?;
+        conn.execute(
+            "UPDATE community_spaces SET position = ?, updated_at = ? WHERE id = ?",
+            params![position, updated_at, id],
+        )
+        .map_err(|e| Error::DatabaseError(e.to_string()))?;
         Ok(())
     }
 
@@ -1874,7 +2071,15 @@ impl Database {
 
     /// Create a new category
     #[allow(clippy::too_many_arguments)]
-    pub fn create_community_category(&self, id: &str, community_id: &str, space_id: &str, name: &str, position: i32, created_at: i64) -> Result<()> {
+    pub fn create_community_category(
+        &self,
+        id: &str,
+        community_id: &str,
+        space_id: &str,
+        name: &str,
+        position: i32,
+        created_at: i64,
+    ) -> Result<()> {
         let conn = self.conn.lock();
         conn.execute(
             "INSERT INTO community_categories (id, community_id, space_id, name, position, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -1890,30 +2095,55 @@ impl Database {
             "SELECT id, community_id, space_id, name, position, created_at, updated_at FROM community_categories WHERE space_id = ? ORDER BY position",
         ).map_err(|e| Error::DatabaseError(e.to_string()))?;
 
-        let rows = stmt.query_map(params![space_id], |row| Ok(CommunityCategoryRecord {
-            id: row.get(0)?, community_id: row.get(1)?, space_id: row.get(2)?,
-            name: row.get(3)?, position: row.get(4)?, created_at: row.get(5)?, updated_at: row.get(6)?,
-        })).map_err(|e| Error::DatabaseError(e.to_string()))?;
+        let rows = stmt
+            .query_map(params![space_id], |row| {
+                Ok(CommunityCategoryRecord {
+                    id: row.get(0)?,
+                    community_id: row.get(1)?,
+                    space_id: row.get(2)?,
+                    name: row.get(3)?,
+                    position: row.get(4)?,
+                    created_at: row.get(5)?,
+                    updated_at: row.get(6)?,
+                })
+            })
+            .map_err(|e| Error::DatabaseError(e.to_string()))?;
 
         let mut categories = Vec::new();
-        for row in rows { categories.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?); }
+        for row in rows {
+            categories.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?);
+        }
         Ok(categories)
     }
 
     /// Get all categories for a community (across all spaces)
-    pub fn get_community_categories_by_community(&self, community_id: &str) -> Result<Vec<CommunityCategoryRecord>> {
+    pub fn get_community_categories_by_community(
+        &self,
+        community_id: &str,
+    ) -> Result<Vec<CommunityCategoryRecord>> {
         let conn = self.conn.lock();
         let mut stmt = conn.prepare(
             "SELECT id, community_id, space_id, name, position, created_at, updated_at FROM community_categories WHERE community_id = ? ORDER BY position",
         ).map_err(|e| Error::DatabaseError(e.to_string()))?;
 
-        let rows = stmt.query_map(params![community_id], |row| Ok(CommunityCategoryRecord {
-            id: row.get(0)?, community_id: row.get(1)?, space_id: row.get(2)?,
-            name: row.get(3)?, position: row.get(4)?, created_at: row.get(5)?, updated_at: row.get(6)?,
-        })).map_err(|e| Error::DatabaseError(e.to_string()))?;
+        let rows = stmt
+            .query_map(params![community_id], |row| {
+                Ok(CommunityCategoryRecord {
+                    id: row.get(0)?,
+                    community_id: row.get(1)?,
+                    space_id: row.get(2)?,
+                    name: row.get(3)?,
+                    position: row.get(4)?,
+                    created_at: row.get(5)?,
+                    updated_at: row.get(6)?,
+                })
+            })
+            .map_err(|e| Error::DatabaseError(e.to_string()))?;
 
         let mut categories = Vec::new();
-        for row in rows { categories.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?); }
+        for row in rows {
+            categories.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?);
+        }
         Ok(categories)
     }
 
@@ -1938,16 +2168,27 @@ impl Database {
     /// Update a category name
     pub fn update_community_category(&self, id: &str, name: &str, updated_at: i64) -> Result<()> {
         let conn = self.conn.lock();
-        conn.execute("UPDATE community_categories SET name = ?, updated_at = ? WHERE id = ?", params![name, updated_at, id])
-            .map_err(|e| Error::DatabaseError(e.to_string()))?;
+        conn.execute(
+            "UPDATE community_categories SET name = ?, updated_at = ? WHERE id = ?",
+            params![name, updated_at, id],
+        )
+        .map_err(|e| Error::DatabaseError(e.to_string()))?;
         Ok(())
     }
 
     /// Update a category position
-    pub fn update_community_category_position(&self, id: &str, position: i32, updated_at: i64) -> Result<()> {
+    pub fn update_community_category_position(
+        &self,
+        id: &str,
+        position: i32,
+        updated_at: i64,
+    ) -> Result<()> {
         let conn = self.conn.lock();
-        conn.execute("UPDATE community_categories SET position = ?, updated_at = ? WHERE id = ?", params![position, updated_at, id])
-            .map_err(|e| Error::DatabaseError(e.to_string()))?;
+        conn.execute(
+            "UPDATE community_categories SET position = ?, updated_at = ? WHERE id = ?",
+            params![position, updated_at, id],
+        )
+        .map_err(|e| Error::DatabaseError(e.to_string()))?;
         Ok(())
     }
 
@@ -1960,12 +2201,18 @@ impl Database {
     }
 
     /// Update a channel's category assignment
-    pub fn update_channel_category(&self, channel_id: &str, category_id: Option<&str>, updated_at: i64) -> Result<()> {
+    pub fn update_channel_category(
+        &self,
+        channel_id: &str,
+        category_id: Option<&str>,
+        updated_at: i64,
+    ) -> Result<()> {
         let conn = self.conn.lock();
         conn.execute(
             "UPDATE community_channels SET category_id = ?, updated_at = ? WHERE id = ?",
             params![category_id, updated_at, channel_id],
-        ).map_err(|e| Error::DatabaseError(e.to_string()))?;
+        )
+        .map_err(|e| Error::DatabaseError(e.to_string()))?;
         Ok(())
     }
 
@@ -1974,8 +2221,16 @@ impl Database {
     /// Create a community channel
     #[allow(clippy::too_many_arguments)]
     pub fn create_community_channel(
-        &self, id: &str, community_id: &str, space_id: &str, category_id: Option<&str>, name: &str,
-        channel_type: &str, topic: Option<&str>, position: i32, created_at: i64,
+        &self,
+        id: &str,
+        community_id: &str,
+        space_id: &str,
+        category_id: Option<&str>,
+        name: &str,
+        channel_type: &str,
+        topic: Option<&str>,
+        position: i32,
+        created_at: i64,
     ) -> Result<()> {
         let conn = self.conn.lock();
         conn.execute(
@@ -1987,46 +2242,78 @@ impl Database {
     }
 
     /// Get channels for a community
-    pub fn get_community_channels(&self, community_id: &str) -> Result<Vec<CommunityChannelRecord>> {
+    pub fn get_community_channels(
+        &self,
+        community_id: &str,
+    ) -> Result<Vec<CommunityChannelRecord>> {
         let conn = self.conn.lock();
         let mut stmt = conn.prepare(
             "SELECT id, community_id, space_id, category_id, name, type, topic, position, slow_mode_seconds, e2ee_enabled, pin_limit, created_at, updated_at
              FROM community_channels WHERE community_id = ? ORDER BY position",
         ).map_err(|e| Error::DatabaseError(e.to_string()))?;
 
-        let rows = stmt.query_map(params![community_id], |row| Ok(CommunityChannelRecord {
-            id: row.get(0)?, community_id: row.get(1)?, space_id: row.get(2)?,
-            category_id: row.get(3)?,
-            name: row.get(4)?, channel_type: row.get(5)?, topic: row.get(6)?,
-            position: row.get(7)?, slow_mode_seconds: row.get(8)?,
-            e2ee_enabled: row.get::<_, i32>(9)? != 0, pin_limit: row.get(10)?,
-            created_at: row.get(11)?, updated_at: row.get(12)?,
-        })).map_err(|e| Error::DatabaseError(e.to_string()))?;
+        let rows = stmt
+            .query_map(params![community_id], |row| {
+                Ok(CommunityChannelRecord {
+                    id: row.get(0)?,
+                    community_id: row.get(1)?,
+                    space_id: row.get(2)?,
+                    category_id: row.get(3)?,
+                    name: row.get(4)?,
+                    channel_type: row.get(5)?,
+                    topic: row.get(6)?,
+                    position: row.get(7)?,
+                    slow_mode_seconds: row.get(8)?,
+                    e2ee_enabled: row.get::<_, i32>(9)? != 0,
+                    pin_limit: row.get(10)?,
+                    created_at: row.get(11)?,
+                    updated_at: row.get(12)?,
+                })
+            })
+            .map_err(|e| Error::DatabaseError(e.to_string()))?;
 
         let mut channels = Vec::new();
-        for row in rows { channels.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?); }
+        for row in rows {
+            channels.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?);
+        }
         Ok(channels)
     }
 
     /// Get channels by space
-    pub fn get_community_channels_by_space(&self, space_id: &str) -> Result<Vec<CommunityChannelRecord>> {
+    pub fn get_community_channels_by_space(
+        &self,
+        space_id: &str,
+    ) -> Result<Vec<CommunityChannelRecord>> {
         let conn = self.conn.lock();
         let mut stmt = conn.prepare(
             "SELECT id, community_id, space_id, category_id, name, type, topic, position, slow_mode_seconds, e2ee_enabled, pin_limit, created_at, updated_at
              FROM community_channels WHERE space_id = ? ORDER BY position",
         ).map_err(|e| Error::DatabaseError(e.to_string()))?;
 
-        let rows = stmt.query_map(params![space_id], |row| Ok(CommunityChannelRecord {
-            id: row.get(0)?, community_id: row.get(1)?, space_id: row.get(2)?,
-            category_id: row.get(3)?,
-            name: row.get(4)?, channel_type: row.get(5)?, topic: row.get(6)?,
-            position: row.get(7)?, slow_mode_seconds: row.get(8)?,
-            e2ee_enabled: row.get::<_, i32>(9)? != 0, pin_limit: row.get(10)?,
-            created_at: row.get(11)?, updated_at: row.get(12)?,
-        })).map_err(|e| Error::DatabaseError(e.to_string()))?;
+        let rows = stmt
+            .query_map(params![space_id], |row| {
+                Ok(CommunityChannelRecord {
+                    id: row.get(0)?,
+                    community_id: row.get(1)?,
+                    space_id: row.get(2)?,
+                    category_id: row.get(3)?,
+                    name: row.get(4)?,
+                    channel_type: row.get(5)?,
+                    topic: row.get(6)?,
+                    position: row.get(7)?,
+                    slow_mode_seconds: row.get(8)?,
+                    e2ee_enabled: row.get::<_, i32>(9)? != 0,
+                    pin_limit: row.get(10)?,
+                    created_at: row.get(11)?,
+                    updated_at: row.get(12)?,
+                })
+            })
+            .map_err(|e| Error::DatabaseError(e.to_string()))?;
 
         let mut channels = Vec::new();
-        for row in rows { channels.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?); }
+        for row in rows {
+            channels.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?);
+        }
         Ok(channels)
     }
 
@@ -2054,18 +2341,26 @@ impl Database {
     }
 
     /// Update channel name/topic
-    pub fn update_community_channel(&self, id: &str, name: Option<&str>, topic: Option<&str>, updated_at: i64) -> Result<()> {
+    pub fn update_community_channel(
+        &self,
+        id: &str,
+        name: Option<&str>,
+        topic: Option<&str>,
+        updated_at: i64,
+    ) -> Result<()> {
         let conn = self.conn.lock();
         if let Some(name) = name {
             conn.execute(
                 "UPDATE community_channels SET name = ?, topic = ?, updated_at = ? WHERE id = ?",
                 params![name, topic, updated_at, id],
-            ).map_err(|e| Error::DatabaseError(e.to_string()))?;
+            )
+            .map_err(|e| Error::DatabaseError(e.to_string()))?;
         } else {
             conn.execute(
                 "UPDATE community_channels SET topic = ?, updated_at = ? WHERE id = ?",
                 params![topic, updated_at, id],
-            ).map_err(|e| Error::DatabaseError(e.to_string()))?;
+            )
+            .map_err(|e| Error::DatabaseError(e.to_string()))?;
         }
         Ok(())
     }
@@ -2073,24 +2368,33 @@ impl Database {
     /// Update channel slow mode
     pub fn update_channel_slow_mode(&self, id: &str, seconds: i32, updated_at: i64) -> Result<()> {
         let conn = self.conn.lock();
-        conn.execute("UPDATE community_channels SET slow_mode_seconds = ?, updated_at = ? WHERE id = ?", params![seconds, updated_at, id])
-            .map_err(|e| Error::DatabaseError(e.to_string()))?;
+        conn.execute(
+            "UPDATE community_channels SET slow_mode_seconds = ?, updated_at = ? WHERE id = ?",
+            params![seconds, updated_at, id],
+        )
+        .map_err(|e| Error::DatabaseError(e.to_string()))?;
         Ok(())
     }
 
     /// Update channel E2EE setting
     pub fn update_channel_e2ee(&self, id: &str, enabled: bool, updated_at: i64) -> Result<()> {
         let conn = self.conn.lock();
-        conn.execute("UPDATE community_channels SET e2ee_enabled = ?, updated_at = ? WHERE id = ?", params![enabled as i32, updated_at, id])
-            .map_err(|e| Error::DatabaseError(e.to_string()))?;
+        conn.execute(
+            "UPDATE community_channels SET e2ee_enabled = ?, updated_at = ? WHERE id = ?",
+            params![enabled as i32, updated_at, id],
+        )
+        .map_err(|e| Error::DatabaseError(e.to_string()))?;
         Ok(())
     }
 
     /// Update channel position
     pub fn update_channel_position(&self, id: &str, position: i32, updated_at: i64) -> Result<()> {
         let conn = self.conn.lock();
-        conn.execute("UPDATE community_channels SET position = ?, updated_at = ? WHERE id = ?", params![position, updated_at, id])
-            .map_err(|e| Error::DatabaseError(e.to_string()))?;
+        conn.execute(
+            "UPDATE community_channels SET position = ?, updated_at = ? WHERE id = ?",
+            params![position, updated_at, id],
+        )
+        .map_err(|e| Error::DatabaseError(e.to_string()))?;
         Ok(())
     }
 
@@ -2107,9 +2411,17 @@ impl Database {
     /// Create a community role
     #[allow(clippy::too_many_arguments)]
     pub fn create_community_role(
-        &self, id: &str, community_id: &str, name: &str, color: Option<&str>,
-        position: i32, hoisted: bool, mentionable: bool, is_preset: bool,
-        permissions_bitfield: &str, created_at: i64,
+        &self,
+        id: &str,
+        community_id: &str,
+        name: &str,
+        color: Option<&str>,
+        position: i32,
+        hoisted: bool,
+        mentionable: bool,
+        is_preset: bool,
+        permissions_bitfield: &str,
+        created_at: i64,
     ) -> Result<()> {
         let conn = self.conn.lock();
         conn.execute(
@@ -2128,16 +2440,30 @@ impl Database {
              FROM community_roles WHERE community_id = ? ORDER BY position DESC",
         ).map_err(|e| Error::DatabaseError(e.to_string()))?;
 
-        let rows = stmt.query_map(params![community_id], |row| Ok(CommunityRoleRecord {
-            id: row.get(0)?, community_id: row.get(1)?, name: row.get(2)?,
-            color: row.get(3)?, icon: row.get(4)?, badge: row.get(5)?,
-            position: row.get(6)?, hoisted: row.get::<_, i32>(7)? != 0,
-            mentionable: row.get::<_, i32>(8)? != 0, is_preset: row.get::<_, i32>(9)? != 0,
-            permissions_bitfield: row.get(10)?, created_at: row.get(11)?, updated_at: row.get(12)?,
-        })).map_err(|e| Error::DatabaseError(e.to_string()))?;
+        let rows = stmt
+            .query_map(params![community_id], |row| {
+                Ok(CommunityRoleRecord {
+                    id: row.get(0)?,
+                    community_id: row.get(1)?,
+                    name: row.get(2)?,
+                    color: row.get(3)?,
+                    icon: row.get(4)?,
+                    badge: row.get(5)?,
+                    position: row.get(6)?,
+                    hoisted: row.get::<_, i32>(7)? != 0,
+                    mentionable: row.get::<_, i32>(8)? != 0,
+                    is_preset: row.get::<_, i32>(9)? != 0,
+                    permissions_bitfield: row.get(10)?,
+                    created_at: row.get(11)?,
+                    updated_at: row.get(12)?,
+                })
+            })
+            .map_err(|e| Error::DatabaseError(e.to_string()))?;
 
         let mut roles = Vec::new();
-        for row in rows { roles.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?); }
+        for row in rows {
+            roles.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?);
+        }
         Ok(roles)
     }
 
@@ -2186,7 +2512,14 @@ impl Database {
     }
 
     /// Assign a role to a member
-    pub fn assign_community_role(&self, community_id: &str, member_did: &str, role_id: &str, assigned_at: i64, assigned_by: Option<&str>) -> Result<()> {
+    pub fn assign_community_role(
+        &self,
+        community_id: &str,
+        member_did: &str,
+        role_id: &str,
+        assigned_at: i64,
+        assigned_by: Option<&str>,
+    ) -> Result<()> {
         let conn = self.conn.lock();
         conn.execute(
             "INSERT OR IGNORE INTO community_member_roles (community_id, member_did, role_id, assigned_at, assigned_by) VALUES (?, ?, ?, ?, ?)",
@@ -2196,7 +2529,12 @@ impl Database {
     }
 
     /// Unassign a role from a member
-    pub fn unassign_community_role(&self, community_id: &str, member_did: &str, role_id: &str) -> Result<()> {
+    pub fn unassign_community_role(
+        &self,
+        community_id: &str,
+        member_did: &str,
+        role_id: &str,
+    ) -> Result<()> {
         let conn = self.conn.lock();
         conn.execute(
             "DELETE FROM community_member_roles WHERE community_id = ? AND member_did = ? AND role_id = ?",
@@ -2206,7 +2544,11 @@ impl Database {
     }
 
     /// Get roles assigned to a member in a community
-    pub fn get_member_community_roles(&self, community_id: &str, member_did: &str) -> Result<Vec<CommunityRoleRecord>> {
+    pub fn get_member_community_roles(
+        &self,
+        community_id: &str,
+        member_did: &str,
+    ) -> Result<Vec<CommunityRoleRecord>> {
         let conn = self.conn.lock();
         let mut stmt = conn.prepare(
             "SELECT r.id, r.community_id, r.name, r.color, r.icon, r.badge, r.position, r.hoisted, r.mentionable, r.is_preset, r.permissions_bitfield, r.created_at, r.updated_at
@@ -2216,23 +2558,43 @@ impl Database {
              ORDER BY r.position DESC",
         ).map_err(|e| Error::DatabaseError(e.to_string()))?;
 
-        let rows = stmt.query_map(params![community_id, member_did], |row| Ok(CommunityRoleRecord {
-            id: row.get(0)?, community_id: row.get(1)?, name: row.get(2)?,
-            color: row.get(3)?, icon: row.get(4)?, badge: row.get(5)?,
-            position: row.get(6)?, hoisted: row.get::<_, i32>(7)? != 0,
-            mentionable: row.get::<_, i32>(8)? != 0, is_preset: row.get::<_, i32>(9)? != 0,
-            permissions_bitfield: row.get(10)?, created_at: row.get(11)?, updated_at: row.get(12)?,
-        })).map_err(|e| Error::DatabaseError(e.to_string()))?;
+        let rows = stmt
+            .query_map(params![community_id, member_did], |row| {
+                Ok(CommunityRoleRecord {
+                    id: row.get(0)?,
+                    community_id: row.get(1)?,
+                    name: row.get(2)?,
+                    color: row.get(3)?,
+                    icon: row.get(4)?,
+                    badge: row.get(5)?,
+                    position: row.get(6)?,
+                    hoisted: row.get::<_, i32>(7)? != 0,
+                    mentionable: row.get::<_, i32>(8)? != 0,
+                    is_preset: row.get::<_, i32>(9)? != 0,
+                    permissions_bitfield: row.get(10)?,
+                    created_at: row.get(11)?,
+                    updated_at: row.get(12)?,
+                })
+            })
+            .map_err(|e| Error::DatabaseError(e.to_string()))?;
 
         let mut roles = Vec::new();
-        for row in rows { roles.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?); }
+        for row in rows {
+            roles.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?);
+        }
         Ok(roles)
     }
 
     // ── Members ──────────────────────────────────────────────────────────
 
     /// Add a member to a community
-    pub fn add_community_member(&self, community_id: &str, member_did: &str, joined_at: i64, nickname: Option<&str>) -> Result<()> {
+    pub fn add_community_member(
+        &self,
+        community_id: &str,
+        member_did: &str,
+        joined_at: i64,
+        nickname: Option<&str>,
+    ) -> Result<()> {
         let conn = self.conn.lock();
         conn.execute(
             "INSERT OR IGNORE INTO community_members (community_id, member_did, nickname, joined_at) VALUES (?, ?, ?, ?)",
@@ -2248,16 +2610,22 @@ impl Database {
         conn.execute(
             "DELETE FROM community_member_roles WHERE community_id = ? AND member_did = ?",
             params![community_id, member_did],
-        ).map_err(|e| Error::DatabaseError(e.to_string()))?;
+        )
+        .map_err(|e| Error::DatabaseError(e.to_string()))?;
         conn.execute(
             "DELETE FROM community_members WHERE community_id = ? AND member_did = ?",
             params![community_id, member_did],
-        ).map_err(|e| Error::DatabaseError(format!("Failed to remove member: {}", e)))?;
+        )
+        .map_err(|e| Error::DatabaseError(format!("Failed to remove member: {}", e)))?;
         Ok(())
     }
 
     /// Get a specific community member
-    pub fn get_community_member(&self, community_id: &str, member_did: &str) -> Result<Option<CommunityMemberRecord>> {
+    pub fn get_community_member(
+        &self,
+        community_id: &str,
+        member_did: &str,
+    ) -> Result<Option<CommunityMemberRecord>> {
         let conn = self.conn.lock();
         let result = conn.query_row(
             "SELECT community_id, member_did, nickname, avatar_url, bio, joined_at FROM community_members WHERE community_id = ? AND member_did = ?",
@@ -2281,18 +2649,35 @@ impl Database {
             "SELECT community_id, member_did, nickname, avatar_url, bio, joined_at FROM community_members WHERE community_id = ? ORDER BY joined_at",
         ).map_err(|e| Error::DatabaseError(e.to_string()))?;
 
-        let rows = stmt.query_map(params![community_id], |row| Ok(CommunityMemberRecord {
-            community_id: row.get(0)?, member_did: row.get(1)?, nickname: row.get(2)?,
-            avatar_url: row.get(3)?, bio: row.get(4)?, joined_at: row.get(5)?,
-        })).map_err(|e| Error::DatabaseError(e.to_string()))?;
+        let rows = stmt
+            .query_map(params![community_id], |row| {
+                Ok(CommunityMemberRecord {
+                    community_id: row.get(0)?,
+                    member_did: row.get(1)?,
+                    nickname: row.get(2)?,
+                    avatar_url: row.get(3)?,
+                    bio: row.get(4)?,
+                    joined_at: row.get(5)?,
+                })
+            })
+            .map_err(|e| Error::DatabaseError(e.to_string()))?;
 
         let mut members = Vec::new();
-        for row in rows { members.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?); }
+        for row in rows {
+            members.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?);
+        }
         Ok(members)
     }
 
     /// Update a member's community profile
-    pub fn update_community_member_profile(&self, community_id: &str, member_did: &str, nickname: Option<&str>, avatar_url: Option<&str>, bio: Option<&str>) -> Result<()> {
+    pub fn update_community_member_profile(
+        &self,
+        community_id: &str,
+        member_did: &str,
+        nickname: Option<&str>,
+        avatar_url: Option<&str>,
+        bio: Option<&str>,
+    ) -> Result<()> {
         let conn = self.conn.lock();
         conn.execute(
             "UPDATE community_members SET nickname = ?, avatar_url = ?, bio = ? WHERE community_id = ? AND member_did = ?",
@@ -2305,7 +2690,16 @@ impl Database {
 
     /// Create a ban record
     #[allow(clippy::too_many_arguments)]
-    pub fn create_community_ban(&self, community_id: &str, banned_did: &str, reason: Option<&str>, banned_by: &str, device_fingerprint: Option<&str>, expires_at: Option<i64>, created_at: i64) -> Result<()> {
+    pub fn create_community_ban(
+        &self,
+        community_id: &str,
+        banned_did: &str,
+        reason: Option<&str>,
+        banned_by: &str,
+        device_fingerprint: Option<&str>,
+        expires_at: Option<i64>,
+        created_at: i64,
+    ) -> Result<()> {
         let conn = self.conn.lock();
         conn.execute(
             "INSERT OR REPLACE INTO community_bans (community_id, banned_did, reason, banned_by, device_fingerprint, expires_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -2317,11 +2711,13 @@ impl Database {
     /// Check if a user is banned
     pub fn is_community_banned(&self, community_id: &str, did: &str) -> Result<bool> {
         let conn = self.conn.lock();
-        let count: i32 = conn.query_row(
-            "SELECT COUNT(*) FROM community_bans WHERE community_id = ? AND banned_did = ?",
-            params![community_id, did],
-            |row| row.get(0),
-        ).map_err(|e| Error::DatabaseError(e.to_string()))?;
+        let count: i32 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM community_bans WHERE community_id = ? AND banned_did = ?",
+                params![community_id, did],
+                |row| row.get(0),
+            )
+            .map_err(|e| Error::DatabaseError(e.to_string()))?;
         Ok(count > 0)
     }
 
@@ -2331,7 +2727,8 @@ impl Database {
         conn.execute(
             "DELETE FROM community_bans WHERE community_id = ? AND banned_did = ?",
             params![community_id, banned_did],
-        ).map_err(|e| Error::DatabaseError(e.to_string()))?;
+        )
+        .map_err(|e| Error::DatabaseError(e.to_string()))?;
         Ok(())
     }
 
@@ -2342,14 +2739,24 @@ impl Database {
             "SELECT community_id, banned_did, reason, banned_by, device_fingerprint, expires_at, created_at FROM community_bans WHERE community_id = ? ORDER BY created_at DESC",
         ).map_err(|e| Error::DatabaseError(e.to_string()))?;
 
-        let rows = stmt.query_map(params![community_id], |row| Ok(CommunityBanRecord {
-            community_id: row.get(0)?, banned_did: row.get(1)?, reason: row.get(2)?,
-            banned_by: row.get(3)?, device_fingerprint: row.get(4)?,
-            expires_at: row.get(5)?, created_at: row.get(6)?,
-        })).map_err(|e| Error::DatabaseError(e.to_string()))?;
+        let rows = stmt
+            .query_map(params![community_id], |row| {
+                Ok(CommunityBanRecord {
+                    community_id: row.get(0)?,
+                    banned_did: row.get(1)?,
+                    reason: row.get(2)?,
+                    banned_by: row.get(3)?,
+                    device_fingerprint: row.get(4)?,
+                    expires_at: row.get(5)?,
+                    created_at: row.get(6)?,
+                })
+            })
+            .map_err(|e| Error::DatabaseError(e.to_string()))?;
 
         let mut bans = Vec::new();
-        for row in rows { bans.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?); }
+        for row in rows {
+            bans.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?);
+        }
         Ok(bans)
     }
 
@@ -2357,7 +2764,17 @@ impl Database {
 
     /// Create a community invite
     #[allow(clippy::too_many_arguments)]
-    pub fn create_community_invite(&self, id: &str, community_id: &str, code: &str, vanity: bool, creator_did: &str, max_uses: Option<i32>, expires_at: Option<i64>, created_at: i64) -> Result<()> {
+    pub fn create_community_invite(
+        &self,
+        id: &str,
+        community_id: &str,
+        code: &str,
+        vanity: bool,
+        creator_did: &str,
+        max_uses: Option<i32>,
+        expires_at: Option<i64>,
+        created_at: i64,
+    ) -> Result<()> {
         let conn = self.conn.lock();
         conn.execute(
             "INSERT INTO community_invites (id, community_id, code, vanity, creator_did, max_uses, expires_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
@@ -2367,7 +2784,10 @@ impl Database {
     }
 
     /// Get an invite by code
-    pub fn get_community_invite_by_code(&self, code: &str) -> Result<Option<CommunityInviteRecord>> {
+    pub fn get_community_invite_by_code(
+        &self,
+        code: &str,
+    ) -> Result<Option<CommunityInviteRecord>> {
         let conn = self.conn.lock();
         let result = conn.query_row(
             "SELECT id, community_id, code, vanity, creator_did, max_uses, use_count, expires_at, created_at FROM community_invites WHERE code = ?",
@@ -2413,23 +2833,37 @@ impl Database {
             "SELECT id, community_id, code, vanity, creator_did, max_uses, use_count, expires_at, created_at FROM community_invites WHERE community_id = ? ORDER BY created_at DESC",
         ).map_err(|e| Error::DatabaseError(e.to_string()))?;
 
-        let rows = stmt.query_map(params![community_id], |row| Ok(CommunityInviteRecord {
-            id: row.get(0)?, community_id: row.get(1)?, code: row.get(2)?,
-            vanity: row.get::<_, i32>(3)? != 0, creator_did: row.get(4)?,
-            max_uses: row.get(5)?, use_count: row.get(6)?,
-            expires_at: row.get(7)?, created_at: row.get(8)?,
-        })).map_err(|e| Error::DatabaseError(e.to_string()))?;
+        let rows = stmt
+            .query_map(params![community_id], |row| {
+                Ok(CommunityInviteRecord {
+                    id: row.get(0)?,
+                    community_id: row.get(1)?,
+                    code: row.get(2)?,
+                    vanity: row.get::<_, i32>(3)? != 0,
+                    creator_did: row.get(4)?,
+                    max_uses: row.get(5)?,
+                    use_count: row.get(6)?,
+                    expires_at: row.get(7)?,
+                    created_at: row.get(8)?,
+                })
+            })
+            .map_err(|e| Error::DatabaseError(e.to_string()))?;
 
         let mut invites = Vec::new();
-        for row in rows { invites.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?); }
+        for row in rows {
+            invites.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?);
+        }
         Ok(invites)
     }
 
     /// Increment invite use count
     pub fn increment_invite_use_count(&self, id: &str) -> Result<()> {
         let conn = self.conn.lock();
-        conn.execute("UPDATE community_invites SET use_count = use_count + 1 WHERE id = ?", params![id])
-            .map_err(|e| Error::DatabaseError(e.to_string()))?;
+        conn.execute(
+            "UPDATE community_invites SET use_count = use_count + 1 WHERE id = ?",
+            params![id],
+        )
+        .map_err(|e| Error::DatabaseError(e.to_string()))?;
         Ok(())
     }
 
@@ -2446,8 +2880,15 @@ impl Database {
     /// Insert an audit log entry
     #[allow(clippy::too_many_arguments)]
     pub fn insert_audit_log(
-        &self, id: &str, community_id: &str, actor_did: &str, action_type: &str,
-        target_type: Option<&str>, target_id: Option<&str>, metadata_json: Option<&str>, created_at: i64,
+        &self,
+        id: &str,
+        community_id: &str,
+        actor_did: &str,
+        action_type: &str,
+        target_type: Option<&str>,
+        target_id: Option<&str>,
+        metadata_json: Option<&str>,
+        created_at: i64,
     ) -> Result<()> {
         let conn = self.conn.lock();
         conn.execute(
@@ -2459,21 +2900,38 @@ impl Database {
     }
 
     /// Get audit log entries for a community
-    pub fn get_audit_log(&self, community_id: &str, limit: usize, offset: usize) -> Result<Vec<CommunityAuditLogRecord>> {
+    pub fn get_audit_log(
+        &self,
+        community_id: &str,
+        limit: usize,
+        offset: usize,
+    ) -> Result<Vec<CommunityAuditLogRecord>> {
         let conn = self.conn.lock();
         let mut stmt = conn.prepare(
             "SELECT id, community_id, actor_did, action_type, target_type, target_id, metadata_json, content_detail, created_at
              FROM community_audit_log WHERE community_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
         ).map_err(|e| Error::DatabaseError(e.to_string()))?;
 
-        let rows = stmt.query_map(params![community_id, limit as i64, offset as i64], |row| Ok(CommunityAuditLogRecord {
-            id: row.get(0)?, community_id: row.get(1)?, actor_did: row.get(2)?,
-            action_type: row.get(3)?, target_type: row.get(4)?, target_id: row.get(5)?,
-            metadata_json: row.get(6)?, content_detail: row.get(7)?, created_at: row.get(8)?,
-        })).map_err(|e| Error::DatabaseError(e.to_string()))?;
+        let rows = stmt
+            .query_map(params![community_id, limit as i64, offset as i64], |row| {
+                Ok(CommunityAuditLogRecord {
+                    id: row.get(0)?,
+                    community_id: row.get(1)?,
+                    actor_did: row.get(2)?,
+                    action_type: row.get(3)?,
+                    target_type: row.get(4)?,
+                    target_id: row.get(5)?,
+                    metadata_json: row.get(6)?,
+                    content_detail: row.get(7)?,
+                    created_at: row.get(8)?,
+                })
+            })
+            .map_err(|e| Error::DatabaseError(e.to_string()))?;
 
         let mut entries = Vec::new();
-        for row in rows { entries.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?); }
+        for row in rows {
+            entries.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?);
+        }
         Ok(entries)
     }
 
@@ -2482,12 +2940,22 @@ impl Database {
     /// Store a community message
     #[allow(clippy::too_many_arguments)]
     pub fn store_community_message(
-        &self, id: &str, channel_id: &str, sender_did: &str,
-        content_encrypted: Option<&[u8]>, content_plaintext: Option<&str>,
-        nonce: Option<&str>, key_version: Option<i32>, is_e2ee: bool,
-        reply_to_id: Option<&str>, thread_id: Option<&str>,
-        has_embed: bool, has_attachment: bool, content_warning: Option<&str>,
-        created_at: i64, metadata_json: Option<&str>,
+        &self,
+        id: &str,
+        channel_id: &str,
+        sender_did: &str,
+        content_encrypted: Option<&[u8]>,
+        content_plaintext: Option<&str>,
+        nonce: Option<&str>,
+        key_version: Option<i32>,
+        is_e2ee: bool,
+        reply_to_id: Option<&str>,
+        thread_id: Option<&str>,
+        has_embed: bool,
+        has_attachment: bool,
+        content_warning: Option<&str>,
+        created_at: i64,
+        metadata_json: Option<&str>,
     ) -> Result<()> {
         let conn = self.conn.lock();
         conn.execute(
@@ -2502,12 +2970,22 @@ impl Database {
     /// Used for persisting messages received from the relay / bridge.
     #[allow(clippy::too_many_arguments)]
     pub fn store_community_message_if_not_exists(
-        &self, id: &str, channel_id: &str, sender_did: &str,
-        content_encrypted: Option<&[u8]>, content_plaintext: Option<&str>,
-        nonce: Option<&str>, key_version: Option<i32>, is_e2ee: bool,
-        reply_to_id: Option<&str>, thread_id: Option<&str>,
-        has_embed: bool, has_attachment: bool, content_warning: Option<&str>,
-        created_at: i64, metadata_json: Option<&str>,
+        &self,
+        id: &str,
+        channel_id: &str,
+        sender_did: &str,
+        content_encrypted: Option<&[u8]>,
+        content_plaintext: Option<&str>,
+        nonce: Option<&str>,
+        key_version: Option<i32>,
+        is_e2ee: bool,
+        reply_to_id: Option<&str>,
+        thread_id: Option<&str>,
+        has_embed: bool,
+        has_attachment: bool,
+        content_warning: Option<&str>,
+        created_at: i64,
+        metadata_json: Option<&str>,
     ) -> Result<()> {
         let conn = self.conn.lock();
         conn.execute(
@@ -2519,9 +2997,16 @@ impl Database {
     }
 
     /// Get messages for a channel
-    pub fn get_community_messages(&self, channel_id: &str, limit: usize, before_timestamp: Option<i64>) -> Result<Vec<CommunityMessageRecord>> {
+    pub fn get_community_messages(
+        &self,
+        channel_id: &str,
+        limit: usize,
+        before_timestamp: Option<i64>,
+    ) -> Result<Vec<CommunityMessageRecord>> {
         let conn = self.conn.lock();
-        let (sql, params_vec): (&str, Vec<Box<dyn rusqlite::types::ToSql>>) = if let Some(before) = before_timestamp {
+        let (sql, params_vec): (&str, Vec<Box<dyn rusqlite::types::ToSql>>) = if let Some(before) =
+            before_timestamp
+        {
             ("SELECT id, channel_id, sender_did, content_encrypted, content_plaintext, nonce, key_version, is_e2ee, reply_to_id, thread_id, has_embed, has_attachment, content_warning, edited_at, deleted_for_everyone, created_at, metadata_json FROM community_messages WHERE channel_id = ? AND created_at < ? AND deleted_for_everyone = 0 ORDER BY created_at DESC LIMIT ?",
              vec![Box::new(channel_id.to_string()), Box::new(before), Box::new(limit as i64)])
         } else {
@@ -2529,21 +3014,39 @@ impl Database {
              vec![Box::new(channel_id.to_string()), Box::new(limit as i64)])
         };
 
-        let mut stmt = conn.prepare(sql).map_err(|e| Error::DatabaseError(e.to_string()))?;
-        let params_refs: Vec<&dyn rusqlite::types::ToSql> = params_vec.iter().map(|p| p.as_ref()).collect();
-        let rows = stmt.query_map(params_refs.as_slice(), |row| Ok(CommunityMessageRecord {
-            id: row.get(0)?, channel_id: row.get(1)?, sender_did: row.get(2)?,
-            content_encrypted: row.get(3)?, content_plaintext: row.get(4)?,
-            nonce: row.get(5)?, key_version: row.get(6)?,
-            is_e2ee: row.get::<_, i32>(7)? != 0, reply_to_id: row.get(8)?,
-            thread_id: row.get(9)?, has_embed: row.get::<_, i32>(10)? != 0,
-            has_attachment: row.get::<_, i32>(11)? != 0, content_warning: row.get(12)?,
-            edited_at: row.get(13)?, deleted_for_everyone: row.get::<_, i32>(14)? != 0,
-            created_at: row.get(15)?, metadata_json: row.get(16)?,
-        })).map_err(|e| Error::DatabaseError(e.to_string()))?;
+        let mut stmt = conn
+            .prepare(sql)
+            .map_err(|e| Error::DatabaseError(e.to_string()))?;
+        let params_refs: Vec<&dyn rusqlite::types::ToSql> =
+            params_vec.iter().map(|p| p.as_ref()).collect();
+        let rows = stmt
+            .query_map(params_refs.as_slice(), |row| {
+                Ok(CommunityMessageRecord {
+                    id: row.get(0)?,
+                    channel_id: row.get(1)?,
+                    sender_did: row.get(2)?,
+                    content_encrypted: row.get(3)?,
+                    content_plaintext: row.get(4)?,
+                    nonce: row.get(5)?,
+                    key_version: row.get(6)?,
+                    is_e2ee: row.get::<_, i32>(7)? != 0,
+                    reply_to_id: row.get(8)?,
+                    thread_id: row.get(9)?,
+                    has_embed: row.get::<_, i32>(10)? != 0,
+                    has_attachment: row.get::<_, i32>(11)? != 0,
+                    content_warning: row.get(12)?,
+                    edited_at: row.get(13)?,
+                    deleted_for_everyone: row.get::<_, i32>(14)? != 0,
+                    created_at: row.get(15)?,
+                    metadata_json: row.get(16)?,
+                })
+            })
+            .map_err(|e| Error::DatabaseError(e.to_string()))?;
 
         let mut messages = Vec::new();
-        for row in rows { messages.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?); }
+        for row in rows {
+            messages.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?);
+        }
         messages.reverse(); // Chronological order
         Ok(messages)
     }
@@ -2573,7 +3076,14 @@ impl Database {
     }
 
     /// Edit a message (update plaintext content)
-    pub fn edit_community_message(&self, id: &str, content_plaintext: Option<&str>, content_encrypted: Option<&[u8]>, nonce: Option<&str>, edited_at: i64) -> Result<()> {
+    pub fn edit_community_message(
+        &self,
+        id: &str,
+        content_plaintext: Option<&str>,
+        content_encrypted: Option<&[u8]>,
+        nonce: Option<&str>,
+        edited_at: i64,
+    ) -> Result<()> {
         let conn = self.conn.lock();
         conn.execute(
             "UPDATE community_messages SET content_plaintext = ?, content_encrypted = ?, nonce = ?, edited_at = ? WHERE id = ?",
@@ -2593,7 +3103,12 @@ impl Database {
     }
 
     /// Delete a message for a specific member only
-    pub fn delete_community_message_for_me(&self, message_id: &str, member_did: &str, deleted_at: i64) -> Result<()> {
+    pub fn delete_community_message_for_me(
+        &self,
+        message_id: &str,
+        member_did: &str,
+        deleted_at: i64,
+    ) -> Result<()> {
         let conn = self.conn.lock();
         conn.execute(
             "INSERT OR IGNORE INTO community_deleted_messages (message_id, member_did, deleted_at) VALUES (?, ?, ?)",
@@ -2605,7 +3120,14 @@ impl Database {
     // ── Reactions (Phase 2) ─────────────────────────────────────────────
 
     /// Add a reaction to a message
-    pub fn add_community_reaction(&self, message_id: &str, member_did: &str, emoji: &str, is_custom: bool, created_at: i64) -> Result<()> {
+    pub fn add_community_reaction(
+        &self,
+        message_id: &str,
+        member_did: &str,
+        emoji: &str,
+        is_custom: bool,
+        created_at: i64,
+    ) -> Result<()> {
         let conn = self.conn.lock();
         conn.execute(
             "INSERT OR IGNORE INTO community_reactions (message_id, member_did, emoji, is_custom, created_at) VALUES (?, ?, ?, ?, ?)",
@@ -2615,36 +3137,60 @@ impl Database {
     }
 
     /// Remove a reaction from a message
-    pub fn remove_community_reaction(&self, message_id: &str, member_did: &str, emoji: &str) -> Result<()> {
+    pub fn remove_community_reaction(
+        &self,
+        message_id: &str,
+        member_did: &str,
+        emoji: &str,
+    ) -> Result<()> {
         let conn = self.conn.lock();
         conn.execute(
             "DELETE FROM community_reactions WHERE message_id = ? AND member_did = ? AND emoji = ?",
             params![message_id, member_did, emoji],
-        ).map_err(|e| Error::DatabaseError(e.to_string()))?;
+        )
+        .map_err(|e| Error::DatabaseError(e.to_string()))?;
         Ok(())
     }
 
     /// Get all reactions for a message
-    pub fn get_community_reactions(&self, message_id: &str) -> Result<Vec<CommunityReactionRecord>> {
+    pub fn get_community_reactions(
+        &self,
+        message_id: &str,
+    ) -> Result<Vec<CommunityReactionRecord>> {
         let conn = self.conn.lock();
         let mut stmt = conn.prepare(
             "SELECT message_id, member_did, emoji, is_custom, created_at FROM community_reactions WHERE message_id = ? ORDER BY created_at",
         ).map_err(|e| Error::DatabaseError(e.to_string()))?;
 
-        let rows = stmt.query_map(params![message_id], |row| Ok(CommunityReactionRecord {
-            message_id: row.get(0)?, member_did: row.get(1)?, emoji: row.get(2)?,
-            is_custom: row.get::<_, i32>(3)? != 0, created_at: row.get(4)?,
-        })).map_err(|e| Error::DatabaseError(e.to_string()))?;
+        let rows = stmt
+            .query_map(params![message_id], |row| {
+                Ok(CommunityReactionRecord {
+                    message_id: row.get(0)?,
+                    member_did: row.get(1)?,
+                    emoji: row.get(2)?,
+                    is_custom: row.get::<_, i32>(3)? != 0,
+                    created_at: row.get(4)?,
+                })
+            })
+            .map_err(|e| Error::DatabaseError(e.to_string()))?;
 
         let mut reactions = Vec::new();
-        for row in rows { reactions.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?); }
+        for row in rows {
+            reactions.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?);
+        }
         Ok(reactions)
     }
 
     // ── Read Receipts (Phase 2) ─────────────────────────────────────────
 
     /// Update a read receipt for a member in a channel
-    pub fn update_read_receipt(&self, channel_id: &str, member_did: &str, last_read_message_id: &str, read_at: i64) -> Result<()> {
+    pub fn update_read_receipt(
+        &self,
+        channel_id: &str,
+        member_did: &str,
+        last_read_message_id: &str,
+        read_at: i64,
+    ) -> Result<()> {
         let conn = self.conn.lock();
         conn.execute(
             "INSERT OR REPLACE INTO community_read_receipts (channel_id, member_did, last_read_message_id, read_at) VALUES (?, ?, ?, ?)",
@@ -2660,20 +3206,34 @@ impl Database {
             "SELECT channel_id, member_did, last_read_message_id, read_at FROM community_read_receipts WHERE channel_id = ?",
         ).map_err(|e| Error::DatabaseError(e.to_string()))?;
 
-        let rows = stmt.query_map(params![channel_id], |row| Ok(CommunityReadReceiptRecord {
-            channel_id: row.get(0)?, member_did: row.get(1)?,
-            last_read_message_id: row.get(2)?, read_at: row.get(3)?,
-        })).map_err(|e| Error::DatabaseError(e.to_string()))?;
+        let rows = stmt
+            .query_map(params![channel_id], |row| {
+                Ok(CommunityReadReceiptRecord {
+                    channel_id: row.get(0)?,
+                    member_did: row.get(1)?,
+                    last_read_message_id: row.get(2)?,
+                    read_at: row.get(3)?,
+                })
+            })
+            .map_err(|e| Error::DatabaseError(e.to_string()))?;
 
         let mut receipts = Vec::new();
-        for row in rows { receipts.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?); }
+        for row in rows {
+            receipts.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?);
+        }
         Ok(receipts)
     }
 
     // ── Pins (Phase 2 / Phase 10) ──────────────────────────────────────
 
     /// Pin a message
-    pub fn pin_community_message(&self, channel_id: &str, message_id: &str, pinned_by: &str, pinned_at: i64) -> Result<()> {
+    pub fn pin_community_message(
+        &self,
+        channel_id: &str,
+        message_id: &str,
+        pinned_by: &str,
+        pinned_at: i64,
+    ) -> Result<()> {
         let conn = self.conn.lock();
         conn.execute(
             "INSERT OR IGNORE INTO community_pins (channel_id, message_id, pinned_by, pinned_at) VALUES (?, ?, ?, ?)",
@@ -2688,7 +3248,8 @@ impl Database {
         conn.execute(
             "DELETE FROM community_pins WHERE channel_id = ? AND message_id = ?",
             params![channel_id, message_id],
-        ).map_err(|e| Error::DatabaseError(e.to_string()))?;
+        )
+        .map_err(|e| Error::DatabaseError(e.to_string()))?;
         Ok(())
     }
 
@@ -2699,30 +3260,49 @@ impl Database {
             "SELECT channel_id, message_id, pinned_by, pinned_at FROM community_pins WHERE channel_id = ? ORDER BY pinned_at DESC",
         ).map_err(|e| Error::DatabaseError(e.to_string()))?;
 
-        let rows = stmt.query_map(params![channel_id], |row| Ok(CommunityPinRecord {
-            channel_id: row.get(0)?, message_id: row.get(1)?,
-            pinned_by: row.get(2)?, pinned_at: row.get(3)?,
-        })).map_err(|e| Error::DatabaseError(e.to_string()))?;
+        let rows = stmt
+            .query_map(params![channel_id], |row| {
+                Ok(CommunityPinRecord {
+                    channel_id: row.get(0)?,
+                    message_id: row.get(1)?,
+                    pinned_by: row.get(2)?,
+                    pinned_at: row.get(3)?,
+                })
+            })
+            .map_err(|e| Error::DatabaseError(e.to_string()))?;
 
         let mut pins = Vec::new();
-        for row in rows { pins.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?); }
+        for row in rows {
+            pins.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?);
+        }
         Ok(pins)
     }
 
     /// Get pin count for a channel
     pub fn get_community_pin_count(&self, channel_id: &str) -> Result<i32> {
         let conn = self.conn.lock();
-        let count: i32 = conn.query_row(
-            "SELECT COUNT(*) FROM community_pins WHERE channel_id = ?",
-            params![channel_id], |row| row.get(0),
-        ).map_err(|e| Error::DatabaseError(e.to_string()))?;
+        let count: i32 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM community_pins WHERE channel_id = ?",
+                params![channel_id],
+                |row| row.get(0),
+            )
+            .map_err(|e| Error::DatabaseError(e.to_string()))?;
         Ok(count)
     }
 
     // ── Threads (Phase 3) ───────────────────────────────────────────────
 
     /// Create a thread from a parent message
-    pub fn create_community_thread(&self, id: &str, channel_id: &str, parent_message_id: &str, name: Option<&str>, created_by: &str, created_at: i64) -> Result<()> {
+    pub fn create_community_thread(
+        &self,
+        id: &str,
+        channel_id: &str,
+        parent_message_id: &str,
+        name: Option<&str>,
+        created_by: &str,
+        created_at: i64,
+    ) -> Result<()> {
         let conn = self.conn.lock();
         conn.execute(
             "INSERT INTO community_threads (id, channel_id, parent_message_id, name, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?)",
@@ -2732,7 +3312,8 @@ impl Database {
         conn.execute(
             "UPDATE community_messages SET thread_id = ? WHERE id = ?",
             params![id, parent_message_id],
-        ).map_err(|e| Error::DatabaseError(e.to_string()))?;
+        )
+        .map_err(|e| Error::DatabaseError(e.to_string()))?;
         Ok(())
     }
 
@@ -2762,14 +3343,25 @@ impl Database {
             "SELECT id, channel_id, parent_message_id, name, created_by, message_count, last_message_at, created_at FROM community_threads WHERE channel_id = ? ORDER BY last_message_at DESC NULLS LAST, created_at DESC",
         ).map_err(|e| Error::DatabaseError(e.to_string()))?;
 
-        let rows = stmt.query_map(params![channel_id], |row| Ok(CommunityThreadRecord {
-            id: row.get(0)?, channel_id: row.get(1)?, parent_message_id: row.get(2)?,
-            name: row.get(3)?, created_by: row.get(4)?, message_count: row.get(5)?,
-            last_message_at: row.get(6)?, created_at: row.get(7)?,
-        })).map_err(|e| Error::DatabaseError(e.to_string()))?;
+        let rows = stmt
+            .query_map(params![channel_id], |row| {
+                Ok(CommunityThreadRecord {
+                    id: row.get(0)?,
+                    channel_id: row.get(1)?,
+                    parent_message_id: row.get(2)?,
+                    name: row.get(3)?,
+                    created_by: row.get(4)?,
+                    message_count: row.get(5)?,
+                    last_message_at: row.get(6)?,
+                    created_at: row.get(7)?,
+                })
+            })
+            .map_err(|e| Error::DatabaseError(e.to_string()))?;
 
         let mut threads = Vec::new();
-        for row in rows { threads.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?); }
+        for row in rows {
+            threads.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?);
+        }
         Ok(threads)
     }
 
@@ -2787,8 +3379,13 @@ impl Database {
 
     /// Set a channel permission override
     pub fn set_channel_permission_override(
-        &self, id: &str, channel_id: &str, target_type: &str, target_id: &str,
-        allow_bitfield: &str, deny_bitfield: &str,
+        &self,
+        id: &str,
+        channel_id: &str,
+        target_type: &str,
+        target_id: &str,
+        allow_bitfield: &str,
+        deny_bitfield: &str,
     ) -> Result<()> {
         let conn = self.conn.lock();
         conn.execute(
@@ -2799,61 +3396,108 @@ impl Database {
     }
 
     /// Get all permission overrides for a channel
-    pub fn get_channel_permission_overrides(&self, channel_id: &str) -> Result<Vec<ChannelPermissionOverrideRecord>> {
+    pub fn get_channel_permission_overrides(
+        &self,
+        channel_id: &str,
+    ) -> Result<Vec<ChannelPermissionOverrideRecord>> {
         let conn = self.conn.lock();
         let mut stmt = conn.prepare(
             "SELECT id, channel_id, target_type, target_id, allow_bitfield, deny_bitfield FROM channel_permission_overrides WHERE channel_id = ?",
         ).map_err(|e| Error::DatabaseError(e.to_string()))?;
 
-        let rows = stmt.query_map(params![channel_id], |row| Ok(ChannelPermissionOverrideRecord {
-            id: row.get(0)?, channel_id: row.get(1)?, target_type: row.get(2)?,
-            target_id: row.get(3)?, allow_bitfield: row.get(4)?, deny_bitfield: row.get(5)?,
-        })).map_err(|e| Error::DatabaseError(e.to_string()))?;
+        let rows = stmt
+            .query_map(params![channel_id], |row| {
+                Ok(ChannelPermissionOverrideRecord {
+                    id: row.get(0)?,
+                    channel_id: row.get(1)?,
+                    target_type: row.get(2)?,
+                    target_id: row.get(3)?,
+                    allow_bitfield: row.get(4)?,
+                    deny_bitfield: row.get(5)?,
+                })
+            })
+            .map_err(|e| Error::DatabaseError(e.to_string()))?;
 
         let mut overrides = Vec::new();
-        for row in rows { overrides.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?); }
+        for row in rows {
+            overrides.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?);
+        }
         Ok(overrides)
     }
 
     /// Remove a channel permission override
     pub fn remove_channel_permission_override(&self, id: &str) -> Result<()> {
         let conn = self.conn.lock();
-        conn.execute("DELETE FROM channel_permission_overrides WHERE id = ?", params![id])
-            .map_err(|e| Error::DatabaseError(e.to_string()))?;
+        conn.execute(
+            "DELETE FROM channel_permission_overrides WHERE id = ?",
+            params![id],
+        )
+        .map_err(|e| Error::DatabaseError(e.to_string()))?;
         Ok(())
     }
 
     /// Update a role's permissions
-    pub fn update_community_role_permissions(&self, role_id: &str, permissions_bitfield: &str, updated_at: i64) -> Result<()> {
+    pub fn update_community_role_permissions(
+        &self,
+        role_id: &str,
+        permissions_bitfield: &str,
+        updated_at: i64,
+    ) -> Result<()> {
         let conn = self.conn.lock();
         conn.execute(
             "UPDATE community_roles SET permissions_bitfield = ?, updated_at = ? WHERE id = ?",
             params![permissions_bitfield, updated_at, role_id],
-        ).map_err(|e| Error::DatabaseError(e.to_string()))?;
+        )
+        .map_err(|e| Error::DatabaseError(e.to_string()))?;
         Ok(())
     }
 
     /// Update a role's properties (name, color, etc)
     #[allow(clippy::too_many_arguments)]
     pub fn update_community_role(
-        &self, role_id: &str, name: Option<&str>, color: Option<&str>,
-        hoisted: Option<bool>, mentionable: Option<bool>, position: Option<i32>, updated_at: i64,
+        &self,
+        role_id: &str,
+        name: Option<&str>,
+        color: Option<&str>,
+        hoisted: Option<bool>,
+        mentionable: Option<bool>,
+        position: Option<i32>,
+        updated_at: i64,
     ) -> Result<()> {
         let conn = self.conn.lock();
         // Build dynamic update query
         let mut updates = vec!["updated_at = ?"];
         let mut param_values: Vec<Box<dyn rusqlite::types::ToSql>> = vec![Box::new(updated_at)];
 
-        if let Some(n) = name { updates.push("name = ?"); param_values.push(Box::new(n.to_string())); }
-        if let Some(c) = color { updates.push("color = ?"); param_values.push(Box::new(c.to_string())); }
-        if let Some(h) = hoisted { updates.push("hoisted = ?"); param_values.push(Box::new(h as i32)); }
-        if let Some(m) = mentionable { updates.push("mentionable = ?"); param_values.push(Box::new(m as i32)); }
-        if let Some(p) = position { updates.push("position = ?"); param_values.push(Box::new(p)); }
+        if let Some(n) = name {
+            updates.push("name = ?");
+            param_values.push(Box::new(n.to_string()));
+        }
+        if let Some(c) = color {
+            updates.push("color = ?");
+            param_values.push(Box::new(c.to_string()));
+        }
+        if let Some(h) = hoisted {
+            updates.push("hoisted = ?");
+            param_values.push(Box::new(h as i32));
+        }
+        if let Some(m) = mentionable {
+            updates.push("mentionable = ?");
+            param_values.push(Box::new(m as i32));
+        }
+        if let Some(p) = position {
+            updates.push("position = ?");
+            param_values.push(Box::new(p));
+        }
 
-        let sql = format!("UPDATE community_roles SET {} WHERE id = ?", updates.join(", "));
+        let sql = format!(
+            "UPDATE community_roles SET {} WHERE id = ?",
+            updates.join(", ")
+        );
         param_values.push(Box::new(role_id.to_string()));
 
-        let params_refs: Vec<&dyn rusqlite::types::ToSql> = param_values.iter().map(|p| p.as_ref()).collect();
+        let params_refs: Vec<&dyn rusqlite::types::ToSql> =
+            param_values.iter().map(|p| p.as_ref()).collect();
         conn.execute(&sql, params_refs.as_slice())
             .map_err(|e| Error::DatabaseError(e.to_string()))?;
         Ok(())
@@ -2863,20 +3507,38 @@ impl Database {
     pub fn delete_community_role(&self, role_id: &str) -> Result<()> {
         let conn = self.conn.lock();
         // Remove role assignments first
-        conn.execute("DELETE FROM community_member_roles WHERE role_id = ?", params![role_id])
-            .map_err(|e| Error::DatabaseError(e.to_string()))?;
+        conn.execute(
+            "DELETE FROM community_member_roles WHERE role_id = ?",
+            params![role_id],
+        )
+        .map_err(|e| Error::DatabaseError(e.to_string()))?;
         // Remove channel overrides for this role
-        conn.execute("DELETE FROM channel_permission_overrides WHERE target_type = 'role' AND target_id = ?", params![role_id])
-            .map_err(|e| Error::DatabaseError(e.to_string()))?;
-        conn.execute("DELETE FROM community_roles WHERE id = ? AND is_preset = 0", params![role_id])
-            .map_err(|e| Error::DatabaseError(e.to_string()))?;
+        conn.execute(
+            "DELETE FROM channel_permission_overrides WHERE target_type = 'role' AND target_id = ?",
+            params![role_id],
+        )
+        .map_err(|e| Error::DatabaseError(e.to_string()))?;
+        conn.execute(
+            "DELETE FROM community_roles WHERE id = ? AND is_preset = 0",
+            params![role_id],
+        )
+        .map_err(|e| Error::DatabaseError(e.to_string()))?;
         Ok(())
     }
 
     // ── Warnings (Phase 5) ──────────────────────────────────────────────
 
     /// Create a warning
-    pub fn create_community_warning(&self, id: &str, community_id: &str, member_did: &str, reason: &str, warned_by: &str, expires_at: Option<i64>, created_at: i64) -> Result<()> {
+    pub fn create_community_warning(
+        &self,
+        id: &str,
+        community_id: &str,
+        member_did: &str,
+        reason: &str,
+        warned_by: &str,
+        expires_at: Option<i64>,
+        created_at: i64,
+    ) -> Result<()> {
         let conn = self.conn.lock();
         conn.execute(
             "INSERT INTO community_warnings (id, community_id, member_did, reason, warned_by, expires_at, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -2886,41 +3548,77 @@ impl Database {
     }
 
     /// Get warnings for a member in a community
-    pub fn get_community_member_warnings(&self, community_id: &str, member_did: &str) -> Result<Vec<CommunityWarningRecord>> {
+    pub fn get_community_member_warnings(
+        &self,
+        community_id: &str,
+        member_did: &str,
+    ) -> Result<Vec<CommunityWarningRecord>> {
         let conn = self.conn.lock();
         let mut stmt = conn.prepare(
             "SELECT id, community_id, member_did, reason, warned_by, expires_at, created_at FROM community_warnings WHERE community_id = ? AND member_did = ? ORDER BY created_at DESC",
         ).map_err(|e| Error::DatabaseError(e.to_string()))?;
 
-        let rows = stmt.query_map(params![community_id, member_did], |row| Ok(CommunityWarningRecord {
-            id: row.get(0)?, community_id: row.get(1)?, member_did: row.get(2)?,
-            reason: row.get(3)?, warned_by: row.get(4)?, expires_at: row.get(5)?, created_at: row.get(6)?,
-        })).map_err(|e| Error::DatabaseError(e.to_string()))?;
+        let rows = stmt
+            .query_map(params![community_id, member_did], |row| {
+                Ok(CommunityWarningRecord {
+                    id: row.get(0)?,
+                    community_id: row.get(1)?,
+                    member_did: row.get(2)?,
+                    reason: row.get(3)?,
+                    warned_by: row.get(4)?,
+                    expires_at: row.get(5)?,
+                    created_at: row.get(6)?,
+                })
+            })
+            .map_err(|e| Error::DatabaseError(e.to_string()))?;
 
         let mut warnings = Vec::new();
-        for row in rows { warnings.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?); }
+        for row in rows {
+            warnings.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?);
+        }
         Ok(warnings)
     }
 
     /// Get all warnings for a community
-    pub fn get_community_warnings(&self, community_id: &str, limit: usize, offset: usize) -> Result<Vec<CommunityWarningRecord>> {
+    pub fn get_community_warnings(
+        &self,
+        community_id: &str,
+        limit: usize,
+        offset: usize,
+    ) -> Result<Vec<CommunityWarningRecord>> {
         let conn = self.conn.lock();
         let mut stmt = conn.prepare(
             "SELECT id, community_id, member_did, reason, warned_by, expires_at, created_at FROM community_warnings WHERE community_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
         ).map_err(|e| Error::DatabaseError(e.to_string()))?;
 
-        let rows = stmt.query_map(params![community_id, limit as i64, offset as i64], |row| Ok(CommunityWarningRecord {
-            id: row.get(0)?, community_id: row.get(1)?, member_did: row.get(2)?,
-            reason: row.get(3)?, warned_by: row.get(4)?, expires_at: row.get(5)?, created_at: row.get(6)?,
-        })).map_err(|e| Error::DatabaseError(e.to_string()))?;
+        let rows = stmt
+            .query_map(params![community_id, limit as i64, offset as i64], |row| {
+                Ok(CommunityWarningRecord {
+                    id: row.get(0)?,
+                    community_id: row.get(1)?,
+                    member_did: row.get(2)?,
+                    reason: row.get(3)?,
+                    warned_by: row.get(4)?,
+                    expires_at: row.get(5)?,
+                    created_at: row.get(6)?,
+                })
+            })
+            .map_err(|e| Error::DatabaseError(e.to_string()))?;
 
         let mut warnings = Vec::new();
-        for row in rows { warnings.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?); }
+        for row in rows {
+            warnings.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?);
+        }
         Ok(warnings)
     }
 
     /// Get active (non-expired) warning count for a member
-    pub fn get_active_warning_count(&self, community_id: &str, member_did: &str, now: i64) -> Result<i32> {
+    pub fn get_active_warning_count(
+        &self,
+        community_id: &str,
+        member_did: &str,
+        now: i64,
+    ) -> Result<i32> {
         let conn = self.conn.lock();
         let count: i32 = conn.query_row(
             "SELECT COUNT(*) FROM community_warnings WHERE community_id = ? AND member_did = ? AND (expires_at IS NULL OR expires_at > ?)",
@@ -2943,9 +3641,17 @@ impl Database {
     /// Store a file record
     #[allow(clippy::too_many_arguments)]
     pub fn store_community_file(
-        &self, id: &str, channel_id: &str, folder_id: Option<&str>,
-        filename: &str, description: Option<&str>, file_size: i64,
-        mime_type: Option<&str>, storage_chunks_json: &str, uploaded_by: &str, created_at: i64,
+        &self,
+        id: &str,
+        channel_id: &str,
+        folder_id: Option<&str>,
+        filename: &str,
+        description: Option<&str>,
+        file_size: i64,
+        mime_type: Option<&str>,
+        storage_chunks_json: &str,
+        uploaded_by: &str,
+        created_at: i64,
     ) -> Result<()> {
         let conn = self.conn.lock();
         conn.execute(
@@ -3019,9 +3725,17 @@ impl Database {
     }
 
     /// Get files in a channel
-    pub fn get_community_files(&self, channel_id: &str, folder_id: Option<&str>, limit: usize, offset: usize) -> Result<Vec<CommunityFileRecord>> {
+    pub fn get_community_files(
+        &self,
+        channel_id: &str,
+        folder_id: Option<&str>,
+        limit: usize,
+        offset: usize,
+    ) -> Result<Vec<CommunityFileRecord>> {
         let conn = self.conn.lock();
-        let (sql, params_vec): (&str, Vec<Box<dyn rusqlite::types::ToSql>>) = if let Some(fid) = folder_id {
+        let (sql, params_vec): (&str, Vec<Box<dyn rusqlite::types::ToSql>>) = if let Some(fid) =
+            folder_id
+        {
             ("SELECT id, channel_id, folder_id, filename, description, file_size, mime_type, storage_chunks_json, uploaded_by, version, download_count, created_at FROM community_files WHERE channel_id = ? AND folder_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
              vec![Box::new(channel_id.to_string()), Box::new(fid.to_string()), Box::new(limit as i64), Box::new(offset as i64)])
         } else {
@@ -3029,17 +3743,35 @@ impl Database {
              vec![Box::new(channel_id.to_string()), Box::new(limit as i64), Box::new(offset as i64)])
         };
 
-        let mut stmt = conn.prepare(sql).map_err(|e| Error::DatabaseError(e.to_string()))?;
-        let params_refs: Vec<&dyn rusqlite::types::ToSql> = params_vec.iter().map(|p| p.as_ref()).collect();
-        let rows = stmt.query_map(params_refs.as_slice(), |row| Ok(CommunityFileRecord {
-            id: row.get(0)?, channel_id: row.get(1)?, folder_id: row.get(2)?,
-            filename: row.get(3)?, description: row.get(4)?, file_size: row.get(5)?,
-            mime_type: row.get(6)?, storage_chunks_json: row.get(7)?, uploaded_by: row.get(8)?,
-            version: row.get(9)?, previous_version_id: None, download_count: row.get(10)?, created_at: row.get(11)?,
-        })).map_err(|e| Error::DatabaseError(e.to_string()))?;
+        let mut stmt = conn
+            .prepare(sql)
+            .map_err(|e| Error::DatabaseError(e.to_string()))?;
+        let params_refs: Vec<&dyn rusqlite::types::ToSql> =
+            params_vec.iter().map(|p| p.as_ref()).collect();
+        let rows = stmt
+            .query_map(params_refs.as_slice(), |row| {
+                Ok(CommunityFileRecord {
+                    id: row.get(0)?,
+                    channel_id: row.get(1)?,
+                    folder_id: row.get(2)?,
+                    filename: row.get(3)?,
+                    description: row.get(4)?,
+                    file_size: row.get(5)?,
+                    mime_type: row.get(6)?,
+                    storage_chunks_json: row.get(7)?,
+                    uploaded_by: row.get(8)?,
+                    version: row.get(9)?,
+                    previous_version_id: None,
+                    download_count: row.get(10)?,
+                    created_at: row.get(11)?,
+                })
+            })
+            .map_err(|e| Error::DatabaseError(e.to_string()))?;
 
         let mut files = Vec::new();
-        for row in rows { files.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?); }
+        for row in rows {
+            files.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?);
+        }
         Ok(files)
     }
 
@@ -3066,8 +3798,11 @@ impl Database {
     /// Increment download count
     pub fn increment_file_download_count(&self, id: &str) -> Result<()> {
         let conn = self.conn.lock();
-        conn.execute("UPDATE community_files SET download_count = download_count + 1 WHERE id = ?", params![id])
-            .map_err(|e| Error::DatabaseError(e.to_string()))?;
+        conn.execute(
+            "UPDATE community_files SET download_count = download_count + 1 WHERE id = ?",
+            params![id],
+        )
+        .map_err(|e| Error::DatabaseError(e.to_string()))?;
         Ok(())
     }
 
@@ -3105,16 +3840,30 @@ impl Database {
         let mut stmt = conn.prepare(
             "SELECT id, channel_id, folder_id, filename, description, file_size, mime_type, storage_chunks_json, uploaded_by, version, previous_version_id, download_count, created_at FROM community_files WHERE channel_id = ? AND needs_reencryption = 1 LIMIT ?",
         ).map_err(|e| Error::DatabaseError(e.to_string()))?;
-        let rows = stmt.query_map(params![channel_id, limit as i64], |row| Ok(CommunityFileRecord {
-            id: row.get(0)?, channel_id: row.get(1)?, folder_id: row.get(2)?,
-            filename: row.get(3)?, description: row.get(4)?, file_size: row.get(5)?,
-            mime_type: row.get(6)?, storage_chunks_json: row.get(7)?, uploaded_by: row.get(8)?,
-            version: row.get(9)?, previous_version_id: row.get(10)?, download_count: row.get(11)?,
-            created_at: row.get(12)?,
-        })).map_err(|e| Error::DatabaseError(e.to_string()))?;
+        let rows = stmt
+            .query_map(params![channel_id, limit as i64], |row| {
+                Ok(CommunityFileRecord {
+                    id: row.get(0)?,
+                    channel_id: row.get(1)?,
+                    folder_id: row.get(2)?,
+                    filename: row.get(3)?,
+                    description: row.get(4)?,
+                    file_size: row.get(5)?,
+                    mime_type: row.get(6)?,
+                    storage_chunks_json: row.get(7)?,
+                    uploaded_by: row.get(8)?,
+                    version: row.get(9)?,
+                    previous_version_id: row.get(10)?,
+                    download_count: row.get(11)?,
+                    created_at: row.get(12)?,
+                })
+            })
+            .map_err(|e| Error::DatabaseError(e.to_string()))?;
 
         let mut files = Vec::new();
-        for row in rows { files.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?); }
+        for row in rows {
+            files.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?);
+        }
         Ok(files)
     }
 
@@ -3133,7 +3882,15 @@ impl Database {
     }
 
     /// Create a folder
-    pub fn create_community_file_folder(&self, id: &str, channel_id: &str, parent_folder_id: Option<&str>, name: &str, created_by: &str, created_at: i64) -> Result<()> {
+    pub fn create_community_file_folder(
+        &self,
+        id: &str,
+        channel_id: &str,
+        parent_folder_id: Option<&str>,
+        name: &str,
+        created_by: &str,
+        created_at: i64,
+    ) -> Result<()> {
         let conn = self.conn.lock();
         conn.execute(
             "INSERT INTO community_file_folders (id, channel_id, parent_folder_id, name, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?)",
@@ -3143,9 +3900,15 @@ impl Database {
     }
 
     /// Get folders in a channel (optionally within a parent folder)
-    pub fn get_community_file_folders(&self, channel_id: &str, parent_folder_id: Option<&str>) -> Result<Vec<CommunityFileFolderRecord>> {
+    pub fn get_community_file_folders(
+        &self,
+        channel_id: &str,
+        parent_folder_id: Option<&str>,
+    ) -> Result<Vec<CommunityFileFolderRecord>> {
         let conn = self.conn.lock();
-        let (sql, params_vec): (&str, Vec<Box<dyn rusqlite::types::ToSql>>) = if let Some(pid) = parent_folder_id {
+        let (sql, params_vec): (&str, Vec<Box<dyn rusqlite::types::ToSql>>) = if let Some(pid) =
+            parent_folder_id
+        {
             ("SELECT id, channel_id, parent_folder_id, name, created_by, created_at FROM community_file_folders WHERE channel_id = ? AND parent_folder_id = ? ORDER BY name",
              vec![Box::new(channel_id.to_string()), Box::new(pid.to_string())])
         } else {
@@ -3153,30 +3916,55 @@ impl Database {
              vec![Box::new(channel_id.to_string())])
         };
 
-        let mut stmt = conn.prepare(sql).map_err(|e| Error::DatabaseError(e.to_string()))?;
-        let params_refs: Vec<&dyn rusqlite::types::ToSql> = params_vec.iter().map(|p| p.as_ref()).collect();
-        let rows = stmt.query_map(params_refs.as_slice(), |row| Ok(CommunityFileFolderRecord {
-            id: row.get(0)?, channel_id: row.get(1)?, parent_folder_id: row.get(2)?,
-            name: row.get(3)?, created_by: row.get(4)?, created_at: row.get(5)?,
-        })).map_err(|e| Error::DatabaseError(e.to_string()))?;
+        let mut stmt = conn
+            .prepare(sql)
+            .map_err(|e| Error::DatabaseError(e.to_string()))?;
+        let params_refs: Vec<&dyn rusqlite::types::ToSql> =
+            params_vec.iter().map(|p| p.as_ref()).collect();
+        let rows = stmt
+            .query_map(params_refs.as_slice(), |row| {
+                Ok(CommunityFileFolderRecord {
+                    id: row.get(0)?,
+                    channel_id: row.get(1)?,
+                    parent_folder_id: row.get(2)?,
+                    name: row.get(3)?,
+                    created_by: row.get(4)?,
+                    created_at: row.get(5)?,
+                })
+            })
+            .map_err(|e| Error::DatabaseError(e.to_string()))?;
 
         let mut folders = Vec::new();
-        for row in rows { folders.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?); }
+        for row in rows {
+            folders.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?);
+        }
         Ok(folders)
     }
 
     /// Delete a folder (cascades to subfolders and contained files)
     pub fn delete_community_file_folder(&self, id: &str) -> Result<()> {
         let conn = self.conn.lock();
-        conn.execute("DELETE FROM community_file_folders WHERE id = ?", params![id])
-            .map_err(|e| Error::DatabaseError(e.to_string()))?;
+        conn.execute(
+            "DELETE FROM community_file_folders WHERE id = ?",
+            params![id],
+        )
+        .map_err(|e| Error::DatabaseError(e.to_string()))?;
         Ok(())
     }
 
     // ── Emoji (Phase 9) ─────────────────────────────────────────────────
 
     /// Create a custom emoji
-    pub fn create_community_emoji(&self, id: &str, community_id: &str, name: &str, image_url: &str, animated: bool, uploaded_by: &str, created_at: i64) -> Result<()> {
+    pub fn create_community_emoji(
+        &self,
+        id: &str,
+        community_id: &str,
+        name: &str,
+        image_url: &str,
+        animated: bool,
+        uploaded_by: &str,
+        created_at: i64,
+    ) -> Result<()> {
         let conn = self.conn.lock();
         conn.execute(
             "INSERT INTO community_emoji (id, community_id, name, image_url, animated, uploaded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -3192,22 +3980,35 @@ impl Database {
             "SELECT id, community_id, name, image_url, animated, uploaded_by, created_at FROM community_emoji WHERE community_id = ? ORDER BY name",
         ).map_err(|e| Error::DatabaseError(e.to_string()))?;
 
-        let rows = stmt.query_map(params![community_id], |row| Ok(CommunityEmojiRecord {
-            id: row.get(0)?, community_id: row.get(1)?, name: row.get(2)?,
-            image_url: row.get(3)?, animated: row.get::<_, i32>(4)? != 0,
-            uploaded_by: row.get(5)?, created_at: row.get(6)?,
-        })).map_err(|e| Error::DatabaseError(e.to_string()))?;
+        let rows = stmt
+            .query_map(params![community_id], |row| {
+                Ok(CommunityEmojiRecord {
+                    id: row.get(0)?,
+                    community_id: row.get(1)?,
+                    name: row.get(2)?,
+                    image_url: row.get(3)?,
+                    animated: row.get::<_, i32>(4)? != 0,
+                    uploaded_by: row.get(5)?,
+                    created_at: row.get(6)?,
+                })
+            })
+            .map_err(|e| Error::DatabaseError(e.to_string()))?;
 
         let mut emojis = Vec::new();
-        for row in rows { emojis.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?); }
+        for row in rows {
+            emojis.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?);
+        }
         Ok(emojis)
     }
 
     /// Rename a custom emoji
     pub fn rename_community_emoji(&self, id: &str, new_name: &str) -> Result<()> {
         let conn = self.conn.lock();
-        conn.execute("UPDATE community_emoji SET name = ? WHERE id = ?", params![new_name, id])
-            .map_err(|e| Error::DatabaseError(e.to_string()))?;
+        conn.execute(
+            "UPDATE community_emoji SET name = ? WHERE id = ?",
+            params![new_name, id],
+        )
+        .map_err(|e| Error::DatabaseError(e.to_string()))?;
         Ok(())
     }
 
@@ -3221,7 +4022,18 @@ impl Database {
 
     /// Create a custom sticker
     #[allow(clippy::too_many_arguments)]
-    pub fn create_community_sticker(&self, id: &str, community_id: &str, pack_id: Option<&str>, name: &str, image_url: &str, animated: bool, format: &str, uploaded_by: &str, created_at: i64) -> Result<()> {
+    pub fn create_community_sticker(
+        &self,
+        id: &str,
+        community_id: &str,
+        pack_id: Option<&str>,
+        name: &str,
+        image_url: &str,
+        animated: bool,
+        format: &str,
+        uploaded_by: &str,
+        created_at: i64,
+    ) -> Result<()> {
         let conn = self.conn.lock();
         conn.execute(
             "INSERT INTO community_stickers (id, community_id, pack_id, name, image_url, animated, format, uploaded_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -3231,20 +4043,35 @@ impl Database {
     }
 
     /// Get all stickers for a community
-    pub fn get_community_stickers(&self, community_id: &str) -> Result<Vec<CommunityStickerRecord>> {
+    pub fn get_community_stickers(
+        &self,
+        community_id: &str,
+    ) -> Result<Vec<CommunityStickerRecord>> {
         let conn = self.conn.lock();
         let mut stmt = conn.prepare(
             "SELECT id, community_id, pack_id, name, image_url, animated, format, uploaded_by, created_at FROM community_stickers WHERE community_id = ? ORDER BY name",
         ).map_err(|e| Error::DatabaseError(e.to_string()))?;
 
-        let rows = stmt.query_map(params![community_id], |row| Ok(CommunityStickerRecord {
-            id: row.get(0)?, community_id: row.get(1)?, pack_id: row.get(2)?,
-            name: row.get(3)?, image_url: row.get(4)?, animated: row.get::<_, i32>(5)? != 0,
-            format: row.get(6)?, uploaded_by: row.get(7)?, created_at: row.get(8)?,
-        })).map_err(|e| Error::DatabaseError(e.to_string()))?;
+        let rows = stmt
+            .query_map(params![community_id], |row| {
+                Ok(CommunityStickerRecord {
+                    id: row.get(0)?,
+                    community_id: row.get(1)?,
+                    pack_id: row.get(2)?,
+                    name: row.get(3)?,
+                    image_url: row.get(4)?,
+                    animated: row.get::<_, i32>(5)? != 0,
+                    format: row.get(6)?,
+                    uploaded_by: row.get(7)?,
+                    created_at: row.get(8)?,
+                })
+            })
+            .map_err(|e| Error::DatabaseError(e.to_string()))?;
 
         let mut stickers = Vec::new();
-        for row in rows { stickers.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?); }
+        for row in rows {
+            stickers.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?);
+        }
         Ok(stickers)
     }
 
@@ -3260,7 +4087,16 @@ impl Database {
 
     /// Create a sticker pack
     #[allow(clippy::too_many_arguments)]
-    pub fn create_community_sticker_pack(&self, id: &str, community_id: &str, name: &str, description: Option<&str>, cover_sticker_id: Option<&str>, created_by: &str, created_at: i64) -> Result<()> {
+    pub fn create_community_sticker_pack(
+        &self,
+        id: &str,
+        community_id: &str,
+        name: &str,
+        description: Option<&str>,
+        cover_sticker_id: Option<&str>,
+        created_by: &str,
+        created_at: i64,
+    ) -> Result<()> {
         let conn = self.conn.lock();
         conn.execute(
             "INSERT INTO community_sticker_packs (id, community_id, name, description, cover_sticker_id, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -3270,20 +4106,33 @@ impl Database {
     }
 
     /// Get all sticker packs for a community
-    pub fn get_community_sticker_packs(&self, community_id: &str) -> Result<Vec<CommunityStickerPackRecord>> {
+    pub fn get_community_sticker_packs(
+        &self,
+        community_id: &str,
+    ) -> Result<Vec<CommunityStickerPackRecord>> {
         let conn = self.conn.lock();
         let mut stmt = conn.prepare(
             "SELECT id, community_id, name, description, cover_sticker_id, created_by, created_at FROM community_sticker_packs WHERE community_id = ? ORDER BY name",
         ).map_err(|e| Error::DatabaseError(e.to_string()))?;
 
-        let rows = stmt.query_map(params![community_id], |row| Ok(CommunityStickerPackRecord {
-            id: row.get(0)?, community_id: row.get(1)?, name: row.get(2)?,
-            description: row.get(3)?, cover_sticker_id: row.get(4)?,
-            created_by: row.get(5)?, created_at: row.get(6)?,
-        })).map_err(|e| Error::DatabaseError(e.to_string()))?;
+        let rows = stmt
+            .query_map(params![community_id], |row| {
+                Ok(CommunityStickerPackRecord {
+                    id: row.get(0)?,
+                    community_id: row.get(1)?,
+                    name: row.get(2)?,
+                    description: row.get(3)?,
+                    cover_sticker_id: row.get(4)?,
+                    created_by: row.get(5)?,
+                    created_at: row.get(6)?,
+                })
+            })
+            .map_err(|e| Error::DatabaseError(e.to_string()))?;
 
         let mut packs = Vec::new();
-        for row in rows { packs.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?); }
+        for row in rows {
+            packs.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?);
+        }
         Ok(packs)
     }
 
@@ -3291,25 +4140,43 @@ impl Database {
     pub fn delete_community_sticker_pack(&self, id: &str) -> Result<()> {
         let conn = self.conn.lock();
         // First nullify pack_id on stickers referencing this pack
-        conn.execute("UPDATE community_stickers SET pack_id = NULL WHERE pack_id = ?", params![id])
-            .map_err(|e| Error::DatabaseError(e.to_string()))?;
-        conn.execute("DELETE FROM community_sticker_packs WHERE id = ?", params![id])
-            .map_err(|e| Error::DatabaseError(e.to_string()))?;
+        conn.execute(
+            "UPDATE community_stickers SET pack_id = NULL WHERE pack_id = ?",
+            params![id],
+        )
+        .map_err(|e| Error::DatabaseError(e.to_string()))?;
+        conn.execute(
+            "DELETE FROM community_sticker_packs WHERE id = ?",
+            params![id],
+        )
+        .map_err(|e| Error::DatabaseError(e.to_string()))?;
         Ok(())
     }
 
     /// Rename a sticker pack
     pub fn rename_community_sticker_pack(&self, id: &str, new_name: &str) -> Result<()> {
         let conn = self.conn.lock();
-        conn.execute("UPDATE community_sticker_packs SET name = ? WHERE id = ?", params![new_name, id])
-            .map_err(|e| Error::DatabaseError(e.to_string()))?;
+        conn.execute(
+            "UPDATE community_sticker_packs SET name = ? WHERE id = ?",
+            params![new_name, id],
+        )
+        .map_err(|e| Error::DatabaseError(e.to_string()))?;
         Ok(())
     }
 
     // ── Webhooks (Phase 10) ─────────────────────────────────────────────
 
     /// Create a webhook
-    pub fn create_community_webhook(&self, id: &str, channel_id: &str, name: &str, avatar_url: Option<&str>, token: &str, creator_did: &str, created_at: i64) -> Result<()> {
+    pub fn create_community_webhook(
+        &self,
+        id: &str,
+        channel_id: &str,
+        name: &str,
+        avatar_url: Option<&str>,
+        token: &str,
+        creator_did: &str,
+        created_at: i64,
+    ) -> Result<()> {
         let conn = self.conn.lock();
         conn.execute(
             "INSERT INTO community_webhooks (id, channel_id, name, avatar_url, token, creator_did, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -3325,14 +4192,24 @@ impl Database {
             "SELECT id, channel_id, name, avatar_url, token, creator_did, created_at FROM community_webhooks WHERE channel_id = ? ORDER BY created_at",
         ).map_err(|e| Error::DatabaseError(e.to_string()))?;
 
-        let rows = stmt.query_map(params![channel_id], |row| Ok(CommunityWebhookRecord {
-            id: row.get(0)?, channel_id: row.get(1)?, name: row.get(2)?,
-            avatar_url: row.get(3)?, token: row.get(4)?,
-            creator_did: row.get(5)?, created_at: row.get(6)?,
-        })).map_err(|e| Error::DatabaseError(e.to_string()))?;
+        let rows = stmt
+            .query_map(params![channel_id], |row| {
+                Ok(CommunityWebhookRecord {
+                    id: row.get(0)?,
+                    channel_id: row.get(1)?,
+                    name: row.get(2)?,
+                    avatar_url: row.get(3)?,
+                    token: row.get(4)?,
+                    creator_did: row.get(5)?,
+                    created_at: row.get(6)?,
+                })
+            })
+            .map_err(|e| Error::DatabaseError(e.to_string()))?;
 
         let mut webhooks = Vec::new();
-        for row in rows { webhooks.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?); }
+        for row in rows {
+            webhooks.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?);
+        }
         Ok(webhooks)
     }
 
@@ -3356,15 +4233,26 @@ impl Database {
     }
 
     /// Update a webhook
-    pub fn update_community_webhook(&self, id: &str, name: Option<&str>, avatar_url: Option<&str>) -> Result<()> {
+    pub fn update_community_webhook(
+        &self,
+        id: &str,
+        name: Option<&str>,
+        avatar_url: Option<&str>,
+    ) -> Result<()> {
         let conn = self.conn.lock();
         if let Some(n) = name {
-            conn.execute("UPDATE community_webhooks SET name = ? WHERE id = ?", params![n, id])
-                .map_err(|e| Error::DatabaseError(e.to_string()))?;
+            conn.execute(
+                "UPDATE community_webhooks SET name = ? WHERE id = ?",
+                params![n, id],
+            )
+            .map_err(|e| Error::DatabaseError(e.to_string()))?;
         }
         if let Some(a) = avatar_url {
-            conn.execute("UPDATE community_webhooks SET avatar_url = ? WHERE id = ?", params![a, id])
-                .map_err(|e| Error::DatabaseError(e.to_string()))?;
+            conn.execute(
+                "UPDATE community_webhooks SET avatar_url = ? WHERE id = ?",
+                params![a, id],
+            )
+            .map_err(|e| Error::DatabaseError(e.to_string()))?;
         }
         Ok(())
     }
@@ -3380,7 +4268,13 @@ impl Database {
     // ── Channel Keys (Phase 2 E2EE) ────────────────────────────────────
 
     /// Store a channel encryption key
-    pub fn store_channel_key(&self, channel_id: &str, key_version: i32, encrypted_key: &[u8], created_at: i64) -> Result<()> {
+    pub fn store_channel_key(
+        &self,
+        channel_id: &str,
+        key_version: i32,
+        encrypted_key: &[u8],
+        created_at: i64,
+    ) -> Result<()> {
         let conn = self.conn.lock();
         conn.execute(
             "INSERT INTO community_channel_keys (channel_id, key_version, encrypted_key, created_at) VALUES (?, ?, ?, ?)",
@@ -3412,10 +4306,21 @@ impl Database {
     /// Create or update a boost node
     #[allow(clippy::too_many_arguments)]
     pub fn upsert_boost_node(
-        &self, id: &str, owner_did: &str, node_type: &str, node_public_key: &str,
-        name: &str, enabled: bool, max_storage_bytes: i64, max_bandwidth_mbps: i32,
-        auto_start: bool, prioritized_communities: Option<&str>,
-        pairing_token: Option<&str>, remote_address: Option<&str>, created_at: i64, updated_at: i64,
+        &self,
+        id: &str,
+        owner_did: &str,
+        node_type: &str,
+        node_public_key: &str,
+        name: &str,
+        enabled: bool,
+        max_storage_bytes: i64,
+        max_bandwidth_mbps: i32,
+        auto_start: bool,
+        prioritized_communities: Option<&str>,
+        pairing_token: Option<&str>,
+        remote_address: Option<&str>,
+        created_at: i64,
+        updated_at: i64,
     ) -> Result<()> {
         let conn = self.conn.lock();
         conn.execute(
@@ -3433,18 +4338,32 @@ impl Database {
             "SELECT id, owner_did, node_type, node_public_key, name, enabled, max_storage_bytes, max_bandwidth_mbps, auto_start, prioritized_communities, pairing_token, remote_address, last_seen_at, created_at, updated_at FROM boost_nodes WHERE owner_did = ? ORDER BY created_at",
         ).map_err(|e| Error::DatabaseError(e.to_string()))?;
 
-        let rows = stmt.query_map(params![owner_did], |row| Ok(BoostNodeRecord {
-            id: row.get(0)?, owner_did: row.get(1)?, node_type: row.get(2)?,
-            node_public_key: row.get(3)?, name: row.get(4)?,
-            enabled: row.get::<_, i32>(5)? != 0, max_storage_bytes: row.get(6)?,
-            max_bandwidth_mbps: row.get(7)?, auto_start: row.get::<_, i32>(8)? != 0,
-            prioritized_communities: row.get(9)?, pairing_token: row.get(10)?,
-            remote_address: row.get(11)?, last_seen_at: row.get(12)?,
-            created_at: row.get(13)?, updated_at: row.get(14)?,
-        })).map_err(|e| Error::DatabaseError(e.to_string()))?;
+        let rows = stmt
+            .query_map(params![owner_did], |row| {
+                Ok(BoostNodeRecord {
+                    id: row.get(0)?,
+                    owner_did: row.get(1)?,
+                    node_type: row.get(2)?,
+                    node_public_key: row.get(3)?,
+                    name: row.get(4)?,
+                    enabled: row.get::<_, i32>(5)? != 0,
+                    max_storage_bytes: row.get(6)?,
+                    max_bandwidth_mbps: row.get(7)?,
+                    auto_start: row.get::<_, i32>(8)? != 0,
+                    prioritized_communities: row.get(9)?,
+                    pairing_token: row.get(10)?,
+                    remote_address: row.get(11)?,
+                    last_seen_at: row.get(12)?,
+                    created_at: row.get(13)?,
+                    updated_at: row.get(14)?,
+                })
+            })
+            .map_err(|e| Error::DatabaseError(e.to_string()))?;
 
         let mut nodes = Vec::new();
-        for row in rows { nodes.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?); }
+        for row in rows {
+            nodes.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?);
+        }
         Ok(nodes)
     }
 
@@ -3473,24 +4392,49 @@ impl Database {
 
     /// Update boost node configuration
     pub fn update_boost_node_config(
-        &self, id: &str, name: Option<&str>, enabled: Option<bool>,
-        max_storage_bytes: Option<i64>, max_bandwidth_mbps: Option<i32>,
-        auto_start: Option<bool>, prioritized_communities: Option<&str>, updated_at: i64,
+        &self,
+        id: &str,
+        name: Option<&str>,
+        enabled: Option<bool>,
+        max_storage_bytes: Option<i64>,
+        max_bandwidth_mbps: Option<i32>,
+        auto_start: Option<bool>,
+        prioritized_communities: Option<&str>,
+        updated_at: i64,
     ) -> Result<()> {
         let conn = self.conn.lock();
         let mut updates = vec!["updated_at = ?"];
         let mut param_values: Vec<Box<dyn rusqlite::types::ToSql>> = vec![Box::new(updated_at)];
 
-        if let Some(n) = name { updates.push("name = ?"); param_values.push(Box::new(n.to_string())); }
-        if let Some(e) = enabled { updates.push("enabled = ?"); param_values.push(Box::new(e as i32)); }
-        if let Some(s) = max_storage_bytes { updates.push("max_storage_bytes = ?"); param_values.push(Box::new(s)); }
-        if let Some(b) = max_bandwidth_mbps { updates.push("max_bandwidth_mbps = ?"); param_values.push(Box::new(b)); }
-        if let Some(a) = auto_start { updates.push("auto_start = ?"); param_values.push(Box::new(a as i32)); }
-        if let Some(p) = prioritized_communities { updates.push("prioritized_communities = ?"); param_values.push(Box::new(p.to_string())); }
+        if let Some(n) = name {
+            updates.push("name = ?");
+            param_values.push(Box::new(n.to_string()));
+        }
+        if let Some(e) = enabled {
+            updates.push("enabled = ?");
+            param_values.push(Box::new(e as i32));
+        }
+        if let Some(s) = max_storage_bytes {
+            updates.push("max_storage_bytes = ?");
+            param_values.push(Box::new(s));
+        }
+        if let Some(b) = max_bandwidth_mbps {
+            updates.push("max_bandwidth_mbps = ?");
+            param_values.push(Box::new(b));
+        }
+        if let Some(a) = auto_start {
+            updates.push("auto_start = ?");
+            param_values.push(Box::new(a as i32));
+        }
+        if let Some(p) = prioritized_communities {
+            updates.push("prioritized_communities = ?");
+            param_values.push(Box::new(p.to_string()));
+        }
 
         let sql = format!("UPDATE boost_nodes SET {} WHERE id = ?", updates.join(", "));
         param_values.push(Box::new(id.to_string()));
-        let params_refs: Vec<&dyn rusqlite::types::ToSql> = param_values.iter().map(|p| p.as_ref()).collect();
+        let params_refs: Vec<&dyn rusqlite::types::ToSql> =
+            param_values.iter().map(|p| p.as_ref()).collect();
         conn.execute(&sql, params_refs.as_slice())
             .map_err(|e| Error::DatabaseError(e.to_string()))?;
         Ok(())
@@ -3499,8 +4443,11 @@ impl Database {
     /// Update boost node last seen timestamp
     pub fn update_boost_node_last_seen(&self, id: &str, last_seen_at: i64) -> Result<()> {
         let conn = self.conn.lock();
-        conn.execute("UPDATE boost_nodes SET last_seen_at = ? WHERE id = ?", params![last_seen_at, id])
-            .map_err(|e| Error::DatabaseError(e.to_string()))?;
+        conn.execute(
+            "UPDATE boost_nodes SET last_seen_at = ? WHERE id = ?",
+            params![last_seen_at, id],
+        )
+        .map_err(|e| Error::DatabaseError(e.to_string()))?;
         Ok(())
     }
 
@@ -3517,8 +4464,13 @@ impl Database {
     /// Update community branding fields
     #[allow(clippy::too_many_arguments)]
     pub fn update_community_branding(
-        &self, id: &str, icon_url: Option<&str>, banner_url: Option<&str>,
-        splash_url: Option<&str>, accent_color: Option<&str>, custom_css: Option<&str>,
+        &self,
+        id: &str,
+        icon_url: Option<&str>,
+        banner_url: Option<&str>,
+        splash_url: Option<&str>,
+        accent_color: Option<&str>,
+        custom_css: Option<&str>,
         updated_at: i64,
     ) -> Result<()> {
         let conn = self.conn.lock();
@@ -3530,38 +4482,64 @@ impl Database {
     }
 
     /// Update community vanity URL
-    pub fn update_community_vanity_url(&self, id: &str, vanity_url: &str, updated_at: i64) -> Result<()> {
+    pub fn update_community_vanity_url(
+        &self,
+        id: &str,
+        vanity_url: &str,
+        updated_at: i64,
+    ) -> Result<()> {
         let conn = self.conn.lock();
         conn.execute(
             "UPDATE communities SET vanity_url = ?, updated_at = ? WHERE id = ?",
             params![vanity_url, updated_at, id],
-        ).map_err(|e| Error::DatabaseError(e.to_string()))?;
+        )
+        .map_err(|e| Error::DatabaseError(e.to_string()))?;
         Ok(())
     }
 
     // ── Search (Phase 3) ────────────────────────────────────────────────
 
     /// Search messages in a channel by content (plaintext only)
-    pub fn search_community_messages(&self, channel_id: &str, query: &str, limit: usize) -> Result<Vec<CommunityMessageRecord>> {
+    pub fn search_community_messages(
+        &self,
+        channel_id: &str,
+        query: &str,
+        limit: usize,
+    ) -> Result<Vec<CommunityMessageRecord>> {
         let conn = self.conn.lock();
         let like_query = format!("%{}%", query);
         let mut stmt = conn.prepare(
             "SELECT id, channel_id, sender_did, content_encrypted, content_plaintext, nonce, key_version, is_e2ee, reply_to_id, thread_id, has_embed, has_attachment, content_warning, edited_at, deleted_for_everyone, created_at FROM community_messages WHERE channel_id = ? AND content_plaintext LIKE ? AND deleted_for_everyone = 0 ORDER BY created_at DESC LIMIT ?",
         ).map_err(|e| Error::DatabaseError(e.to_string()))?;
 
-        let rows = stmt.query_map(params![channel_id, like_query, limit as i64], |row| Ok(CommunityMessageRecord {
-            id: row.get(0)?, channel_id: row.get(1)?, sender_did: row.get(2)?,
-            content_encrypted: row.get(3)?, content_plaintext: row.get(4)?,
-            nonce: row.get(5)?, key_version: row.get(6)?,
-            is_e2ee: row.get::<_, i32>(7)? != 0, reply_to_id: row.get(8)?,
-            thread_id: row.get(9)?, has_embed: row.get::<_, i32>(10)? != 0,
-            has_attachment: row.get::<_, i32>(11)? != 0, content_warning: row.get(12)?,
-            edited_at: row.get(13)?, deleted_for_everyone: row.get::<_, i32>(14)? != 0,
-            created_at: row.get(15)?, metadata_json: row.get(16)?,
-        })).map_err(|e| Error::DatabaseError(e.to_string()))?;
+        let rows = stmt
+            .query_map(params![channel_id, like_query, limit as i64], |row| {
+                Ok(CommunityMessageRecord {
+                    id: row.get(0)?,
+                    channel_id: row.get(1)?,
+                    sender_did: row.get(2)?,
+                    content_encrypted: row.get(3)?,
+                    content_plaintext: row.get(4)?,
+                    nonce: row.get(5)?,
+                    key_version: row.get(6)?,
+                    is_e2ee: row.get::<_, i32>(7)? != 0,
+                    reply_to_id: row.get(8)?,
+                    thread_id: row.get(9)?,
+                    has_embed: row.get::<_, i32>(10)? != 0,
+                    has_attachment: row.get::<_, i32>(11)? != 0,
+                    content_warning: row.get(12)?,
+                    edited_at: row.get(13)?,
+                    deleted_for_everyone: row.get::<_, i32>(14)? != 0,
+                    created_at: row.get(15)?,
+                    metadata_json: row.get(16)?,
+                })
+            })
+            .map_err(|e| Error::DatabaseError(e.to_string()))?;
 
         let mut messages = Vec::new();
-        for row in rows { messages.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?); }
+        for row in rows {
+            messages.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?);
+        }
         Ok(messages)
     }
 
@@ -3570,9 +4548,15 @@ impl Database {
     /// Create a timeout for a member
     #[allow(clippy::too_many_arguments)]
     pub fn create_community_timeout(
-        &self, id: &str, community_id: &str, member_did: &str,
-        reason: Option<&str>, timeout_type: &str, issued_by: &str,
-        expires_at: i64, created_at: i64,
+        &self,
+        id: &str,
+        community_id: &str,
+        member_did: &str,
+        reason: Option<&str>,
+        timeout_type: &str,
+        issued_by: &str,
+        expires_at: i64,
+        created_at: i64,
     ) -> Result<()> {
         let conn = self.conn.lock();
         conn.execute(
@@ -3583,38 +4567,68 @@ impl Database {
     }
 
     /// Get active timeouts for a member in a community
-    pub fn get_active_timeouts(&self, community_id: &str, member_did: &str, now: i64) -> Result<Vec<CommunityTimeoutRecord>> {
+    pub fn get_active_timeouts(
+        &self,
+        community_id: &str,
+        member_did: &str,
+        now: i64,
+    ) -> Result<Vec<CommunityTimeoutRecord>> {
         let conn = self.conn.lock();
         let mut stmt = conn.prepare(
             "SELECT id, community_id, member_did, reason, timeout_type, issued_by, expires_at, created_at FROM community_timeouts WHERE community_id = ? AND member_did = ? AND expires_at > ? ORDER BY created_at DESC",
         ).map_err(|e| Error::DatabaseError(e.to_string()))?;
 
-        let rows = stmt.query_map(params![community_id, member_did, now], |row| Ok(CommunityTimeoutRecord {
-            id: row.get(0)?, community_id: row.get(1)?, member_did: row.get(2)?,
-            reason: row.get(3)?, timeout_type: row.get(4)?, issued_by: row.get(5)?,
-            expires_at: row.get(6)?, created_at: row.get(7)?,
-        })).map_err(|e| Error::DatabaseError(e.to_string()))?;
+        let rows = stmt
+            .query_map(params![community_id, member_did, now], |row| {
+                Ok(CommunityTimeoutRecord {
+                    id: row.get(0)?,
+                    community_id: row.get(1)?,
+                    member_did: row.get(2)?,
+                    reason: row.get(3)?,
+                    timeout_type: row.get(4)?,
+                    issued_by: row.get(5)?,
+                    expires_at: row.get(6)?,
+                    created_at: row.get(7)?,
+                })
+            })
+            .map_err(|e| Error::DatabaseError(e.to_string()))?;
 
         let mut results = Vec::new();
-        for row in rows { results.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?); }
+        for row in rows {
+            results.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?);
+        }
         Ok(results)
     }
 
     /// Get all timeouts for a community
-    pub fn get_community_timeouts(&self, community_id: &str) -> Result<Vec<CommunityTimeoutRecord>> {
+    pub fn get_community_timeouts(
+        &self,
+        community_id: &str,
+    ) -> Result<Vec<CommunityTimeoutRecord>> {
         let conn = self.conn.lock();
         let mut stmt = conn.prepare(
             "SELECT id, community_id, member_did, reason, timeout_type, issued_by, expires_at, created_at FROM community_timeouts WHERE community_id = ? ORDER BY created_at DESC",
         ).map_err(|e| Error::DatabaseError(e.to_string()))?;
 
-        let rows = stmt.query_map(params![community_id], |row| Ok(CommunityTimeoutRecord {
-            id: row.get(0)?, community_id: row.get(1)?, member_did: row.get(2)?,
-            reason: row.get(3)?, timeout_type: row.get(4)?, issued_by: row.get(5)?,
-            expires_at: row.get(6)?, created_at: row.get(7)?,
-        })).map_err(|e| Error::DatabaseError(e.to_string()))?;
+        let rows = stmt
+            .query_map(params![community_id], |row| {
+                Ok(CommunityTimeoutRecord {
+                    id: row.get(0)?,
+                    community_id: row.get(1)?,
+                    member_did: row.get(2)?,
+                    reason: row.get(3)?,
+                    timeout_type: row.get(4)?,
+                    issued_by: row.get(5)?,
+                    expires_at: row.get(6)?,
+                    created_at: row.get(7)?,
+                })
+            })
+            .map_err(|e| Error::DatabaseError(e.to_string()))?;
 
         let mut results = Vec::new();
-        for row in rows { results.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?); }
+        for row in rows {
+            results.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?);
+        }
         Ok(results)
     }
 
@@ -3627,7 +4641,13 @@ impl Database {
     }
 
     /// Check if a member has an active timeout of a given type
-    pub fn is_member_timed_out(&self, community_id: &str, member_did: &str, timeout_type: &str, now: i64) -> Result<bool> {
+    pub fn is_member_timed_out(
+        &self,
+        community_id: &str,
+        member_did: &str,
+        timeout_type: &str,
+        now: i64,
+    ) -> Result<bool> {
         let conn = self.conn.lock();
         let count: i32 = conn.query_row(
             "SELECT COUNT(*) FROM community_timeouts WHERE community_id = ? AND member_did = ? AND timeout_type = ? AND expires_at > ?",
@@ -3655,23 +4675,35 @@ impl Database {
         conn.execute(
             "DELETE FROM community_thread_followers WHERE thread_id = ? AND member_did = ?",
             params![thread_id, member_did],
-        ).map_err(|e| Error::DatabaseError(e.to_string()))?;
+        )
+        .map_err(|e| Error::DatabaseError(e.to_string()))?;
         Ok(())
     }
 
     /// Get followers of a thread
-    pub fn get_thread_followers(&self, thread_id: &str) -> Result<Vec<CommunityThreadFollowerRecord>> {
+    pub fn get_thread_followers(
+        &self,
+        thread_id: &str,
+    ) -> Result<Vec<CommunityThreadFollowerRecord>> {
         let conn = self.conn.lock();
         let mut stmt = conn.prepare(
             "SELECT thread_id, member_did, followed_at FROM community_thread_followers WHERE thread_id = ? ORDER BY followed_at",
         ).map_err(|e| Error::DatabaseError(e.to_string()))?;
 
-        let rows = stmt.query_map(params![thread_id], |row| Ok(CommunityThreadFollowerRecord {
-            thread_id: row.get(0)?, member_did: row.get(1)?, followed_at: row.get(2)?,
-        })).map_err(|e| Error::DatabaseError(e.to_string()))?;
+        let rows = stmt
+            .query_map(params![thread_id], |row| {
+                Ok(CommunityThreadFollowerRecord {
+                    thread_id: row.get(0)?,
+                    member_did: row.get(1)?,
+                    followed_at: row.get(2)?,
+                })
+            })
+            .map_err(|e| Error::DatabaseError(e.to_string()))?;
 
         let mut results = Vec::new();
-        for row in rows { results.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?); }
+        for row in rows {
+            results.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?);
+        }
         Ok(results)
     }
 
@@ -3690,9 +4722,13 @@ impl Database {
 
     /// Set or update a member's custom status
     pub fn set_member_status(
-        &self, community_id: &str, member_did: &str,
-        status_text: Option<&str>, status_emoji: Option<&str>,
-        expires_at: Option<i64>, now: i64,
+        &self,
+        community_id: &str,
+        member_did: &str,
+        status_text: Option<&str>,
+        status_emoji: Option<&str>,
+        expires_at: Option<i64>,
+        now: i64,
     ) -> Result<()> {
         let conn = self.conn.lock();
         conn.execute(
@@ -3703,7 +4739,11 @@ impl Database {
     }
 
     /// Get a member's custom status
-    pub fn get_member_status(&self, community_id: &str, member_did: &str) -> Result<Option<CommunityMemberStatusRecord>> {
+    pub fn get_member_status(
+        &self,
+        community_id: &str,
+        member_did: &str,
+    ) -> Result<Option<CommunityMemberStatusRecord>> {
         let conn = self.conn.lock();
         let result = conn.query_row(
             "SELECT community_id, member_did, status_text, status_emoji, expires_at, updated_at FROM community_member_status WHERE community_id = ? AND member_did = ?",
@@ -3727,7 +4767,8 @@ impl Database {
         conn.execute(
             "DELETE FROM community_member_status WHERE community_id = ? AND member_did = ?",
             params![community_id, member_did],
-        ).map_err(|e| Error::DatabaseError(e.to_string()))?;
+        )
+        .map_err(|e| Error::DatabaseError(e.to_string()))?;
         Ok(())
     }
 
@@ -3736,10 +4777,17 @@ impl Database {
     /// Upsert notification settings for a target (community, space, or channel)
     #[allow(clippy::too_many_arguments)]
     pub fn upsert_notification_setting(
-        &self, id: &str, community_id: &str, member_did: &str,
-        target_type: &str, target_id: &str,
-        mute_until: Option<i64>, suppress_everyone: bool, suppress_roles: bool,
-        level: &str, now: i64,
+        &self,
+        id: &str,
+        community_id: &str,
+        member_did: &str,
+        target_type: &str,
+        target_id: &str,
+        mute_until: Option<i64>,
+        suppress_everyone: bool,
+        suppress_roles: bool,
+        level: &str,
+        now: i64,
     ) -> Result<()> {
         let conn = self.conn.lock();
         conn.execute(
@@ -3750,29 +4798,48 @@ impl Database {
     }
 
     /// Get all notification settings for a member in a community
-    pub fn get_notification_settings(&self, community_id: &str, member_did: &str) -> Result<Vec<CommunityNotificationSettingRecord>> {
+    pub fn get_notification_settings(
+        &self,
+        community_id: &str,
+        member_did: &str,
+    ) -> Result<Vec<CommunityNotificationSettingRecord>> {
         let conn = self.conn.lock();
         let mut stmt = conn.prepare(
             "SELECT id, community_id, member_did, target_type, target_id, mute_until, suppress_everyone, suppress_roles, level, updated_at FROM community_notification_settings WHERE community_id = ? AND member_did = ? ORDER BY target_type, target_id",
         ).map_err(|e| Error::DatabaseError(e.to_string()))?;
 
-        let rows = stmt.query_map(params![community_id, member_did], |row| Ok(CommunityNotificationSettingRecord {
-            id: row.get(0)?, community_id: row.get(1)?, member_did: row.get(2)?,
-            target_type: row.get(3)?, target_id: row.get(4)?, mute_until: row.get(5)?,
-            suppress_everyone: row.get::<_, i32>(6)? != 0, suppress_roles: row.get::<_, i32>(7)? != 0,
-            level: row.get(8)?, updated_at: row.get(9)?,
-        })).map_err(|e| Error::DatabaseError(e.to_string()))?;
+        let rows = stmt
+            .query_map(params![community_id, member_did], |row| {
+                Ok(CommunityNotificationSettingRecord {
+                    id: row.get(0)?,
+                    community_id: row.get(1)?,
+                    member_did: row.get(2)?,
+                    target_type: row.get(3)?,
+                    target_id: row.get(4)?,
+                    mute_until: row.get(5)?,
+                    suppress_everyone: row.get::<_, i32>(6)? != 0,
+                    suppress_roles: row.get::<_, i32>(7)? != 0,
+                    level: row.get(8)?,
+                    updated_at: row.get(9)?,
+                })
+            })
+            .map_err(|e| Error::DatabaseError(e.to_string()))?;
 
         let mut results = Vec::new();
-        for row in rows { results.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?); }
+        for row in rows {
+            results.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?);
+        }
         Ok(results)
     }
 
     /// Delete a notification setting
     pub fn delete_notification_setting(&self, id: &str) -> Result<()> {
         let conn = self.conn.lock();
-        conn.execute("DELETE FROM community_notification_settings WHERE id = ?", params![id])
-            .map_err(|e| Error::DatabaseError(e.to_string()))?;
+        conn.execute(
+            "DELETE FROM community_notification_settings WHERE id = ?",
+            params![id],
+        )
+        .map_err(|e| Error::DatabaseError(e.to_string()))?;
         Ok(())
     }
 
@@ -3800,7 +4867,11 @@ impl Database {
 
         // Channel filter
         if !channel_ids.is_empty() {
-            let placeholders: Vec<String> = channel_ids.iter().enumerate().map(|(_, _)| "?".to_string()).collect();
+            let placeholders: Vec<String> = channel_ids
+                .iter()
+                .enumerate()
+                .map(|(_, _)| "?".to_string())
+                .collect();
             conditions.push(format!("channel_id IN ({})", placeholders.join(",")));
             for cid in channel_ids {
                 param_values.push(Box::new(cid.clone()));
@@ -3841,13 +4912,15 @@ impl Database {
 
         // Has reaction (we check via subquery)
         if let Some(true) = has_reaction {
-            conditions.push("id IN (SELECT DISTINCT message_id FROM community_reactions)".to_string());
+            conditions
+                .push("id IN (SELECT DISTINCT message_id FROM community_reactions)".to_string());
         }
 
         // Is pinned
         if let Some(true) = is_pinned {
             if !pinned_message_ids.is_empty() {
-                let placeholders: Vec<String> = pinned_message_ids.iter().map(|_| "?".to_string()).collect();
+                let placeholders: Vec<String> =
+                    pinned_message_ids.iter().map(|_| "?".to_string()).collect();
                 conditions.push(format!("id IN ({})", placeholders.join(",")));
                 for pid in pinned_message_ids {
                     param_values.push(Box::new(pid.clone()));
@@ -3871,56 +4944,87 @@ impl Database {
         param_values.push(Box::new(limit as i64));
 
         let params: Vec<&dyn rusqlite::ToSql> = param_values.iter().map(|v| v.as_ref()).collect();
-        let mut stmt = conn.prepare(&sql).map_err(|e| Error::DatabaseError(e.to_string()))?;
+        let mut stmt = conn
+            .prepare(&sql)
+            .map_err(|e| Error::DatabaseError(e.to_string()))?;
 
-        let rows = stmt.query_map(params.as_slice(), |row| Ok(CommunityMessageRecord {
-            id: row.get(0)?, channel_id: row.get(1)?, sender_did: row.get(2)?,
-            content_encrypted: row.get(3)?, content_plaintext: row.get(4)?,
-            nonce: row.get(5)?, key_version: row.get(6)?,
-            is_e2ee: row.get::<_, i32>(7)? != 0, reply_to_id: row.get(8)?,
-            thread_id: row.get(9)?, has_embed: row.get::<_, i32>(10)? != 0,
-            has_attachment: row.get::<_, i32>(11)? != 0, content_warning: row.get(12)?,
-            edited_at: row.get(13)?, deleted_for_everyone: row.get::<_, i32>(14)? != 0,
-            created_at: row.get(15)?, metadata_json: row.get(16)?,
-        })).map_err(|e| Error::DatabaseError(e.to_string()))?;
+        let rows = stmt
+            .query_map(params.as_slice(), |row| {
+                Ok(CommunityMessageRecord {
+                    id: row.get(0)?,
+                    channel_id: row.get(1)?,
+                    sender_did: row.get(2)?,
+                    content_encrypted: row.get(3)?,
+                    content_plaintext: row.get(4)?,
+                    nonce: row.get(5)?,
+                    key_version: row.get(6)?,
+                    is_e2ee: row.get::<_, i32>(7)? != 0,
+                    reply_to_id: row.get(8)?,
+                    thread_id: row.get(9)?,
+                    has_embed: row.get::<_, i32>(10)? != 0,
+                    has_attachment: row.get::<_, i32>(11)? != 0,
+                    content_warning: row.get(12)?,
+                    edited_at: row.get(13)?,
+                    deleted_for_everyone: row.get::<_, i32>(14)? != 0,
+                    created_at: row.get(15)?,
+                    metadata_json: row.get(16)?,
+                })
+            })
+            .map_err(|e| Error::DatabaseError(e.to_string()))?;
 
         let mut results = Vec::new();
-        for row in rows { results.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?); }
+        for row in rows {
+            results.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?);
+        }
         Ok(results)
     }
 
     /// Get all pinned message IDs for a channel (helper for search)
     pub fn get_pinned_message_ids(&self, channel_id: &str) -> Result<Vec<String>> {
         let conn = self.conn.lock();
-        let mut stmt = conn.prepare(
-            "SELECT message_id FROM community_pins WHERE channel_id = ?",
-        ).map_err(|e| Error::DatabaseError(e.to_string()))?;
+        let mut stmt = conn
+            .prepare("SELECT message_id FROM community_pins WHERE channel_id = ?")
+            .map_err(|e| Error::DatabaseError(e.to_string()))?;
 
-        let rows = stmt.query_map(params![channel_id], |row| {
-            row.get::<_, String>(0)
-        }).map_err(|e| Error::DatabaseError(e.to_string()))?;
+        let rows = stmt
+            .query_map(params![channel_id], |row| row.get::<_, String>(0))
+            .map_err(|e| Error::DatabaseError(e.to_string()))?;
 
         let mut results = Vec::new();
-        for row in rows { results.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?); }
+        for row in rows {
+            results.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?);
+        }
         Ok(results)
     }
 
     /// Get thread messages directly (without filtering all channel messages)
     pub fn get_thread_messages_direct(
-        &self, thread_id: &str, limit: usize, before_timestamp: Option<i64>,
+        &self,
+        thread_id: &str,
+        limit: usize,
+        before_timestamp: Option<i64>,
     ) -> Result<Vec<CommunityMessageRecord>> {
         let conn = self.conn.lock();
 
         fn parse_msg_row(row: &rusqlite::Row<'_>) -> rusqlite::Result<CommunityMessageRecord> {
             Ok(CommunityMessageRecord {
-                id: row.get(0)?, channel_id: row.get(1)?, sender_did: row.get(2)?,
-                content_encrypted: row.get(3)?, content_plaintext: row.get(4)?,
-                nonce: row.get(5)?, key_version: row.get(6)?,
-                is_e2ee: row.get::<_, i32>(7)? != 0, reply_to_id: row.get(8)?,
-                thread_id: row.get(9)?, has_embed: row.get::<_, i32>(10)? != 0,
-                has_attachment: row.get::<_, i32>(11)? != 0, content_warning: row.get(12)?,
-                edited_at: row.get(13)?, deleted_for_everyone: row.get::<_, i32>(14)? != 0,
-                created_at: row.get(15)?, metadata_json: row.get(16)?,
+                id: row.get(0)?,
+                channel_id: row.get(1)?,
+                sender_did: row.get(2)?,
+                content_encrypted: row.get(3)?,
+                content_plaintext: row.get(4)?,
+                nonce: row.get(5)?,
+                key_version: row.get(6)?,
+                is_e2ee: row.get::<_, i32>(7)? != 0,
+                reply_to_id: row.get(8)?,
+                thread_id: row.get(9)?,
+                has_embed: row.get::<_, i32>(10)? != 0,
+                has_attachment: row.get::<_, i32>(11)? != 0,
+                content_warning: row.get(12)?,
+                edited_at: row.get(13)?,
+                deleted_for_everyone: row.get::<_, i32>(14)? != 0,
+                created_at: row.get(15)?,
+                metadata_json: row.get(16)?,
             })
         }
 
@@ -3929,16 +5033,22 @@ impl Database {
             let mut stmt = conn.prepare(
                 "SELECT id, channel_id, sender_did, content_encrypted, content_plaintext, nonce, key_version, is_e2ee, reply_to_id, thread_id, has_embed, has_attachment, content_warning, edited_at, deleted_for_everyone, created_at, metadata_json FROM community_messages WHERE thread_id = ? AND deleted_for_everyone = 0 AND created_at < ? ORDER BY created_at DESC LIMIT ?",
             ).map_err(|e| Error::DatabaseError(e.to_string()))?;
-            let rows = stmt.query_map(params![thread_id, before, limit as i64], parse_msg_row)
+            let rows = stmt
+                .query_map(params![thread_id, before, limit as i64], parse_msg_row)
                 .map_err(|e| Error::DatabaseError(e.to_string()))?;
-            for row in rows { results.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?); }
+            for row in rows {
+                results.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?);
+            }
         } else {
             let mut stmt = conn.prepare(
                 "SELECT id, channel_id, sender_did, content_encrypted, content_plaintext, nonce, key_version, is_e2ee, reply_to_id, thread_id, has_embed, has_attachment, content_warning, edited_at, deleted_for_everyone, created_at, metadata_json FROM community_messages WHERE thread_id = ? AND deleted_for_everyone = 0 ORDER BY created_at DESC LIMIT ?",
             ).map_err(|e| Error::DatabaseError(e.to_string()))?;
-            let rows = stmt.query_map(params![thread_id, limit as i64], parse_msg_row)
+            let rows = stmt
+                .query_map(params![thread_id, limit as i64], parse_msg_row)
                 .map_err(|e| Error::DatabaseError(e.to_string()))?;
-            for row in rows { results.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?); }
+            for row in rows {
+                results.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?);
+            }
         }
         Ok(results)
     }
@@ -3948,7 +5058,15 @@ impl Database {
     // ========================================================================
 
     /// Store a file chunk
-    pub fn store_chunk(&self, chunk_id: &str, file_id: &str, chunk_index: i32, data: &[u8], size: i64, created_at: i64) -> Result<()> {
+    pub fn store_chunk(
+        &self,
+        chunk_id: &str,
+        file_id: &str,
+        chunk_index: i32,
+        data: &[u8],
+        size: i64,
+        created_at: i64,
+    ) -> Result<()> {
         let conn = self.conn.lock();
         conn.execute(
             "INSERT OR REPLACE INTO file_chunks (chunk_id, file_id, chunk_index, data, size, created_at) VALUES (?, ?, ?, ?, ?, ?)",
@@ -3989,32 +5107,51 @@ impl Database {
             "SELECT chunk_id, file_id, chunk_index, data, size, created_at FROM file_chunks WHERE file_id = ? ORDER BY chunk_index",
         ).map_err(|e| Error::DatabaseError(e.to_string()))?;
 
-        let rows = stmt.query_map(params![file_id], |row| {
-            Ok(FileChunkRecord {
-                chunk_id: row.get(0)?,
-                file_id: row.get(1)?,
-                chunk_index: row.get(2)?,
-                data: row.get(3)?,
-                size: row.get(4)?,
-                created_at: row.get(5)?,
+        let rows = stmt
+            .query_map(params![file_id], |row| {
+                Ok(FileChunkRecord {
+                    chunk_id: row.get(0)?,
+                    file_id: row.get(1)?,
+                    chunk_index: row.get(2)?,
+                    data: row.get(3)?,
+                    size: row.get(4)?,
+                    created_at: row.get(5)?,
+                })
             })
-        }).map_err(|e| Error::DatabaseError(e.to_string()))?;
+            .map_err(|e| Error::DatabaseError(e.to_string()))?;
 
         let mut chunks = Vec::new();
-        for row in rows { chunks.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?); }
+        for row in rows {
+            chunks.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?);
+        }
         Ok(chunks)
     }
 
     /// Delete all chunks for a file
     pub fn delete_chunks_for_file(&self, file_id: &str) -> Result<()> {
         let conn = self.conn.lock();
-        conn.execute("DELETE FROM file_chunks WHERE file_id = ?", params![file_id])
-            .map_err(|e| Error::DatabaseError(e.to_string()))?;
+        conn.execute(
+            "DELETE FROM file_chunks WHERE file_id = ?",
+            params![file_id],
+        )
+        .map_err(|e| Error::DatabaseError(e.to_string()))?;
         Ok(())
     }
 
     /// Store a file manifest
-    pub fn store_manifest(&self, file_id: &str, filename: &str, total_size: i64, chunk_size: i64, total_chunks: i32, chunks_json: &str, file_hash: &str, encrypted: bool, encryption_key_id: Option<&str>, created_at: i64) -> Result<()> {
+    pub fn store_manifest(
+        &self,
+        file_id: &str,
+        filename: &str,
+        total_size: i64,
+        chunk_size: i64,
+        total_chunks: i32,
+        chunks_json: &str,
+        file_hash: &str,
+        encrypted: bool,
+        encryption_key_id: Option<&str>,
+        created_at: i64,
+    ) -> Result<()> {
         let conn = self.conn.lock();
         conn.execute(
             "INSERT OR REPLACE INTO file_manifests (file_id, filename, total_size, chunk_size, total_chunks, chunks_json, file_hash, encrypted, encryption_key_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -4055,8 +5192,11 @@ impl Database {
     /// Delete a file manifest
     pub fn delete_manifest(&self, file_id: &str) -> Result<()> {
         let conn = self.conn.lock();
-        conn.execute("DELETE FROM file_manifests WHERE file_id = ?", params![file_id])
-            .map_err(|e| Error::DatabaseError(e.to_string()))?;
+        conn.execute(
+            "DELETE FROM file_manifests WHERE file_id = ?",
+            params![file_id],
+        )
+        .map_err(|e| Error::DatabaseError(e.to_string()))?;
         Ok(())
     }
 
@@ -4066,7 +5206,21 @@ impl Database {
 
     /// Store a DM shared file
     #[allow(clippy::too_many_arguments)]
-    pub fn store_dm_shared_file(&self, id: &str, conversation_id: &str, folder_id: Option<&str>, filename: &str, description: Option<&str>, file_size: i64, mime_type: Option<&str>, storage_chunks_json: &str, uploaded_by: &str, encrypted_metadata: Option<&str>, encryption_nonce: Option<&str>, created_at: i64) -> Result<()> {
+    pub fn store_dm_shared_file(
+        &self,
+        id: &str,
+        conversation_id: &str,
+        folder_id: Option<&str>,
+        filename: &str,
+        description: Option<&str>,
+        file_size: i64,
+        mime_type: Option<&str>,
+        storage_chunks_json: &str,
+        uploaded_by: &str,
+        encrypted_metadata: Option<&str>,
+        encryption_nonce: Option<&str>,
+        created_at: i64,
+    ) -> Result<()> {
         let conn = self.conn.lock();
         conn.execute(
             "INSERT INTO dm_shared_files (id, conversation_id, folder_id, filename, description, file_size, mime_type, storage_chunks_json, uploaded_by, encrypted_metadata, encryption_nonce, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -4076,40 +5230,54 @@ impl Database {
     }
 
     /// Get DM shared files in a conversation (optionally within a folder)
-    pub fn get_dm_shared_files(&self, conversation_id: &str, folder_id: Option<&str>, limit: usize, offset: usize) -> Result<Vec<DmSharedFileRecord>> {
+    pub fn get_dm_shared_files(
+        &self,
+        conversation_id: &str,
+        folder_id: Option<&str>,
+        limit: usize,
+        offset: usize,
+    ) -> Result<Vec<DmSharedFileRecord>> {
         let conn = self.conn.lock();
-        let (sql, params_vec): (&str, Vec<Box<dyn rusqlite::types::ToSql>>) =
-            if let Some(fid) = folder_id {
-                ("SELECT id, conversation_id, folder_id, filename, description, file_size, mime_type, storage_chunks_json, uploaded_by, version, download_count, encrypted_metadata, encryption_nonce, created_at FROM dm_shared_files WHERE conversation_id = ? AND folder_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
+        let (sql, params_vec): (&str, Vec<Box<dyn rusqlite::types::ToSql>>) = if let Some(fid) =
+            folder_id
+        {
+            ("SELECT id, conversation_id, folder_id, filename, description, file_size, mime_type, storage_chunks_json, uploaded_by, version, download_count, encrypted_metadata, encryption_nonce, created_at FROM dm_shared_files WHERE conversation_id = ? AND folder_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?",
                  vec![Box::new(conversation_id.to_string()), Box::new(fid.to_string()), Box::new(limit as i64), Box::new(offset as i64)])
-            } else {
-                ("SELECT id, conversation_id, folder_id, filename, description, file_size, mime_type, storage_chunks_json, uploaded_by, version, download_count, encrypted_metadata, encryption_nonce, created_at FROM dm_shared_files WHERE conversation_id = ? AND folder_id IS NULL ORDER BY created_at DESC LIMIT ? OFFSET ?",
+        } else {
+            ("SELECT id, conversation_id, folder_id, filename, description, file_size, mime_type, storage_chunks_json, uploaded_by, version, download_count, encrypted_metadata, encryption_nonce, created_at FROM dm_shared_files WHERE conversation_id = ? AND folder_id IS NULL ORDER BY created_at DESC LIMIT ? OFFSET ?",
                  vec![Box::new(conversation_id.to_string()), Box::new(limit as i64), Box::new(offset as i64)])
-            };
+        };
 
-        let mut stmt = conn.prepare(sql).map_err(|e| Error::DatabaseError(e.to_string()))?;
-        let params_refs: Vec<&dyn rusqlite::types::ToSql> = params_vec.iter().map(|p| p.as_ref()).collect();
-        let rows = stmt.query_map(params_refs.as_slice(), |row| {
-            Ok(DmSharedFileRecord {
-                id: row.get(0)?,
-                conversation_id: row.get(1)?,
-                folder_id: row.get(2)?,
-                filename: row.get(3)?,
-                description: row.get(4)?,
-                file_size: row.get(5)?,
-                mime_type: row.get(6)?,
-                storage_chunks_json: row.get(7)?,
-                uploaded_by: row.get(8)?,
-                version: row.get(9)?,
-                download_count: row.get(10)?,
-                encrypted_metadata: row.get(11)?,
-                encryption_nonce: row.get(12)?,
-                created_at: row.get(13)?,
+        let mut stmt = conn
+            .prepare(sql)
+            .map_err(|e| Error::DatabaseError(e.to_string()))?;
+        let params_refs: Vec<&dyn rusqlite::types::ToSql> =
+            params_vec.iter().map(|p| p.as_ref()).collect();
+        let rows = stmt
+            .query_map(params_refs.as_slice(), |row| {
+                Ok(DmSharedFileRecord {
+                    id: row.get(0)?,
+                    conversation_id: row.get(1)?,
+                    folder_id: row.get(2)?,
+                    filename: row.get(3)?,
+                    description: row.get(4)?,
+                    file_size: row.get(5)?,
+                    mime_type: row.get(6)?,
+                    storage_chunks_json: row.get(7)?,
+                    uploaded_by: row.get(8)?,
+                    version: row.get(9)?,
+                    download_count: row.get(10)?,
+                    encrypted_metadata: row.get(11)?,
+                    encryption_nonce: row.get(12)?,
+                    created_at: row.get(13)?,
+                })
             })
-        }).map_err(|e| Error::DatabaseError(e.to_string()))?;
+            .map_err(|e| Error::DatabaseError(e.to_string()))?;
 
         let mut files = Vec::new();
-        for row in rows { files.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?); }
+        for row in rows {
+            files.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?);
+        }
         Ok(files)
     }
 
@@ -4149,8 +5317,11 @@ impl Database {
     /// Increment download count for a DM shared file
     pub fn increment_dm_file_download_count(&self, id: &str) -> Result<()> {
         let conn = self.conn.lock();
-        conn.execute("UPDATE dm_shared_files SET download_count = download_count + 1 WHERE id = ?", params![id])
-            .map_err(|e| Error::DatabaseError(e.to_string()))?;
+        conn.execute(
+            "UPDATE dm_shared_files SET download_count = download_count + 1 WHERE id = ?",
+            params![id],
+        )
+        .map_err(|e| Error::DatabaseError(e.to_string()))?;
         Ok(())
     }
 
@@ -4165,15 +5336,26 @@ impl Database {
     /// Move a DM shared file to a different folder
     pub fn move_dm_shared_file(&self, id: &str, target_folder_id: Option<&str>) -> Result<()> {
         let conn = self.conn.lock();
-        conn.execute("UPDATE dm_shared_files SET folder_id = ? WHERE id = ?", params![target_folder_id, id])
-            .map_err(|e| Error::DatabaseError(e.to_string()))?;
+        conn.execute(
+            "UPDATE dm_shared_files SET folder_id = ? WHERE id = ?",
+            params![target_folder_id, id],
+        )
+        .map_err(|e| Error::DatabaseError(e.to_string()))?;
         Ok(())
     }
 
     // ── DM Shared Folders ────────────────────────────────────────────────
 
     /// Create a DM shared folder
-    pub fn create_dm_shared_folder(&self, id: &str, conversation_id: &str, parent_folder_id: Option<&str>, name: &str, created_by: &str, created_at: i64) -> Result<()> {
+    pub fn create_dm_shared_folder(
+        &self,
+        id: &str,
+        conversation_id: &str,
+        parent_folder_id: Option<&str>,
+        name: &str,
+        created_by: &str,
+        created_at: i64,
+    ) -> Result<()> {
         let conn = self.conn.lock();
         conn.execute(
             "INSERT INTO dm_shared_folders (id, conversation_id, parent_folder_id, name, created_by, created_at) VALUES (?, ?, ?, ?, ?, ?)",
@@ -4183,32 +5365,44 @@ impl Database {
     }
 
     /// Get DM shared folders in a conversation (optionally within a parent folder)
-    pub fn get_dm_shared_folders(&self, conversation_id: &str, parent_folder_id: Option<&str>) -> Result<Vec<DmSharedFolderRecord>> {
+    pub fn get_dm_shared_folders(
+        &self,
+        conversation_id: &str,
+        parent_folder_id: Option<&str>,
+    ) -> Result<Vec<DmSharedFolderRecord>> {
         let conn = self.conn.lock();
-        let (sql, params_vec): (&str, Vec<Box<dyn rusqlite::types::ToSql>>) =
-            if let Some(pid) = parent_folder_id {
-                ("SELECT id, conversation_id, parent_folder_id, name, created_by, created_at FROM dm_shared_folders WHERE conversation_id = ? AND parent_folder_id = ? ORDER BY name",
+        let (sql, params_vec): (&str, Vec<Box<dyn rusqlite::types::ToSql>>) = if let Some(pid) =
+            parent_folder_id
+        {
+            ("SELECT id, conversation_id, parent_folder_id, name, created_by, created_at FROM dm_shared_folders WHERE conversation_id = ? AND parent_folder_id = ? ORDER BY name",
                  vec![Box::new(conversation_id.to_string()), Box::new(pid.to_string())])
-            } else {
-                ("SELECT id, conversation_id, parent_folder_id, name, created_by, created_at FROM dm_shared_folders WHERE conversation_id = ? AND parent_folder_id IS NULL ORDER BY name",
+        } else {
+            ("SELECT id, conversation_id, parent_folder_id, name, created_by, created_at FROM dm_shared_folders WHERE conversation_id = ? AND parent_folder_id IS NULL ORDER BY name",
                  vec![Box::new(conversation_id.to_string())])
-            };
+        };
 
-        let mut stmt = conn.prepare(sql).map_err(|e| Error::DatabaseError(e.to_string()))?;
-        let params_refs: Vec<&dyn rusqlite::types::ToSql> = params_vec.iter().map(|p| p.as_ref()).collect();
-        let rows = stmt.query_map(params_refs.as_slice(), |row| {
-            Ok(DmSharedFolderRecord {
-                id: row.get(0)?,
-                conversation_id: row.get(1)?,
-                parent_folder_id: row.get(2)?,
-                name: row.get(3)?,
-                created_by: row.get(4)?,
-                created_at: row.get(5)?,
+        let mut stmt = conn
+            .prepare(sql)
+            .map_err(|e| Error::DatabaseError(e.to_string()))?;
+        let params_refs: Vec<&dyn rusqlite::types::ToSql> =
+            params_vec.iter().map(|p| p.as_ref()).collect();
+        let rows = stmt
+            .query_map(params_refs.as_slice(), |row| {
+                Ok(DmSharedFolderRecord {
+                    id: row.get(0)?,
+                    conversation_id: row.get(1)?,
+                    parent_folder_id: row.get(2)?,
+                    name: row.get(3)?,
+                    created_by: row.get(4)?,
+                    created_at: row.get(5)?,
+                })
             })
-        }).map_err(|e| Error::DatabaseError(e.to_string()))?;
+            .map_err(|e| Error::DatabaseError(e.to_string()))?;
 
         let mut folders = Vec::new();
-        for row in rows { folders.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?); }
+        for row in rows {
+            folders.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?);
+        }
         Ok(folders)
     }
 
@@ -4223,8 +5417,11 @@ impl Database {
     /// Rename a DM shared folder
     pub fn rename_dm_shared_folder(&self, id: &str, name: &str) -> Result<()> {
         let conn = self.conn.lock();
-        conn.execute("UPDATE dm_shared_folders SET name = ? WHERE id = ?", params![name, id])
-            .map_err(|e| Error::DatabaseError(e.to_string()))?;
+        conn.execute(
+            "UPDATE dm_shared_folders SET name = ? WHERE id = ?",
+            params![name, id],
+        )
+        .map_err(|e| Error::DatabaseError(e.to_string()))?;
         Ok(())
     }
 
@@ -4281,35 +5478,64 @@ impl Database {
              FROM community_seats WHERE community_id = ? ORDER BY platform_username",
         ).map_err(|e| Error::DatabaseError(e.to_string()))?;
 
-        let rows = stmt.query_map(params![community_id], |row| Ok(CommunitySeatRecord {
-            id: row.get(0)?, community_id: row.get(1)?, platform: row.get(2)?,
-            platform_user_id: row.get(3)?, platform_username: row.get(4)?,
-            nickname: row.get(5)?, avatar_url: row.get(6)?, role_ids_json: row.get(7)?,
-            claimed_by_did: row.get(8)?, claimed_at: row.get(9)?, created_at: row.get(10)?,
-        })).map_err(|e| Error::DatabaseError(e.to_string()))?;
+        let rows = stmt
+            .query_map(params![community_id], |row| {
+                Ok(CommunitySeatRecord {
+                    id: row.get(0)?,
+                    community_id: row.get(1)?,
+                    platform: row.get(2)?,
+                    platform_user_id: row.get(3)?,
+                    platform_username: row.get(4)?,
+                    nickname: row.get(5)?,
+                    avatar_url: row.get(6)?,
+                    role_ids_json: row.get(7)?,
+                    claimed_by_did: row.get(8)?,
+                    claimed_at: row.get(9)?,
+                    created_at: row.get(10)?,
+                })
+            })
+            .map_err(|e| Error::DatabaseError(e.to_string()))?;
 
         let mut seats = Vec::new();
-        for row in rows { seats.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?); }
+        for row in rows {
+            seats.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?);
+        }
         Ok(seats)
     }
 
     /// Get unclaimed seats for a community
-    pub fn get_unclaimed_community_seats(&self, community_id: &str) -> Result<Vec<CommunitySeatRecord>> {
+    pub fn get_unclaimed_community_seats(
+        &self,
+        community_id: &str,
+    ) -> Result<Vec<CommunitySeatRecord>> {
         let conn = self.conn.lock();
         let mut stmt = conn.prepare(
             "SELECT id, community_id, platform, platform_user_id, platform_username, nickname, avatar_url, role_ids_json, claimed_by_did, claimed_at, created_at
              FROM community_seats WHERE community_id = ? AND claimed_by_did IS NULL ORDER BY platform_username",
         ).map_err(|e| Error::DatabaseError(e.to_string()))?;
 
-        let rows = stmt.query_map(params![community_id], |row| Ok(CommunitySeatRecord {
-            id: row.get(0)?, community_id: row.get(1)?, platform: row.get(2)?,
-            platform_user_id: row.get(3)?, platform_username: row.get(4)?,
-            nickname: row.get(5)?, avatar_url: row.get(6)?, role_ids_json: row.get(7)?,
-            claimed_by_did: row.get(8)?, claimed_at: row.get(9)?, created_at: row.get(10)?,
-        })).map_err(|e| Error::DatabaseError(e.to_string()))?;
+        let rows = stmt
+            .query_map(params![community_id], |row| {
+                Ok(CommunitySeatRecord {
+                    id: row.get(0)?,
+                    community_id: row.get(1)?,
+                    platform: row.get(2)?,
+                    platform_user_id: row.get(3)?,
+                    platform_username: row.get(4)?,
+                    nickname: row.get(5)?,
+                    avatar_url: row.get(6)?,
+                    role_ids_json: row.get(7)?,
+                    claimed_by_did: row.get(8)?,
+                    claimed_at: row.get(9)?,
+                    created_at: row.get(10)?,
+                })
+            })
+            .map_err(|e| Error::DatabaseError(e.to_string()))?;
 
         let mut seats = Vec::new();
-        for row in rows { seats.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?); }
+        for row in rows {
+            seats.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?);
+        }
         Ok(seats)
     }
 
@@ -4363,7 +5589,12 @@ impl Database {
     }
 
     /// Claim a seat (set claimed_by_did and claimed_at)
-    pub fn claim_community_seat(&self, seat_id: &str, claimed_by_did: &str, claimed_at: i64) -> Result<()> {
+    pub fn claim_community_seat(
+        &self,
+        seat_id: &str,
+        claimed_by_did: &str,
+        claimed_at: i64,
+    ) -> Result<()> {
         let conn = self.conn.lock();
         let updated = conn.execute(
             "UPDATE community_seats SET claimed_by_did = ?, claimed_at = ? WHERE id = ? AND claimed_by_did IS NULL",
@@ -4371,7 +5602,9 @@ impl Database {
         ).map_err(|e| Error::DatabaseError(format!("Failed to claim seat: {}", e)))?;
 
         if updated == 0 {
-            return Err(Error::DatabaseError("Seat not found or already claimed".to_string()));
+            return Err(Error::DatabaseError(
+                "Seat not found or already claimed".to_string(),
+            ));
         }
         Ok(())
     }
@@ -4387,11 +5620,13 @@ impl Database {
     /// Count seats for a community (total and unclaimed)
     pub fn count_community_seats(&self, community_id: &str) -> Result<(i64, i64)> {
         let conn = self.conn.lock();
-        let total: i64 = conn.query_row(
-            "SELECT COUNT(*) FROM community_seats WHERE community_id = ?",
-            params![community_id],
-            |row| row.get(0),
-        ).map_err(|e| Error::DatabaseError(e.to_string()))?;
+        let total: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM community_seats WHERE community_id = ?",
+                params![community_id],
+                |row| row.get(0),
+            )
+            .map_err(|e| Error::DatabaseError(e.to_string()))?;
 
         let unclaimed: i64 = conn.query_row(
             "SELECT COUNT(*) FROM community_seats WHERE community_id = ? AND claimed_by_did IS NULL",
@@ -5165,11 +6400,18 @@ mod tests {
         // Add a friend first
         let signing_key = [1u8; 32];
         let encryption_key = [2u8; 32];
-        db.add_friend("did:key:z6MkTest", "Alice", &signing_key, &encryption_key, None)
-            .unwrap();
+        db.add_friend(
+            "did:key:z6MkTest",
+            "Alice",
+            &signing_key,
+            &encryption_key,
+            None,
+        )
+        .unwrap();
 
         // Create conversation
-        db.create_conversation("conv-1", "did:key:z6MkTest").unwrap();
+        db.create_conversation("conv-1", "did:key:z6MkTest")
+            .unwrap();
 
         // Get conversation
         let conv = db.get_conversation("conv-1").unwrap().unwrap();
@@ -5192,9 +6434,16 @@ mod tests {
         // Setup
         let signing_key = [1u8; 32];
         let encryption_key = [2u8; 32];
-        db.add_friend("did:key:z6MkTest", "Alice", &signing_key, &encryption_key, None)
+        db.add_friend(
+            "did:key:z6MkTest",
+            "Alice",
+            &signing_key,
+            &encryption_key,
+            None,
+        )
+        .unwrap();
+        db.create_conversation("conv-1", "did:key:z6MkTest")
             .unwrap();
-        db.create_conversation("conv-1", "did:key:z6MkTest").unwrap();
 
         // Store messages
         let content = b"encrypted message content";
@@ -5265,9 +6514,16 @@ mod tests {
         // Setup: create a friend and conversation
         let signing_key = [1u8; 32];
         let encryption_key = [2u8; 32];
-        db.add_friend("did:key:z6MkTest", "Alice", &signing_key, &encryption_key, None)
+        db.add_friend(
+            "did:key:z6MkTest",
+            "Alice",
+            &signing_key,
+            &encryption_key,
+            None,
+        )
+        .unwrap();
+        db.create_conversation("conv-1", "did:key:z6MkTest")
             .unwrap();
-        db.create_conversation("conv-1", "did:key:z6MkTest").unwrap();
 
         // Store a call record
         db.store_call_record(
@@ -5314,24 +6570,27 @@ mod tests {
         // Setup
         let signing_key = [1u8; 32];
         let encryption_key = [2u8; 32];
-        db.add_friend("did:key:z6MkTest", "Alice", &signing_key, &encryption_key, None)
+        db.add_friend(
+            "did:key:z6MkTest",
+            "Alice",
+            &signing_key,
+            &encryption_key,
+            None,
+        )
+        .unwrap();
+        db.create_conversation("conv-1", "did:key:z6MkTest")
             .unwrap();
-        db.create_conversation("conv-1", "did:key:z6MkTest").unwrap();
 
         // Store a call record
         db.store_call_record(
-            "call-1",
-            "conv-1",
-            "voice",
-            "outgoing",
-            "active",
-            "[]",
-            1000,
+            "call-1", "conv-1", "voice", "outgoing", "active", "[]", 1000,
         )
         .unwrap();
 
         // End the call
-        let updated = db.end_call_record("call-1", "completed", 6000, 5000).unwrap();
+        let updated = db
+            .end_call_record("call-1", "completed", 6000, 5000)
+            .unwrap();
         assert!(updated);
 
         // Verify the update
@@ -5347,7 +6606,9 @@ mod tests {
         let db = Database::open(None).await.unwrap();
 
         // Ending a non-existent call should return false
-        let updated = db.end_call_record("nonexistent", "completed", 6000, 5000).unwrap();
+        let updated = db
+            .end_call_record("nonexistent", "completed", 6000, 5000)
+            .unwrap();
         assert!(!updated);
     }
 
@@ -5358,20 +6619,51 @@ mod tests {
         // Setup: two conversations
         let signing_key = [1u8; 32];
         let encryption_key = [2u8; 32];
-        db.add_friend("did:key:z6MkAlice", "Alice", &signing_key, &encryption_key, None)
+        db.add_friend(
+            "did:key:z6MkAlice",
+            "Alice",
+            &signing_key,
+            &encryption_key,
+            None,
+        )
+        .unwrap();
+        db.add_friend(
+            "did:key:z6MkBob",
+            "Bob",
+            &signing_key,
+            &encryption_key,
+            None,
+        )
+        .unwrap();
+        db.create_conversation("conv-1", "did:key:z6MkAlice")
             .unwrap();
-        db.add_friend("did:key:z6MkBob", "Bob", &signing_key, &encryption_key, None)
-            .unwrap();
-        db.create_conversation("conv-1", "did:key:z6MkAlice").unwrap();
         db.create_conversation("conv-2", "did:key:z6MkBob").unwrap();
 
         // Store calls across different conversations
-        db.store_call_record("call-1", "conv-1", "voice", "outgoing", "completed", "[]", 1000)
-            .unwrap();
-        db.store_call_record("call-2", "conv-2", "video", "incoming", "completed", "[]", 2000)
-            .unwrap();
-        db.store_call_record("call-3", "conv-1", "voice", "incoming", "missed", "[]", 3000)
-            .unwrap();
+        db.store_call_record(
+            "call-1",
+            "conv-1",
+            "voice",
+            "outgoing",
+            "completed",
+            "[]",
+            1000,
+        )
+        .unwrap();
+        db.store_call_record(
+            "call-2",
+            "conv-2",
+            "video",
+            "incoming",
+            "completed",
+            "[]",
+            2000,
+        )
+        .unwrap();
+        db.store_call_record(
+            "call-3", "conv-1", "voice", "incoming", "missed", "[]", 3000,
+        )
+        .unwrap();
 
         // Get all call history
         let all_history = db.get_all_call_history(10, 0).unwrap();
@@ -5430,9 +6722,12 @@ mod tests {
         let db = Database::open(None).await.unwrap();
         let now = 1700000000i64;
 
-        db.store_chunk("c0", "file-A", 0, b"part-0", 6, now).unwrap();
-        db.store_chunk("c1", "file-A", 1, b"part-1", 6, now).unwrap();
-        db.store_chunk("c2", "file-A", 2, b"part-2", 6, now).unwrap();
+        db.store_chunk("c0", "file-A", 0, b"part-0", 6, now)
+            .unwrap();
+        db.store_chunk("c1", "file-A", 1, b"part-1", 6, now)
+            .unwrap();
+        db.store_chunk("c2", "file-A", 2, b"part-2", 6, now)
+            .unwrap();
         // Different file
         db.store_chunk("c3", "file-B", 0, b"other", 5, now).unwrap();
 
@@ -5451,9 +6746,12 @@ mod tests {
         let db = Database::open(None).await.unwrap();
         let now = 1700000000i64;
 
-        db.store_chunk("c0", "file-del", 0, b"data0", 5, now).unwrap();
-        db.store_chunk("c1", "file-del", 1, b"data1", 5, now).unwrap();
-        db.store_chunk("c2", "file-keep", 0, b"keep", 4, now).unwrap();
+        db.store_chunk("c0", "file-del", 0, b"data0", 5, now)
+            .unwrap();
+        db.store_chunk("c1", "file-del", 1, b"data1", 5, now)
+            .unwrap();
+        db.store_chunk("c2", "file-keep", 0, b"keep", 4, now)
+            .unwrap();
 
         db.delete_chunks_for_file("file-del").unwrap();
 
@@ -5475,9 +6773,18 @@ mod tests {
         let chunks_json = r#"[{"chunk_id":"c0","index":0,"size":256,"hash":"abc"}]"#;
 
         db.store_manifest(
-            "file-m1", "report.pdf", 1024, 256, 1,
-            chunks_json, "filehash123", false, None, now,
-        ).unwrap();
+            "file-m1",
+            "report.pdf",
+            1024,
+            256,
+            1,
+            chunks_json,
+            "filehash123",
+            false,
+            None,
+            now,
+        )
+        .unwrap();
 
         let manifest = db.get_manifest("file-m1").unwrap().unwrap();
         assert_eq!(manifest.file_id, "file-m1");
@@ -5496,9 +6803,18 @@ mod tests {
         let now = 1700000000i64;
 
         db.store_manifest(
-            "file-enc", "secret.dat", 2048, 256, 8,
-            "[]", "hash456", true, Some("key-v3"), now,
-        ).unwrap();
+            "file-enc",
+            "secret.dat",
+            2048,
+            256,
+            8,
+            "[]",
+            "hash456",
+            true,
+            Some("key-v3"),
+            now,
+        )
+        .unwrap();
 
         let manifest = db.get_manifest("file-enc").unwrap().unwrap();
         assert!(manifest.encrypted);
@@ -5511,9 +6827,18 @@ mod tests {
         let now = 1700000000i64;
 
         db.store_manifest(
-            "file-del-m", "temp.txt", 100, 100, 1,
-            "[]", "hash", false, None, now,
-        ).unwrap();
+            "file-del-m",
+            "temp.txt",
+            100,
+            100,
+            1,
+            "[]",
+            "hash",
+            false,
+            None,
+            now,
+        )
+        .unwrap();
 
         assert!(db.get_manifest("file-del-m").unwrap().is_some());
         db.delete_manifest("file-del-m").unwrap();
@@ -5537,11 +6862,20 @@ mod tests {
         let now = 1700000000i64;
 
         db.store_dm_shared_file(
-            "sf-1", "conv-1", None, "photo.jpg",
-            Some("vacation photo"), 2048000, Some("image/jpeg"),
-            r#"{"chunks":[]}"#, "did:key:alice",
-            None, None, now,
-        ).unwrap();
+            "sf-1",
+            "conv-1",
+            None,
+            "photo.jpg",
+            Some("vacation photo"),
+            2048000,
+            Some("image/jpeg"),
+            r#"{"chunks":[]}"#,
+            "did:key:alice",
+            None,
+            None,
+            now,
+        )
+        .unwrap();
 
         let file = db.get_dm_shared_file("sf-1").unwrap().unwrap();
         assert_eq!(file.id, "sf-1");
@@ -5558,19 +6892,36 @@ mod tests {
 
         // Create a folder first
         db.create_dm_shared_folder(
-            "folder-1", "conv-1", None, "Documents",
-            "did:key:alice", now,
-        ).unwrap();
+            "folder-1",
+            "conv-1",
+            None,
+            "Documents",
+            "did:key:alice",
+            now,
+        )
+        .unwrap();
 
         // Store file in folder
         db.store_dm_shared_file(
-            "sf-2", "conv-1", Some("folder-1"), "doc.pdf",
-            None, 1024, Some("application/pdf"),
-            "{}", "did:key:alice", None, None, now,
-        ).unwrap();
+            "sf-2",
+            "conv-1",
+            Some("folder-1"),
+            "doc.pdf",
+            None,
+            1024,
+            Some("application/pdf"),
+            "{}",
+            "did:key:alice",
+            None,
+            None,
+            now,
+        )
+        .unwrap();
 
         // List files in folder
-        let files = db.get_dm_shared_files("conv-1", Some("folder-1"), 100, 0).unwrap();
+        let files = db
+            .get_dm_shared_files("conv-1", Some("folder-1"), 100, 0)
+            .unwrap();
         assert_eq!(files.len(), 1);
         assert_eq!(files[0].filename, "doc.pdf");
 
@@ -5585,10 +6936,20 @@ mod tests {
         let now = 1700000000i64;
 
         db.store_dm_shared_file(
-            "sf-dl", "conv-1", None, "file.zip",
-            None, 5000, None, "{}", "did:key:bob",
-            None, None, now,
-        ).unwrap();
+            "sf-dl",
+            "conv-1",
+            None,
+            "file.zip",
+            None,
+            5000,
+            None,
+            "{}",
+            "did:key:bob",
+            None,
+            None,
+            now,
+        )
+        .unwrap();
 
         // Initial download count should be 0
         let file = db.get_dm_shared_file("sf-dl").unwrap().unwrap();
@@ -5609,10 +6970,20 @@ mod tests {
         let now = 1700000000i64;
 
         db.store_dm_shared_file(
-            "sf-del", "conv-1", None, "temp.txt",
-            None, 100, None, "{}", "did:key:alice",
-            None, None, now,
-        ).unwrap();
+            "sf-del",
+            "conv-1",
+            None,
+            "temp.txt",
+            None,
+            100,
+            None,
+            "{}",
+            "did:key:alice",
+            None,
+            None,
+            now,
+        )
+        .unwrap();
 
         assert!(db.get_dm_shared_file("sf-del").unwrap().is_some());
         db.delete_dm_shared_file("sf-del").unwrap();
@@ -5624,21 +6995,38 @@ mod tests {
         let db = Database::open(None).await.unwrap();
         let now = 1700000000i64;
 
-        db.create_dm_shared_folder("folder-a", "conv-1", None, "Folder A", "alice", now).unwrap();
-        db.create_dm_shared_folder("folder-b", "conv-1", None, "Folder B", "alice", now).unwrap();
+        db.create_dm_shared_folder("folder-a", "conv-1", None, "Folder A", "alice", now)
+            .unwrap();
+        db.create_dm_shared_folder("folder-b", "conv-1", None, "Folder B", "alice", now)
+            .unwrap();
 
         db.store_dm_shared_file(
-            "sf-mv", "conv-1", Some("folder-a"), "moveme.txt",
-            None, 50, None, "{}", "alice", None, None, now,
-        ).unwrap();
+            "sf-mv",
+            "conv-1",
+            Some("folder-a"),
+            "moveme.txt",
+            None,
+            50,
+            None,
+            "{}",
+            "alice",
+            None,
+            None,
+            now,
+        )
+        .unwrap();
 
         // Move to folder-b
         db.move_dm_shared_file("sf-mv", Some("folder-b")).unwrap();
 
-        let files_a = db.get_dm_shared_files("conv-1", Some("folder-a"), 100, 0).unwrap();
+        let files_a = db
+            .get_dm_shared_files("conv-1", Some("folder-a"), 100, 0)
+            .unwrap();
         assert!(files_a.is_empty());
 
-        let files_b = db.get_dm_shared_files("conv-1", Some("folder-b"), 100, 0).unwrap();
+        let files_b = db
+            .get_dm_shared_files("conv-1", Some("folder-b"), 100, 0)
+            .unwrap();
         assert_eq!(files_b.len(), 1);
         assert_eq!(files_b[0].id, "sf-mv");
     }
@@ -5652,9 +7040,12 @@ mod tests {
         let db = Database::open(None).await.unwrap();
         let now = 1700000000i64;
 
-        db.create_dm_shared_folder("f-1", "conv-1", None, "Photos", "alice", now).unwrap();
-        db.create_dm_shared_folder("f-2", "conv-1", None, "Documents", "alice", now).unwrap();
-        db.create_dm_shared_folder("f-3", "conv-1", Some("f-1"), "Vacation", "alice", now).unwrap();
+        db.create_dm_shared_folder("f-1", "conv-1", None, "Photos", "alice", now)
+            .unwrap();
+        db.create_dm_shared_folder("f-2", "conv-1", None, "Documents", "alice", now)
+            .unwrap();
+        db.create_dm_shared_folder("f-3", "conv-1", Some("f-1"), "Vacation", "alice", now)
+            .unwrap();
 
         let root = db.get_dm_shared_folders("conv-1", None).unwrap();
         assert_eq!(root.len(), 2);
@@ -5669,7 +7060,8 @@ mod tests {
         let db = Database::open(None).await.unwrap();
         let now = 1700000000i64;
 
-        db.create_dm_shared_folder("f-ren", "conv-1", None, "Old Name", "alice", now).unwrap();
+        db.create_dm_shared_folder("f-ren", "conv-1", None, "Old Name", "alice", now)
+            .unwrap();
         db.rename_dm_shared_folder("f-ren", "New Name").unwrap();
 
         let folders = db.get_dm_shared_folders("conv-1", None).unwrap();
@@ -5681,7 +7073,8 @@ mod tests {
         let db = Database::open(None).await.unwrap();
         let now = 1700000000i64;
 
-        db.create_dm_shared_folder("f-del", "conv-1", None, "Temp", "alice", now).unwrap();
+        db.create_dm_shared_folder("f-del", "conv-1", None, "Temp", "alice", now)
+            .unwrap();
         assert_eq!(db.get_dm_shared_folders("conv-1", None).unwrap().len(), 1);
 
         db.delete_dm_shared_folder("f-del").unwrap();
@@ -5695,10 +7088,20 @@ mod tests {
 
         for i in 0..10 {
             db.store_dm_shared_file(
-                &format!("sf-page-{}", i), "conv-page", None,
-                &format!("file-{}.txt", i), None, (i * 100) as i64,
-                None, "{}", "alice", None, None, now + i as i64,
-            ).unwrap();
+                &format!("sf-page-{}", i),
+                "conv-page",
+                None,
+                &format!("file-{}.txt", i),
+                None,
+                (i * 100) as i64,
+                None,
+                "{}",
+                "alice",
+                None,
+                None,
+                now + i as i64,
+            )
+            .unwrap();
         }
 
         let page1 = db.get_dm_shared_files("conv-page", None, 3, 0).unwrap();

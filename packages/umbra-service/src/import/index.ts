@@ -102,6 +102,8 @@ export {
   getEmojiUrl,
   getStickerUrl,
   mapStickerFormat,
+  downloadAndStoreAsset,
+  downloadAndStoreGuildBranding,
   getAvatarUrl,
   snowflakeToTimestamp,
   mapChannelType,

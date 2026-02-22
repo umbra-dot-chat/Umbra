@@ -350,7 +350,7 @@ export function ProfileImportSelector({
                 : 'Waiting for login to complete...'}
           </Text>
           {status === 'fetching' && (
-            <Button variant="ghost" size="sm" onPress={handleRetry}>
+            <Button variant="tertiary" size="sm" onPress={handleRetry}>
               Cancel
             </Button>
           )}
@@ -367,18 +367,18 @@ export function ProfileImportSelector({
           <HStack gap="md" style={{ alignItems: 'center' }}>
             {importedProfile.avatarBase64 ? (
               <Avatar
-                source={{ uri: `data:${importedProfile.avatarMime || 'image/png'};base64,${importedProfile.avatarBase64}` }}
+                src={`data:${importedProfile.avatarMime || 'image/png'};base64,${importedProfile.avatarBase64}`}
                 size="lg"
               />
             ) : importedProfile.avatarUrl ? (
-              <Avatar source={{ uri: importedProfile.avatarUrl }} size="lg" />
+              <Avatar src={importedProfile.avatarUrl} size="lg" />
             ) : (
               <View
                 style={{
                   width: 48,
                   height: 48,
                   borderRadius: 24,
-                  backgroundColor: theme.colors.bg.tertiary,
+                  backgroundColor: theme.colors.background.surface,
                   alignItems: 'center',
                   justifyContent: 'center',
                 }}
@@ -406,7 +406,7 @@ export function ProfileImportSelector({
         </Card>
 
         <HStack gap="sm">
-          <Button variant="ghost" size="sm" onPress={handleRetry}>
+          <Button variant="tertiary" size="sm" onPress={handleRetry}>
             Change
           </Button>
           <Button size="sm" onPress={handleUseProfile} style={{ flex: 1 }}>
@@ -424,7 +424,7 @@ export function ProfileImportSelector({
         <Alert variant="danger">
           {error || 'Failed to import profile'}
         </Alert>
-        <Button variant="ghost" size="sm" onPress={handleRetry}>
+        <Button variant="tertiary" size="sm" onPress={handleRetry}>
           Try again
         </Button>
       </VStack>
@@ -493,7 +493,7 @@ export function ProfileImportSelector({
       </VStack>
 
       {onSkip && (
-        <Button variant="ghost" size="sm" onPress={onSkip}>
+        <Button variant="tertiary" size="sm" onPress={onSkip}>
           Skip and enter manually
         </Button>
       )}

@@ -30,26 +30,21 @@
 //! └─────────────────────────────────────────────────────────────────────────┘
 //! ```
 
+use futures::StreamExt;
+use parking_lot::RwLock;
 use std::collections::HashMap;
 use std::sync::Arc;
-use parking_lot::RwLock;
-use tokio::sync::{mpsc, broadcast, oneshot};
-use futures::StreamExt;
+use tokio::sync::{broadcast, mpsc, oneshot};
 
-use libp2p::{
-    swarm::SwarmEvent,
-    identify, kad, ping,
-    request_response,
-    PeerId, Multiaddr, Swarm,
-};
+use libp2p::{identify, kad, ping, request_response, swarm::SwarmEvent, Multiaddr, PeerId, Swarm};
 
-use crate::error::{Error, Result};
 use super::{
-    UmbraBehaviour, NetworkEvent, NetworkCommand, PeerInfo,
     codec::{UmbraRequest, UmbraResponse},
     file_transfer::{FileTransferMessage, TransferManager},
-    protocols::{MessageResponse, MessageDeliveryStatus, FriendResponse, FriendResponseStatus},
+    protocols::{FriendResponse, FriendResponseStatus, MessageDeliveryStatus, MessageResponse},
+    NetworkCommand, NetworkEvent, PeerInfo, UmbraBehaviour,
 };
+use crate::error::{Error, Result};
 
 /// Shared state for the event loop
 pub struct EventLoopState {
@@ -171,7 +166,11 @@ async fn handle_command(
             // Deserialize the message bytes into an UmbraRequest and send via request-response
             match bincode::deserialize::<UmbraRequest>(&message) {
                 Ok(request) => {
-                    tracing::debug!("Sending request to peer {}: {:?}", peer_id, std::mem::discriminant(&request));
+                    tracing::debug!(
+                        "Sending request to peer {}: {:?}",
+                        peer_id,
+                        std::mem::discriminant(&request)
+                    );
                     let _request_id = swarm.behaviour_mut().send_request(&peer_id, request);
                 }
                 Err(e) => {
@@ -185,7 +184,10 @@ async fn handle_command(
             }
         }
 
-        NetworkCommand::FindPeer { peer_id, response_tx } => {
+        NetworkCommand::FindPeer {
+            peer_id,
+            response_tx,
+        } => {
             tracing::info!("Finding peer: {}", peer_id);
             let query_id = swarm.behaviour_mut().find_peer(peer_id);
             if let Some(tx) = response_tx {
@@ -309,13 +311,13 @@ async fn handle_swarm_event(
 
             // Remove from connected peers if no connections remain
             if num_established == 0 {
-                state.connected_peers.write().retain(|p| p.peer_id != peer_id);
+                state
+                    .connected_peers
+                    .write()
+                    .retain(|p| p.peer_id != peer_id);
             }
 
-            let _ = event_tx.send(NetworkEvent::PeerDisconnected {
-                peer_id,
-                reason,
-            });
+            let _ = event_tx.send(NetworkEvent::PeerDisconnected { peer_id, reason });
         }
 
         SwarmEvent::OutgoingConnectionError { peer_id, error, .. } => {
@@ -324,8 +326,16 @@ async fn handle_swarm_event(
             // The error handling is done at the dial site
         }
 
-        SwarmEvent::IncomingConnectionError { send_back_addr, error, .. } => {
-            tracing::warn!("Incoming connection error from {}: {}", send_back_addr, error);
+        SwarmEvent::IncomingConnectionError {
+            send_back_addr,
+            error,
+            ..
+        } => {
+            tracing::warn!(
+                "Incoming connection error from {}: {}",
+                send_back_addr,
+                error
+            );
         }
 
         // ====================================================================
@@ -358,7 +368,10 @@ async fn handle_swarm_event(
 
                     // Add addresses to Kademlia for future discovery
                     for addr in &info.listen_addrs {
-                        swarm.behaviour_mut().kademlia.add_address(&peer_id, addr.clone());
+                        swarm
+                            .behaviour_mut()
+                            .kademlia
+                            .add_address(&peer_id, addr.clone());
                     }
 
                     let _ = event_tx.send(NetworkEvent::PeerIdentified {
@@ -368,15 +381,25 @@ async fn handle_swarm_event(
                     });
                 }
 
-                super::behaviour::UmbraBehaviourEvent::Identify(identify::Event::Sent { peer_id, .. }) => {
+                super::behaviour::UmbraBehaviourEvent::Identify(identify::Event::Sent {
+                    peer_id,
+                    ..
+                }) => {
                     tracing::debug!("Sent identify to {}", peer_id);
                 }
 
-                super::behaviour::UmbraBehaviourEvent::Identify(identify::Event::Pushed { peer_id, .. }) => {
+                super::behaviour::UmbraBehaviourEvent::Identify(identify::Event::Pushed {
+                    peer_id,
+                    ..
+                }) => {
                     tracing::debug!("Pushed identify info to {}", peer_id);
                 }
 
-                super::behaviour::UmbraBehaviourEvent::Identify(identify::Event::Error { peer_id, error, .. }) => {
+                super::behaviour::UmbraBehaviourEvent::Identify(identify::Event::Error {
+                    peer_id,
+                    error,
+                    ..
+                }) => {
                     tracing::warn!("Identify error with {}: {}", peer_id, error);
                 }
 
@@ -384,9 +407,7 @@ async fn handle_swarm_event(
                 // Ping Events
                 // ----------------------------------------------------------------
                 super::behaviour::UmbraBehaviourEvent::Ping(ping::Event {
-                    peer,
-                    result,
-                    ..
+                    peer, result, ..
                 }) => {
                     match result {
                         Ok(duration) => {
@@ -408,11 +429,9 @@ async fn handle_swarm_event(
                 // ----------------------------------------------------------------
                 // Kademlia Events
                 // ----------------------------------------------------------------
-                super::behaviour::UmbraBehaviourEvent::Kademlia(kad::Event::OutboundQueryProgressed {
-                    id,
-                    result,
-                    ..
-                }) => {
+                super::behaviour::UmbraBehaviourEvent::Kademlia(
+                    kad::Event::OutboundQueryProgressed { id, result, .. },
+                ) => {
                     handle_kademlia_query_progress(id, result, swarm, event_tx, state);
                 }
 
@@ -428,13 +447,18 @@ async fn handle_swarm_event(
                     );
 
                     // Count peers in routing table
-                    let peer_count = swarm.behaviour_mut().kademlia.kbuckets()
+                    let peer_count = swarm
+                        .behaviour_mut()
+                        .kademlia
+                        .kbuckets()
                         .fold(0, |acc, bucket| acc + bucket.num_entries());
 
                     let _ = event_tx.send(NetworkEvent::DhtUpdated { peer_count });
                 }
 
-                super::behaviour::UmbraBehaviourEvent::Kademlia(kad::Event::InboundRequest { request }) => {
+                super::behaviour::UmbraBehaviourEvent::Kademlia(kad::Event::InboundRequest {
+                    request,
+                }) => {
                     tracing::trace!("DHT inbound request: {:?}", request);
                 }
 
@@ -442,26 +466,63 @@ async fn handle_swarm_event(
                 // Request-Response Events
                 // ----------------------------------------------------------------
                 super::behaviour::UmbraBehaviourEvent::RequestResponse(
-                    request_response::Event::Message { peer, message, .. }
+                    request_response::Event::Message { peer, message, .. },
                 ) => {
                     match message {
                         // Inbound request from a peer
-                        request_response::Message::Request { request, channel, .. } => {
-                            tracing::info!("Received request from peer {}: {:?}", peer, std::mem::discriminant(&request));
-                            handle_inbound_request(peer, request, channel, swarm, event_tx, &mut state.transfer_manager);
+                        request_response::Message::Request {
+                            request, channel, ..
+                        } => {
+                            tracing::info!(
+                                "Received request from peer {}: {:?}",
+                                peer,
+                                std::mem::discriminant(&request)
+                            );
+                            handle_inbound_request(
+                                peer,
+                                request,
+                                channel,
+                                swarm,
+                                event_tx,
+                                &mut state.transfer_manager,
+                            );
                         }
                         // Response to our outbound request
-                        request_response::Message::Response { response, request_id, .. } => {
-                            tracing::debug!("Received response from peer {} for request {:?}: {:?}", peer, request_id, std::mem::discriminant(&response));
-                            handle_inbound_response(peer, response, event_tx, &mut state.transfer_manager);
+                        request_response::Message::Response {
+                            response,
+                            request_id,
+                            ..
+                        } => {
+                            tracing::debug!(
+                                "Received response from peer {} for request {:?}: {:?}",
+                                peer,
+                                request_id,
+                                std::mem::discriminant(&response)
+                            );
+                            handle_inbound_response(
+                                peer,
+                                response,
+                                event_tx,
+                                &mut state.transfer_manager,
+                            );
                         }
                     }
                 }
 
                 super::behaviour::UmbraBehaviourEvent::RequestResponse(
-                    request_response::Event::OutboundFailure { peer, error, request_id, .. }
+                    request_response::Event::OutboundFailure {
+                        peer,
+                        error,
+                        request_id,
+                        ..
+                    },
                 ) => {
-                    tracing::warn!("Outbound request {:?} to {} failed: {}", request_id, peer, error);
+                    tracing::warn!(
+                        "Outbound request {:?} to {} failed: {}",
+                        request_id,
+                        peer,
+                        error
+                    );
                     let _ = event_tx.send(NetworkEvent::MessageFailed {
                         peer_id: peer,
                         message_id: format!("{:?}", request_id),
@@ -470,13 +531,25 @@ async fn handle_swarm_event(
                 }
 
                 super::behaviour::UmbraBehaviourEvent::RequestResponse(
-                    request_response::Event::InboundFailure { peer, error, request_id, .. }
+                    request_response::Event::InboundFailure {
+                        peer,
+                        error,
+                        request_id,
+                        ..
+                    },
                 ) => {
-                    tracing::warn!("Inbound request {:?} from {} failed: {}", request_id, peer, error);
+                    tracing::warn!(
+                        "Inbound request {:?} from {} failed: {}",
+                        request_id,
+                        peer,
+                        error
+                    );
                 }
 
                 super::behaviour::UmbraBehaviourEvent::RequestResponse(
-                    request_response::Event::ResponseSent { peer, request_id, .. }
+                    request_response::Event::ResponseSent {
+                        peer, request_id, ..
+                    },
                 ) => {
                     tracing::debug!("Response sent to {} for request {:?}", peer, request_id);
                 }
@@ -499,11 +572,18 @@ async fn handle_swarm_event(
             tracing::error!("Listener {:?} error: {}", listener_id, error);
         }
 
-        SwarmEvent::ListenerClosed { listener_id, reason, .. } => {
+        SwarmEvent::ListenerClosed {
+            listener_id,
+            reason,
+            ..
+        } => {
             tracing::info!("Listener {:?} closed: {:?}", listener_id, reason);
         }
 
-        SwarmEvent::Dialing { peer_id: Some(peer_id), .. } => {
+        SwarmEvent::Dialing {
+            peer_id: Some(peer_id),
+            ..
+        } => {
             tracing::debug!("Dialing peer: {}", peer_id);
         }
 
@@ -538,7 +618,11 @@ fn handle_kademlia_query_progress(
                 // Also emit PeerDiscovered events
                 let _ = event_tx.send(NetworkEvent::PeerDiscovered {
                     peer_id,
-                    addresses: state.discovered_addrs.get(&peer_id).cloned().unwrap_or_default(),
+                    addresses: state
+                        .discovered_addrs
+                        .get(&peer_id)
+                        .cloned()
+                        .unwrap_or_default(),
                 });
             }
 
@@ -569,7 +653,10 @@ fn handle_kademlia_query_progress(
             tracing::warn!("DHT bootstrap error: {:?}", e);
         }
 
-        kad::QueryResult::GetProviders(Ok(kad::GetProvidersOk::FoundProviders { providers, .. })) => {
+        kad::QueryResult::GetProviders(Ok(kad::GetProvidersOk::FoundProviders {
+            providers,
+            ..
+        })) => {
             // Check if this was one of our file provider queries
             if let Some(file_id) = state.pending_provider_queries.get(&query_id) {
                 let providers: Vec<PeerId> = providers.into_iter().collect();
@@ -588,7 +675,9 @@ fn handle_kademlia_query_progress(
             }
         }
 
-        kad::QueryResult::GetProviders(Ok(kad::GetProvidersOk::FinishedWithNoAdditionalRecord { .. })) => {
+        kad::QueryResult::GetProviders(Ok(
+            kad::GetProvidersOk::FinishedWithNoAdditionalRecord { .. },
+        )) => {
             // Query finished — remove from pending
             if let Some(file_id) = state.pending_provider_queries.remove(&query_id) {
                 tracing::debug!("GetProviders query finished for file {}", file_id);
@@ -656,7 +745,10 @@ fn handle_inbound_request(
             });
 
             if let Err(e) = swarm.behaviour_mut().send_response(channel, response) {
-                tracing::warn!("Failed to send message delivery response: {:?}", std::mem::discriminant(&e));
+                tracing::warn!(
+                    "Failed to send message delivery response: {:?}",
+                    std::mem::discriminant(&e)
+                );
             }
         }
 
@@ -670,7 +762,8 @@ fn handle_inbound_request(
             // Emit as a raw message event for the application layer
             let _ = event_tx.send(NetworkEvent::MessageReceived {
                 peer_id: peer,
-                message: bincode::serialize(&UmbraRequest::Friend(friend_request)).unwrap_or_default(),
+                message: bincode::serialize(&UmbraRequest::Friend(friend_request))
+                    .unwrap_or_default(),
             });
 
             // Acknowledge receipt
@@ -684,7 +777,10 @@ fn handle_inbound_request(
             });
 
             if let Err(e) = swarm.behaviour_mut().send_response(channel, response) {
-                tracing::warn!("Failed to send friend request response: {:?}", std::mem::discriminant(&e));
+                tracing::warn!(
+                    "Failed to send friend request response: {:?}",
+                    std::mem::discriminant(&e)
+                );
             }
         }
 
@@ -703,8 +799,14 @@ fn handle_inbound_request(
             });
 
             // Acknowledge
-            if let Err(e) = swarm.behaviour_mut().send_response(channel, UmbraResponse::Ack) {
-                tracing::warn!("Failed to send presence ack: {:?}", std::mem::discriminant(&e));
+            if let Err(e) = swarm
+                .behaviour_mut()
+                .send_response(channel, UmbraResponse::Ack)
+            {
+                tracing::warn!(
+                    "Failed to send presence ack: {:?}",
+                    std::mem::discriminant(&e)
+                );
             }
         }
 
@@ -737,14 +839,26 @@ fn handle_inbound_request(
                         }
                         Ok(None) => {
                             // No response needed — just ack
-                            if let Err(e) = swarm.behaviour_mut().send_response(channel, UmbraResponse::Ack) {
-                                tracing::warn!("Failed to send file transfer ack: {:?}", std::mem::discriminant(&e));
+                            if let Err(e) = swarm
+                                .behaviour_mut()
+                                .send_response(channel, UmbraResponse::Ack)
+                            {
+                                tracing::warn!(
+                                    "Failed to send file transfer ack: {:?}",
+                                    std::mem::discriminant(&e)
+                                );
                             }
                         }
                         Err(e) => {
                             tracing::error!("TransferManager error for {}: {}", transfer_id, e);
-                            if let Err(e) = swarm.behaviour_mut().send_response(channel, UmbraResponse::Ack) {
-                                tracing::warn!("Failed to send ack after error: {:?}", std::mem::discriminant(&e));
+                            if let Err(e) = swarm
+                                .behaviour_mut()
+                                .send_response(channel, UmbraResponse::Ack)
+                            {
+                                tracing::warn!(
+                                    "Failed to send ack after error: {:?}",
+                                    std::mem::discriminant(&e)
+                                );
                             }
                         }
                     }
@@ -756,8 +870,14 @@ fn handle_inbound_request(
                 }
                 Err(e) => {
                     tracing::error!("Failed to deserialize FileTransferMessage: {}", e);
-                    if let Err(e) = swarm.behaviour_mut().send_response(channel, UmbraResponse::Ack) {
-                        tracing::warn!("Failed to send ack after deser error: {:?}", std::mem::discriminant(&e));
+                    if let Err(e) = swarm
+                        .behaviour_mut()
+                        .send_response(channel, UmbraResponse::Ack)
+                    {
+                        tracing::warn!(
+                            "Failed to send ack after deser error: {:?}",
+                            std::mem::discriminant(&e)
+                        );
                     }
                 }
             }
@@ -773,30 +893,28 @@ fn handle_inbound_response(
     transfer_manager: &mut TransferManager,
 ) {
     match response {
-        UmbraResponse::Message(msg_response) => {
-            match &msg_response.status {
-                MessageDeliveryStatus::Delivered => {
-                    tracing::info!("Message {} delivered to {}", msg_response.message_id, peer);
-                    let _ = event_tx.send(NetworkEvent::MessageDelivered {
-                        peer_id: peer,
-                        message_id: msg_response.message_id,
-                    });
-                }
-                MessageDeliveryStatus::Failed { reason } => {
-                    tracing::warn!(
-                        "Message {} failed to deliver to {}: {}",
-                        msg_response.message_id,
-                        peer,
-                        reason
-                    );
-                    let _ = event_tx.send(NetworkEvent::MessageFailed {
-                        peer_id: peer,
-                        message_id: msg_response.message_id,
-                        error: reason.clone(),
-                    });
-                }
+        UmbraResponse::Message(msg_response) => match &msg_response.status {
+            MessageDeliveryStatus::Delivered => {
+                tracing::info!("Message {} delivered to {}", msg_response.message_id, peer);
+                let _ = event_tx.send(NetworkEvent::MessageDelivered {
+                    peer_id: peer,
+                    message_id: msg_response.message_id,
+                });
             }
-        }
+            MessageDeliveryStatus::Failed { reason } => {
+                tracing::warn!(
+                    "Message {} failed to deliver to {}: {}",
+                    msg_response.message_id,
+                    peer,
+                    reason
+                );
+                let _ = event_tx.send(NetworkEvent::MessageFailed {
+                    peer_id: peer,
+                    message_id: msg_response.message_id,
+                    error: reason.clone(),
+                });
+            }
+        },
 
         UmbraResponse::Friend(friend_response) => {
             tracing::info!(
@@ -829,7 +947,11 @@ fn handle_inbound_response(
                     match transfer_manager.on_message(&peer_did, ft_message, now) {
                         Ok(_) => {}
                         Err(e) => {
-                            tracing::error!("TransferManager error processing response for {}: {}", transfer_id, e);
+                            tracing::error!(
+                                "TransferManager error processing response for {}: {}",
+                                transfer_id,
+                                e
+                            );
                         }
                     }
 
@@ -853,7 +975,7 @@ fn handle_inbound_response(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::network::protocols::{MessageRequest, MessageDeliveryStatus, FriendRequestType};
+    use crate::network::protocols::{FriendRequestType, MessageDeliveryStatus, MessageRequest};
 
     #[test]
     fn test_event_loop_state_creation() {
@@ -906,7 +1028,10 @@ mod tests {
 
         for cmd in commands {
             let debug_str = format!("{:?}", cmd);
-            assert!(!debug_str.is_empty(), "Debug should produce non-empty string");
+            assert!(
+                !debug_str.is_empty(),
+                "Debug should produce non-empty string"
+            );
         }
     }
 
@@ -990,14 +1115,12 @@ mod tests {
         }
 
         match f_restored {
-            UmbraResponse::Message(m) => {
-                match m.status {
-                    MessageDeliveryStatus::Failed { reason } => {
-                        assert_eq!(reason, "test failure");
-                    }
-                    _ => panic!("Expected Failed variant"),
+            UmbraResponse::Message(m) => match m.status {
+                MessageDeliveryStatus::Failed { reason } => {
+                    assert_eq!(reason, "test failure");
                 }
-            }
+                _ => panic!("Expected Failed variant"),
+            },
             _ => panic!("Expected Message variant"),
         }
     }

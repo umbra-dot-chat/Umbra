@@ -56,9 +56,9 @@
 //! ```
 
 use ed25519_dalek::{SigningKey, VerifyingKey};
-use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret};
 use rand::rngs::OsRng;
 use serde::{Deserialize, Serialize};
+use x25519_dalek::{PublicKey as X25519PublicKey, StaticSecret};
 use zeroize::ZeroizeOnDrop;
 
 use crate::error::{Error, Result};
@@ -244,7 +244,10 @@ pub struct PublicKey {
 impl PublicKey {
     /// Create a PublicKey from raw bytes
     pub fn from_bytes(signing: [u8; 32], encryption: [u8; 32]) -> Self {
-        Self { signing, encryption }
+        Self {
+            signing,
+            encryption,
+        }
     }
 
     /// Get the verifying key for signature verification
@@ -255,17 +258,23 @@ impl PublicKey {
 
     /// Encode as hex string (for display/QR codes)
     pub fn to_hex(&self) -> String {
-        format!("{}{}", hex::encode(self.signing), hex::encode(self.encryption))
+        format!(
+            "{}{}",
+            hex::encode(self.signing),
+            hex::encode(self.encryption)
+        )
     }
 
     /// Decode from hex string
     pub fn from_hex(hex_str: &str) -> Result<Self> {
         if hex_str.len() != 128 {
-            return Err(Error::InvalidKey("Public key hex must be 128 characters".into()));
+            return Err(Error::InvalidKey(
+                "Public key hex must be 128 characters".into(),
+            ));
         }
 
-        let bytes = hex::decode(hex_str)
-            .map_err(|e| Error::InvalidKey(format!("Invalid hex: {}", e)))?;
+        let bytes =
+            hex::decode(hex_str).map_err(|e| Error::InvalidKey(format!("Invalid hex: {}", e)))?;
 
         let signing: [u8; 32] = bytes[0..32]
             .try_into()
@@ -275,7 +284,10 @@ impl PublicKey {
             .try_into()
             .map_err(|_| Error::InvalidKey("Invalid encryption key length".into()))?;
 
-        Ok(Self { signing, encryption })
+        Ok(Self {
+            signing,
+            encryption,
+        })
     }
 }
 
@@ -296,7 +308,9 @@ mod hex_bytes {
     {
         let s = String::deserialize(deserializer)?;
         let bytes = hex::decode(&s).map_err(serde::de::Error::custom)?;
-        bytes.try_into().map_err(|_| serde::de::Error::custom("Invalid length"))
+        bytes
+            .try_into()
+            .map_err(|_| serde::de::Error::custom("Invalid length"))
     }
 }
 

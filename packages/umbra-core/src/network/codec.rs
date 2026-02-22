@@ -179,7 +179,10 @@ where
     if len > MAX_MESSAGE_SIZE {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
-            format!("Message too large: {} bytes (max {})", len, MAX_MESSAGE_SIZE),
+            format!(
+                "Message too large: {} bytes (max {})",
+                len, MAX_MESSAGE_SIZE
+            ),
         ));
     }
 
@@ -238,9 +241,9 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use base64::Engine;
-    use crate::network::protocols::{MessageDeliveryStatus, FriendRequestType};
+    use crate::network::protocols::{FriendRequestType, MessageDeliveryStatus};
     use crate::storage::chunking::ChunkManifest;
+    use base64::Engine;
 
     #[test]
     fn test_umbra_request_message_roundtrip() {
@@ -375,7 +378,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_codec_read_write_presence() {
-        use crate::network::protocols::{PresenceAnnouncement, OnlineStatus};
+        use crate::network::protocols::{OnlineStatus, PresenceAnnouncement};
 
         let request = UmbraRequest::Presence(PresenceAnnouncement {
             did: "did:key:z6MkTest".to_string(),
@@ -507,7 +510,8 @@ mod tests {
         let bytes = bincode::serialize(&request).unwrap();
         let restored: UmbraRequest = bincode::deserialize(&bytes).unwrap();
 
-        let ft = restored.into_file_transfer_message()
+        let ft = restored
+            .into_file_transfer_message()
             .expect("Should deserialize FileTransferMessage");
         match ft {
             FileTransferMessage::TransferRequest {
@@ -535,7 +539,8 @@ mod tests {
         let bytes = bincode::serialize(&response).unwrap();
         let restored: UmbraResponse = bincode::deserialize(&bytes).unwrap();
 
-        let ft = restored.into_file_transfer_message()
+        let ft = restored
+            .into_file_transfer_message()
             .expect("Should deserialize FileTransferMessage");
         match ft {
             FileTransferMessage::TransferAccept {
@@ -552,7 +557,8 @@ mod tests {
     #[tokio::test]
     async fn test_chunk_data_near_size_limit() {
         // A 256KB chunk, base64-encoded, is ~342KB. This must fit within MAX_MESSAGE_SIZE.
-        let chunk_data = base64::engine::general_purpose::STANDARD.encode(&vec![0xABu8; 256 * 1024]);
+        let chunk_data =
+            base64::engine::general_purpose::STANDARD.encode(&vec![0xABu8; 256 * 1024]);
         let msg = FileTransferMessage::ChunkData {
             transfer_id: "xfer-big".to_string(),
             chunk_index: 0,
@@ -563,12 +569,16 @@ mod tests {
 
         let mut buf = Vec::new();
         let result = write_length_prefixed(&mut buf, &request).await;
-        assert!(result.is_ok(), "256KB chunk should fit within 512KB message limit");
+        assert!(
+            result.is_ok(),
+            "256KB chunk should fit within 512KB message limit"
+        );
 
         // Verify it can be read back
         let mut cursor = futures::io::Cursor::new(buf);
         let restored: UmbraRequest = read_length_prefixed(&mut cursor).await.unwrap();
-        let ft = restored.into_file_transfer_message()
+        let ft = restored
+            .into_file_transfer_message()
             .expect("Should deserialize FileTransferMessage");
         match ft {
             FileTransferMessage::ChunkData { chunk_index, .. } => {
@@ -591,7 +601,8 @@ mod tests {
         let bytes = bincode::serialize(&response).unwrap();
         let restored: UmbraResponse = bincode::deserialize(&bytes).unwrap();
 
-        let ft = restored.into_file_transfer_message()
+        let ft = restored
+            .into_file_transfer_message()
             .expect("Should deserialize FileTransferMessage");
         match ft {
             FileTransferMessage::ChunkAck {
@@ -641,7 +652,8 @@ mod tests {
             let request = UmbraRequest::file_transfer(&msg);
             let bytes = bincode::serialize(&request).unwrap();
             let restored: UmbraRequest = bincode::deserialize(&bytes).unwrap();
-            let ft = restored.into_file_transfer_message()
+            let ft = restored
+                .into_file_transfer_message()
                 .expect("Should deserialize FileTransferMessage");
             assert_eq!(ft.transfer_id(), "xfer-001");
         }

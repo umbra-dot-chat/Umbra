@@ -135,11 +135,17 @@ impl FfiIdentityInfo {
         let profile = identity.profile();
         Self {
             did: CString::new(identity.did_string()).unwrap().into_raw(),
-            display_name: CString::new(profile.display_name.clone()).unwrap().into_raw(),
-            status: profile.status.as_ref()
+            display_name: CString::new(profile.display_name.clone())
+                .unwrap()
+                .into_raw(),
+            status: profile
+                .status
+                .as_ref()
                 .map(|s: &String| CString::new(s.clone()).unwrap().into_raw())
                 .unwrap_or(std::ptr::null_mut()),
-            avatar: profile.avatar.as_ref()
+            avatar: profile
+                .avatar
+                .as_ref()
                 .map(|s: &String| CString::new(s.clone()).unwrap().into_raw())
                 .unwrap_or(std::ptr::null_mut()),
             recovery_phrase: recovery_phrase

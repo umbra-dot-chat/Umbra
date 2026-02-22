@@ -8,13 +8,37 @@
 // Mock the WASM module before importing community module
 jest.mock('@umbra/wasm', () => ({
   getWasm: jest.fn(() => ({
-    umbra_wasm_community_member_list: jest.fn((communityId) =>
+    umbra_wasm_community_member_list: jest.fn((communityId: string) =>
       JSON.stringify([
         { id: 'm1', community_id: communityId, member_did: 'did:key:z6MkAlice', nickname: 'Alice', joined_at: 1000 },
         { id: 'm2', community_id: communityId, member_did: 'did:key:z6MkBob', nickname: 'Bob', joined_at: 1000 },
         { id: 'm3', community_id: communityId, member_did: 'did:key:z6MkCharlie', nickname: 'Charlie', joined_at: 1000 },
       ])
     ),
+    umbra_wasm_community_build_event_relay_batch: jest.fn((json: string) => {
+      const { community_id, event, sender_did } = JSON.parse(json);
+      // Return the same members list minus the sender, with relay envelope payloads
+      const members = [
+        { member_did: 'did:key:z6MkAlice' },
+        { member_did: 'did:key:z6MkBob' },
+        { member_did: 'did:key:z6MkCharlie' },
+      ].filter(m => m.member_did !== sender_did);
+
+      const relayMessages = members.map(m => ({
+        toDid: m.member_did,
+        payload: JSON.stringify({
+          envelope: 'community_event',
+          version: 1,
+          payload: {
+            communityId: community_id,
+            event,
+            senderDid: sender_did,
+            timestamp: Date.now(),
+          },
+        }),
+      }));
+      return JSON.stringify(relayMessages);
+    }),
   })),
   initUmbraWasm: jest.fn(() => Promise.resolve({})),
   isWasmReady: jest.fn(() => true),

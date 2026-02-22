@@ -62,51 +62,69 @@ pub struct DiscoveryConfig {
 impl DiscoveryConfig {
     /// Load configuration from environment variables.
     pub fn from_env() -> Self {
-        let relay_base_url = env::var("RELAY_BASE_URL")
-            .unwrap_or_else(|_| "http://localhost:8080".to_string());
+        let relay_base_url =
+            env::var("RELAY_BASE_URL").unwrap_or_else(|_| "http://localhost:8080".to_string());
 
         Self {
             discord_client_id: env::var("DISCORD_CLIENT_ID").ok(),
             discord_client_secret: env::var("DISCORD_CLIENT_SECRET").ok(),
-            discord_redirect_uri: env::var("DISCORD_REDIRECT_URI").ok().or_else(|| {
-                Some(format!("{}/auth/discord/callback", relay_base_url))
-            }),
-            discord_profile_import_redirect_uri: env::var("DISCORD_PROFILE_IMPORT_REDIRECT_URI").ok().or_else(|| {
-                Some(format!("{}/profile/import/discord/callback", relay_base_url))
-            }),
-            discord_community_import_redirect_uri: env::var("DISCORD_COMMUNITY_IMPORT_REDIRECT_URI").ok().or_else(|| {
-                Some(format!("{}/community/import/discord/callback", relay_base_url))
+            discord_redirect_uri: env::var("DISCORD_REDIRECT_URI")
+                .ok()
+                .or_else(|| Some(format!("{}/auth/discord/callback", relay_base_url))),
+            discord_profile_import_redirect_uri: env::var("DISCORD_PROFILE_IMPORT_REDIRECT_URI")
+                .ok()
+                .or_else(|| {
+                    Some(format!(
+                        "{}/profile/import/discord/callback",
+                        relay_base_url
+                    ))
+                }),
+            discord_community_import_redirect_uri: env::var(
+                "DISCORD_COMMUNITY_IMPORT_REDIRECT_URI",
+            )
+            .ok()
+            .or_else(|| {
+                Some(format!(
+                    "{}/community/import/discord/callback",
+                    relay_base_url
+                ))
             }),
             discord_bot_token: env::var("DISCORD_BOT_TOKEN").ok(),
 
             github_client_id: env::var("GITHUB_CLIENT_ID").ok(),
             github_client_secret: env::var("GITHUB_CLIENT_SECRET").ok(),
-            github_redirect_uri: env::var("GITHUB_REDIRECT_URI").ok().or_else(|| {
-                Some(format!("{}/auth/github/callback", relay_base_url))
-            }),
-            github_profile_import_redirect_uri: env::var("GITHUB_PROFILE_IMPORT_REDIRECT_URI").ok().or_else(|| {
-                Some(format!("{}/profile/import/github/callback", relay_base_url))
-            }),
+            github_redirect_uri: env::var("GITHUB_REDIRECT_URI")
+                .ok()
+                .or_else(|| Some(format!("{}/auth/github/callback", relay_base_url))),
+            github_profile_import_redirect_uri: env::var("GITHUB_PROFILE_IMPORT_REDIRECT_URI")
+                .ok()
+                .or_else(|| Some(format!("{}/profile/import/github/callback", relay_base_url))),
 
             steam_api_key: env::var("STEAM_API_KEY").ok(),
-            steam_profile_import_redirect_uri: env::var("STEAM_PROFILE_IMPORT_REDIRECT_URI").ok().or_else(|| {
-                Some(format!("{}/profile/import/steam/callback", relay_base_url))
-            }),
+            steam_profile_import_redirect_uri: env::var("STEAM_PROFILE_IMPORT_REDIRECT_URI")
+                .ok()
+                .or_else(|| Some(format!("{}/profile/import/steam/callback", relay_base_url))),
 
             bluesky_client_id: env::var("BLUESKY_CLIENT_ID").ok(),
             bluesky_client_secret: env::var("BLUESKY_CLIENT_SECRET").ok(),
-            bluesky_profile_import_redirect_uri: env::var("BLUESKY_PROFILE_IMPORT_REDIRECT_URI").ok().or_else(|| {
-                Some(format!("{}/profile/import/bluesky/callback", relay_base_url))
-            }),
+            bluesky_profile_import_redirect_uri: env::var("BLUESKY_PROFILE_IMPORT_REDIRECT_URI")
+                .ok()
+                .or_else(|| {
+                    Some(format!(
+                        "{}/profile/import/bluesky/callback",
+                        relay_base_url
+                    ))
+                }),
 
             xbox_client_id: env::var("XBOX_CLIENT_ID").ok(),
             xbox_client_secret: env::var("XBOX_CLIENT_SECRET").ok(),
-            xbox_profile_import_redirect_uri: env::var("XBOX_PROFILE_IMPORT_REDIRECT_URI").ok().or_else(|| {
-                Some(format!("{}/profile/import/xbox/callback", relay_base_url))
-            }),
+            xbox_profile_import_redirect_uri: env::var("XBOX_PROFILE_IMPORT_REDIRECT_URI")
+                .ok()
+                .or_else(|| Some(format!("{}/profile/import/xbox/callback", relay_base_url))),
 
-            discovery_salt: env::var("DISCOVERY_SALT")
-                .unwrap_or_else(|_| "umbra-discovery-default-salt-change-in-production".to_string()),
+            discovery_salt: env::var("DISCOVERY_SALT").unwrap_or_else(|_| {
+                "umbra-discovery-default-salt-change-in-production".to_string()
+            }),
 
             data_dir: env::var("DATA_DIR").ok(),
 

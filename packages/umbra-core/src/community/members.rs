@@ -2,9 +2,9 @@
 //!
 //! Join, leave, kick, ban, and member profile operations.
 
-use crate::error::{Error, Result};
-use crate::storage::{CommunityMemberRecord, CommunityBanRecord, CommunityRoleRecord};
 use super::service::generate_id;
+use crate::error::{Error, Result};
+use crate::storage::{CommunityBanRecord, CommunityMemberRecord, CommunityRoleRecord};
 
 impl super::CommunityService {
     /// Add a member to a community (join).
@@ -20,17 +20,23 @@ impl super::CommunityService {
         }
 
         // Check if already a member
-        if self.db().get_community_member(community_id, member_did)?.is_some() {
+        if self
+            .db()
+            .get_community_member(community_id, member_did)?
+            .is_some()
+        {
             return Err(Error::AlreadyMember);
         }
 
         let now = crate::time::now_timestamp();
-        self.db().add_community_member(community_id, member_did, now, nickname)?;
+        self.db()
+            .add_community_member(community_id, member_did, now, nickname)?;
 
         // Assign default member role
         let member_role = self.db().get_member_role(community_id)?;
         if let Some(role) = member_role {
-            self.db().assign_community_role(community_id, member_did, &role.id, now, None)?;
+            self.db()
+                .assign_community_role(community_id, member_did, &role.id, now, None)?;
         }
 
         self.db().insert_audit_log(
@@ -57,11 +63,7 @@ impl super::CommunityService {
     }
 
     /// Remove self from a community (leave).
-    pub fn leave_community(
-        &self,
-        community_id: &str,
-        member_did: &str,
-    ) -> Result<()> {
+    pub fn leave_community(&self, community_id: &str, member_did: &str) -> Result<()> {
         let community = self.get_community(community_id)?;
         if community.owner_did == member_did {
             return Err(Error::InvalidCommunityOperation(
@@ -70,7 +72,8 @@ impl super::CommunityService {
         }
 
         let now = crate::time::now_timestamp();
-        self.db().remove_community_member(community_id, member_did)?;
+        self.db()
+            .remove_community_member(community_id, member_did)?;
 
         self.db().insert_audit_log(
             &generate_id(),
@@ -87,19 +90,15 @@ impl super::CommunityService {
     }
 
     /// Kick a member from a community.
-    pub fn kick_member(
-        &self,
-        community_id: &str,
-        target_did: &str,
-        actor_did: &str,
-    ) -> Result<()> {
+    pub fn kick_member(&self, community_id: &str, target_did: &str, actor_did: &str) -> Result<()> {
         let community = self.get_community(community_id)?;
         if community.owner_did == target_did {
             return Err(Error::CannotModifyOwner);
         }
 
         let now = crate::time::now_timestamp();
-        self.db().remove_community_member(community_id, target_did)?;
+        self.db()
+            .remove_community_member(community_id, target_did)?;
 
         self.db().insert_audit_log(
             &generate_id(),
@@ -133,7 +132,8 @@ impl super::CommunityService {
         let now = crate::time::now_timestamp();
 
         // Remove from community first
-        self.db().remove_community_member(community_id, target_did)?;
+        self.db()
+            .remove_community_member(community_id, target_did)?;
 
         // Create ban record
         self.db().create_community_ban(
@@ -195,7 +195,8 @@ impl super::CommunityService {
         community_id: &str,
         member_did: &str,
     ) -> Result<CommunityMemberRecord> {
-        self.db().get_community_member(community_id, member_did)?
+        self.db()
+            .get_community_member(community_id, member_did)?
             .ok_or(Error::NotMember)
     }
 
@@ -231,13 +232,8 @@ impl super::CommunityService {
         actor_did: &str,
     ) -> Result<()> {
         let now = crate::time::now_timestamp();
-        self.db().assign_community_role(
-            community_id,
-            member_did,
-            role_id,
-            now,
-            Some(actor_did),
-        )?;
+        self.db()
+            .assign_community_role(community_id, member_did, role_id, now, Some(actor_did))?;
 
         self.db().insert_audit_log(
             &generate_id(),
@@ -261,7 +257,8 @@ impl super::CommunityService {
         role_id: &str,
         actor_did: &str,
     ) -> Result<()> {
-        self.db().unassign_community_role(community_id, member_did, role_id)?;
+        self.db()
+            .unassign_community_role(community_id, member_did, role_id)?;
 
         let now = crate::time::now_timestamp();
         self.db().insert_audit_log(
@@ -289,6 +286,7 @@ impl super::CommunityService {
         community_id: &str,
         member_did: &str,
     ) -> Result<Vec<CommunityRoleRecord>> {
-        self.db().get_member_community_roles(community_id, member_did)
+        self.db()
+            .get_member_community_roles(community_id, member_did)
     }
 }

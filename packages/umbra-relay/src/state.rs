@@ -369,8 +369,7 @@ impl RelayState {
             id: session_id.to_string(),
             creator_did: creator_did.to_string(),
             offer_payload: offer_payload.to_string(),
-            created_at: chrono::DateTime::from_timestamp(created_at, 0)
-                .unwrap_or_else(Utc::now),
+            created_at: chrono::DateTime::from_timestamp(created_at, 0).unwrap_or_else(Utc::now),
             consumed: false,
         };
 
@@ -691,9 +690,9 @@ impl RelayState {
 
         for mut entry in self.offline_queue.iter_mut() {
             let before = entry.value().len();
-            entry.value_mut().retain(|m| {
-                now - m.queued_at.timestamp() < self.config.offline_ttl_secs
-            });
+            entry
+                .value_mut()
+                .retain(|m| now - m.queued_at.timestamp() < self.config.offline_ttl_secs);
             cleaned_messages += before - entry.value().len();
 
             if entry.value().is_empty() {
@@ -725,10 +724,7 @@ impl RelayState {
         }
 
         if !expired_rooms.is_empty() {
-            tracing::debug!(
-                count = expired_rooms.len(),
-                "Cleaned up expired call rooms"
-            );
+            tracing::debug!(count = expired_rooms.len(), "Cleaned up expired call rooms");
         }
 
         // Clean expired published invites
@@ -806,10 +802,7 @@ mod tests {
 
         state.register_client("did:key:z6MkAlice", tx);
 
-        let sent = state.send_to_client(
-            "did:key:z6MkAlice",
-            ServerMessage::Pong,
-        );
+        let sent = state.send_to_client("did:key:z6MkAlice", ServerMessage::Pong);
         assert!(sent);
 
         let msg = rx.try_recv().unwrap();
@@ -1006,6 +999,8 @@ mod tests {
     #[test]
     fn test_join_nonexistent_room() {
         let state = RelayState::new(test_config());
-        assert!(state.join_call_room("nonexistent", "did:key:z6MkAlice").is_none());
+        assert!(state
+            .join_call_room("nonexistent", "did:key:z6MkAlice")
+            .is_none());
     }
 }

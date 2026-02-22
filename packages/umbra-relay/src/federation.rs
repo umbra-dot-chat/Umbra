@@ -166,7 +166,10 @@ impl Federation {
 
     /// Connect to a single peer relay and handle the message loop.
     /// Connects to the `/federation` endpoint on the peer.
-    async fn connect_to_peer(&self, peer_url: &str) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    async fn connect_to_peer(
+        &self,
+        peer_url: &str,
+    ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
         // Convert /ws URL to /federation endpoint
         let federation_url = if peer_url.ends_with("/ws") {
             format!("{}federation", &peer_url[..peer_url.len() - 2])
@@ -212,20 +215,18 @@ impl Federation {
         // Process incoming messages from peer
         while let Some(msg_result) = ws_receiver.next().await {
             match msg_result {
-                Ok(WsMessage::Text(text)) => {
-                    match serde_json::from_str::<PeerMessage>(&text) {
-                        Ok(peer_msg) => {
-                            self.handle_peer_message(peer_url, peer_msg);
-                        }
-                        Err(e) => {
-                            tracing::warn!(
-                                peer = peer_url,
-                                error = %e,
-                                "Failed to parse peer message"
-                            );
-                        }
+                Ok(WsMessage::Text(text)) => match serde_json::from_str::<PeerMessage>(&text) {
+                    Ok(peer_msg) => {
+                        self.handle_peer_message(peer_url, peer_msg);
                     }
-                }
+                    Err(e) => {
+                        tracing::warn!(
+                            peer = peer_url,
+                            error = %e,
+                            "Failed to parse peer message"
+                        );
+                    }
+                },
                 Ok(WsMessage::Ping(data)) => {
                     // tungstenite auto-responds to pings
                     let _ = data;
@@ -567,7 +568,9 @@ impl Federation {
 mod tests {
     use super::*;
 
-    fn make_federation(peer_urls: Vec<String>) -> (Federation, mpsc::UnboundedReceiver<PeerMessage>) {
+    fn make_federation(
+        peer_urls: Vec<String>,
+    ) -> (Federation, mpsc::UnboundedReceiver<PeerMessage>) {
         let (tx, rx) = mpsc::unbounded_channel();
         let fed = Federation::new(
             "test-relay".to_string(),
@@ -594,7 +597,10 @@ mod tests {
         let (fed, _rx) = make_federation(vec![]);
 
         // Simulate a presence online from a peer
-        fed.did_to_peer.insert("did:key:z6MkAlice".to_string(), "wss://peer1/ws".to_string());
+        fed.did_to_peer.insert(
+            "did:key:z6MkAlice".to_string(),
+            "wss://peer1/ws".to_string(),
+        );
 
         assert_eq!(
             fed.find_peer_for_did("did:key:z6MkAlice"),
@@ -624,8 +630,10 @@ mod tests {
                 },
             },
         );
-        fed.did_to_peer.insert("did:key:z6MkAlice".to_string(), peer_url.to_string());
-        fed.did_to_peer.insert("did:key:z6MkBob".to_string(), peer_url.to_string());
+        fed.did_to_peer
+            .insert("did:key:z6MkAlice".to_string(), peer_url.to_string());
+        fed.did_to_peer
+            .insert("did:key:z6MkBob".to_string(), peer_url.to_string());
 
         assert_eq!(fed.remote_did_count(), 2);
 

@@ -8,7 +8,7 @@
 //! cargo run --example signing_demo
 //! ```
 
-use umbra_core::crypto::{KeyPair, sign, verify};
+use umbra_core::crypto::{sign, verify, KeyPair};
 
 fn main() {
     println!("=== Umbra Core: Digital Signature Demo ===\n");
@@ -19,7 +19,10 @@ fn main() {
     let seed: [u8; 32] = [42u8; 32]; // In production, use secure random
     let keypair = KeyPair::from_seed(&seed).expect("Failed to create keypair");
 
-    println!("  Public key (hex): {}", hex::encode(keypair.signing.public_bytes()));
+    println!(
+        "  Public key (hex): {}",
+        hex::encode(keypair.signing.public_bytes())
+    );
     println!();
 
     // Step 2: Explain the signing process
@@ -79,7 +82,11 @@ fn main() {
 
     // Try to verify with tampered message
     let tampered_message = b"This message was MODIFIED by an attacker!";
-    match verify(&keypair.signing.public_bytes(), tampered_message, &signature) {
+    match verify(
+        &keypair.signing.public_bytes(),
+        tampered_message,
+        &signature,
+    ) {
         Ok(()) => println!("  [FAILED] Tampered message was accepted!"),
         Err(_) => println!("  [OK] Tampered message detected - signature invalid!"),
     }

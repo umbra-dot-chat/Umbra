@@ -127,19 +127,16 @@
 
 pub mod files;
 
+use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
+use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
-use parking_lot::RwLock;
 use uuid::Uuid;
-use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
 
-use crate::crypto::{
-    encrypt, decrypt, sign, verify,
-    SharedSecret, Signature, Nonce, NONCE_SIZE,
-};
+use crate::crypto::{decrypt, encrypt, sign, verify, Nonce, SharedSecret, Signature, NONCE_SIZE};
 use crate::error::{Error, Result};
-use crate::identity::Identity;
 use crate::friends::Friend;
+use crate::identity::Identity;
 use crate::storage::Database;
 
 /// Current message protocol version
@@ -387,8 +384,8 @@ impl MessageEnvelope {
             ciphertext: BASE64.encode(&ciphertext),
         };
 
-        let sign_bytes = bincode::serialize(&sign_data)
-            .map_err(|e| Error::SerializationError(e.to_string()))?;
+        let sign_bytes =
+            bincode::serialize(&sign_data).map_err(|e| Error::SerializationError(e.to_string()))?;
 
         // Sign the envelope
         let signature = sign(&sender_identity.keypair().signing, &sign_bytes);
@@ -408,11 +405,7 @@ impl MessageEnvelope {
     }
 
     /// Decrypt an envelope and verify its authenticity
-    pub fn decrypt(
-        &self,
-        recipient_identity: &Identity,
-        sender: &Friend,
-    ) -> Result<Message> {
+    pub fn decrypt(&self, recipient_identity: &Identity, sender: &Friend) -> Result<Message> {
         // Verify protocol version
         if self.version != MESSAGE_PROTOCOL_VERSION {
             return Err(Error::ProtocolError(format!(
@@ -423,16 +416,12 @@ impl MessageEnvelope {
 
         // Verify sender DID matches friend
         if self.sender_did != sender.did {
-            return Err(Error::InvalidMessageContent(
-                "Sender DID mismatch".into()
-            ));
+            return Err(Error::InvalidMessageContent("Sender DID mismatch".into()));
         }
 
         // Verify recipient is us
         if self.recipient_did != recipient_identity.did_string() {
-            return Err(Error::InvalidMessageContent(
-                "Message not for us".into()
-            ));
+            return Err(Error::InvalidMessageContent("Message not for us".into()));
         }
 
         // Verify signature
@@ -450,20 +439,23 @@ impl MessageEnvelope {
             ciphertext: self.ciphertext.clone(),
         };
 
-        let sign_bytes = bincode::serialize(&sign_data)
-            .map_err(|e| Error::SerializationError(e.to_string()))?;
+        let sign_bytes =
+            bincode::serialize(&sign_data).map_err(|e| Error::SerializationError(e.to_string()))?;
 
         verify(&sender.signing_public_key, &sign_bytes, &signature)?;
 
         // Decode base64 fields
-        let nonce_bytes = BASE64.decode(&self.nonce)
+        let nonce_bytes = BASE64
+            .decode(&self.nonce)
             .map_err(|e| Error::DeserializationError(format!("Invalid nonce: {}", e)))?;
 
-        let ciphertext = BASE64.decode(&self.ciphertext)
+        let ciphertext = BASE64
+            .decode(&self.ciphertext)
             .map_err(|e| Error::DeserializationError(format!("Invalid ciphertext: {}", e)))?;
 
         // Parse nonce
-        let nonce_array: [u8; NONCE_SIZE] = nonce_bytes.try_into()
+        let nonce_array: [u8; NONCE_SIZE] = nonce_bytes
+            .try_into()
             .map_err(|_| Error::DeserializationError("Invalid nonce length".into()))?;
         let nonce = Nonce::from_bytes(nonce_array);
 
@@ -504,14 +496,12 @@ impl MessageEnvelope {
 
     /// Serialize to JSON
     pub fn to_json(&self) -> Result<String> {
-        serde_json::to_string(self)
-            .map_err(|e| Error::SerializationError(e.to_string()))
+        serde_json::to_string(self).map_err(|e| Error::SerializationError(e.to_string()))
     }
 
     /// Deserialize from JSON
     pub fn from_json(json: &str) -> Result<Self> {
-        serde_json::from_str(json)
-            .map_err(|e| Error::DeserializationError(e.to_string()))
+        serde_json::from_str(json).map_err(|e| Error::DeserializationError(e.to_string()))
     }
 }
 
@@ -593,7 +583,7 @@ impl Conversation {
     ///
     /// This ensures both parties derive the same conversation ID.
     pub fn generate_id(did1: &str, did2: &str) -> String {
-        use sha2::{Sha256, Digest};
+        use sha2::{Digest, Sha256};
 
         // Sort DIDs to ensure consistent ordering
         let (first, second) = if did1 < did2 {
@@ -663,10 +653,7 @@ impl MessagingService {
     /// Get or create a conversation with a friend
     pub fn get_or_create_conversation(&self, friend: &Friend) -> Result<Conversation> {
         // Generate deterministic conversation ID
-        let conv_id = Conversation::generate_id(
-            &self.identity.did_string(),
-            &friend.did,
-        );
+        let conv_id = Conversation::generate_id(&self.identity.did_string(), &friend.did);
 
         // Check if we already have this conversation
         {
@@ -708,11 +695,8 @@ impl MessagingService {
         );
 
         // Encrypt it
-        let envelope = MessageEnvelope::encrypt(
-            &message,
-            &self.identity,
-            &friend.encryption_public_key,
-        )?;
+        let envelope =
+            MessageEnvelope::encrypt(&message, &self.identity, &friend.encryption_public_key)?;
 
         // Store in database
         self.store_message(&message)?;
@@ -744,11 +728,7 @@ impl MessagingService {
     }
 
     /// Send a read receipt
-    pub fn send_read_receipt(
-        &self,
-        friend: &Friend,
-        message_id: &str,
-    ) -> Result<MessageEnvelope> {
+    pub fn send_read_receipt(&self, friend: &Friend, message_id: &str) -> Result<MessageEnvelope> {
         let conversation = self.get_or_create_conversation(friend)?;
 
         let message = Message::new(
@@ -847,14 +827,18 @@ impl MessagingService {
 
     /// Get a specific conversation
     pub fn get_conversation(&self, id: &str) -> Option<Conversation> {
-        self.conversations.read().iter()
+        self.conversations
+            .read()
+            .iter()
             .find(|c| c.id == id)
             .cloned()
     }
 
     /// Get conversation by friend DID
     pub fn get_conversation_by_friend(&self, friend_did: &str) -> Option<Conversation> {
-        self.conversations.read().iter()
+        self.conversations
+            .read()
+            .iter()
             .find(|c| c.friend_did.as_deref() == Some(friend_did))
             .cloned()
     }
@@ -925,20 +909,19 @@ impl MessagingService {
     fn update_conversation_from_message(&self, message: &Message) -> Result<()> {
         let mut conversations = self.conversations.write();
 
-        if let Some(conv) = conversations.iter_mut()
+        if let Some(conv) = conversations
+            .iter_mut()
             .find(|c| c.id == message.conversation_id)
         {
             conv.last_message_at = Some(message.timestamp);
 
             if let MessageContent::Text(text) = &message.content {
                 // Truncate preview
-                conv.last_message_preview = Some(
-                    if text.len() > 50 {
-                        format!("{}...", &text[..50])
-                    } else {
-                        text.clone()
-                    }
-                );
+                conv.last_message_preview = Some(if text.len() > 50 {
+                    format!("{}...", &text[..50])
+                } else {
+                    text.clone()
+                });
             }
 
             if !message.is_outgoing(&self.identity.did_string()) {
@@ -957,8 +940,8 @@ impl MessagingService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::identity::Identity;
     use crate::friends::Friend;
+    use crate::identity::Identity;
 
     fn create_test_identity(name: &str) -> Identity {
         let (identity, _) = Identity::create(name.to_string()).unwrap();
@@ -1045,11 +1028,8 @@ mod tests {
         );
 
         // Encrypt with Bob's public key
-        let envelope = MessageEnvelope::encrypt(
-            &message,
-            &alice,
-            &bob_friend.encryption_public_key,
-        ).unwrap();
+        let envelope =
+            MessageEnvelope::encrypt(&message, &alice, &bob_friend.encryption_public_key).unwrap();
 
         assert_eq!(envelope.version, MESSAGE_PROTOCOL_VERSION);
         assert_eq!(envelope.sender_did, alice.did_string());
@@ -1078,11 +1058,8 @@ mod tests {
             MessageContent::Text("Hello!".to_string()),
         );
 
-        let mut envelope = MessageEnvelope::encrypt(
-            &message,
-            &alice,
-            &bob_friend.encryption_public_key,
-        ).unwrap();
+        let mut envelope =
+            MessageEnvelope::encrypt(&message, &alice, &bob_friend.encryption_public_key).unwrap();
 
         // Tamper with the timestamp
         envelope.timestamp += 1000;
@@ -1108,11 +1085,8 @@ mod tests {
             MessageContent::Text("Hello!".to_string()),
         );
 
-        let envelope = MessageEnvelope::encrypt(
-            &message,
-            &alice,
-            &bob_friend.encryption_public_key,
-        ).unwrap();
+        let envelope =
+            MessageEnvelope::encrypt(&message, &alice, &bob_friend.encryption_public_key).unwrap();
 
         // Charlie tries to decrypt (not the intended recipient)
         let result = envelope.decrypt(&charlie, &alice_friend);
@@ -1132,11 +1106,8 @@ mod tests {
             MessageContent::Text("Hello!".to_string()),
         );
 
-        let envelope = MessageEnvelope::encrypt(
-            &message,
-            &alice,
-            &bob_friend.encryption_public_key,
-        ).unwrap();
+        let envelope =
+            MessageEnvelope::encrypt(&message, &alice, &bob_friend.encryption_public_key).unwrap();
 
         let json = envelope.to_json().unwrap();
         let restored = MessageEnvelope::from_json(&json).unwrap();
@@ -1162,11 +1133,7 @@ mod tests {
             MessageContent::Text(large_content),
         );
 
-        let result = MessageEnvelope::encrypt(
-            &message,
-            &alice,
-            &bob_friend.encryption_public_key,
-        );
+        let result = MessageEnvelope::encrypt(&message, &alice, &bob_friend.encryption_public_key);
 
         assert!(result.is_err());
     }
@@ -1199,13 +1166,15 @@ mod tests {
         let database = Arc::new(Database::open(None).await.unwrap());
 
         // Add bob as friend first
-        database.add_friend(
-            &bob_friend.did,
-            &bob_friend.display_name,
-            &bob_friend.signing_public_key,
-            &bob_friend.encryption_public_key,
-            None,
-        ).unwrap();
+        database
+            .add_friend(
+                &bob_friend.did,
+                &bob_friend.display_name,
+                &bob_friend.signing_public_key,
+                &bob_friend.encryption_public_key,
+                None,
+            )
+            .unwrap();
 
         let service = MessagingService::new(alice.clone(), database);
 
@@ -1226,13 +1195,15 @@ mod tests {
         let bob_friend = create_test_friend(&bob);
 
         let database = Arc::new(Database::open(None).await.unwrap());
-        database.add_friend(
-            &bob_friend.did,
-            &bob_friend.display_name,
-            &bob_friend.signing_public_key,
-            &bob_friend.encryption_public_key,
-            None,
-        ).unwrap();
+        database
+            .add_friend(
+                &bob_friend.did,
+                &bob_friend.display_name,
+                &bob_friend.signing_public_key,
+                &bob_friend.encryption_public_key,
+                None,
+            )
+            .unwrap();
 
         let service = MessagingService::new(alice.clone(), database);
 
@@ -1240,7 +1211,10 @@ mod tests {
 
         assert_eq!(message.sender_did, alice.did_string());
         assert_eq!(message.recipient_did, bob_friend.did);
-        assert_eq!(message.content, MessageContent::Text("Hello Bob!".to_string()));
+        assert_eq!(
+            message.content,
+            MessageContent::Text("Hello Bob!".to_string())
+        );
 
         // Envelope should be in outbox
         assert_eq!(service.get_outbox().len(), 1);

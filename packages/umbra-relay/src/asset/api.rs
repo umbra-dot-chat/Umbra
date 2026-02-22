@@ -90,10 +90,7 @@ pub async fn upload_asset(
                     Ok(bytes) => file_data = Some(bytes.to_vec()),
                     Err(e) => {
                         tracing::warn!(error = %e, "Failed to read upload file bytes");
-                        return error_response(
-                            StatusCode::BAD_REQUEST,
-                            "Failed to read file data",
-                        );
+                        return error_response(StatusCode::BAD_REQUEST, "Failed to read file data");
                     }
                 }
             }
@@ -181,10 +178,7 @@ pub async fn upload_asset(
     // Store the asset
     match store.store_asset(&community_id, &data, &content_type, &uploader_did) {
         Ok(meta) => {
-            let url = format!(
-                "/api/community/{}/assets/{}",
-                community_id, meta.filename
-            );
+            let url = format!("/api/community/{}/assets/{}", community_id, meta.filename);
             (
                 StatusCode::CREATED,
                 Json(ApiResponse {
@@ -216,9 +210,9 @@ pub async fn get_asset(
             let mut headers = HeaderMap::new();
             headers.insert(
                 header::CONTENT_TYPE,
-                content_type.parse().unwrap_or_else(|_| {
-                    "application/octet-stream".parse().unwrap()
-                }),
+                content_type
+                    .parse()
+                    .unwrap_or_else(|_| "application/octet-stream".parse().unwrap()),
             );
             // Cache for 1 year — content-hash filenames never change
             headers.insert(

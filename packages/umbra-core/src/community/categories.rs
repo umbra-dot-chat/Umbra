@@ -3,9 +3,9 @@
 //! Category CRUD within spaces. Categories are user-named groupings
 //! that organize channels within a space.
 
+use super::service::generate_id;
 use crate::error::{Error, Result};
 use crate::storage::CommunityCategoryRecord;
-use super::service::generate_id;
 
 impl super::CommunityService {
     /// Create a new category in a space.
@@ -58,21 +58,20 @@ impl super::CommunityService {
 
     /// Get all categories in a community (across all spaces).
     pub fn get_all_categories(&self, community_id: &str) -> Result<Vec<CommunityCategoryRecord>> {
-        self.db().get_community_categories_by_community(community_id)
+        self.db()
+            .get_community_categories_by_community(community_id)
     }
 
     /// Update a category's name.
-    pub fn update_category(
-        &self,
-        category_id: &str,
-        name: &str,
-        actor_did: &str,
-    ) -> Result<()> {
+    pub fn update_category(&self, category_id: &str, name: &str, actor_did: &str) -> Result<()> {
         let now = crate::time::now_timestamp();
-        let category = self.db().get_community_category(category_id)?
+        let category = self
+            .db()
+            .get_community_category(category_id)?
             .ok_or(Error::CategoryNotFound)?;
 
-        self.db().update_community_category(category_id, name, now)?;
+        self.db()
+            .update_community_category(category_id, name, now)?;
 
         self.db().insert_audit_log(
             &generate_id(),
@@ -89,26 +88,21 @@ impl super::CommunityService {
     }
 
     /// Reorder categories in a space.
-    pub fn reorder_categories(
-        &self,
-        _space_id: &str,
-        category_ids: &[String],
-    ) -> Result<()> {
+    pub fn reorder_categories(&self, _space_id: &str, category_ids: &[String]) -> Result<()> {
         let now = crate::time::now_timestamp();
         for (position, category_id) in category_ids.iter().enumerate() {
-            self.db().update_community_category_position(category_id, position as i32, now)?;
+            self.db()
+                .update_community_category_position(category_id, position as i32, now)?;
         }
         Ok(())
     }
 
     /// Delete a category. Channels in this category will have their
     /// category_id set to NULL (uncategorized).
-    pub fn delete_category(
-        &self,
-        category_id: &str,
-        actor_did: &str,
-    ) -> Result<()> {
-        let category = self.db().get_community_category(category_id)?
+    pub fn delete_category(&self, category_id: &str, actor_did: &str) -> Result<()> {
+        let category = self
+            .db()
+            .get_community_category(category_id)?
             .ok_or(Error::CategoryNotFound)?;
 
         let now = crate::time::now_timestamp();
@@ -138,7 +132,8 @@ impl super::CommunityService {
         let channel = self.get_channel(channel_id)?;
         let now = crate::time::now_timestamp();
 
-        self.db().update_channel_category(channel_id, category_id, now)?;
+        self.db()
+            .update_channel_category(channel_id, category_id, now)?;
 
         self.db().insert_audit_log(
             &generate_id(),

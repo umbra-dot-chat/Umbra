@@ -96,7 +96,6 @@ pub enum Error {
     // ========================================================================
     // Core Lifecycle Errors (100-199)
     // ========================================================================
-
     /// Core has not been initialized
     #[error("Umbra Core has not been initialized. Call UmbraCore::initialize() first.")]
     NotInitialized,
@@ -112,7 +111,6 @@ pub enum Error {
     // ========================================================================
     // Identity Errors (200-299)
     // ========================================================================
-
     /// No identity has been loaded
     #[error("No identity loaded. Create or load an identity first.")]
     NoIdentity,
@@ -140,7 +138,6 @@ pub enum Error {
     // ========================================================================
     // Crypto Errors (300-399)
     // ========================================================================
-
     /// Encryption failed
     #[error("Encryption failed: {0}")]
     EncryptionFailed(String),
@@ -172,7 +169,6 @@ pub enum Error {
     // ========================================================================
     // Storage Errors (400-499)
     // ========================================================================
-
     /// Storage has not been initialized
     #[error("Storage has not been initialized.")]
     StorageNotInitialized,
@@ -200,7 +196,6 @@ pub enum Error {
     // ========================================================================
     // Network Errors (500-599)
     // ========================================================================
-
     /// Not connected to the network
     #[error("Not connected to the network.")]
     NotConnected,
@@ -232,7 +227,6 @@ pub enum Error {
     // ========================================================================
     // Friend Errors (600-699)
     // ========================================================================
-
     /// Already friends with this user
     #[error("Already friends with this user.")]
     AlreadyFriends,
@@ -264,7 +258,6 @@ pub enum Error {
     // ========================================================================
     // Message Errors (700-799)
     // ========================================================================
-
     /// Conversation not found
     #[error("Conversation not found.")]
     ConversationNotFound,
@@ -288,7 +281,6 @@ pub enum Error {
     // ========================================================================
     // Community Errors (800-899)
     // ========================================================================
-
     /// Community not found
     #[error("Community not found.")]
     CommunityNotFound,
@@ -356,7 +348,6 @@ pub enum Error {
     // ========================================================================
     // Internal Errors (900-999)
     // ========================================================================
-
     /// Internal error (should not happen in normal operation)
     #[error("Internal error: {0}")]
     Internal(String),

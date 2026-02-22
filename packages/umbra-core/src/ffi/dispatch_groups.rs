@@ -1,6 +1,6 @@
 //! Groups dispatch handlers — CRUD, encryption, invitations, messaging.
 
-use super::dispatcher::{DResult, err, json_parse, require_str, ok_json, emit_event};
+use super::dispatcher::{emit_event, err, json_parse, ok_json, require_str, DResult};
 use super::state::get_state;
 
 // ── Helper: derive a key-wrapping key from the identity's encryption secret ──
@@ -56,12 +56,13 @@ fn encrypt_group_key_for_member(
     raw_key: &[u8; 32],
     key_version: i32,
 ) -> Result<(String, String), (i32, String)> {
-    let member = database.get_friend(member_did)
+    let member = database
+        .get_friend(member_did)
         .map_err(|e| err(704, format!("DB error: {}", e)))?
         .ok_or_else(|| err(704, format!("Member {} not found in friends", member_did)))?;
 
-    let member_enc_bytes = hex::decode(&member.encryption_key)
-        .map_err(|e| err(704, format!("Invalid key: {}", e)))?;
+    let member_enc_bytes =
+        hex::decode(&member.encryption_key).map_err(|e| err(704, format!("Invalid key: {}", e)))?;
     if member_enc_bytes.len() != 32 {
         return Err(err(704, "Member encryption key must be 32 bytes"));
     }
@@ -75,7 +76,8 @@ fn encrypt_group_key_for_member(
         group_id.as_bytes(),
         raw_key,
         aad.as_bytes(),
-    ).map_err(|e| err(704, format!("Encryption failed: {}", e)))?;
+    )
+    .map_err(|e| err(704, format!("Encryption failed: {}", e)))?;
 
     Ok((hex::encode(&ciphertext), hex::encode(&nonce.0)))
 }
@@ -105,7 +107,8 @@ fn generate_and_store_group_key(
     stored.extend_from_slice(&ciphertext);
 
     let now = crate::time::now_timestamp_millis();
-    database.store_group_key(group_id, key_version, &stored, now)
+    database
+        .store_group_key(group_id, key_version, &stored, now)
         .map_err(|e| err(400, format!("Failed to store group key: {}", e)))?;
 
     Ok(raw_key)
@@ -122,8 +125,14 @@ pub fn groups_create(args: &str) -> DResult {
 
     let state = get_state().map_err(|e| err(100, e))?;
     let state = state.read();
-    let identity = state.identity.as_ref().ok_or_else(|| err(200, "No identity loaded"))?;
-    let database = state.database.as_ref().ok_or_else(|| err(400, "Database not initialized"))?;
+    let identity = state
+        .identity
+        .as_ref()
+        .ok_or_else(|| err(200, "No identity loaded"))?;
+    let database = state
+        .database
+        .as_ref()
+        .ok_or_else(|| err(400, "Database not initialized"))?;
 
     let our_did = identity.did_string();
     let display_name = identity.profile().display_name.clone();
@@ -131,20 +140,26 @@ pub fn groups_create(args: &str) -> DResult {
     let conv_id = format!("group-{}", group_id);
     let now = crate::time::now_timestamp_millis();
 
-    database.create_group(&group_id, name, description, &our_did, now)
+    database
+        .create_group(&group_id, name, description, &our_did, now)
         .map_err(|e| err(400, format!("Failed to create group: {}", e)))?;
 
-    database.add_group_member(&group_id, &our_did, Some(&display_name), "admin", now)
+    database
+        .add_group_member(&group_id, &our_did, Some(&display_name), "admin", now)
         .map_err(|e| err(400, format!("Failed to add self as admin: {}", e)))?;
 
-    database.create_group_conversation(&conv_id, &group_id)
+    database
+        .create_group_conversation(&conv_id, &group_id)
         .map_err(|e| err(400, format!("Failed to create conversation: {}", e)))?;
 
-    emit_event("groups", &serde_json::json!({
-        "type": "group_created",
-        "group_id": group_id,
-        "name": name,
-    }));
+    emit_event(
+        "groups",
+        &serde_json::json!({
+            "type": "group_created",
+            "group_id": group_id,
+            "name": name,
+        }),
+    );
 
     ok_json(serde_json::json!({
         "group_id": group_id,
@@ -165,9 +180,13 @@ pub fn groups_get(args: &str) -> DResult {
 
     let state = get_state().map_err(|e| err(100, e))?;
     let state = state.read();
-    let database = state.database.as_ref().ok_or_else(|| err(400, "Database not initialized"))?;
+    let database = state
+        .database
+        .as_ref()
+        .ok_or_else(|| err(400, "Database not initialized"))?;
 
-    let group = database.get_group(group_id)
+    let group = database
+        .get_group(group_id)
         .map_err(|e| err(400, format!("DB error: {}", e)))?
         .ok_or_else(|| err(404, format!("Group not found: {}", group_id)))?;
 
@@ -189,20 +208,29 @@ pub fn groups_get(args: &str) -> DResult {
 pub fn groups_list() -> DResult {
     let state = get_state().map_err(|e| err(100, e))?;
     let state = state.read();
-    let database = state.database.as_ref().ok_or_else(|| err(400, "Database not initialized"))?;
+    let database = state
+        .database
+        .as_ref()
+        .ok_or_else(|| err(400, "Database not initialized"))?;
 
-    let groups = database.get_all_groups()
+    let groups = database
+        .get_all_groups()
         .map_err(|e| err(400, format!("DB error: {}", e)))?;
 
-    let arr: Vec<serde_json::Value> = groups.iter().map(|g| serde_json::json!({
-        "id": g.id,
-        "name": g.name,
-        "description": g.description,
-        "avatar": g.avatar,
-        "created_by": g.created_by,
-        "created_at": g.created_at,
-        "updated_at": g.updated_at,
-    })).collect();
+    let arr: Vec<serde_json::Value> = groups
+        .iter()
+        .map(|g| {
+            serde_json::json!({
+                "id": g.id,
+                "name": g.name,
+                "description": g.description,
+                "avatar": g.avatar,
+                "created_by": g.created_by,
+                "created_at": g.created_at,
+                "updated_at": g.updated_at,
+            })
+        })
+        .collect();
 
     Ok(serde_json::to_string(&arr).unwrap_or_default())
 }
@@ -220,15 +248,22 @@ pub fn groups_update(args: &str) -> DResult {
 
     let state = get_state().map_err(|e| err(100, e))?;
     let state = state.read();
-    let database = state.database.as_ref().ok_or_else(|| err(400, "Database not initialized"))?;
+    let database = state
+        .database
+        .as_ref()
+        .ok_or_else(|| err(400, "Database not initialized"))?;
 
-    database.update_group(group_id, name, description, now)
+    database
+        .update_group(group_id, name, description, now)
         .map_err(|e| err(400, format!("Failed to update group: {}", e)))?;
 
-    emit_event("groups", &serde_json::json!({
-        "type": "group_updated",
-        "group_id": group_id,
-    }));
+    emit_event(
+        "groups",
+        &serde_json::json!({
+            "type": "group_updated",
+            "group_id": group_id,
+        }),
+    );
 
     ok_json(serde_json::json!({
         "group_id": group_id,
@@ -246,25 +281,38 @@ pub fn groups_delete(args: &str) -> DResult {
 
     let state = get_state().map_err(|e| err(100, e))?;
     let state = state.read();
-    let identity = state.identity.as_ref().ok_or_else(|| err(200, "No identity loaded"))?;
-    let database = state.database.as_ref().ok_or_else(|| err(400, "Database not initialized"))?;
+    let identity = state
+        .identity
+        .as_ref()
+        .ok_or_else(|| err(200, "No identity loaded"))?;
+    let database = state
+        .database
+        .as_ref()
+        .ok_or_else(|| err(400, "Database not initialized"))?;
 
     // Verify the caller is admin
     let our_did = identity.did_string();
-    let members = database.get_group_members(group_id)
+    let members = database
+        .get_group_members(group_id)
         .map_err(|e| err(400, format!("DB error: {}", e)))?;
-    let is_admin = members.iter().any(|m| m.member_did == our_did && m.role == "admin");
+    let is_admin = members
+        .iter()
+        .any(|m| m.member_did == our_did && m.role == "admin");
     if !is_admin {
         return Err(err(403, "Only group admins can delete a group"));
     }
 
-    database.delete_group(group_id)
+    database
+        .delete_group(group_id)
         .map_err(|e| err(400, format!("Failed to delete group: {}", e)))?;
 
-    emit_event("groups", &serde_json::json!({
-        "type": "group_deleted",
-        "group_id": group_id,
-    }));
+    emit_event(
+        "groups",
+        &serde_json::json!({
+            "type": "group_deleted",
+            "group_id": group_id,
+        }),
+    );
 
     ok_json(serde_json::json!({ "group_id": group_id }))
 }
@@ -282,16 +330,23 @@ pub fn groups_add_member(args: &str) -> DResult {
 
     let state = get_state().map_err(|e| err(100, e))?;
     let state = state.read();
-    let database = state.database.as_ref().ok_or_else(|| err(400, "Database not initialized"))?;
+    let database = state
+        .database
+        .as_ref()
+        .ok_or_else(|| err(400, "Database not initialized"))?;
 
-    database.add_group_member(group_id, did, display_name, "member", now)
+    database
+        .add_group_member(group_id, did, display_name, "member", now)
         .map_err(|e| err(400, format!("Failed to add member: {}", e)))?;
 
-    emit_event("groups", &serde_json::json!({
-        "type": "member_added",
-        "group_id": group_id,
-        "member_did": did,
-    }));
+    emit_event(
+        "groups",
+        &serde_json::json!({
+            "type": "member_added",
+            "group_id": group_id,
+            "member_did": did,
+        }),
+    );
 
     ok_json(serde_json::json!({
         "group_id": group_id,
@@ -310,16 +365,23 @@ pub fn groups_remove_member(args: &str) -> DResult {
 
     let state = get_state().map_err(|e| err(100, e))?;
     let state = state.read();
-    let database = state.database.as_ref().ok_or_else(|| err(400, "Database not initialized"))?;
+    let database = state
+        .database
+        .as_ref()
+        .ok_or_else(|| err(400, "Database not initialized"))?;
 
-    database.remove_group_member(group_id, did)
+    database
+        .remove_group_member(group_id, did)
         .map_err(|e| err(400, format!("Failed to remove member: {}", e)))?;
 
-    emit_event("groups", &serde_json::json!({
-        "type": "member_removed",
-        "group_id": group_id,
-        "member_did": did,
-    }));
+    emit_event(
+        "groups",
+        &serde_json::json!({
+            "type": "member_removed",
+            "group_id": group_id,
+            "member_did": did,
+        }),
+    );
 
     ok_json(serde_json::json!({
         "group_id": group_id,
@@ -337,18 +399,27 @@ pub fn groups_get_members(args: &str) -> DResult {
 
     let state = get_state().map_err(|e| err(100, e))?;
     let state = state.read();
-    let database = state.database.as_ref().ok_or_else(|| err(400, "Database not initialized"))?;
+    let database = state
+        .database
+        .as_ref()
+        .ok_or_else(|| err(400, "Database not initialized"))?;
 
-    let members = database.get_group_members(group_id)
+    let members = database
+        .get_group_members(group_id)
         .map_err(|e| err(400, format!("DB error: {}", e)))?;
 
-    let arr: Vec<serde_json::Value> = members.iter().map(|m| serde_json::json!({
-        "group_id": m.group_id,
-        "member_did": m.member_did,
-        "display_name": m.display_name,
-        "role": m.role,
-        "joined_at": m.joined_at,
-    })).collect();
+    let arr: Vec<serde_json::Value> = members
+        .iter()
+        .map(|m| {
+            serde_json::json!({
+                "group_id": m.group_id,
+                "member_did": m.member_did,
+                "display_name": m.display_name,
+                "role": m.role,
+                "joined_at": m.joined_at,
+            })
+        })
+        .collect();
 
     Ok(serde_json::to_string(&arr).unwrap_or_default())
 }
@@ -363,8 +434,14 @@ pub fn groups_generate_key(args: &str) -> DResult {
 
     let state = get_state().map_err(|e| err(100, e))?;
     let state = state.read();
-    let identity = state.identity.as_ref().ok_or_else(|| err(200, "No identity loaded"))?;
-    let database = state.database.as_ref().ok_or_else(|| err(400, "Database not initialized"))?;
+    let identity = state
+        .identity
+        .as_ref()
+        .ok_or_else(|| err(200, "No identity loaded"))?;
+    let database = state
+        .database
+        .as_ref()
+        .ok_or_else(|| err(400, "Database not initialized"))?;
 
     let raw_key = generate_and_store_group_key(identity, database, group_id, 1)?;
 
@@ -385,10 +462,17 @@ pub fn groups_rotate_key(args: &str) -> DResult {
 
     let state = get_state().map_err(|e| err(100, e))?;
     let state = state.read();
-    let identity = state.identity.as_ref().ok_or_else(|| err(200, "No identity loaded"))?;
-    let database = state.database.as_ref().ok_or_else(|| err(400, "Database not initialized"))?;
+    let identity = state
+        .identity
+        .as_ref()
+        .ok_or_else(|| err(200, "No identity loaded"))?;
+    let database = state
+        .database
+        .as_ref()
+        .ok_or_else(|| err(400, "Database not initialized"))?;
 
-    let current = database.get_latest_group_key(group_id)
+    let current = database
+        .get_latest_group_key(group_id)
         .map_err(|e| err(400, format!("DB error: {}", e)))?;
     let new_version = current.map(|k| k.key_version + 1).unwrap_or(1);
 
@@ -415,11 +499,18 @@ pub fn groups_import_key(args: &str) -> DResult {
 
     let state = get_state().map_err(|e| err(100, e))?;
     let state = state.read();
-    let identity = state.identity.as_ref().ok_or_else(|| err(200, "No identity loaded"))?;
-    let database = state.database.as_ref().ok_or_else(|| err(400, "Database not initialized"))?;
+    let identity = state
+        .identity
+        .as_ref()
+        .ok_or_else(|| err(200, "No identity loaded"))?;
+    let database = state
+        .database
+        .as_ref()
+        .ok_or_else(|| err(400, "Database not initialized"))?;
 
     // Look up sender's encryption key
-    let sender = database.get_friend(sender_did)
+    let sender = database
+        .get_friend(sender_did)
         .map_err(|e| err(704, format!("DB error: {}", e)))?
         .ok_or_else(|| err(704, format!("Sender {} not found in friends", sender_did)))?;
 
@@ -433,8 +524,8 @@ pub fn groups_import_key(args: &str) -> DResult {
 
     let encrypted_key = hex::decode(encrypted_key_hex)
         .map_err(|e| err(704, format!("Invalid encrypted_key hex: {}", e)))?;
-    let nonce_bytes = hex::decode(nonce_hex)
-        .map_err(|e| err(704, format!("Invalid nonce hex: {}", e)))?;
+    let nonce_bytes =
+        hex::decode(nonce_hex).map_err(|e| err(704, format!("Invalid nonce hex: {}", e)))?;
     if nonce_bytes.len() != 12 {
         return Err(err(704, "Nonce must be 12 bytes"));
     }
@@ -450,7 +541,8 @@ pub fn groups_import_key(args: &str) -> DResult {
         &nonce,
         &encrypted_key,
         aad.as_bytes(),
-    ).map_err(|e| err(704, format!("Failed to decrypt group key: {}", e)))?;
+    )
+    .map_err(|e| err(704, format!("Failed to decrypt group key: {}", e)))?;
 
     if raw_key_vec.len() != 32 {
         return Err(err(704, "Decrypted group key is not 32 bytes"));
@@ -462,15 +554,17 @@ pub fn groups_import_key(args: &str) -> DResult {
     let wrapping_key = derive_key_wrapping_key(identity);
     let wrap_enc_key = crate::crypto::EncryptionKey::from_bytes(wrapping_key);
     let wrap_aad = format!("group-key:{}:{}", group_id, key_version);
-    let (wrap_nonce, ciphertext) = crate::crypto::encrypt(&wrap_enc_key, &raw_key, wrap_aad.as_bytes())
-        .map_err(|e| err(704, format!("Re-encryption failed: {}", e)))?;
+    let (wrap_nonce, ciphertext) =
+        crate::crypto::encrypt(&wrap_enc_key, &raw_key, wrap_aad.as_bytes())
+            .map_err(|e| err(704, format!("Re-encryption failed: {}", e)))?;
 
     let mut stored = Vec::with_capacity(12 + ciphertext.len());
     stored.extend_from_slice(&wrap_nonce.0);
     stored.extend_from_slice(&ciphertext);
 
     let now = crate::time::now_timestamp_millis();
-    database.store_group_key(group_id, key_version, &stored, now)
+    database
+        .store_group_key(group_id, key_version, &stored, now)
         .map_err(|e| err(400, format!("Failed to store imported key: {}", e)))?;
 
     ok_json(serde_json::json!({
@@ -490,12 +584,19 @@ pub fn groups_encrypt_message(args: &str) -> DResult {
 
     let state = get_state().map_err(|e| err(100, e))?;
     let state = state.read();
-    let identity = state.identity.as_ref().ok_or_else(|| err(200, "No identity loaded"))?;
-    let database = state.database.as_ref().ok_or_else(|| err(400, "Database not initialized"))?;
+    let identity = state
+        .identity
+        .as_ref()
+        .ok_or_else(|| err(200, "No identity loaded"))?;
+    let database = state
+        .database
+        .as_ref()
+        .ok_or_else(|| err(400, "Database not initialized"))?;
     let our_did = identity.did_string();
     let timestamp = crate::time::now_timestamp_millis();
 
-    let key_record = database.get_latest_group_key(group_id)
+    let key_record = database
+        .get_latest_group_key(group_id)
         .map_err(|e| err(400, format!("DB error: {}", e)))?
         .ok_or_else(|| err(704, "No group key found"))?;
 
@@ -503,8 +604,9 @@ pub fn groups_encrypt_message(args: &str) -> DResult {
     let enc_key = crate::crypto::EncryptionKey::from_bytes(raw_key);
 
     let aad = format!("group-msg:{}:{}:{}", group_id, our_did, timestamp);
-    let (nonce, ciphertext) = crate::crypto::encrypt(&enc_key, plaintext.as_bytes(), aad.as_bytes())
-        .map_err(|e| err(704, format!("Encryption failed: {}", e)))?;
+    let (nonce, ciphertext) =
+        crate::crypto::encrypt(&enc_key, plaintext.as_bytes(), aad.as_bytes())
+            .map_err(|e| err(704, format!("Encryption failed: {}", e)))?;
 
     ok_json(serde_json::json!({
         "ciphertext_hex": hex::encode(&ciphertext),
@@ -524,21 +626,30 @@ pub fn groups_decrypt_message(args: &str) -> DResult {
     let ciphertext_hex = require_str(&data, "ciphertext_hex")?;
     let nonce_hex = require_str(&data, "nonce_hex")?;
     let sender_did = require_str(&data, "sender_did")?;
-    let timestamp = data["timestamp"].as_i64()
+    let timestamp = data["timestamp"]
+        .as_i64()
         .ok_or_else(|| err(2, "Missing timestamp"))?;
     let key_version = data["key_version"].as_i64();
 
     let state = get_state().map_err(|e| err(100, e))?;
     let state = state.read();
-    let identity = state.identity.as_ref().ok_or_else(|| err(200, "No identity loaded"))?;
-    let database = state.database.as_ref().ok_or_else(|| err(400, "Database not initialized"))?;
+    let identity = state
+        .identity
+        .as_ref()
+        .ok_or_else(|| err(200, "No identity loaded"))?;
+    let database = state
+        .database
+        .as_ref()
+        .ok_or_else(|| err(400, "Database not initialized"))?;
 
     let key_record = if let Some(ver) = key_version {
-        database.get_group_key(group_id, ver as i32)
+        database
+            .get_group_key(group_id, ver as i32)
             .map_err(|e| err(400, format!("DB error: {}", e)))?
             .ok_or_else(|| err(704, format!("Group key version {} not found", ver)))?
     } else {
-        database.get_latest_group_key(group_id)
+        database
+            .get_latest_group_key(group_id)
             .map_err(|e| err(400, format!("DB error: {}", e)))?
             .ok_or_else(|| err(704, "No group key found"))?
     };
@@ -548,8 +659,8 @@ pub fn groups_decrypt_message(args: &str) -> DResult {
 
     let ciphertext = hex::decode(ciphertext_hex)
         .map_err(|e| err(704, format!("Invalid ciphertext hex: {}", e)))?;
-    let nonce_bytes = hex::decode(nonce_hex)
-        .map_err(|e| err(704, format!("Invalid nonce hex: {}", e)))?;
+    let nonce_bytes =
+        hex::decode(nonce_hex).map_err(|e| err(704, format!("Invalid nonce hex: {}", e)))?;
     if nonce_bytes.len() != 12 {
         return Err(err(704, "Nonce must be 12 bytes"));
     }
@@ -561,8 +672,8 @@ pub fn groups_decrypt_message(args: &str) -> DResult {
     let plaintext = crate::crypto::decrypt(&enc_key, &nonce, &ciphertext, aad.as_bytes())
         .map_err(|e| err(704, format!("Decryption failed: {}", e)))?;
 
-    let text = String::from_utf8(plaintext)
-        .map_err(|e| err(704, format!("Invalid UTF-8: {}", e)))?;
+    let text =
+        String::from_utf8(plaintext).map_err(|e| err(704, format!("Invalid UTF-8: {}", e)))?;
 
     ok_json(serde_json::json!(text))
 }
@@ -578,8 +689,8 @@ pub fn groups_encrypt_key_for_member_handler(args: &str) -> DResult {
     let key_version = data["key_version"].as_i64().unwrap_or(1) as i32;
     let member_did = require_str(&data, "member_did")?;
 
-    let raw_key_bytes = hex::decode(raw_key_hex)
-        .map_err(|e| err(704, format!("Invalid raw_key hex: {}", e)))?;
+    let raw_key_bytes =
+        hex::decode(raw_key_hex).map_err(|e| err(704, format!("Invalid raw_key hex: {}", e)))?;
     if raw_key_bytes.len() != 32 {
         return Err(err(704, "Raw key must be 32 bytes"));
     }
@@ -588,11 +699,23 @@ pub fn groups_encrypt_key_for_member_handler(args: &str) -> DResult {
 
     let state = get_state().map_err(|e| err(100, e))?;
     let state = state.read();
-    let identity = state.identity.as_ref().ok_or_else(|| err(200, "No identity loaded"))?;
-    let database = state.database.as_ref().ok_or_else(|| err(400, "Database not initialized"))?;
+    let identity = state
+        .identity
+        .as_ref()
+        .ok_or_else(|| err(200, "No identity loaded"))?;
+    let database = state
+        .database
+        .as_ref()
+        .ok_or_else(|| err(400, "Database not initialized"))?;
 
-    let (encrypted_key_hex, nonce_hex) =
-        encrypt_group_key_for_member(identity, database, group_id, member_did, &raw_key, key_version)?;
+    let (encrypted_key_hex, nonce_hex) = encrypt_group_key_for_member(
+        identity,
+        database,
+        group_id,
+        member_did,
+        &raw_key,
+        key_version,
+    )?;
 
     ok_json(serde_json::json!({
         "encrypted_key_hex": encrypted_key_hex,
@@ -616,11 +739,16 @@ pub fn groups_store_invite(args: &str) -> DResult {
     let nonce = require_str(&data, "nonce")?;
     let members_json = data["members_json"].as_str().unwrap_or("[]");
     let status = data["status"].as_str().unwrap_or("pending");
-    let created_at = data["created_at"].as_i64().unwrap_or_else(crate::time::now_timestamp_millis);
+    let created_at = data["created_at"]
+        .as_i64()
+        .unwrap_or_else(crate::time::now_timestamp_millis);
 
     let state = get_state().map_err(|e| err(100, e))?;
     let state = state.read();
-    let database = state.database.as_ref().ok_or_else(|| err(400, "Database not initialized"))?;
+    let database = state
+        .database
+        .as_ref()
+        .ok_or_else(|| err(400, "Database not initialized"))?;
 
     let invite = crate::storage::GroupInviteRecord {
         id: id.to_string(),
@@ -636,14 +764,18 @@ pub fn groups_store_invite(args: &str) -> DResult {
         created_at,
     };
 
-    database.store_group_invite(&invite)
+    database
+        .store_group_invite(&invite)
         .map_err(|e| err(400, format!("Failed to store invite: {}", e)))?;
 
-    emit_event("groups", &serde_json::json!({
-        "type": "invite_received",
-        "invite_id": id,
-        "group_id": group_id,
-    }));
+    emit_event(
+        "groups",
+        &serde_json::json!({
+            "type": "invite_received",
+            "invite_id": id,
+            "group_id": group_id,
+        }),
+    );
 
     ok_json(serde_json::json!({"ok": true}))
 }
@@ -655,24 +787,33 @@ pub fn groups_store_invite(args: &str) -> DResult {
 pub fn groups_get_pending_invites() -> DResult {
     let state = get_state().map_err(|e| err(100, e))?;
     let state = state.read();
-    let database = state.database.as_ref().ok_or_else(|| err(400, "Database not initialized"))?;
+    let database = state
+        .database
+        .as_ref()
+        .ok_or_else(|| err(400, "Database not initialized"))?;
 
-    let invites = database.get_pending_group_invites()
+    let invites = database
+        .get_pending_group_invites()
         .map_err(|e| err(400, format!("DB error: {}", e)))?;
 
-    let arr: Vec<serde_json::Value> = invites.iter().map(|inv| serde_json::json!({
-        "id": inv.id,
-        "group_id": inv.group_id,
-        "group_name": inv.group_name,
-        "description": inv.description,
-        "inviter_did": inv.inviter_did,
-        "inviter_name": inv.inviter_name,
-        "encrypted_group_key": inv.encrypted_group_key,
-        "nonce": inv.nonce,
-        "members_json": inv.members_json,
-        "status": inv.status,
-        "created_at": inv.created_at,
-    })).collect();
+    let arr: Vec<serde_json::Value> = invites
+        .iter()
+        .map(|inv| {
+            serde_json::json!({
+                "id": inv.id,
+                "group_id": inv.group_id,
+                "group_name": inv.group_name,
+                "description": inv.description,
+                "inviter_did": inv.inviter_did,
+                "inviter_name": inv.inviter_name,
+                "encrypted_group_key": inv.encrypted_group_key,
+                "nonce": inv.nonce,
+                "members_json": inv.members_json,
+                "status": inv.status,
+                "created_at": inv.created_at,
+            })
+        })
+        .collect();
 
     Ok(serde_json::to_string(&arr).unwrap_or_default())
 }
@@ -687,10 +828,17 @@ pub fn groups_accept_invite(args: &str) -> DResult {
 
     let state = get_state().map_err(|e| err(100, e))?;
     let state = state.read();
-    let identity = state.identity.as_ref().ok_or_else(|| err(200, "No identity loaded"))?;
-    let database = state.database.as_ref().ok_or_else(|| err(400, "Database not initialized"))?;
+    let identity = state
+        .identity
+        .as_ref()
+        .ok_or_else(|| err(200, "No identity loaded"))?;
+    let database = state
+        .database
+        .as_ref()
+        .ok_or_else(|| err(400, "Database not initialized"))?;
 
-    let invite = database.get_group_invite(invite_id)
+    let invite = database
+        .get_group_invite(invite_id)
         .map_err(|e| err(400, format!("DB error: {}", e)))?
         .ok_or_else(|| err(404, format!("Invite not found: {}", invite_id)))?;
 
@@ -701,9 +849,15 @@ pub fn groups_accept_invite(args: &str) -> DResult {
     let conv_id = format!("group-{}", group_id);
 
     // Import the group key from the invite
-    let sender = database.get_friend(&invite.inviter_did)
+    let sender = database
+        .get_friend(&invite.inviter_did)
         .map_err(|e| err(704, format!("DB error: {}", e)))?
-        .ok_or_else(|| err(704, format!("Inviter {} not found in friends", invite.inviter_did)))?;
+        .ok_or_else(|| {
+            err(
+                704,
+                format!("Inviter {} not found in friends", invite.inviter_did),
+            )
+        })?;
 
     let sender_enc_bytes = hex::decode(&sender.encryption_key)
         .map_err(|e| err(704, format!("Invalid inviter key hex: {}", e)))?;
@@ -715,8 +869,8 @@ pub fn groups_accept_invite(args: &str) -> DResult {
 
     let encrypted_key = hex::decode(&invite.encrypted_group_key)
         .map_err(|e| err(704, format!("Invalid encrypted_group_key hex: {}", e)))?;
-    let nonce_bytes = hex::decode(&invite.nonce)
-        .map_err(|e| err(704, format!("Invalid nonce hex: {}", e)))?;
+    let nonce_bytes =
+        hex::decode(&invite.nonce).map_err(|e| err(704, format!("Invalid nonce hex: {}", e)))?;
     if nonce_bytes.len() != 12 {
         return Err(err(704, "Invite nonce must be 12 bytes"));
     }
@@ -732,7 +886,8 @@ pub fn groups_accept_invite(args: &str) -> DResult {
         &nonce,
         &encrypted_key,
         aad.as_bytes(),
-    ).map_err(|e| err(704, format!("Failed to decrypt invite key: {}", e)))?;
+    )
+    .map_err(|e| err(704, format!("Failed to decrypt invite key: {}", e)))?;
 
     if raw_key_vec.len() != 32 {
         return Err(err(704, "Decrypted group key is not 32 bytes"));
@@ -744,26 +899,37 @@ pub fn groups_accept_invite(args: &str) -> DResult {
     let wrapping_key = derive_key_wrapping_key(identity);
     let wrap_enc_key = crate::crypto::EncryptionKey::from_bytes(wrapping_key);
     let wrap_aad = format!("group-key:{}:1", group_id);
-    let (wrap_nonce, ciphertext) = crate::crypto::encrypt(&wrap_enc_key, &raw_key, wrap_aad.as_bytes())
-        .map_err(|e| err(704, format!("Re-encryption failed: {}", e)))?;
+    let (wrap_nonce, ciphertext) =
+        crate::crypto::encrypt(&wrap_enc_key, &raw_key, wrap_aad.as_bytes())
+            .map_err(|e| err(704, format!("Re-encryption failed: {}", e)))?;
 
     let mut stored = Vec::with_capacity(12 + ciphertext.len());
     stored.extend_from_slice(&wrap_nonce.0);
     stored.extend_from_slice(&ciphertext);
 
-    database.store_group_key(group_id, 1, &stored, now)
+    database
+        .store_group_key(group_id, 1, &stored, now)
         .map_err(|e| err(400, format!("Failed to store imported key: {}", e)))?;
 
     // Create the group locally
-    database.create_group(group_id, &invite.group_name, invite.description.as_deref(), &invite.inviter_did, now)
+    database
+        .create_group(
+            group_id,
+            &invite.group_name,
+            invite.description.as_deref(),
+            &invite.inviter_did,
+            now,
+        )
         .map_err(|e| err(400, format!("Failed to create group: {}", e)))?;
 
     // Add self as member
-    database.add_group_member(group_id, &our_did, Some(&display_name), "member", now)
+    database
+        .add_group_member(group_id, &our_did, Some(&display_name), "member", now)
         .map_err(|e| err(400, format!("Failed to add self: {}", e)))?;
 
     // Add existing members from invite
-    let members: Vec<serde_json::Value> = serde_json::from_str(&invite.members_json).unwrap_or_default();
+    let members: Vec<serde_json::Value> =
+        serde_json::from_str(&invite.members_json).unwrap_or_default();
     for member in &members {
         if let Some(did) = member["did"].as_str() {
             if did != our_did {
@@ -775,18 +941,23 @@ pub fn groups_accept_invite(args: &str) -> DResult {
     }
 
     // Create conversation
-    database.create_group_conversation(&conv_id, group_id)
+    database
+        .create_group_conversation(&conv_id, group_id)
         .map_err(|e| err(400, format!("Failed to create conversation: {}", e)))?;
 
     // Update invite status
-    database.update_group_invite_status(invite_id, "accepted")
+    database
+        .update_group_invite_status(invite_id, "accepted")
         .map_err(|e| err(400, format!("Failed to update invite: {}", e)))?;
 
-    emit_event("groups", &serde_json::json!({
-        "type": "invite_accepted",
-        "invite_id": invite_id,
-        "group_id": group_id,
-    }));
+    emit_event(
+        "groups",
+        &serde_json::json!({
+            "type": "invite_accepted",
+            "invite_id": invite_id,
+            "group_id": group_id,
+        }),
+    );
 
     ok_json(serde_json::json!({
         "group_id": group_id,
@@ -804,9 +975,13 @@ pub fn groups_decline_invite(args: &str) -> DResult {
 
     let state = get_state().map_err(|e| err(100, e))?;
     let state = state.read();
-    let database = state.database.as_ref().ok_or_else(|| err(400, "Database not initialized"))?;
+    let database = state
+        .database
+        .as_ref()
+        .ok_or_else(|| err(400, "Database not initialized"))?;
 
-    database.update_group_invite_status(invite_id, "declined")
+    database
+        .update_group_invite_status(invite_id, "declined")
         .map_err(|e| err(400, format!("Failed to decline invite: {}", e)))?;
 
     ok_json(serde_json::json!({"ok": true}))
@@ -823,37 +998,57 @@ pub fn groups_send_invite(args: &str) -> DResult {
 
     let state = get_state().map_err(|e| err(100, e))?;
     let state = state.read();
-    let identity = state.identity.as_ref().ok_or_else(|| err(200, "No identity loaded"))?;
-    let database = state.database.as_ref().ok_or_else(|| err(400, "Database not initialized"))?;
+    let identity = state
+        .identity
+        .as_ref()
+        .ok_or_else(|| err(200, "No identity loaded"))?;
+    let database = state
+        .database
+        .as_ref()
+        .ok_or_else(|| err(400, "Database not initialized"))?;
 
     let our_did = identity.did_string();
     let display_name = identity.profile().display_name.clone();
 
     // Get group info
-    let group = database.get_group(group_id)
+    let group = database
+        .get_group(group_id)
         .map_err(|e| err(400, format!("DB error: {}", e)))?
         .ok_or_else(|| err(404, format!("Group not found: {}", group_id)))?;
 
     // Get and decrypt the latest group key
-    let key_record = database.get_latest_group_key(group_id)
+    let key_record = database
+        .get_latest_group_key(group_id)
         .map_err(|e| err(400, format!("DB error: {}", e)))?
         .ok_or_else(|| err(704, "No group key found"))?;
 
     let raw_key = decrypt_stored_group_key(identity, &key_record, group_id)?;
 
     // Encrypt the key for the member
-    let (encrypted_key_hex, nonce_hex) =
-        encrypt_group_key_for_member(identity, database, group_id, member_did, &raw_key, key_record.key_version)?;
+    let (encrypted_key_hex, nonce_hex) = encrypt_group_key_for_member(
+        identity,
+        database,
+        group_id,
+        member_did,
+        &raw_key,
+        key_record.key_version,
+    )?;
 
     // Get current members
-    let members = database.get_group_members(group_id)
+    let members = database
+        .get_group_members(group_id)
         .map_err(|e| err(400, format!("DB error: {}", e)))?;
 
-    let members_arr: Vec<serde_json::Value> = members.iter().map(|m| serde_json::json!({
-        "did": m.member_did,
-        "display_name": m.display_name,
-        "role": m.role,
-    })).collect();
+    let members_arr: Vec<serde_json::Value> = members
+        .iter()
+        .map(|m| {
+            serde_json::json!({
+                "did": m.member_did,
+                "display_name": m.display_name,
+                "role": m.role,
+            })
+        })
+        .collect();
 
     let invite_id = uuid::Uuid::new_v4().to_string();
     let timestamp = crate::time::now_timestamp_millis();
@@ -898,10 +1093,17 @@ pub fn groups_build_invite_accept_envelope(args: &str) -> DResult {
 
     let state = get_state().map_err(|e| err(100, e))?;
     let state = state.read();
-    let identity = state.identity.as_ref().ok_or_else(|| err(200, "No identity loaded"))?;
-    let database = state.database.as_ref().ok_or_else(|| err(400, "Database not initialized"))?;
+    let identity = state
+        .identity
+        .as_ref()
+        .ok_or_else(|| err(200, "No identity loaded"))?;
+    let database = state
+        .database
+        .as_ref()
+        .ok_or_else(|| err(400, "Database not initialized"))?;
 
-    let invite = database.get_group_invite(invite_id)
+    let invite = database
+        .get_group_invite(invite_id)
         .map_err(|e| err(400, format!("DB error: {}", e)))?
         .ok_or_else(|| err(404, format!("Invite not found: {}", invite_id)))?;
 
@@ -941,10 +1143,17 @@ pub fn groups_build_invite_decline_envelope(args: &str) -> DResult {
 
     let state = get_state().map_err(|e| err(100, e))?;
     let state = state.read();
-    let identity = state.identity.as_ref().ok_or_else(|| err(200, "No identity loaded"))?;
-    let database = state.database.as_ref().ok_or_else(|| err(400, "Database not initialized"))?;
+    let identity = state
+        .identity
+        .as_ref()
+        .ok_or_else(|| err(200, "No identity loaded"))?;
+    let database = state
+        .database
+        .as_ref()
+        .ok_or_else(|| err(400, "Database not initialized"))?;
 
-    let invite = database.get_group_invite(invite_id)
+    let invite = database
+        .get_group_invite(invite_id)
         .map_err(|e| err(400, format!("DB error: {}", e)))?
         .ok_or_else(|| err(404, format!("Invite not found: {}", invite_id)))?;
 
@@ -984,15 +1193,22 @@ pub fn groups_send_message(args: &str) -> DResult {
 
     let state = get_state().map_err(|e| err(100, e))?;
     let state = state.read();
-    let identity = state.identity.as_ref().ok_or_else(|| err(200, "No identity loaded"))?;
-    let database = state.database.as_ref().ok_or_else(|| err(400, "Database not initialized"))?;
+    let identity = state
+        .identity
+        .as_ref()
+        .ok_or_else(|| err(200, "No identity loaded"))?;
+    let database = state
+        .database
+        .as_ref()
+        .ok_or_else(|| err(400, "Database not initialized"))?;
 
     let our_did = identity.did_string();
     let msg_id = uuid::Uuid::new_v4().to_string();
     let timestamp = crate::time::now_timestamp_millis();
 
     // Encrypt with group key
-    let key_record = database.get_latest_group_key(group_id)
+    let key_record = database
+        .get_latest_group_key(group_id)
         .map_err(|e| err(400, format!("DB error: {}", e)))?
         .ok_or_else(|| err(704, "No group key found"))?;
 
@@ -1004,11 +1220,20 @@ pub fn groups_send_message(args: &str) -> DResult {
         .map_err(|e| err(704, format!("Encryption failed: {}", e)))?;
 
     // Store locally
-    database.store_message(&msg_id, conversation_id, &our_did, &ciphertext, &nonce.0, timestamp)
+    database
+        .store_message(
+            &msg_id,
+            conversation_id,
+            &our_did,
+            &ciphertext,
+            &nonce.0,
+            timestamp,
+        )
         .map_err(|e| err(400, format!("Failed to store message: {}", e)))?;
 
     // Build relay envelopes for all members except self
-    let members = database.get_group_members(group_id)
+    let members = database
+        .get_group_members(group_id)
         .map_err(|e| err(400, format!("DB error: {}", e)))?;
 
     let envelope = serde_json::json!({
@@ -1027,20 +1252,26 @@ pub fn groups_send_message(args: &str) -> DResult {
     });
     let envelope_str = envelope.to_string();
 
-    let relay_messages: Vec<serde_json::Value> = members.iter()
+    let relay_messages: Vec<serde_json::Value> = members
+        .iter()
         .filter(|m| m.member_did != our_did)
-        .map(|m| serde_json::json!({
-            "to_did": m.member_did,
-            "payload": envelope_str,
-        }))
+        .map(|m| {
+            serde_json::json!({
+                "to_did": m.member_did,
+                "payload": envelope_str,
+            })
+        })
         .collect();
 
-    emit_event("messaging", &serde_json::json!({
-        "type": "messageSent",
-        "message_id": msg_id,
-        "conversation_id": conversation_id,
-        "group_id": group_id,
-    }));
+    emit_event(
+        "messaging",
+        &serde_json::json!({
+            "type": "messageSent",
+            "message_id": msg_id,
+            "conversation_id": conversation_id,
+            "group_id": group_id,
+        }),
+    );
 
     ok_json(serde_json::json!({
         "message": {
@@ -1064,24 +1295,33 @@ pub fn groups_remove_member_with_rotation(args: &str) -> DResult {
 
     let state = get_state().map_err(|e| err(100, e))?;
     let state = state.read();
-    let identity = state.identity.as_ref().ok_or_else(|| err(200, "No identity loaded"))?;
-    let database = state.database.as_ref().ok_or_else(|| err(400, "Database not initialized"))?;
+    let identity = state
+        .identity
+        .as_ref()
+        .ok_or_else(|| err(200, "No identity loaded"))?;
+    let database = state
+        .database
+        .as_ref()
+        .ok_or_else(|| err(400, "Database not initialized"))?;
 
     let our_did = identity.did_string();
 
     // Remove the member from DB
-    database.remove_group_member(group_id, member_did)
+    database
+        .remove_group_member(group_id, member_did)
         .map_err(|e| err(400, format!("Failed to remove member: {}", e)))?;
 
     // Generate a new key (rotation)
-    let current = database.get_latest_group_key(group_id)
+    let current = database
+        .get_latest_group_key(group_id)
         .map_err(|e| err(400, format!("DB error: {}", e)))?;
     let new_version = current.map(|k| k.key_version + 1).unwrap_or(1);
 
     let raw_key = generate_and_store_group_key(identity, database, group_id, new_version)?;
 
     // Get remaining members (after removal)
-    let remaining_members = database.get_group_members(group_id)
+    let remaining_members = database
+        .get_group_members(group_id)
         .map_err(|e| err(400, format!("DB error: {}", e)))?;
 
     let mut relay_messages: Vec<serde_json::Value> = Vec::new();
@@ -1093,7 +1333,12 @@ pub fn groups_remove_member_with_rotation(args: &str) -> DResult {
 
         // Encrypt new key for this member; skip if it fails (e.g. not in friends)
         let enc_result = encrypt_group_key_for_member(
-            identity, database, group_id, &member.member_did, &raw_key, new_version,
+            identity,
+            database,
+            group_id,
+            &member.member_did,
+            &raw_key,
+            new_version,
         );
 
         match enc_result {
@@ -1139,12 +1384,15 @@ pub fn groups_remove_member_with_rotation(args: &str) -> DResult {
         }
     }
 
-    emit_event("groups", &serde_json::json!({
-        "type": "member_removed_with_rotation",
-        "group_id": group_id,
-        "removed_did": member_did,
-        "new_key_version": new_version,
-    }));
+    emit_event(
+        "groups",
+        &serde_json::json!({
+            "type": "member_removed_with_rotation",
+            "group_id": group_id,
+            "removed_did": member_did,
+            "new_key_version": new_version,
+        }),
+    );
 
     ok_json(serde_json::json!({
         "key_version": new_version,

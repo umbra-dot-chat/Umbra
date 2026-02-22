@@ -117,15 +117,15 @@
 
 use base64::{engine::general_purpose::URL_SAFE_NO_PAD, Engine as _};
 use libp2p::{Multiaddr, PeerId};
+use parking_lot::RwLock;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::str::FromStr;
 use std::sync::Arc;
-use parking_lot::RwLock;
 
 use crate::error::{Error, Result};
 use crate::identity::{Did, Identity};
-use crate::network::{NetworkService, did_to_peer_id};
+use crate::network::{did_to_peer_id, NetworkService};
 
 /// Current connection info protocol version
 pub const CONNECTION_INFO_VERSION: u8 = 1;
@@ -187,19 +187,18 @@ impl ConnectionInfo {
             version: CONNECTION_INFO_VERSION,
             did: identity.did_string(),
             peer_id: network.peer_id().to_string(),
-            addresses: network.listen_addrs().iter().map(|a| a.to_string()).collect(),
+            addresses: network
+                .listen_addrs()
+                .iter()
+                .map(|a| a.to_string())
+                .collect(),
             display_name: identity.profile().display_name.clone(),
             timestamp: crate::time::now_timestamp(),
         }
     }
 
     /// Create connection info manually (for testing or offline generation)
-    pub fn new(
-        did: String,
-        peer_id: String,
-        addresses: Vec<String>,
-        display_name: String,
-    ) -> Self {
+    pub fn new(did: String, peer_id: String, addresses: Vec<String>, display_name: String) -> Self {
         Self {
             version: CONNECTION_INFO_VERSION,
             did,
@@ -212,8 +211,7 @@ impl ConnectionInfo {
 
     /// Encode to JSON string
     pub fn to_json(&self) -> Result<String> {
-        serde_json::to_string(self)
-            .map_err(|e| Error::SerializationError(e.to_string()))
+        serde_json::to_string(self).map_err(|e| Error::SerializationError(e.to_string()))
     }
 
     /// Encode to URL-safe base64 (for sharing links)
@@ -224,8 +222,7 @@ impl ConnectionInfo {
 
     /// Decode from JSON string
     pub fn from_json(json: &str) -> Result<Self> {
-        serde_json::from_str(json)
-            .map_err(|e| Error::DeserializationError(e.to_string()))
+        serde_json::from_str(json).map_err(|e| Error::DeserializationError(e.to_string()))
     }
 
     /// Decode from URL-safe base64
@@ -252,7 +249,7 @@ impl ConnectionInfo {
 
         if !link.starts_with(PREFIX) {
             return Err(Error::DeserializationError(
-                "Invalid link format: must start with 'umbra://connect/'".into()
+                "Invalid link format: must start with 'umbra://connect/'".into(),
             ));
         }
 
@@ -279,8 +276,9 @@ impl ConnectionInfo {
 
         // Validate addresses
         for addr in &self.addresses {
-            addr.parse::<Multiaddr>()
-                .map_err(|e| Error::ProtocolError(format!("Invalid multiaddr '{}': {}", addr, e)))?;
+            addr.parse::<Multiaddr>().map_err(|e| {
+                Error::ProtocolError(format!("Invalid multiaddr '{}': {}", addr, e))
+            })?;
         }
 
         Ok(())
@@ -375,7 +373,9 @@ impl DiscoveryService {
         {
             let mut running = self.running.write();
             if *running {
-                return Err(Error::ProtocolError("Discovery service already running".into()));
+                return Err(Error::ProtocolError(
+                    "Discovery service already running".into(),
+                ));
             }
             *running = true;
         }
@@ -453,11 +453,7 @@ impl DiscoveryService {
                     return Ok(None);
                 }
 
-                tracing::info!(
-                    "Found {} addresses for peer {}",
-                    addresses.len(),
-                    peer_id
-                );
+                tracing::info!("Found {} addresses for peer {}", addresses.len(), peer_id);
 
                 let peer = DiscoveredPeer {
                     did: did.to_string(),
@@ -525,9 +521,7 @@ impl DiscoveryService {
             }
         }
 
-        Err(last_error.unwrap_or_else(|| {
-            Error::ConnectionFailed("No addresses to try".into())
-        }))
+        Err(last_error.unwrap_or_else(|| Error::ConnectionFailed("No addresses to try".into())))
     }
 
     /// Get all discovered peers

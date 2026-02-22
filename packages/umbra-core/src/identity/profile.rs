@@ -269,12 +269,8 @@ mod tests {
 
     #[test]
     fn test_profile_serialization() {
-        let profile = Profile::with_all(
-            "Alice".to_string(),
-            Some("Available".to_string()),
-            None,
-        )
-        .unwrap();
+        let profile =
+            Profile::with_all("Alice".to_string(), Some("Available".to_string()), None).unwrap();
 
         let json = serde_json::to_string(&profile).unwrap();
         let restored: Profile = serde_json::from_str(&json).unwrap();

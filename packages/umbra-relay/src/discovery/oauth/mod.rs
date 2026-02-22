@@ -2,13 +2,13 @@
 //!
 //! Provides OAuth2/OpenID flows for Discord, GitHub, Steam, Bluesky, and Xbox.
 
+pub mod bluesky;
+pub mod community_import;
 pub mod discord;
 pub mod github;
-pub mod steam;
-pub mod bluesky;
-pub mod xbox;
 pub mod profile_import;
-pub mod community_import;
+pub mod steam;
+pub mod xbox;
 
 use axum::response::Html;
 use serde::Deserialize;

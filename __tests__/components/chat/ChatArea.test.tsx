@@ -59,6 +59,7 @@ describe('ChatArea', () => {
   const defaultProps = {
     messages: sampleMessages,
     myDid: 'did:key:z6MkMe',
+    myDisplayName: 'You',
     friendNames: { 'did:key:z6MkFriend': 'Alice' } as Record<string, string>,
     hoveredMessage: null,
     onHoverIn: jest.fn(),

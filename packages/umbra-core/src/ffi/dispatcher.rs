@@ -13,7 +13,7 @@
 //! Returns `Ok(json_string)` on success, `Err((error_code, message))` on failure.
 
 use base64::Engine as _;
-use sha2::{Sha256, Digest};
+use sha2::{Digest, Sha256};
 
 use super::state::get_state;
 use crate::community::CommunityService;
@@ -33,7 +33,9 @@ pub fn json_parse(args: &str) -> Result<serde_json::Value, (i32, String)> {
 }
 
 pub fn require_str<'a>(data: &'a serde_json::Value, field: &str) -> Result<&'a str, (i32, String)> {
-    data[field].as_str().ok_or_else(|| err(2, format!("Missing {}", field)))
+    data[field]
+        .as_str()
+        .ok_or_else(|| err(2, format!("Missing {}", field)))
 }
 
 pub fn ok_json(v: serde_json::Value) -> DResult {
@@ -55,14 +57,20 @@ pub fn deterministic_conversation_id(did_a: &str, did_b: &str) -> String {
 pub fn community_service() -> Result<CommunityService, (i32, String)> {
     let state = get_state().map_err(|e| err(100, e))?;
     let state = state.read();
-    let db = state.database.as_ref().ok_or_else(|| err(400, "Database not initialized"))?;
+    let db = state
+        .database
+        .as_ref()
+        .ok_or_else(|| err(400, "Database not initialized"))?;
     Ok(CommunityService::new(db.clone()))
 }
 
 pub fn dm_file_service() -> Result<crate::messaging::files::DmFileService, (i32, String)> {
     let state = get_state().map_err(|e| err(100, e))?;
     let state = state.read();
-    let db = state.database.as_ref().ok_or_else(|| err(400, "Database not initialized"))?;
+    let db = state
+        .database
+        .as_ref()
+        .ok_or_else(|| err(400, "Database not initialized"))?;
     Ok(crate::messaging::files::DmFileService::new(db.clone()))
 }
 
@@ -73,7 +81,10 @@ pub fn emit_event(domain: &str, data: &serde_json::Value) {
 
 // JSON converters for records
 pub fn community_msg_json(m: &crate::storage::CommunityMessageRecord) -> serde_json::Value {
-    let ct_b64 = m.content_encrypted.as_ref().map(|b| base64::engine::general_purpose::STANDARD.encode(b));
+    let ct_b64 = m
+        .content_encrypted
+        .as_ref()
+        .map(|b| base64::engine::general_purpose::STANDARD.encode(b));
     serde_json::json!({
         "id": m.id, "channel_id": m.channel_id, "sender_did": m.sender_did,
         "content_encrypted_b64": ct_b64, "content": m.content_plaintext,
@@ -180,15 +191,15 @@ pub fn boost_node_json(n: &crate::storage::BoostNodeRecord) -> serde_json::Value
 // MAIN DISPATCHER
 // ============================================================================
 
-use super::dispatch_identity;
-use super::dispatch_friends;
-use super::dispatch_messaging;
 use super::dispatch_community;
-use super::dispatch_community_msg;
 use super::dispatch_community_ext;
+use super::dispatch_community_msg;
 use super::dispatch_dm_files;
-use super::dispatch_secure_store;
+use super::dispatch_friends;
 use super::dispatch_groups;
+use super::dispatch_identity;
+use super::dispatch_messaging;
+use super::dispatch_secure_store;
 use super::dispatch_stubs;
 
 pub fn dispatch(method: &str, args: &str) -> DResult {
@@ -215,14 +226,20 @@ pub fn dispatch(method: &str, args: &str) -> DResult {
 
         // ── Messaging (DM) ──────────────────────────────────────────
         "messaging_get_conversations" => dispatch_messaging::messaging_get_conversations(),
-        "messaging_create_dm_conversation" => dispatch_messaging::messaging_create_dm_conversation(args),
+        "messaging_create_dm_conversation" => {
+            dispatch_messaging::messaging_create_dm_conversation(args)
+        }
         "messaging_get_messages" => dispatch_messaging::messaging_get_messages(args),
         "messaging_send" => dispatch_messaging::messaging_send(args),
         "messaging_mark_read" => dispatch_messaging::messaging_mark_read(args),
         "messaging_decrypt" => dispatch_messaging::messaging_decrypt(args),
         "messaging_store_incoming" => dispatch_messaging::messaging_store_incoming(args),
-        "messaging_build_typing_envelope" => dispatch_messaging::messaging_build_typing_envelope(args),
-        "messaging_build_receipt_envelope" => dispatch_messaging::messaging_build_receipt_envelope(args),
+        "messaging_build_typing_envelope" => {
+            dispatch_messaging::messaging_build_typing_envelope(args)
+        }
+        "messaging_build_receipt_envelope" => {
+            dispatch_messaging::messaging_build_receipt_envelope(args)
+        }
         "messaging_edit" => dispatch_messaging::messaging_edit(args),
         "messaging_delete" => dispatch_messaging::messaging_delete(args),
         "messaging_pin" => dispatch_messaging::messaging_pin(args),
@@ -249,16 +266,24 @@ pub fn dispatch(method: &str, args: &str) -> DResult {
         "groups_import_key" => dispatch_groups::groups_import_key(args),
         "groups_encrypt_message" => dispatch_groups::groups_encrypt_message(args),
         "groups_decrypt_message" => dispatch_groups::groups_decrypt_message(args),
-        "groups_encrypt_key_for_member" => dispatch_groups::groups_encrypt_key_for_member_handler(args),
+        "groups_encrypt_key_for_member" => {
+            dispatch_groups::groups_encrypt_key_for_member_handler(args)
+        }
         "groups_store_invite" => dispatch_groups::groups_store_invite(args),
         "groups_get_pending_invites" => dispatch_groups::groups_get_pending_invites(),
         "groups_accept_invite" => dispatch_groups::groups_accept_invite(args),
         "groups_decline_invite" => dispatch_groups::groups_decline_invite(args),
         "groups_send_invite" => dispatch_groups::groups_send_invite(args),
-        "groups_build_invite_accept_envelope" => dispatch_groups::groups_build_invite_accept_envelope(args),
-        "groups_build_invite_decline_envelope" => dispatch_groups::groups_build_invite_decline_envelope(args),
+        "groups_build_invite_accept_envelope" => {
+            dispatch_groups::groups_build_invite_accept_envelope(args)
+        }
+        "groups_build_invite_decline_envelope" => {
+            dispatch_groups::groups_build_invite_decline_envelope(args)
+        }
         "groups_send_message" => dispatch_groups::groups_send_message(args),
-        "groups_remove_member_with_rotation" => dispatch_groups::groups_remove_member_with_rotation(args),
+        "groups_remove_member_with_rotation" => {
+            dispatch_groups::groups_remove_member_with_rotation(args)
+        }
 
         // ── Network ─────────────────────────────────────────────────
         "network_status" => dispatch_stubs::network_status(),
@@ -305,7 +330,9 @@ pub fn dispatch(method: &str, args: &str) -> DResult {
         "get_file_manifest" => dispatch_stubs::get_file_manifest(args),
 
         // ── Relay Envelope Builders ─────────────────────────────────
-        "community_build_event_relay_batch" => dispatch_stubs::community_build_event_relay_batch(args),
+        "community_build_event_relay_batch" => {
+            dispatch_stubs::community_build_event_relay_batch(args)
+        }
         "build_dm_file_event_envelope" => dispatch_stubs::build_dm_file_event_envelope(args),
         "build_metadata_envelope" => dispatch_stubs::build_metadata_envelope(args),
 
@@ -332,7 +359,9 @@ pub fn dispatch(method: &str, args: &str) -> DResult {
         "community_category_update" => dispatch_community::community_category_update(args),
         "community_category_reorder" => dispatch_community::community_category_reorder(args),
         "community_category_delete" => dispatch_community::community_category_delete(args),
-        "community_channel_move_category" => dispatch_community::community_channel_move_category(args),
+        "community_channel_move_category" => {
+            dispatch_community::community_channel_move_category(args)
+        }
 
         // ── Community — Channels ────────────────────────────────────
         "community_channel_create" => dispatch_community::community_channel_create(args),
@@ -340,7 +369,9 @@ pub fn dispatch(method: &str, args: &str) -> DResult {
         "community_channel_list_all" => dispatch_community::community_channel_list_all(args),
         "community_channel_get" => dispatch_community::community_channel_get(args),
         "community_channel_update" => dispatch_community::community_channel_update(args),
-        "community_channel_set_slow_mode" => dispatch_community::community_channel_set_slow_mode(args),
+        "community_channel_set_slow_mode" => {
+            dispatch_community::community_channel_set_slow_mode(args)
+        }
         "community_channel_set_e2ee" => dispatch_community::community_channel_set_e2ee(args),
         "community_channel_delete" => dispatch_community::community_channel_delete(args),
         "community_channel_reorder" => dispatch_community::community_channel_reorder(args),
@@ -353,7 +384,9 @@ pub fn dispatch(method: &str, args: &str) -> DResult {
         "community_unban" => dispatch_community::community_unban(args),
         "community_member_list" => dispatch_community::community_member_list(args),
         "community_member_get" => dispatch_community::community_member_get(args),
-        "community_member_update_profile" => dispatch_community::community_member_update_profile(args),
+        "community_member_update_profile" => {
+            dispatch_community::community_member_update_profile(args)
+        }
         "community_ban_list" => dispatch_community::community_ban_list(args),
 
         // ── Community — Roles ───────────────────────────────────────
@@ -363,7 +396,9 @@ pub fn dispatch(method: &str, args: &str) -> DResult {
         "community_role_unassign" => dispatch_community::community_role_unassign(args),
         "community_custom_role_create" => dispatch_community::community_custom_role_create(args),
         "community_role_update" => dispatch_community::community_role_update(args),
-        "community_role_update_permissions" => dispatch_community::community_role_update_permissions(args),
+        "community_role_update_permissions" => {
+            dispatch_community::community_role_update_permissions(args)
+        }
         "community_role_delete" => dispatch_community::community_role_delete(args),
 
         // ── Community — Invites ─────────────────────────────────────
@@ -375,7 +410,9 @@ pub fn dispatch(method: &str, args: &str) -> DResult {
 
         // ── Community — Messages ────────────────────────────────────
         "community_message_send" => dispatch_community_msg::community_message_send(args),
-        "community_message_store_received" => dispatch_community_msg::community_message_store_received(args),
+        "community_message_store_received" => {
+            dispatch_community_msg::community_message_store_received(args)
+        }
         "community_message_list" => dispatch_community_msg::community_message_list(args),
         "community_message_get" => dispatch_community_msg::community_message_get(args),
         "community_message_edit" => dispatch_community_msg::community_message_edit(args),
@@ -398,10 +435,16 @@ pub fn dispatch(method: &str, args: &str) -> DResult {
         "community_sticker_delete" => dispatch_community_ext::community_sticker_delete(args),
 
         // ── Community — Sticker Packs ───────────────────────────────
-        "community_sticker_pack_create" => dispatch_community_ext::community_sticker_pack_create(args),
+        "community_sticker_pack_create" => {
+            dispatch_community_ext::community_sticker_pack_create(args)
+        }
         "community_sticker_pack_list" => dispatch_community_ext::community_sticker_pack_list(args),
-        "community_sticker_pack_delete" => dispatch_community_ext::community_sticker_pack_delete(args),
-        "community_sticker_pack_rename" => dispatch_community_ext::community_sticker_pack_rename(args),
+        "community_sticker_pack_delete" => {
+            dispatch_community_ext::community_sticker_pack_delete(args)
+        }
+        "community_sticker_pack_rename" => {
+            dispatch_community_ext::community_sticker_pack_rename(args)
+        }
 
         // ── Community — Pins ────────────────────────────────────────
         "community_pin_message" => dispatch_community_msg::community_pin_message(args),
@@ -422,7 +465,9 @@ pub fn dispatch(method: &str, args: &str) -> DResult {
         "community_get_files" => dispatch_community_ext::community_get_files(args),
         "community_get_file" => dispatch_community_ext::community_get_file(args),
         "community_delete_file" => dispatch_community_ext::community_delete_file(args),
-        "community_record_file_download" => dispatch_community_ext::community_record_file_download(args),
+        "community_record_file_download" => {
+            dispatch_community_ext::community_record_file_download(args)
+        }
         "community_create_folder" => dispatch_community_ext::community_create_folder(args),
         "community_get_folders" => dispatch_community_ext::community_get_folders(args),
         "community_delete_folder" => dispatch_community_ext::community_delete_folder(args),
@@ -441,7 +486,9 @@ pub fn dispatch(method: &str, args: &str) -> DResult {
 
         // ── Community — Seats ───────────────────────────────────────
         "community_seat_list" => dispatch_community_ext::community_seat_list(args),
-        "community_seat_list_unclaimed" => dispatch_community_ext::community_seat_list_unclaimed(args),
+        "community_seat_list_unclaimed" => {
+            dispatch_community_ext::community_seat_list_unclaimed(args)
+        }
         "community_seat_find_match" => dispatch_community_ext::community_seat_find_match(args),
         "community_seat_claim" => dispatch_community_ext::community_seat_claim(args),
         "community_seat_delete" => dispatch_community_ext::community_seat_delete(args),
@@ -449,7 +496,9 @@ pub fn dispatch(method: &str, args: &str) -> DResult {
         "community_seat_count" => dispatch_community_ext::community_seat_count(args),
 
         // ── Community — Audit Log ───────────────────────────────────
-        "community_audit_log_create_batch" => dispatch_community_ext::community_audit_log_create_batch(args),
+        "community_audit_log_create_batch" => {
+            dispatch_community_ext::community_audit_log_create_batch(args)
+        }
         "community_audit_log_list" => dispatch_community_ext::community_audit_log_list(args),
 
         // ── DHT ─────────────────────────────────────────────────────

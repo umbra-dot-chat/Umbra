@@ -73,38 +73,68 @@ mod database;
 #[path = "wasm_database.rs"]
 mod database;
 
-mod secure_store;
-mod schema;
 pub mod chunking;
+mod schema;
+mod secure_store;
 
 /// OPFS storage adapter for web chunk data (WASM-only)
 #[cfg(target_arch = "wasm32")]
 pub mod opfs;
 
 pub use database::{
-    Database, DatabaseConfig, FriendRecord, FriendRequestRecord,
-    ConversationRecord, MessageRecord, GroupRecord, GroupMemberRecord,
-    GroupKeyRecord, GroupInviteRecord, ReactionRecord,
-    // Community record types
-    CommunityRecord, CommunitySpaceRecord, CommunityCategoryRecord, CommunityChannelRecord,
-    CommunityRoleRecord, CommunityMemberRoleRecord, ChannelPermissionOverrideRecord,
-    CommunityMemberRecord, CommunityMessageRecord, CommunityReactionRecord,
-    CommunityInviteRecord, CommunityBanRecord, CommunityWarningRecord,
-    CommunityAuditLogRecord, CommunityThreadRecord, BoostNodeRecord,
+    BoostNodeRecord,
+    ChannelKeyRecord,
+    ChannelPermissionOverrideRecord,
+    CommunityAuditLogRecord,
+    CommunityBanRecord,
+    CommunityCategoryRecord,
+    CommunityChannelRecord,
+    CommunityDeletedMessageRecord,
+    CommunityEmojiRecord,
+    CommunityFileFolderRecord,
+    CommunityFileRecord,
+    CommunityInviteRecord,
+    CommunityMemberRecord,
+    CommunityMemberRoleRecord,
+    CommunityMemberStatusRecord,
+    CommunityMessageRecord,
+    CommunityNotificationSettingRecord,
+    CommunityPinRecord,
+    CommunityReactionRecord,
     // Phase 2-11 record types
-    CommunityReadReceiptRecord, CommunityPinRecord,
-    CommunityFileRecord, CommunityFileFolderRecord,
-    CommunityEmojiRecord, CommunityStickerRecord, CommunityStickerPackRecord,
-    CommunityWebhookRecord, ChannelKeyRecord, CommunityDeletedMessageRecord,
-    // Gap fill record types
-    CommunityTimeoutRecord, CommunityThreadFollowerRecord,
-    CommunityMemberStatusRecord, CommunityNotificationSettingRecord,
-    // File chunk and DM file record types
-    FileChunkRecord, FileManifestRecord, DmSharedFileRecord, DmSharedFolderRecord,
-    // Transfer session record type
-    TransferSessionRecord,
+    CommunityReadReceiptRecord,
+    // Community record types
+    CommunityRecord,
+    CommunityRoleRecord,
     // Community seat record type (ghost member placeholders)
     CommunitySeatRecord,
+    CommunitySpaceRecord,
+    CommunityStickerPackRecord,
+    CommunityStickerRecord,
+    CommunityThreadFollowerRecord,
+    CommunityThreadRecord,
+    // Gap fill record types
+    CommunityTimeoutRecord,
+    CommunityWarningRecord,
+    CommunityWebhookRecord,
+    ConversationRecord,
+    Database,
+    DatabaseConfig,
+    DmSharedFileRecord,
+    DmSharedFolderRecord,
+    // File chunk and DM file record types
+    FileChunkRecord,
+    FileManifestRecord,
+    FriendRecord,
+    FriendRequestRecord,
+    GroupInviteRecord,
+    GroupKeyRecord,
+    GroupMemberRecord,
+    GroupRecord,
+    MessageRecord,
+    ReactionRecord,
+    // Transfer session record type
+    TransferSessionRecord,
 };
 pub use secure_store::SecureStore;
 

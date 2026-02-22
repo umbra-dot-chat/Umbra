@@ -318,9 +318,7 @@ pub fn validate_username_name(name: &str) -> Result<(), String> {
         .chars()
         .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-')
     {
-        return Err(
-            "Username can only contain letters, numbers, underscores, and hyphens".into(),
-        );
+        return Err("Username can only contain letters, numbers, underscores, and hyphens".into());
     }
     Ok(())
 }

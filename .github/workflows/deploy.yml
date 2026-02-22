@@ -271,6 +271,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Checkout Wisp
+        uses: actions/checkout@v4
+        with:
+          repository: InfamousVague/Wisp
+          path: .wisp
+          token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -279,6 +286,9 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      - name: Patch Wisp packages
+        run: bash scripts/patch-wisp.sh
 
       - name: Build web
         run: npx expo export --platform web

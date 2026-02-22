@@ -91,15 +91,15 @@
 // MODULE DECLARATIONS
 // ============================================================================
 
-pub mod error;
-pub mod crypto;
-pub mod identity;
-pub mod storage;
-pub mod network;
-pub mod discovery;
-pub mod friends;
-pub mod messaging;
 pub mod community;
+pub mod crypto;
+pub mod discovery;
+pub mod error;
+pub mod friends;
+pub mod identity;
+pub mod messaging;
+pub mod network;
+pub mod storage;
 /// Platform-aware time utilities for native and WASM targets.
 pub mod time;
 
@@ -110,17 +110,17 @@ pub mod ffi;
 // RE-EXPORTS
 // ============================================================================
 
-pub use error::{Error, Result};
 pub use crypto::{KeyPair, PublicKey, SharedSecret};
-pub use identity::{Identity, PublicIdentity, ProfileUpdate};
+pub use error::{Error, Result};
+pub use identity::{Identity, ProfileUpdate, PublicIdentity};
 
 // ============================================================================
 // CORE INSTANCE
 // ============================================================================
 
-use std::sync::Arc;
-use parking_lot::RwLock;
 use once_cell::sync::OnceCell;
+use parking_lot::RwLock;
+use std::sync::Arc;
 
 /// Global Umbra Core instance
 static CORE_INSTANCE: OnceCell<Arc<RwLock<UmbraCore>>> = OnceCell::new();
@@ -226,10 +226,7 @@ impl UmbraCore {
     ///
     /// Returns an error if the core hasn't been initialized.
     pub fn instance() -> Result<Arc<RwLock<UmbraCore>>> {
-        CORE_INSTANCE
-            .get()
-            .cloned()
-            .ok_or(Error::NotInitialized)
+        CORE_INSTANCE.get().cloned().ok_or(Error::NotInitialized)
     }
 
     /// Check if the core is initialized
@@ -286,7 +283,11 @@ pub fn build_info() -> BuildInfo {
             target_arch = "wasm32"
         )))]
         target: "unknown",
-        profile: if cfg!(debug_assertions) { "debug" } else { "release" },
+        profile: if cfg!(debug_assertions) {
+            "debug"
+        } else {
+            "release"
+        },
     }
 }
 

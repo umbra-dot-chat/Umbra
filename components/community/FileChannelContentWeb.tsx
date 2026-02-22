@@ -13,15 +13,17 @@
 import React, { useState, useCallback, useMemo, useRef } from 'react';
 import {
   FileChannelView,
+} from '@coexist/wisp-react-native/src/components/file-channel-view';
+import {
   FileDetailPanel,
-} from '@coexist/wisp-react';
+} from '@coexist/wisp-react-native/src/components/file-detail-panel';
 import type {
   FileEntry,
   FileFolder,
   FileViewMode,
   FileSortField,
   FileSortDirection,
-} from '@coexist/wisp-react';
+} from '@coexist/wisp-core/types/FileChannelView.types';
 import { useCommunityFiles } from '@/hooks/useCommunityFiles';
 import { useCommunitySync } from '@/hooks/useCommunitySync';
 import { useUmbra } from '@/contexts/UmbraContext';
@@ -380,38 +382,43 @@ export function FileChannelContentWeb({
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%' }}>
+      {/* Web-only props (subfolders, sort, selection, detail panel, drag-drop) are
+         passed through to the full Wisp web FileChannelView at runtime. The RN type
+         definition is narrower so we spread via `any` to avoid type errors. */}
       <FileChannelView
-        folders={folderTreeEntries}
-        files={sortedFiles}
-        subfolders={subfolderEntries}
-        currentFolderId={currentFolderId}
-        viewMode={viewMode}
-        onViewModeChange={setViewMode}
-        onFolderClick={handleFolderClick}
-        onFileClick={handleFileClick}
-        onUploadClick={allowUpload ? handleUploadClick : undefined}
-        onCreateFolder={allowManage ? handleCreateFolder : undefined}
-        breadcrumbPath={breadcrumbPath}
-        onBreadcrumbClick={handleBreadcrumbClick}
-        loading={isLoading}
-        emptyText="No files yet — click Upload to add files"
-        selectedFileIds={selectedFileIds}
-        selectedFolderIds={selectedFolderIds}
-        onFileSelectionChange={setSelectedFileIds}
-        onFolderSelectionChange={setSelectedFolderIds}
-        onFileDownload={handleFileDownload}
-        onFileDelete={allowManage ? handleFileDelete : undefined}
-        onFolderDelete={allowManage ? handleFolderDelete : undefined}
-        onFileDrop={allowUpload ? handleFileDrop : undefined}
-        showDetailPanel={!!detailFile}
-        detailFile={detailFile}
-        onDetailPanelClose={() => setDetailFileId(null)}
-        sortBy={sortBy}
-        sortDirection={sortDirection}
-        onSortChange={handleSortChange}
-        uploading={isUploading}
-        uploadProgress={uploadProgress}
-        currentUploadFileName={uploadFileName}
+        {...({
+          folders: folderTreeEntries,
+          files: sortedFiles,
+          subfolders: subfolderEntries,
+          currentFolderId,
+          viewMode,
+          onViewModeChange: setViewMode,
+          onFolderClick: handleFolderClick,
+          onFileClick: handleFileClick,
+          onUploadClick: allowUpload ? handleUploadClick : undefined,
+          onCreateFolder: allowManage ? handleCreateFolder : undefined,
+          breadcrumbPath,
+          onBreadcrumbClick: handleBreadcrumbClick,
+          loading: isLoading,
+          emptyText: 'No files yet — click Upload to add files',
+          selectedFileIds,
+          selectedFolderIds,
+          onFileSelectionChange: setSelectedFileIds,
+          onFolderSelectionChange: setSelectedFolderIds,
+          onFileDownload: handleFileDownload,
+          onFileDelete: allowManage ? handleFileDelete : undefined,
+          onFolderDelete: allowManage ? handleFolderDelete : undefined,
+          onFileDrop: allowUpload ? handleFileDrop : undefined,
+          showDetailPanel: !!detailFile,
+          detailFile,
+          onDetailPanelClose: () => setDetailFileId(null),
+          sortBy,
+          sortDirection,
+          onSortChange: handleSortChange,
+          uploading: isUploading,
+          uploadProgress,
+          currentUploadFileName: uploadFileName,
+        } as any)}
       />
 
       {/* Create folder dialog */}

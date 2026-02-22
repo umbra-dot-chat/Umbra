@@ -135,8 +135,9 @@ impl RecoveryPhrase {
         let mut entropy = [0u8; ENTROPY_BYTES];
         rand::rngs::OsRng.fill_bytes(&mut entropy);
 
-        let mnemonic = Mnemonic::from_entropy(&entropy)
-            .map_err(|e| Error::KeyDerivationFailed(format!("Failed to generate mnemonic: {}", e)))?;
+        let mnemonic = Mnemonic::from_entropy(&entropy).map_err(|e| {
+            Error::KeyDerivationFailed(format!("Failed to generate mnemonic: {}", e))
+        })?;
 
         Ok(Self { mnemonic })
     }

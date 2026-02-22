@@ -1437,7 +1437,7 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
           style={{
             width: '100%',
             height: 120,
-            backgroundColor: theme.colors.background.tertiary,
+            backgroundColor: theme.colors.background.surface,
           }}
           resizeMode="cover"
         />

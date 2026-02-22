@@ -126,14 +126,14 @@ fn profile_success_html(profile: &ImportedProfile) -> Html<String> {
     </script>
 </body>
 </html>"#,
-        profile.display_name,
-        profile_json
+        profile.display_name, profile_json
     ))
 }
 
 /// Generate HTML page for profile import errors.
 fn profile_error_html(message: &str) -> Html<String> {
-    let error_json = serde_json::to_string(message).unwrap_or_else(|_| "\"Unknown error\"".to_string());
+    let error_json =
+        serde_json::to_string(message).unwrap_or_else(|_| "\"Unknown error\"".to_string());
     Html(format!(
         r#"<!DOCTYPE html>
 <html>
@@ -213,8 +213,7 @@ fn profile_error_html(message: &str) -> Html<String> {
     </script>
 </body>
 </html>"#,
-        message,
-        error_json
+        message, error_json
     ))
 }
 
@@ -273,12 +272,16 @@ pub async fn start_discord(
     let did = body.and_then(|b| b.did.clone()).unwrap_or_default();
 
     // Get client_id and redirect_uri, falling back to regular redirect URI if needed
-    let (client_id, redirect_uri) = match (&config.discord_client_id, &config.discord_profile_import_redirect_uri) {
+    let (client_id, redirect_uri) = match (
+        &config.discord_client_id,
+        &config.discord_profile_import_redirect_uri,
+    ) {
         (Some(id), Some(uri)) => (id.clone(), uri.clone()),
         (Some(id), None) => {
             // Fall back to regular redirect URI
             if let Some(uri) = &config.discord_redirect_uri {
-                let profile_uri = uri.replace("/auth/discord/callback", "/profile/import/discord/callback");
+                let profile_uri =
+                    uri.replace("/auth/discord/callback", "/profile/import/discord/callback");
                 (id.clone(), profile_uri)
             } else {
                 return (
@@ -371,22 +374,29 @@ pub async fn callback_discord(
                 profile_import = s.profile_import,
                 "OAuth state found but doesn't match expected criteria"
             );
-            return profile_error_html("Invalid OAuth state (not a profile import flow)").into_response();
+            return profile_error_html("Invalid OAuth state (not a profile import flow)")
+                .into_response();
         }
         None => {
             tracing::warn!(state = query.state.as_str(), "OAuth state not found");
-            return profile_error_html("Invalid or expired state. Please try again.").into_response();
+            return profile_error_html("Invalid or expired state. Please try again.")
+                .into_response();
         }
     };
 
     let (client_id, client_secret, redirect_uri) = match (
         config.discord_client_id.as_ref(),
         config.discord_client_secret.as_ref(),
-        config.discord_profile_import_redirect_uri.as_ref().or(
-            config.discord_redirect_uri.as_ref().map(|uri| {
-                uri.replace("/auth/discord/callback", "/profile/import/discord/callback")
-            }).as_ref()
-        ),
+        config
+            .discord_profile_import_redirect_uri
+            .as_ref()
+            .or(config
+                .discord_redirect_uri
+                .as_ref()
+                .map(|uri| {
+                    uri.replace("/auth/discord/callback", "/profile/import/discord/callback")
+                })
+                .as_ref()),
     ) {
         (Some(id), Some(secret), Some(uri)) => (id.clone(), secret.clone(), uri.clone()),
         _ => {
@@ -502,7 +512,10 @@ pub async fn callback_discord(
 }
 
 /// Download Discord avatar and return as base64.
-async fn download_discord_avatar(client: &Client, user: &DiscordUser) -> (Option<String>, Option<String>) {
+async fn download_discord_avatar(
+    client: &Client,
+    user: &DiscordUser,
+) -> (Option<String>, Option<String>) {
     let avatar_url = if let Some(ref hash) = user.avatar {
         let ext = if hash.starts_with("a_") { "gif" } else { "png" };
         format!(
@@ -582,12 +595,16 @@ pub async fn start_github(
     let did = body.and_then(|b| b.did.clone()).unwrap_or_default();
 
     // Get client_id and redirect_uri, falling back to regular redirect URI if needed
-    let (client_id, redirect_uri) = match (&config.github_client_id, &config.github_profile_import_redirect_uri) {
+    let (client_id, redirect_uri) = match (
+        &config.github_client_id,
+        &config.github_profile_import_redirect_uri,
+    ) {
         (Some(id), Some(uri)) => (id.clone(), uri.clone()),
         (Some(id), None) => {
             // Fall back to regular redirect URI
             if let Some(uri) = &config.github_redirect_uri {
-                let profile_uri = uri.replace("/auth/github/callback", "/profile/import/github/callback");
+                let profile_uri =
+                    uri.replace("/auth/github/callback", "/profile/import/github/callback");
                 (id.clone(), profile_uri)
             } else {
                 return (
@@ -658,21 +675,23 @@ pub async fn callback_github(
     let oauth_state = match store.take_oauth_state(&query.state) {
         Some(s) if s.platform == Platform::GitHub && s.profile_import => s,
         Some(_) => {
-            return profile_error_html("Invalid OAuth state (not a profile import flow)").into_response();
+            return profile_error_html("Invalid OAuth state (not a profile import flow)")
+                .into_response();
         }
         None => {
-            return profile_error_html("Invalid or expired state. Please try again.").into_response();
+            return profile_error_html("Invalid or expired state. Please try again.")
+                .into_response();
         }
     };
 
     let (client_id, client_secret, redirect_uri) = match (
         config.github_client_id.as_ref(),
         config.github_client_secret.as_ref(),
-        config.github_profile_import_redirect_uri.as_ref().or(
-            config.github_redirect_uri.as_ref().map(|uri| {
-                uri.replace("/auth/github/callback", "/profile/import/github/callback")
-            }).as_ref()
-        ),
+        config.github_profile_import_redirect_uri.as_ref().or(config
+            .github_redirect_uri
+            .as_ref()
+            .map(|uri| uri.replace("/auth/github/callback", "/profile/import/github/callback"))
+            .as_ref()),
     ) {
         (Some(id), Some(secret), Some(uri)) => (id.clone(), secret.clone(), uri.clone()),
         _ => {
@@ -948,10 +967,12 @@ pub async fn callback_steam(
     let oauth_state = match store.take_oauth_state(&state_nonce) {
         Some(s) if s.platform == Platform::Steam && s.profile_import => s,
         Some(_) => {
-            return profile_error_html("Invalid OAuth state (not a profile import flow)").into_response();
+            return profile_error_html("Invalid OAuth state (not a profile import flow)")
+                .into_response();
         }
         None => {
-            return profile_error_html("Invalid or expired state. Please try again.").into_response();
+            return profile_error_html("Invalid or expired state. Please try again.")
+                .into_response();
         }
     };
 
@@ -994,15 +1015,13 @@ pub async fn callback_steam(
     let profile_response = client.get(&profile_url).send().await;
 
     let player = match profile_response {
-        Ok(resp) if resp.status().is_success() => {
-            match resp.json::<SteamApiResponse>().await {
-                Ok(api_resp) => api_resp.response.players.into_iter().next(),
-                Err(e) => {
-                    tracing::error!("Failed to parse Steam API response: {}", e);
-                    None
-                }
+        Ok(resp) if resp.status().is_success() => match resp.json::<SteamApiResponse>().await {
+            Ok(api_resp) => api_resp.response.players.into_iter().next(),
+            Err(e) => {
+                tracing::error!("Failed to parse Steam API response: {}", e);
+                None
             }
-        }
+        },
         Ok(resp) => {
             tracing::error!("Steam API request failed: {}", resp.status());
             None
@@ -1079,12 +1098,30 @@ async fn verify_steam_openid(
         ("openid.mode", "check_authentication".to_string()),
         ("openid.sig", query.sig.clone().unwrap_or_default()),
         ("openid.signed", query.signed.clone().unwrap_or_default()),
-        ("openid.assoc_handle", query.assoc_handle.clone().unwrap_or_default()),
-        ("openid.claimed_id", query.claimed_id.clone().unwrap_or_default()),
-        ("openid.identity", query.identity.clone().unwrap_or_default()),
-        ("openid.op_endpoint", query.op_endpoint.clone().unwrap_or_default()),
-        ("openid.response_nonce", query.response_nonce.clone().unwrap_or_default()),
-        ("openid.return_to", query.return_to.clone().unwrap_or_default()),
+        (
+            "openid.assoc_handle",
+            query.assoc_handle.clone().unwrap_or_default(),
+        ),
+        (
+            "openid.claimed_id",
+            query.claimed_id.clone().unwrap_or_default(),
+        ),
+        (
+            "openid.identity",
+            query.identity.clone().unwrap_or_default(),
+        ),
+        (
+            "openid.op_endpoint",
+            query.op_endpoint.clone().unwrap_or_default(),
+        ),
+        (
+            "openid.response_nonce",
+            query.response_nonce.clone().unwrap_or_default(),
+        ),
+        (
+            "openid.return_to",
+            query.return_to.clone().unwrap_or_default(),
+        ),
     ];
 
     match client
@@ -1159,8 +1196,7 @@ pub async fn start_bluesky(
     // Redirect to relay-hosted handle input page
     let verify_url = format!(
         "{}/profile/import/bluesky/verify?state={}",
-        config.relay_base_url,
-        nonce,
+        config.relay_base_url, nonce,
     );
 
     tracing::info!("Bluesky profile import handle verification started");
@@ -1361,10 +1397,12 @@ pub async fn callback_bluesky(
     let oauth_state = match store.take_oauth_state(&query.state) {
         Some(s) if s.platform == Platform::Bluesky && s.profile_import => s,
         Some(_) => {
-            return profile_error_html("Invalid state (not a Bluesky profile import flow)").into_response();
+            return profile_error_html("Invalid state (not a Bluesky profile import flow)")
+                .into_response();
         }
         None => {
-            return profile_error_html("Invalid or expired state. Please try again.").into_response();
+            return profile_error_html("Invalid or expired state. Please try again.")
+                .into_response();
         }
     };
 
@@ -1392,7 +1430,8 @@ pub async fn callback_bluesky(
             }
         },
         Ok(resp) if resp.status().as_u16() == 400 => {
-            return profile_error_html("Bluesky handle not found. Check the handle and try again.").into_response();
+            return profile_error_html("Bluesky handle not found. Check the handle and try again.")
+                .into_response();
         }
         Ok(resp) => {
             let status = resp.status();
@@ -1407,7 +1446,10 @@ pub async fn callback_bluesky(
 
     let bsky_did = bsky_profile.did.clone();
     let bsky_handle = bsky_profile.handle.clone();
-    let display_name = bsky_profile.display_name.clone().unwrap_or_else(|| bsky_handle.clone());
+    let display_name = bsky_profile
+        .display_name
+        .clone()
+        .unwrap_or_else(|| bsky_handle.clone());
     let avatar_url = bsky_profile.avatar.clone();
     let bio = bsky_profile.description.clone();
 
@@ -1533,7 +1575,10 @@ pub async fn start_xbox(
 ) -> impl IntoResponse {
     let did = body.and_then(|b| b.did.clone()).unwrap_or_default();
 
-    let (client_id, redirect_uri) = match (&config.xbox_client_id, &config.xbox_profile_import_redirect_uri) {
+    let (client_id, redirect_uri) = match (
+        &config.xbox_client_id,
+        &config.xbox_profile_import_redirect_uri,
+    ) {
         (Some(id), Some(uri)) => (id.clone(), uri.clone()),
         _ => {
             return (
@@ -1594,10 +1639,12 @@ pub async fn callback_xbox(
     let oauth_state = match store.take_oauth_state(&query.state) {
         Some(s) if s.platform == Platform::XboxLive && s.profile_import => s,
         Some(_) => {
-            return profile_error_html("Invalid OAuth state (not a profile import flow)").into_response();
+            return profile_error_html("Invalid OAuth state (not a profile import flow)")
+                .into_response();
         }
         None => {
-            return profile_error_html("Invalid or expired state. Please try again.").into_response();
+            return profile_error_html("Invalid or expired state. Please try again.")
+                .into_response();
         }
     };
 
@@ -1784,7 +1831,11 @@ pub async fn callback_xbox(
         (None, None)
     };
 
-    let platform_id = if xuid.is_empty() { user_hash.clone() } else { xuid };
+    let platform_id = if xuid.is_empty() {
+        user_hash.clone()
+    } else {
+        xuid
+    };
 
     tracing::info!(
         xbox_id = platform_id.as_str(),
@@ -1849,12 +1900,13 @@ pub async fn get_profile_result(
             }))
             .into_response()
         }
-        None => {
-            (StatusCode::NOT_FOUND, Json(serde_json::json!({
+        None => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({
                 "success": false,
                 "error": "pending",
-            })))
-            .into_response()
-        }
+            })),
+        )
+            .into_response(),
     }
 }

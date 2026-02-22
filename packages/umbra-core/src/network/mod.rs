@@ -94,33 +94,31 @@ pub use behaviour::UmbraBehaviour;
 pub use codec::{UmbraCodec, UmbraRequest, UmbraResponse};
 pub use events::NetworkEvent;
 pub use file_transfer::{
-    FileTransferMessage, FlowControl, SpeedTracker, TransferDirection,
-    TransferEvent, TransferLimits, TransferManager, TransferSession,
-    TransferState, TransportConfig, TransportType,
+    FileTransferMessage, FlowControl, SpeedTracker, TransferDirection, TransferEvent,
+    TransferLimits, TransferManager, TransferSession, TransferState, TransportConfig,
+    TransportType,
 };
 pub use peer::{PeerInfo, PeerState};
 
 mod event_loop;
 
+use parking_lot::RwLock;
 use std::sync::Arc;
 use std::time::Duration;
-use parking_lot::RwLock;
-use tokio::sync::{mpsc, broadcast, oneshot};
+use tokio::sync::{broadcast, mpsc, oneshot};
 
 #[cfg(not(target_arch = "wasm32"))]
 use tokio::task::JoinHandle;
 
 use libp2p::{
-    identity::Keypair as Libp2pKeypair,
-    PeerId, Multiaddr, Swarm, SwarmBuilder,
-    noise, yamux,
+    identity::Keypair as Libp2pKeypair, noise, yamux, Multiaddr, PeerId, Swarm, SwarmBuilder,
 };
 
 #[cfg(not(target_arch = "wasm32"))]
 use libp2p::tcp;
 
-use crate::error::{Error, Result};
 use crate::crypto::KeyPair;
+use crate::error::{Error, Result};
 
 pub use event_loop::run_event_loop;
 
@@ -322,9 +320,8 @@ impl NetworkService {
 
         // Create libp2p Ed25519 SecretKey from the seed
         // libp2p uses the 32-byte seed format
-        let ed25519_secret = libp2p::identity::ed25519::SecretKey::try_from_bytes(
-            secret_bytes
-        ).map_err(|e| Error::InvalidKey(format!("Failed to convert keypair: {}", e)))?;
+        let ed25519_secret = libp2p::identity::ed25519::SecretKey::try_from_bytes(secret_bytes)
+            .map_err(|e| Error::InvalidKey(format!("Failed to convert keypair: {}", e)))?;
 
         let ed25519_keypair = libp2p::identity::ed25519::Keypair::from(ed25519_secret);
 
@@ -333,7 +330,10 @@ impl NetworkService {
 
     /// Build the libp2p swarm (native: TCP + DNS + Tokio)
     #[cfg(not(target_arch = "wasm32"))]
-    fn build_swarm(keypair: Libp2pKeypair, _config: &NetworkConfig) -> Result<Swarm<UmbraBehaviour>> {
+    fn build_swarm(
+        keypair: Libp2pKeypair,
+        _config: &NetworkConfig,
+    ) -> Result<Swarm<UmbraBehaviour>> {
         let peer_id = PeerId::from(keypair.public());
         let public_key = keypair.public();
 
@@ -347,13 +347,9 @@ impl NetworkService {
             .map_err(|e| Error::TransportError(format!("Failed to configure TCP: {}", e)))?
             .with_dns()
             .map_err(|e| Error::TransportError(format!("Failed to configure DNS: {}", e)))?
-            .with_behaviour(|_key| {
-                Ok(UmbraBehaviour::new(peer_id, public_key.clone()))
-            })
+            .with_behaviour(|_key| Ok(UmbraBehaviour::new(peer_id, public_key.clone())))
             .map_err(|e| Error::ProtocolError(format!("Failed to create behaviour: {}", e)))?
-            .with_swarm_config(|cfg| {
-                cfg.with_idle_connection_timeout(Duration::from_secs(60))
-            })
+            .with_swarm_config(|cfg| cfg.with_idle_connection_timeout(Duration::from_secs(60)))
             .build();
 
         Ok(swarm)
@@ -371,7 +367,13 @@ impl NetworkService {
     /// be stored separately. The injector is used by the FFI signaling
     /// functions to push completed WebRTC connections into the swarm.
     #[cfg(target_arch = "wasm32")]
-    fn build_swarm(keypair: Libp2pKeypair, _config: &NetworkConfig) -> Result<(Swarm<UmbraBehaviour>, webrtc_transport::WebRtcConnectionInjector)> {
+    fn build_swarm(
+        keypair: Libp2pKeypair,
+        _config: &NetworkConfig,
+    ) -> Result<(
+        Swarm<UmbraBehaviour>,
+        webrtc_transport::WebRtcConnectionInjector,
+    )> {
         let peer_id = PeerId::from(keypair.public());
         let public_key = keypair.public();
 
@@ -381,9 +383,7 @@ impl NetworkService {
             .with_wasm_bindgen()
             .with_other_transport(|_key| Ok(transport))
             .expect("WebRTC transport creation is infallible")
-            .with_behaviour(|_key| {
-                Ok(UmbraBehaviour::new(peer_id, public_key.clone()))
-            })
+            .with_behaviour(|_key| Ok(UmbraBehaviour::new(peer_id, public_key.clone())))
             .map_err(|e| Error::ProtocolError(format!("Failed to create behaviour: {}", e)))?
             .with_swarm_config(|cfg: libp2p::swarm::Config| {
                 cfg.with_idle_connection_timeout(Duration::from_secs(120))
@@ -401,15 +401,18 @@ impl NetworkService {
         {
             let running = self.running.read();
             if *running {
-                return Err(Error::ProtocolError("Network service already running".into()));
+                return Err(Error::ProtocolError(
+                    "Network service already running".into(),
+                ));
             }
         }
 
         tracing::info!("Network service starting...");
 
         // Take the command receiver (we can only start once)
-        let command_rx = self.command_rx.write().take()
-            .ok_or_else(|| Error::ProtocolError("Network service can only be started once".into()))?;
+        let command_rx = self.command_rx.write().take().ok_or_else(|| {
+            Error::ProtocolError("Network service can only be started once".into())
+        })?;
 
         // Build the swarm
         let swarm = Self::build_swarm(self.libp2p_keypair.clone(), &self.config)?;
@@ -448,15 +451,18 @@ impl NetworkService {
         {
             let running = self.running.read();
             if *running {
-                return Err(Error::ProtocolError("Network service already running".into()));
+                return Err(Error::ProtocolError(
+                    "Network service already running".into(),
+                ));
             }
         }
 
         tracing::info!("Network service starting (WASM)...");
 
         // Take the command receiver (we can only start once)
-        let command_rx = self.command_rx.write().take()
-            .ok_or_else(|| Error::ProtocolError("Network service can only be started once".into()))?;
+        let command_rx = self.command_rx.write().take().ok_or_else(|| {
+            Error::ProtocolError("Network service can only be started once".into())
+        })?;
 
         // Build the swarm — returns both swarm and connection injector
         let (swarm, injector) = Self::build_swarm(self.libp2p_keypair.clone(), &self.config)?;
@@ -703,16 +709,14 @@ async fn run_swarm_with_listeners(
     // Start listening on configured addresses
     for addr_str in &config.listen_addrs {
         match addr_str.parse::<Multiaddr>() {
-            Ok(addr) => {
-                match swarm.listen_on(addr.clone()) {
-                    Ok(_) => {
-                        tracing::info!("Listening on: {}", addr);
-                    }
-                    Err(e) => {
-                        tracing::error!("Failed to listen on {}: {}", addr, e);
-                    }
+            Ok(addr) => match swarm.listen_on(addr.clone()) {
+                Ok(_) => {
+                    tracing::info!("Listening on: {}", addr);
                 }
-            }
+                Err(e) => {
+                    tracing::error!("Failed to listen on {}: {}", addr, e);
+                }
+            },
             Err(e) => {
                 tracing::error!("Invalid listen address '{}': {}", addr_str, e);
             }
@@ -724,8 +728,7 @@ async fn run_swarm_with_listeners(
     // connections are never picked up by the swarm.
     #[cfg(target_arch = "wasm32")]
     {
-        let webrtc_addr: Multiaddr = "/memory/0".parse()
-            .expect("/memory/0 is a valid multiaddr");
+        let webrtc_addr: Multiaddr = "/memory/0".parse().expect("/memory/0 is a valid multiaddr");
         match swarm.listen_on(webrtc_addr) {
             Ok(_) => tracing::info!("WebRTC transport listener started"),
             Err(e) => tracing::error!("Failed to start WebRTC listener: {}", e),
@@ -786,7 +789,7 @@ pub fn peer_id_to_did(_peer_id: &PeerId) -> Result<String> {
 
     // For now, return an error indicating this requires the Identify protocol
     Err(Error::InvalidDid(
-        "Converting PeerId to DID requires Identify protocol data".into()
+        "Converting PeerId to DID requires Identify protocol data".into(),
     ))
 }
 
@@ -814,7 +817,9 @@ mod tests {
         let service = NetworkService::new(&keypair, config).await.unwrap();
 
         // Verify PeerId is deterministic from keypair
-        let service2 = NetworkService::new(&keypair, NetworkConfig::default()).await.unwrap();
+        let service2 = NetworkService::new(&keypair, NetworkConfig::default())
+            .await
+            .unwrap();
         assert_eq!(service.peer_id(), service2.peer_id());
     }
 
@@ -841,7 +846,10 @@ mod tests {
         let peer_id1 = did_to_peer_id(&did).unwrap();
         let peer_id2 = did_to_peer_id(&did).unwrap();
 
-        assert_eq!(peer_id1, peer_id2, "Same DID should always produce same PeerId");
+        assert_eq!(
+            peer_id1, peer_id2,
+            "Same DID should always produce same PeerId"
+        );
     }
 
     #[test]
@@ -854,7 +862,10 @@ mod tests {
         let peer_id1 = did_to_peer_id(&identity1.did_string()).unwrap();
         let peer_id2 = did_to_peer_id(&identity2.did_string()).unwrap();
 
-        assert_ne!(peer_id1, peer_id2, "Different identities should have different PeerIds");
+        assert_ne!(
+            peer_id1, peer_id2,
+            "Different identities should have different PeerIds"
+        );
     }
 
     #[test]
@@ -878,9 +889,7 @@ mod tests {
                 "/ip4/0.0.0.0/tcp/8080".to_string(),
                 "/ip4/0.0.0.0/tcp/8081".to_string(),
             ],
-            bootstrap_peers: vec![
-                "/ip4/1.2.3.4/tcp/4001/p2p/12D3KooWExample".to_string(),
-            ],
+            bootstrap_peers: vec!["/ip4/1.2.3.4/tcp/4001/p2p/12D3KooWExample".to_string()],
             enable_dht: false,
             enable_relay: true,
             relay_url: Some("wss://relay.umbra.app/ws".to_string()),
@@ -910,14 +919,18 @@ mod tests {
         let seed = [7u8; 32];
         let keypair = KeyPair::from_seed(&seed).unwrap();
 
-        let service = NetworkService::new(&keypair, NetworkConfig::default()).await.unwrap();
+        let service = NetworkService::new(&keypair, NetworkConfig::default())
+            .await
+            .unwrap();
 
         // PeerId should be deterministic from the seed
         let peer_id = service.peer_id();
         assert!(!peer_id.to_string().is_empty());
 
         // Creating another service with the same keypair should give the same peer ID
-        let service2 = NetworkService::new(&keypair, NetworkConfig::default()).await.unwrap();
+        let service2 = NetworkService::new(&keypair, NetworkConfig::default())
+            .await
+            .unwrap();
         assert_eq!(service.peer_id(), service2.peer_id());
     }
 
@@ -926,7 +939,9 @@ mod tests {
         let seed = [99u8; 32];
         let keypair = KeyPair::from_seed(&seed).unwrap();
 
-        let service = NetworkService::new(&keypair, NetworkConfig::default()).await.unwrap();
+        let service = NetworkService::new(&keypair, NetworkConfig::default())
+            .await
+            .unwrap();
 
         // Should be able to subscribe multiple times
         let _rx1 = service.subscribe();
@@ -938,7 +953,9 @@ mod tests {
         let seed = [11u8; 32];
         let keypair = KeyPair::from_seed(&seed).unwrap();
 
-        let service = NetworkService::new(&keypair, NetworkConfig::default()).await.unwrap();
+        let service = NetworkService::new(&keypair, NetworkConfig::default())
+            .await
+            .unwrap();
 
         let random_peer = PeerId::random();
         assert!(!service.is_connected(&random_peer));

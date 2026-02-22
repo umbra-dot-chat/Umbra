@@ -2,9 +2,9 @@
 //!
 //! Warnings, timeouts, AutoMod keyword filtering, and audit log extensions.
 
+use super::service::generate_id;
 use crate::error::{Error, Result};
 use crate::storage::CommunityWarningRecord;
-use super::service::generate_id;
 
 /// Default warning thresholds for auto-escalation.
 pub const DEFAULT_TIMEOUT_THRESHOLD: i32 = 3;
@@ -32,13 +32,23 @@ impl super::CommunityService {
         }
 
         self.db().create_community_warning(
-            &id, community_id, member_did, reason, warned_by, expires_at, now,
+            &id,
+            community_id,
+            member_did,
+            reason,
+            warned_by,
+            expires_at,
+            now,
         )?;
 
         // Audit log
         self.db().insert_audit_log(
-            &generate_id(), community_id, warned_by, "member_warn",
-            Some("member"), Some(member_did),
+            &generate_id(),
+            community_id,
+            warned_by,
+            "member_warn",
+            Some("member"),
+            Some(member_did),
             Some(&serde_json::json!({"reason": reason}).to_string()),
             now,
         )?;
@@ -60,7 +70,8 @@ impl super::CommunityService {
         community_id: &str,
         member_did: &str,
     ) -> Result<Vec<CommunityWarningRecord>> {
-        self.db().get_community_member_warnings(community_id, member_did)
+        self.db()
+            .get_community_member_warnings(community_id, member_did)
     }
 
     /// Get all warnings for a community (paginated).
@@ -70,17 +81,15 @@ impl super::CommunityService {
         limit: usize,
         offset: usize,
     ) -> Result<Vec<CommunityWarningRecord>> {
-        self.db().get_community_warnings(community_id, limit, offset)
+        self.db()
+            .get_community_warnings(community_id, limit, offset)
     }
 
     /// Get the count of active (non-expired) warnings for a member.
-    pub fn get_active_warning_count(
-        &self,
-        community_id: &str,
-        member_did: &str,
-    ) -> Result<i32> {
+    pub fn get_active_warning_count(&self, community_id: &str, member_did: &str) -> Result<i32> {
         let now = crate::time::now_timestamp();
-        self.db().get_active_warning_count(community_id, member_did, now)
+        self.db()
+            .get_active_warning_count(community_id, member_did, now)
     }
 
     /// Delete a warning.
@@ -124,11 +133,7 @@ impl super::CommunityService {
     /// "delete", "warn", or "timeout".
     ///
     /// Returns the action to take, or None if no match.
-    pub fn check_keyword_filter(
-        &self,
-        content: &str,
-        filters: &[(&str, &str)],
-    ) -> Option<String> {
+    pub fn check_keyword_filter(&self, content: &str, filters: &[(&str, &str)]) -> Option<String> {
         let content_lower = content.to_lowercase();
         for (pattern, action) in filters {
             let pattern_lower = pattern.to_lowercase();
@@ -186,7 +191,14 @@ impl super::CommunityService {
         let expires_at = now + duration_seconds;
 
         self.db().create_community_timeout(
-            &id, community_id, member_did, reason, timeout_type, issued_by, expires_at, now,
+            &id,
+            community_id,
+            member_did,
+            reason,
+            timeout_type,
+            issued_by,
+            expires_at,
+            now,
         )?;
 
         self.db().insert_audit_log(
@@ -236,7 +248,8 @@ impl super::CommunityService {
     /// Check if a member is currently muted (has active 'mute' timeout).
     pub fn is_member_muted(&self, community_id: &str, member_did: &str) -> Result<bool> {
         let now = crate::time::now_timestamp();
-        self.db().is_member_timed_out(community_id, member_did, "mute", now)
+        self.db()
+            .is_member_timed_out(community_id, member_did, "mute", now)
     }
 
     // ── Ban Evasion Detection ───────────────────────────────────────────

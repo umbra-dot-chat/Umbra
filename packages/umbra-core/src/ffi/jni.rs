@@ -21,18 +21,18 @@
 
 #![cfg(all(feature = "ffi", target_os = "android"))]
 
+use jni::objects::{JClass, JObject, JString};
+use jni::sys::{jboolean, jint, jlong, jstring};
 use jni::JNIEnv;
-use jni::objects::{JClass, JString, JObject};
-use jni::sys::{jstring, jboolean, jint, jlong};
-use std::sync::Arc;
-use parking_lot::RwLock;
 use once_cell::sync::OnceCell;
+use parking_lot::RwLock;
+use std::sync::Arc;
 
-use crate::identity::Identity;
-use crate::network::{NetworkService, NetworkConfig};
-use crate::discovery::{DiscoveryService, DiscoveryConfig, ConnectionInfo};
+use crate::discovery::{ConnectionInfo, DiscoveryConfig, DiscoveryService};
 use crate::friends::FriendService;
+use crate::identity::Identity;
 use crate::messaging::MessagingService;
+use crate::network::{NetworkConfig, NetworkService};
 use crate::storage::Database;
 
 // ============================================================================
@@ -61,9 +61,7 @@ impl JniState {
 }
 
 fn get_runtime() -> &'static tokio::runtime::Runtime {
-    RUNTIME.get_or_init(|| {
-        tokio::runtime::Runtime::new().expect("Failed to create runtime")
-    })
+    RUNTIME.get_or_init(|| tokio::runtime::Runtime::new().expect("Failed to create runtime"))
 }
 
 fn get_state() -> Option<Arc<RwLock<JniState>>> {
@@ -110,7 +108,10 @@ pub extern "system" fn Java_com_umbra_core_UmbraCore_nativeInit(
     let _ = get_runtime();
 
     // Initialize state
-    if STATE.set(Arc::new(RwLock::new(JniState::new(path)))).is_err() {
+    if STATE
+        .set(Arc::new(RwLock::new(JniState::new(path))))
+        .is_err()
+    {
         throw_exception(&mut env, "Already initialized");
         return std::ptr::null_mut();
     }
@@ -469,16 +470,22 @@ pub extern "system" fn Java_com_umbra_core_UmbraCore_nativeGetFriends(
 
     match database.get_friends() {
         Ok(friends) => {
-            let friends_json: Vec<serde_json::Value> = friends.iter().map(|f| {
-                serde_json::json!({
-                    "did": f.did,
-                    "display_name": f.display_name,
-                    "nickname": f.nickname,
-                    "added_at": f.added_at,
+            let friends_json: Vec<serde_json::Value> = friends
+                .iter()
+                .map(|f| {
+                    serde_json::json!({
+                        "did": f.did,
+                        "display_name": f.display_name,
+                        "nickname": f.nickname,
+                        "added_at": f.added_at,
+                    })
                 })
-            }).collect();
+                .collect();
 
-            string_to_jstring(&mut env, &serde_json::to_string(&friends_json).unwrap_or_default())
+            string_to_jstring(
+                &mut env,
+                &serde_json::to_string(&friends_json).unwrap_or_default(),
+            )
         }
         Err(e) => {
             throw_exception(&mut env, &e.to_string());
@@ -512,16 +519,22 @@ pub extern "system" fn Java_com_umbra_core_UmbraCore_nativeGetPendingFriendReque
 
     match database.get_pending_friend_requests() {
         Ok(requests) => {
-            let requests_json: Vec<serde_json::Value> = requests.iter().map(|r| {
-                serde_json::json!({
-                    "id": r.id,
-                    "from_did": r.from_did,
-                    "message": r.message,
-                    "created_at": r.created_at,
+            let requests_json: Vec<serde_json::Value> = requests
+                .iter()
+                .map(|r| {
+                    serde_json::json!({
+                        "id": r.id,
+                        "from_did": r.from_did,
+                        "message": r.message,
+                        "created_at": r.created_at,
+                    })
                 })
-            }).collect();
+                .collect();
 
-            string_to_jstring(&mut env, &serde_json::to_string(&requests_json).unwrap_or_default())
+            string_to_jstring(
+                &mut env,
+                &serde_json::to_string(&requests_json).unwrap_or_default(),
+            )
         }
         Err(e) => {
             throw_exception(&mut env, &e.to_string());
@@ -559,16 +572,22 @@ pub extern "system" fn Java_com_umbra_core_UmbraCore_nativeGetConversations(
 
     match database.get_conversations() {
         Ok(conversations) => {
-            let conv_json: Vec<serde_json::Value> = conversations.iter().map(|c| {
-                serde_json::json!({
-                    "id": c.id,
-                    "participant_did": c.participant_did,
-                    "created_at": c.created_at,
-                    "updated_at": c.updated_at,
+            let conv_json: Vec<serde_json::Value> = conversations
+                .iter()
+                .map(|c| {
+                    serde_json::json!({
+                        "id": c.id,
+                        "participant_did": c.participant_did,
+                        "created_at": c.created_at,
+                        "updated_at": c.updated_at,
+                    })
                 })
-            }).collect();
+                .collect();
 
-            string_to_jstring(&mut env, &serde_json::to_string(&conv_json).unwrap_or_default())
+            string_to_jstring(
+                &mut env,
+                &serde_json::to_string(&conv_json).unwrap_or_default(),
+            )
         }
         Err(e) => {
             throw_exception(&mut env, &e.to_string());
@@ -617,19 +636,25 @@ pub extern "system" fn Java_com_umbra_core_UmbraCore_nativeGetMessages(
 
     match database.get_messages(&conv_id, limit, before.as_deref()) {
         Ok(messages) => {
-            let messages_json: Vec<serde_json::Value> = messages.iter().map(|m| {
-                serde_json::json!({
-                    "id": m.id,
-                    "conversation_id": m.conversation_id,
-                    "sender_did": m.sender_did,
-                    "content_type": m.content_type,
-                    "content": m.content_encrypted,
-                    "timestamp": m.timestamp,
-                    "status": m.status,
+            let messages_json: Vec<serde_json::Value> = messages
+                .iter()
+                .map(|m| {
+                    serde_json::json!({
+                        "id": m.id,
+                        "conversation_id": m.conversation_id,
+                        "sender_did": m.sender_did,
+                        "content_type": m.content_type,
+                        "content": m.content_encrypted,
+                        "timestamp": m.timestamp,
+                        "status": m.status,
+                    })
                 })
-            }).collect();
+                .collect();
 
-            string_to_jstring(&mut env, &serde_json::to_string(&messages_json).unwrap_or_default())
+            string_to_jstring(
+                &mut env,
+                &serde_json::to_string(&messages_json).unwrap_or_default(),
+            )
         }
         Err(e) => {
             throw_exception(&mut env, &e.to_string());

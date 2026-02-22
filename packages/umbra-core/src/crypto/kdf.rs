@@ -198,10 +198,7 @@ pub fn derive_keys_from_seed(seed: &[u8; 32]) -> Result<DerivedKeys> {
 /// ## Returns
 ///
 /// 32-byte AES-256-GCM encryption key
-pub fn derive_shared_secret(
-    dh_output: &[u8; 32],
-    conversation_id: &[u8],
-) -> Result<[u8; 32]> {
+pub fn derive_shared_secret(dh_output: &[u8; 32], conversation_id: &[u8]) -> Result<[u8; 32]> {
     let hkdf = Hkdf::<Sha256>::new(Some(conversation_id), dh_output);
 
     let mut key = [0u8; 32];
@@ -220,10 +217,7 @@ pub fn derive_shared_secret(
 /// The storage key is derived from both signing and encryption keys,
 /// ensuring it's tied to the user's identity.
 #[allow(dead_code)]
-pub fn derive_storage_key(
-    signing_key: &[u8; 32],
-    encryption_key: &[u8; 32],
-) -> Result<[u8; 32]> {
+pub fn derive_storage_key(signing_key: &[u8; 32], encryption_key: &[u8; 32]) -> Result<[u8; 32]> {
     // Combine both keys as input key material
     let mut combined = [0u8; 64];
     combined[..32].copy_from_slice(signing_key);
@@ -262,10 +256,7 @@ pub fn derive_storage_key(
 /// - Compromise of one file key doesn't affect other files
 /// - Both conversation participants independently derive the same key
 /// - Key is bound to both the conversation (via shared_secret) and the file (via file_id)
-pub fn derive_file_key(
-    shared_secret: &[u8; 32],
-    file_id: &[u8],
-) -> Result<[u8; 32]> {
+pub fn derive_file_key(shared_secret: &[u8; 32], file_id: &[u8]) -> Result<[u8; 32]> {
     let hkdf = Hkdf::<Sha256>::new(Some(file_id), shared_secret);
 
     let mut key = [0u8; 32];
@@ -356,10 +347,7 @@ pub fn compute_key_fingerprint(key: &[u8; 32]) -> Result<String> {
 /// ## Returns
 ///
 /// `true` if the fingerprints match, `false` if they don't (possible MITM).
-pub fn verify_key_fingerprint(
-    local_key: &[u8; 32],
-    remote_fingerprint: &str,
-) -> Result<bool> {
+pub fn verify_key_fingerprint(local_key: &[u8; 32], remote_fingerprint: &str) -> Result<bool> {
     let local_fingerprint = compute_key_fingerprint(local_key)?;
     Ok(local_fingerprint == remote_fingerprint)
 }
@@ -388,9 +376,7 @@ pub fn derive_multiple_keys<const N: usize>(
     let mut keys = [[0u8; 32]; N];
     for (i, info) in infos.iter().enumerate() {
         hkdf.expand(info, &mut keys[i])
-            .map_err(|_| Error::KeyDerivationFailed(format!(
-                "Failed to derive key {}", i
-            )))?;
+            .map_err(|_| Error::KeyDerivationFailed(format!("Failed to derive key {}", i)))?;
     }
 
     Ok(keys)

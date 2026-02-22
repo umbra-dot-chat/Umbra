@@ -7,9 +7,9 @@
 //!
 //! Platform-agnostic: works with Discord, GitHub, Steam, etc.
 
+use super::service::generate_id;
 use crate::error::{Error, Result};
 use crate::storage::CommunitySeatRecord;
-use super::service::generate_id;
 
 impl super::CommunityService {
     /// Get all seats for a community.
@@ -29,7 +29,8 @@ impl super::CommunityService {
         platform: &str,
         platform_user_id: &str,
     ) -> Result<Option<CommunitySeatRecord>> {
-        self.db().find_community_seat_by_platform(community_id, platform, platform_user_id)
+        self.db()
+            .find_community_seat_by_platform(community_id, platform, platform_user_id)
     }
 
     /// Claim a seat: auto-join the community and assign the original roles.
@@ -40,24 +41,27 @@ impl super::CommunityService {
     /// 3. Parse role_ids_json and assign each role
     /// 4. Mark the seat as claimed
     /// 5. Audit log the action
-    pub fn claim_seat(
-        &self,
-        seat_id: &str,
-        claimer_did: &str,
-    ) -> Result<CommunitySeatRecord> {
+    pub fn claim_seat(&self, seat_id: &str, claimer_did: &str) -> Result<CommunitySeatRecord> {
         // 1. Get the seat and verify it's unclaimed
-        let seat = self.db().get_community_seat(seat_id)?
+        let seat = self
+            .db()
+            .get_community_seat(seat_id)?
             .ok_or_else(|| Error::InvalidCommunityOperation("Seat not found".to_string()))?;
 
         if seat.claimed_by_did.is_some() {
-            return Err(Error::InvalidCommunityOperation("Seat already claimed".to_string()));
+            return Err(Error::InvalidCommunityOperation(
+                "Seat already claimed".to_string(),
+            ));
         }
 
         let now = crate::time::now_timestamp();
 
         // 2. Join the community (reuses existing flow: ban check, default role, welcome)
         // If already a member, that's fine — just assign the extra roles
-        let already_member = self.db().get_community_member(&seat.community_id, claimer_did)?.is_some();
+        let already_member = self
+            .db()
+            .get_community_member(&seat.community_id, claimer_did)?
+            .is_some();
         if !already_member {
             self.join_community(&seat.community_id, claimer_did, seat.nickname.as_deref())?;
         }
@@ -87,25 +91,27 @@ impl super::CommunityService {
             "seat_claimed",
             Some("seat"),
             Some(seat_id),
-            Some(&serde_json::json!({
-                "platform": seat.platform,
-                "platform_username": seat.platform_username,
-            }).to_string()),
+            Some(
+                &serde_json::json!({
+                    "platform": seat.platform,
+                    "platform_username": seat.platform_username,
+                })
+                .to_string(),
+            ),
             now,
         )?;
 
         // Return the updated seat
-        self.db().get_community_seat(seat_id)?
-            .ok_or_else(|| Error::InvalidCommunityOperation("Seat disappeared after claim".to_string()))
+        self.db().get_community_seat(seat_id)?.ok_or_else(|| {
+            Error::InvalidCommunityOperation("Seat disappeared after claim".to_string())
+        })
     }
 
     /// Delete a seat (admin action).
-    pub fn delete_seat(
-        &self,
-        seat_id: &str,
-        actor_did: &str,
-    ) -> Result<()> {
-        let seat = self.db().get_community_seat(seat_id)?
+    pub fn delete_seat(&self, seat_id: &str, actor_did: &str) -> Result<()> {
+        let seat = self
+            .db()
+            .get_community_seat(seat_id)?
             .ok_or_else(|| Error::InvalidCommunityOperation("Seat not found".to_string()))?;
 
         let now = crate::time::now_timestamp();
@@ -118,10 +124,13 @@ impl super::CommunityService {
             "seat_deleted",
             Some("seat"),
             Some(seat_id),
-            Some(&serde_json::json!({
-                "platform": seat.platform,
-                "platform_username": seat.platform_username,
-            }).to_string()),
+            Some(
+                &serde_json::json!({
+                    "platform": seat.platform,
+                    "platform_username": seat.platform_username,
+                })
+                .to_string(),
+            ),
             now,
         )?;
 
@@ -131,15 +140,12 @@ impl super::CommunityService {
     /// Create seats in batch (for import).
     ///
     /// Takes a list of seat data and creates them all. Returns the count of seats created.
-    pub fn create_seats_batch(
-        &self,
-        community_id: &str,
-        seats: Vec<SeatInput>,
-    ) -> Result<usize> {
+    pub fn create_seats_batch(&self, community_id: &str, seats: Vec<SeatInput>) -> Result<usize> {
         let now = crate::time::now_timestamp();
 
-        let records: Vec<CommunitySeatRecord> = seats.into_iter().map(|s| {
-            CommunitySeatRecord {
+        let records: Vec<CommunitySeatRecord> = seats
+            .into_iter()
+            .map(|s| CommunitySeatRecord {
                 id: generate_id(),
                 community_id: community_id.to_string(),
                 platform: s.platform,
@@ -147,12 +153,13 @@ impl super::CommunityService {
                 platform_username: s.platform_username,
                 nickname: s.nickname,
                 avatar_url: s.avatar_url,
-                role_ids_json: serde_json::to_string(&s.role_ids).unwrap_or_else(|_| "[]".to_string()),
+                role_ids_json: serde_json::to_string(&s.role_ids)
+                    .unwrap_or_else(|_| "[]".to_string()),
                 claimed_by_did: None,
                 claimed_at: None,
                 created_at: now,
-            }
-        }).collect();
+            })
+            .collect();
 
         self.db().create_community_seats_batch(&records)
     }

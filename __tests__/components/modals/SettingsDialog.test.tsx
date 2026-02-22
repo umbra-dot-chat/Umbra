@@ -125,6 +125,30 @@ jest.mock('@/config', () => ({
   DEFAULT_RELAY_SERVERS: [],
 }));
 
+jest.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
+  SafeAreaProvider: ({ children }: any) => children,
+  SafeAreaView: ({ children }: any) => children,
+}));
+
+jest.mock('@/contexts/SoundContext', () => ({
+  useSound: () => ({
+    playSound: jest.fn(),
+    masterVolume: 0.8,
+    setMasterVolume: jest.fn(),
+    muted: false,
+    setMuted: jest.fn(),
+    categoryVolumes: {},
+    setCategoryVolume: jest.fn(),
+    categoryEnabled: {},
+    setCategoryEnabled: jest.fn(),
+    activeTheme: 'playful',
+    setActiveTheme: jest.fn(),
+    preferencesLoaded: true,
+  }),
+  SoundProvider: ({ children }: any) => children,
+}));
+
 const Wrapper = ({ children }: { children: React.ReactNode }) => (
   <AuthProvider>
     <UmbraProvider>

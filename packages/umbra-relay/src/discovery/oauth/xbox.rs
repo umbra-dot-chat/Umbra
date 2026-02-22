@@ -15,8 +15,8 @@ use uuid::Uuid;
 
 use super::{error_html, success_html, CallbackQuery, ErrorCallbackQuery, StartAuthQuery};
 use crate::discovery::{
-    config::XBOX_SCOPES, types::StartAuthResponse, DiscoveryConfig, DiscoveryStore,
-    LinkedAccount, OAuthState, Platform,
+    config::XBOX_SCOPES, types::StartAuthResponse, DiscoveryConfig, DiscoveryStore, LinkedAccount,
+    OAuthState, Platform,
 };
 
 /// Microsoft OAuth token response.
@@ -258,9 +258,7 @@ pub async fn callback(
     let xuid = xui.as_ref().and_then(|x| x.xid.clone()).unwrap_or_default();
 
     let platform_id = if xuid.is_empty() {
-        xui.as_ref()
-            .and_then(|x| x.uhs.clone())
-            .unwrap_or_default()
+        xui.as_ref().and_then(|x| x.uhs.clone()).unwrap_or_default()
     } else {
         xuid
     };

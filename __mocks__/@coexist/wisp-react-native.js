@@ -113,6 +113,7 @@ module.exports = {
   NavbarItem: mockComponent('NavbarItem'),
   ThreadPanel: mockComponent('ThreadPanel'),
   MentionAutocomplete: mockComponent('MentionAutocomplete'),
+  CombinedPicker: mockComponent('CombinedPicker'),
 
   // Form controls
   Tag: mockComponent('Tag'),

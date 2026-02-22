@@ -377,7 +377,10 @@ impl WebRtcConnectionInjector {
     /// the peer and start running Noise + Yamux + protocols on top.
     pub fn inject(&self, peer_id: PeerId, connection: WebRtcConnection) -> Result<(), String> {
         self.connection_tx
-            .send(CompletedConnection { peer_id, connection })
+            .send(CompletedConnection {
+                peer_id,
+                connection,
+            })
             .map_err(|_| "Transport channel closed — swarm may have shut down".to_string())?;
 
         // Wake the transport so it polls and picks up the new connection
@@ -401,7 +404,10 @@ pub fn create_transport() -> (WebRtcTransport, WebRtcConnectionInjector) {
         listener_id: ListenerId::next(),
         waker: Arc::clone(&waker),
     };
-    let injector = WebRtcConnectionInjector { connection_tx: tx, waker };
+    let injector = WebRtcConnectionInjector {
+        connection_tx: tx,
+        waker,
+    };
     (transport, injector)
 }
 
@@ -465,15 +471,14 @@ impl LibTransport for WebRtcTransport {
                 let muxer = StreamMuxerBox::new(completed.connection);
 
                 // Create the upgrade future (already complete — just wraps the muxer)
-                let upgrade = Box::pin(async move {
-                    Ok((peer_id, muxer))
-                }) as BoxFuture<'static, Result<(PeerId, StreamMuxerBox), io::Error>>;
+                let upgrade = Box::pin(async move { Ok((peer_id, muxer)) })
+                    as BoxFuture<'static, Result<(PeerId, StreamMuxerBox), io::Error>>;
 
                 // Use /memory/0 as a valid multiaddr placeholder for WebRTC
-                let local_addr: Multiaddr = "/memory/0".parse()
-                    .expect("/memory/0 is a valid multiaddr");
-                let send_back_addr: Multiaddr = "/memory/0".parse()
-                    .expect("/memory/0 is a valid multiaddr");
+                let local_addr: Multiaddr =
+                    "/memory/0".parse().expect("/memory/0 is a valid multiaddr");
+                let send_back_addr: Multiaddr =
+                    "/memory/0".parse().expect("/memory/0 is a valid multiaddr");
 
                 Poll::Ready(TransportEvent::Incoming {
                     listener_id: self.listener_id,
@@ -528,8 +533,12 @@ fn create_peer_connection() -> Result<web_sys::RtcPeerConnection, JsValue> {
 /// Returns SignalingData containing the SDP offer, ICE candidates,
 /// and the sender's identity (DID + PeerId) so the answerer knows
 /// who they're connecting to.
-pub async fn create_offer(did: Option<String>, peer_id: Option<String>) -> Result<SignalingData, String> {
-    let pc = create_peer_connection().map_err(|e| format!("Failed to create RTCPeerConnection: {:?}", e))?;
+pub async fn create_offer(
+    did: Option<String>,
+    peer_id: Option<String>,
+) -> Result<SignalingData, String> {
+    let pc = create_peer_connection()
+        .map_err(|e| format!("Failed to create RTCPeerConnection: {:?}", e))?;
 
     // Create a data channel before creating the offer
     let dc_init = web_sys::RtcDataChannelInit::new();
@@ -558,7 +567,8 @@ pub async fn create_offer(did: Option<String>, peer_id: Option<String>) -> Resul
                 waker.wake();
             }
         }
-    }) as Box<dyn FnMut(web_sys::RtcPeerConnectionIceEvent)>);
+    })
+        as Box<dyn FnMut(web_sys::RtcPeerConnectionIceEvent)>);
     pc.set_onicecandidate(Some(onicecandidate.as_ref().unchecked_ref()));
 
     // Create and set local description
@@ -612,8 +622,13 @@ pub async fn create_offer(did: Option<String>, peer_id: Option<String>) -> Resul
 ///
 /// Returns SignalingData containing the SDP answer, ICE candidates,
 /// and the answerer's identity (DID + PeerId).
-pub async fn accept_offer(offer: &SignalingData, did: Option<String>, peer_id: Option<String>) -> Result<SignalingData, String> {
-    let pc = create_peer_connection().map_err(|e| format!("Failed to create RTCPeerConnection: {:?}", e))?;
+pub async fn accept_offer(
+    offer: &SignalingData,
+    did: Option<String>,
+    peer_id: Option<String>,
+) -> Result<SignalingData, String> {
+    let pc = create_peer_connection()
+        .map_err(|e| format!("Failed to create RTCPeerConnection: {:?}", e))?;
 
     // Set remote description (the offer)
     let remote_desc = web_sys::RtcSessionDescriptionInit::new(web_sys::RtcSdpType::Offer);
@@ -660,7 +675,8 @@ pub async fn accept_offer(offer: &SignalingData, did: Option<String>, peer_id: O
                 waker.wake();
             }
         }
-    }) as Box<dyn FnMut(web_sys::RtcPeerConnectionIceEvent)>);
+    })
+        as Box<dyn FnMut(web_sys::RtcPeerConnectionIceEvent)>);
     pc.set_onicecandidate(Some(onicecandidate.as_ref().unchecked_ref()));
 
     // Create and set local description (the answer)
@@ -712,8 +728,7 @@ pub async fn accept_offer(offer: &SignalingData, did: Option<String>, peer_id: O
 /// This is called by the offerer after receiving the answer.
 /// Returns a WebRtcConnection that can be used as a StreamMuxer.
 pub async fn complete_handshake(answer: &SignalingData) -> Result<WebRtcConnection, String> {
-    let pc = take_pending_offer()
-        .ok_or("No pending offer — call create_offer() first")?;
+    let pc = take_pending_offer().ok_or("No pending offer — call create_offer() first")?;
 
     // Set remote description (the answer)
     let remote_desc = web_sys::RtcSessionDescriptionInit::new(web_sys::RtcSdpType::Answer);
@@ -779,8 +794,7 @@ pub async fn complete_handshake(answer: &SignalingData) -> Result<WebRtcConnecti
 /// This is called by the answerer after accept_offer() completes and the
 /// WebRTC connection is established via ICE.
 pub async fn get_answerer_connection() -> Result<WebRtcConnection, String> {
-    let pc = take_pending_answer()
-        .ok_or("No pending answer — call accept_offer() first")?;
+    let pc = take_pending_answer().ok_or("No pending answer — call accept_offer() first")?;
 
     // For the answerer, the data channel comes via ondatachannel event
     // Wait for the data channel to arrive
@@ -849,7 +863,9 @@ fn take_pending_answer() -> Option<web_sys::RtcPeerConnection> {
 
 /// Get the data channel from the offerer's peer connection.
 /// The offerer created the data channel during create_offer().
-fn get_offerer_data_channel(pc: &web_sys::RtcPeerConnection) -> Result<web_sys::RtcDataChannel, String> {
+fn get_offerer_data_channel(
+    pc: &web_sys::RtcPeerConnection,
+) -> Result<web_sys::RtcDataChannel, String> {
     // The data channel was created during create_offer() — but we didn't store it.
     // Create a new one with the same label — WebRTC allows this.
     let dc_init = web_sys::RtcDataChannelInit::new();
@@ -860,7 +876,9 @@ fn get_offerer_data_channel(pc: &web_sys::RtcPeerConnection) -> Result<web_sys::
 }
 
 /// Wait for a data channel to arrive on the answerer side
-async fn wait_for_data_channel(pc: &web_sys::RtcPeerConnection) -> Result<web_sys::RtcDataChannel, String> {
+async fn wait_for_data_channel(
+    pc: &web_sys::RtcPeerConnection,
+) -> Result<web_sys::RtcDataChannel, String> {
     let channel = Arc::new(Mutex::new(None::<web_sys::RtcDataChannel>));
     let channel_clone = channel.clone();
     let waker = Arc::new(Mutex::new(None::<Waker>));

@@ -11,11 +11,18 @@
  */
 
 import React from 'react';
-import { renderHook, act } from '@testing-library/react-native';
+import { renderHook, act, waitFor } from '@testing-library/react-native';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 
 const wrapper = ({ children }: { children: React.ReactNode }) =>
   React.createElement(AuthProvider, null, children);
+
+/** Wait for the native hydration effect to complete before testing state changes. */
+async function waitForHydration(result: { current: ReturnType<typeof useAuth> }) {
+  await waitFor(() => {
+    expect(result.current.isHydrated).toBe(true);
+  });
+}
 
 describe('Account persistence (AuthContext)', () => {
   test('login sets identity and isAuthenticated', async () => {
@@ -64,6 +71,9 @@ describe('Account persistence (AuthContext)', () => {
 
   test('rememberMe state toggles correctly', async () => {
     const { result } = renderHook(() => useAuth(), { wrapper });
+
+    // Wait for native async hydration to complete before testing state changes
+    await waitForHydration(result);
 
     expect(result.current.rememberMe).toBe(false);
 

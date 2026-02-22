@@ -3,12 +3,20 @@
 //! Channel CRUD within spaces. Supports text, voice, files,
 //! announcement, bulletin, and welcome channel types.
 
+use super::service::generate_id;
 use crate::error::{Error, Result};
 use crate::storage::CommunityChannelRecord;
-use super::service::generate_id;
 
 /// Valid channel types.
-pub const CHANNEL_TYPES: &[&str] = &["text", "voice", "files", "announcement", "bulletin", "welcome", "forum"];
+pub const CHANNEL_TYPES: &[&str] = &[
+    "text",
+    "voice",
+    "files",
+    "announcement",
+    "bulletin",
+    "welcome",
+    "forum",
+];
 
 impl super::CommunityService {
     /// Create a new channel in a space.
@@ -24,9 +32,10 @@ impl super::CommunityService {
         category_id: Option<&str>,
     ) -> Result<CommunityChannelRecord> {
         if !CHANNEL_TYPES.contains(&channel_type) {
-            return Err(Error::InvalidCommunityOperation(
-                format!("Invalid channel type: {}", channel_type),
-            ));
+            return Err(Error::InvalidCommunityOperation(format!(
+                "Invalid channel type: {}",
+                channel_type
+            )));
         }
 
         let now = crate::time::now_timestamp();
@@ -84,7 +93,8 @@ impl super::CommunityService {
 
     /// Get a single channel by ID.
     pub fn get_channel(&self, channel_id: &str) -> Result<CommunityChannelRecord> {
-        self.db().get_community_channel(channel_id)?
+        self.db()
+            .get_community_channel(channel_id)?
             .ok_or(Error::ChannelNotFound)
     }
 
@@ -99,7 +109,8 @@ impl super::CommunityService {
         let now = crate::time::now_timestamp();
         let channel = self.get_channel(channel_id)?;
 
-        self.db().update_community_channel(channel_id, name, topic, now)?;
+        self.db()
+            .update_community_channel(channel_id, name, topic, now)?;
 
         self.db().insert_audit_log(
             &generate_id(),
@@ -116,12 +127,7 @@ impl super::CommunityService {
     }
 
     /// Set slow mode for a channel (seconds between messages per user, 0 = off).
-    pub fn set_slow_mode(
-        &self,
-        channel_id: &str,
-        seconds: i32,
-        _actor_did: &str,
-    ) -> Result<()> {
+    pub fn set_slow_mode(&self, channel_id: &str, seconds: i32, _actor_did: &str) -> Result<()> {
         let now = crate::time::now_timestamp();
         self.db().update_channel_slow_mode(channel_id, seconds, now)
     }
@@ -138,11 +144,7 @@ impl super::CommunityService {
     }
 
     /// Delete a channel.
-    pub fn delete_channel(
-        &self,
-        channel_id: &str,
-        actor_did: &str,
-    ) -> Result<()> {
+    pub fn delete_channel(&self, channel_id: &str, actor_did: &str) -> Result<()> {
         let channel = self.get_channel(channel_id)?;
         let now = crate::time::now_timestamp();
 
@@ -163,14 +165,11 @@ impl super::CommunityService {
     }
 
     /// Reorder channels within a space.
-    pub fn reorder_channels(
-        &self,
-        _space_id: &str,
-        channel_ids: &[String],
-    ) -> Result<()> {
+    pub fn reorder_channels(&self, _space_id: &str, channel_ids: &[String]) -> Result<()> {
         let now = crate::time::now_timestamp();
         for (position, channel_id) in channel_ids.iter().enumerate() {
-            self.db().update_channel_position(channel_id, position as i32, now)?;
+            self.db()
+                .update_channel_position(channel_id, position as i32, now)?;
         }
         Ok(())
     }

@@ -1,8 +1,8 @@
 //! Identity dispatch handlers.
 
-use super::dispatcher::{DResult, err, json_parse, require_str, ok_json, ok_success};
+use super::dispatcher::{err, json_parse, ok_json, ok_success, require_str, DResult};
 use super::state::get_state;
-use crate::identity::{Identity, RecoveryPhrase, ProfileUpdate};
+use crate::identity::{Identity, ProfileUpdate, RecoveryPhrase};
 
 pub fn identity_create(args: &str) -> DResult {
     let data = json_parse(args)?;
@@ -51,7 +51,10 @@ pub fn identity_get_did() -> DResult {
 pub fn identity_get_profile() -> DResult {
     let state = get_state().map_err(|e| err(100, e))?;
     let state = state.read();
-    let id = state.identity.as_ref().ok_or_else(|| err(200, "No identity loaded"))?;
+    let id = state
+        .identity
+        .as_ref()
+        .ok_or_else(|| err(200, "No identity loaded"))?;
     let p = id.profile();
     ok_json(serde_json::json!({
         "did": id.did_string(), "display_name": p.display_name,
@@ -65,19 +68,36 @@ pub fn identity_update_profile(args: &str) -> DResult {
     let updates = json_parse(args)?;
     let state = get_state().map_err(|e| err(100, e))?;
     let mut state = state.write();
-    let id = state.identity.as_mut().ok_or_else(|| err(200, "No identity loaded"))?;
+    let id = state
+        .identity
+        .as_mut()
+        .ok_or_else(|| err(200, "No identity loaded"))?;
     let profile = id.profile_mut();
 
     if let Some(n) = updates.get("display_name").and_then(|v| v.as_str()) {
-        profile.apply_update(ProfileUpdate::DisplayName(n.to_string())).map_err(|e| err(205, e))?;
+        profile
+            .apply_update(ProfileUpdate::DisplayName(n.to_string()))
+            .map_err(|e| err(205, e))?;
     }
     if let Some(s) = updates.get("status") {
-        let sv = if s.is_null() { None } else { s.as_str().map(|x| x.to_string()) };
-        profile.apply_update(ProfileUpdate::Status(sv)).map_err(|e| err(205, e))?;
+        let sv = if s.is_null() {
+            None
+        } else {
+            s.as_str().map(|x| x.to_string())
+        };
+        profile
+            .apply_update(ProfileUpdate::Status(sv))
+            .map_err(|e| err(205, e))?;
     }
     if let Some(a) = updates.get("avatar") {
-        let av = if a.is_null() { None } else { a.as_str().map(|x| x.to_string()) };
-        profile.apply_update(ProfileUpdate::Avatar(av)).map_err(|e| err(205, e))?;
+        let av = if a.is_null() {
+            None
+        } else {
+            a.as_str().map(|x| x.to_string())
+        };
+        profile
+            .apply_update(ProfileUpdate::Avatar(av))
+            .map_err(|e| err(205, e))?;
     }
     ok_success()
 }
