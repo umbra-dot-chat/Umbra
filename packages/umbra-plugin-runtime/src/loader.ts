@@ -112,10 +112,13 @@ export class PluginLoader {
 
       if (typeof Blob !== 'undefined' && typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function') {
         // Web/Desktop: Blob URL + dynamic import (supports full ESM)
+        // Wrapped in new Function() so Hermes never parses the import()
+        // expression — this code path only runs on web/desktop.
+        const dynamicImport = new Function('url', 'return import(url)');
         const blob = new Blob([bundleCode], { type: 'application/javascript' });
         const url = URL.createObjectURL(blob);
         try {
-          mod = await import(/* webpackIgnore: true */ url);
+          mod = await dynamicImport(url);
         } finally {
           URL.revokeObjectURL(url);
         }
@@ -167,8 +170,11 @@ export class PluginLoader {
    */
   async loadFromUrl(url: string): Promise<PluginModule> {
     try {
+      // Wrapped in new Function() so Hermes never parses the import()
+      // expression — this code path only runs on web/desktop.
+      const dynamicImport = new Function('url', 'return import(url)');
       const cacheBust = `?t=${Date.now()}`;
-      const mod = await import(/* webpackIgnore: true */ `${url}${cacheBust}`);
+      const mod = await dynamicImport(`${url}${cacheBust}`);
       return this.extractPluginModule(mod);
     } catch (err: any) {
       throw new Error(`Failed to load plugin from URL "${url}": ${err.message}`);
