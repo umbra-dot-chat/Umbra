@@ -29,6 +29,8 @@
   "exclude": [
     "node_modules",
     "packages/umbra-core",
-    "packages/umbra-relay"
+    "packages/umbra-relay",
+    "packages/umbra-bridge-bot",
+    "testing"
   ]
 }
