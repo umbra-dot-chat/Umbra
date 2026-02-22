@@ -34,6 +34,7 @@ pub async fn send_friend_request(
         from_signing_key: Some(hex::encode(&request.from.public_keys.signing)),
         from_encryption_key: Some(hex::encode(&request.from.public_keys.encryption)),
         from_display_name: Some(request.from.display_name.clone()),
+        from_avatar: None,
         created_at: request.created_at,
         status: "pending".to_string(),
     };
