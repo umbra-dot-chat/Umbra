@@ -4,14 +4,13 @@
  *
  * Provides:
  * - Text input for pasting an invite code or full invite URL
- * - QR code scanner button (mobile only)
  * - "Join" button that calls the invite-use service method
  * - Loading / error / success states
  * - Navigates to the community on success
  */
 
 import React, { useState, useCallback, useEffect } from 'react';
-import { View, Platform } from 'react-native';
+import { View } from 'react-native';
 import { Dialog, Button, Text, Input, Alert, useTheme } from '@coexist/wisp-react-native';
 import { defaultSpacing } from '@coexist/wisp-core/theme/create-theme';
 import { useUmbra } from '@/contexts/UmbraContext';
@@ -19,7 +18,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'expo-router';
 import { resolveInviteFromRelay } from '@umbra/service';
 import { DEFAULT_RELAY_SERVERS } from '@/config';
-import { QRCodeScanner } from './QRCodeScanner';
 
 // ---------------------------------------------------------------------------
 // Props
@@ -75,7 +73,6 @@ export function JoinCommunityModal({
   const [isJoining, setIsJoining] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [autoJoining, setAutoJoining] = useState(false);
-  const [showScanner, setShowScanner] = useState(false);
 
   // Pre-fill and optionally auto-join when initialCode is provided
   useEffect(() => {
@@ -101,17 +98,8 @@ export function JoinCommunityModal({
       setError(null);
       setIsJoining(false);
       setAutoJoining(false);
-      setShowScanner(false);
     }
   }, [open]);
-
-  // Handle QR code scanned — fill in the code and auto-join
-  const handleQrScanned = useCallback((scannedCode: string) => {
-    setShowScanner(false);
-    setRawInput(scannedCode);
-    setError(null);
-    setAutoJoining(true);
-  }, []);
 
   const handleJoin = useCallback(async () => {
     if (!service || !identity?.did) return;
@@ -216,20 +204,6 @@ export function JoinCommunityModal({
   const code = extractInviteCode(rawInput);
   const canJoin = code.length > 0 && !isJoining;
 
-  // Show full-screen scanner on mobile
-  if (showScanner && Platform.OS !== 'web') {
-    return (
-      <Dialog open={open} onClose={onClose} title="Scan QR Code" size="lg">
-        <View style={{ height: 400 }}>
-          <QRCodeScanner
-            onScanned={handleQrScanned}
-            onClose={() => setShowScanner(false)}
-          />
-        </View>
-      </Dialog>
-    );
-  }
-
   return (
     <Dialog
       open={open}
@@ -239,8 +213,7 @@ export function JoinCommunityModal({
     >
       <View style={{ gap: defaultSpacing.md }}>
         <Text size="sm" style={{ color: tc.text.muted }}>
-          Enter an invite code, paste an invite link, or scan a QR code to join
-          an existing community.
+          Enter an invite code or paste an invite link to join an existing community.
         </Text>
 
         <Input
@@ -262,15 +235,6 @@ export function JoinCommunityModal({
         )}
 
         <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: defaultSpacing.sm }}>
-          {Platform.OS !== 'web' && (
-            <Button
-              variant="secondary"
-              onPress={() => setShowScanner(true)}
-              disabled={isJoining}
-            >
-              Scan QR
-            </Button>
-          )}
           <View style={{ flex: 1 }} />
           <Button
             variant="tertiary"

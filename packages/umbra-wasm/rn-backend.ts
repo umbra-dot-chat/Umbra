@@ -59,7 +59,8 @@ function ensureJsonString(value: unknown): string {
  */
 function checkNativeResult(result: string, context?: string): string {
   // Fast path: most successful responses don't start with {"error"
-  if (!result || !result.startsWith('{"error"')) return result;
+  if (!result || typeof result !== 'string') return result ?? '';
+  if (!result.startsWith('{"error')) return result;
 
   try {
     const parsed = JSON.parse(result);
@@ -104,10 +105,19 @@ function createNativeBackend(native: NativeUmbraCore): UmbraWasmModule {
   /**
    * Route a method through the generic Rust dispatcher.
    * `native.call(method, args)` → Swift `umbra_call` → Rust `dispatch()`.
+   *
+   * native.call() is an AsyncFunction (returns a Promise) because Swift
+   * Expo Modules use `AsyncFunction`. We must await the result before
+   * checking for error-as-JSON responses.
+   *
+   * Returns `any` to satisfy UmbraWasmModule interface which expects
+   * synchronous strings — downstream parseWasm() handles both strings
+   * and promises via `await`.
    */
   const call = (method: string, args: Record<string, any> = {}): any => {
-    const result = native.call(method, JSON.stringify(args));
-    return checkNativeResult(result, method);
+    return native.call(method, JSON.stringify(args)).then(
+      (result: string) => checkNativeResult(result, method)
+    );
   };
 
   return {

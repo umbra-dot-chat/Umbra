@@ -17,13 +17,8 @@ import { HelpPopoverHost } from '@/components/ui/HelpPopoverHost';
 import { PinLockScreen } from '@/components/auth/PinLockScreen';
 import { LoadingScreen } from '@/components/loading/LoadingScreen';
 import type { LoadingStep } from '@/components/loading/LoadingScreen';
-import { useNetwork } from '@/hooks/useNetwork';
 import { usePendingInvite } from '@/hooks/usePendingInvite';
-import { PRIMARY_RELAY_URL } from '@/config';
 import * as Linking from 'expo-linking';
-
-/** Max time (ms) to wait for the relay before giving up retries */
-const RELAY_TIMEOUT_MS = 5000;
 
 /** Dynamic iOS status bar: light text on dark themes, dark text on light themes. */
 function DynamicStatusBar() {
@@ -35,14 +30,11 @@ function AuthGate() {
   const { isAuthenticated, hasPin, isPinVerified, identity } = useAuth();
   const { isReady, isLoading, initStage } = useUmbra();
   const { preferencesLoaded } = useAppTheme();
-  const { relayConnected, connectRelay } = useNetwork();
   const segments = useSegments();
   const router = useRouter();
   const rootNav = useNavigationContainerRef();
   const [navReady, setNavReady] = useState(false);
   const [loadingDismissed, setLoadingDismissed] = useState(false);
-  const [relayTimedOut, setRelayTimedOut] = useState(false);
-  const retryCountRef = useRef(0);
   const pendingInviteHandledRef = useRef(false);
   const { pendingCode, isLoaded: inviteLoaded, consumePendingCode } = usePendingInvite();
   const inAuthGroup = segments[0] === '(auth)';
@@ -111,44 +103,6 @@ function AuthGate() {
 
   // Show PIN lock screen when authenticated + has PIN + not yet verified
   const showPinLock = isAuthenticated && hasPin && !isPinVerified;
-
-  // Retry relay connection if not connected after hydration.
-  // The auto-start in useNetwork fires once, but if it fails or the WebSocket
-  // doesn't open in time, we retry here.
-  useEffect(() => {
-    if (relayConnected || relayTimedOut) return;
-    if (initStage !== 'hydrated') return;
-
-    const retryInterval = setInterval(() => {
-      if (relayConnected || retryCountRef.current >= 3) {
-        clearInterval(retryInterval);
-        return;
-      }
-      retryCountRef.current += 1;
-      console.log(`[AuthGate] Relay retry attempt ${retryCountRef.current}...`);
-      connectRelay(PRIMARY_RELAY_URL).catch(() => {});
-    }, 1500);
-
-    // Overall timeout — dismiss loading screen even if relay never connects
-    const timeout = setTimeout(() => {
-      if (!relayConnected) {
-        console.warn('[AuthGate] Relay timed out after', RELAY_TIMEOUT_MS, 'ms');
-        setRelayTimedOut(true);
-      }
-    }, RELAY_TIMEOUT_MS);
-
-    return () => {
-      clearInterval(retryInterval);
-      clearTimeout(timeout);
-    };
-  }, [initStage, relayConnected, relayTimedOut, connectRelay]);
-
-  // Clear timeout flag if relay connects later
-  useEffect(() => {
-    if (relayConnected && relayTimedOut) {
-      setRelayTimedOut(false);
-    }
-  }, [relayConnected, relayTimedOut]);
 
   // ── Loading screen steps ──────────────────────────────────────────────
   // Only shown for essential init: core, database, identity, preferences.

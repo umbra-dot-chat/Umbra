@@ -24,6 +24,7 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { AppState, type AppStateStatus } from 'react-native';
 import { useUmbra } from '@/contexts/UmbraContext';
 import type { InitStage } from '@/contexts/UmbraContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -48,7 +49,7 @@ import type {
   DmFileEventPayload,
   AccountMetadataPayload,
 } from '@umbra/service';
-import { PRIMARY_RELAY_URL, NETWORK_CONFIG } from '@/config';
+import { PRIMARY_RELAY_URL, DEFAULT_RELAY_SERVERS, NETWORK_CONFIG } from '@/config';
 
 // Module-level singletons to prevent duplicate auto-starts and relay
 // connections when multiple components call useNetwork(). Unlike useRef,
@@ -56,6 +57,22 @@ import { PRIMARY_RELAY_URL, NETWORK_CONFIG } from '@/config';
 let _hasAutoStarted = false;
 let _relayWs: WebSocket | null = null;
 let _relayConnectPromise: Promise<void> | null = null;
+
+// ── Reconnect Manager State ──────────────────────────────────────────
+/** Whether an intentional disconnect was requested (user-triggered). */
+let _intentionalDisconnect = false;
+/** Current reconnect attempt count. */
+let _reconnectAttempt = 0;
+/** Timer ID for the pending reconnect attempt. */
+let _reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+/** Timer ID for the WebSocket keep-alive ping. */
+let _keepAliveTimer: ReturnType<typeof setInterval> | null = null;
+/** The last DID used for relay registration (needed for reconnect without AuthContext). */
+let _lastRelayDid: string | null = null;
+/** The last service reference (needed for reconnect from module-level scope). */
+let _lastService: any = null;
+/** The index into DEFAULT_RELAY_SERVERS currently being tried. */
+let _currentServerIndex = 0;
 
 // Pending message queue for relay ack tracking.
 // When we send a chat message via relay, we push the messageId here.
@@ -123,6 +140,58 @@ function _notifyPresence() {
     listener(snapshot);
   }
 }
+
+// ── Reconnect Manager Functions ──────────────────────────────────────
+
+function _clearReconnectTimer(): void {
+  if (_reconnectTimer !== null) {
+    clearTimeout(_reconnectTimer);
+    _reconnectTimer = null;
+  }
+}
+
+function _clearKeepAlive(): void {
+  if (_keepAliveTimer !== null) {
+    clearInterval(_keepAliveTimer);
+    _keepAliveTimer = null;
+  }
+}
+
+function _startKeepAlive(): void {
+  _clearKeepAlive();
+  _keepAliveTimer = setInterval(() => {
+    if (_relayWs && _relayWs.readyState === WebSocket.OPEN) {
+      try {
+        _relayWs.send(JSON.stringify({ type: 'ping' }));
+      } catch {
+        // If send fails, the onclose handler will trigger reconnect
+      }
+    }
+  }, NETWORK_CONFIG.keepAliveInterval);
+}
+
+/**
+ * Exponential backoff with jitter.
+ * Uses NETWORK_CONFIG.reconnectDelay as base, capped at maxBackoffDelay.
+ * Adds ±20% random jitter to prevent thundering herd.
+ */
+function _computeBackoffDelay(attempt: number): number {
+  const base = NETWORK_CONFIG.reconnectDelay;
+  const exponential = Math.min(base * Math.pow(2, attempt), NETWORK_CONFIG.maxBackoffDelay);
+  const jitter = exponential * (0.8 + Math.random() * 0.4);
+  return Math.round(jitter);
+}
+
+function _resetReconnectState(): void {
+  _reconnectAttempt = 0;
+  _currentServerIndex = 0;
+  _intentionalDisconnect = false;
+  _clearReconnectTimer();
+}
+
+// Forward declarations — implemented after _handleRelayMessage
+let _scheduleReconnect: () => void;
+let _attemptReconnect: (serverUrl: string) => Promise<void>;
 
 export type ConnectionState =
   | 'idle'
@@ -227,6 +296,364 @@ export interface UseNetworkResult {
   /** Set of friend DIDs currently known to be online (seen via relay) */
   onlineDids: Set<string>;
 }
+
+// ── Extracted relay message handler (module-level) ────────────────────
+// Extracted from the inline ws.onmessage closure so it can be shared
+// between connectRelay() and the reconnect manager.
+// Uses _lastService and _lastRelayDid instead of hook-scoped service/identity.
+
+async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<void> {
+  const service = _lastService;
+  if (!service) return;
+
+  try {
+    const msg = JSON.parse(event.data);
+    console.log('[useNetwork] Relay message:', msg.type);
+
+    switch (msg.type) {
+      case 'registered': {
+        console.log('[useNetwork] Registered with relay as', msg.did);
+        service.relayFetchOffline().then((fetchMsg: string) => {
+          if (ws.readyState === WebSocket.OPEN) ws.send(fetchMsg);
+        }).catch((err: any) => console.error('[useNetwork] Failed to fetch offline messages:', err));
+
+        service.getFriends().then(async (friendsList: any[]) => {
+          const presenceEnvelope = JSON.stringify({
+            envelope: 'presence_online', version: 1,
+            payload: { timestamp: Date.now() },
+          });
+          for (const f of friendsList) {
+            try {
+              const { relayMessage } = await service.relaySend(f.did, presenceEnvelope);
+              if (ws.readyState === WebSocket.OPEN) ws.send(relayMessage);
+            } catch { /* Best-effort */ }
+          }
+          console.log('[useNetwork] Broadcast presence_online to', friendsList.length, 'friends');
+        }).catch((err: any) => console.warn('[useNetwork] Failed to broadcast presence:', err));
+
+        if (_lastRelayDid) {
+          const myDid = _lastRelayDid;
+          service.getCommunities(myDid).then(async (communities: any[]) => {
+            let published = 0;
+            for (const community of communities) {
+              if (community.ownerDid !== myDid) continue;
+              try {
+                const invites = await service.getCommunityInvites(community.id);
+                const members = await service.getCommunityMembers(community.id);
+                for (const invite of invites) {
+                  if (ws.readyState !== WebSocket.OPEN) break;
+                  service.publishCommunityInviteToRelay(ws, invite, community.name, community.description, community.iconUrl, members.length);
+                  published++;
+                }
+              } catch { /* Best-effort */ }
+            }
+            if (published > 0) console.log('[useNetwork] Re-published', published, 'community invite(s) to relay');
+          }).catch((err: any) => console.warn('[useNetwork] Failed to re-publish invites:', err));
+        }
+        break;
+      }
+
+      case 'message': {
+        const { from_did, payload } = msg;
+        console.log('[useNetwork] Message from', from_did);
+        if (from_did) _markDidOnline(from_did);
+
+        try {
+          const envelope = JSON.parse(payload) as RelayEnvelope;
+
+          if (envelope.envelope === 'friend_request' && envelope.version === 1) {
+            const reqPayload = envelope.payload as FriendRequestPayload;
+            const friendRequest: FriendRequest = {
+              id: reqPayload.id, fromDid: reqPayload.fromDid, toDid: '', direction: 'incoming',
+              message: reqPayload.message, fromDisplayName: reqPayload.fromDisplayName,
+              fromAvatar: reqPayload.fromAvatar, fromSigningKey: reqPayload.fromSigningKey,
+              fromEncryptionKey: reqPayload.fromEncryptionKey, createdAt: reqPayload.createdAt, status: 'pending',
+            };
+            try { await service.storeIncomingRequest(friendRequest); } catch (e) { console.warn('[useNetwork] Failed to store incoming request:', e); }
+            service.dispatchFriendEvent({ type: 'requestReceived', request: friendRequest });
+
+          } else if (envelope.envelope === 'friend_response' && envelope.version === 1) {
+            const respPayload = envelope.payload as FriendResponsePayload;
+            if (respPayload.accepted) {
+              try { await service.processAcceptedFriendResponse({ fromDid: respPayload.fromDid, fromDisplayName: respPayload.fromDisplayName, fromAvatar: respPayload.fromAvatar, fromSigningKey: respPayload.fromSigningKey, fromEncryptionKey: respPayload.fromEncryptionKey }); } catch (e) { console.warn('[useNetwork] Failed to process acceptance:', e); }
+              service.dispatchFriendEvent({ type: 'requestAccepted', did: respPayload.fromDid });
+              try { const myDid = _lastRelayDid ?? ''; if (myDid) await service.sendFriendAcceptAck(respPayload.fromDid, myDid, ws); } catch (e) { console.warn('[useNetwork] Failed to send friend_accept_ack:', e); }
+            } else {
+              service.dispatchFriendEvent({ type: 'requestRejected', did: respPayload.fromDid });
+            }
+
+          } else if (envelope.envelope === 'friend_accept_ack' && envelope.version === 1) {
+            const ackPayload = envelope.payload as FriendAcceptAckPayload;
+            service.dispatchFriendEvent({ type: 'friendSyncConfirmed', did: ackPayload.senderDid });
+
+          } else if (envelope.envelope === 'chat_message' && envelope.version === 1) {
+            const chatPayload = envelope.payload as ChatMessagePayload;
+            try {
+              await service.storeIncomingMessage(chatPayload);
+              const decryptedText = await service.decryptIncomingMessage(chatPayload);
+              if (!decryptedText) {
+                console.warn('[useNetwork] Decryption failed, skipping dispatch for', chatPayload.messageId);
+              } else if (chatPayload.threadId) {
+                service.dispatchMessageEvent({ type: 'threadReplyReceived', message: { id: chatPayload.messageId, conversationId: chatPayload.conversationId, senderDid: chatPayload.senderDid, content: { type: 'text', text: decryptedText }, timestamp: chatPayload.timestamp, read: false, delivered: true, status: 'delivered', threadId: chatPayload.threadId }, parentId: chatPayload.threadId });
+              } else {
+                service.dispatchMessageEvent({ type: 'messageReceived', message: { id: chatPayload.messageId, conversationId: chatPayload.conversationId, senderDid: chatPayload.senderDid, content: { type: 'text', text: decryptedText }, timestamp: chatPayload.timestamp, read: false, delivered: true, status: 'delivered' } });
+              }
+              service.sendDeliveryReceipt(chatPayload.messageId, chatPayload.conversationId, chatPayload.senderDid, 'delivered', ws).catch((err: any) => console.warn('[useNetwork] Failed to send delivery receipt:', err));
+            } catch (err) { console.warn('[useNetwork] Failed to store incoming chat message:', err); }
+
+          } else if (envelope.envelope === 'group_invite' && envelope.version === 1) {
+            const invitePayload = envelope.payload as GroupInvitePayload;
+            try {
+              await service.storeGroupInvite(invitePayload);
+              service.dispatchGroupEvent({ type: 'inviteReceived', invite: { id: invitePayload.inviteId, groupId: invitePayload.groupId, groupName: invitePayload.groupName, description: invitePayload.description, inviterDid: invitePayload.inviterDid, inviterName: invitePayload.inviterName, encryptedGroupKey: invitePayload.encryptedGroupKey, nonce: invitePayload.nonce, membersJson: invitePayload.membersJson, status: 'pending', createdAt: invitePayload.timestamp } });
+            } catch (err) { console.warn('[useNetwork] Failed to store group invite:', err); }
+
+          } else if (envelope.envelope === 'group_invite_accept' && envelope.version === 1) {
+            const acceptPayload = envelope.payload as GroupInviteResponsePayload;
+            try { await service.addGroupMember(acceptPayload.groupId, acceptPayload.fromDid, acceptPayload.fromDisplayName); service.dispatchGroupEvent({ type: 'inviteAccepted', groupId: acceptPayload.groupId, fromDid: acceptPayload.fromDid }); } catch (err) { console.warn('[useNetwork] Failed to process group invite acceptance:', err); }
+
+          } else if (envelope.envelope === 'group_invite_decline' && envelope.version === 1) {
+            const declinePayload = envelope.payload as GroupInviteResponsePayload;
+            service.dispatchGroupEvent({ type: 'inviteDeclined', groupId: declinePayload.groupId, fromDid: declinePayload.fromDid });
+
+          } else if (envelope.envelope === 'group_message' && envelope.version === 1) {
+            const groupMsgPayload = envelope.payload as GroupMessagePayload;
+            try {
+              const plaintext = await service.decryptGroupMessage(groupMsgPayload.groupId, groupMsgPayload.ciphertext, groupMsgPayload.nonce, groupMsgPayload.keyVersion);
+              const storePayload: ChatMessagePayload = { messageId: groupMsgPayload.messageId, conversationId: groupMsgPayload.conversationId, senderDid: groupMsgPayload.senderDid, contentEncrypted: groupMsgPayload.ciphertext, nonce: groupMsgPayload.nonce, timestamp: groupMsgPayload.timestamp };
+              await service.storeIncomingMessage(storePayload);
+              service.dispatchMessageEvent({ type: 'messageReceived', message: { id: groupMsgPayload.messageId, conversationId: groupMsgPayload.conversationId, senderDid: groupMsgPayload.senderDid, content: { type: 'text', text: plaintext }, timestamp: groupMsgPayload.timestamp, read: false, delivered: true, status: 'delivered' } });
+            } catch (err) { console.warn('[useNetwork] Failed to process group message:', err); }
+
+          } else if (envelope.envelope === 'group_key_rotation' && envelope.version === 1) {
+            const keyPayload = envelope.payload as GroupKeyRotationPayload;
+            try { await service.importGroupKey(keyPayload.encryptedKey, keyPayload.nonce, keyPayload.senderDid, keyPayload.groupId, keyPayload.keyVersion); service.dispatchGroupEvent({ type: 'keyRotated', groupId: keyPayload.groupId, keyVersion: keyPayload.keyVersion }); } catch (err) { console.warn('[useNetwork] Failed to import rotated group key:', err); }
+
+          } else if (envelope.envelope === 'group_member_removed' && envelope.version === 1) {
+            const removePayload = envelope.payload as GroupMemberRemovedPayload;
+            service.dispatchGroupEvent({ type: 'memberRemoved', groupId: removePayload.groupId, removedDid: removePayload.removedDid });
+
+          } else if (envelope.envelope === 'message_status' && envelope.version === 1) {
+            const statusPayload = envelope.payload as MessageStatusPayload;
+            try { await service.updateMessageStatus(statusPayload.messageId, statusPayload.status); service.dispatchMessageEvent({ type: 'messageStatusChanged', messageId: statusPayload.messageId, status: statusPayload.status }); } catch (err) { console.warn('[useNetwork] Failed to update message status:', err); }
+
+          } else if (envelope.envelope === 'typing_indicator' && envelope.version === 1) {
+            const typingPayload = envelope.payload as TypingIndicatorPayload;
+            service.dispatchMessageEvent({ type: typingPayload.isTyping ? 'typingStarted' : 'typingStopped', conversationId: typingPayload.conversationId, did: typingPayload.senderDid, senderName: typingPayload.senderName });
+
+          } else if (envelope.envelope === 'call_offer' && envelope.version === 1) { service.dispatchCallEvent({ type: 'callOffer', payload: envelope.payload as any });
+          } else if (envelope.envelope === 'call_answer' && envelope.version === 1) { service.dispatchCallEvent({ type: 'callAnswer', payload: envelope.payload as any });
+          } else if (envelope.envelope === 'call_ice_candidate' && envelope.version === 1) { service.dispatchCallEvent({ type: 'callIceCandidate', payload: envelope.payload as any });
+          } else if (envelope.envelope === 'call_end' && envelope.version === 1) { service.dispatchCallEvent({ type: 'callEnd', payload: envelope.payload as any });
+          } else if (envelope.envelope === 'call_state' && envelope.version === 1) { service.dispatchCallEvent({ type: 'callState', payload: envelope.payload as any });
+
+          } else if (envelope.envelope === 'community_event' && envelope.version === 1) {
+            const communityPayload = envelope.payload as CommunityEventPayload;
+            service.dispatchCommunityEvent(communityPayload.event);
+
+          } else if (envelope.envelope === 'dm_file_event' && envelope.version === 1) {
+            const dmFilePayload = envelope.payload as DmFileEventPayload;
+            service.dispatchDmFileEvent(dmFilePayload);
+
+          } else if (envelope.envelope === 'account_metadata' && envelope.version === 1) {
+            const metaPayload = envelope.payload as AccountMetadataPayload;
+            service.dispatchMetadataEvent({ type: 'metadataReceived', key: metaPayload.key, value: metaPayload.value, timestamp: metaPayload.timestamp });
+
+          } else if (envelope.envelope === 'presence_online') {
+            if (from_did) {
+              const ackEnvelope = JSON.stringify({ envelope: 'presence_ack', version: 1, payload: { timestamp: Date.now() } });
+              service.relaySend(from_did, ackEnvelope).then(({ relayMessage }: any) => { if (ws.readyState === WebSocket.OPEN) ws.send(relayMessage); }).catch(() => {});
+            }
+          } else if (envelope.envelope === 'presence_ack') {
+            // Already handled via _markDidOnline(from_did) above
+          }
+        } catch (parseErr) {
+          console.log('[useNetwork] Message payload is not a relay envelope:', parseErr);
+        }
+        break;
+      }
+
+      case 'offline_messages': {
+        const messages = msg.messages || [];
+        console.log('[useNetwork] Received', messages.length, 'offline messages');
+
+        for (const offlineMsg of messages) {
+          try {
+            const envelope = JSON.parse(offlineMsg.payload) as RelayEnvelope;
+
+            if (envelope.envelope === 'friend_request' && envelope.version === 1) {
+              const reqPayload = envelope.payload as FriendRequestPayload;
+              const friendRequest: FriendRequest = { id: reqPayload.id, fromDid: reqPayload.fromDid, toDid: '', direction: 'incoming', message: reqPayload.message, fromDisplayName: reqPayload.fromDisplayName, fromAvatar: reqPayload.fromAvatar, fromSigningKey: reqPayload.fromSigningKey, fromEncryptionKey: reqPayload.fromEncryptionKey, createdAt: reqPayload.createdAt, status: 'pending' };
+              try { await service.storeIncomingRequest(friendRequest); } catch (e) { console.warn('[useNetwork] Failed to store offline incoming request:', e); }
+              service.dispatchFriendEvent({ type: 'requestReceived', request: friendRequest });
+            } else if (envelope.envelope === 'friend_response' && envelope.version === 1) {
+              const respPayload = envelope.payload as FriendResponsePayload;
+              if (respPayload.accepted) {
+                try { await service.processAcceptedFriendResponse({ fromDid: respPayload.fromDid, fromDisplayName: respPayload.fromDisplayName, fromAvatar: respPayload.fromAvatar, fromSigningKey: respPayload.fromSigningKey, fromEncryptionKey: respPayload.fromEncryptionKey }); } catch (e) { console.warn('[useNetwork] Failed to process offline acceptance:', e); }
+                service.dispatchFriendEvent({ type: 'requestAccepted', did: respPayload.fromDid });
+                try { const myDid = _lastRelayDid ?? ''; if (myDid) await service.sendFriendAcceptAck(respPayload.fromDid, myDid, ws); } catch (e) { console.warn('[useNetwork] Failed to send offline friend_accept_ack:', e); }
+              } else {
+                service.dispatchFriendEvent({ type: 'requestRejected', did: respPayload.fromDid });
+              }
+            } else if (envelope.envelope === 'friend_accept_ack' && envelope.version === 1) {
+              const ackPayload = envelope.payload as FriendAcceptAckPayload;
+              service.dispatchFriendEvent({ type: 'friendSyncConfirmed', did: ackPayload.senderDid });
+            } else if (envelope.envelope === 'chat_message' && envelope.version === 1) {
+              const chatPayload = envelope.payload as ChatMessagePayload;
+              try {
+                await service.storeIncomingMessage(chatPayload);
+                const decryptedText = await service.decryptIncomingMessage(chatPayload);
+                if (!decryptedText) { console.warn('[useNetwork] Offline decryption failed for', chatPayload.messageId);
+                } else if (chatPayload.threadId) { service.dispatchMessageEvent({ type: 'threadReplyReceived', message: { id: chatPayload.messageId, conversationId: chatPayload.conversationId, senderDid: chatPayload.senderDid, content: { type: 'text', text: decryptedText }, timestamp: chatPayload.timestamp, read: false, delivered: true, status: 'delivered', threadId: chatPayload.threadId }, parentId: chatPayload.threadId });
+                } else { service.dispatchMessageEvent({ type: 'messageReceived', message: { id: chatPayload.messageId, conversationId: chatPayload.conversationId, senderDid: chatPayload.senderDid, content: { type: 'text', text: decryptedText }, timestamp: chatPayload.timestamp, read: false, delivered: true, status: 'delivered' } }); }
+              } catch (err) { console.warn('[useNetwork] Failed to store offline chat message:', err); }
+            } else if (envelope.envelope === 'group_invite' && envelope.version === 1) {
+              const invitePayload = envelope.payload as GroupInvitePayload;
+              try { await service.storeGroupInvite(invitePayload); service.dispatchGroupEvent({ type: 'inviteReceived', invite: { id: invitePayload.inviteId, groupId: invitePayload.groupId, groupName: invitePayload.groupName, description: invitePayload.description, inviterDid: invitePayload.inviterDid, inviterName: invitePayload.inviterName, encryptedGroupKey: invitePayload.encryptedGroupKey, nonce: invitePayload.nonce, membersJson: invitePayload.membersJson, status: 'pending', createdAt: invitePayload.timestamp } }); } catch (err) { console.warn('[useNetwork] Failed to store offline group invite:', err); }
+            } else if (envelope.envelope === 'group_invite_accept' && envelope.version === 1) {
+              const acceptPayload = envelope.payload as GroupInviteResponsePayload;
+              try { await service.addGroupMember(acceptPayload.groupId, acceptPayload.fromDid, acceptPayload.fromDisplayName); service.dispatchGroupEvent({ type: 'inviteAccepted', groupId: acceptPayload.groupId, fromDid: acceptPayload.fromDid }); } catch (err) { console.warn('[useNetwork] Failed to process offline group invite acceptance:', err); }
+            } else if (envelope.envelope === 'group_message' && envelope.version === 1) {
+              const groupMsgPayload = envelope.payload as GroupMessagePayload;
+              try {
+                const plaintext = await service.decryptGroupMessage(groupMsgPayload.groupId, groupMsgPayload.ciphertext, groupMsgPayload.nonce, groupMsgPayload.keyVersion);
+                const storePayload: ChatMessagePayload = { messageId: groupMsgPayload.messageId, conversationId: groupMsgPayload.conversationId, senderDid: groupMsgPayload.senderDid, contentEncrypted: groupMsgPayload.ciphertext, nonce: groupMsgPayload.nonce, timestamp: groupMsgPayload.timestamp };
+                await service.storeIncomingMessage(storePayload);
+                service.dispatchMessageEvent({ type: 'messageReceived', message: { id: groupMsgPayload.messageId, conversationId: groupMsgPayload.conversationId, senderDid: groupMsgPayload.senderDid, content: { type: 'text', text: plaintext }, timestamp: groupMsgPayload.timestamp, read: false, delivered: true, status: 'delivered' } });
+              } catch (err) { console.warn('[useNetwork] Failed to process offline group message:', err); }
+            } else if (envelope.envelope === 'group_key_rotation' && envelope.version === 1) {
+              const keyPayload = envelope.payload as GroupKeyRotationPayload;
+              try { await service.importGroupKey(keyPayload.encryptedKey, keyPayload.nonce, keyPayload.senderDid, keyPayload.groupId, keyPayload.keyVersion); service.dispatchGroupEvent({ type: 'keyRotated', groupId: keyPayload.groupId, keyVersion: keyPayload.keyVersion }); } catch (err) { console.warn('[useNetwork] Failed to import offline rotated group key:', err); }
+            } else if (envelope.envelope === 'group_member_removed' && envelope.version === 1) {
+              const removePayload = envelope.payload as GroupMemberRemovedPayload;
+              service.dispatchGroupEvent({ type: 'memberRemoved', groupId: removePayload.groupId, removedDid: removePayload.removedDid });
+            } else if (envelope.envelope === 'message_status' && envelope.version === 1) {
+              const statusPayload = envelope.payload as MessageStatusPayload;
+              try { await service.updateMessageStatus(statusPayload.messageId, statusPayload.status); service.dispatchMessageEvent({ type: 'messageStatusChanged', messageId: statusPayload.messageId, status: statusPayload.status }); } catch (err) { console.warn('[useNetwork] Failed to update offline message status:', err); }
+            } else if (envelope.envelope === 'community_event' && envelope.version === 1) {
+              const communityPayload = envelope.payload as CommunityEventPayload;
+              service.dispatchCommunityEvent(communityPayload.event);
+            } else if (envelope.envelope === 'dm_file_event' && envelope.version === 1) {
+              const dmFilePayload = envelope.payload as DmFileEventPayload;
+              service.dispatchDmFileEvent(dmFilePayload);
+            } else if (envelope.envelope === 'account_metadata' && envelope.version === 1) {
+              const metaPayload = envelope.payload as AccountMetadataPayload;
+              service.dispatchMetadataEvent({ type: 'metadataReceived', key: metaPayload.key, value: metaPayload.value, timestamp: metaPayload.timestamp });
+            } else if (envelope.envelope === 'presence_online' || envelope.envelope === 'presence_ack') {
+              // Stale presence from when we were offline — ignore silently
+            }
+          } catch (parseErr) {
+            console.log('[useNetwork] Offline message parse error:', parseErr);
+          }
+        }
+        break;
+      }
+
+      case 'ack': {
+        const pendingMsgId = _pendingRelayAcks.shift();
+        if (pendingMsgId && service) {
+          try {
+            await service.updateMessageStatus(pendingMsgId, 'sent');
+            service.dispatchMessageEvent({ type: 'messageStatusChanged', messageId: pendingMsgId, status: 'sent' });
+            console.log('[useNetwork] Message ack: sending→sent for', pendingMsgId);
+          } catch (err) { console.warn('[useNetwork] Failed to update message status on ack:', err); }
+        }
+        break;
+      }
+
+      case 'call_room_created': { service.dispatchCallEvent({ type: 'callRoomCreated', payload: { roomId: msg.room_id, groupId: msg.group_id } }); break; }
+      case 'call_participant_joined': { service.dispatchCallEvent({ type: 'callParticipantJoined', payload: { roomId: msg.room_id, did: msg.did } }); break; }
+      case 'call_participant_left': { service.dispatchCallEvent({ type: 'callParticipantLeft', payload: { roomId: msg.room_id, did: msg.did } }); break; }
+      case 'call_signal_forward': { service.dispatchCallEvent({ type: 'callSignalForward', payload: { roomId: msg.room_id, fromDid: msg.from_did, payload: msg.payload } }); break; }
+      case 'pong': break;
+      case 'session_created': case 'session_joined': case 'signal': break;
+      case 'error': console.error('[useNetwork] Relay error:', msg.message); break;
+      default: console.log('[useNetwork] Unknown relay message type:', msg.type);
+    }
+  } catch (err) {
+    console.error('[useNetwork] Failed to parse relay message:', err);
+  }
+}
+
+// ── Reconnect scheduler & executor ────────────────────────────────────
+
+_scheduleReconnect = function(): void {
+  if (_intentionalDisconnect) { console.log('[Reconnect] Skipping — intentional disconnect'); return; }
+  if (_relayConnectPromise) { console.log('[Reconnect] Skipping — connection already in progress'); return; }
+  if (!_lastRelayDid || !_lastService) { console.log('[Reconnect] Skipping — no DID or service available'); return; }
+
+  const maxPerServer = NETWORK_CONFIG.maxReconnectAttempts;
+  const totalServers = DEFAULT_RELAY_SERVERS.length;
+  const totalMaxAttempts = maxPerServer * totalServers;
+
+  if (_reconnectAttempt >= totalMaxAttempts) {
+    console.warn('[Reconnect] All servers exhausted after', _reconnectAttempt, 'attempts. Will retry on foreground.');
+    return;
+  }
+
+  _currentServerIndex = Math.floor(_reconnectAttempt / maxPerServer) % totalServers;
+  const serverUrl = DEFAULT_RELAY_SERVERS[_currentServerIndex];
+  const delay = _computeBackoffDelay(_reconnectAttempt % maxPerServer);
+  console.log(`[Reconnect] Attempt ${_reconnectAttempt + 1}/${totalMaxAttempts} to ${serverUrl} in ${delay}ms`);
+
+  _clearReconnectTimer();
+  _reconnectTimer = setTimeout(() => {
+    _reconnectTimer = null;
+    _attemptReconnect(serverUrl);
+  }, delay);
+};
+
+_attemptReconnect = async function(serverUrl: string): Promise<void> {
+  if (_intentionalDisconnect || !_lastService || !_lastRelayDid) return;
+  if (_relayWs && _relayWs.readyState === WebSocket.OPEN) {
+    console.log('[Reconnect] Already connected, aborting attempt');
+    return;
+  }
+
+  console.log('[Reconnect] Attempting connection to', serverUrl);
+  _reconnectAttempt++;
+
+  try {
+    const registerMessage = JSON.stringify({ type: 'register', did: _lastRelayDid });
+
+    try { await _lastService.connectRelay(serverUrl); } catch { /* Non-fatal */ }
+
+    if (_relayWs) { _relayWs.close(); _relayWs = null; }
+
+    const ws = new WebSocket(serverUrl);
+    _relayWs = ws;
+    _lastService.setRelayWs(ws);
+
+    ws.onopen = () => {
+      console.log('[Reconnect] Connected to', serverUrl);
+      ws.send(registerMessage);
+      _notifyRelayState(true, serverUrl);
+      _reconnectAttempt = 0;
+      _currentServerIndex = 0;
+      _startKeepAlive();
+    };
+
+    ws.onmessage = (event) => _handleRelayMessage(ws, event);
+
+    ws.onerror = (event) => {
+      console.error('[Reconnect] WebSocket error:', event);
+    };
+
+    ws.onclose = (event) => {
+      console.log('[Reconnect] WebSocket closed — code:', event.code);
+      if (_relayWs === ws) {
+        _relayWs = null;
+        _notifyRelayState(false, null);
+        _clearKeepAlive();
+        _clearOnlineDids();
+        _scheduleReconnect();
+      }
+    };
+  } catch (err) {
+    console.error('[Reconnect] Failed:', err);
+    _scheduleReconnect();
+  }
+};
 
 export function useNetwork(): UseNetworkResult {
   const { service, isReady, initStage } = useUmbra();
@@ -433,6 +860,11 @@ export function useNetwork(): UseNetworkResult {
       try {
         setError(null);
 
+        // Store refs for reconnect manager (module-level, survives unmounts)
+        _intentionalDisconnect = false;
+        if (identity?.did) _lastRelayDid = identity.did;
+        if (service) _lastService = service;
+
         // Build the register message using the frontend identity's DID.
         //
         // We prefer the frontend DID (from AuthContext / localStorage) over
@@ -481,745 +913,14 @@ export function useNetwork(): UseNetworkResult {
           }
           // Notify ALL useNetwork() instances via shared state
           _notifyRelayState(true, url);
+          // Reset reconnect state on successful connection & start keep-alive
+          _reconnectAttempt = 0;
+          _currentServerIndex = 0;
+          _startKeepAlive();
           console.log('[useNetwork] Relay WebSocket connected to', url);
         };
 
-        ws.onmessage = async (event) => {
-          try {
-            const msg = JSON.parse(event.data);
-            console.log('[useNetwork] Relay message:', msg.type);
-
-            // Handle relay messages based on type
-            switch (msg.type) {
-              case 'registered': {
-                console.log('[useNetwork] Registered with relay as', msg.did);
-                // Fetch offline messages after registration
-                service.relayFetchOffline().then((fetchMsg) => {
-                  if (ws.readyState === WebSocket.OPEN) {
-                    ws.send(fetchMsg);
-                  }
-                }).catch((err) => {
-                  console.error('[useNetwork] Failed to fetch offline messages:', err);
-                });
-
-                // Broadcast presence_online to all friends so they know we're online.
-                // When they receive it, they mark us online via _markDidOnline.
-                // This is a lightweight envelope — no encryption needed, just a signal.
-                service.getFriends().then(async (friendsList) => {
-                  const presenceEnvelope = JSON.stringify({
-                    envelope: 'presence_online',
-                    version: 1,
-                    payload: { timestamp: Date.now() },
-                  });
-                  for (const f of friendsList) {
-                    try {
-                      const { relayMessage } = await service.relaySend(f.did, presenceEnvelope);
-                      if (ws.readyState === WebSocket.OPEN) {
-                        ws.send(relayMessage);
-                      }
-                    } catch {
-                      // Best-effort — skip friends we can't reach
-                    }
-                  }
-                  console.log('[useNetwork] Broadcast presence_online to', friendsList.length, 'friends');
-                }).catch((err) => {
-                  console.warn('[useNetwork] Failed to broadcast presence:', err);
-                });
-
-                // Re-publish all community invites to relay so they survive relay restarts.
-                // The relay stores invites in memory, so after a restart they're gone.
-                // Each connected community owner re-publishes their invites on reconnect.
-                if (identity?.did) {
-                  service.getCommunities(identity.did).then(async (communities) => {
-                    let published = 0;
-                    for (const community of communities) {
-                      if (community.ownerDid !== identity.did) continue;
-                      try {
-                        const invites = await service.getCommunityInvites(community.id);
-                        const members = await service.getCommunityMembers(community.id);
-                        for (const invite of invites) {
-                          if (ws.readyState !== WebSocket.OPEN) break;
-                          service.publishCommunityInviteToRelay(
-                            ws,
-                            invite,
-                            community.name,
-                            community.description,
-                            community.iconUrl,
-                            members.length,
-                          );
-                          published++;
-                        }
-                      } catch {
-                        // Best-effort — skip communities we can't read
-                      }
-                    }
-                    if (published > 0) {
-                      console.log('[useNetwork] Re-published', published, 'community invite(s) to relay');
-                    }
-                  }).catch((err) => {
-                    console.warn('[useNetwork] Failed to re-publish invites:', err);
-                  });
-                }
-
-                break;
-              }
-
-              case 'message': {
-                // Handle incoming message - could be a friend request/response
-                const { from_did, payload } = msg;
-                console.log('[useNetwork] Message from', from_did);
-
-                // Track presence — any relay message means the sender is online
-                if (from_did) _markDidOnline(from_did);
-
-                try {
-                  const envelope = JSON.parse(payload) as RelayEnvelope;
-
-                  if (envelope.envelope === 'friend_request' && envelope.version === 1) {
-                    // Handle incoming friend request
-                    const reqPayload = envelope.payload as FriendRequestPayload;
-                    console.log('[useNetwork] Friend request received from', reqPayload.fromDid);
-
-                    // Create a FriendRequest object to dispatch
-                    const friendRequest: FriendRequest = {
-                      id: reqPayload.id,
-                      fromDid: reqPayload.fromDid,
-                      toDid: '', // Will be filled by the service
-                      direction: 'incoming',
-                      message: reqPayload.message,
-                      fromDisplayName: reqPayload.fromDisplayName,
-                      fromAvatar: reqPayload.fromAvatar,
-                      fromSigningKey: reqPayload.fromSigningKey,
-                      fromEncryptionKey: reqPayload.fromEncryptionKey,
-                      createdAt: reqPayload.createdAt,
-                      status: 'pending',
-                    };
-
-                    // Store in database THEN dispatch event so UI refresh finds it
-                    try {
-                      await service.storeIncomingRequest(friendRequest);
-                    } catch (storeErr) {
-                      console.warn('[useNetwork] Failed to store incoming request:', storeErr);
-                    }
-                    service.dispatchFriendEvent({
-                      type: 'requestReceived',
-                      request: friendRequest,
-                    });
-                  } else if (envelope.envelope === 'friend_response' && envelope.version === 1) {
-                    // Handle friend response (acceptance/rejection)
-                    const respPayload = envelope.payload as FriendResponsePayload;
-                    console.log('[useNetwork] Friend response received from', respPayload.fromDid, 'accepted:', respPayload.accepted);
-
-                    if (respPayload.accepted) {
-                      // Add the accepter as a friend on OUR side (with their keys)
-                      try {
-                        await service.processAcceptedFriendResponse({
-                          fromDid: respPayload.fromDid,
-                          fromDisplayName: respPayload.fromDisplayName,
-                          fromAvatar: respPayload.fromAvatar,
-                          fromSigningKey: respPayload.fromSigningKey,
-                          fromEncryptionKey: respPayload.fromEncryptionKey,
-                        });
-                      } catch (err) {
-                        console.warn('[useNetwork] Failed to process acceptance:', err);
-                      }
-                      service.dispatchFriendEvent({
-                        type: 'requestAccepted',
-                        did: respPayload.fromDid,
-                      });
-
-                      // Two-phase sync: send friend_accept_ack back to the accepter
-                      // so they know friendship is confirmed on both sides
-                      try {
-                        const myDid = identity?.did ?? '';
-                        if (myDid) {
-                          await service.sendFriendAcceptAck(respPayload.fromDid, myDid, ws);
-                        }
-                      } catch (err) {
-                        console.warn('[useNetwork] Failed to send friend_accept_ack:', err);
-                      }
-                    } else {
-                      service.dispatchFriendEvent({
-                        type: 'requestRejected',
-                        did: respPayload.fromDid,
-                      });
-                    }
-                  } else if (envelope.envelope === 'friend_accept_ack' && envelope.version === 1) {
-                    // Handle friend acceptance acknowledgment (two-phase sync confirmation)
-                    const ackPayload = envelope.payload as FriendAcceptAckPayload;
-                    console.log('[useNetwork] Friend accept ack received from', ackPayload.senderDid);
-
-                    // The original requester has confirmed friendship on their side.
-                    // Dispatch event so UI can update (e.g., show confirmed status).
-                    service.dispatchFriendEvent({
-                      type: 'friendSyncConfirmed',
-                      did: ackPayload.senderDid,
-                    });
-                  } else if (envelope.envelope === 'chat_message' && envelope.version === 1) {
-                    // Handle incoming chat message
-                    const chatPayload = envelope.payload as ChatMessagePayload;
-                    console.log('[useNetwork] Chat message received from', chatPayload.senderDid, chatPayload.threadId ? `(thread reply to ${chatPayload.threadId})` : '');
-
-                    try {
-                      await service.storeIncomingMessage(chatPayload);
-                      // Decrypt the message content for real-time UI display
-                      const decryptedText = await service.decryptIncomingMessage(chatPayload);
-
-                      // Skip dispatch if decryption failed — message is stored
-                      // encrypted in DB and can be retried later
-                      if (!decryptedText) {
-                        console.warn('[useNetwork] Decryption failed, skipping dispatch for', chatPayload.messageId);
-                      } else if (chatPayload.threadId) {
-                        // Thread reply — dispatch threadReplyReceived so the UI
-                        // does NOT add this to the main chat list
-                        service.dispatchMessageEvent({
-                          type: 'threadReplyReceived',
-                          message: {
-                            id: chatPayload.messageId,
-                            conversationId: chatPayload.conversationId,
-                            senderDid: chatPayload.senderDid,
-                            content: { type: 'text', text: decryptedText },
-                            timestamp: chatPayload.timestamp,
-                            read: false,
-                            delivered: true,
-                            status: 'delivered',
-                            threadId: chatPayload.threadId,
-                          },
-                          parentId: chatPayload.threadId,
-                        });
-                      } else {
-                        // Regular message — dispatch normally
-                        service.dispatchMessageEvent({
-                          type: 'messageReceived',
-                          message: {
-                            id: chatPayload.messageId,
-                            conversationId: chatPayload.conversationId,
-                            senderDid: chatPayload.senderDid,
-                            content: { type: 'text', text: decryptedText },
-                            timestamp: chatPayload.timestamp,
-                            read: false,
-                            delivered: true,
-                            status: 'delivered',
-                          },
-                        });
-                      }
-                      // Send delivery receipt back to sender
-                      service.sendDeliveryReceipt(
-                        chatPayload.messageId,
-                        chatPayload.conversationId,
-                        chatPayload.senderDid,
-                        'delivered',
-                        ws
-                      ).catch((err) => console.warn('[useNetwork] Failed to send delivery receipt:', err));
-                    } catch (err) {
-                      console.warn('[useNetwork] Failed to store incoming chat message:', err);
-                    }
-                  } else if (envelope.envelope === 'group_invite' && envelope.version === 1) {
-                    // Handle incoming group invitation
-                    const invitePayload = envelope.payload as GroupInvitePayload;
-                    console.log('[useNetwork] Group invite received from', invitePayload.inviterDid, 'for group', invitePayload.groupName);
-
-                    try {
-                      await service.storeGroupInvite(invitePayload);
-                      service.dispatchGroupEvent({
-                        type: 'inviteReceived',
-                        invite: {
-                          id: invitePayload.inviteId,
-                          groupId: invitePayload.groupId,
-                          groupName: invitePayload.groupName,
-                          description: invitePayload.description,
-                          inviterDid: invitePayload.inviterDid,
-                          inviterName: invitePayload.inviterName,
-                          encryptedGroupKey: invitePayload.encryptedGroupKey,
-                          nonce: invitePayload.nonce,
-                          membersJson: invitePayload.membersJson,
-                          status: 'pending',
-                          createdAt: invitePayload.timestamp,
-                        },
-                      });
-                    } catch (err) {
-                      console.warn('[useNetwork] Failed to store group invite:', err);
-                    }
-                  } else if (envelope.envelope === 'group_invite_accept' && envelope.version === 1) {
-                    // Handle group invite acceptance
-                    const acceptPayload = envelope.payload as GroupInviteResponsePayload;
-                    console.log('[useNetwork] Group invite accepted by', acceptPayload.fromDid);
-
-                    try {
-                      // Add the accepting member to the group
-                      await service.addGroupMember(acceptPayload.groupId, acceptPayload.fromDid, acceptPayload.fromDisplayName);
-                      service.dispatchGroupEvent({
-                        type: 'inviteAccepted',
-                        groupId: acceptPayload.groupId,
-                        fromDid: acceptPayload.fromDid,
-                      });
-                    } catch (err) {
-                      console.warn('[useNetwork] Failed to process group invite acceptance:', err);
-                    }
-                  } else if (envelope.envelope === 'group_invite_decline' && envelope.version === 1) {
-                    // Handle group invite decline
-                    const declinePayload = envelope.payload as GroupInviteResponsePayload;
-                    console.log('[useNetwork] Group invite declined by', declinePayload.fromDid);
-
-                    service.dispatchGroupEvent({
-                      type: 'inviteDeclined',
-                      groupId: declinePayload.groupId,
-                      fromDid: declinePayload.fromDid,
-                    });
-                  } else if (envelope.envelope === 'group_message' && envelope.version === 1) {
-                    // Handle incoming group message
-                    const groupMsgPayload = envelope.payload as GroupMessagePayload;
-                    console.log('[useNetwork] Group message from', groupMsgPayload.senderDid, 'in group', groupMsgPayload.groupId);
-
-                    try {
-                      // Decrypt the group message
-                      const plaintext = await service.decryptGroupMessage(
-                        groupMsgPayload.groupId,
-                        groupMsgPayload.ciphertext,
-                        groupMsgPayload.nonce,
-                        groupMsgPayload.keyVersion
-                      );
-
-                      // Store the message locally
-                      const storePayload: ChatMessagePayload = {
-                        messageId: groupMsgPayload.messageId,
-                        conversationId: groupMsgPayload.conversationId,
-                        senderDid: groupMsgPayload.senderDid,
-                        contentEncrypted: groupMsgPayload.ciphertext,
-                        nonce: groupMsgPayload.nonce,
-                        timestamp: groupMsgPayload.timestamp,
-                      };
-                      await service.storeIncomingMessage(storePayload);
-
-                      // Dispatch for real-time UI
-                      service.dispatchMessageEvent({
-                        type: 'messageReceived',
-                        message: {
-                          id: groupMsgPayload.messageId,
-                          conversationId: groupMsgPayload.conversationId,
-                          senderDid: groupMsgPayload.senderDid,
-                          content: { type: 'text', text: plaintext },
-                          timestamp: groupMsgPayload.timestamp,
-                          read: false,
-                          delivered: true,
-                          status: 'delivered',
-                        },
-                      });
-                    } catch (err) {
-                      console.warn('[useNetwork] Failed to process group message:', err);
-                    }
-                  } else if (envelope.envelope === 'group_key_rotation' && envelope.version === 1) {
-                    // Handle group key rotation (after a member was removed)
-                    const keyPayload = envelope.payload as GroupKeyRotationPayload;
-                    console.log('[useNetwork] Group key rotated for', keyPayload.groupId, 'version', keyPayload.keyVersion);
-
-                    try {
-                      await service.importGroupKey(
-                        keyPayload.encryptedKey,
-                        keyPayload.nonce,
-                        keyPayload.senderDid,
-                        keyPayload.groupId,
-                        keyPayload.keyVersion
-                      );
-                      service.dispatchGroupEvent({
-                        type: 'keyRotated',
-                        groupId: keyPayload.groupId,
-                        keyVersion: keyPayload.keyVersion,
-                      });
-                    } catch (err) {
-                      console.warn('[useNetwork] Failed to import rotated group key:', err);
-                    }
-                  } else if (envelope.envelope === 'group_member_removed' && envelope.version === 1) {
-                    // Handle group member removal notification
-                    const removePayload = envelope.payload as GroupMemberRemovedPayload;
-                    console.log('[useNetwork] Member', removePayload.removedDid, 'removed from group', removePayload.groupId);
-
-                    service.dispatchGroupEvent({
-                      type: 'memberRemoved',
-                      groupId: removePayload.groupId,
-                      removedDid: removePayload.removedDid,
-                    });
-                  } else if (envelope.envelope === 'message_status' && envelope.version === 1) {
-                    // Handle message delivery/read status update
-                    const statusPayload = envelope.payload as MessageStatusPayload;
-                    console.log('[useNetwork] Message status:', statusPayload.messageId, statusPayload.status);
-
-                    try {
-                      await service.updateMessageStatus(statusPayload.messageId, statusPayload.status);
-                      service.dispatchMessageEvent({
-                        type: 'messageStatusChanged',
-                        messageId: statusPayload.messageId,
-                        status: statusPayload.status,
-                      });
-                    } catch (err) {
-                      console.warn('[useNetwork] Failed to update message status:', err);
-                    }
-                  } else if (envelope.envelope === 'typing_indicator' && envelope.version === 1) {
-                    // Handle typing indicator
-                    const typingPayload = envelope.payload as TypingIndicatorPayload;
-                    service.dispatchMessageEvent({
-                      type: typingPayload.isTyping ? 'typingStarted' : 'typingStopped',
-                      conversationId: typingPayload.conversationId,
-                      did: typingPayload.senderDid,
-                      senderName: typingPayload.senderName,
-                    });
-                  } else if (envelope.envelope === 'call_offer' && envelope.version === 1) {
-                    service.dispatchCallEvent({ type: 'callOffer', payload: envelope.payload as any });
-                  } else if (envelope.envelope === 'call_answer' && envelope.version === 1) {
-                    service.dispatchCallEvent({ type: 'callAnswer', payload: envelope.payload as any });
-                  } else if (envelope.envelope === 'call_ice_candidate' && envelope.version === 1) {
-                    service.dispatchCallEvent({ type: 'callIceCandidate', payload: envelope.payload as any });
-                  } else if (envelope.envelope === 'call_end' && envelope.version === 1) {
-                    service.dispatchCallEvent({ type: 'callEnd', payload: envelope.payload as any });
-                  } else if (envelope.envelope === 'call_state' && envelope.version === 1) {
-                    service.dispatchCallEvent({ type: 'callState', payload: envelope.payload as any });
-                  } else if (envelope.envelope === 'community_event' && envelope.version === 1) {
-                    // Handle incoming community sync event
-                    const communityPayload = envelope.payload as CommunityEventPayload;
-                    console.log('[useNetwork] Community event received:', communityPayload.event.type, 'from', communityPayload.senderDid);
-                    service.dispatchCommunityEvent(communityPayload.event);
-                  } else if (envelope.envelope === 'dm_file_event' && envelope.version === 1) {
-                    // Handle incoming DM file event
-                    const dmFilePayload = envelope.payload as DmFileEventPayload;
-                    console.log('[useNetwork] DM file event received:', dmFilePayload.event.type, 'from', dmFilePayload.senderDid);
-                    service.dispatchDmFileEvent(dmFilePayload);
-                  } else if (envelope.envelope === 'account_metadata' && envelope.version === 1) {
-                    // Handle incoming account metadata sync (from another session)
-                    const metaPayload = envelope.payload as AccountMetadataPayload;
-                    console.log('[useNetwork] Metadata received:', metaPayload.key, 'from', metaPayload.senderDid);
-                    service.dispatchMetadataEvent({
-                      type: 'metadataReceived',
-                      key: metaPayload.key,
-                      value: metaPayload.value,
-                      timestamp: metaPayload.timestamp,
-                    });
-                  } else if (envelope.envelope === 'presence_online') {
-                    // Presence ping — sender is online.
-                    // Already handled above via _markDidOnline(from_did).
-                    // Send a presence_ack back so the sender also knows we're online.
-                    if (from_did) {
-                      const ackEnvelope = JSON.stringify({
-                        envelope: 'presence_ack',
-                        version: 1,
-                        payload: { timestamp: Date.now() },
-                      });
-                      service.relaySend(from_did, ackEnvelope).then(({ relayMessage }) => {
-                        if (ws.readyState === WebSocket.OPEN) {
-                          ws.send(relayMessage);
-                        }
-                      }).catch(() => {
-                        // Best-effort ack
-                      });
-                    }
-                  } else if (envelope.envelope === 'presence_ack') {
-                    // Presence ack — sender confirmed they're online.
-                    // Already handled via _markDidOnline(from_did) above.
-                  }
-                } catch (parseErr) {
-                  console.log('[useNetwork] Message payload is not a relay envelope:', parseErr);
-                }
-                break;
-              }
-
-              case 'offline_messages': {
-                // Handle offline messages batch
-                const messages = msg.messages || [];
-                console.log('[useNetwork] Received', messages.length, 'offline messages');
-
-                for (const offlineMsg of messages) {
-                  try {
-                    const envelope = JSON.parse(offlineMsg.payload) as RelayEnvelope;
-
-                    if (envelope.envelope === 'friend_request' && envelope.version === 1) {
-                      const reqPayload = envelope.payload as FriendRequestPayload;
-                      const friendRequest: FriendRequest = {
-                        id: reqPayload.id,
-                        fromDid: reqPayload.fromDid,
-                        toDid: '',
-                        direction: 'incoming',
-                        message: reqPayload.message,
-                        fromDisplayName: reqPayload.fromDisplayName,
-                        fromAvatar: reqPayload.fromAvatar,
-                        fromSigningKey: reqPayload.fromSigningKey,
-                        fromEncryptionKey: reqPayload.fromEncryptionKey,
-                        createdAt: reqPayload.createdAt,
-                        status: 'pending',
-                      };
-
-                      // Store in database THEN dispatch event
-                      try {
-                        await service.storeIncomingRequest(friendRequest);
-                      } catch (storeErr) {
-                        console.warn('[useNetwork] Failed to store offline incoming request:', storeErr);
-                      }
-                      service.dispatchFriendEvent({
-                        type: 'requestReceived',
-                        request: friendRequest,
-                      });
-                    } else if (envelope.envelope === 'friend_response' && envelope.version === 1) {
-                      const respPayload = envelope.payload as FriendResponsePayload;
-                      if (respPayload.accepted) {
-                        // Add the accepter as a friend on OUR side
-                        try {
-                          await service.processAcceptedFriendResponse({
-                            fromDid: respPayload.fromDid,
-                            fromDisplayName: respPayload.fromDisplayName,
-                            fromAvatar: respPayload.fromAvatar,
-                            fromSigningKey: respPayload.fromSigningKey,
-                            fromEncryptionKey: respPayload.fromEncryptionKey,
-                          });
-                        } catch (err) {
-                          console.warn('[useNetwork] Failed to process offline acceptance:', err);
-                        }
-                        service.dispatchFriendEvent({
-                          type: 'requestAccepted',
-                          did: respPayload.fromDid,
-                        });
-
-                        // Two-phase sync: send friend_accept_ack back to the accepter
-                        try {
-                          const myDid = identity?.did ?? '';
-                          if (myDid) {
-                            await service.sendFriendAcceptAck(respPayload.fromDid, myDid, ws);
-                          }
-                        } catch (err) {
-                          console.warn('[useNetwork] Failed to send offline friend_accept_ack:', err);
-                        }
-                      } else {
-                        service.dispatchFriendEvent({
-                          type: 'requestRejected',
-                          did: respPayload.fromDid,
-                        });
-                      }
-                    } else if (envelope.envelope === 'friend_accept_ack' && envelope.version === 1) {
-                      // Handle offline friend acceptance acknowledgment
-                      const ackPayload = envelope.payload as FriendAcceptAckPayload;
-                      console.log('[useNetwork] Offline friend accept ack from', ackPayload.senderDid);
-                      service.dispatchFriendEvent({
-                        type: 'friendSyncConfirmed',
-                        did: ackPayload.senderDid,
-                      });
-                    } else if (envelope.envelope === 'chat_message' && envelope.version === 1) {
-                      // Handle offline chat message
-                      const chatPayload = envelope.payload as ChatMessagePayload;
-                      try {
-                        await service.storeIncomingMessage(chatPayload);
-                        const decryptedText = await service.decryptIncomingMessage(chatPayload);
-
-                        // Skip dispatch if decryption failed — message is stored
-                        // encrypted in DB and can be retried later
-                        if (!decryptedText) {
-                          console.warn('[useNetwork] Offline decryption failed, skipping dispatch for', chatPayload.messageId);
-                        } else if (chatPayload.threadId) {
-                          // Thread reply — dispatch threadReplyReceived
-                          service.dispatchMessageEvent({
-                            type: 'threadReplyReceived',
-                            message: {
-                              id: chatPayload.messageId,
-                              conversationId: chatPayload.conversationId,
-                              senderDid: chatPayload.senderDid,
-                              content: { type: 'text', text: decryptedText },
-                              timestamp: chatPayload.timestamp,
-                              read: false,
-                              delivered: true,
-                              status: 'delivered',
-                              threadId: chatPayload.threadId,
-                            },
-                            parentId: chatPayload.threadId,
-                          });
-                        } else {
-                          service.dispatchMessageEvent({
-                            type: 'messageReceived',
-                            message: {
-                              id: chatPayload.messageId,
-                              conversationId: chatPayload.conversationId,
-                              senderDid: chatPayload.senderDid,
-                              content: { type: 'text', text: decryptedText },
-                              timestamp: chatPayload.timestamp,
-                              read: false,
-                              delivered: true,
-                              status: 'delivered',
-                            },
-                          });
-                        }
-                      } catch (err) {
-                        console.warn('[useNetwork] Failed to store offline chat message:', err);
-                      }
-                    } else if (envelope.envelope === 'group_invite' && envelope.version === 1) {
-                      const invitePayload = envelope.payload as GroupInvitePayload;
-                      try {
-                        await service.storeGroupInvite(invitePayload);
-                        service.dispatchGroupEvent({
-                          type: 'inviteReceived',
-                          invite: {
-                            id: invitePayload.inviteId,
-                            groupId: invitePayload.groupId,
-                            groupName: invitePayload.groupName,
-                            description: invitePayload.description,
-                            inviterDid: invitePayload.inviterDid,
-                            inviterName: invitePayload.inviterName,
-                            encryptedGroupKey: invitePayload.encryptedGroupKey,
-                            nonce: invitePayload.nonce,
-                            membersJson: invitePayload.membersJson,
-                            status: 'pending',
-                            createdAt: invitePayload.timestamp,
-                          },
-                        });
-                      } catch (err) {
-                        console.warn('[useNetwork] Failed to store offline group invite:', err);
-                      }
-                    } else if (envelope.envelope === 'group_invite_accept' && envelope.version === 1) {
-                      const acceptPayload = envelope.payload as GroupInviteResponsePayload;
-                      try {
-                        await service.addGroupMember(acceptPayload.groupId, acceptPayload.fromDid, acceptPayload.fromDisplayName);
-                        service.dispatchGroupEvent({ type: 'inviteAccepted', groupId: acceptPayload.groupId, fromDid: acceptPayload.fromDid });
-                      } catch (err) {
-                        console.warn('[useNetwork] Failed to process offline group invite acceptance:', err);
-                      }
-                    } else if (envelope.envelope === 'group_message' && envelope.version === 1) {
-                      const groupMsgPayload = envelope.payload as GroupMessagePayload;
-                      try {
-                        const plaintext = await service.decryptGroupMessage(groupMsgPayload.groupId, groupMsgPayload.ciphertext, groupMsgPayload.nonce, groupMsgPayload.keyVersion);
-                        const storePayload: ChatMessagePayload = {
-                          messageId: groupMsgPayload.messageId, conversationId: groupMsgPayload.conversationId,
-                          senderDid: groupMsgPayload.senderDid, contentEncrypted: groupMsgPayload.ciphertext,
-                          nonce: groupMsgPayload.nonce, timestamp: groupMsgPayload.timestamp,
-                        };
-                        await service.storeIncomingMessage(storePayload);
-                        service.dispatchMessageEvent({
-                          type: 'messageReceived',
-                          message: {
-                            id: groupMsgPayload.messageId, conversationId: groupMsgPayload.conversationId,
-                            senderDid: groupMsgPayload.senderDid, content: { type: 'text', text: plaintext },
-                            timestamp: groupMsgPayload.timestamp, read: false, delivered: true, status: 'delivered',
-                          },
-                        });
-                      } catch (err) {
-                        console.warn('[useNetwork] Failed to process offline group message:', err);
-                      }
-                    } else if (envelope.envelope === 'group_key_rotation' && envelope.version === 1) {
-                      const keyPayload = envelope.payload as GroupKeyRotationPayload;
-                      try {
-                        await service.importGroupKey(keyPayload.encryptedKey, keyPayload.nonce, keyPayload.senderDid, keyPayload.groupId, keyPayload.keyVersion);
-                        service.dispatchGroupEvent({ type: 'keyRotated', groupId: keyPayload.groupId, keyVersion: keyPayload.keyVersion });
-                      } catch (err) {
-                        console.warn('[useNetwork] Failed to import offline rotated group key:', err);
-                      }
-                    } else if (envelope.envelope === 'group_member_removed' && envelope.version === 1) {
-                      const removePayload = envelope.payload as GroupMemberRemovedPayload;
-                      service.dispatchGroupEvent({ type: 'memberRemoved', groupId: removePayload.groupId, removedDid: removePayload.removedDid });
-                    } else if (envelope.envelope === 'message_status' && envelope.version === 1) {
-                      const statusPayload = envelope.payload as MessageStatusPayload;
-                      try {
-                        await service.updateMessageStatus(statusPayload.messageId, statusPayload.status);
-                        service.dispatchMessageEvent({ type: 'messageStatusChanged', messageId: statusPayload.messageId, status: statusPayload.status });
-                      } catch (err) {
-                        console.warn('[useNetwork] Failed to update offline message status:', err);
-                      }
-                    } else if (envelope.envelope === 'community_event' && envelope.version === 1) {
-                      // Handle offline community sync event
-                      const communityPayload = envelope.payload as CommunityEventPayload;
-                      console.log('[useNetwork] Offline community event:', communityPayload.event.type);
-                      service.dispatchCommunityEvent(communityPayload.event);
-                    } else if (envelope.envelope === 'dm_file_event' && envelope.version === 1) {
-                      // Handle offline DM file event
-                      const dmFilePayload = envelope.payload as DmFileEventPayload;
-                      console.log('[useNetwork] Offline DM file event:', dmFilePayload.event.type);
-                      service.dispatchDmFileEvent(dmFilePayload);
-                    } else if (envelope.envelope === 'account_metadata' && envelope.version === 1) {
-                      // Handle offline account metadata sync
-                      const metaPayload = envelope.payload as AccountMetadataPayload;
-                      console.log('[useNetwork] Offline metadata:', metaPayload.key);
-                      service.dispatchMetadataEvent({
-                        type: 'metadataReceived',
-                        key: metaPayload.key,
-                        value: metaPayload.value,
-                        timestamp: metaPayload.timestamp,
-                      });
-                    } else if (envelope.envelope === 'presence_online' || envelope.envelope === 'presence_ack') {
-                      // Stale presence from when we were offline — ignore silently
-                    }
-                  } catch (parseErr) {
-                    console.log('[useNetwork] Offline message parse error:', parseErr);
-                  }
-                }
-                break;
-              }
-
-              case 'ack': {
-                // Relay confirmed it received our message.
-                // Transition the oldest pending message from 'sending' → 'sent'.
-                const pendingMsgId = _pendingRelayAcks.shift();
-                if (pendingMsgId && service) {
-                  try {
-                    await service.updateMessageStatus(pendingMsgId, 'sent');
-                    service.dispatchMessageEvent({
-                      type: 'messageStatusChanged',
-                      messageId: pendingMsgId,
-                      status: 'sent',
-                    });
-                    console.log('[useNetwork] Message ack: sending→sent for', pendingMsgId);
-                  } catch (err) {
-                    console.warn('[useNetwork] Failed to update message status on ack:', err);
-                  }
-                }
-                break;
-              }
-
-              // ── Group Call Room Messages ──────────────────────────────────
-              case 'call_room_created': {
-                service.dispatchCallEvent({
-                  type: 'callRoomCreated',
-                  payload: { roomId: msg.room_id, groupId: msg.group_id },
-                });
-                break;
-              }
-
-              case 'call_participant_joined': {
-                service.dispatchCallEvent({
-                  type: 'callParticipantJoined',
-                  payload: { roomId: msg.room_id, did: msg.did },
-                });
-                break;
-              }
-
-              case 'call_participant_left': {
-                service.dispatchCallEvent({
-                  type: 'callParticipantLeft',
-                  payload: { roomId: msg.room_id, did: msg.did },
-                });
-                break;
-              }
-
-              case 'call_signal_forward': {
-                service.dispatchCallEvent({
-                  type: 'callSignalForward',
-                  payload: { roomId: msg.room_id, fromDid: msg.from_did, payload: msg.payload },
-                });
-                break;
-              }
-
-              case 'pong':
-                // Keepalive response — nothing to do
-                break;
-
-              case 'session_created':
-              case 'session_joined':
-              case 'signal':
-                // These are handled elsewhere for WebRTC signaling
-                break;
-
-              case 'error':
-                console.error('[useNetwork] Relay error:', msg.message);
-                break;
-
-              default:
-                console.log('[useNetwork] Unknown relay message type:', msg.type);
-            }
-          } catch (err) {
-            console.error('[useNetwork] Failed to parse relay message:', err);
-          }
-        };
+        ws.onmessage = (event) => _handleRelayMessage(ws, event);
 
         ws.onerror = (event) => {
           console.error('[useNetwork] Relay WebSocket error:', event);
@@ -1237,6 +938,9 @@ export function useNetwork(): UseNetworkResult {
             _notifyRelayState(false, null);
             // Clear presence — can't know who's online without relay
             _clearOnlineDids();
+            // Stop keep-alive and schedule auto-reconnect (unless intentional)
+            _clearKeepAlive();
+            _scheduleReconnect();
           }
         };
       } catch (err) {
@@ -1309,9 +1013,49 @@ export function useNetwork(): UseNetworkResult {
     autoStart();
   }, [isReady, service, identity, initStage, connectRelay]);
 
+  // ── AppState listener — reconnect when app returns to foreground ──────
+  useEffect(() => {
+    if (!service || !identity?.did) return;
+    // Keep module-level refs fresh for reconnect manager
+    _lastService = service;
+    _lastRelayDid = identity.did;
+
+    const handleAppStateChange = (nextState: AppStateStatus) => {
+      if (nextState === 'active') {
+        // Foreground: check relay and reconnect if needed
+        if (!_relayWs || _relayWs.readyState !== WebSocket.OPEN) {
+          console.log('[AppState] Foregrounded — relay disconnected, scheduling reconnect');
+          _resetReconnectState();
+          _scheduleReconnect();
+        } else {
+          // Relay still open — restart keep-alive in case it lapsed
+          _startKeepAlive();
+        }
+        // Check P2P network too
+        service.getNetworkStatus().then((status: NetworkStatus) => {
+          if (!status.isRunning) {
+            console.log('[AppState] P2P network not running, restarting...');
+            service.startNetwork().catch(() => {});
+          }
+        }).catch(() => {});
+      } else if (nextState === 'background') {
+        // Background: stop keep-alive to save battery
+        _clearKeepAlive();
+      }
+    };
+
+    const sub = AppState.addEventListener('change', handleAppStateChange);
+    return () => sub.remove();
+  }, [service, identity?.did]);
+
   const disconnectRelay = useCallback(async () => {
     if (!service) return;
     try {
+      // Mark as intentional so onclose won't trigger reconnect
+      _intentionalDisconnect = true;
+      _clearReconnectTimer();
+      _clearKeepAlive();
+
       await service.disconnectRelay();
 
       if (_relayWs) {
@@ -1321,6 +1065,7 @@ export function useNetwork(): UseNetworkResult {
       relayWsRef.current = null;
 
       _notifyRelayState(false, null);
+      _clearOnlineDids();
     } catch (err) {
       setError(err instanceof Error ? err : new Error(String(err)));
     }

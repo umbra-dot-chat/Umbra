@@ -1,7 +1,7 @@
 {
   "name": "umbra",
   "main": "expo-router/entry",
-  "version": "1.2.0",
+  "version": "1.4.0",
   "scripts": {
     "eas-build-pre-install": "bash eas-hooks/eas-build-pre-install.sh",
     "postinstall": "node scripts/postinstall.js",

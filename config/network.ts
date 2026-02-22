@@ -161,6 +161,12 @@ export const NETWORK_CONFIG = {
   /** Reconnect delay on disconnect (ms) */
   reconnectDelay: 5000,
 
-  /** Max reconnect attempts before giving up */
+  /** Max reconnect attempts before giving up (per server) */
   maxReconnectAttempts: 5,
+
+  /** Keep-alive ping interval (ms) — should be less than server idle timeout */
+  keepAliveInterval: 25_000,
+
+  /** Maximum backoff delay cap (ms) */
+  maxBackoffDelay: 30_000,
 } as const;

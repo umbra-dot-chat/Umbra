@@ -101,7 +101,7 @@ function ChatSidebarInner({
                       alignItems: 'center',
                       justifyContent: 'center',
                     }}>
-                      <Text style={{ fontSize: 9, fontWeight: '700', color: '#FFFFFF', textAlign: 'center' }}>
+                      <Text style={{ fontSize: 9, lineHeight: 12, fontWeight: '700', color: '#FFFFFF', textAlign: 'center' }}>
                         {pendingFriendRequests > 99 ? '99+' : pendingFriendRequests}
                       </Text>
                     </View>
