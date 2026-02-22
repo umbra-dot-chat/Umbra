@@ -1,5 +1,5 @@
 /**
- * FriendsContent — Friend management, key exchange, and sync protocol.
+ * FriendsContent — Friend management, key exchange, discovery, and sync protocol.
  */
 
 import React from 'react';
@@ -9,6 +9,7 @@ import { FeatureCard } from '@/components/guide/FeatureCard';
 import { TechSpec } from '@/components/guide/TechSpec';
 import {
   UserPlusIcon, UserCheckIcon, KeyIcon, BlockIcon, HandshakeIcon,
+  QrCodeIcon, GlobeIcon, SearchIcon, ExternalLinkIcon, ClipboardIcon,
 } from '@/components/icons';
 
 export default function FriendsContent() {
@@ -17,18 +18,17 @@ export default function FriendsContent() {
       <FeatureCard
         icon={<UserPlusIcon size={16} color="#8B5CF6" />}
         title="Add Friends"
-        description="Send a friend request using their DID (decentralized identifier). The request payload includes your DID, display name, Ed25519 signing public key, X25519 encryption public key, an optional message, a timestamp, and an Ed25519 signature over the entire envelope. The relay routes the encrypted request to the recipient by DID. Both parties must be connected to the relay (or have offline delivery enabled) for the request to arrive."
+        description="Send a friend request using their DID (decentralized identifier), Umbra username, or by scanning their QR code. The request payload includes your DID, display name, Ed25519 signing public key, X25519 encryption public key, an optional message, a timestamp, and an Ed25519 signature over the entire envelope. The relay routes the encrypted request to the recipient by DID. You can also search for friends across linked platforms like Discord, GitHub, Steam, and Bluesky."
         status="working"
         howTo={[
           'Go to the Friends tab',
-          "Paste your friend's DID in the Add Friend input",
+          "Add by DID, username, QR code, or cross-platform search",
           'Optionally add a personal message',
           'Click Send Request',
         ]}
         limitations={[
           'Recipient must be online or have offline delivery enabled',
-          'DID must be exact — there is no username search or discovery',
-          'No QR code scanning yet — manual DID entry only',
+          'Cross-platform search requires the other user to have linked their account and opted into discovery',
         ]}
         sourceLinks={[
           { label: 'friends/mod.rs', path: 'packages/umbra-core/src/friends/mod.rs' },
@@ -39,6 +39,89 @@ export default function FriendsContent() {
           { label: 'useFriends.test.ts', path: '__tests__/hooks/useFriends.test.ts' },
           { label: 'friends-flow.test.ts', path: '__tests__/integration/friends-flow.test.ts' },
         ]}
+      />
+
+      <FeatureCard
+        icon={<QrCodeIcon size={16} color="#14B8A6" />}
+        title="QR Code Sharing & Scanning"
+        description="Share your identity or scan a friend's QR code for instant friend requests. The QR card dialog has two modes: Share (displays your DID as a scannable QR code) and Scan (opens the camera to read a QR code). On mobile, scanning uses the device camera via expo-camera. On web, you can paste the QR data as text. The QR parser automatically identifies whether the scanned data is a DID or a community invite code and takes the appropriate action."
+        status="working"
+        howTo={[
+          'Tap the QR icon on the Friends tab or your Profile card',
+          'Share mode: show your QR code for others to scan',
+          'Scan mode: point your camera at a QR code',
+          'Scanned DIDs auto-populate the Add Friend input',
+        ]}
+        sourceLinks={[
+          { label: 'QRCardDialog.tsx', path: 'components/qr/QRCardDialog.tsx' },
+          { label: 'QRCodeScanner.tsx', path: 'components/community/QRCodeScanner.tsx' },
+          { label: 'friends.tsx', path: 'app/(main)/friends.tsx' },
+        ]}
+        testLinks={[]}
+      />
+
+      <FeatureCard
+        icon={<GlobeIcon size={16} color="#6366F1" />}
+        title="Friend Discovery & Linked Accounts"
+        description="Link your Umbra identity to external platform accounts to make yourself discoverable. Supported platforms include Discord, GitHub, Steam, and Bluesky. Once linked, other Umbra users who have also linked their accounts can find you through cross-platform search. Discovery is fully opt-in — you control whether your linked accounts are visible. You can link or unlink accounts at any time from Settings."
+        status="working"
+        howTo={[
+          'Go to Settings > Linked Accounts',
+          'Link your Discord, GitHub, Steam, or Bluesky account',
+          'Enable Discoverability to let others find you',
+          'Search for friends by their platform username in the Friends tab',
+        ]}
+        limitations={[
+          'Discovery requires both users to opt in',
+          'Xbox linking is planned but not yet available',
+        ]}
+        sourceLinks={[
+          { label: 'LinkedAccountsPanel.tsx', path: 'components/discovery/LinkedAccountsPanel.tsx' },
+          { label: 'FriendDiscoveryPanel.tsx', path: 'components/discovery/FriendDiscoveryPanel.tsx' },
+          { label: 'DiscoveryToggle.tsx', path: 'components/discovery/DiscoveryToggle.tsx' },
+          { label: 'UsernameSettings.tsx', path: 'components/discovery/UsernameSettings.tsx' },
+        ]}
+        testLinks={[]}
+      />
+
+      <FeatureCard
+        icon={<SearchIcon size={16} color="#F59E0B" />}
+        title="Cross-Platform Search"
+        description="The Friends tab includes a multi-platform search with a segmented control to switch between search sources. Search by Umbra username for direct matches, or search across Discord, GitHub, Steam, and Bluesky to find users who have linked their accounts. Friend suggestion cards appear for discovered users, showing their linked platform info and a quick Add Friend action."
+        status="working"
+        howTo={[
+          'Open the Friends tab and tap the search bar',
+          'Select a platform from the segmented control (Umbra, Discord, GitHub, etc.)',
+          'Type a username to search across that platform',
+          'Tap a suggestion card to send a friend request',
+        ]}
+        sourceLinks={[
+          { label: 'friends.tsx', path: 'app/(main)/friends.tsx' },
+          { label: 'FriendSuggestionCard.tsx', path: 'components/discovery/FriendSuggestionCard.tsx' },
+          { label: 'LinkAccountButton.tsx', path: 'components/discovery/LinkAccountButton.tsx' },
+        ]}
+        testLinks={[]}
+      />
+
+      <FeatureCard
+        icon={<ClipboardIcon size={16} color="#D946EF" />}
+        title="Connection Links"
+        description="Share a connection link as an alternative to QR codes or raw DIDs. The ConnectionLinkPanel provides a desktop-friendly interface with two sections: 'Share Your Info' displays your DID and a copyable connection link, while 'Add Friend by Link' lets you paste a link or DID, parse it to preview the sender's display name and DID, then send a friend request. Connection links encode your DID and display name into a shareable URL format that works across platforms."
+        status="working"
+        howTo={[
+          'Open the Friends tab on desktop',
+          'Copy your Connection Link from the Share Your Info section',
+          'Share the link via any external channel (email, chat, etc.)',
+          'To add a friend: paste their link, click Parse, then Send Request',
+        ]}
+        limitations={[
+          'Desktop-optimized UI (mobile uses QR scanning instead)',
+        ]}
+        sourceLinks={[
+          { label: 'ConnectionLinkPanel.tsx', path: 'components/friends/ConnectionLinkPanel.tsx' },
+          { label: 'useConnectionLink.ts', path: 'hooks/useConnectionLink.ts' },
+        ]}
+        testLinks={[]}
       />
 
       <FeatureCard
@@ -137,6 +220,22 @@ export default function FriendsContent() {
           { label: 'Offline Support', value: 'Yes (queued at relay)' },
           { label: 'Block Storage', value: 'Local only (never synced)' },
           { label: 'Signature', value: 'Ed25519 over full request envelope' },
+        ]}
+      />
+
+      <TechSpec
+        title="Discovery & QR System"
+        accentColor="#14B8A6"
+        entries={[
+          { label: 'QR Format', value: 'DID string or invite URL' },
+          { label: 'Camera (Mobile)', value: 'expo-camera with barcode scanner' },
+          { label: 'Camera (Web)', value: 'Text paste fallback' },
+          { label: 'Linked Platforms', value: 'Discord, GitHub, Steam, Bluesky' },
+          { label: 'Discovery', value: 'Opt-in (both users must enable)' },
+          { label: 'Username Search', value: 'Umbra username + cross-platform' },
+          { label: 'Friend Suggestions', value: 'Cards with platform info + quick add' },
+          { label: 'Account Linking', value: 'Link/unlink anytime from Settings' },
+          { label: 'Connection Links', value: 'Shareable URL with DID + display name' },
         ]}
       />
 

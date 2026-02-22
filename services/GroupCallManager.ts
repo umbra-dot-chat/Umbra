@@ -14,6 +14,7 @@ import type {
 } from '@/types/call';
 import { DEFAULT_ICE_SERVERS, VIDEO_QUALITY_PRESETS } from '@/types/call';
 import { resolveTurnCredentials } from '@/config/network';
+import { Platform } from 'react-native';
 
 interface PeerConnection {
   pc: RTCPeerConnection;
@@ -83,9 +84,11 @@ export class GroupCallManager {
   }
 
   /**
-   * Ensure AudioContext exists (lazy init).
+   * Ensure AudioContext exists (lazy init). Returns null on non-web platforms
+   * where AudioContext / AnalyserNode are unavailable.
    */
-  private ensureAudioContext(): AudioContext {
+  private ensureAudioContext(): AudioContext | null {
+    if (Platform.OS !== 'web') return null;
     if (!this.audioContext) {
       this.audioContext = new AudioContext();
     }
@@ -98,6 +101,7 @@ export class GroupCallManager {
   private createAnalysisForStream(stream: MediaStream): AudioAnalysis | null {
     try {
       const ctx = this.ensureAudioContext();
+      if (!ctx) return null; // Not available on mobile
       const source = ctx.createMediaStreamSource(stream);
       const analyser = ctx.createAnalyser();
       analyser.fftSize = 256;
@@ -261,7 +265,17 @@ export class GroupCallManager {
       video: videoConstraints,
     };
 
-    this.localStream = await navigator.mediaDevices.getUserMedia(constraints);
+    if (Platform.OS === 'web') {
+      this.localStream = await navigator.mediaDevices.getUserMedia(constraints);
+    } else {
+      // Mobile: use react-native-webrtc
+      try {
+        const { mediaDevices } = await import('react-native-webrtc');
+        this.localStream = await (mediaDevices as any).getUserMedia(constraints);
+      } catch {
+        throw new Error('react-native-webrtc is not available');
+      }
+    }
     this.setupLocalAudioAnalysis();
     return this.localStream;
   }

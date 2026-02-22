@@ -13,6 +13,11 @@ import ExpoModulesCore
 // This is safe because the module lives for the entire app lifetime.
 private weak var sharedModule: ExpoUmbraCoreModule?
 
+// Track whether any JS listener has been added for the event.
+// sendEvent() before a listener is attached throws an NSException in the
+// TurboModule bridge (performVoidMethodInvocation) → SIGABRT.
+private var hasEventListeners = false
+
 // C-compatible callback for Rust events.
 // Called from Rust's async runtime thread — must dispatch to main for Expo.
 private let umbraEventCallback: UmbraEventCallback = { eventType, data in
@@ -21,10 +26,18 @@ private let umbraEventCallback: UmbraEventCallback = { eventType, data in
     let dataStr = String(cString: data)
 
     DispatchQueue.main.async {
-        sharedModule?.sendEvent("onUmbraCoreEvent", [
-            "type": typeStr,
-            "data": dataStr,
-        ])
+        guard hasEventListeners, let module = sharedModule else { return }
+        // Wrap in ObjC exception handler to prevent TurboModule bridge crashes.
+        // sendEvent can still throw if the bridge is torn down during a hot-reload.
+        let result = ObjCExceptionHelper.tryCatch {
+            module.sendEvent("onUmbraCoreEvent", [
+                "type": typeStr,
+                "data": dataStr,
+            ])
+        }
+        if let error = result {
+            NSLog("[ExpoUmbraCore] sendEvent failed (non-fatal): %@", error.localizedDescription)
+        }
     }
 }
 
@@ -83,6 +96,14 @@ public class ExpoUmbraCoreModule: Module {
 
         // ── Events ──────────────────────────────────────────────────────────
         Events("onUmbraCoreEvent")
+
+        OnStartObserving {
+            hasEventListeners = true
+        }
+
+        OnStopObserving {
+            hasEventListeners = false
+        }
 
         OnCreate {
             // Store weak reference so the C callback can reach sendEvent

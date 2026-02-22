@@ -100,11 +100,11 @@ export default function CommunitiesContent() {
       <FeatureCard
         icon={<UsersIcon size={16} color="#8B5CF6" />}
         title="Members & Invites"
-        description="Members join via invite codes that support optional expiration and max use limits. On join, the system checks ban status, prevents duplicates, auto-assigns the default Member role, and sends a welcome message to the welcome channel. Members can be kicked or banned (with device fingerprint, optional reason, and optional expiry). Ban evasion is detected by matching device fingerprints on join attempts. Vanity URLs provide custom short invite codes."
+        description="Members join via invite codes that support optional expiration and max use limits. Invite links can be shared as text or as scannable QR codes — the invite panel includes a built-in QR code generator. On join, the system checks ban status, prevents duplicates, auto-assigns the default Member role, and sends a welcome message to the welcome channel. Members can be kicked or banned (with device fingerprint, optional reason, and optional expiry). Ban evasion is detected by matching device fingerprints on join attempts. Vanity URLs provide custom short invite codes."
         status="working"
         howTo={[
           'Create an invite link with optional expiry and max uses',
-          'Share the code — recipients use it to join',
+          'Share via text link or QR code from the invite panel',
           'Set a vanity URL for a memorable invite link',
           'View and manage the ban list in community settings',
         ]}
@@ -115,6 +115,7 @@ export default function CommunitiesContent() {
         sourceLinks={[
           { label: 'members.rs', path: 'packages/umbra-core/src/community/members.rs' },
           { label: 'invites.rs', path: 'packages/umbra-core/src/community/invites.rs' },
+          { label: 'CommunityInvitePanel.tsx', path: 'components/community/CommunityInvitePanel.tsx' },
         ]}
         testLinks={[
           { label: 'permissions.rs (inline)', path: 'packages/umbra-core/src/community/permissions.rs' },
@@ -287,6 +288,29 @@ export default function CommunitiesContent() {
         ]}
       />
 
+      {/* ── Discord Import ───────────────────────────────────── */}
+
+      <FeatureCard
+        icon={<GlobeIcon size={16} color="#5865F2" />}
+        title="Discord Import"
+        description="Import your existing Discord server structure into Umbra. The import dialog lets you connect to Discord and pull in your server's channels, roles, and organizational structure. This helps communities migrate from Discord to Umbra without manually recreating their entire setup. Imported structures can be customized after import."
+        status="working"
+        howTo={[
+          'Open community settings and select Discord Import',
+          'Connect your Discord account',
+          'Select the server structure to import',
+          'Review and customize the imported channels and roles',
+        ]}
+        limitations={[
+          'Message history is not imported (only structure)',
+          'Member accounts must be re-invited on Umbra',
+        ]}
+        sourceLinks={[
+          { label: 'DiscordImportDialog.tsx', path: 'components/community/DiscordImportDialog.tsx' },
+        ]}
+        testLinks={[]}
+      />
+
       {/* ── Boost Nodes ──────────────────────────────────────── */}
 
       <FeatureCard
@@ -340,6 +364,8 @@ export default function CommunitiesContent() {
           { label: 'Schema Version', value: 'v7 (migrated from v6)' },
           { label: 'Channel Types', value: 'text, voice, files, announce, bulletin, welcome' },
           { label: 'Encryption', value: 'E2EE optional per channel (AES-256-GCM)' },
+          { label: 'Invite Sharing', value: 'Text links + QR codes' },
+          { label: 'Import', value: 'Discord server structure import' },
           { label: 'Discovery', value: 'Invite links only (no public directory)' },
         ]}
       />

@@ -395,12 +395,75 @@ export default function TechnicalReferenceContent() {
       />
 
       {/* ═══════════════════════════════════════════════════════════════════════ */}
+      <SectionHeader title="Mobile Architecture (React Native)" color="#10B981" />
+
+      <FeatureCard
+        icon={<ServerIcon size={16} color="#10B981" />}
+        title="Native FFI Backend (iOS/Android)"
+        description="On mobile, Umbra uses a native FFI backend instead of WASM. The Rust core compiles to a static library (libumbra_core.a for iOS, libumbra_core.so for Android) packaged as an XCFramework. The Expo native module (ExpoUmbraCoreModule.swift) wraps the Rust C API with Swift, exposing functions like initialize(), initDatabase(), and a generic call(method, args) dispatcher. All calls go through the TurboModule bridge: TypeScript calls NativeUmbraCore → Swift wrapper → Rust FFI → dispatcher.rs routes to service methods."
+        status="working"
+        howTo={[
+          'Rust → libumbra_core.a (aarch64-apple-ios + simulator)',
+          'Packaged as UmbraCore.xcframework with device + sim slices',
+          'Swift FFI: ExpoUmbraCoreModule.swift wraps C functions',
+          'Generic dispatcher: call(method, argsJson) → JSON result',
+          'Dedicated functions: initialize(), identityGetDid(), etc.',
+          'Events: Rust C callback → Swift → Expo EventEmitter → JS',
+        ]}
+        sourceLinks={[
+          { label: 'ExpoUmbraCoreModule.swift', path: 'modules/expo-umbra-core/ios/ExpoUmbraCoreModule.swift' },
+          { label: 'c_api.rs', path: 'packages/umbra-core/src/ffi/c_api.rs' },
+          { label: 'dispatcher.rs', path: 'packages/umbra-core/src/ffi/dispatcher.rs' },
+        ]}
+      />
+
+      <FeatureCard
+        icon={<CodeIcon size={16} color="#14B8A6" />}
+        title="Platform Detection & Backend Selection"
+        description="The loader.ts auto-detects which backend to use with a priority chain: isTauri() checks for window.__TAURI_INTERNALS__ (desktop), isReactNative() checks for a non-browser navigator without a window (mobile), otherwise falls back to WASM (web). All three backends implement the same UmbraWasmModule interface, so the rest of the app is platform-agnostic. On mobile, rn-backend.ts adapts the native module to this interface, converting native errors from JSON format instead of thrown NSExceptions to avoid Hermes heap corruption."
+        status="working"
+        howTo={[
+          'Priority: isTauri() → isReactNative() → WASM fallback',
+          'All backends implement UmbraWasmModule interface',
+          'rn-backend.ts: adapts NativeUmbraCore → UmbraWasmModule',
+          'Error handling: native returns JSON errors (not thrown)',
+          'Stub backend: graceful fallback when native module missing',
+          'sql.js dynamically imported to avoid Metro bundling it',
+        ]}
+        sourceLinks={[
+          { label: 'loader.ts', path: 'packages/umbra-wasm/loader.ts' },
+          { label: 'rn-backend.ts', path: 'packages/umbra-wasm/rn-backend.ts' },
+          { label: 'index.ts', path: 'modules/expo-umbra-core/src/index.ts' },
+        ]}
+      />
+
+      <FeatureCard
+        icon={<ZapIcon size={16} color="#F59E0B" />}
+        title="FFI Dispatcher (240+ Methods)"
+        description="The Rust FFI dispatcher (dispatcher.rs) routes all method calls from the mobile native layer. A single entry point umbra_call(method, args_json) matches the method string against a dispatch table of 240+ methods covering identity, friends, messaging, groups, communities, crypto, files, plugins, and more. Core methods like init, identity, and network have dedicated extern 'C' functions for performance. State is held in FfiState with OnceCell<Arc<RwLock<FfiState>>>. Events are pushed back to Swift via a registered C callback."
+        status="working"
+        howTo={[
+          'Entry: umbra_call("method_name", "{ json_args }") → JSON',
+          'Dedicated: umbra_init(), umbra_identity_get_did(), etc.',
+          'State: FfiState with OnceCell + Arc<RwLock> for thread safety',
+          'Events: C callback registered from Swift on init',
+          'Error format: { "error": "message" } JSON string',
+          'Build: scripts/build-mobile.sh → xcframework',
+        ]}
+        sourceLinks={[
+          { label: 'dispatcher.rs', path: 'packages/umbra-core/src/ffi/dispatcher.rs' },
+          { label: 'state.rs', path: 'packages/umbra-core/src/ffi/state.rs' },
+          { label: 'events.rs', path: 'packages/umbra-core/src/ffi/events.rs' },
+        ]}
+      />
+
+      {/* ═══════════════════════════════════════════════════════════════════════ */}
       <SectionHeader title="Service Layer (TypeScript)" color="#3B82F6" />
 
       <FeatureCard
         icon={<NetworkIcon size={16} color="#3B82F6" />}
         title="@umbra/service Package"
-        description="The @umbra/service package provides a unified TypeScript API for all platforms. It wraps WASM calls (web) and Tauri IPC (desktop) behind a single UmbraService class. Methods handle JSON serialization, snake_case ↔ camelCase conversion, and error normalization. The service is a singleton initialized once on app start. Event subscriptions allow React components to react to incoming messages, friend requests, etc."
+        description="The @umbra/service package provides a unified TypeScript API for all platforms. It wraps WASM calls (web), Tauri IPC (desktop), and native FFI (mobile) behind a single UmbraService class. Methods handle JSON serialization, snake_case to camelCase conversion, and error normalization. The service is a singleton initialized once on app start. Event subscriptions allow React components to react to incoming messages, friend requests, etc."
         status="working"
         howTo={[
           'import { UmbraService } from "@umbra/service"',
@@ -408,7 +471,7 @@ export default function TechnicalReferenceContent() {
           'UmbraService.instance.createIdentity("Alice")',
           'UmbraService.instance.sendMessage(did, content)',
           'UmbraService.instance.onMessageEvent(callback)',
-          'Same API on web and desktop',
+          'Same API on web, desktop, and mobile',
         ]}
         sourceLinks={[
           { label: 'service.ts', path: 'packages/umbra-service/src/service.ts' },
@@ -420,18 +483,19 @@ export default function TechnicalReferenceContent() {
       <FeatureCard
         icon={<SettingsIcon size={16} color="#06B6D4" />}
         title="Backend Detection"
-        description="The loader automatically detects which backend to use based on the runtime environment. It checks for window.__TAURI_INTERNALS__ to determine if running in Tauri. If present, it loads the Tauri IPC adapter (tauri-backend.ts). Otherwise, it loads the WASM module and initializes sql.js. This abstraction allows the same TypeScript code to run on web and desktop without changes."
+        description="The loader automatically detects which backend to use based on the runtime environment. It checks for window.__TAURI_INTERNALS__ (Tauri desktop), then isReactNative() (Expo mobile), otherwise loads WASM for web. Each backend implements the UmbraWasmModule interface so the service layer and all hooks work identically across platforms. The mobile backend uses the Expo native module with error-as-JSON handling, while web uses WASM + sql.js."
         status="working"
         howTo={[
           'Detection in initUmbraWasm() in loader.ts',
-          'Tauri: window.__TAURI_INTERNALS__ present',
-          'Web: loads WASM + sql.js + IndexedDB',
-          'Desktop: loads Tauri IPC adapter',
-          'Both return UmbraWasmModule interface',
+          'Tauri: window.__TAURI_INTERNALS__ → tauri-backend.ts',
+          'Mobile: isReactNative() → rn-backend.ts → native FFI',
+          'Web: fallback → WASM + sql.js + IndexedDB',
+          'All return UmbraWasmModule interface',
         ]}
         sourceLinks={[
           { label: 'loader.ts', path: 'packages/umbra-wasm/loader.ts' },
           { label: 'tauri-backend.ts', path: 'packages/umbra-wasm/tauri-backend.ts' },
+          { label: 'rn-backend.ts', path: 'packages/umbra-wasm/rn-backend.ts' },
         ]}
       />
 

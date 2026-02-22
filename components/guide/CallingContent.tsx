@@ -16,6 +16,7 @@ import {
   PhoneIcon, VideoIcon, MicIcon, ScreenShareIcon, ShieldIcon,
   SettingsIcon, UsersIcon, KeyIcon, ZapIcon, ActivityIcon,
   NetworkIcon, SmileIcon, MicOffIcon, MinimizeIcon, DatabaseIcon,
+  AudioWaveIcon,
 } from '@/components/icons';
 
 export default function CallingContent() {
@@ -432,6 +433,29 @@ export default function CallingContent() {
         ]}
       />
 
+{/* ── Diagnostics ──────────────────────────────────────────────── */}
+
+      <FeatureCard
+        icon={<AudioWaveIcon size={16} color="#F59E0B" />}
+        title="Call Diagnostics Page"
+        description="A dedicated in-app diagnostics page for testing and troubleshooting the entire calling infrastructure. The page includes six test sections: Relay Connectivity (tests WebSocket connections to relay servers including US East and Seoul endpoints), TURN/STUN Connectivity (verifies ICE server accessibility with automatic credential resolution), Loopback Audio Test (captures microphone input and displays real-time audio level meters to verify your mic is working), Call Negotiation Test (creates and accepts SDP offers between browser tabs for WebRTC round-trip testing), Real-Time Call Stats (a live dashboard showing RTT, packet loss, jitter, bitrate, codec, resolution, frame rate, audio levels, and ICE candidate info), and ICE Candidate Log (timestamped log of all gathered and received ICE candidates)."
+        status="working"
+        howTo={[
+          'Navigate to Settings > Call Diagnostics',
+          'Run Relay test to verify WebSocket connectivity',
+          'Run TURN/STUN test to check ICE server availability',
+          'Use Loopback to verify microphone input levels',
+          'Create SDP offer to test WebRTC negotiation flow',
+          'View real-time stats during an active call',
+        ]}
+        sourceLinks={[
+          { label: 'call-diagnostics.tsx', path: 'app/(main)/call-diagnostics.tsx' },
+          { label: 'CallManager.ts', path: 'services/CallManager.ts' },
+          { label: 'network.ts', path: 'config/network.ts' },
+        ]}
+        testLinks={[]}
+      />
+
       {/* ── Technical Specs ─────────────────────────────────────────── */}
 
       <TechSpec
@@ -483,7 +507,22 @@ export default function CallingContent() {
           { label: 'Max Mesh', value: '6 (15 connections)' },
         ]}
       />
-<TechSpec
+      <TechSpec
+        title="Diagnostics Dashboard"
+        accentColor="#F59E0B"
+        entries={[
+          { label: 'Relay Test', value: 'WebSocket ping to US East + Seoul' },
+          { label: 'STUN Test', value: 'Google STUN (stun.l.google.com)' },
+          { label: 'TURN Test', value: 'coturn with auto credential resolution' },
+          { label: 'Loopback Audio', value: 'Mic capture + real-time level meter' },
+          { label: 'SDP Negotiation', value: 'Create/accept offer between tabs' },
+          { label: 'Live Stats', value: 'RTT, loss, jitter, bitrate, codec' },
+          { label: 'ICE Candidate Log', value: 'Timestamped gather + receive log' },
+          { label: 'Location', value: 'Settings > Call Diagnostics' },
+        ]}
+      />
+
+      <TechSpec
         title="Test Coverage Details"
         accentColor="#22C55E"
         entries={[

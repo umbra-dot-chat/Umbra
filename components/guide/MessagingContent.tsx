@@ -10,7 +10,8 @@ import { FeatureCard } from '@/components/guide/FeatureCard';
 import { TechSpec } from '@/components/guide/TechSpec';
 import {
   SendIcon, CheckCircleIcon, EditIcon, TrashIcon, PinIcon,
-  SmileIcon, ThreadIcon, ForwardIcon,
+  SmileIcon, ThreadIcon, ForwardIcon, AtSignIcon, PaperclipIcon,
+  FileIcon, ImageIcon,
 } from '@/components/icons';
 
 export default function MessagingContent() {
@@ -29,7 +30,6 @@ export default function MessagingContent() {
         ]}
         limitations={[
           'Maximum message size: 64 KB (65,536 bytes)',
-          'File attachments not yet supported',
         ]}
         sourceLinks={[
           { label: 'encryption.rs', path: 'packages/umbra-core/src/crypto/encryption.rs' },
@@ -187,7 +187,85 @@ export default function MessagingContent() {
           { label: 'chat-features.test.ts', path: '__tests__/integration/chat-features.test.ts' },
         ]}
       />
-<TechSpec
+      <FeatureCard
+        icon={<AtSignIcon size={16} color="#14B8A6" />}
+        title="@Mention Autocomplete"
+        description="Type @ in the chat input to trigger mention autocomplete. The useMention hook detects the @ trigger with word boundary validation and filters conversation members in real-time as you type. A dropdown appears with up to 5 matching suggestions showing display names and usernames. Navigate with arrow keys, select with Enter, or dismiss with Escape. When a mention is selected, it replaces the partial @text with the full display name and stores the DID reference for notification routing."
+        status="working"
+        howTo={[
+          'Type @ in the message input',
+          'Start typing a name to filter suggestions',
+          'Arrow keys to navigate, Enter to select',
+          'Escape to dismiss the autocomplete dropdown',
+        ]}
+        sourceLinks={[
+          { label: 'ChatInput.tsx', path: 'components/chat/ChatInput.tsx' },
+          { label: 'useMention.ts', path: 'hooks/useMention.ts' },
+        ]}
+        testLinks={[]}
+      />
+
+      <FeatureCard
+        icon={<SmileIcon size={16} color="#F59E0B" />}
+        title="Emoji & Sticker Picker"
+        description="The chat input includes a CombinedPicker component that provides both emoji and sticker selection. The emoji picker offers the full Unicode emoji set organized by category. Sticker packs support custom community stickers — selecting a sticker sends it as a special sticker message type. The picker is accessible via the smiley icon button in the chat input bar. Custom community emojis are also supported and displayed inline within messages."
+        status="working"
+        howTo={[
+          'Click the smiley icon in the chat input bar',
+          'Browse emojis by category or search',
+          'Switch to the Stickers tab for sticker packs',
+          'Click to insert an emoji or send a sticker',
+        ]}
+        sourceLinks={[
+          { label: 'ChatInput.tsx', path: 'components/chat/ChatInput.tsx' },
+        ]}
+        testLinks={[]}
+      />
+
+      <FeatureCard
+        icon={<PaperclipIcon size={16} color="#6366F1" />}
+        title="File Attachments & Transfers"
+        description="Send files in DM conversations with end-to-end encrypted peer-to-peer transfers. The useFileTransfer hook manages the full transfer lifecycle: requesting, negotiating, transferring, paused, completed, failed, or cancelled. Files are transferred directly between peers with real-time speed calculation (bytes/sec) and progress tracking. File messages display with MIME-type icons, filename, file size, optional image thumbnail preview, a download button, and an encryption indicator (lock icon). The DmSharedFilesPanel provides a filterable view of all shared files in a conversation with tabs for All, Images, Docs, Media, and Other."
+        status="working"
+        howTo={[
+          'Click the attachment (paperclip) icon in the chat input',
+          'Select a file to send',
+          'Transfer progress is shown in real-time',
+          'View all shared files via the Files button in the chat header',
+        ]}
+        sourceLinks={[
+          { label: 'DmFileMessage.tsx', path: 'components/messaging/DmFileMessage.tsx' },
+          { label: 'DmSharedFilesPanel.tsx', path: 'components/messaging/DmSharedFilesPanel.tsx' },
+          { label: 'useFileTransfer.ts', path: 'hooks/useFileTransfer.ts' },
+          { label: 'ChatInput.tsx', path: 'components/chat/ChatInput.tsx' },
+        ]}
+        testLinks={[]}
+      />
+
+      <FeatureCard
+        icon={<ImageIcon size={16} color="#EC4899" />}
+        title="Chat Layout & Message Display"
+        description="Messages are rendered in the ChatArea component with two display modes: Bubble (default, chat-app style with messages grouped by sender) and Inline (Slack/Discord-style with avatars on the left). Messages from the same sender within a 5-minute window are grouped together. The HoverBubble component wraps each message with a hover action bar (React, Reply, Thread, More) and a right-click context menu with actions for Reply, Thread, Copy, Edit (own messages only), Forward, Pin, and Delete. The ChatHeader displays the conversation name, online status, and buttons for voice/video calls, search, shared files, pinned messages, and members panel."
+        status="working"
+        howTo={[
+          'Messages auto-group by sender within 5-minute windows',
+          'Hover over a message for quick actions (React, Reply, Thread)',
+          'Right-click for the full context menu',
+          'Use the chat header buttons for calls, search, files, and pins',
+        ]}
+        sourceLinks={[
+          { label: 'ChatArea.tsx', path: 'components/chat/ChatArea.tsx' },
+          { label: 'HoverBubble.tsx', path: 'components/chat/HoverBubble.tsx' },
+          { label: 'MsgGroup.tsx', path: 'components/chat/MsgGroup.tsx' },
+          { label: 'InlineMsgGroup.tsx', path: 'components/chat/InlineMsgGroup.tsx' },
+          { label: 'ChatHeader.tsx', path: 'components/chat/ChatHeader.tsx' },
+        ]}
+        testLinks={[
+          { label: 'ChatArea.test.tsx', path: '__tests__/components/chat/ChatArea.test.tsx' },
+        ]}
+      />
+
+      <TechSpec
         title="Message Encryption"
         accentColor="#3B82F6"
         entries={[
@@ -216,6 +294,23 @@ export default function MessagingContent() {
           { label: 'Forward', value: 'Decrypt + re-encrypt for target' },
           { label: 'Ack Protocol', value: 'Relay FIFO queue per client' },
           { label: 'Envelope Format', value: 'JSON (versioned schema v1)' },
+        ]}
+      />
+
+      <TechSpec
+        title="Chat Input & UI"
+        accentColor="#14B8A6"
+        entries={[
+          { label: 'Mention Trigger', value: '@ with word boundary detection' },
+          { label: 'Max Suggestions', value: '5 (filtered by name/username)' },
+          { label: 'Mention Navigation', value: 'Arrow keys + Enter + Escape' },
+          { label: 'Picker', value: 'CombinedPicker (emoji + stickers)' },
+          { label: 'Custom Emoji', value: 'Community emoji packs' },
+          { label: 'File Transfer', value: 'P2P with progress + speed tracking' },
+          { label: 'File Filters', value: 'All, Images, Docs, Media, Other' },
+          { label: 'Layout Modes', value: 'Bubble (default) + Inline (Slack-style)' },
+          { label: 'Message Grouping', value: 'Same sender within 5-min window' },
+          { label: 'Context Actions', value: 'Reply, Thread, Copy, Edit, Forward, Pin, Delete' },
         ]}
       />
 

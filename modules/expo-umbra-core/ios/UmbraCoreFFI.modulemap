@@ -1,4 +1,5 @@
 module UmbraCoreFFI {
     header "UmbraCore.h"
+    header "ObjCExceptionHelper.h"
     export *
 }

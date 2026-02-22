@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef } from 'react';
-import { View, ScrollView } from 'react-native';
+import { View, ScrollView, Pressable } from 'react-native';
 import {
   Tabs, TabList, Tab, TabPanel,
   Text,
@@ -16,14 +16,16 @@ import {
   FriendSection,
 } from '@/components/friends/FriendComponents';
 import { useRouter } from 'expo-router';
-import { UsersIcon, MessageIcon, MoreIcon, UserCheckIcon } from '@/components/icons';
+import { UsersIcon, MessageIcon, MoreIcon, UserCheckIcon, QrCodeIcon } from '@/components/icons';
 import { useFriends } from '@/hooks/useFriends';
 import { ProfileCard } from '@/components/friends/ProfileCard';
 import { HelpIndicator } from '@/components/ui/HelpIndicator';
 import { HelpText, HelpHighlight, HelpListItem } from '@/components/ui/HelpContent';
 import { FriendSuggestionCard } from '@/components/discovery/FriendSuggestionCard';
+import { QRCardDialog, parseScannedQR } from '@/components/qr/QRCardDialog';
 import { searchByUsername, searchUsernames, lookupUsername } from '@umbra/service';
 import type { Friend, FriendRequest, DiscoverySearchResult, UsernameSearchResult } from '@umbra/service';
+import { useAuth } from '@/contexts/AuthContext';
 import { useSound } from '@/contexts/SoundContext';
 import { MobileBackButton } from '@/components/ui/MobileBackButton';
 import { useIsMobile } from '@/hooks/useIsMobile';
@@ -94,6 +96,7 @@ function formatRelativeTime(timestamp: number): string {
 export default function FriendsPage() {
   const { theme } = useTheme();
   const router = useRouter();
+  const { identity } = useAuth();
   const { playSound } = useSound();
   const isMobile = useIsMobile();
   const {
@@ -109,6 +112,7 @@ export default function FriendsPage() {
   const { onlineDids } = useNetwork();
 
   const [activeTab, setActiveTab] = useState('all');
+  const [qrCardOpen, setQrCardOpen] = useState(false);
   const handleTabChange = useCallback((tab: string) => {
     setActiveTab(tab);
     playSound('tab_switch');
@@ -432,6 +436,16 @@ export default function FriendsPage() {
             </Tab>
             <Tab value="blocked">Blocked</Tab>
           </TabList>
+
+          <View style={{ flex: 1 }} />
+
+          <Pressable
+            onPress={() => setQrCardOpen(true)}
+            style={{ paddingBottom: 12, paddingHorizontal: 8 }}
+            hitSlop={6}
+          >
+            <QrCodeIcon size={20} color={theme.colors.text.secondary} />
+          </Pressable>
         </View>
 
         {/* ─── All Friends ─── */}
@@ -795,6 +809,22 @@ export default function FriendsPage() {
           </ScrollView>
         </TabPanel>
       </Tabs>
+
+      <QRCardDialog
+        open={qrCardOpen}
+        onClose={() => setQrCardOpen(false)}
+        mode="profile"
+        value={identity?.did ?? ''}
+        label={identity?.displayName}
+        title="My QR Code"
+        onScanned={(data) => {
+          setQrCardOpen(false);
+          const parsed = parseScannedQR(data);
+          if (parsed?.type === 'did') {
+            handleAddFriend(parsed.value);
+          }
+        }}
+      />
     </View>
   );
 }

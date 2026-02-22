@@ -35,6 +35,7 @@ import {
   midnightTheme,
   emberTheme,
   inkBlackTheme,
+  oledTheme,
 } from './presets';
 
 /** All built-in theme presets, ordered for the selector dropdown. */
@@ -70,6 +71,7 @@ export const THEME_REGISTRY: ThemePreset[] = [
   midnightTheme,
   emberTheme,
   inkBlackTheme,
+  oledTheme,
 ];
 
 /** Look up a theme by ID. Returns `undefined` if not found. */

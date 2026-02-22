@@ -26,7 +26,8 @@ import {
   type ManagedRole, type RolePermissionCategory,
 } from '@coexist/wisp-react-native';
 
-import { SettingsIcon, FileTextIcon, ShieldIcon, UserPlusIcon, BellIcon, LogOutIcon, PlusIcon, VolumeIcon, TrashIcon } from '@/components/icons';
+import { SettingsIcon, FileTextIcon, ShieldIcon, UserPlusIcon, BellIcon, LogOutIcon, PlusIcon, VolumeIcon, TrashIcon, QrCodeIcon } from '@/components/icons';
+import { QRCardDialog } from '@/components/qr/QRCardDialog';
 import { VoiceChannelBar } from '@/components/community/VoiceChannelBar';
 import { VoiceChannelUsers } from '@/components/community/VoiceChannelUsers';
 import { useVoiceChannel } from '@/contexts/VoiceChannelContext';
@@ -303,6 +304,9 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
   // Leave/Delete community dialog state
   const [leaveDialogOpen, setLeaveDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+
+  // QR invite dialog state
+  const [qrInviteOpen, setQrInviteOpen] = useState(false);
 
   // ---------------------------------------------------------------------------
   // Resolve data — use mock data for mock communities, real data otherwise
@@ -628,6 +632,14 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
       expires_at: inv.expiresAt,
       created_at: inv.createdAt,
     }));
+  }, [invites]);
+
+  // Build invite URL for QR dialog from most recent non-vanity invite
+  const qrInviteUrl = useMemo(() => {
+    const nonVanity = invites.filter((i) => !i.vanity);
+    if (nonVanity.length === 0) return null;
+    const sorted = [...nonVanity].sort((a, b) => b.createdAt - a.createdAt);
+    return `https://umbra.chat/invite/${sorted[0].code}`;
   }, [invites]);
 
   // ---------------------------------------------------------------------------
@@ -1481,6 +1493,14 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
           >
             Create Invite
           </DropdownMenuItem>
+          {qrInviteUrl && (
+            <DropdownMenuItem
+              icon={<QrCodeIcon size={16} color={iconColor} />}
+              onSelect={() => setQrInviteOpen(true)}
+            >
+              QR Invite
+            </DropdownMenuItem>
+          )}
           {!isMock && (
             <DropdownMenuItem icon={<PlusIcon size={16} color={iconColor} />} onSelect={handleCategoryCreate}>
               Create Category
@@ -1719,6 +1739,18 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
         confirmLabel="Delete Community"
         onConfirm={handleDeleteConfirm}
       />
+
+      {/* QR Invite Dialog */}
+      {qrInviteUrl && (
+        <QRCardDialog
+          open={qrInviteOpen}
+          onClose={() => setQrInviteOpen(false)}
+          mode="community-invite"
+          value={qrInviteUrl}
+          label={community?.name}
+          title="Community Invite"
+        />
+      )}
     </View>
   );
 }

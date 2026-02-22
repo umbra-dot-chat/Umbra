@@ -6,7 +6,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useNetwork } from '@/hooks/useNetwork';
 import { useUsername } from '@/packages/umbra-service/src/discovery/hooks';
 import { PRIMARY_RELAY_URL } from '@/config';
-import { CopyIcon, RadioIcon, KeyIcon } from '@/components/icons';
+import { CopyIcon, RadioIcon, KeyIcon, QrCodeIcon } from '@/components/icons';
+import { QRCardDialog } from '@/components/qr/QRCardDialog';
 import { HelpIndicator } from '@/components/ui/HelpIndicator';
 import { HelpText, HelpHighlight, HelpListItem } from '@/components/ui/HelpContent';
 
@@ -24,6 +25,7 @@ export function ProfileCard({ style }: ProfileCardProps) {
   const tc = theme.colors;
   const [didCopied, setDidCopied] = useState(false);
   const [usernameCopied, setUsernameCopied] = useState(false);
+  const [qrCardOpen, setQrCardOpen] = useState(false);
   const { relayConnected, connectRelay } = useNetwork();
   const { username } = useUsername(identity?.did ?? null);
 
@@ -232,10 +234,42 @@ export function ProfileCard({ style }: ProfileCardProps) {
                 {didCopied ? 'Copied' : 'Copy'}
               </RNText>
             </Pressable>
+            <Pressable
+              onPress={() => setQrCardOpen(true)}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 4,
+                paddingVertical: 4,
+                paddingHorizontal: 8,
+                borderRadius: 6,
+                backgroundColor: tc.background.sunken,
+              }}
+            >
+              <QrCodeIcon size={14} color={tc.text.secondary} />
+              <RNText
+                style={{
+                  fontSize: 11,
+                  color: tc.text.secondary,
+                  fontWeight: '500',
+                }}
+              >
+                QR
+              </RNText>
+            </Pressable>
           </View>
         </View>
 
       </View>
+
+      <QRCardDialog
+        open={qrCardOpen}
+        onClose={() => setQrCardOpen(false)}
+        mode="profile"
+        value={identity.did}
+        label={identity.displayName}
+        title="My QR Code"
+      />
     </Card>
   );
 }

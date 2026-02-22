@@ -59,6 +59,7 @@
     "expo-splash-screen": "~31.0.13",
     "expo-status-bar": "~3.0.9",
     "expo-umbra-core": "file:modules/expo-umbra-core",
+    "expo-video-effects": "file:modules/expo-video-effects",
     "expo-web-browser": "~15.0.10",
     "jszip": "^3.10.1",
     "react": "19.1.0",

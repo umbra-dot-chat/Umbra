@@ -2,7 +2,7 @@
   "expo": {
     "name": "Umbra",
     "slug": "Umbra",
-    "version": "1.4.0",
+    "version": "1.5.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "umbra",
@@ -21,7 +21,8 @@
       ],
       "buildNumber": "1",
       "infoPlist": {
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSCameraUsageDescription": "Umbra needs camera access for video calls and effects preview."
       }
     },
     "android": {

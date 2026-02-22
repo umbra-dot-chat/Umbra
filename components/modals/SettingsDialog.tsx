@@ -65,6 +65,7 @@ import { useNetwork } from '@/hooks/useNetwork';
 import { useCall } from '@/hooks/useCall';
 import { BACKGROUND_PRESETS, useVideoEffects } from '@/hooks/useVideoEffects';
 import type { VideoEffect, BackgroundPreset } from '@/hooks/useVideoEffects';
+import { VideoEffectsPreview } from 'expo-video-effects/src/ExpoVideoEffectsView';
 import { useCallSettings } from '@/hooks/useCallSettings';
 import { useMediaDevices } from '@/hooks/useMediaDevices';
 import type { VideoQuality, AudioQuality, OpusConfig, OpusApplication, AudioBitrate } from '@/types/call';
@@ -1746,95 +1747,131 @@ function AudioVideoSection() {
           </RNText>
         </View>
 
-        {effectsPreviewStream ? (
-          <View style={{ gap: 12 }}>
-            {/* Live preview with effects */}
-            <View style={{
-              width: '100%',
-              height: 220,
-              borderRadius: 10,
-              overflow: 'hidden',
-              backgroundColor: tc.background.sunken,
-              position: 'relative',
-            }}>
-              <video
-                ref={effectsVideoElRef as any}
-                autoPlay
-                muted
-                playsInline
-                style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)' } as any}
-              />
+        {Platform.OS === 'web' ? (
+          /* Web: canvas-based preview */
+          effectsPreviewStream ? (
+            <View style={{ gap: 12 }}>
+              <View style={{
+                width: '100%',
+                height: 220,
+                borderRadius: 10,
+                overflow: 'hidden',
+                backgroundColor: tc.background.sunken,
+                position: 'relative',
+              }}>
+                <video
+                  ref={effectsVideoElRef as any}
+                  autoPlay
+                  muted
+                  playsInline
+                  style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)' } as any}
+                />
 
-              {/* Processing indicator */}
-              {effectsProcessing && videoEffect !== 'none' && (
-                <View style={{
-                  position: 'absolute',
-                  top: 8,
-                  left: 8,
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: 6,
-                  backgroundColor: 'rgba(0,0,0,0.6)',
-                  paddingVertical: 3,
-                  paddingHorizontal: 8,
-                  borderRadius: 6,
-                }}>
+                {effectsProcessing && videoEffect !== 'none' && (
                   <View style={{
-                    width: 6,
-                    height: 6,
-                    borderRadius: 3,
-                    backgroundColor: tc.status.success,
-                  }} />
-                  <RNText style={{ fontSize: 10, color: '#fff', fontWeight: '500' }}>
-                    {videoEffect === 'blur' ? 'Blur active' : 'Background active'}
-                  </RNText>
-                </View>
-              )}
+                    position: 'absolute',
+                    top: 8,
+                    left: 8,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 6,
+                    backgroundColor: 'rgba(0,0,0,0.6)',
+                    paddingVertical: 3,
+                    paddingHorizontal: 8,
+                    borderRadius: 6,
+                  }}>
+                    <View style={{
+                      width: 6,
+                      height: 6,
+                      borderRadius: 3,
+                      backgroundColor: tc.status.success,
+                    }} />
+                    <RNText style={{ fontSize: 10, color: '#fff', fontWeight: '500' }}>
+                      {videoEffect === 'blur' ? 'Blur active' : 'Background active'}
+                    </RNText>
+                  </View>
+                )}
 
-              {/* Effect label */}
-              {videoEffect === 'none' && (
-                <View style={{
-                  position: 'absolute',
-                  top: 8,
-                  left: 8,
-                  backgroundColor: 'rgba(0,0,0,0.5)',
-                  paddingVertical: 3,
-                  paddingHorizontal: 8,
-                  borderRadius: 6,
-                }}>
-                  <RNText style={{ fontSize: 10, color: '#fff', opacity: 0.8 }}>
-                    No effect
-                  </RNText>
-                </View>
-              )}
+                {videoEffect === 'none' && (
+                  <View style={{
+                    position: 'absolute',
+                    top: 8,
+                    left: 8,
+                    backgroundColor: 'rgba(0,0,0,0.5)',
+                    paddingVertical: 3,
+                    paddingHorizontal: 8,
+                    borderRadius: 6,
+                  }}>
+                    <RNText style={{ fontSize: 10, color: '#fff', opacity: 0.8 }}>
+                      No effect
+                    </RNText>
+                  </View>
+                )}
+              </View>
+
+              <Button variant="secondary" size="sm" onPress={stopEffectsPreview}>
+                Stop Preview
+              </Button>
             </View>
-
-            <Button variant="secondary" size="sm" onPress={stopEffectsPreview}>
-              Stop Preview
+          ) : (
+            <Button
+              variant="secondary"
+              size="sm"
+              onPress={startEffectsPreview}
+              iconLeft={<VideoIcon size={14} color={tc.text.secondary} />}
+            >
+              Start Camera Preview
             </Button>
-          </View>
+          )
         ) : (
-          <Button
-            variant="secondary"
-            size="sm"
-            onPress={startEffectsPreview}
-            iconLeft={<VideoIcon size={14} color={tc.text.secondary} />}
-          >
-            Start Camera Preview
-          </Button>
+          /* Mobile: native Metal-backed preview */
+          <View style={{ gap: 12 }}>
+            <VideoEffectsPreview
+              effect={videoEffect}
+              blurIntensity={blurIntensity}
+              backgroundImage={activeBackgroundUrl}
+              cameraPosition="front"
+              enabled={true}
+              style={{
+                width: '100%' as any,
+                height: 220,
+                borderRadius: 10,
+                overflow: 'hidden',
+                backgroundColor: tc.background.sunken,
+              }}
+            />
+
+            {videoEffect !== 'none' && (
+              <View style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 6,
+                paddingVertical: 4,
+                paddingHorizontal: 8,
+              }}>
+                <View style={{
+                  width: 6, height: 6, borderRadius: 3,
+                  backgroundColor: tc.status.success,
+                }} />
+                <RNText style={{ fontSize: 11, color: tc.text.muted }}>
+                  {videoEffect === 'blur' ? 'Background blur active' : 'Virtual background active'}
+                </RNText>
+              </View>
+            )}
+          </View>
         )}
       </View>
 
       <Separator spacing="sm" />
 
-      {/* Video Effects */}
+      {/* Video Effects — available on all platforms */}
       <View style={{ gap: 16 }}>
         <View>
           <RNText style={{ fontSize: 15, fontWeight: '600', color: tc.text.primary }}>
             Video Effects
           </RNText>
           <RNText style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
-            Apply background effects to your webcam during calls.
+            Apply background effects to your camera during calls.
           </RNText>
         </View>
 
@@ -1889,13 +1926,21 @@ function AudioVideoSection() {
                       backgroundColor: tc.background.sunken,
                     })}
                   >
-                    {/* Thumbnail preview — uses the SVG data URI */}
+                    {/* Thumbnail preview */}
                     <View style={{ width: '100%', height: '100%', position: 'relative' }}>
-                      <img
-                        src={preset.thumbnail}
-                        alt={preset.name}
-                        style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' } as any}
-                      />
+                      {Platform.OS === 'web' ? (
+                        <img
+                          src={preset.thumbnail}
+                          alt={preset.name}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' } as any}
+                        />
+                      ) : (
+                        <Image
+                          source={{ uri: preset.thumbnail }}
+                          style={{ width: '100%', height: '100%' }}
+                          resizeMode="cover"
+                        />
+                      )}
                       <View style={{
                         position: 'absolute',
                         bottom: 0,
@@ -2094,7 +2139,8 @@ function AudioVideoSection() {
           />
         </SettingRow>
 
-        {/* Voice Meter */}
+        {/* Voice Meter (web only — uses AudioContext) */}
+        {Platform.OS === 'web' && (
         <View style={{ gap: 8 }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
             <View>
@@ -2152,6 +2198,7 @@ function AudioVideoSection() {
             </View>
           )}
         </View>
+        )}
 
         <SettingRow label="Output Volume" description={`${volume}%`} vertical>
           <Slider
@@ -2173,138 +2220,206 @@ function AudioVideoSection() {
             Devices
           </RNText>
           <RNText style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
-            Your available audio and video input/output devices.
+            {Platform.OS === 'web'
+              ? 'Your available audio and video input/output devices.'
+              : 'Camera and microphone are managed by your device.'}
           </RNText>
         </View>
 
-        {/* Microphones */}
-        <View style={{ gap: 6 }}>
-          <RNText style={{ fontSize: 11, fontWeight: '600', color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-            Microphones
-          </RNText>
-          {audioInputs.length === 0 ? (
-            <RNText style={{ fontSize: 13, color: tc.text.secondary }}>No microphones detected</RNText>
-          ) : (
-            audioInputs.map((device) => (
-              <View key={device.deviceId} style={{
-                flexDirection: 'row', alignItems: 'center', gap: 8,
-                paddingVertical: 6, paddingHorizontal: 10,
-                borderRadius: 6, backgroundColor: tc.background.sunken,
-              }}>
-                <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: tc.status.success }} />
-                <RNText style={{ fontSize: 13, color: tc.text.primary, flex: 1 }} numberOfLines={1}>
-                  {device.label || `Microphone ${device.deviceId.slice(0, 8)}`}
-                </RNText>
-              </View>
-            ))
-          )}
-        </View>
-
-        {/* Cameras */}
-        <View style={{ gap: 6 }}>
-          <RNText style={{ fontSize: 11, fontWeight: '600', color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-            Cameras
-          </RNText>
-          {videoInputs.length === 0 ? (
-            <RNText style={{ fontSize: 13, color: tc.text.secondary }}>No cameras detected</RNText>
-          ) : (
-            videoInputs.map((device) => (
-              <View key={device.deviceId} style={{
-                flexDirection: 'row', alignItems: 'center', gap: 8,
-                paddingVertical: 6, paddingHorizontal: 10,
-                borderRadius: 6, backgroundColor: tc.background.sunken,
-              }}>
-                <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: tc.status.success }} />
-                <RNText style={{ fontSize: 13, color: tc.text.primary, flex: 1 }} numberOfLines={1}>
-                  {device.label || `Camera ${device.deviceId.slice(0, 8)}`}
-                </RNText>
-              </View>
-            ))
-          )}
-        </View>
-
-        {/* Speakers */}
-        <View style={{ gap: 6 }}>
-          <RNText style={{ fontSize: 11, fontWeight: '600', color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-            Speakers
-          </RNText>
-          {audioOutputs.length === 0 ? (
-            <RNText style={{ fontSize: 13, color: tc.text.secondary }}>No speakers detected</RNText>
-          ) : (
-            audioOutputs.map((device) => (
-              <View key={device.deviceId} style={{
-                flexDirection: 'row', alignItems: 'center', gap: 8,
-                paddingVertical: 6, paddingHorizontal: 10,
-                borderRadius: 6, backgroundColor: tc.background.sunken,
-              }}>
-                <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: tc.status.success }} />
-                <RNText style={{ fontSize: 13, color: tc.text.primary, flex: 1 }} numberOfLines={1}>
-                  {device.label || `Speaker ${device.deviceId.slice(0, 8)}`}
-                </RNText>
-              </View>
-            ))
-          )}
-        </View>
-
-        {!isSupported && (
-          <View style={{
-            padding: 12, borderRadius: 8,
-            backgroundColor: tc.status.warningSurface,
-            borderWidth: 1, borderColor: tc.status.warningBorder,
-          }}>
-            <RNText style={{ fontSize: 12, color: tc.status.warning }}>
-              Media devices are not available in this browser or environment.
-            </RNText>
-          </View>
-        )}
-
-        {/* Device Test — inline within Devices section */}
-        <Separator spacing="sm" />
-        <View>
-          <RNText style={{ fontSize: 11, fontWeight: '600', color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-            Test Devices
-          </RNText>
-        </View>
-
-        {cameraPreviewStream ? (
-          <View style={{ gap: 12 }}>
-            {/* Camera preview */}
-            <View style={{
-              width: '100%', height: 180, borderRadius: 10, overflow: 'hidden',
-              backgroundColor: tc.background.sunken,
-            }}>
-              <video
-                ref={(el) => { if (el && cameraPreviewStream) el.srcObject = cameraPreviewStream; }}
-                autoPlay
-                muted
-                playsInline
-                style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)' } as any}
-              />
-            </View>
-
-            {/* Mic level meter */}
-            <View style={{ gap: 4 }}>
+        {Platform.OS === 'web' ? (
+          <>
+            {/* Microphones */}
+            <View style={{ gap: 6 }}>
               <RNText style={{ fontSize: 11, fontWeight: '600', color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                Microphone Level
+                Microphones
               </RNText>
-              <View style={{ height: 8, borderRadius: 4, backgroundColor: tc.background.sunken, overflow: 'hidden' }}>
+              {audioInputs.length === 0 ? (
+                <RNText style={{ fontSize: 13, color: tc.text.secondary }}>No microphones detected</RNText>
+              ) : (
+                audioInputs.map((device) => (
+                  <View key={device.deviceId} style={{
+                    flexDirection: 'row', alignItems: 'center', gap: 8,
+                    paddingVertical: 6, paddingHorizontal: 10,
+                    borderRadius: 6, backgroundColor: tc.background.sunken,
+                  }}>
+                    <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: tc.status.success }} />
+                    <RNText style={{ fontSize: 13, color: tc.text.primary, flex: 1 }} numberOfLines={1}>
+                      {device.label || `Microphone ${device.deviceId.slice(0, 8)}`}
+                    </RNText>
+                  </View>
+                ))
+              )}
+            </View>
+
+            {/* Cameras */}
+            <View style={{ gap: 6 }}>
+              <RNText style={{ fontSize: 11, fontWeight: '600', color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                Cameras
+              </RNText>
+              {videoInputs.length === 0 ? (
+                <RNText style={{ fontSize: 13, color: tc.text.secondary }}>No cameras detected</RNText>
+              ) : (
+                videoInputs.map((device) => (
+                  <View key={device.deviceId} style={{
+                    flexDirection: 'row', alignItems: 'center', gap: 8,
+                    paddingVertical: 6, paddingHorizontal: 10,
+                    borderRadius: 6, backgroundColor: tc.background.sunken,
+                  }}>
+                    <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: tc.status.success }} />
+                    <RNText style={{ fontSize: 13, color: tc.text.primary, flex: 1 }} numberOfLines={1}>
+                      {device.label || `Camera ${device.deviceId.slice(0, 8)}`}
+                    </RNText>
+                  </View>
+                ))
+              )}
+            </View>
+
+            {/* Speakers */}
+            <View style={{ gap: 6 }}>
+              <RNText style={{ fontSize: 11, fontWeight: '600', color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                Speakers
+              </RNText>
+              {audioOutputs.length === 0 ? (
+                <RNText style={{ fontSize: 13, color: tc.text.secondary }}>No speakers detected</RNText>
+              ) : (
+                audioOutputs.map((device) => (
+                  <View key={device.deviceId} style={{
+                    flexDirection: 'row', alignItems: 'center', gap: 8,
+                    paddingVertical: 6, paddingHorizontal: 10,
+                    borderRadius: 6, backgroundColor: tc.background.sunken,
+                  }}>
+                    <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: tc.status.success }} />
+                    <RNText style={{ fontSize: 13, color: tc.text.primary, flex: 1 }} numberOfLines={1}>
+                      {device.label || `Speaker ${device.deviceId.slice(0, 8)}`}
+                    </RNText>
+                  </View>
+                ))
+              )}
+            </View>
+
+            {!isSupported && (
+              <View style={{
+                padding: 12, borderRadius: 8,
+                backgroundColor: tc.status.warningSurface,
+                borderWidth: 1, borderColor: tc.status.warningBorder,
+              }}>
+                <RNText style={{ fontSize: 12, color: tc.status.warning }}>
+                  Media devices are not available in this browser or environment.
+                </RNText>
+              </View>
+            )}
+
+            {/* Device Test — inline within Devices section */}
+            <Separator spacing="sm" />
+            <View>
+              <RNText style={{ fontSize: 11, fontWeight: '600', color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                Test Devices
+              </RNText>
+            </View>
+
+            {cameraPreviewStream ? (
+              <View style={{ gap: 12 }}>
+                {/* Camera preview */}
                 <View style={{
-                  width: `${micLevel}%`,
-                  height: '100%',
-                  borderRadius: 4,
-                  backgroundColor: micLevel > 70 ? tc.status.danger : micLevel > 30 ? tc.status.success : tc.accent.primary,
-                }} />
+                  width: '100%', height: 180, borderRadius: 10, overflow: 'hidden',
+                  backgroundColor: tc.background.sunken,
+                }}>
+                  <video
+                    ref={(el) => { if (el && cameraPreviewStream) el.srcObject = cameraPreviewStream; }}
+                    autoPlay
+                    muted
+                    playsInline
+                    style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)' } as any}
+                  />
+                </View>
+
+                {/* Mic level meter */}
+                <View style={{ gap: 4 }}>
+                  <RNText style={{ fontSize: 11, fontWeight: '600', color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                    Microphone Level
+                  </RNText>
+                  <View style={{ height: 8, borderRadius: 4, backgroundColor: tc.background.sunken, overflow: 'hidden' }}>
+                    <View style={{
+                      width: `${micLevel}%`,
+                      height: '100%',
+                      borderRadius: 4,
+                      backgroundColor: micLevel > 70 ? tc.status.danger : micLevel > 30 ? tc.status.success : tc.accent.primary,
+                    }} />
+                  </View>
+                </View>
+
+                <Button variant="secondary" size="sm" onPress={stopTestPreview}>
+                  Stop Test
+                </Button>
+              </View>
+            ) : (
+              <Button variant="secondary" size="sm" onPress={startTestPreview}>
+                Test Camera & Microphone
+              </Button>
+            )}
+          </>
+        ) : (
+          <>
+            {/* Mobile device display — simplified */}
+            <View style={{ gap: 6 }}>
+              <RNText style={{ fontSize: 11, fontWeight: '600', color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                Camera
+              </RNText>
+              <View style={{
+                flexDirection: 'row', alignItems: 'center', gap: 8,
+                paddingVertical: 8, paddingHorizontal: 12,
+                borderRadius: 8, backgroundColor: tc.background.sunken,
+              }}>
+                <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: tc.status.success }} />
+                <RNText style={{ fontSize: 13, color: tc.text.primary, flex: 1 }}>
+                  Front Camera
+                </RNText>
+                <RNText style={{ fontSize: 11, color: tc.text.muted }}>
+                  Default
+                </RNText>
+              </View>
+              <View style={{
+                flexDirection: 'row', alignItems: 'center', gap: 8,
+                paddingVertical: 8, paddingHorizontal: 12,
+                borderRadius: 8, backgroundColor: tc.background.sunken,
+              }}>
+                <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: tc.status.success }} />
+                <RNText style={{ fontSize: 13, color: tc.text.primary, flex: 1 }}>
+                  Back Camera
+                </RNText>
+              </View>
+              <RNText style={{ fontSize: 11, color: tc.text.muted, marginTop: 2 }}>
+                Switch cameras during a call using the camera flip button.
+              </RNText>
+            </View>
+
+            <View style={{ gap: 6 }}>
+              <RNText style={{ fontSize: 11, fontWeight: '600', color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                Microphone
+              </RNText>
+              <View style={{
+                flexDirection: 'row', alignItems: 'center', gap: 8,
+                paddingVertical: 8, paddingHorizontal: 12,
+                borderRadius: 8, backgroundColor: tc.background.sunken,
+              }}>
+                <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: tc.status.success }} />
+                <RNText style={{ fontSize: 13, color: tc.text.primary, flex: 1 }}>
+                  Default Microphone
+                </RNText>
               </View>
             </View>
 
-            <Button variant="secondary" size="sm" onPress={stopTestPreview}>
-              Stop Test
-            </Button>
-          </View>
-        ) : (
-          <Button variant="secondary" size="sm" onPress={startTestPreview}>
-            Test Camera & Microphone
-          </Button>
+            <View style={{
+              padding: 12, borderRadius: 8,
+              backgroundColor: tc.status.infoSurface,
+              borderWidth: 1, borderColor: tc.status.infoBorder,
+            }}>
+              <RNText style={{ fontSize: 12, color: tc.status.info }}>
+                Device permissions are managed by your device settings. Camera and microphone
+                access will be requested when you start a call.
+              </RNText>
+            </View>
+          </>
         )}
       </View>
       </View>
@@ -2333,7 +2448,8 @@ function AudioVideoSection() {
 
       <Separator spacing="sm" />
 
-      {/* Encryption */}
+      {/* Encryption (web only — Insertable Streams / RTCRtpScriptTransform) */}
+      {Platform.OS === 'web' && (
       <View style={{ gap: 16 }}>
         <View>
           <RNText style={{ fontSize: 15, fontWeight: '600', color: tc.text.primary }}>
@@ -2372,6 +2488,7 @@ function AudioVideoSection() {
           </View>
         )}
       </View>
+      )}
 
     </View>
   );

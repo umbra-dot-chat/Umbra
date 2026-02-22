@@ -77,6 +77,15 @@ export default function LimitationsContent() {
           { label: 'Group Messaging', value: 'Stable (78% coverage)' },
           { label: 'Friend Management', value: 'Stable (92% coverage)' },
           { label: 'Identity / DID', value: 'Stable (85% coverage)' },
+          { label: 'QR Code Sharing', value: 'Stable (share + scan)' },
+          { label: 'Friend Discovery', value: 'Stable (cross-platform)' },
+          { label: 'Linked Accounts', value: 'Stable (Discord, GitHub, Steam, Bluesky)' },
+          { label: 'Username System', value: 'Stable (search + lookup)' },
+          { label: 'Connection Links', value: 'Stable (shareable URLs)' },
+          { label: '@Mentions', value: 'Stable (autocomplete + filtering)' },
+          { label: 'File Transfers', value: 'Stable (P2P encrypted)' },
+          { label: 'Emoji & Stickers', value: 'Stable (combined picker)' },
+          { label: 'Deep Links', value: 'Stable (umbra:// + https://)' },
         ]}
       />
 
@@ -92,6 +101,24 @@ export default function LimitationsContent() {
           { label: 'Quality Presets', value: 'Beta' },
           { label: 'Audio Codecs', value: 'Beta (Opus + PCM)' },
           { label: 'Frame E2EE', value: 'Beta (Chromium only)' },
+          { label: 'Call Diagnostics', value: 'Beta (relay, TURN, loopback, stats)' },
+        ]}
+      />
+
+      <TechSpec
+        title="Community Features (Alpha)"
+        accentColor="#F97316"
+        entries={[
+          { label: 'Community CRUD', value: 'Working (create, update, delete)' },
+          { label: 'Spaces & Channels', value: 'Working (6 channel types)' },
+          { label: 'Roles & Permissions', value: 'Working (64-bit bitfield)' },
+          { label: 'Invites & QR Codes', value: 'Working (link + QR sharing)' },
+          { label: 'Community Messaging', value: 'Working (E2EE per channel)' },
+          { label: 'Moderation System', value: 'Working (warnings, bans, AutoMod)' },
+          { label: 'Discord Import', value: 'Working (structure import)' },
+          { label: 'File Channels', value: 'Working (folders, uploads)' },
+          { label: 'Emoji & Stickers', value: 'Working (custom packs)' },
+          { label: 'Boost Nodes', value: 'Beta (config only, no runtime)' },
         ]}
       />
 
@@ -99,15 +126,15 @@ export default function LimitationsContent() {
         title="Planned Features"
         accentColor="#6366F1"
         entries={[
-          { label: 'File Attachments', value: 'Planned' },
-          { label: 'Read Receipts', value: 'Planned' },
-          { label: 'Typing Indicators', value: 'Planned' },
           { label: 'Voice Messages', value: 'Planned' },
           { label: 'Link Previews', value: 'Planned' },
           { label: 'SFU Group Calls', value: 'Planned (7-50 peers)' },
           { label: 'Multi-Device Sync', value: 'Planned' },
           { label: 'Push Notifications', value: 'Planned' },
           { label: 'Forward Secrecy', value: 'Planned (Double Ratchet)' },
+          { label: 'Xbox Account Linking', value: 'Planned' },
+          { label: 'Android Native', value: 'Planned (JNI FFI)' },
+          { label: 'Biometric Unlock', value: 'Planned (Face ID / Touch ID)' },
         ]}
       />
 
@@ -117,13 +144,18 @@ export default function LimitationsContent() {
         entries={[
           { label: 'Web Browser', value: 'Full support' },
           { label: 'Desktop (Tauri)', value: 'In development' },
-          { label: 'Mobile (React Native)', value: 'In development' },
-          { label: 'Database', value: 'sql.js WASM (web)' },
-          { label: 'Data Persistence', value: 'IndexedDB (keyed by DID)' },
+          { label: 'iOS (Expo)', value: 'TestFlight beta (v1.5.0)' },
+          { label: 'Android (Expo)', value: 'In development' },
+          { label: 'Database', value: 'sql.js WASM (web), SQLite (native)' },
+          { label: 'Data Persistence', value: 'IndexedDB (web), SQLite (native)' },
           { label: 'WebRTC Calls', value: 'Desktop + Web' },
           { label: 'Frame E2EE', value: 'Web only (Insertable Streams)' },
           { label: 'Virtual Backgrounds', value: 'Web only (TensorFlow.js)' },
           { label: 'PiP Mode', value: 'Web (custom), Mobile (native)' },
+          { label: 'QR Code Scanner', value: 'Mobile camera, Web text input' },
+          { label: 'Native FFI', value: 'Rust → Swift (iOS), JNI planned (Android)' },
+          { label: 'Backend Detection', value: 'isTauri() → isReactNative() → WASM' },
+          { label: 'Deep Links', value: 'umbra:// + umbra.chat/invite/ (iOS + web)' },
         ]}
       />
 
@@ -152,7 +184,7 @@ export default function LimitationsContent() {
           { label: 'Multi-Device Sync', value: 'Single device only' },
           { label: 'Backup / Restore', value: 'Manual export only' },
           { label: 'Push Notifications', value: 'Not yet implemented' },
-          { label: 'TURN Relay Endpoint', value: '/turn-credentials needs deploy' },
+          { label: 'Community Tests', value: 'Only permissions tested (8%)' },
         ]}
       />
     </View>

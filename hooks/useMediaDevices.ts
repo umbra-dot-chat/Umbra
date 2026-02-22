@@ -2,11 +2,13 @@
  * useMediaDevices — Enumerates audio/video devices and detects hot-swap changes.
  *
  * Provides lists of available audio inputs, video inputs, and audio outputs.
- * Listens for the `devicechange` event to auto-detect when devices are
- * plugged in or unplugged.
+ * On web, listens for the `devicechange` event to auto-detect when devices are
+ * plugged in or unplugged. On mobile (iOS/Android), provides sensible defaults
+ * (front/back camera, default mic) since enumerateDevices is unavailable.
  */
 
 import { useCallback, useEffect, useState } from 'react';
+import { Platform } from 'react-native';
 
 export interface MediaDeviceInfo {
   deviceId: string;
@@ -31,15 +33,44 @@ export interface UseMediaDevicesResult {
   requestPermission: (video?: boolean) => Promise<boolean>;
 }
 
+/** Whether we're on a native mobile platform (iOS/Android). */
+const isMobile = Platform.OS === 'ios' || Platform.OS === 'android';
+
+/**
+ * Default mobile devices — enumerateDevices() doesn't work on RN/iOS,
+ * so we provide sensible defaults for front/back camera and default mic.
+ */
+const MOBILE_AUDIO_INPUTS: MediaDeviceInfo[] = [
+  { deviceId: 'default', label: 'Default Microphone', kind: 'audioinput' },
+];
+const MOBILE_VIDEO_INPUTS: MediaDeviceInfo[] = [
+  { deviceId: 'front', label: 'Front Camera', kind: 'videoinput' },
+  { deviceId: 'back', label: 'Back Camera', kind: 'videoinput' },
+];
+
 export function useMediaDevices(): UseMediaDevicesResult {
-  const [audioInputs, setAudioInputs] = useState<MediaDeviceInfo[]>([]);
-  const [videoInputs, setVideoInputs] = useState<MediaDeviceInfo[]>([]);
+  const [audioInputs, setAudioInputs] = useState<MediaDeviceInfo[]>(
+    isMobile ? MOBILE_AUDIO_INPUTS : [],
+  );
+  const [videoInputs, setVideoInputs] = useState<MediaDeviceInfo[]>(
+    isMobile ? MOBILE_VIDEO_INPUTS : [],
+  );
   const [audioOutputs, setAudioOutputs] = useState<MediaDeviceInfo[]>([]);
   const [deviceChanged, setDeviceChanged] = useState(false);
 
-  const isSupported = typeof navigator !== 'undefined' && !!navigator.mediaDevices;
+  const isSupported = isMobile
+    ? true
+    : (typeof navigator !== 'undefined' && !!navigator.mediaDevices);
 
   const enumerate = useCallback(async () => {
+    // On mobile, use hardcoded device list
+    if (isMobile) {
+      setAudioInputs(MOBILE_AUDIO_INPUTS);
+      setVideoInputs(MOBILE_VIDEO_INPUTS);
+      setAudioOutputs([]);
+      return;
+    }
+
     if (!isSupported) return;
 
     try {
@@ -78,6 +109,12 @@ export function useMediaDevices(): UseMediaDevicesResult {
   }, [isSupported]);
 
   const requestPermission = useCallback(async (video = false): Promise<boolean> => {
+    if (isMobile) {
+      // On mobile, permissions are handled by the OS when getUserMedia is called.
+      // Return true optimistically — the actual permission prompt happens at call time.
+      return true;
+    }
+
     if (!isSupported) return false;
 
     try {
@@ -97,9 +134,9 @@ export function useMediaDevices(): UseMediaDevicesResult {
     }
   }, [isSupported, enumerate]);
 
-  // Listen for device changes
+  // Listen for device changes (web only)
   useEffect(() => {
-    if (!isSupported) return;
+    if (isMobile || !isSupported) return;
 
     enumerate();
 

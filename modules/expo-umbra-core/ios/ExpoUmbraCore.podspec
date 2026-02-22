@@ -16,11 +16,12 @@ Pod::Spec.new do |s|
 
   s.dependency 'ExpoModulesCore'
 
-  # Swift source files + C header for Rust FFI types.
+  # Swift + ObjC source files + C header for Rust FFI types.
   # CocoaPods will include UmbraCore.h in the umbrella header, making the
   # C struct definitions (UmbraCoreResult) and function declarations
   # (umbra_init, umbra_call, etc.) available to Swift automatically.
-  s.source_files = '**/*.swift', 'UmbraCore.h'
+  # ObjCExceptionHelper.{h,m} provides @try/@catch bridging for Swift.
+  s.source_files = '**/*.swift', '**/*.{h,m}'
 
   # Link the pre-compiled Rust static library via XCFramework.
   # After running scripts/build-mobile.sh ios, this bundles both:

@@ -64,9 +64,9 @@ const SECTIONS: SectionDef[] = [
   {
     id: 'getting-started',
     title: 'Getting Started',
-    subtitle: 'Create your identity and connect',
+    subtitle: 'Create your identity, connect, and handle invites',
     iconBg: '#22C55E',
-    keywords: ['identity', 'create', 'recovery', 'pin', 'start', 'did', 'bip39', 'mnemonic', 'key', 'hkdf'],
+    keywords: ['identity', 'create', 'recovery', 'pin', 'start', 'did', 'bip39', 'mnemonic', 'key', 'hkdf', 'deep link', 'invite', 'loading', 'initialization', 'onboarding'],
     stage: 'stable',
     testCoverage: {
       percentage: 85,
@@ -82,9 +82,9 @@ const SECTIONS: SectionDef[] = [
   {
     id: 'friends',
     title: 'Friends',
-    subtitle: 'Add and manage friends',
+    subtitle: 'Add friends, scan QR codes, and discover users',
     iconBg: '#8B5CF6',
-    keywords: ['friend', 'request', 'add', 'block', 'accept', 'reject', 'ecdh', 'key exchange', 'sync'],
+    keywords: ['friend', 'request', 'add', 'block', 'accept', 'reject', 'ecdh', 'key exchange', 'sync', 'qr', 'qr code', 'scan', 'discovery', 'discover', 'linked', 'link account', 'discord', 'github', 'steam', 'bluesky', 'username', 'search', 'cross-platform', 'connection link', 'share'],
     stage: 'stable',
     testCoverage: {
       percentage: 92,
@@ -100,9 +100,9 @@ const SECTIONS: SectionDef[] = [
   {
     id: 'messaging',
     title: 'Messaging',
-    subtitle: 'Send encrypted messages',
+    subtitle: 'Send encrypted messages, files, and mentions',
     iconBg: '#3B82F6',
-    keywords: ['message', 'send', 'edit', 'delete', 'pin', 'reaction', 'thread', 'reply', 'forward', 'aes', 'encrypt', 'nonce', 'gcm'],
+    keywords: ['message', 'send', 'edit', 'delete', 'pin', 'reaction', 'thread', 'reply', 'forward', 'aes', 'encrypt', 'nonce', 'gcm', 'mention', 'autocomplete', 'emoji', 'sticker', 'file', 'attachment', 'transfer', 'chat input', 'bubble', 'inline'],
     stage: 'stable',
     testCoverage: {
       percentage: 88,
@@ -145,6 +145,7 @@ const SECTIONS: SectionDef[] = [
       'webhook', 'emoji', 'sticker', 'branding', 'boost', 'node', 'audit',
       'announcement', 'bulletin', 'file', 'folder', 'mention', 'reaction', 'pin',
       'vanity', 'slow mode', 'e2ee', 'notification', 'status', 'member',
+      'qr', 'qr code', 'discord', 'import', 'migrate',
     ],
     stage: 'alpha',
     testCoverage: {
@@ -160,7 +161,7 @@ const SECTIONS: SectionDef[] = [
     title: 'Voice & Video Calls',
     subtitle: 'WebRTC calling with E2EE',
     iconBg: '#10B981',
-    keywords: ['call', 'voice', 'video', 'webrtc', 'ice', 'stun', 'turn', 'sdp', 'opus', 'codec', 'screen share', 'group call', 'e2ee', 'dtls', 'srtp'],
+    keywords: ['call', 'voice', 'video', 'webrtc', 'ice', 'stun', 'turn', 'sdp', 'opus', 'codec', 'screen share', 'group call', 'e2ee', 'dtls', 'srtp', 'diagnostics', 'loopback', 'relay test'],
     stage: 'beta',
     testCoverage: {
       percentage: 75,
@@ -246,9 +247,9 @@ const SECTIONS: SectionDef[] = [
   {
     id: 'technical',
     title: 'Technical Reference',
-    subtitle: 'Protocols, formats, and specs',
+    subtitle: 'Protocols, formats, mobile FFI, and specs',
     iconBg: '#6366F1',
-    keywords: ['technical', 'protocol', 'format', 'crypto', 'spec', 'reference', 'schema', 'envelope', 'database', 'architecture'],
+    keywords: ['technical', 'protocol', 'format', 'crypto', 'spec', 'reference', 'schema', 'envelope', 'database', 'architecture', 'mobile', 'ffi', 'native', 'dispatcher', 'tauri', 'wasm', 'react native', 'expo'],
     stage: 'stable',
     testCoverage: {
       percentage: 100,
@@ -629,7 +630,7 @@ export function GuideScreen() {
       {/* Footer */}
       <View style={styles.footer}>
         <Text style={[styles.footerText, { color: tc.text.muted }]}>
-          Umbra v0.1.0 — Built with privacy in mind
+          Umbra v1.5.0 — Built with privacy in mind
         </Text>
         <Text style={[styles.footerSub, { color: isDark ? '#3F3F46' : tc.text.muted }]}>
           All data is encrypted locally. No servers can read your messages.
