@@ -383,7 +383,7 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
                       ) : (
                         <View style={{ width: 48, height: 48, backgroundColor: '#5865F2', alignItems: 'center', justifyContent: 'center' }}>
                           <Text size="lg" weight="bold" style={{ color: 'white' }}>
-                            {importedProfile.displayName.charAt(0).toUpperCase()}
+                            {(importedProfile.displayName || importedProfile.username || '?').charAt(0).toUpperCase()}
                           </Text>
                         </View>
                       )}

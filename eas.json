@@ -6,6 +6,7 @@
   "build": {
     "production": {
       "autoIncrement": true,
+      "pre-install": "bash eas-hooks/eas-build-pre-install.sh",
       "ios": {
         "buildConfiguration": "Release",
         "distribution": "store"
@@ -17,6 +18,7 @@
     },
     "preview": {
       "autoIncrement": true,
+      "pre-install": "bash eas-hooks/eas-build-pre-install.sh",
       "ios": {
         "buildConfiguration": "Release",
         "distribution": "internal"
