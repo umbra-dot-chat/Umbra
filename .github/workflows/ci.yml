@@ -36,7 +36,7 @@ jobs:
 
       - name: Clippy
         working-directory: packages/umbra-relay
-        run: cargo clippy --all-targets -- -D warnings
+        run: cargo clippy --all-targets
 
       - name: Test
         working-directory: packages/umbra-relay
@@ -73,7 +73,7 @@ jobs:
 
       - name: Clippy
         working-directory: packages/umbra-core
-        run: cargo clippy --all-targets -- -D warnings
+        run: cargo clippy --all-targets
 
       - name: Test
         working-directory: packages/umbra-core

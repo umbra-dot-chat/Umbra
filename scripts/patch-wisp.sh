@@ -9,6 +9,15 @@ set -euo pipefail
 
 UMBRA_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 
+# Cross-platform in-place sed (macOS uses -i '', Linux uses -i)
+sed_i() {
+  if [[ "$OSTYPE" == "darwin"* ]]; then
+    sed -i '' "$@"
+  else
+    sed -i "$@"
+  fi
+}
+
 # Check for Wisp in sibling directory (local dev) or .wisp (CI)
 if [ -d "$UMBRA_DIR/../Wisp/packages" ]; then
   WISP_DIR="$UMBRA_DIR/../Wisp"
@@ -200,7 +209,7 @@ echo "  Applying Wisp type-error fixups..."
 fix_wisp_types() {
   local file="$1"
   [ -f "$file" ] || return 0
-  sed -i '' \
+  sed_i \
     -e 's/\.background\.base/\.background\.canvas/g' \
     -e 's/\.background\.secondary/\.background\.surface/g' \
     -e 's/\.background\.primary/\.background\.canvas/g' \
@@ -231,15 +240,15 @@ done
 # The actual type is WispTheme, exported from ./types.
 TEPS="$CORE_DEST/src/styles/TextEffectPicker.styles.ts"
 if [ -f "$TEPS" ]; then
-  sed -i '' "s|import type { Theme } from '../theme/create-theme'|import type { WispTheme as Theme } from '../theme/types'|" "$TEPS"
+  sed_i "s|import type { Theme } from '../theme/create-theme'|import type { WispTheme as Theme } from '../theme/types'|" "$TEPS"
   # Also handle if it was already partially patched
-  sed -i '' "s|import type { Theme } from '../theme/types'|import type { WispTheme as Theme } from '../theme/types'|" "$TEPS"
+  sed_i "s|import type { Theme } from '../theme/types'|import type { WispTheme as Theme } from '../theme/types'|" "$TEPS"
 fi
 
 # Fix FileUploadZone.tsx — string not assignable to DimensionValue (cast percentage)
 FUPZ="$RN_DEST/src/components/file-upload-zone/FileUploadZone.tsx"
 if [ -f "$FUPZ" ]; then
-  sed -i '' "s/(uploadProgress ?? 0) + '%'/(\`\${uploadProgress ?? 0}%\` as any)/" "$FUPZ"
+  sed_i "s/(uploadProgress ?? 0) + '%'/(\`\${uploadProgress ?? 0}%\` as any)/" "$FUPZ"
 fi
 
 echo "Done. Wisp packages patched successfully."
