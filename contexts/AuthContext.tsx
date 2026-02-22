@@ -49,9 +49,25 @@ function ensureRustInit(native: any): Promise<void> {
   if (_rustInitPromise) return _rustInitPromise;
   _rustInitPromise = (async () => {
     try {
-      native.initialize('');
+      const result = native.initialize('');
+      // processResult() now returns error-as-JSON instead of throwing.
+      // Check for error responses and handle "already initialized" (101) gracefully.
+      if (typeof result === 'string' && result.startsWith('{"error"')) {
+        try {
+          const parsed = JSON.parse(result);
+          if (parsed && parsed.error === true) {
+            const code = parsed.error_code ?? 0;
+            const message = parsed.error_message ?? 'Unknown error';
+            // 101 = already initialized — that's fine
+            if (code !== 101 && !message.includes('Already initialized')) {
+              console.warn('[AuthContext] Rust init returned error:', message);
+            }
+            return; // Don't throw for init errors — they're usually benign
+          }
+        } catch { /* not valid JSON — ignore */ }
+      }
     } catch (e: any) {
-      // 101 = already initialized — that's fine
+      // Fallback: some errors may still throw (e.g., module not loaded)
       const msg = e?.message ?? String(e);
       if (!msg.includes('Already initialized') && !msg.includes('101')) {
         console.warn('[AuthContext] Rust init failed:', e);
@@ -73,6 +89,13 @@ async function getStorageItem(key: string): Promise<string | null> {
   try {
     await ensureRustInit(native);
     const resultJson = await native.call('secure_retrieve', JSON.stringify({ key }));
+    // Check for error-as-JSON responses from processResult()
+    if (typeof resultJson === 'string' && resultJson.startsWith('{"error"')) {
+      try {
+        const errCheck = JSON.parse(resultJson);
+        if (errCheck && errCheck.error === true) return null; // Treat errors as "not found"
+      } catch { /* not valid error JSON — try normal parse below */ }
+    }
     const result = JSON.parse(resultJson);
     return result.value ?? null;
   } catch {
@@ -92,7 +115,16 @@ async function setStorageItem(key: string, value: string): Promise<void> {
   if (!native) return;
   try {
     await ensureRustInit(native);
-    await native.call('secure_store', JSON.stringify({ key, value }));
+    const result = await native.call('secure_store', JSON.stringify({ key, value }));
+    // Check for error-as-JSON responses
+    if (typeof result === 'string' && result.startsWith('{"error"')) {
+      try {
+        const errCheck = JSON.parse(result);
+        if (errCheck && errCheck.error === true) {
+          console.warn('[AuthContext] SecureStore write error:', errCheck.error_message);
+        }
+      } catch { /* ignore */ }
+    }
   } catch (e) {
     console.warn('[AuthContext] SecureStore write failed:', e);
   }
@@ -110,7 +142,16 @@ async function removeStorageItem(key: string): Promise<void> {
   if (!native) return;
   try {
     await ensureRustInit(native);
-    await native.call('secure_delete', JSON.stringify({ key }));
+    const result = await native.call('secure_delete', JSON.stringify({ key }));
+    // Check for error-as-JSON responses
+    if (typeof result === 'string' && result.startsWith('{"error"')) {
+      try {
+        const errCheck = JSON.parse(result);
+        if (errCheck && errCheck.error === true) {
+          console.warn('[AuthContext] SecureStore delete error:', errCheck.error_message);
+        }
+      } catch { /* ignore */ }
+    }
   } catch (e) {
     console.warn('[AuthContext] SecureStore delete failed:', e);
   }

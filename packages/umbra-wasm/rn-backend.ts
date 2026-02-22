@@ -47,6 +47,39 @@ function ensureJsonString(value: unknown): string {
   return JSON.stringify(value);
 }
 
+/**
+ * Check a native result string for error-as-JSON responses.
+ *
+ * Since we changed processResult() in Swift to return JSON error objects
+ * instead of throwing NSError (which caused Hermes heap corruption via
+ * NSException → TurboModule bridge race), we now need to detect these
+ * error responses on the JS side and throw proper JS errors.
+ *
+ * Error format: {"error": true, "error_code": N, "error_message": "..."}
+ */
+function checkNativeResult(result: string, context?: string): string {
+  // Fast path: most successful responses don't start with {"error"
+  if (!result || !result.startsWith('{"error"')) return result;
+
+  try {
+    const parsed = JSON.parse(result);
+    if (parsed && parsed.error === true) {
+      const code = parsed.error_code ?? 0;
+      const message = parsed.error_message ?? 'Unknown native error';
+      const err = new Error(`[native${context ? `:${context}` : ''}] ${message}`);
+      (err as any).code = code;
+      (err as any).nativeErrorCode = code;
+      throw err;
+    }
+  } catch (e) {
+    // If it's already our error, re-throw
+    if (e instanceof Error && (e as any).nativeErrorCode !== undefined) throw e;
+    // Otherwise it's not valid JSON or not an error object — return as-is
+  }
+
+  return result;
+}
+
 // ─────────────────────────────────────────────────────────────────────────
 // Backend factory
 // ─────────────────────────────────────────────────────────────────────────
@@ -73,7 +106,8 @@ function createNativeBackend(native: NativeUmbraCore): UmbraWasmModule {
    * `native.call(method, args)` → Swift `umbra_call` → Rust `dispatch()`.
    */
   const call = (method: string, args: Record<string, any> = {}): any => {
-    return native.call(method, JSON.stringify(args));
+    const result = native.call(method, JSON.stringify(args));
+    return checkNativeResult(result, method);
   };
 
   return {
@@ -83,7 +117,9 @@ function createNativeBackend(native: NativeUmbraCore): UmbraWasmModule {
         // Pass empty string to use the platform-default storage path.
         // Note: "init" is reserved in Swift, so the native function is
         // named "initialize" to avoid Expo Modules type coercion issues.
-        native.initialize('');
+        const result = native.initialize('');
+        // processResult() now returns error-as-JSON instead of throwing
+        checkNativeResult(result, 'init');
         console.log('[rn-backend] Native Rust backend initialized');
       } catch (e: any) {
         // Rust returns error code 101 if already initialized — that's fine,
@@ -99,7 +135,8 @@ function createNativeBackend(native: NativeUmbraCore): UmbraWasmModule {
 
     umbra_wasm_init_database: async () => {
       try {
-        native.initDatabase();
+        const result = native.initDatabase();
+        checkNativeResult(result, 'initDatabase');
         console.log('[rn-backend] Database initialized');
         return true;
       } catch (e: any) {
@@ -114,21 +151,21 @@ function createNativeBackend(native: NativeUmbraCore): UmbraWasmModule {
 
     // ── Identity (direct native calls) ──────────────────────────────────
     umbra_wasm_identity_create: (display_name: string) =>
-      ensureJsonString(native.identityCreate(display_name)),
+      checkNativeResult(ensureJsonString(native.identityCreate(display_name)), 'identityCreate'),
 
     umbra_wasm_identity_restore: (recovery_phrase: string, display_name: string) =>
-      ensureJsonString(native.identityRestore(recovery_phrase, display_name)),
+      checkNativeResult(ensureJsonString(native.identityRestore(recovery_phrase, display_name)), 'identityRestore'),
 
     umbra_wasm_identity_set: (_json: string) => {
       console.debug('[rn-backend] identity_set — no-op on native');
     },
 
-    umbra_wasm_identity_get_did: () => native.identityGetDid(),
-    umbra_wasm_identity_get_profile: () => ensureJsonString(native.identityGetProfile()),
-    umbra_wasm_identity_update_profile: (json: string) => ensureJsonString(native.identityUpdateProfile(json)),
+    umbra_wasm_identity_get_did: () => checkNativeResult(native.identityGetDid(), 'identityGetDid'),
+    umbra_wasm_identity_get_profile: () => checkNativeResult(ensureJsonString(native.identityGetProfile()), 'identityGetProfile'),
+    umbra_wasm_identity_update_profile: (json: string) => checkNativeResult(ensureJsonString(native.identityUpdateProfile(json)), 'identityUpdateProfile'),
 
     // ── Discovery (direct native calls) ─────────────────────────────────
-    umbra_wasm_discovery_get_connection_info: () => ensureJsonString(native.discoveryGetConnectionInfo()),
+    umbra_wasm_discovery_get_connection_info: () => checkNativeResult(ensureJsonString(native.discoveryGetConnectionInfo()), 'discoveryGetConnectionInfo'),
     umbra_wasm_discovery_parse_connection_info: (info: string) => info,
 
     // ── Friends (via dispatcher) ────────────────────────────────────────
@@ -199,16 +236,24 @@ function createNativeBackend(native: NativeUmbraCore): UmbraWasmModule {
 
     // ── Network (direct native calls) ───────────────────────────────────
     umbra_wasm_network_status: () => {
-      try { return ensureJsonString(native.networkStatus()); }
-      catch { return JSON.stringify({ connected: false, peers: 0 }); }
+      try {
+        const result = ensureJsonString(native.networkStatus());
+        return checkNativeResult(result, 'networkStatus');
+      } catch { return JSON.stringify({ connected: false, peers: 0 }); }
     },
     umbra_wasm_network_start: async () => {
-      try { await native.networkStart(null); return true; }
-      catch (e) { console.warn('[rn-backend] network_start failed:', e); return false; }
+      try {
+        const result = await native.networkStart(null);
+        checkNativeResult(result, 'networkStart');
+        return true;
+      } catch (e) { console.warn('[rn-backend] network_start failed:', e); return false; }
     },
     umbra_wasm_network_stop: async () => {
-      try { await native.networkStop(); return true; }
-      catch (e) { console.warn('[rn-backend] network_stop failed:', e); return false; }
+      try {
+        const result = await native.networkStop();
+        checkNativeResult(result, 'networkStop');
+        return true;
+      } catch (e) { console.warn('[rn-backend] network_stop failed:', e); return false; }
     },
     umbra_wasm_network_create_offer: () => call('network_create_offer'),
     umbra_wasm_network_accept_offer: (offer: string) => call('network_accept_offer', { offer }),

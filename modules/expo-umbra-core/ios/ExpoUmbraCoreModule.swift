@@ -33,8 +33,9 @@ public class ExpoUmbraCoreModule: Module {
     // MARK: - Helpers
 
     /// Convert UmbraCoreResult (C struct) to a Swift String, freeing C memory.
-    /// Throws if the FFI call returned an error.
-    private func processResult(_ result: UmbraCoreResult) throws -> String {
+    /// Returns a JSON error string instead of throwing to avoid NSException
+    /// crashes in the Hermes/TurboModule bridge during concurrent execution.
+    private func processResult(_ result: UmbraCoreResult) -> String {
         defer {
             if result.error_message != nil {
                 umbra_free_string(result.error_message)
@@ -56,11 +57,16 @@ public class ExpoUmbraCoreModule: Module {
             } else {
                 errorMessage = "Unknown error"
             }
-            throw NSError(
-                domain: "UmbraCore",
-                code: Int(result.error_code),
-                userInfo: [NSLocalizedDescriptionKey: errorMessage]
-            )
+            // Return error as JSON instead of throwing.
+            // Throwing NSError from synchronous Expo Module functions causes
+            // the TurboModule bridge to convert it to an NSException, which
+            // can corrupt the Hermes heap during concurrent microtask draining
+            // and crash the app on startup (EXC_BAD_ACCESS in HiddenClass::findProperty).
+            let code = Int(result.error_code)
+            let escapedMsg = errorMessage
+                .replacingOccurrences(of: "\\", with: "\\\\")
+                .replacingOccurrences(of: "\"", with: "\\\"")
+            return "{\"error\": true, \"error_code\": \(code), \"error_message\": \"\(escapedMsg)\"}"
         }
     }
 
@@ -100,17 +106,17 @@ public class ExpoUmbraCoreModule: Module {
             let result = path.withCString { cPath in
                 umbra_init(cPath)
             }
-            return try self.processResult(result)
+            return self.processResult(result)
         }
 
         Function("initDatabase") { () -> String in
             let result = umbra_init_database()
-            return try self.processResult(result)
+            return self.processResult(result)
         }
 
         Function("shutdown") { () -> String in
             let result = umbra_shutdown()
-            return try self.processResult(result)
+            return self.processResult(result)
         }
 
         Function("version") { () -> String in
@@ -128,7 +134,7 @@ public class ExpoUmbraCoreModule: Module {
             let result = displayName.withCString { cName in
                 umbra_identity_create(cName)
             }
-            return try self.processResult(result)
+            return self.processResult(result)
         }
 
         Function("identityRestore") { (recoveryPhrase: String, displayName: String) -> String in
@@ -137,24 +143,24 @@ public class ExpoUmbraCoreModule: Module {
                     umbra_identity_restore(cPhrase, cName)
                 }
             }
-            return try self.processResult(result)
+            return self.processResult(result)
         }
 
         Function("identityGetDid") { () -> String in
             let result = umbra_identity_get_did()
-            return try self.processResult(result)
+            return self.processResult(result)
         }
 
         Function("identityGetProfile") { () -> String in
             let result = umbra_identity_get_profile()
-            return try self.processResult(result)
+            return self.processResult(result)
         }
 
         Function("identityUpdateProfile") { (json: String) -> String in
             let result = json.withCString { cJson in
                 umbra_identity_update_profile(cJson)
             }
-            return try self.processResult(result)
+            return self.processResult(result)
         }
 
         // ── Network ──────────────────────────────────────────────────────────
@@ -164,49 +170,49 @@ public class ExpoUmbraCoreModule: Module {
                 let result = config.withCString { cConfig in
                     umbra_network_start(cConfig)
                 }
-                return try self.processResult(result)
+                return self.processResult(result)
             } else {
                 let result = umbra_network_start(nil)
-                return try self.processResult(result)
+                return self.processResult(result)
             }
         }
 
         AsyncFunction("networkStop") { () -> String in
             let result = umbra_network_stop()
-            return try self.processResult(result)
+            return self.processResult(result)
         }
 
         Function("networkStatus") { () -> String in
             let result = umbra_network_status()
-            return try self.processResult(result)
+            return self.processResult(result)
         }
 
         AsyncFunction("networkConnect") { (addr: String) -> String in
             let result = addr.withCString { cAddr in
                 umbra_network_connect(cAddr)
             }
-            return try self.processResult(result)
+            return self.processResult(result)
         }
 
         // ── Discovery ────────────────────────────────────────────────────────
 
         Function("discoveryGetConnectionInfo") { () -> String in
             let result = umbra_discovery_get_connection_info()
-            return try self.processResult(result)
+            return self.processResult(result)
         }
 
         AsyncFunction("discoveryConnectWithInfo") { (info: String) -> String in
             let result = info.withCString { cInfo in
                 umbra_discovery_connect_with_info(cInfo)
             }
-            return try self.processResult(result)
+            return self.processResult(result)
         }
 
         AsyncFunction("discoveryLookupPeer") { (did: String) -> String in
             let result = did.withCString { cDid in
                 umbra_discovery_lookup_peer(cDid)
             }
-            return try self.processResult(result)
+            return self.processResult(result)
         }
 
         // ── Friends ──────────────────────────────────────────────────────────
@@ -224,31 +230,31 @@ public class ExpoUmbraCoreModule: Module {
                     umbra_friends_send_request(cDid, nil)
                 }
             }
-            return try self.processResult(result)
+            return self.processResult(result)
         }
 
         Function("friendsAcceptRequest") { (requestId: String) -> String in
             let result = requestId.withCString { cId in
                 umbra_friends_accept_request(cId)
             }
-            return try self.processResult(result)
+            return self.processResult(result)
         }
 
         Function("friendsRejectRequest") { (requestId: String) -> String in
             let result = requestId.withCString { cId in
                 umbra_friends_reject_request(cId)
             }
-            return try self.processResult(result)
+            return self.processResult(result)
         }
 
         Function("friendsList") { () -> String in
             let result = umbra_friends_list()
-            return try self.processResult(result)
+            return self.processResult(result)
         }
 
         Function("friendsPendingRequests") { () -> String in
             let result = umbra_friends_pending_requests()
-            return try self.processResult(result)
+            return self.processResult(result)
         }
 
         // ── Messaging ────────────────────────────────────────────────────────
@@ -259,12 +265,12 @@ public class ExpoUmbraCoreModule: Module {
                     umbra_messaging_send_text(cDid, cText)
                 }
             }
-            return try self.processResult(result)
+            return self.processResult(result)
         }
 
         Function("messagingGetConversations") { () -> String in
             let result = umbra_messaging_get_conversations()
-            return try self.processResult(result)
+            return self.processResult(result)
         }
 
         Function("messagingGetMessages") { (conversationId: String, limit: Int, beforeId: String?) -> String in
@@ -280,7 +286,7 @@ public class ExpoUmbraCoreModule: Module {
                     umbra_messaging_get_messages(cId, Int32(limit), nil)
                 }
             }
-            return try self.processResult(result)
+            return self.processResult(result)
         }
 
         // ── Generic Dispatcher ───────────────────────────────────────────
@@ -291,7 +297,7 @@ public class ExpoUmbraCoreModule: Module {
                     umbra_call(cMethod, cArgs)
                 }
             }
-            return try self.processResult(result)
+            return self.processResult(result)
         }
     }
 }
