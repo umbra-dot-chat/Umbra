@@ -10,10 +10,12 @@
  */
 
 import React, { useMemo } from 'react';
+import { View, Pressable } from 'react-native';
 import { ChannelHeader, useTheme } from '@coexist/wisp-react-native';
 import type { ChannelHeaderType, ChannelHeaderAction } from '@coexist/wisp-react-native';
 import type { RightPanel } from '@/types/panels';
-import { SearchIcon, PinIcon, UsersIcon, SettingsIcon } from '@/components/icons';
+import { SearchIcon, PinIcon, UsersIcon, SettingsIcon, ArrowLeftIcon } from '@/components/icons';
+import { useIsMobile } from '@/hooks/useIsMobile';
 
 // ---------------------------------------------------------------------------
 // Props
@@ -38,6 +40,8 @@ export interface CommunityChannelHeaderProps {
   onTopicClick?: () => void;
   /** Show loading skeleton. @default false */
   skeleton?: boolean;
+  /** Called when the mobile back button is pressed (navigates back to channel list). */
+  onBackPress?: () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -54,36 +58,51 @@ export function CommunityChannelHeader({
   onSettingsPress,
   onTopicClick,
   skeleton = false,
+  onBackPress,
 }: CommunityChannelHeaderProps) {
   const { theme } = useTheme();
   const themeColors = theme.colors;
+  const isMobile = useIsMobile();
 
   // Build action buttons — highlight the active panel
   const actions = useMemo<ChannelHeaderAction[]>(() => {
     const iconColor = themeColors.text.secondary;
-    const items: ChannelHeaderAction[] = [
-      {
-        key: 'search',
-        label: 'Search messages',
-        icon: <SearchIcon size={18} color={iconColor} />,
-        onClick: () => togglePanel('search'),
-        active: rightPanel === 'search',
-      },
-      {
-        key: 'pins',
-        label: 'Pinned Messages',
-        icon: <PinIcon size={18} color={iconColor} />,
-        onClick: () => togglePanel('pins'),
-        active: rightPanel === 'pins',
-      },
-      {
+    const items: ChannelHeaderAction[] = [];
+
+    // On mobile, only show the members toggle (no search/pins in header to save space)
+    if (isMobile) {
+      items.push({
         key: 'members',
         label: 'Member List',
         icon: <UsersIcon size={18} color={iconColor} />,
         onClick: () => togglePanel('members'),
         active: rightPanel === 'members',
-      },
-    ];
+      });
+    } else {
+      items.push(
+        {
+          key: 'search',
+          label: 'Search messages',
+          icon: <SearchIcon size={18} color={iconColor} />,
+          onClick: () => togglePanel('search'),
+          active: rightPanel === 'search',
+        },
+        {
+          key: 'pins',
+          label: 'Pinned Messages',
+          icon: <PinIcon size={18} color={iconColor} />,
+          onClick: () => togglePanel('pins'),
+          active: rightPanel === 'pins',
+        },
+        {
+          key: 'members',
+          label: 'Member List',
+          icon: <UsersIcon size={18} color={iconColor} />,
+          onClick: () => togglePanel('members'),
+          active: rightPanel === 'members',
+        },
+      );
+    }
 
     if (onSettingsPress) {
       items.push({
@@ -95,7 +114,42 @@ export function CommunityChannelHeader({
     }
 
     return items;
-  }, [themeColors.text.secondary, rightPanel, togglePanel, onSettingsPress]);
+  }, [themeColors.text.secondary, rightPanel, togglePanel, onSettingsPress, isMobile]);
+
+  // On mobile, wrap with a back button
+  if (isMobile && onBackPress) {
+    return (
+      <View style={{ flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: themeColors.border.subtle, backgroundColor: themeColors.background.surface }}>
+        <Pressable
+          onPress={onBackPress}
+          accessibilityRole="button"
+          accessibilityLabel="Back to channels"
+          style={({ pressed }) => ({
+            width: 40,
+            height: 40,
+            borderRadius: 8,
+            alignItems: 'center',
+            justifyContent: 'center',
+            marginLeft: 8,
+            opacity: pressed ? 0.7 : 1,
+          })}
+        >
+          <ArrowLeftIcon size={20} color={themeColors.text.secondary} />
+        </Pressable>
+        <View style={{ flex: 1 }}>
+          <ChannelHeader
+            name={name}
+            type={type}
+            encrypted={encrypted}
+            actions={actions}
+            onTopicClick={onTopicClick}
+            skeleton={skeleton}
+            style={{ borderBottomWidth: 0 }}
+          />
+        </View>
+      </View>
+    );
+  }
 
   return (
     <ChannelHeader

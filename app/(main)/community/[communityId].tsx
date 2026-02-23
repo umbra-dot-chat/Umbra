@@ -23,6 +23,7 @@ import React, { useMemo, useCallback, useState, useRef } from 'react';
 import { View, Image, Animated, Pressable } from 'react-native';
 import type { GestureResponderEvent } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
+import { useIsMobile } from '@/hooks/useIsMobile';
 import {
   useTheme, Text, Avatar, CombinedPicker,
   MemberList, MessageInput, MessageList, E2EEKeyExchangeUI, PinnedMessages,
@@ -44,7 +45,7 @@ import { useRightPanel } from '@/hooks/useRightPanel';
 import { useUmbra } from '@/contexts/UmbraContext';
 import { useMessaging } from '@/contexts/MessagingContext';
 import { PANEL_WIDTH } from '@/types/panels';
-import { VolumeIcon } from '@/components/icons';
+import { VolumeIcon, ArrowLeftIcon } from '@/components/icons';
 import { FileChannelContent } from '@/components/community/FileChannelContent';
 
 // ---------------------------------------------------------------------------
@@ -272,7 +273,8 @@ export default function CommunityPage() {
   const isMock = communityId?.startsWith('mock-') ?? false;
 
   // Read active channel from shared context (set by CommunityLayoutSidebar)
-  const { activeChannelId } = useCommunityContext();
+  const { activeChannelId, setActiveChannelId } = useCommunityContext();
+  const isMobile = useIsMobile();
 
   // Voice channel state
   const { activeChannelId: voiceActiveChannelId, voiceParticipants } = useVoiceChannel();
@@ -643,6 +645,11 @@ export default function CommunityPage() {
     }
   }, [sendMessage]);
 
+  // Mobile back: clear active channel to return to the community sidebar
+  const handleBackPress = useCallback(() => {
+    setActiveChannelId(null);
+  }, [setActiveChannelId]);
+
   // -- Context menu: roles list (non-default roles) -------------------------
 
   const contextMenuRoles = useMemo<MemberContextMenuRole[]>(() => {
@@ -776,20 +783,38 @@ export default function CommunityPage() {
       <View style={{ flex: 1, flexDirection: 'column', minWidth: 0 }}>
         {activeChannel && activeChannel.channelType === 'voice' && voiceActiveChannelId === activeChannelId ? (
           /* Voice channel — show call panel when connected */
-          <VoiceCallPanel
-            channelName={activeChannel.name}
-            members={effectiveMembers as any}
-            myDid={myDid}
-            myDisplayName={identity?.displayName}
-          />
+          <>
+            {isMobile && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', height: 48, paddingHorizontal: 8, borderBottomWidth: 1, borderBottomColor: theme.colors.border.subtle }}>
+                <Pressable onPress={handleBackPress} style={{ width: 40, height: 40, borderRadius: 8, alignItems: 'center', justifyContent: 'center' }}>
+                  <ArrowLeftIcon size={20} color={theme.colors.text.secondary} />
+                </Pressable>
+              </View>
+            )}
+            <VoiceCallPanel
+              channelName={activeChannel.name}
+              members={effectiveMembers as any}
+              myDid={myDid}
+              myDisplayName={identity?.displayName}
+            />
+          </>
         ) : activeChannel && activeChannel.channelType === 'voice' ? (
           /* Voice channel selected but not connected — show lobby */
-          <VoiceChannelLobby
-            channelName={activeChannel.name}
-            communityId={communityId!}
-            channelId={activeChannelId!}
-            members={effectiveMembers as any}
-          />
+          <>
+            {isMobile && (
+              <View style={{ flexDirection: 'row', alignItems: 'center', height: 48, paddingHorizontal: 8, borderBottomWidth: 1, borderBottomColor: theme.colors.border.subtle }}>
+                <Pressable onPress={handleBackPress} style={{ width: 40, height: 40, borderRadius: 8, alignItems: 'center', justifyContent: 'center' }}>
+                  <ArrowLeftIcon size={20} color={theme.colors.text.secondary} />
+                </Pressable>
+              </View>
+            )}
+            <VoiceChannelLobby
+              channelName={activeChannel.name}
+              communityId={communityId!}
+              channelId={activeChannelId!}
+              members={effectiveMembers as any}
+            />
+          </>
         ) : activeChannel && activeChannel.channelType === 'files' ? (
           /* File channel — show file manager */
           <>
@@ -800,6 +825,7 @@ export default function CommunityPage() {
               encrypted={activeChannel.e2eeEnabled}
               rightPanel={visiblePanel}
               togglePanel={togglePanel}
+              onBackPress={handleBackPress}
             />
             <FileChannelContent
               channelId={activeChannelId!}
@@ -818,6 +844,7 @@ export default function CommunityPage() {
               encrypted={activeChannel.e2eeEnabled}
               rightPanel={visiblePanel}
               togglePanel={togglePanel}
+              onBackPress={handleBackPress}
             />
 
             {/* Messages — E2EE banner scrolls at the top of the message list */}
@@ -883,27 +910,62 @@ export default function CommunityPage() {
         )}
       </View>
 
-      {/* Right column: Members / Pins panel (animated) */}
-      <Animated.View style={{ width: panelWidth, overflow: 'hidden' }}>
-        <View style={{ width: PANEL_WIDTH, height: '100%', borderLeftWidth: 1, borderLeftColor: theme.colors.border.subtle }}>
-          {visiblePanel === 'members' && (
-            <MemberList
-              sections={memberSections}
-              title={`Members — ${effectiveMembers.length}`}
-              onClose={() => togglePanel('members')}
-              onMemberLongPress={handleMemberLongPress}
-            />
-          )}
-          {visiblePanel === 'pins' && (
-            <PinnedMessages
-              messages={pinnedForPanel}
-              onClose={() => togglePanel('pins')}
-              onMessageClick={() => {}}
-              onUnpin={(msg) => unpinMessage(msg.id)}
-            />
-          )}
-        </View>
-      </Animated.View>
+      {/* Right column: Members / Pins panel */}
+      {isMobile ? (
+        /* Mobile: Full-screen overlay when a panel is open */
+        visiblePanel && (
+          <View
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              zIndex: 50,
+              backgroundColor: theme.colors.background.canvas,
+            }}
+          >
+            {visiblePanel === 'members' && (
+              <MemberList
+                sections={memberSections}
+                title={`Members — ${effectiveMembers.length}`}
+                onClose={() => togglePanel('members')}
+                onMemberLongPress={handleMemberLongPress}
+              />
+            )}
+            {visiblePanel === 'pins' && (
+              <PinnedMessages
+                messages={pinnedForPanel}
+                onClose={() => togglePanel('pins')}
+                onMessageClick={() => {}}
+                onUnpin={(msg) => unpinMessage(msg.id)}
+              />
+            )}
+          </View>
+        )
+      ) : (
+        /* Desktop: Animated side panel */
+        <Animated.View style={{ width: panelWidth, overflow: 'hidden' }}>
+          <View style={{ width: PANEL_WIDTH, height: '100%', borderLeftWidth: 1, borderLeftColor: theme.colors.border.subtle }}>
+            {visiblePanel === 'members' && (
+              <MemberList
+                sections={memberSections}
+                title={`Members — ${effectiveMembers.length}`}
+                onClose={() => togglePanel('members')}
+                onMemberLongPress={handleMemberLongPress}
+              />
+            )}
+            {visiblePanel === 'pins' && (
+              <PinnedMessages
+                messages={pinnedForPanel}
+                onClose={() => togglePanel('pins')}
+                onMessageClick={() => {}}
+                onUnpin={(msg) => unpinMessage(msg.id)}
+              />
+            )}
+          </View>
+        </Animated.View>
+      )}
 
       {/* Member context menu (role picker dropdown) */}
       <MemberContextMenu
