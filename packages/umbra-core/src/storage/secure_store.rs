@@ -74,7 +74,9 @@
 //! └─────────────────────────────────────────────────────────────────────────┘
 //! ```
 
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
 use parking_lot::RwLock;
+#[cfg(not(any(target_os = "ios", target_os = "android")))]
 use std::collections::HashMap;
 use zeroize::Zeroizing;
 
@@ -216,7 +218,6 @@ impl SecureStore {
     // iOS Keychain implementation
     #[cfg(target_os = "ios")]
     fn store_raw(&self, key: &str, value: &[u8]) -> Result<()> {
-        use security_framework::item::{ItemClass, ItemSearchOptions, Limit};
         use security_framework::passwords::{delete_generic_password, set_generic_password};
 
         const SERVICE_NAME: &str = "com.umbra.keychain";

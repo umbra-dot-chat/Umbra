@@ -28,7 +28,7 @@ class ExpoVideoEffectsView: ExpoView, MTKViewDelegate {
 
     // MARK: - Init
 
-    required init(appContext: AppContext) {
+    required init(appContext: AppContext? = nil) {
         guard let device = MTLCreateSystemDefaultDevice(),
               let queue = device.makeCommandQueue() else {
             fatalError("[ExpoVideoEffectsView] Metal is not available")
@@ -63,10 +63,6 @@ class ExpoVideoEffectsView: ExpoView, MTKViewDelegate {
                 self?.metalView.setNeedsDisplay()
             }
         }
-    }
-
-    required init?(coder: NSCoder) {
-        fatalError("init(coder:) not supported")
     }
 
     // MARK: - Layout

@@ -147,6 +147,7 @@ pub fn dm_folder_json(f: &crate::storage::DmSharedFolderRecord) -> serde_json::V
     })
 }
 
+#[allow(dead_code)]
 pub fn webhook_json(w: &crate::storage::CommunityWebhookRecord) -> serde_json::Value {
     serde_json::json!({
         "id": w.id, "channel_id": w.channel_id, "name": w.name,
@@ -155,6 +156,7 @@ pub fn webhook_json(w: &crate::storage::CommunityWebhookRecord) -> serde_json::V
     })
 }
 
+#[allow(dead_code)]
 pub fn warning_json(w: &crate::storage::CommunityWarningRecord) -> serde_json::Value {
     serde_json::json!({
         "id": w.id, "community_id": w.community_id, "member_did": w.member_did,
@@ -174,6 +176,7 @@ pub fn seat_json(s: &crate::storage::CommunitySeatRecord) -> serde_json::Value {
     })
 }
 
+#[allow(dead_code)]
 pub fn boost_node_json(n: &crate::storage::BoostNodeRecord) -> serde_json::Value {
     serde_json::json!({
         "id": n.id, "owner_did": n.owner_did, "node_type": n.node_type,

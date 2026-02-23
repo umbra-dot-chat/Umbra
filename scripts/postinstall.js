@@ -21,6 +21,58 @@ const WISP_DIR = fs.existsSync(path.join(WISP_DIR_CI, 'packages'))
 const CORE_DEST = path.join(UMBRA_DIR, 'node_modules', '@coexist', 'wisp-core');
 const RN_DEST = path.join(UMBRA_DIR, 'node_modules', '@coexist', 'wisp-react-native');
 
+// ── Patch Expo CLI devicectl for Xcode 26+ (jsonVersion 3) ───────────────────
+// Xcode 26+ ships devicectl that outputs jsonVersion:3, but Expo CLI only
+// accepts version 2. This patch accepts both so physical device builds work.
+const devicectlPath = path.join(
+  UMBRA_DIR, 'node_modules', '@expo', 'cli', 'build', 'src', 'start', 'platforms', 'ios', 'devicectl.js'
+);
+if (fs.existsSync(devicectlPath)) {
+  let src = fs.readFileSync(devicectlPath, 'utf8');
+  const old = '.jsonVersion) !== 2)';
+  const patched = '.jsonVersion) !== 2 && _devicesJson_info.jsonVersion !== 3)';
+  if (src.includes(old) && !src.includes(patched)) {
+    src = src.replace(old, patched);
+    fs.writeFileSync(devicectlPath, src);
+    console.log('[postinstall] Patched @expo/cli devicectl.js for Xcode 26+ (jsonVersion 3)');
+  } else if (src.includes(patched)) {
+    console.log('[postinstall] @expo/cli devicectl.js — already patched');
+  } else {
+    console.log('[postinstall] @expo/cli devicectl.js — patch target not found (may be fixed upstream)');
+  }
+} else {
+  console.log('[postinstall] @expo/cli devicectl.js not found — skipping patch');
+}
+
+// ── Patch Expo CLI XcodeBuild to always pass -allowProvisioningUpdates ────────
+// Expo only adds -allowProvisioningUpdates when it sets DEVELOPMENT_TEAM itself,
+// but skips it when the team is already configured in the pbxproj. This causes
+// "No profiles found" errors on device builds with automatic signing.
+const xcodeBuildPath = path.join(
+  UMBRA_DIR, 'node_modules', '@expo', 'cli', 'build', 'src', 'run', 'ios', 'XcodeBuild.js'
+);
+if (fs.existsSync(xcodeBuildPath)) {
+  let xbSrc = fs.readFileSync(xcodeBuildPath, 'utf8');
+  const oldProvision = "args.push(`DEVELOPMENT_TEAM=${developmentTeamId}`, '-allowProvisioningUpdates', '-allowProvisioningDeviceRegistration');";
+  const newProvision = "args.push(`DEVELOPMENT_TEAM=${developmentTeamId}`);\n        }\n        args.push('-allowProvisioningUpdates', '-allowProvisioningDeviceRegistration');";
+  // Check for the already-patched form to avoid double-patching
+  if (xbSrc.includes(oldProvision)) {
+    // Need to replace the old block including the closing brace
+    xbSrc = xbSrc.replace(
+      oldProvision + "\n        }",
+      newProvision
+    );
+    fs.writeFileSync(xcodeBuildPath, xbSrc);
+    console.log('[postinstall] Patched @expo/cli XcodeBuild.js — always pass -allowProvisioningUpdates');
+  } else if (xbSrc.includes("args.push('-allowProvisioningUpdates', '-allowProvisioningDeviceRegistration');")) {
+    console.log('[postinstall] @expo/cli XcodeBuild.js — already patched');
+  } else {
+    console.log('[postinstall] @expo/cli XcodeBuild.js — patch target not found (may be fixed upstream)');
+  }
+} else {
+  console.log('[postinstall] @expo/cli XcodeBuild.js not found — skipping patch');
+}
+
 // Check if local Wisp repo exists
 const hasWisp = fs.existsSync(path.join(WISP_DIR, 'packages'));
 

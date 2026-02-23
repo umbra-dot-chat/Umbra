@@ -171,6 +171,7 @@ impl super::CommunityService {
 }
 
 /// Input data for creating a seat (used by batch import).
+#[allow(missing_docs)]
 #[derive(Debug, Clone)]
 pub struct SeatInput {
     pub platform: String,

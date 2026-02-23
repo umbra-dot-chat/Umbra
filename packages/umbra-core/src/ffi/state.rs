@@ -32,6 +32,7 @@ pub type EventCallback =
     extern "C" fn(event_type: *const std::os::raw::c_char, data: *const std::os::raw::c_char);
 
 /// FFI state holding all services
+#[allow(dead_code)]
 pub(crate) struct FfiState {
     pub identity: Option<Identity>,
     pub network: Option<Arc<NetworkService>>,

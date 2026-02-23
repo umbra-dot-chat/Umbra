@@ -5859,6 +5859,7 @@ pub struct CallHistoryRecord {
     pub created_at: i64,
 }
 
+#[allow(missing_docs)]
 /// A community record from the database
 #[derive(Debug, Clone)]
 pub struct CommunityRecord {
@@ -5876,6 +5877,7 @@ pub struct CommunityRecord {
     pub updated_at: i64,
 }
 
+#[allow(missing_docs)]
 /// A community space record
 #[derive(Debug, Clone)]
 pub struct CommunitySpaceRecord {
@@ -5887,6 +5889,7 @@ pub struct CommunitySpaceRecord {
     pub updated_at: i64,
 }
 
+#[allow(missing_docs)]
 /// A community category record (channel grouping within a space)
 #[derive(Debug, Clone)]
 pub struct CommunityCategoryRecord {
@@ -5899,6 +5902,7 @@ pub struct CommunityCategoryRecord {
     pub updated_at: i64,
 }
 
+#[allow(missing_docs)]
 /// A community channel record
 #[derive(Debug, Clone)]
 pub struct CommunityChannelRecord {
@@ -5917,6 +5921,7 @@ pub struct CommunityChannelRecord {
     pub updated_at: i64,
 }
 
+#[allow(missing_docs)]
 /// A community role record
 #[derive(Debug, Clone)]
 pub struct CommunityRoleRecord {
@@ -5935,6 +5940,7 @@ pub struct CommunityRoleRecord {
     pub updated_at: i64,
 }
 
+#[allow(missing_docs)]
 /// A community member-role assignment record
 #[derive(Debug, Clone)]
 pub struct CommunityMemberRoleRecord {
@@ -5945,6 +5951,7 @@ pub struct CommunityMemberRoleRecord {
     pub assigned_by: Option<String>,
 }
 
+#[allow(missing_docs)]
 /// A channel permission override record
 #[derive(Debug, Clone)]
 pub struct ChannelPermissionOverrideRecord {
@@ -5956,6 +5963,7 @@ pub struct ChannelPermissionOverrideRecord {
     pub deny_bitfield: String,
 }
 
+#[allow(missing_docs)]
 /// A community member record
 #[derive(Debug, Clone)]
 pub struct CommunityMemberRecord {
@@ -5967,6 +5975,7 @@ pub struct CommunityMemberRecord {
     pub joined_at: i64,
 }
 
+#[allow(missing_docs)]
 /// A community message record
 #[derive(Debug, Clone)]
 pub struct CommunityMessageRecord {
@@ -5989,6 +5998,7 @@ pub struct CommunityMessageRecord {
     pub metadata_json: Option<String>,
 }
 
+#[allow(missing_docs)]
 /// A community reaction record
 #[derive(Debug, Clone)]
 pub struct CommunityReactionRecord {
@@ -5999,6 +6009,7 @@ pub struct CommunityReactionRecord {
     pub created_at: i64,
 }
 
+#[allow(missing_docs)]
 /// A community invite record
 #[derive(Debug, Clone)]
 pub struct CommunityInviteRecord {
@@ -6013,6 +6024,7 @@ pub struct CommunityInviteRecord {
     pub created_at: i64,
 }
 
+#[allow(missing_docs)]
 /// A community ban record
 #[derive(Debug, Clone)]
 pub struct CommunityBanRecord {
@@ -6025,6 +6037,7 @@ pub struct CommunityBanRecord {
     pub created_at: i64,
 }
 
+#[allow(missing_docs)]
 /// A community warning record
 #[derive(Debug, Clone)]
 pub struct CommunityWarningRecord {
@@ -6037,6 +6050,7 @@ pub struct CommunityWarningRecord {
     pub created_at: i64,
 }
 
+#[allow(missing_docs)]
 /// A community audit log entry
 #[derive(Debug, Clone)]
 pub struct CommunityAuditLogRecord {
@@ -6051,6 +6065,7 @@ pub struct CommunityAuditLogRecord {
     pub created_at: i64,
 }
 
+#[allow(missing_docs)]
 /// A community thread record
 #[derive(Debug, Clone)]
 pub struct CommunityThreadRecord {
@@ -6064,6 +6079,7 @@ pub struct CommunityThreadRecord {
     pub created_at: i64,
 }
 
+#[allow(missing_docs)]
 /// A read receipt record
 #[derive(Debug, Clone)]
 pub struct CommunityReadReceiptRecord {
@@ -6073,6 +6089,7 @@ pub struct CommunityReadReceiptRecord {
     pub read_at: i64,
 }
 
+#[allow(missing_docs)]
 /// A pin record
 #[derive(Debug, Clone)]
 pub struct CommunityPinRecord {
@@ -6082,6 +6099,7 @@ pub struct CommunityPinRecord {
     pub pinned_at: i64,
 }
 
+#[allow(missing_docs)]
 /// A file record
 #[derive(Debug, Clone)]
 pub struct CommunityFileRecord {
@@ -6100,6 +6118,7 @@ pub struct CommunityFileRecord {
     pub created_at: i64,
 }
 
+#[allow(missing_docs)]
 /// A file folder record
 #[derive(Debug, Clone)]
 pub struct CommunityFileFolderRecord {
@@ -6111,6 +6130,7 @@ pub struct CommunityFileFolderRecord {
     pub created_at: i64,
 }
 
+#[allow(missing_docs)]
 /// A custom emoji record
 #[derive(Debug, Clone)]
 pub struct CommunityEmojiRecord {
@@ -6123,6 +6143,7 @@ pub struct CommunityEmojiRecord {
     pub created_at: i64,
 }
 
+#[allow(missing_docs)]
 /// A custom sticker record
 #[derive(Debug, Clone)]
 pub struct CommunityStickerRecord {
@@ -6137,6 +6158,7 @@ pub struct CommunityStickerRecord {
     pub created_at: i64,
 }
 
+#[allow(missing_docs)]
 /// A sticker pack record
 #[derive(Debug, Clone)]
 pub struct CommunityStickerPackRecord {
@@ -6149,6 +6171,7 @@ pub struct CommunityStickerPackRecord {
     pub created_at: i64,
 }
 
+#[allow(missing_docs)]
 /// A webhook record
 #[derive(Debug, Clone)]
 pub struct CommunityWebhookRecord {
@@ -6161,6 +6184,7 @@ pub struct CommunityWebhookRecord {
     pub created_at: i64,
 }
 
+#[allow(missing_docs)]
 /// A channel encryption key record
 #[derive(Debug, Clone)]
 pub struct ChannelKeyRecord {
@@ -6170,6 +6194,7 @@ pub struct ChannelKeyRecord {
     pub created_at: i64,
 }
 
+#[allow(missing_docs)]
 /// A deleted message tracking record
 #[derive(Debug, Clone)]
 pub struct CommunityDeletedMessageRecord {
@@ -6178,6 +6203,7 @@ pub struct CommunityDeletedMessageRecord {
     pub deleted_at: i64,
 }
 
+#[allow(missing_docs)]
 /// A boost node record
 #[derive(Debug, Clone)]
 pub struct BoostNodeRecord {
@@ -6198,6 +6224,7 @@ pub struct BoostNodeRecord {
     pub updated_at: i64,
 }
 
+#[allow(missing_docs)]
 /// A community timeout record
 #[derive(Debug, Clone)]
 pub struct CommunityTimeoutRecord {
@@ -6211,6 +6238,7 @@ pub struct CommunityTimeoutRecord {
     pub created_at: i64,
 }
 
+#[allow(missing_docs)]
 /// A thread follower record
 #[derive(Debug, Clone)]
 pub struct CommunityThreadFollowerRecord {
@@ -6219,6 +6247,7 @@ pub struct CommunityThreadFollowerRecord {
     pub followed_at: i64,
 }
 
+#[allow(missing_docs)]
 /// A member status record (custom status text + emoji)
 #[derive(Debug, Clone)]
 pub struct CommunityMemberStatusRecord {
@@ -6230,6 +6259,7 @@ pub struct CommunityMemberStatusRecord {
     pub updated_at: i64,
 }
 
+#[allow(missing_docs)]
 /// A notification settings record
 #[derive(Debug, Clone)]
 pub struct CommunityNotificationSettingRecord {
@@ -6245,6 +6275,7 @@ pub struct CommunityNotificationSettingRecord {
     pub updated_at: i64,
 }
 
+#[allow(missing_docs)]
 /// A file chunk record (local chunk storage for P2P transfer)
 #[derive(Debug, Clone)]
 pub struct FileChunkRecord {
@@ -6256,6 +6287,7 @@ pub struct FileChunkRecord {
     pub created_at: i64,
 }
 
+#[allow(missing_docs)]
 /// A file manifest record (describes how a file was chunked)
 #[derive(Debug, Clone)]
 pub struct FileManifestRecord {
@@ -6271,6 +6303,7 @@ pub struct FileManifestRecord {
     pub created_at: i64,
 }
 
+#[allow(missing_docs)]
 /// A DM shared file record
 #[derive(Debug, Clone)]
 pub struct DmSharedFileRecord {
@@ -6290,6 +6323,7 @@ pub struct DmSharedFileRecord {
     pub created_at: i64,
 }
 
+#[allow(missing_docs)]
 /// A DM shared folder record
 #[derive(Debug, Clone)]
 pub struct DmSharedFolderRecord {
@@ -6301,6 +6335,7 @@ pub struct DmSharedFolderRecord {
     pub created_at: i64,
 }
 
+#[allow(missing_docs)]
 /// A transfer session record (P2P file transfer state for resume support)
 #[derive(Debug, Clone)]
 pub struct TransferSessionRecord {
@@ -6321,6 +6356,7 @@ pub struct TransferSessionRecord {
     pub updated_at: i64,
 }
 
+#[allow(missing_docs)]
 /// A community seat record (ghost member placeholder from platform import)
 #[derive(Debug, Clone)]
 pub struct CommunitySeatRecord {

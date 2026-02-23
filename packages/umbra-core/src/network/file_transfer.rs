@@ -362,6 +362,7 @@ impl FileTransferMessage {
 // ============================================================================
 
 /// Events emitted by the transfer manager for the UI/application layer.
+#[allow(missing_docs)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum TransferEvent {
@@ -1335,7 +1336,7 @@ impl TransferManager {
         transfer_id: &str,
         chunk_index: u32,
         success: bool,
-        error: Option<String>,
+        _error: Option<String>,
         now_ms: i64,
     ) -> Result<Option<FileTransferMessage>, String> {
         // Calculate RTT
@@ -1511,7 +1512,7 @@ impl TransferManager {
         if let Some(session) = self.sessions.get_mut(transfer_id) {
             // Verify final file hash matches
             if session.manifest.file_hash != file_hash {
-                let old_state = session.state;
+                let _old_state = session.state;
                 session.state = TransferState::Failed;
                 session.error = Some(format!(
                     "Final hash mismatch: expected {}, got {}",

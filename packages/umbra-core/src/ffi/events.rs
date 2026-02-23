@@ -40,6 +40,7 @@ pub(crate) fn emit_event(event_type: &str, data: &str) {
 }
 
 /// Check if an event callback has been registered.
+#[allow(dead_code)]
 pub(crate) fn has_event_callback() -> bool {
     EVENT_CB.get().is_some()
 }
