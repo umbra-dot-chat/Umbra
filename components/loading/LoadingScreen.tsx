@@ -1,44 +1,18 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { View, Platform, Animated, Text as RNText } from 'react-native';
+import React, { useEffect, useRef, useState, useCallback } from 'react';
+import { View, Platform, Animated, Dimensions, Image, Text as RNText } from 'react-native';
+import { useTheme } from '@coexist/wisp-react-native';
 import { useBlobPath, AnimatedBlobs } from '@/components/auth/AnimatedBlobs';
+import { TAGLINES } from '@/app/(auth)/index';
+import Svg, { Path } from 'react-native-svg';
 
 // ---------------------------------------------------------------------------
-// Load BBH Bartle from Google Fonts (web only) — same as auth screen
+// Ghost logo assets — black and white variants for theme + blob inversion
 // ---------------------------------------------------------------------------
 
-const FONT_FAMILY = 'BBH Bartle';
-const FONT_URL = 'https://fonts.googleapis.com/css2?family=BBH+Bartle&display=swap';
-
-function useGoogleFont() {
-  const [loaded, setLoaded] = useState(false);
-
-  useEffect(() => {
-    if (Platform.OS !== 'web') {
-      setLoaded(true);
-      return;
-    }
-
-    if (!document.querySelector(`link[href="${FONT_URL}"]`)) {
-      const link = document.createElement('link');
-      link.rel = 'stylesheet';
-      link.href = FONT_URL;
-      document.head.appendChild(link);
-    }
-
-    if ('fonts' in document) {
-      document.fonts.load(`400 72px "${FONT_FAMILY}"`).then(() => {
-        setLoaded(true);
-      }).catch(() => {
-        setLoaded(true);
-      });
-    } else {
-      const timer = setTimeout(() => setLoaded(true), 500);
-      return () => clearTimeout(timer);
-    }
-  }, []);
-
-  return loaded;
-}
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const ghostBlack = require('@/assets/images/ghost-black.png');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const ghostWhite = require('@/assets/images/ghost-white.png');
 
 // ---------------------------------------------------------------------------
 // Types
@@ -56,69 +30,53 @@ interface LoadingScreenProps {
 }
 
 // ---------------------------------------------------------------------------
-// Step indicator — animated dot/check for each loading step
+// Native inverted layer — MaskedView (same pattern as auth screen)
 // ---------------------------------------------------------------------------
 
-function StepIndicator({ status }: { status: LoadingStep['status'] }) {
-  const pulseAnim = useRef(new Animated.Value(1)).current;
+function NativeInvertedLayer({
+  pathData,
+  children,
+}: {
+  pathData: string;
+  children: React.ReactNode;
+}) {
+  // Lazy-require MaskedView so it's never bundled on web
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const MaskedViewComponent = require('@react-native-masked-view/masked-view').default;
+
+  const [dims, setDims] = useState(() => Dimensions.get('window'));
 
   useEffect(() => {
-    if (status === 'active') {
-      const pulse = Animated.loop(
-        Animated.sequence([
-          Animated.timing(pulseAnim, {
-            toValue: 1.4,
-            duration: 600,
-            useNativeDriver: true,
-          }),
-          Animated.timing(pulseAnim, {
-            toValue: 1,
-            duration: 600,
-            useNativeDriver: true,
-          }),
-        ])
-      );
-      pulse.start();
-      return () => pulse.stop();
-    } else {
-      pulseAnim.setValue(1);
-    }
-  }, [status, pulseAnim]);
+    const sub = Dimensions.addEventListener('change', ({ window }) => {
+      setDims(window);
+    });
+    return () => sub?.remove();
+  }, []);
 
-  const dotColor =
-    status === 'complete' ? '#22c55e' :
-    status === 'active' ? '#3b82f6' :
-    status === 'error' ? '#ef4444' :
-    'rgba(0,0,0,0.2)';
-
-  const dotSize = status === 'complete' ? 8 : 6;
+  if (!pathData || dims.width === 0) return null;
 
   return (
-    <Animated.View
+    <MaskedViewComponent
       style={{
-        width: 16,
-        height: 16,
-        alignItems: 'center',
-        justifyContent: 'center',
-        transform: status === 'active' ? [{ scale: pulseAnim }] : [],
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
       }}
+      pointerEvents="none"
+      maskElement={
+        <Svg
+          width={dims.width}
+          height={dims.height}
+          viewBox={`0 0 ${dims.width} ${dims.height}`}
+        >
+          <Path d={pathData} fill="black" />
+        </Svg>
+      }
     >
-      {status === 'complete' ? (
-        // Checkmark
-        <RNText style={{ fontSize: 12, color: '#22c55e', fontWeight: '700' }}>
-          {'\u2713'}
-        </RNText>
-      ) : (
-        <View
-          style={{
-            width: dotSize,
-            height: dotSize,
-            borderRadius: dotSize / 2,
-            backgroundColor: dotColor,
-          }}
-        />
-      )}
-    </Animated.View>
+      {children}
+    </MaskedViewComponent>
   );
 }
 
@@ -126,11 +84,44 @@ function StepIndicator({ status }: { status: LoadingStep['status'] }) {
 // LoadingScreen
 // ---------------------------------------------------------------------------
 
+const TAGLINE_INTERVAL = 3500;
+const TAGLINE_ANIM_DURATION = 500;
+
 export function LoadingScreen({ steps, onComplete }: LoadingScreenProps) {
-  const fontLoaded = useGoogleFont();
   const { pathData } = useBlobPath();
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const [hidden, setHidden] = useState(false);
+  const { theme, mode } = useTheme();
+  const isDark = mode === 'dark';
+  const tc = theme.colors;
+
+  // Tagline rotation — shared across both layers
+  const taglineLineHeight = 20;
+  const [taglineIndex, setTaglineIndex] = useState(() => Math.floor(Math.random() * TAGLINES.length));
+  const taglineSlideAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      Animated.timing(taglineSlideAnim, {
+        toValue: -taglineLineHeight,
+        duration: TAGLINE_ANIM_DURATION,
+        useNativeDriver: true,
+      }).start(() => {
+        setTaglineIndex((prev) => {
+          let next;
+          do { next = Math.floor(Math.random() * TAGLINES.length); } while (next === prev && TAGLINES.length > 1);
+          return next;
+        });
+        taglineSlideAnim.setValue(taglineLineHeight);
+        Animated.timing(taglineSlideAnim, {
+          toValue: 0,
+          duration: TAGLINE_ANIM_DURATION,
+          useNativeDriver: true,
+        }).start();
+      });
+    }, TAGLINE_INTERVAL);
+    return () => clearInterval(interval);
+  }, [taglineSlideAnim]);
 
   // Check if all steps are complete
   const allComplete = steps.length > 0 && steps.every(s => s.status === 'complete');
@@ -154,10 +145,40 @@ export function LoadingScreen({ steps, onComplete }: LoadingScreenProps) {
 
   if (hidden) return null;
 
+  const isNative = Platform.OS !== 'web';
+
+  // CSS clip-path for web
   const clipStyle =
-    Platform.OS === 'web'
+    !isNative
       ? ({ clipPath: `path('${pathData}')` } as any)
-      : { display: 'none' as const };
+      : undefined;
+
+  // Inverted content wrapper
+  const invertedContent = (
+    <View
+      style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: 24,
+      }}
+      pointerEvents="none"
+    >
+      <LoadingContent
+        steps={steps}
+        inverted
+        isDark={isDark}
+        tc={tc}
+        taglineIndex={taglineIndex}
+        taglineSlideAnim={taglineSlideAnim}
+        taglineLineHeight={taglineLineHeight}
+      />
+    </View>
+  );
 
   return (
     <Animated.View
@@ -167,15 +188,15 @@ export function LoadingScreen({ steps, onComplete }: LoadingScreenProps) {
         left: 0,
         right: 0,
         bottom: 0,
-        backgroundColor: '#FFFFFF',
+        backgroundColor: tc.background.canvas,
         zIndex: 9999,
         opacity: fadeAnim,
       }}
     >
-      {/* Layer 1: Animated blob */}
-      <AnimatedBlobs pathData={pathData} />
+      {/* Layer 1: Animated blob — color inverts with theme */}
+      <AnimatedBlobs pathData={pathData} color={tc.text.primary} />
 
-      {/* Layer 2: Normal content (black text on white) */}
+      {/* Layer 2: Normal content (ghost logo + progress bar) */}
       <View
         style={{
           flex: 1,
@@ -186,120 +207,168 @@ export function LoadingScreen({ steps, onComplete }: LoadingScreenProps) {
       >
         <LoadingContent
           steps={steps}
-          fontLoaded={fontLoaded}
           inverted={false}
+          isDark={isDark}
+          tc={tc}
+          taglineIndex={taglineIndex}
+          taglineSlideAnim={taglineSlideAnim}
+          taglineLineHeight={taglineLineHeight}
         />
       </View>
 
-      {/* Layer 3: Inverted content (white text, clipped to blob) */}
-      <View
-        style={[
-          {
-            position: 'absolute',
-            top: 0,
-            left: 0,
-            right: 0,
-            bottom: 0,
-          },
-          clipStyle,
-        ]}
-        pointerEvents="none"
-      >
+      {/* Layer 3: Inverted content clipped to blob shape */}
+      {isNative ? (
+        <NativeInvertedLayer pathData={pathData}>
+          {invertedContent}
+        </NativeInvertedLayer>
+      ) : (
         <View
-          style={{
-            flex: 1,
-            justifyContent: 'center',
-            alignItems: 'center',
-            padding: 24,
-          }}
+          style={[
+            {
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+            },
+            clipStyle,
+          ]}
+          pointerEvents="none"
         >
-          <LoadingContent
-            steps={steps}
-            fontLoaded={fontLoaded}
-            inverted
-          />
+          {invertedContent}
         </View>
-      </View>
+      )}
     </Animated.View>
   );
 }
 
 // ---------------------------------------------------------------------------
 // Inner content — rendered twice (normal + inverted for blob clip)
+// Displays: Ghost logo + animated progress bar
 // ---------------------------------------------------------------------------
+
+const GHOST_SIZE = 300;
 
 function LoadingContent({
   steps,
-  fontLoaded,
   inverted,
+  isDark,
+  tc,
+  taglineIndex,
+  taglineSlideAnim,
+  taglineLineHeight,
 }: {
   steps: LoadingStep[];
-  fontLoaded: boolean;
   inverted: boolean;
+  isDark: boolean;
+  tc: {
+    text: { primary: string; secondary: string };
+    background: { canvas: string };
+    accent: { primary: string };
+  };
+  taglineIndex: number;
+  taglineSlideAnim: Animated.Value;
+  taglineLineHeight: number;
 }) {
-  const textColor = inverted ? '#FFFFFF' : '#000000';
-  const mutedColor = inverted ? 'rgba(255,255,255,0.5)' : 'rgba(0,0,0,0.35)';
+  // Normal layer: dark mode → white ghost, light mode → black ghost
+  // Inverted layer (on blob): dark mode → black ghost, light mode → white ghost
+  const ghostSource = inverted
+    ? (isDark ? ghostBlack : ghostWhite)
+    : (isDark ? ghostWhite : ghostBlack);
+
+  // Progress calculation
+  const completed = steps.filter(s => s.status === 'complete').length;
+  const progress = steps.length > 0 ? completed / steps.length : 0;
+
+  // Animated progress bar width
+  const progressAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    Animated.timing(progressAnim, {
+      toValue: progress,
+      duration: 400,
+      useNativeDriver: false, // width animation can't use native driver
+    }).start();
+  }, [progress, progressAnim]);
+
+  // Progress bar colors
+  const barBgColor = inverted
+    ? (isDark ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.2)')
+    : (isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.08)');
+  const barFillColor = inverted ? tc.background.canvas : tc.text.primary;
+
+  // Current active step label
+  const activeStep = steps.find(s => s.status === 'active');
+  const statusLabel = activeStep?.label ?? (completed === steps.length ? 'Ready' : '');
+  const mutedColor = inverted
+    ? (isDark ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.5)')
+    : tc.text.secondary;
 
   return (
-    <View style={{ alignItems: 'center', gap: 48 }}>
-      {/* Umbra title */}
-      <View style={{ alignItems: 'center', gap: 8 }}>
-        <RNText
-          style={{
-            fontFamily: fontLoaded ? `"${FONT_FAMILY}", sans-serif` : 'sans-serif',
-            fontSize: 72,
-            lineHeight: 80,
-            letterSpacing: 2,
-            color: textColor,
-            textAlign: 'center',
-            opacity: fontLoaded ? 1 : 0,
-          }}
-        >
-          Umbra
-        </RNText>
-        <RNText
-          style={{
-            fontSize: 14,
-            color: mutedColor,
-            textAlign: 'center',
-          }}
-        >
-          Encrypted messaging, powered by your keys
-        </RNText>
+    <View style={{ alignItems: 'center', gap: 32 }}>
+      {/* Ghost logo */}
+      <Image
+        source={ghostSource}
+        style={{
+          width: GHOST_SIZE,
+          height: GHOST_SIZE,
+        }}
+        resizeMode="contain"
+      />
+
+      {/* Tagline rotation */}
+      <View style={{ height: taglineLineHeight, overflow: 'hidden' }}>
+        <Animated.View style={{ transform: [{ translateY: taglineSlideAnim }] }}>
+          <RNText
+            style={{
+              fontSize: 13,
+              color: mutedColor,
+              textAlign: 'center',
+              letterSpacing: 0.3,
+            }}
+          >
+            {TAGLINES[taglineIndex]}
+          </RNText>
+        </Animated.View>
       </View>
 
-      {/* Loading steps */}
-      <View style={{ gap: 12, minWidth: 220 }}>
-        {steps.map((step) => {
-          const labelColor =
-            step.status === 'complete' ? (inverted ? 'rgba(255,255,255,0.4)' : 'rgba(0,0,0,0.3)') :
-            step.status === 'active' ? textColor :
-            step.status === 'error' ? '#ef4444' :
-            mutedColor;
+      {/* Progress bar + status label */}
+      <View style={{ alignItems: 'center', gap: 12 }}>
+        <View
+          style={{
+            width: 200,
+            height: 3,
+            borderRadius: 1.5,
+            backgroundColor: barBgColor,
+            overflow: 'hidden',
+          }}
+        >
+          <Animated.View
+            style={{
+              height: '100%',
+              borderRadius: 1.5,
+              backgroundColor: barFillColor,
+              width: progressAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: ['0%', '100%'],
+              }),
+            }}
+          />
+        </View>
 
-          return (
-            <View
-              key={step.id}
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: 10,
-              }}
-            >
-              <StepIndicator status={step.status} />
-              <RNText
-                style={{
-                  fontSize: 13,
-                  fontWeight: step.status === 'active' ? '600' : '400',
-                  color: labelColor,
-                  letterSpacing: 0.3,
-                }}
-              >
-                {step.label}
-              </RNText>
-            </View>
-          );
-        })}
+        {/* Status text describing current loading step */}
+        {statusLabel ? (
+          <RNText
+            style={{
+              fontSize: 13,
+              color: mutedColor,
+              textAlign: 'center',
+              letterSpacing: 0.3,
+            }}
+          >
+            {statusLabel}
+          </RNText>
+        ) : null}
       </View>
     </View>
   );

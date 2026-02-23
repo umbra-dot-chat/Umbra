@@ -191,9 +191,11 @@ export interface AnimatedBlobsProps {
   style?: ViewStyle;
   /** Pass shared pathData from useBlobPath() so blob + clip-path stay in sync */
   pathData: string;
+  /** Fill color for the blob shape (default: '#000000') */
+  color?: string;
 }
 
-export function AnimatedBlobs({ style, pathData }: AnimatedBlobsProps) {
+export function AnimatedBlobs({ style, pathData, color = '#000000' }: AnimatedBlobsProps) {
   const [dimensions, setDimensions] = useState(() => {
     const { width, height } = Dimensions.get('window');
     return { width, height };
@@ -235,7 +237,7 @@ export function AnimatedBlobs({ style, pathData }: AnimatedBlobsProps) {
       pointerEvents="none"
     >
       <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
-        <Path d={pathData} fill="#000000" fillRule="nonzero" />
+        <Path d={pathData} fill={color} fillRule="nonzero" />
       </Svg>
     </View>
   );

@@ -23,21 +23,17 @@ pub fn network_status() -> DResult {
                 .iter()
                 .map(|a| a.to_string())
                 .collect();
-            let peers: Vec<String> = network
-                .connected_peers()
-                .iter()
-                .map(|p| p.peer_id.to_string())
-                .collect();
+            let peer_count = network.connected_peers().len();
             super::dispatcher::ok_json(serde_json::json!({
-                "started": network.is_running(),
-                "peer_id": network.peer_id().to_string(),
+                "is_running": network.is_running(),
+                "peer_count": peer_count,
                 "listen_addresses": addrs,
-                "connected_peers": peers,
             }))
         }
         None => super::dispatcher::ok_json(serde_json::json!({
-            "started": false, "peer_id": null,
-            "listen_addresses": [], "connected_peers": [],
+            "is_running": false,
+            "peer_count": 0,
+            "listen_addresses": [],
         })),
     }
 }

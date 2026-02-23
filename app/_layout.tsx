@@ -27,7 +27,7 @@ function DynamicStatusBar() {
 }
 
 function AuthGate() {
-  const { isAuthenticated, hasPin, isPinVerified, identity } = useAuth();
+  const { isAuthenticated, hasPin, isPinVerified, identity, isHydrated: authHydrated } = useAuth();
   const { isReady, isLoading, initStage } = useUmbra();
   const { preferencesLoaded } = useAppTheme();
   const segments = useSegments();
@@ -114,6 +114,14 @@ function AuthGate() {
     const coreStatus: LoadingStep['status'] =
       coreComplete ? 'complete' : isLoading ? 'active' : 'pending';
 
+    // For unauthenticated users, only show core init progress
+    if (authHydrated && !isAuthenticated) {
+      return [
+        { id: 'core', label: 'Initializing core', status: coreStatus },
+        { id: 'ready', label: 'Ready', status: coreComplete ? 'complete' : 'pending' },
+      ];
+    }
+
     // Database: IndexedDB persistence restore
     const dbStatus: LoadingStep['status'] =
       initStage === 'loading-db' ? 'active' :
@@ -147,10 +155,19 @@ function AuthGate() {
       { id: 'prefs', label: 'Loading preferences', status: prefsStatus },
       { id: 'ready', label: 'Ready', status: allDone ? 'complete' : 'pending' },
     ];
-  }, [isReady, isLoading, initStage, identity, preferencesLoaded]);
+  }, [isReady, isLoading, initStage, identity, preferencesLoaded, authHydrated, isAuthenticated]);
 
-  // Show loading screen while authenticated and essential steps are not all complete
-  const showLoading = isAuthenticated && !loadingDismissed && !loadingSteps.every(s => s.status === 'complete');
+  // ── Loading screen visibility ────────────────────────────────────────
+  // Show loading screen on initial mount to prevent flash of auth screen.
+  // - Before auth hydration: always show (we don't know auth state yet)
+  // - Unauthenticated + core ready: dismiss loading → show auth screen
+  // - Authenticated: keep loading until all steps complete
+  const allStepsComplete = loadingSteps.every(s => s.status === 'complete');
+  const showLoading = !loadingDismissed && (
+    !authHydrated ||                              // Auth state not yet known
+    (isAuthenticated && !allStepsComplete) ||      // Authenticated, still initializing
+    (!isAuthenticated && !isReady)                 // Not authenticated, core not ready yet
+  );
 
   const handleLoadingComplete = useCallback(() => {
     setLoadingDismissed(true);

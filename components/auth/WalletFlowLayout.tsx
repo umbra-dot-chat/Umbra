@@ -15,7 +15,7 @@
 import React, { useRef } from 'react';
 import { View, ScrollView, Platform, Pressable, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Overlay, ProgressSteps, Separator, Presence, Text } from '@coexist/wisp-react-native';
+import { Overlay, ProgressSteps, Separator, Presence, Text, useTheme } from '@coexist/wisp-react-native';
 import type { ProgressStep, PresenceAnimation } from '@coexist/wisp-react-native';
 import { ArrowLeftIcon, XIcon } from '@/components/icons';
 
@@ -46,6 +46,8 @@ export function WalletFlowLayout({
 }: WalletFlowLayoutProps) {
   const insets = useSafeAreaInsets();
   const isNative = Platform.OS !== 'web';
+  const { theme } = useTheme();
+  const tc = theme.colors;
 
   // Track previous step to determine animation direction
   const prevStepRef = useRef(currentStep);
@@ -73,7 +75,7 @@ export function WalletFlowLayout({
     <>
       {/* Native header bar — safe area + back button + title */}
       {isNative && (
-        <View style={{ backgroundColor: '#FFFFFF' }}>
+        <View style={{ backgroundColor: tc.background.canvas }}>
           {/* Safe area spacer */}
           <View style={{ height: insets.top }} />
 
@@ -85,9 +87,9 @@ export function WalletFlowLayout({
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
               {isFirstStep ? (
-                <XIcon size={20} color="#333333" />
+                <XIcon size={20} color={tc.text.primary} />
               ) : (
-                <ArrowLeftIcon size={20} color="#333333" />
+                <ArrowLeftIcon size={20} color={tc.text.primary} />
               )}
             </Pressable>
 
@@ -140,7 +142,7 @@ export function WalletFlowLayout({
   // Native: full-screen view
   if (isNative) {
     return (
-      <View style={fullScreenStyle}>
+      <View style={[fullScreenStyle, { backgroundColor: tc.background.canvas }]}>
         {content}
       </View>
     );
@@ -155,7 +157,7 @@ export function WalletFlowLayout({
       onBackdropPress={allowBackdropClose ? onClose : undefined}
       useModal={false}
     >
-      <View style={modalStyle}>
+      <View style={[modalStyle, { backgroundColor: tc.background.raised ?? tc.background.canvas }]}>
         {content}
       </View>
     </Overlay>
@@ -179,7 +181,6 @@ const headerBackButton: ViewStyle = {
 
 const fullScreenStyle: ViewStyle = {
   flex: 1,
-  backgroundColor: '#FFFFFF',
   position: 'absolute',
   top: 0,
   left: 0,
@@ -189,7 +190,6 @@ const fullScreenStyle: ViewStyle = {
 };
 
 const modalStyle: ViewStyle = {
-  backgroundColor: '#FFFFFF',
   borderRadius: 16,
   width: '90%',
   maxWidth: 520,

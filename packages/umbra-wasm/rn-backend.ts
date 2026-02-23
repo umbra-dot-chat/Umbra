@@ -249,7 +249,7 @@ function createNativeBackend(native: NativeUmbraCore): UmbraWasmModule {
       try {
         const result = ensureJsonString(native.networkStatus());
         return checkNativeResult(result, 'networkStatus');
-      } catch { return JSON.stringify({ connected: false, peers: 0 }); }
+      } catch { return JSON.stringify({ is_running: false, peer_count: 0, listen_addresses: [] }); }
     },
     umbra_wasm_network_start: async () => {
       try {

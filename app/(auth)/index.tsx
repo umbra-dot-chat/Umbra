@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { View, ScrollView, Platform, type ViewStyle, Text as RNText, Dimensions, useWindowDimensions, Animated } from 'react-native';
-import { Text, Button, Card, VStack, HStack, Separator } from '@coexist/wisp-react-native';
+import { Text, Button, Card, VStack, HStack, Separator, useTheme } from '@coexist/wisp-react-native';
 import * as ExpoFont from 'expo-font';
 import { useBlobPath, AnimatedBlobs } from '@/components/auth/AnimatedBlobs';
 import { WalletIcon, DownloadIcon, KeyIcon } from '@/components/icons';
@@ -84,7 +84,7 @@ function useResponsiveTitleSize() {
 // Slot-machine tagline rotation
 // ---------------------------------------------------------------------------
 
-const TAGLINES = [
+export const TAGLINES = [
   // Original taglines
   'Private by math, not by promise.',
   'Messaging that forgets you exist.',
@@ -155,19 +155,30 @@ interface AuthContentProps {
   taglineSlideAnim: Animated.Value;
   /** Line height of the tagline text for clipping */
   taglineLineHeight: number;
+  /** Whether the app is in dark mode */
+  isDark: boolean;
+  /** Theme color tokens */
+  tc: {
+    text: { primary: string; secondary: string; muted: string };
+    background: { canvas: string };
+    border: { subtle: string };
+  };
 }
 
-function AuthContent({ inverted, onCreateWallet, onImportWallet, fontLoaded, isWeb, taglineIndex, taglineSlideAnim, taglineLineHeight }: AuthContentProps) {
-  const textColor = inverted ? '#FFFFFF' : undefined;
-  const mutedColor = inverted ? 'rgba(255,255,255,0.6)' : undefined;
+function AuthContent({ inverted, onCreateWallet, onImportWallet, fontLoaded, isWeb, taglineIndex, taglineSlideAnim, taglineLineHeight, isDark, tc }: AuthContentProps) {
+  // Normal layer: use theme text colors. Inverted layer: flip — bg color on blob.
+  const textColor = inverted ? tc.background.canvas : tc.text.primary;
+  const mutedColor = inverted
+    ? (isDark ? 'rgba(0,0,0,0.6)' : 'rgba(255,255,255,0.6)')
+    : tc.text.secondary;
 
-  // Inverted buttons: white bg + black text (visible on black blob)
-  // Include borderRadius to ensure it renders on React Native
+  // Inverted buttons: canvas bg + text color (visible on blob)
   const invertedBtnStyle: ViewStyle | undefined = inverted
-    ? { backgroundColor: '#FFFFFF', borderColor: '#FFFFFF', borderRadius: 8, overflow: 'hidden' }
+    ? { backgroundColor: tc.background.canvas, borderColor: tc.background.canvas, borderRadius: 8, overflow: 'hidden' }
     : undefined;
 
-  const iconColor = inverted ? '#000000' : '#FFFFFF';
+  // Icon on primary button: canvas color. On inverted button: text color.
+  const iconColor = inverted ? tc.text.primary : tc.background.canvas;
 
   // Font family for the title — works on both web and native now
   const titleFontFamily = isWeb
@@ -189,7 +200,7 @@ function AuthContent({ inverted, onCreateWallet, onImportWallet, fontLoaded, isW
               fontSize: titleFontSize,
               lineHeight: titleLineHeight,
               letterSpacing: 2,
-              color: textColor ?? '#000000',
+              color: textColor,
               textAlign: 'center',
               opacity: fontLoaded ? 1 : 0,
             }}
@@ -202,8 +213,7 @@ function AuthContent({ inverted, onCreateWallet, onImportWallet, fontLoaded, isW
               <Text
                 size="md"
                 align="center"
-                style={mutedColor ? { color: mutedColor } : undefined}
-                color={mutedColor ? undefined : 'secondary'}
+                style={{ color: mutedColor }}
               >
                 {TAGLINES[taglineIndex]}
               </Text>
@@ -218,7 +228,7 @@ function AuthContent({ inverted, onCreateWallet, onImportWallet, fontLoaded, isW
           radius="md"
           style={{
             width: '100%',
-            ...(inverted ? { backgroundColor: 'transparent', borderColor: 'rgba(255,255,255,0.3)' } : {}),
+            ...(inverted ? { backgroundColor: 'transparent', borderColor: isDark ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.3)' } : {}),
           }}
         >
           <VStack gap="md">
@@ -227,8 +237,7 @@ function AuthContent({ inverted, onCreateWallet, onImportWallet, fontLoaded, isW
                 <Text
                   size="lg"
                   weight="semibold"
-                  style={textColor ? { color: textColor } : undefined}
-                  color={textColor ? undefined : 'primary'}
+                  style={{ color: textColor }}
                 >
                   Create Account
                 </Text>
@@ -253,8 +262,7 @@ function AuthContent({ inverted, onCreateWallet, onImportWallet, fontLoaded, isW
               </View>
               <Text
                 size="sm"
-                style={mutedColor ? { color: mutedColor } : undefined}
-                color={mutedColor ? undefined : 'secondary'}
+                style={{ color: mutedColor }}
               >
                 Generate a new account to get started. Your keys, your messages.
               </Text>
@@ -278,20 +286,19 @@ function AuthContent({ inverted, onCreateWallet, onImportWallet, fontLoaded, isW
           <View style={{ flex: 1 }}>
             <Separator
               spacing="none"
-              style={inverted ? { backgroundColor: 'rgba(255,255,255,0.2)' } : undefined}
+              style={inverted ? { backgroundColor: isDark ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.2)' } : undefined}
             />
           </View>
           <Text
             size="sm"
-            style={mutedColor ? { color: mutedColor } : undefined}
-            color={mutedColor ? undefined : 'muted'}
+            style={{ color: mutedColor }}
           >
             or
           </Text>
           <View style={{ flex: 1 }}>
             <Separator
               spacing="none"
-              style={inverted ? { backgroundColor: 'rgba(255,255,255,0.2)' } : undefined}
+              style={inverted ? { backgroundColor: isDark ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.2)' } : undefined}
             />
           </View>
         </HStack>
@@ -303,7 +310,7 @@ function AuthContent({ inverted, onCreateWallet, onImportWallet, fontLoaded, isW
           radius="md"
           style={{
             width: '100%',
-            ...(inverted ? { backgroundColor: 'transparent', borderColor: 'rgba(255,255,255,0.3)' } : {}),
+            ...(inverted ? { backgroundColor: 'transparent', borderColor: isDark ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.3)' } : {}),
           }}
         >
           <VStack gap="md">
@@ -312,8 +319,7 @@ function AuthContent({ inverted, onCreateWallet, onImportWallet, fontLoaded, isW
                 <Text
                   size="lg"
                   weight="semibold"
-                  style={textColor ? { color: textColor } : undefined}
-                  color={textColor ? undefined : 'primary'}
+                  style={{ color: textColor }}
                 >
                   Import Account
                 </Text>
@@ -337,8 +343,7 @@ function AuthContent({ inverted, onCreateWallet, onImportWallet, fontLoaded, isW
               </View>
               <Text
                 size="sm"
-                style={mutedColor ? { color: mutedColor } : undefined}
-                color={mutedColor ? undefined : 'secondary'}
+                style={{ color: mutedColor }}
               >
                 Already have an account? Import your existing account to continue.
               </Text>
@@ -361,8 +366,7 @@ function AuthContent({ inverted, onCreateWallet, onImportWallet, fontLoaded, isW
         <Text
           size="xs"
           align="center"
-          style={mutedColor ? { color: mutedColor, marginTop: 8 } : { marginTop: 8 }}
-          color={mutedColor ? undefined : 'muted'}
+          style={{ color: mutedColor, marginTop: 8 }}
         >
           Your private keys never leave your device
         </Text>
@@ -431,6 +435,9 @@ export default function AuthScreen() {
   const { loaded: fontLoaded, isWeb } = useGoogleFont();
   const { pathData } = useBlobPath(); // single source of truth for blob shape
   const { height: windowHeight } = useWindowDimensions();
+  const { theme, mode } = useTheme();
+  const isDark = mode === 'dark';
+  const tc = theme.colors;
 
   // Flow visibility state
   const [showCreate, setShowCreate] = useState(false);
@@ -441,7 +448,7 @@ export default function AuthScreen() {
 
   // Tagline slot-machine rotation — shared across both AuthContent layers
   const taglineLineHeight = 24; // matches Text size="md" line height
-  const [taglineIndex, setTaglineIndex] = useState(0);
+  const [taglineIndex, setTaglineIndex] = useState(() => Math.floor(Math.random() * TAGLINES.length));
   const taglineSlideAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
@@ -453,7 +460,11 @@ export default function AuthScreen() {
         useNativeDriver: true,
       }).start(() => {
         // Swap to next tagline, position it below
-        setTaglineIndex((prev) => (prev + 1) % TAGLINES.length);
+        setTaglineIndex((prev) => {
+          let next;
+          do { next = Math.floor(Math.random() * TAGLINES.length); } while (next === prev && TAGLINES.length > 1);
+          return next;
+        });
         taglineSlideAnim.setValue(taglineLineHeight);
         // Slide new tagline up into view
         Animated.timing(taglineSlideAnim, {
@@ -511,12 +522,14 @@ export default function AuthScreen() {
         taglineIndex={taglineIndex}
         taglineSlideAnim={taglineSlideAnim}
         taglineLineHeight={taglineLineHeight}
+        isDark={isDark}
+        tc={tc}
       />
     </View>
   );
 
   return (
-    <View style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
+    <View style={{ flex: 1, backgroundColor: tc.background.canvas }}>
       <ScrollView
         contentContainerStyle={{
           flexGrow: 1,
@@ -527,10 +540,10 @@ export default function AuthScreen() {
       >
         {/* All layers in one container — scrolls & bounces as a unit */}
         <View style={{ minHeight: windowHeight, justifyContent: 'center', alignItems: 'center', padding: 24 }}>
-          {/* Layer 1: Black blobs — absolute within the scrollable area */}
-          <AnimatedBlobs pathData={pathData} />
+          {/* Layer 1: Blob fill — color inverts with theme */}
+          <AnimatedBlobs pathData={pathData} color={tc.text.primary} />
 
-          {/* Layer 2: Normal content (black text on white) */}
+          {/* Layer 2: Normal content (themed text on canvas bg) */}
           <AuthContent
             onCreateWallet={handleCreateWallet}
             onImportWallet={handleImportWallet}
@@ -539,6 +552,8 @@ export default function AuthScreen() {
             taglineIndex={taglineIndex}
             taglineSlideAnim={taglineSlideAnim}
             taglineLineHeight={taglineLineHeight}
+            isDark={isDark}
+            tc={tc}
           />
 
           {/* Layer 3: Inverted content (white text, clipped to blob shape) */}

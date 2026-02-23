@@ -16,6 +16,7 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "chat.umbra.app",
+      "appleTeamId": "F6ZAL7ANAD",
       "associatedDomains": [
         "applinks:umbra.chat"
       ],

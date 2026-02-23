@@ -2714,7 +2714,7 @@ function NetworkSection() {
               Peers: {peerCount}
             </RNText>
             <RNText style={{ fontSize: 13, color: tc.text.secondary }}>
-              Addresses: {listenAddresses.length}
+              Addresses: {listenAddresses?.length ?? 0}
             </RNText>
           </View>
         </View>
