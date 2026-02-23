@@ -87,7 +87,7 @@ function MainLayoutInner() {
 
   // Service + data hooks
   const { service, isReady } = useUmbra();
-  const { identity, accounts, switchAccount, isSwitching, logout, addAccount, recoveryPhrase, pin, rememberMe } = useAuth();
+  const { identity, accounts, switchAccount, isSwitching, logout, addAccount, removeAccount, recoveryPhrase, pin, rememberMe } = useAuth();
   const { conversations, refresh: refreshConversations, isLoading: conversationsLoading } = useConversations();
   const { friends, incomingRequests } = useFriends();
   const { groups, pendingInvites, acceptInvite, declineInvite } = useGroups();
@@ -645,6 +645,7 @@ function MainLayoutInner() {
         activeAccountDid={identity?.did ?? null}
         onSwitchAccount={(did) => switchAccount(did)}
         onActiveAccountPress={() => { openSettings('profile'); }}
+        onRemoveAccount={(did) => removeAccount(did)}
         onAddAccount={async () => {
           // Ensure the current account is registered in the multi-account list
           // before logging out. This handles the case where the account was

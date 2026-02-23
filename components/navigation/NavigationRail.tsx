@@ -223,15 +223,15 @@ export function NavigationRail({
             }}
           />
 
-          {/* Account avatar bubble — above settings gear */}
+          {/* Account avatar bubble — above settings gear, matches RailItem size */}
           {onAvatarPress && (
             <View style={{ marginBottom: 4, width: '100%', alignItems: 'center' }}>
               <Pressable
                 onPress={onAvatarPress}
                 style={({ pressed }) => ({
-                  width: 32,
-                  height: 32,
-                  borderRadius: 16,
+                  width: ICON_SIZE,
+                  height: ICON_SIZE,
+                  borderRadius: ICON_SIZE / 2,
                   backgroundColor: pressed
                     ? theme.colors.border.strong
                     : theme.colors.accent.primary,
@@ -243,11 +243,11 @@ export function NavigationRail({
                 {userAvatar ? (
                   <Image
                     source={{ uri: userAvatar }}
-                    style={{ width: 32, height: 32 }}
+                    style={{ width: ICON_SIZE, height: ICON_SIZE }}
                     resizeMode="cover"
                   />
                 ) : (
-                  <Text size="xs" weight="bold" style={{ color: theme.colors.text.inverse }}>
+                  <Text size="sm" weight="bold" style={{ color: theme.colors.text.inverse }}>
                     {(userDisplayName ?? '?').charAt(0).toUpperCase()}
                   </Text>
                 )}

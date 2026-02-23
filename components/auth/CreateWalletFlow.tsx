@@ -21,7 +21,6 @@ import {
   Spinner,
   Card,
   Presence,
-  Dialog,
   Separator,
 } from '@coexist/wisp-react-native';
 import type { ProgressStep } from '@coexist/wisp-react-native';
@@ -38,11 +37,10 @@ import {
   UserIcon,
   ArrowRightIcon,
   CheckCircleIcon,
-  AlertTriangleIcon,
 } from '@/components/icons';
 import UmbraService from '@/packages/umbra-service/src';
 import type { Identity } from '@/packages/umbra-service/src';
-import { enablePersistence, listStoredDids, clearDatabaseExport } from '@umbra/wasm';
+import { enablePersistence } from '@umbra/wasm';
 
 // ---------------------------------------------------------------------------
 // Step definitions
@@ -95,10 +93,6 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
   // Discovery opt-in state (shown after profile import + auto-link)
   const [showDiscoveryOptIn, setShowDiscoveryOptIn] = useState(false);
   const [accountLinkedDuringCreation, setAccountLinkedDuringCreation] = useState(false);
-
-  // Identity switch dialog state
-  const [showSwitchDialog, setShowSwitchDialog] = useState(false);
-  const [oldDids, setOldDids] = useState<string[]>([]);
 
   const { currentStep, goNext, goBack, isFirstStep, reset } = useWalletFlow({
     totalSteps: 6,
@@ -263,22 +257,9 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
   }, [identity, login, chosenPin, setPin, rememberMe, setAuthRememberMe, seedPhrase, setRecoveryPhrase, addAccount]);
 
   // Called after discovery opt-in decision (or skip) to finish login
-  const finishLogin = useCallback(async () => {
-    if (!identity) return;
-    // Check if there's old IndexedDB data from a different identity
-    try {
-      const stored = await listStoredDids();
-      const otherDids = stored.filter((did) => did !== identity.did);
-      if (otherDids.length > 0) {
-        setOldDids(otherDids);
-        setShowSwitchDialog(true);
-        return; // Wait for user decision
-      }
-    } catch {
-      // listStoredDids may fail in unsupported environments — proceed normally
-    }
+  const finishLogin = useCallback(() => {
     doLogin();
-  }, [identity, doLogin]);
+  }, [doLogin]);
 
   const handleComplete = useCallback(async () => {
     if (!identity) return;
@@ -310,25 +291,6 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
     setShowDiscoveryOptIn(false);
     finishLogin();
   }, [finishLogin]);
-
-  // Identity switch dialog: keep old data
-  const handleKeepOldData = useCallback(() => {
-    setShowSwitchDialog(false);
-    doLogin();
-  }, [doLogin]);
-
-  // Identity switch dialog: clear old data
-  const handleClearOldData = useCallback(async () => {
-    setShowSwitchDialog(false);
-    for (const did of oldDids) {
-      try {
-        await clearDatabaseExport(did);
-      } catch {
-        // best-effort cleanup
-      }
-    }
-    doLogin();
-  }, [oldDids, doLogin]);
 
   const handleClose = useCallback(() => {
     onClose();
@@ -736,25 +698,6 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
         />
       )}
 
-      {/* Identity Switch Dialog — shown when creating a new identity over existing data */}
-      <Dialog
-        open={showSwitchDialog}
-        onClose={handleKeepOldData}
-        title="Existing Data Found"
-        description={`You have data from ${oldDids.length} previous ${oldDids.length === 1 ? 'identity' : 'identities'} on this device. Would you like to keep or remove it?`}
-        icon={<AlertTriangleIcon size={24} color="#F59E0B" />}
-        size="sm"
-        footer={
-          <HStack gap="sm" style={{ justifyContent: 'flex-end' }}>
-            <Button variant="secondary" onPress={handleClearOldData}>
-              Start Fresh
-            </Button>
-            <Button variant="primary" onPress={handleKeepOldData}>
-              Keep Old Data
-            </Button>
-          </HStack>
-        }
-      />
     </>
   );
 }

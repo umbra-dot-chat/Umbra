@@ -357,6 +357,11 @@ export interface UmbraWasmModule {
 
 let wasmModule: UmbraWasmModule | null = null;
 let initPromise: Promise<UmbraWasmModule> | null = null;
+// Track whether umbra_wasm_init() has been called at least once.
+// The tracing-wasm crate sets a global subscriber that persists for the
+// lifetime of the page/process — calling init() again panics with
+// "a global default trace dispatcher has already been set".
+let wasmInitCalled = false;
 
 // ─────────────────────────────────────────────────────────────────────────
 // Platform Detection
@@ -517,8 +522,13 @@ async function doInitTauri(): Promise<UmbraWasmModule> {
   const backend = createTauriBackend(invoke);
 
   // Initialize (panic hooks + tracing already set up by Rust main())
-  console.log('[umbra] Calling init via Tauri IPC...');
-  backend.umbra_wasm_init();
+  if (!wasmInitCalled) {
+    console.log('[umbra] Calling init via Tauri IPC...');
+    backend.umbra_wasm_init();
+    wasmInitCalled = true;
+  } else {
+    console.log('[umbra] Skipping init (already called)');
+  }
 
   // Initialize the database schema (native SQLite on disk)
   console.log('[umbra] Initializing database via Tauri IPC...');
@@ -546,7 +556,12 @@ async function doInitReactNative(_did?: string): Promise<UmbraWasmModule> {
   const backend = createReactNativeBackend();
 
   // Initialize
-  backend.umbra_wasm_init();
+  if (!wasmInitCalled) {
+    backend.umbra_wasm_init();
+    wasmInitCalled = true;
+  } else {
+    console.log('[umbra] Skipping init (already called)');
+  }
   await backend.umbra_wasm_init_database();
 
   wasmModule = backend;
@@ -629,8 +644,15 @@ async function doInitWasm(did?: string): Promise<UmbraWasmModule> {
   const wasm = buildModule(wasmPkg);
 
   // Step 4: Initialize Umbra (panic hooks, tracing)
-  console.log('[umbra-wasm] Calling umbra_wasm_init()...');
-  wasm.umbra_wasm_init();
+  // Skip if already called — tracing-wasm's global subscriber persists across
+  // reinits and panics on double-set.
+  if (!wasmInitCalled) {
+    console.log('[umbra-wasm] Calling umbra_wasm_init()...');
+    wasm.umbra_wasm_init();
+    wasmInitCalled = true;
+  } else {
+    console.log('[umbra-wasm] Skipping umbra_wasm_init() (already called)');
+  }
 
   // Step 5: Initialize the database schema
   console.log('[umbra-wasm] Initializing database...');
