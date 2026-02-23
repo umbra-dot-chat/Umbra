@@ -232,26 +232,36 @@ fn community_import_success_html(access_token: &str) -> Html<String> {
     </div>
     <script>
         const accessToken = "{}";
-        // Send token to opener window
+        // Send token to opener window (popup flow)
         if (window.opener) {{
             window.opener.postMessage({{
                 type: 'UMBRA_COMMUNITY_IMPORT',
                 success: true,
                 token: accessToken
             }}, '*');
+            // Close after a short delay
+            setTimeout(() => {{
+                window.close();
+            }}, 2000);
         }}
         // Also try to send to parent (for iframe scenarios)
-        if (window.parent && window.parent !== window) {{
+        else if (window.parent && window.parent !== window) {{
             window.parent.postMessage({{
                 type: 'UMBRA_COMMUNITY_IMPORT',
                 success: true,
                 token: accessToken
             }}, '*');
+            setTimeout(() => {{
+                window.close();
+            }}, 2000);
         }}
-        // Close after a short delay
-        setTimeout(() => {{
-            window.close();
-        }}, 2000);
+        // Mobile fallback: no opener — redirect back to app with token in hash
+        else {{
+            document.querySelector('.close-hint').textContent = 'Redirecting back to Umbra...';
+            setTimeout(() => {{
+                window.location.href = 'https://umbra.chat/#discord_import_token=' + encodeURIComponent(accessToken);
+            }}, 1000);
+        }}
     </script>
 </body>
 </html>"#,

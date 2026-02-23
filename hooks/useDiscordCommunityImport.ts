@@ -217,6 +217,25 @@ export function useDiscordCommunityImport(): UseDiscordCommunityImportState & Us
     }
   }, []);
 
+  // Mobile fallback: Check URL hash for Discord import token on mount
+  // When popups aren't available, the relay redirects back with #discord_import_token=TOKEN
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const hash = window.location.hash;
+    if (hash.startsWith('#discord_import_token=')) {
+      const token = decodeURIComponent(hash.replace('#discord_import_token=', ''));
+      if (token) {
+        // Clean up the hash from the URL
+        window.history.replaceState(null, '', window.location.pathname + window.location.search);
+        authSucceededRef.current = true;
+        setAccessToken(token);
+        setPhase('selecting_server');
+        setError(null);
+        setIsLoading(false);
+      }
+    }
+  }, []);
+
   // Fetch guilds when we have an access token
   useEffect(() => {
     if (accessToken && phase === 'selecting_server' && guilds.length === 0) {
@@ -558,31 +577,36 @@ export function useDiscordCommunityImport(): UseDiscordCommunityImportState & Us
 
   /**
    * Start the OAuth authentication flow.
+   *
+   * On desktop: Opens a popup window for Discord OAuth.
+   * On mobile: Falls back to same-window redirect if window.open is unavailable.
    */
   const startAuth = useCallback(async () => {
     setPhase('authenticating');
     setError(null);
     setIsLoading(true);
 
-    // Open popup IMMEDIATELY in the click handler (before any async work)
-    // to avoid browser popup blockers that require a direct user gesture.
-    const width = 500;
-    const height = 700;
-    const left = window.screenX + (window.innerWidth - width) / 2;
-    const top = window.screenY + (window.innerHeight - height) / 2;
+    // Check if window.open is available (may be undefined on mobile web views)
+    const canOpenPopup = typeof window !== 'undefined' && typeof window.open === 'function';
 
-    popupRef.current = window.open(
-      'about:blank',
-      'discord_community_import',
-      `width=${width},height=${height},left=${left},top=${top},menubar=no,toolbar=no,status=no`
-    );
+    let popup: Window | null = null;
 
-    if (!popupRef.current) {
-      setError('Failed to open popup. Please allow popups for this site.');
-      setPhase('error');
-      setIsLoading(false);
-      return;
+    if (canOpenPopup) {
+      // Open popup IMMEDIATELY in the click handler (before any async work)
+      // to avoid browser popup blockers that require a direct user gesture.
+      const width = 500;
+      const height = 700;
+      const left = (window.screenX ?? 0) + ((window.innerWidth ?? 500) - width) / 2;
+      const top = (window.screenY ?? 0) + ((window.innerHeight ?? 700) - height) / 2;
+
+      popup = window.open(
+        'about:blank',
+        'discord_community_import',
+        `width=${width},height=${height},left=${left},top=${top},menubar=no,toolbar=no,status=no`
+      );
     }
+
+    popupRef.current = popup;
 
     try {
       // Request the OAuth URL from the relay
@@ -591,29 +615,39 @@ export function useDiscordCommunityImport(): UseDiscordCommunityImportState & Us
       });
 
       if (!response.ok) {
-        popupRef.current.close();
+        if (popup && !popup.closed) popup.close();
         throw new Error('Failed to start Discord authentication');
       }
 
       const data = await response.json();
 
-      // Navigate the already-open popup to the Discord OAuth URL
-      popupRef.current.location.href = data.redirect_url;
+      if (popup && !popup.closed) {
+        // Desktop: Navigate the already-open popup to the Discord OAuth URL
+        popup.location.href = data.redirect_url;
 
-      // Poll for popup close (in case user closes without completing)
-      authSucceededRef.current = false;
-      const pollTimer = setInterval(() => {
-        if (popupRef.current?.closed) {
-          clearInterval(pollTimer);
-          setIsLoading(false);
-          if (!authSucceededRef.current) {
-            setPhase('idle');
+        // Poll for popup close (in case user closes without completing)
+        authSucceededRef.current = false;
+        const pollTimer = setInterval(() => {
+          if (popupRef.current?.closed) {
+            clearInterval(pollTimer);
+            setIsLoading(false);
+            if (!authSucceededRef.current) {
+              setPhase('idle');
+            }
           }
+        }, 500);
+      } else {
+        // Mobile fallback: redirect in the same window
+        // The OAuth callback will redirect back with the token
+        if (typeof window !== 'undefined' && data.redirect_url) {
+          window.location.href = data.redirect_url;
+        } else {
+          throw new Error('Cannot open Discord authentication. Please try on a desktop browser.');
         }
-      }, 500);
+      }
     } catch (err: any) {
-      if (popupRef.current && !popupRef.current.closed) {
-        popupRef.current.close();
+      if (popup && !popup.closed) {
+        popup.close();
       }
       setError(err.message || 'Failed to start authentication');
       setPhase('error');
@@ -756,23 +790,26 @@ export function useDiscordCommunityImport(): UseDiscordCommunityImportState & Us
     setError(null);
     setBotStatus('inviting');
 
-    // Open popup IMMEDIATELY (same pattern as startAuth to avoid blockers)
-    const width = 500;
-    const height = 750;
-    const left = window.screenX + (window.innerWidth - width) / 2;
-    const top = window.screenY + (window.innerHeight - height) / 2;
+    // Check if window.open is available
+    const canOpenPopup = typeof window !== 'undefined' && typeof window.open === 'function';
 
-    popupRef.current = window.open(
-      'about:blank',
-      'discord_bot_invite',
-      `width=${width},height=${height},left=${left},top=${top},menubar=no,toolbar=no,status=no`
-    );
+    let popup: Window | null = null;
 
-    if (!popupRef.current) {
-      setError('Failed to open popup. Please allow popups for this site.');
-      setBotStatus('not_in_guild');
-      return;
+    if (canOpenPopup) {
+      // Open popup IMMEDIATELY (same pattern as startAuth to avoid blockers)
+      const width = 500;
+      const height = 750;
+      const left = (window.screenX ?? 0) + ((window.innerWidth ?? 500) - width) / 2;
+      const top = (window.screenY ?? 0) + ((window.innerHeight ?? 750) - height) / 2;
+
+      popup = window.open(
+        'about:blank',
+        'discord_bot_invite',
+        `width=${width},height=${height},left=${left},top=${top},menubar=no,toolbar=no,status=no`
+      );
     }
+
+    popupRef.current = popup;
 
     try {
       // Fetch bot invite URL from relay
@@ -781,21 +818,31 @@ export function useDiscordCommunityImport(): UseDiscordCommunityImportState & Us
       );
 
       if (!response.ok) {
-        popupRef.current.close();
+        if (popup && !popup.closed) popup.close();
         throw new Error('Failed to get bot invite URL');
       }
 
       const data = await response.json();
 
       if (!data.bot_enabled || !data.invite_url) {
-        popupRef.current.close();
+        if (popup && !popup.closed) popup.close();
         setBotStatus('disabled');
         setError(data.message || 'Bot is not configured on this relay.');
         return;
       }
 
-      // Navigate popup to Discord bot authorization page
-      popupRef.current.location.href = data.invite_url;
+      if (popup && !popup.closed) {
+        // Desktop: Navigate popup to Discord bot authorization page
+        popup.location.href = data.invite_url;
+      } else {
+        // Mobile fallback: redirect in the same window
+        if (typeof window !== 'undefined' && data.invite_url) {
+          window.location.href = data.invite_url;
+          return; // Don't set up polling — user will return to app manually
+        } else {
+          throw new Error('Cannot open bot invite. Please try on a desktop browser.');
+        }
+      }
 
       // Poll bot-status every 2 seconds until the bot joins
       pollTimerRef.current = setInterval(async () => {
