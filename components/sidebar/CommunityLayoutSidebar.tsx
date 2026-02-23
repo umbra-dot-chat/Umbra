@@ -26,7 +26,7 @@ import {
   type ManagedRole, type RolePermissionCategory,
 } from '@coexist/wisp-react-native';
 
-import { SettingsIcon, FileTextIcon, ShieldIcon, UserPlusIcon, BellIcon, LogOutIcon, PlusIcon, VolumeIcon, TrashIcon, QrCodeIcon } from '@/components/icons';
+import { SettingsIcon, FileTextIcon, ShieldIcon, UserPlusIcon, BellIcon, LogOutIcon, PlusIcon, VolumeIcon, TrashIcon, QrCodeIcon, ChevronDownIcon } from '@/components/icons';
 import { QRCardDialog } from '@/components/qr/QRCardDialog';
 import { VoiceChannelBar } from '@/components/community/VoiceChannelBar';
 import { VoiceChannelUsers } from '@/components/community/VoiceChannelUsers';
@@ -1377,6 +1377,52 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
         style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 56 }}
         pointerEvents="none"
       />
+
+      {/* Header action buttons — overlaid on top-right of community header */}
+      <View
+        style={{
+          position: 'absolute',
+          top: 0,
+          right: 0,
+          zIndex: 10,
+          height: 56,
+          flexDirection: 'row',
+          alignItems: 'center',
+          paddingRight: 8,
+          gap: 2,
+        }}
+      >
+        <Pressable
+          onPress={() => { setSettingsInitialSection('invites'); setSettingsDialogOpen(true); }}
+          accessibilityRole="button"
+          accessibilityLabel="Invite to server"
+          style={({ pressed }) => ({
+            width: 32,
+            height: 32,
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRadius: 6,
+            opacity: pressed ? 0.6 : 1,
+          })}
+        >
+          <UserPlusIcon size={16} color={theme.colors.text.secondary} />
+        </Pressable>
+        <Pressable
+          onPress={handleCommunityClick}
+          accessibilityRole="button"
+          accessibilityLabel="Server settings"
+          style={({ pressed }) => ({
+            width: 32,
+            height: 32,
+            alignItems: 'center',
+            justifyContent: 'center',
+            borderRadius: 6,
+            opacity: pressed ? 0.6 : 1,
+          })}
+        >
+          <ChevronDownIcon size={14} color={theme.colors.text.secondary} />
+        </Pressable>
+      </View>
 
       {/* Seat claim banner */}
       {matchingSeats.length > 0 && (
