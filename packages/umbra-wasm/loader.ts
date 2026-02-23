@@ -438,6 +438,20 @@ export function isWasmReady(): boolean {
 }
 
 /**
+ * Reset the WASM module state to allow re-initialization with a different DID.
+ *
+ * Must be called before `initUmbraWasm()` when switching accounts. This clears
+ * the cached module and promise so a fresh init cycle can load the new
+ * identity's database from IndexedDB.
+ *
+ * Call `flushAndCloseSqlBridge()` BEFORE this to persist the current DB.
+ */
+export function resetWasm(): void {
+  wasmModule = null;
+  initPromise = null;
+}
+
+/**
  * Enable IndexedDB persistence for an already-initialized database.
  *
  * Call this after creating a new identity (when the DID first becomes

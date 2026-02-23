@@ -71,7 +71,7 @@ export interface CreateWalletFlowProps {
 // ---------------------------------------------------------------------------
 
 export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
-  const { login, setPin, setRememberMe: setAuthRememberMe, setRecoveryPhrase } = useAuth();
+  const { login, setPin, setRememberMe: setAuthRememberMe, setRecoveryPhrase, addAccount } = useAuth();
 
   // Flow state
   const [displayName, setDisplayName] = useState('');
@@ -244,10 +244,23 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
     // so this retroactively enables persistence for all subsequent writes.
     enablePersistence(identity.did);
 
+    // Register account for multi-account switching
+    if (seedPhrase) {
+      addAccount({
+        did: identity.did,
+        displayName: identity.displayName,
+        avatar: identity.avatar,
+        recoveryPhrase: seedPhrase,
+        pin: chosenPin ?? undefined,
+        rememberMe,
+        addedAt: Date.now(),
+      });
+    }
+
     // Login — AuthGate will redirect to /(main) and unmount the auth
     // screen (including this overlay), so we don't need to manually close.
     login(identity);
-  }, [identity, login, chosenPin, setPin, rememberMe, setAuthRememberMe, seedPhrase, setRecoveryPhrase]);
+  }, [identity, login, chosenPin, setPin, rememberMe, setAuthRememberMe, seedPhrase, setRecoveryPhrase, addAccount]);
 
   // Called after discovery opt-in decision (or skip) to finish login
   const finishLogin = useCallback(async () => {

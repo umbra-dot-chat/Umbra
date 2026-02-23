@@ -16,7 +16,7 @@ import React from 'react';
 import { Image, Pressable, ScrollView, View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 import { Text, Skeleton, useTheme, NotificationBadge } from '@coexist/wisp-react-native';
-import { HomeIcon, FolderIcon, PlusIcon, SettingsIcon } from '@/components/icons';
+import { UmbraIcon, FolderIcon, PlusIcon, SettingsIcon } from '@/components/icons';
 import type { Community } from '@umbra/service';
 
 // ---------------------------------------------------------------------------
@@ -53,6 +53,12 @@ export interface NavigationRailProps {
   onCreateCommunity: () => void;
   /** Open settings dialog */
   onOpenSettings?: () => void;
+  /** Current user's avatar (base64 data URI) */
+  userAvatar?: string;
+  /** Current user's display name (for initial fallback) */
+  userDisplayName?: string;
+  /** Called when the user avatar bubble is pressed */
+  onAvatarPress?: () => void;
   /** Whether community data is still loading */
   loading?: boolean;
   /** Aggregated notification count for the home badge (shown when not on home) */
@@ -78,6 +84,9 @@ export function NavigationRail({
   onCommunityPress,
   onCreateCommunity,
   onOpenSettings,
+  userAvatar,
+  userDisplayName,
+  onAvatarPress,
   loading,
   homeNotificationCount,
   safeAreaTop = 0,
@@ -105,7 +114,7 @@ export function NavigationRail({
         theme={theme}
         badgeCount={!isHomeActive && homeNotificationCount ? homeNotificationCount : undefined}
       >
-        <HomeIcon
+        <UmbraIcon
           size={22}
           color={isHomeActive ? theme.colors.text.inverse : theme.colors.text.secondary}
         />
@@ -203,7 +212,7 @@ export function NavigationRail({
 
       {/* Settings button — anchored to the bottom */}
       {onOpenSettings && (
-        <View style={{ paddingBottom: safeAreaBottom + 12, paddingTop: 8, alignItems: 'center', width: '100%' }}>
+        <View style={{ paddingBottom: Math.round(safeAreaBottom / 3) + 12, paddingTop: 8, alignItems: 'center', width: '100%' }}>
           <View
             style={{
               width: 28,
@@ -213,6 +222,39 @@ export function NavigationRail({
               marginBottom: 8,
             }}
           />
+
+          {/* Account avatar bubble — above settings gear */}
+          {onAvatarPress && (
+            <View style={{ marginBottom: 4, width: '100%', alignItems: 'center' }}>
+              <Pressable
+                onPress={onAvatarPress}
+                style={({ pressed }) => ({
+                  width: 32,
+                  height: 32,
+                  borderRadius: 16,
+                  backgroundColor: pressed
+                    ? theme.colors.border.strong
+                    : theme.colors.accent.primary,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  overflow: 'hidden',
+                })}
+              >
+                {userAvatar ? (
+                  <Image
+                    source={{ uri: userAvatar }}
+                    style={{ width: 32, height: 32 }}
+                    resizeMode="cover"
+                  />
+                ) : (
+                  <Text size="xs" weight="bold" style={{ color: theme.colors.text.inverse }}>
+                    {(userDisplayName ?? '?').charAt(0).toUpperCase()}
+                  </Text>
+                )}
+              </Pressable>
+            </View>
+          )}
+
           <RailItem
             active={false}
             onPress={onOpenSettings}

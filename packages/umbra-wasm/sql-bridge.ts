@@ -402,3 +402,43 @@ export function closeSqlBridge(): void {
   currentDid = null;
   persistenceEnabled = false;
 }
+
+/**
+ * Force-flush any pending database save, then close.
+ *
+ * Used before account switching to ensure no data is lost. Unlike
+ * `closeSqlBridge()`, this awaits all in-flight persistence operations
+ * and does one final export before tearing down.
+ */
+export async function flushAndCloseSqlBridge(): Promise<void> {
+  // Cancel any pending debounced save timer
+  if (saveTimer !== null) {
+    clearTimeout(saveTimer);
+    saveTimer = null;
+  }
+
+  // Wait for any in-flight save to finish
+  if (saveInFlight) {
+    await new Promise<void>((resolve) => {
+      const check = setInterval(() => {
+        if (!saveInFlight) {
+          clearInterval(check);
+          resolve();
+        }
+      }, 50);
+    });
+  }
+
+  // Do one final synchronous export + await the persistence write
+  if (persistenceEnabled && currentDid && db) {
+    try {
+      const data = db.export();
+      await saveDatabaseExport(currentDid, data);
+    } catch (err) {
+      console.warn('[sql-bridge] Final flush failed:', err);
+    }
+  }
+
+  // Now tear down
+  closeSqlBridge();
+}

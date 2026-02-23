@@ -30,6 +30,7 @@ import { CommunityProvider, useCommunityContext } from '@/contexts/CommunityCont
 import { VoiceChannelProvider } from '@/contexts/VoiceChannelContext';
 import { useCommunities } from '@/hooks/useCommunities';
 import { NavigationRail } from '@/components/navigation/NavigationRail';
+import { AccountSwitcher } from '@/components/navigation/AccountSwitcher';
 import { CommunityLayoutSidebar } from '@/components/sidebar/CommunityLayoutSidebar';
 import { CommunityCreateDialog } from '@coexist/wisp-react-native';
 import type { Community, Friend, MessageEvent, MappedCommunityStructure, CommunityImportResult } from '@umbra/service';
@@ -86,7 +87,7 @@ function MainLayoutInner() {
 
   // Service + data hooks
   const { service, isReady } = useUmbra();
-  const { identity } = useAuth();
+  const { identity, accounts, switchAccount, isSwitching, logout, addAccount, recoveryPhrase, pin, rememberMe } = useAuth();
   const { conversations, refresh: refreshConversations, isLoading: conversationsLoading } = useConversations();
   const { friends, incomingRequests } = useFriends();
   const { groups, pendingInvites, acceptInvite, declineInvite } = useGroups();
@@ -191,6 +192,7 @@ function MainLayoutInner() {
   const [createCommunityOpen, setCreateCommunityOpen] = useState(false);
   const [discordImportOpen, setDiscordImportOpen] = useState(false);
   const [joinCommunityOpen, setJoinCommunityOpen] = useState(false);
+  const [accountSwitcherOpen, setAccountSwitcherOpen] = useState(false);
   const [communitySubmitting, setCommunitySubmitting] = useState(false);
   const [communityError, setCommunityError] = useState<string | undefined>();
   const { open: cmdOpen, setOpen: setCmdOpen } = useCommandPalette();
@@ -477,6 +479,9 @@ function MainLayoutInner() {
                     onCommunityPress={handleCommunityPress}
                     onCreateCommunity={() => { playSound('dialog_open'); setCreateCommunityOptionsOpen(true); }}
                     onOpenSettings={() => { playSound('dialog_open'); openSettings(); }}
+                    userAvatar={identity?.avatar}
+                    userDisplayName={identity?.displayName}
+                    onAvatarPress={() => { playSound('dialog_open'); setAccountSwitcherOpen(true); }}
                     loading={coreLoading || communitiesLoading}
                     homeNotificationCount={homeNotificationCount}
                     safeAreaTop={0}
@@ -632,6 +637,50 @@ function MainLayoutInner() {
           onToggleMute={toggleMute}
         />
       )}
+
+      <AccountSwitcher
+        open={accountSwitcherOpen}
+        onClose={() => { playSound('dialog_close'); setAccountSwitcherOpen(false); }}
+        accounts={accounts}
+        activeAccountDid={identity?.did ?? null}
+        onSwitchAccount={(did) => switchAccount(did)}
+        onActiveAccountPress={() => { openSettings('profile'); }}
+        onAddAccount={async () => {
+          // Ensure the current account is registered in the multi-account list
+          // before logging out. This handles the case where the account was
+          // created before multi-account support was added.
+          if (identity && recoveryPhrase) {
+            const alreadyRegistered = accounts.some((a) => a.did === identity.did);
+            if (!alreadyRegistered) {
+              addAccount({
+                did: identity.did,
+                displayName: identity.displayName ?? '',
+                avatar: identity.avatar,
+                recoveryPhrase,
+                pin: pin ?? undefined,
+                rememberMe,
+                addedAt: identity.createdAt ?? Date.now(),
+              });
+            }
+          }
+          // Graceful shutdown: flush DB → shutdown service → reset WASM
+          try {
+            const { flushAndCloseSqlBridge } = await import('@umbra/wasm');
+            await flushAndCloseSqlBridge();
+          } catch { /* ignore if not web */ }
+          try {
+            const { UmbraService } = await import('@umbra/service');
+            if (UmbraService.isInitialized) await UmbraService.shutdown();
+          } catch { /* ignore */ }
+          try {
+            const { resetWasm } = await import('@umbra/wasm');
+            resetWasm();
+          } catch { /* ignore */ }
+          // Clear active session (accounts list preserved in STORAGE_KEY_ACCOUNTS).
+          // AuthGate will redirect to /(auth) once identity is null.
+          logout();
+        }}
+      />
 
       <IncomingCallOverlay />
     </View>

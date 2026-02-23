@@ -10,6 +10,21 @@ const STORAGE_KEY_IDENTITY = 'umbra_identity';
 const STORAGE_KEY_REMEMBER = 'umbra_remember_me';
 const STORAGE_KEY_PIN = 'umbra_pin';
 const STORAGE_KEY_RECOVERY = 'umbra_recovery';
+const STORAGE_KEY_ACCOUNTS = 'umbra_accounts';
+
+// ---------------------------------------------------------------------------
+// Multi-account types
+// ---------------------------------------------------------------------------
+
+export interface StoredAccount {
+  did: string;
+  displayName: string;
+  avatar?: string;
+  recoveryPhrase: string[];
+  pin?: string;
+  rememberMe: boolean;
+  addedAt: number;
+}
 
 // ---------------------------------------------------------------------------
 // Platform-aware async storage helpers
@@ -209,6 +224,22 @@ interface AuthContextValue {
   verifyPin: (attempt: string) => boolean;
   /** Re-lock the app (requires PIN again) */
   lockApp: () => void;
+
+  // Multi-account
+  /** All stored accounts on this device */
+  accounts: StoredAccount[];
+  /** Add or update an account in the stored list */
+  addAccount: (account: StoredAccount) => void;
+  /** Remove an account from the stored list (and its data) */
+  removeAccount: (did: string) => void;
+  /** Switch to a different stored account */
+  switchAccount: (did: string) => Promise<void>;
+  /** Re-login to a stored account from the auth screen (service may not be running) */
+  loginFromStoredAccount: (did: string) => Promise<void>;
+  /** Whether an account switch is currently in progress */
+  isSwitching: boolean;
+  /** Incremented on each account switch to trigger UmbraProvider remount */
+  switchGeneration: number;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -251,6 +282,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const [isPinVerified, setIsPinVerified] = useState(false);
 
+  // Multi-account state
+  const [accounts, setAccounts] = useState<StoredAccount[]>(() => {
+    if (!isWeb) return [];
+    const saved = getWebStorageItem(STORAGE_KEY_ACCOUNTS);
+    if (saved) {
+      try { return JSON.parse(saved) as StoredAccount[]; } catch { /* ignore */ }
+    }
+    return [];
+  });
+  const [isSwitching, setIsSwitching] = useState(false);
+  const [switchGeneration, setSwitchGeneration] = useState(0);
+
   // On web, hydration is immediate (synchronous localStorage). On native, async.
   const [isHydrated, setIsHydrated] = useState(isWeb);
 
@@ -262,11 +305,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     async function hydrate() {
       try {
-        const [rememberedStr, identityStr, pinStr, recoveryStr] = await Promise.all([
+        const [rememberedStr, identityStr, pinStr, recoveryStr, accountsStr] = await Promise.all([
           getStorageItem(STORAGE_KEY_REMEMBER),
           getStorageItem(STORAGE_KEY_IDENTITY),
           getStorageItem(STORAGE_KEY_PIN),
           getStorageItem(STORAGE_KEY_RECOVERY),
+          getStorageItem(STORAGE_KEY_ACCOUNTS),
         ]);
 
         if (cancelled) return;
@@ -289,6 +333,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
             setRecoveryPhraseState(JSON.parse(recoveryStr) as string[]);
           } catch { /* ignore */ }
         }
+
+        if (accountsStr) {
+          try {
+            setAccounts(JSON.parse(accountsStr) as StoredAccount[]);
+          } catch { /* ignore */ }
+        }
       } catch (e) {
         console.warn('[AuthContext] Native hydration failed:', e);
       }
@@ -301,6 +351,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     hydrate();
     return () => { cancelled = true; };
   }, []);
+
+  // ─── Defensive: ensure active identity is in accounts list ──────────────
+  // Covers the case where an account was created before multi-account support
+  // was added. Without this, the account switcher wouldn't show the user's
+  // current account and "Add Account" → logout → create new → would make it
+  // appear as if the old account was deleted.
+  useEffect(() => {
+    if (!isHydrated || !identity || !recoveryPhrase) return;
+    // Use functional updater so we always read the latest accounts list
+    // without needing `accounts` in the dependency array (avoids infinite loop).
+    setAccounts((prev) => {
+      if (prev.some((a) => a.did === identity.did)) return prev; // Already registered
+      const updated = [...prev, {
+        did: identity.did,
+        displayName: identity.displayName ?? '',
+        avatar: identity.avatar,
+        recoveryPhrase,
+        pin: pin ?? undefined,
+        rememberMe,
+        addedAt: identity.createdAt ?? Date.now(),
+      }];
+      setStorageItem(STORAGE_KEY_ACCOUNTS, JSON.stringify(updated));
+      return updated;
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isHydrated, identity?.did, recoveryPhrase]);
 
   // ─── Ref for rememberMe ─────────────────────────────────────────────────
   const rememberMeRef = useRef(rememberMe);
@@ -383,6 +459,173 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setIsPinVerified(false);
   }, []);
 
+  // ─── Multi-account callbacks ──────────────────────────────────────────
+
+  /** Add or update an account in the stored list */
+  const addAccount = useCallback((account: StoredAccount) => {
+    setAccounts((prev) => {
+      const exists = prev.findIndex((a) => a.did === account.did);
+      let updated: StoredAccount[];
+      if (exists >= 0) {
+        // Update existing entry (preserves addedAt, merges new fields)
+        updated = [...prev];
+        updated[exists] = { ...prev[exists], ...account };
+      } else {
+        updated = [...prev, account];
+      }
+      setStorageItem(STORAGE_KEY_ACCOUNTS, JSON.stringify(updated));
+      return updated;
+    });
+  }, []);
+
+  /** Remove an account from the stored list */
+  const removeAccount = useCallback((did: string) => {
+    setAccounts((prev) => {
+      const updated = prev.filter((a) => a.did !== did);
+      setStorageItem(STORAGE_KEY_ACCOUNTS, JSON.stringify(updated));
+      return updated;
+    });
+  }, []);
+
+  /** Ref to latest accounts for use inside switchAccount without stale closure */
+  const accountsRef = useRef(accounts);
+  accountsRef.current = accounts;
+
+  /**
+   * Switch to a different stored account.
+   *
+   * Orchestrates: DB flush → service shutdown → WASM reset → state swap →
+   * UmbraProvider remount (via switchGeneration key change).
+   */
+  const switchAccount = useCallback(async (did: string) => {
+    const target = accountsRef.current.find((a) => a.did === did);
+    if (!target) {
+      console.warn('[AuthContext] switchAccount: account not found for DID:', did.slice(0, 20));
+      return;
+    }
+
+    setIsSwitching(true);
+
+    try {
+      // 1. Flush and close the current database (persist to IndexedDB)
+      const { flushAndCloseSqlBridge } = await import('@umbra/wasm');
+      await flushAndCloseSqlBridge();
+
+      // 2. Shutdown the service (clears event bridge + singleton)
+      const { UmbraService } = await import('@umbra/service');
+      await UmbraService.shutdown();
+
+      // 3. Reset the WASM loader so initUmbraWasm() can re-run with new DID
+      const { resetWasm } = await import('@umbra/wasm');
+      resetWasm();
+
+      // 4. Update auth state to the target account
+      const targetIdentity: Identity = {
+        did: target.did,
+        displayName: target.displayName,
+        avatar: target.avatar,
+        createdAt: target.addedAt,
+      };
+
+      setIdentity(targetIdentity);
+      setRecoveryPhraseState(target.recoveryPhrase);
+      setPinState(target.pin ?? null);
+      setIsPinVerified(false);
+
+      // Persist active identity
+      setStorageItem(STORAGE_KEY_IDENTITY, JSON.stringify(targetIdentity));
+      setStorageItem(STORAGE_KEY_REMEMBER, 'true');
+      setStorageItem(STORAGE_KEY_RECOVERY, JSON.stringify(target.recoveryPhrase));
+      if (target.pin) {
+        setStorageItem(STORAGE_KEY_PIN, target.pin);
+      } else {
+        removeStorageItem(STORAGE_KEY_PIN);
+      }
+
+      // 5. Bump switchGeneration — triggers UmbraProvider remount
+      setSwitchGeneration((g) => g + 1);
+
+      console.log('[AuthContext] Switched to account:', target.displayName);
+    } catch (err) {
+      console.error('[AuthContext] Account switch failed:', err);
+    } finally {
+      setIsSwitching(false);
+    }
+  }, []);
+
+  /**
+   * Re-login to a stored account from the auth screen.
+   *
+   * Similar to switchAccount but handles the case where the WASM service
+   * may not be fully initialized (coming from the unauthenticated state).
+   * PIN verification is expected to happen on the auth screen *before*
+   * calling this — isPinVerified is set to true unconditionally.
+   */
+  const loginFromStoredAccount = useCallback(async (did: string) => {
+    const target = accountsRef.current.find((a) => a.did === did);
+    if (!target) {
+      console.warn('[AuthContext] loginFromStoredAccount: account not found for DID:', did.slice(0, 20));
+      return;
+    }
+
+    setIsSwitching(true);
+
+    try {
+      // 1. Try to flush and close any existing database (may fail if not initialized)
+      try {
+        const { flushAndCloseSqlBridge } = await import('@umbra/wasm');
+        await flushAndCloseSqlBridge();
+      } catch { /* Expected if WASM/service isn't running yet */ }
+
+      // 2. Try to shutdown the service if it's running
+      try {
+        const { UmbraService } = await import('@umbra/service');
+        if (UmbraService.isInitialized) {
+          await UmbraService.shutdown();
+        }
+      } catch { /* Expected if service isn't initialized */ }
+
+      // 3. Reset the WASM loader so it can re-initialize with the new DID
+      try {
+        const { resetWasm } = await import('@umbra/wasm');
+        resetWasm();
+      } catch { /* May fail if WASM was never loaded */ }
+
+      // 4. Update auth state to the target account
+      const targetIdentity: Identity = {
+        did: target.did,
+        displayName: target.displayName,
+        avatar: target.avatar,
+        createdAt: target.addedAt,
+      };
+
+      setIdentity(targetIdentity);
+      setRecoveryPhraseState(target.recoveryPhrase);
+      setPinState(target.pin ?? null);
+      // PIN was already verified on the auth screen before this was called
+      setIsPinVerified(true);
+
+      // Persist active identity
+      setStorageItem(STORAGE_KEY_IDENTITY, JSON.stringify(targetIdentity));
+      setStorageItem(STORAGE_KEY_REMEMBER, 'true');
+      setStorageItem(STORAGE_KEY_RECOVERY, JSON.stringify(target.recoveryPhrase));
+      if (target.pin) {
+        setStorageItem(STORAGE_KEY_PIN, target.pin);
+      } else {
+        removeStorageItem(STORAGE_KEY_PIN);
+      }
+
+      // 5. Bump switchGeneration — triggers UmbraProvider remount
+      setSwitchGeneration((g) => g + 1);
+
+      console.log('[AuthContext] Re-logged into stored account:', target.displayName);
+    } catch (err) {
+      console.error('[AuthContext] loginFromStoredAccount failed:', err);
+    } finally {
+      setIsSwitching(false);
+    }
+  }, []);
+
   const value = useMemo<AuthContextValue>(
     () => ({
       identity,
@@ -401,8 +644,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setPin,
       verifyPin,
       lockApp,
+      accounts,
+      addAccount,
+      removeAccount,
+      switchAccount,
+      loginFromStoredAccount,
+      isSwitching,
+      switchGeneration,
     }),
-    [identity, isHydrated, login, updateIdentity, logout, rememberMe, setRememberMe, recoveryPhrase, setRecoveryPhrase, pin, isPinVerified, setPin, verifyPin, lockApp],
+    [identity, isHydrated, login, updateIdentity, logout, rememberMe, setRememberMe, recoveryPhrase, setRecoveryPhrase, pin, isPinVerified, setPin, verifyPin, lockApp, accounts, addAccount, removeAccount, switchAccount, loginFromStoredAccount, isSwitching, switchGeneration],
   );
 
   return (

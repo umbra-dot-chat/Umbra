@@ -705,6 +705,24 @@ export function HomeIcon({ size = 18, color }: { size?: number; color?: string }
   );
 }
 
+/**
+ * UmbraIcon — The Umbra ghost logo.
+ * A filled icon (not stroked) that uses `color` as the fill.
+ * Uses evenodd fill rule so the eye sub-paths create cutouts.
+ * Traced from assets/images/ghost-black.png via potrace.
+ */
+export function UmbraIcon({ size = 18, color }: { size?: number; color?: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill={color ?? 'currentColor'}>
+      <Path
+        fillRule="evenodd"
+        clipRule="evenodd"
+        d="M7.6,3.1C7.6,3.1 7.4,3.1 7.2,3.1C5,3.3 3.1,5 2.6,7.2C2.6,7.3 2.6,7.4 2.6,7.5C2.5,7.7 2.5,9.2 2.6,9.4C2.6,9.5 2.6,9.7 2.7,9.8C2.7,10.2 3,11 3,11.1C3.1,11.2 3.1,11.3 3.1,11.3C3.1,11.4 3.1,11.5 3.2,11.6C3.2,11.6 3.4,12 3.6,12.4C5,15.4 8.7,19.1 11.5,20.4C11.6,20.4 11.7,20.5 11.8,20.5C12.4,20.9 13.1,20.5 13.2,19.8C13.4,19 13.9,19 15.3,19.8C17.3,20.9 19.3,20.6 18.4,19.3C18.1,19 18.1,18.9 18.3,18.7C18.5,18.5 18.5,18.5 21.2,18.5C22.9,18.4 23.4,18.4 23.7,18C24,17.7 23.7,17.4 22.9,17.2C20.8,16.8 18.4,15.1 16.6,12.8C16.1,12.2 16.3,11.7 17.1,11.8C18.4,12 18.9,11.6 18.3,10.9C18.1,10.7 18.3,10.5 18.7,10.5C18.8,10.5 19,10.3 19,10.1C19,9.3 16.9,8.5 15.6,8.8C15.3,8.9 14.4,9.1 14.3,9.2C14.3,9.2 14.1,8.9 13.7,8.1C12.1,4.8 10.6,3.4 8.4,3.2C7.8,3.1 7.7,3.1 7.6,3.1ZM7.8,7.1C8.6,7.5 8.9,8.8 8.2,9.2C7.5,9.6 6.8,8.6 7,7.4C7,7.1 7.5,6.9 7.8,7.1ZM4.8,8.2C5.5,8.8 5.4,10.1 4.7,10.1C4,10.1 3.5,8.6 4,8.1C4.2,7.9 4.6,7.9 4.8,8.2ZM2.4,12.3C0.7,12.9 0,14.8 1.6,14.6C2.1,14.6 2.2,14.6 2.3,15.1C2.5,15.8 2.9,15.9 3.5,15.5C3.8,15.2 3.9,15.2 4.5,15.4C5,15.5 5,15.5 4.6,14.9C4.1,14.2 3.6,13.4 3.3,12.7C3,12.1 3,12.1 2.4,12.3Z"
+      />
+    </Svg>
+  );
+}
+
 export function AudioWaveIcon({ size = 16, color }: { size?: number; color?: string }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color ?? 'currentColor'} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">

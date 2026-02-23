@@ -493,8 +493,21 @@ function AccountSection() {
     }
   }, [identity]);
 
-  const handleLogout = useCallback(() => {
+  const handleLogout = useCallback(async () => {
     setShowLogoutConfirm(false);
+    // Graceful shutdown: flush DB → shutdown service → reset WASM
+    try {
+      const { flushAndCloseSqlBridge } = await import('@umbra/wasm');
+      await flushAndCloseSqlBridge();
+    } catch { /* ignore */ }
+    try {
+      const { UmbraService } = await import('@umbra/service');
+      if (UmbraService.isInitialized) await UmbraService.shutdown();
+    } catch { /* ignore */ }
+    try {
+      const { resetWasm } = await import('@umbra/wasm');
+      resetWasm();
+    } catch { /* ignore */ }
     logout();
     router.replace('/(auth)');
   }, [logout, router]);
@@ -719,7 +732,7 @@ function AccountSection() {
         open={showLogoutConfirm}
         onClose={() => setShowLogoutConfirm(false)}
         title="Log Out?"
-        description="Logging out will permanently clear your identity from this device. This action cannot be undone. Make sure you have backed up your recovery phrase before proceeding."
+        description="You'll be signed out of this account. Your account data is saved and you can sign back in from the login screen."
         icon={<LogOutIcon size={24} color={tc.status.danger} />}
         size="sm"
         footer={
@@ -745,7 +758,7 @@ function AccountSection() {
 }
 
 function ProfileSection() {
-  const { identity, setIdentity } = useAuth();
+  const { identity, setIdentity, addAccount, recoveryPhrase, pin, rememberMe } = useAuth();
   const { service } = useUmbra();
   const { theme } = useTheme();
   const tc = theme.colors;
@@ -819,12 +832,27 @@ function ProfileSection() {
         await service.updateProfile({ type: 'avatar', value: pendingAvatar });
       }
       // Update identity in AuthContext so the rest of the app reflects changes
-      setIdentity({
+      const updatedIdentity = {
         ...identity,
         displayName,
         status,
         ...(pendingAvatar !== null ? { avatar: pendingAvatar } : {}),
-      });
+      };
+      setIdentity(updatedIdentity);
+
+      // Keep stored account in sync for account switcher
+      if (recoveryPhrase) {
+        addAccount({
+          did: identity.did,
+          displayName: updatedIdentity.displayName,
+          avatar: updatedIdentity.avatar,
+          recoveryPhrase,
+          pin: pin ?? undefined,
+          rememberMe,
+          addedAt: identity.createdAt ?? Date.now(),
+        });
+      }
+
       setPendingAvatar(null);
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
@@ -833,7 +861,7 @@ function ProfileSection() {
     } finally {
       setSaving(false);
     }
-  }, [service, identity, displayName, status, pendingAvatar, setIdentity]);
+  }, [service, identity, displayName, status, pendingAvatar, setIdentity, addAccount, recoveryPhrase, pin, rememberMe]);
 
   return (
     <View style={{ gap: 20 }}>

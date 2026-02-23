@@ -1,6 +1,6 @@
 import 'react-native-gesture-handler';
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
-import { View } from 'react-native';
+import { View, useColorScheme } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Slot, useSegments, useRouter, useNavigationContainerRef } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -26,8 +26,14 @@ function DynamicStatusBar() {
   return <StatusBar style={mode === 'dark' ? 'light' : 'dark'} />;
 }
 
+/** Wrapper that forces UmbraProvider to remount on account switch via React key */
+function UmbraProviderWithSwitch({ children }: { children: React.ReactNode }) {
+  const { switchGeneration } = useAuth();
+  return <UmbraProvider key={switchGeneration}>{children}</UmbraProvider>;
+}
+
 function AuthGate() {
-  const { isAuthenticated, hasPin, isPinVerified, identity, isHydrated: authHydrated } = useAuth();
+  const { isAuthenticated, hasPin, isPinVerified, identity, isHydrated: authHydrated, isSwitching } = useAuth();
   const { isReady, isLoading, initStage } = useUmbra();
   const { preferencesLoaded } = useAppTheme();
   const segments = useSegments();
@@ -177,10 +183,12 @@ function AuthGate() {
     <View style={{ flex: 1 }}>
       <Slot />
       {showPinLock && <PinLockScreen />}
-      {showLoading && (
+      {(showLoading || isSwitching) && (
         <LoadingScreen
-          steps={loadingSteps}
-          onComplete={handleLoadingComplete}
+          steps={isSwitching ? [
+            { id: 'switch', label: 'Switching account', status: 'active' as const },
+          ] : loadingSteps}
+          onComplete={isSwitching ? undefined : handleLoadingComplete}
         />
       )}
     </View>
@@ -188,12 +196,15 @@ function AuthGate() {
 }
 
 export default function RootLayout() {
+  const systemColorScheme = useColorScheme();
+  const initialMode = systemColorScheme === 'dark' ? 'dark' : 'light';
+
   return (
     <SafeAreaProvider>
-      <WispProvider mode="light">
+      <WispProvider mode={initialMode}>
         <ToastProvider maxToasts={3}>
           <AuthProvider>
-            <UmbraProvider>
+            <UmbraProviderWithSwitch>
               <FontProvider>
                 <ThemeProvider>
                   <SoundProvider>
@@ -209,7 +220,7 @@ export default function RootLayout() {
                   </SoundProvider>
                 </ThemeProvider>
               </FontProvider>
-            </UmbraProvider>
+            </UmbraProviderWithSwitch>
           </AuthProvider>
         </ToastProvider>
       </WispProvider>

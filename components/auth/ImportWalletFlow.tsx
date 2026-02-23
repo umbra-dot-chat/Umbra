@@ -68,7 +68,7 @@ function createEmptyWords(): string[] {
 // ---------------------------------------------------------------------------
 
 export function ImportWalletFlow({ open, onClose }: ImportWalletFlowProps) {
-  const { login, setPin, setRecoveryPhrase, setRememberMe } = useAuth();
+  const { login, setPin, setRecoveryPhrase, setRememberMe, addAccount } = useAuth();
 
   // Flow state
   const [words, setWords] = useState<string[]>(createEmptyWords);
@@ -172,11 +172,23 @@ export function ImportWalletFlow({ open, onClose }: ImportWalletFlowProps) {
       setRecoveryPhrase(words);
       // Enable rememberMe so identity persists across page refreshes
       setRememberMe(true);
+
+      // Register account for multi-account switching
+      addAccount({
+        did: identity.did,
+        displayName: identity.displayName,
+        avatar: identity.avatar,
+        recoveryPhrase: words,
+        pin: chosenPin ?? undefined,
+        rememberMe: true,
+        addedAt: Date.now(),
+      });
+
       // Login directly — AuthGate will redirect to /(main) and unmount the
       // auth screen (including this overlay), so no manual close needed.
       login(identity);
     }
-  }, [identity, login, chosenPin, setPin, words, setRecoveryPhrase, setRememberMe]);
+  }, [identity, login, chosenPin, setPin, words, setRecoveryPhrase, setRememberMe, addAccount]);
 
   const handleRetry = useCallback(() => {
     setError(null);

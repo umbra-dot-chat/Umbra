@@ -93,13 +93,20 @@ function buildSmoothPath(pts: { x: number; y: number }[]): string {
 
 function createBlobConfigs(width: number, height: number): BlobConfig[] {
   const minDim = Math.min(width, height);
+  const isMobile = width < 600;
+
+  // On mobile: larger blob pushed further off-center for a bolder look.
+  // On desktop: smaller, more centered blob.
+  const radiusFactor = isMobile ? 0.58 : 0.38;
+  const cxFactor = isMobile ? 0.2 : 0.32;
+  const cyFactor = isMobile ? 0.42 : 0.55;
 
   return [
     // Single large blob — offset left of center, overlapping form area
     {
-      cx: width * 0.32,
-      cy: height * 0.55,
-      points: createPointConfigs(minDim * 0.38),
+      cx: width * cxFactor,
+      cy: height * cyFactor,
+      points: createPointConfigs(minDim * radiusFactor),
     },
   ];
 }

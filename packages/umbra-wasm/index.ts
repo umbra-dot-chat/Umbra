@@ -18,7 +18,7 @@
  * ```
  */
 
-export { initUmbraWasm, getWasm, isWasmReady, enablePersistence, isReactNative } from './loader';
+export { initUmbraWasm, getWasm, isWasmReady, enablePersistence, isReactNative, resetWasm } from './loader';
 export type { UmbraWasmModule } from './loader';
 export { EventBridge, eventBridge } from './event-bridge';
 export type { EventDomain, UmbraEvent, EventListener, DomainListener } from './event-bridge';
@@ -43,6 +43,12 @@ export function closeSqlBridge(): void {
   if (isReactNative()) return;
   // Fire-and-forget dynamic import for cleanup
   import('./sql-bridge').then((mod) => mod.closeSqlBridge());
+}
+
+export async function flushAndCloseSqlBridge(): Promise<void> {
+  if (isReactNative()) return;
+  const mod = await import('./sql-bridge');
+  return mod.flushAndCloseSqlBridge();
 }
 
 export function getSqlDatabase(): any {
