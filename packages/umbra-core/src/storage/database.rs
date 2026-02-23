@@ -1310,12 +1310,13 @@ impl Database {
     // FRIEND REQUEST OPERATIONS
     // ========================================================================
 
-    /// Store a friend request
-    pub fn store_friend_request(&self, request: &FriendRequestRecord) -> Result<()> {
+    /// Store a friend request (ignores duplicates by ID silently).
+    /// Returns true if a new row was inserted, false if it was a duplicate.
+    pub fn store_friend_request(&self, request: &FriendRequestRecord) -> Result<bool> {
         let conn = self.conn.lock();
 
-        conn.execute(
-            "INSERT INTO friend_requests
+        let rows = conn.execute(
+            "INSERT OR IGNORE INTO friend_requests
              (id, from_did, to_did, direction, message, from_signing_key, from_encryption_key, from_display_name, from_avatar, created_at, status)
              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             params![
@@ -1334,7 +1335,24 @@ impl Database {
         )
         .map_err(|e| Error::DatabaseError(format!("Failed to store friend request: {}", e)))?;
 
-        Ok(())
+        Ok(rows > 0)
+    }
+
+    /// Check if there is already a pending request involving this DID in the given direction.
+    pub fn has_pending_request(&self, did: &str, direction: &str) -> Result<bool> {
+        let conn = self.conn.lock();
+        let col = if direction == "outgoing" { "to_did" } else { "from_did" };
+        let count: i64 = conn
+            .query_row(
+                &format!(
+                    "SELECT COUNT(*) FROM friend_requests WHERE {} = ? AND direction = ? AND status = 'pending'",
+                    col
+                ),
+                params![did, direction],
+                |row| row.get(0),
+            )
+            .map_err(|e| Error::DatabaseError(format!("Failed to check pending request: {}", e)))?;
+        Ok(count > 0)
     }
 
     /// Get pending friend requests

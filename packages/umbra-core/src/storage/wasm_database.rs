@@ -931,12 +931,31 @@ impl Database {
     // ========================================================================
 
     /// Store a friend request
-    pub fn store_friend_request(&self, r: &FriendRequestRecord) -> Result<()> {
-        self.exec(
-            "INSERT INTO friend_requests (id, from_did, to_did, direction, message, from_signing_key, from_encryption_key, from_display_name, from_avatar, created_at, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+    /// Store a friend request (ignores duplicates by ID silently).
+    /// Returns true if a new row was inserted, false if it was a duplicate.
+    pub fn store_friend_request(&self, r: &FriendRequestRecord) -> Result<bool> {
+        let rows = self.exec(
+            "INSERT OR IGNORE INTO friend_requests (id, from_did, to_did, direction, message, from_signing_key, from_encryption_key, from_display_name, from_avatar, created_at, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             json!([r.id, r.from_did, r.to_did, r.direction, r.message, r.from_signing_key, r.from_encryption_key, r.from_display_name, r.from_avatar, r.created_at, r.status]),
         )?;
-        Ok(())
+        Ok(rows > 0)
+    }
+
+    /// Check if there is already a pending request involving this DID in the given direction.
+    pub fn has_pending_request(&self, did: &str, direction: &str) -> Result<bool> {
+        let col = if direction == "outgoing" { "to_did" } else { "from_did" };
+        let rows = self.query(
+            &format!(
+                "SELECT COUNT(*) as cnt FROM friend_requests WHERE {} = ? AND direction = ? AND status = 'pending'",
+                col
+            ),
+            json!([did, direction]),
+        )?;
+        if let Some(row) = rows.first() {
+            Ok(row["cnt"].as_i64().unwrap_or(0) > 0)
+        } else {
+            Ok(false)
+        }
     }
 
     /// Get pending friend requests

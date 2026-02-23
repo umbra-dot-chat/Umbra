@@ -382,6 +382,16 @@ pub fn umbra_wasm_friends_send_request(
         .as_ref()
         .ok_or_else(|| JsValue::from_str("Database not initialized"))?;
 
+    // Dedup: reject if already friends
+    if database.get_friend(did).map_err(|e| JsValue::from_str(&e.to_string()))?.is_some() {
+        return Err(JsValue::from_str("Already friends with this user"));
+    }
+
+    // Dedup: reject if there's already a pending outgoing request to this DID
+    if database.has_pending_request(did, "outgoing").map_err(|e| JsValue::from_str(&e.to_string()))? {
+        return Err(JsValue::from_str("Friend request already sent to this user"));
+    }
+
     // Create a signed friend request directly
     let request = FriendRequest::create(identity, did.to_string(), message)
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
@@ -471,8 +481,9 @@ pub fn umbra_wasm_friends_send_request(
 
 /// Store an incoming friend request received via relay.
 /// Takes a JSON string with the request fields.
+/// Returns JSON: { "duplicate": false } or { "duplicate": true } if already stored.
 #[wasm_bindgen]
-pub fn umbra_wasm_friends_store_incoming(json: &str) -> Result<(), JsValue> {
+pub fn umbra_wasm_friends_store_incoming(json: &str) -> Result<JsValue, JsValue> {
     let state = get_state()?;
     let state = state.read();
 
@@ -484,12 +495,19 @@ pub fn umbra_wasm_friends_store_incoming(json: &str) -> Result<(), JsValue> {
     let data: serde_json::Value =
         serde_json::from_str(json).map_err(|e| JsValue::from_str(&e.to_string()))?;
 
+    let from_did = data["from_did"].as_str().unwrap_or("").to_string();
+
+    // Dedup: skip if already friends with this sender
+    if database.get_friend(&from_did).map_err(|e| JsValue::from_str(&e.to_string()))?.is_some() {
+        return Ok(JsValue::from_str("{\"duplicate\":true}"));
+    }
+
     let record = FriendRequestRecord {
         id: data["id"]
             .as_str()
             .unwrap_or(&uuid::Uuid::new_v4().to_string())
             .to_string(),
-        from_did: data["from_did"].as_str().unwrap_or("").to_string(),
+        from_did,
         to_did: data["to_did"].as_str().unwrap_or("").to_string(),
         direction: "incoming".to_string(),
         message: data["message"].as_str().map(|s| s.to_string()),
@@ -501,11 +519,16 @@ pub fn umbra_wasm_friends_store_incoming(json: &str) -> Result<(), JsValue> {
         status: "pending".to_string(),
     };
 
-    database
+    // INSERT OR IGNORE — returns false if duplicate ID
+    let inserted = database
         .store_friend_request(&record)
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
 
-    Ok(())
+    if !inserted {
+        return Ok(JsValue::from_str("{\"duplicate\":true}"));
+    }
+
+    Ok(JsValue::from_str("{\"duplicate\":false}"))
 }
 
 /// Process a friend request acceptance received via relay.
@@ -4425,24 +4448,37 @@ fn handle_inbound_friend_request(
                 status: "pending".to_string(),
             };
 
-            if let Err(e) = database.store_friend_request(&record) {
-                tracing::error!("Failed to store incoming friend request: {}", e);
+            // Dedup: skip if already friends
+            if database.get_friend(&fr.from_did).ok().flatten().is_some() {
+                tracing::info!("Ignoring friend request from already-friended DID {}", fr.from_did);
                 return;
             }
 
-            emit_event(
-                "friend",
-                &serde_json::json!({
-                    "type": "friendRequestReceived",
-                    "request": {
-                        "id": record.id,
-                        "from_did": fr.from_did,
-                        "from_display_name": fr.from_display_name,
-                        "message": fr.message,
-                        "timestamp": fr.timestamp,
-                    }
-                }),
-            );
+            match database.store_friend_request(&record) {
+                Ok(true) => {
+                    // New request — emit event
+                    emit_event(
+                        "friend",
+                        &serde_json::json!({
+                            "type": "friendRequestReceived",
+                            "request": {
+                                "id": record.id,
+                                "from_did": fr.from_did,
+                                "from_display_name": fr.from_display_name,
+                                "message": fr.message,
+                                "timestamp": fr.timestamp,
+                            }
+                        }),
+                    );
+                }
+                Ok(false) => {
+                    tracing::info!("Ignoring duplicate friend request from {}", fr.from_did);
+                }
+                Err(e) => {
+                    tracing::error!("Failed to store incoming friend request: {}", e);
+                    return;
+                }
+            }
         }
         crate::network::protocols::FriendRequestType::Accept => {
             // The remote peer accepted our friend request — add them as a friend

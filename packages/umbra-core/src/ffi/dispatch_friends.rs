@@ -23,6 +23,16 @@ pub fn friends_send_request(args: &str) -> DResult {
         .as_ref()
         .ok_or_else(|| err(400, "Database not initialized"))?;
 
+    // Dedup: reject if already friends
+    if database.get_friend(did).map_err(|e| err(e.code(), e))?.is_some() {
+        return Err(err(409, "Already friends with this user"));
+    }
+
+    // Dedup: reject if there's already a pending outgoing request to this DID
+    if database.has_pending_request(did, "outgoing").map_err(|e| err(e.code(), e))? {
+        return Err(err(409, "Friend request already sent to this user"));
+    }
+
     let request = FriendRequest::create(identity, did.to_string(), message.clone())
         .map_err(|e| err(e.code(), e))?;
 
@@ -80,9 +90,16 @@ pub fn friends_store_incoming(args: &str) -> DResult {
         .as_ref()
         .ok_or_else(|| err(400, "Database not initialized"))?;
 
+    let from_did = data["from_did"].as_str().unwrap_or("").to_string();
+
+    // Dedup: skip if already friends with this sender
+    if db.get_friend(&from_did).map_err(|e| err(e.code(), e))?.is_some() {
+        return ok_json(serde_json::json!({"duplicate": true}));
+    }
+
     let record = FriendRequestRecord {
         id: data["id"].as_str().unwrap_or("").to_string(),
-        from_did: data["from_did"].as_str().unwrap_or("").to_string(),
+        from_did: from_did.clone(),
         to_did: data["to_did"].as_str().unwrap_or("").to_string(),
         direction: "incoming".to_string(),
         message: data["message"].as_str().map(|s| s.to_string()),
@@ -93,8 +110,14 @@ pub fn friends_store_incoming(args: &str) -> DResult {
         created_at: data["created_at"].as_i64().unwrap_or(0),
         status: "pending".to_string(),
     };
-    db.store_friend_request(&record)
+
+    // INSERT OR IGNORE — returns false if duplicate ID
+    let inserted = db.store_friend_request(&record)
         .map_err(|e| err(e.code(), e))?;
+
+    if !inserted {
+        return ok_json(serde_json::json!({"duplicate": true}));
+    }
 
     super::dispatcher::emit_event(
         "friend",

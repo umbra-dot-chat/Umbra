@@ -369,8 +369,9 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
               fromAvatar: reqPayload.fromAvatar, fromSigningKey: reqPayload.fromSigningKey,
               fromEncryptionKey: reqPayload.fromEncryptionKey, createdAt: reqPayload.createdAt, status: 'pending',
             };
-            try { await service.storeIncomingRequest(friendRequest); } catch (e) { console.warn('[useNetwork] Failed to store incoming request:', e); }
-            service.dispatchFriendEvent({ type: 'requestReceived', request: friendRequest });
+            let isNew = true;
+            try { isNew = await service.storeIncomingRequest(friendRequest); } catch (e) { console.warn('[useNetwork] Failed to store incoming request:', e); }
+            if (isNew) service.dispatchFriendEvent({ type: 'requestReceived', request: friendRequest });
 
           } else if (envelope.envelope === 'friend_response' && envelope.version === 1) {
             const respPayload = envelope.payload as FriendResponsePayload;
@@ -484,8 +485,9 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
             if (envelope.envelope === 'friend_request' && envelope.version === 1) {
               const reqPayload = envelope.payload as FriendRequestPayload;
               const friendRequest: FriendRequest = { id: reqPayload.id, fromDid: reqPayload.fromDid, toDid: '', direction: 'incoming', message: reqPayload.message, fromDisplayName: reqPayload.fromDisplayName, fromAvatar: reqPayload.fromAvatar, fromSigningKey: reqPayload.fromSigningKey, fromEncryptionKey: reqPayload.fromEncryptionKey, createdAt: reqPayload.createdAt, status: 'pending' };
-              try { await service.storeIncomingRequest(friendRequest); } catch (e) { console.warn('[useNetwork] Failed to store offline incoming request:', e); }
-              service.dispatchFriendEvent({ type: 'requestReceived', request: friendRequest });
+              let isNew = true;
+              try { isNew = await service.storeIncomingRequest(friendRequest); } catch (e) { console.warn('[useNetwork] Failed to store offline incoming request:', e); }
+              if (isNew) service.dispatchFriendEvent({ type: 'requestReceived', request: friendRequest });
             } else if (envelope.envelope === 'friend_response' && envelope.version === 1) {
               const respPayload = envelope.payload as FriendResponsePayload;
               if (respPayload.accepted) {

@@ -158,8 +158,9 @@ export async function unblockUser(did: string): Promise<boolean> {
  * Store an incoming friend request received via relay into the WASM database.
  * This must be called before dispatching the friend event so that
  * getIncomingRequests() returns the request when the UI refreshes.
+ * Returns true if the request was new, false if it was a duplicate.
  */
-export async function storeIncomingRequest(request: FriendRequest): Promise<void> {
+export async function storeIncomingRequest(request: FriendRequest): Promise<boolean> {
   const json = JSON.stringify({
     id: request.id,
     from_did: request.fromDid,
@@ -171,7 +172,13 @@ export async function storeIncomingRequest(request: FriendRequest): Promise<void
     from_avatar: request.fromAvatar,
     created_at: request.createdAt,
   });
-  wasm().umbra_wasm_friends_store_incoming(json);
+  const result = wasm().umbra_wasm_friends_store_incoming(json);
+  try {
+    const parsed = typeof result === 'string' ? JSON.parse(result) : result;
+    return !parsed?.duplicate;
+  } catch {
+    return true; // Assume new if parsing fails
+  }
 }
 
 /**

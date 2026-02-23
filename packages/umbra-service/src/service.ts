@@ -321,7 +321,7 @@ export class UmbraService {
     return friends.unblockUser(did);
   }
 
-  storeIncomingRequest(request: FriendRequest): Promise<void> {
+  storeIncomingRequest(request: FriendRequest): Promise<boolean> {
     return friends.storeIncomingRequest(request);
   }
 
