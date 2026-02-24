@@ -143,6 +143,14 @@ export interface UmbraWasmModule {
   umbra_wasm_calls_get_history(json: string): string;
   umbra_wasm_calls_get_all_history(json: string): string;
 
+  // Notifications
+  umbra_wasm_notifications_create(json: string): string;
+  umbra_wasm_notifications_get(json: string): string;
+  umbra_wasm_notifications_mark_read(json: string): string;
+  umbra_wasm_notifications_mark_all_read(json: string): string;
+  umbra_wasm_notifications_dismiss(json: string): string;
+  umbra_wasm_notifications_unread_counts(json: string): string;
+
   // Crypto
   umbra_wasm_crypto_sign(data: Uint8Array): Uint8Array;
   umbra_wasm_crypto_verify(public_key_hex: string, data: Uint8Array, signature: Uint8Array): boolean;
@@ -853,6 +861,20 @@ function buildModule(wasmPkg: any): UmbraWasmModule {
       wasmPkg.umbra_wasm_calls_get_history(json),
     umbra_wasm_calls_get_all_history: (json: string) =>
       wasmPkg.umbra_wasm_calls_get_all_history(json),
+
+    // ── Notifications (real WASM) ───────────────────────────────────
+    umbra_wasm_notifications_create: (json: string) =>
+      wasmPkg.umbra_wasm_notifications_create(json),
+    umbra_wasm_notifications_get: (json: string) =>
+      wasmPkg.umbra_wasm_notifications_get(json),
+    umbra_wasm_notifications_mark_read: (json: string) =>
+      wasmPkg.umbra_wasm_notifications_mark_read(json),
+    umbra_wasm_notifications_mark_all_read: (json: string) =>
+      wasmPkg.umbra_wasm_notifications_mark_all_read(json),
+    umbra_wasm_notifications_dismiss: (json: string) =>
+      wasmPkg.umbra_wasm_notifications_dismiss(json),
+    umbra_wasm_notifications_unread_counts: (json: string) =>
+      wasmPkg.umbra_wasm_notifications_unread_counts(json),
 
     // ── Events (real WASM) ──────────────────────────────────────────
     umbra_wasm_subscribe_events: (callback: (event_json: string) => void) => {

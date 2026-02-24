@@ -11,7 +11,7 @@
 
 import React, { useMemo } from 'react';
 import { MemberList } from '@coexist/wisp-react-native';
-import type { MemberListMember, MemberListSection } from '@coexist/wisp-react-native';
+import type { MemberListSection, MemberListMember } from '@coexist/wisp-react-native';
 
 // ---------------------------------------------------------------------------
 // Community data types (mirrors WASM JSON output shapes)

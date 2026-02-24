@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Platform, View } from 'react-native';
 import {
-  Avatar, CombinedPicker, MessageInput, useTheme, MentionAutocomplete,
+  Avatar, MessageInput, useTheme,
+  CombinedPicker, MentionAutocomplete,
 } from '@coexist/wisp-react-native';
 import type { EmojiItem } from '@coexist/wisp-core/types/EmojiPicker.types';
 import type { StickerPickerPack } from '@coexist/wisp-core/types/StickerPicker.types';

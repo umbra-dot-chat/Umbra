@@ -26,7 +26,7 @@ import {
   type ManagedRole, type RolePermissionCategory,
 } from '@coexist/wisp-react-native';
 
-import { SettingsIcon, FileTextIcon, ShieldIcon, UserPlusIcon, BellIcon, LogOutIcon, PlusIcon, VolumeIcon, TrashIcon, QrCodeIcon, ChevronDownIcon } from '@/components/icons';
+import { SettingsIcon, FileTextIcon, ShieldIcon, BellIcon, LogOutIcon, PlusIcon, VolumeIcon, TrashIcon, QrCodeIcon, ShareIcon } from '@/components/icons';
 import { QRCardDialog } from '@/components/qr/QRCardDialog';
 import { VoiceChannelBar } from '@/components/community/VoiceChannelBar';
 import { VoiceChannelUsers } from '@/components/community/VoiceChannelUsers';
@@ -1395,7 +1395,7 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
         <Pressable
           onPress={() => { setSettingsInitialSection('invites'); setSettingsDialogOpen(true); }}
           accessibilityRole="button"
-          accessibilityLabel="Invite to server"
+          accessibilityLabel="Invite link"
           style={({ pressed }) => ({
             width: 32,
             height: 32,
@@ -1405,22 +1405,7 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
             opacity: pressed ? 0.6 : 1,
           })}
         >
-          <UserPlusIcon size={16} color={theme.colors.text.secondary} />
-        </Pressable>
-        <Pressable
-          onPress={handleCommunityClick}
-          accessibilityRole="button"
-          accessibilityLabel="Server settings"
-          style={({ pressed }) => ({
-            width: 32,
-            height: 32,
-            alignItems: 'center',
-            justifyContent: 'center',
-            borderRadius: 6,
-            opacity: pressed ? 0.6 : 1,
-          })}
-        >
-          <ChevronDownIcon size={14} color={theme.colors.text.secondary} />
+          <ShareIcon size={16} color={theme.colors.text.secondary} />
         </Pressable>
       </View>
 
@@ -1534,10 +1519,10 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
             Manage Roles
           </DropdownMenuItem>
           <DropdownMenuItem
-            icon={<UserPlusIcon size={16} color={iconColor} />}
+            icon={<ShareIcon size={16} color={iconColor} />}
             onSelect={() => { setSettingsInitialSection('invites'); setSettingsDialogOpen(true); }}
           >
-            Create Invite
+            Invite Link
           </DropdownMenuItem>
           {qrInviteUrl && (
             <DropdownMenuItem

@@ -5673,6 +5673,223 @@ pub fn umbra_wasm_calls_get_all_history(json: &str) -> Result<JsValue, JsValue> 
 }
 
 // ============================================================================
+// NOTIFICATIONS
+// ============================================================================
+
+/// Create a new notification.
+///
+/// Takes JSON: { "id": "...", "type": "friend_request_received|call_missed|...",
+///               "title": "...", "description": "...", "related_did": "...",
+///               "related_id": "...", "avatar": "..." }
+///
+/// Returns JSON: { "id": "...", "created_at": ... }
+#[wasm_bindgen]
+pub fn umbra_wasm_notifications_create(json: &str) -> Result<JsValue, JsValue> {
+    let state = get_state()?;
+    let state = state.read();
+
+    let database = state
+        .database
+        .as_ref()
+        .ok_or_else(|| JsValue::from_str("Database not initialized"))?;
+
+    let data: serde_json::Value =
+        serde_json::from_str(json).map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let id = data["id"]
+        .as_str()
+        .ok_or_else(|| JsValue::from_str("Missing id"))?;
+    let notification_type = data["type"]
+        .as_str()
+        .ok_or_else(|| JsValue::from_str("Missing type"))?;
+    let title = data["title"]
+        .as_str()
+        .ok_or_else(|| JsValue::from_str("Missing title"))?;
+    let description = data["description"].as_str();
+    let related_did = data["related_did"].as_str();
+    let related_id = data["related_id"].as_str();
+    let avatar = data["avatar"].as_str();
+
+    let record = database
+        .create_notification(id, notification_type, title, description, related_did, related_id, avatar)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let result = serde_json::json!({
+        "id": record.id,
+        "created_at": record.created_at,
+    });
+    Ok(JsValue::from_str(
+        &serde_json::to_string(&result).unwrap_or_default(),
+    ))
+}
+
+/// Get notifications with optional filters.
+///
+/// Takes JSON: { "type": "...", "read": true|false, "limit": 100, "offset": 0 }
+/// All fields optional. Returns JSON array of notification records.
+#[wasm_bindgen]
+pub fn umbra_wasm_notifications_get(json: &str) -> Result<JsValue, JsValue> {
+    let state = get_state()?;
+    let state = state.read();
+
+    let database = state
+        .database
+        .as_ref()
+        .ok_or_else(|| JsValue::from_str("Database not initialized"))?;
+
+    let data: serde_json::Value =
+        serde_json::from_str(json).map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let notification_type = data["type"].as_str();
+    let read = data["read"].as_bool();
+    let limit = data["limit"].as_i64().unwrap_or(100) as usize;
+    let offset = data["offset"].as_i64().unwrap_or(0) as usize;
+
+    let records = database
+        .get_notifications(notification_type, read, limit, offset)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let notifications_json: Vec<serde_json::Value> = records
+        .iter()
+        .map(|n| {
+            serde_json::json!({
+                "id": n.id,
+                "type": n.notification_type,
+                "title": n.title,
+                "description": n.description,
+                "related_did": n.related_did,
+                "related_id": n.related_id,
+                "avatar": n.avatar,
+                "read": n.read,
+                "dismissed": n.dismissed,
+                "action_taken": n.action_taken,
+                "created_at": n.created_at,
+                "updated_at": n.updated_at,
+            })
+        })
+        .collect();
+
+    Ok(JsValue::from_str(
+        &serde_json::to_string(&notifications_json).unwrap_or_default(),
+    ))
+}
+
+/// Mark a single notification as read.
+///
+/// Takes JSON: { "id": "..." }
+/// Returns JSON: { "success": true }
+#[wasm_bindgen]
+pub fn umbra_wasm_notifications_mark_read(json: &str) -> Result<JsValue, JsValue> {
+    let state = get_state()?;
+    let state = state.read();
+
+    let database = state
+        .database
+        .as_ref()
+        .ok_or_else(|| JsValue::from_str("Database not initialized"))?;
+
+    let data: serde_json::Value =
+        serde_json::from_str(json).map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let id = data["id"]
+        .as_str()
+        .ok_or_else(|| JsValue::from_str("Missing id"))?;
+
+    database
+        .mark_notification_read(id)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    Ok(JsValue::from_str(r#"{"success":true}"#))
+}
+
+/// Mark all notifications as read, optionally filtered by type.
+///
+/// Takes JSON: { "type": "..." } (type is optional)
+/// Returns JSON: { "success": true, "count": N }
+#[wasm_bindgen]
+pub fn umbra_wasm_notifications_mark_all_read(json: &str) -> Result<JsValue, JsValue> {
+    let state = get_state()?;
+    let state = state.read();
+
+    let database = state
+        .database
+        .as_ref()
+        .ok_or_else(|| JsValue::from_str("Database not initialized"))?;
+
+    let data: serde_json::Value =
+        serde_json::from_str(json).map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let notification_type = data["type"].as_str();
+
+    let count = database
+        .mark_all_notifications_read(notification_type)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let result = serde_json::json!({
+        "success": true,
+        "count": count,
+    });
+    Ok(JsValue::from_str(
+        &serde_json::to_string(&result).unwrap_or_default(),
+    ))
+}
+
+/// Dismiss (soft-delete) a notification.
+///
+/// Takes JSON: { "id": "..." }
+/// Returns JSON: { "success": true }
+#[wasm_bindgen]
+pub fn umbra_wasm_notifications_dismiss(json: &str) -> Result<JsValue, JsValue> {
+    let state = get_state()?;
+    let state = state.read();
+
+    let database = state
+        .database
+        .as_ref()
+        .ok_or_else(|| JsValue::from_str("Database not initialized"))?;
+
+    let data: serde_json::Value =
+        serde_json::from_str(json).map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let id = data["id"]
+        .as_str()
+        .ok_or_else(|| JsValue::from_str("Missing id"))?;
+
+    database
+        .dismiss_notification(id)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    Ok(JsValue::from_str(r#"{"success":true}"#))
+}
+
+/// Get unread notification counts by category.
+///
+/// Takes JSON: {} (empty object)
+/// Returns JSON: { "all": N, "social": N, "calls": N, "mentions": N, "system": N }
+#[wasm_bindgen]
+pub fn umbra_wasm_notifications_unread_counts(json: &str) -> Result<JsValue, JsValue> {
+    let state = get_state()?;
+    let state = state.read();
+
+    let database = state
+        .database
+        .as_ref()
+        .ok_or_else(|| JsValue::from_str("Database not initialized"))?;
+
+    // Parse JSON even if empty, to follow the convention
+    let _data: serde_json::Value =
+        serde_json::from_str(json).map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let counts = database
+        .get_notification_unread_counts()
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    Ok(JsValue::from_str(
+        &serde_json::to_string(&counts).unwrap_or_default(),
+    ))
+}
+
+// ============================================================================
 // COMMUNITIES
 // ============================================================================
 

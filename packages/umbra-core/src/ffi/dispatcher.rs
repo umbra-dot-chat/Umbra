@@ -309,6 +309,14 @@ pub fn dispatch(method: &str, args: &str) -> DResult {
         "calls_get_history" => dispatch_stubs::calls_get_history(args),
         "calls_get_all_history" => dispatch_stubs::calls_get_all_history(args),
 
+        // ── Notifications ──────────────────────────────────────────
+        "notifications_create" => dispatch_stubs::notifications_create(args),
+        "notifications_get" => dispatch_stubs::notifications_get(args),
+        "notifications_mark_read" => dispatch_stubs::notifications_mark_read(args),
+        "notifications_mark_all_read" => dispatch_stubs::notifications_mark_all_read(args),
+        "notifications_dismiss" => dispatch_stubs::notifications_dismiss(args),
+        "notifications_unread_counts" => dispatch_stubs::notifications_unread_counts(args),
+
         // ── Plugin Storage ──────────────────────────────────────────
         "plugin_kv_get" => dispatch_stubs::plugin_kv_get(args),
         "plugin_kv_set" => dispatch_stubs::plugin_kv_set(args),

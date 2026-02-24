@@ -1,16 +1,16 @@
 import { BookOpenIcon, CheckIcon, PlusIcon, ShoppingBagIcon, UsersIcon, XIcon } from '@/components/icons';
 import {
   Avatar, AvatarGroup, Button,
+  ConversationListItem,
   SearchInput,
   Sidebar, SidebarSection,
   Skeleton,
+  Text,
   useTheme,
-  ConversationListItem,
 } from '@coexist/wisp-react-native';
 import type { PendingGroupInvite } from '@umbra/service';
 import React, { useCallback, useState } from 'react';
 import { ScrollView, View } from 'react-native';
-import { Text } from '@coexist/wisp-react-native';
 import { NewChatMenu } from './NewChatMenu';
 import { SlotRenderer } from '@/components/plugins/SlotRenderer';
 

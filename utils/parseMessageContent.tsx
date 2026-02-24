@@ -1,6 +1,7 @@
 /**
  * parseMessageContent — Parses message text with markdown formatting,
- * custom emoji shortcodes (`:emoji_name:`), and sticker messages.
+ * custom emoji shortcodes (`:emoji_name:`), standard Unicode shortcodes
+ * (`:thumbsup:`, `:fire:`, etc.), and sticker messages.
  *
  * Supported formatting:
  * - **bold**, *italic*, __underline__, ~~strikethrough~~
@@ -10,13 +11,15 @@
  * - > block quotes
  * - - bullet lists, 1. numbered lists
  * - # Header, ## Subheader
- * - :custom_emoji: — inline images
+ * - :custom_emoji: — inline images (community / built-in)
+ * - :shortcode: — standard Unicode emoji via emojibase
  * - sticker::{stickerId} — full sticker messages
  */
 
 import React, { useState } from 'react';
 import { Image, Text, View, Pressable, Linking, type TextStyle, type ViewStyle } from 'react-native';
 import type { CommunityEmoji, CommunitySticker } from '@umbra/service';
+import { resolveShortcode } from '@/constants/emojiShortcodes';
 
 // ---------------------------------------------------------------------------
 // Patterns
@@ -42,6 +45,8 @@ export interface ParseOptions {
   spoilerBgColor?: string;
   quoteBorderColor?: string;
   baseFontSize?: number;
+  /** Override emoji display size (px). Computed automatically for emoji-only messages. */
+  emojiSize?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -117,7 +122,8 @@ type InlineToken =
   | { type: 'code'; value: string }
   | { type: 'spoiler'; children: InlineToken[] }
   | { type: 'link'; text: string; url: string }
-  | { type: 'emoji'; name: string };
+  | { type: 'emoji'; name: string }
+  | { type: 'unicode_shortcode'; emoji: string; name: string };
 
 // ---------------------------------------------------------------------------
 // Inline parser — turns a text string into inline tokens
@@ -171,10 +177,17 @@ function parseInline(text: string, emojiMap: EmojiMap): InlineToken[] {
       tokens.push({ type: 'link', text: linkText, url: linkUrl });
     } else if (emojiName !== undefined) {
       if (emojiMap.has(emojiName)) {
+        // Custom / built-in emoji (image-based)
         tokens.push({ type: 'emoji', name: emojiName });
       } else {
-        // Not a known emoji — keep raw text
-        tokens.push({ type: 'text', value: match[0] });
+        // Try standard Unicode shortcode (e.g. :thumbsup: → 👍)
+        const unicode = resolveShortcode(emojiName);
+        if (unicode) {
+          tokens.push({ type: 'unicode_shortcode', emoji: unicode, name: emojiName });
+        } else {
+          // Not a known shortcode — keep raw text
+          tokens.push({ type: 'text', value: match[0] });
+        }
       }
     }
 
@@ -280,15 +293,16 @@ function renderInlineTokens(
       case 'emoji': {
         const emoji = opts.emojiMap.get(token.name);
         if (!emoji) return <Text key={key}>:{token.name}:</Text>;
+        const sz = opts.emojiSize ?? 20;
         return (
           <Image
             key={key}
             source={{ uri: emoji.imageUrl }}
             style={{
-              width: 20,
-              height: 20,
-              marginHorizontal: 1,
-              marginBottom: -4,
+              width: sz,
+              height: sz,
+              marginHorizontal: sz > 24 ? 2 : 1,
+              marginBottom: sz > 24 ? 0 : -4,
             }}
             resizeMode="contain"
             accessibilityLabel={`:${token.name}:`}
@@ -296,9 +310,62 @@ function renderInlineTokens(
         );
       }
 
+      case 'unicode_shortcode':
+        return (
+          <Text key={key} accessibilityLabel={`:${token.name}:`}>
+            {token.emoji}
+          </Text>
+        );
+
       default:
         return null;
     }
+  });
+}
+
+/**
+ * Render tokens for an emoji-only message with separate sizing for custom
+ * (image-based, sticker-like) and Unicode (text-based, moderate) emoji.
+ */
+function renderEmojiOnlyTokens(
+  tokens: InlineToken[],
+  opts: ParseOptions,
+  customSize: number,
+  unicodeSize: number,
+  keyPrefix: string,
+): React.ReactNode[] {
+  return tokens.map((token, i) => {
+    const key = `${keyPrefix}-${i}`;
+    if (token.type === 'emoji') {
+      const emoji = opts.emojiMap.get(token.name);
+      if (!emoji) return <Text key={key}>:{token.name}:</Text>;
+      return (
+        <Image
+          key={key}
+          source={{ uri: emoji.imageUrl }}
+          style={{ width: customSize, height: customSize }}
+          resizeMode="contain"
+          accessibilityLabel={`:${token.name}:`}
+        />
+      );
+    }
+    if (token.type === 'unicode_shortcode') {
+      return (
+        <Text key={key} style={{ fontSize: unicodeSize, lineHeight: unicodeSize * 1.15 }} accessibilityLabel={`:${token.name}:`}>
+          {token.emoji}
+        </Text>
+      );
+    }
+    if (token.type === 'text') {
+      const stripped = token.value.trim();
+      if (stripped.length === 0) return null;
+      return (
+        <Text key={key} style={{ fontSize: unicodeSize, lineHeight: unicodeSize * 1.15 }}>
+          {stripped}
+        </Text>
+      );
+    }
+    return null;
   });
 }
 
@@ -433,6 +500,17 @@ function renderBlocks(
     switch (block.type) {
       case 'paragraph': {
         const tokens = parseInline(block.content, opts.emojiMap);
+        const emojiInfo = analyzeEmojiOnly(tokens);
+        if (emojiInfo) {
+          const cSz = Math.round(fontSize * customEmojiMultiplier(emojiInfo.total));
+          const uSz = Math.round(fontSize * unicodeEmojiMultiplier(emojiInfo.total));
+          const gap = cSz > 40 ? 4 : 2;
+          return (
+            <View key={key} style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap }}>
+              {renderEmojiOnlyTokens(tokens, opts, cSz, uSz, key)}
+            </View>
+          );
+        }
         return (
           <Text key={key} style={{ color: textColor, fontSize }}>
             {renderInlineTokens(tokens, opts, key)}
@@ -533,6 +611,86 @@ function renderBlocks(
 }
 
 // ---------------------------------------------------------------------------
+// Emoji-only detection & scaling
+// ---------------------------------------------------------------------------
+
+/**
+ * Matches a single Unicode emoji (including ZWJ sequences, flags, keycaps,
+ * skin-tone modifiers, etc.). Covers the vast majority of emoji in use.
+ */
+const UNICODE_EMOJI_RE =
+  /(?:\p{Emoji_Presentation}|\p{Extended_Pictographic})(?:\uFE0F?\u20E3|\uFE0F)?(?:\u200D(?:\p{Emoji_Presentation}|\p{Extended_Pictographic})(?:\uFE0F?\u20E3|\uFE0F)?)*/gu;
+
+/** Breakdown of an emoji-only message: how many custom (image) vs Unicode emoji. */
+interface EmojiOnlyInfo {
+  total: number;
+  customCount: number;   // image-based emoji (community / built-in)
+  unicodeCount: number;  // native Unicode emoji + :shortcode: resolved emoji
+}
+
+/**
+ * Check whether a flat token list contains only emoji (and optional whitespace).
+ * Returns counts broken down by type, or `null` if the message has non-emoji content.
+ */
+function analyzeEmojiOnly(tokens: InlineToken[]): EmojiOnlyInfo | null {
+  let customCount = 0;
+  let unicodeCount = 0;
+  for (const t of tokens) {
+    if (t.type === 'emoji') {
+      customCount++;
+    } else if (t.type === 'unicode_shortcode') {
+      unicodeCount++;
+    } else if (t.type === 'text') {
+      // Strip whitespace, then check if what remains is only Unicode emoji
+      const stripped = t.value.replace(/\s/g, '');
+      if (stripped.length === 0) continue; // whitespace-only — fine
+      const emojiMatches = stripped.match(UNICODE_EMOJI_RE);
+      if (!emojiMatches) return null; // non-emoji text
+      // Verify that the emoji matches cover the entire stripped string
+      const joined = emojiMatches.join('');
+      if (joined !== stripped) return null; // leftover non-emoji characters
+      unicodeCount += emojiMatches.length;
+    } else {
+      // Any other formatting (bold, code, link, etc.) means not emoji-only
+      return null;
+    }
+  }
+  const total = customCount + unicodeCount;
+  if (total === 0) return null;
+  return { total, customCount, unicodeCount };
+}
+
+/**
+ * Custom emoji (image-based) scaling — these act like stickers.
+ *
+ *   1 emoji  → 5×   (14px base → 70px)
+ *   3 emoji  → 4×   (14px base → 56px)
+ *   5 emoji  → 3×   (14px base → 42px)
+ *   ≥10      → 1.5× (14px base → 21px)
+ */
+function customEmojiMultiplier(count: number): number {
+  if (count <= 0) return 1;
+  if (count >= 10) return 1.5;
+  // Linear: 1 → 5×, 10 → 1.5×
+  return 5 - (count - 1) * (3.5 / 9);
+}
+
+/**
+ * Unicode emoji scaling — moderate enlargement, not sticker-sized.
+ *
+ *   1 emoji  → 2.5× (14px base → 35px)
+ *   3 emoji  → 2×   (14px base → 28px)
+ *   5 emoji  → 1.5× (14px base → 21px)
+ *   ≥8       → 1×   (normal inline size)
+ */
+function unicodeEmojiMultiplier(count: number): number {
+  if (count <= 0) return 1;
+  if (count >= 8) return 1;
+  // Linear: 1 → 2.5×, 8 → 1×
+  return 2.5 - (count - 1) * (1.5 / 7);
+}
+
+// ---------------------------------------------------------------------------
 // Main export
 // ---------------------------------------------------------------------------
 
@@ -630,6 +788,22 @@ export function parseMessageContent(
 
   // Single-line inline parsing
   const tokens = parseInline(content, emojiMap);
+
+  // Emoji-only messages get scaled — custom emoji large (sticker-like),
+  // Unicode emoji moderately enlarged.
+  const emojiInfo = analyzeEmojiOnly(tokens);
+  if (emojiInfo) {
+    const baseFontSize = opts.baseFontSize ?? 14;
+    const cSz = Math.round(baseFontSize * customEmojiMultiplier(emojiInfo.total));
+    const uSz = Math.round(baseFontSize * unicodeEmojiMultiplier(emojiInfo.total));
+    const gap = cSz > 40 ? 4 : 2;
+
+    return (
+      <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap }}>
+        {renderEmojiOnlyTokens(tokens, opts, cSz, uSz, 'emoji-only')}
+      </View>
+    );
+  }
 
   // If all tokens are plain text, return the original string
   if (tokens.every((t) => t.type === 'text')) {

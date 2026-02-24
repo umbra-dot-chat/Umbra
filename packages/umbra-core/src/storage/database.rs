@@ -217,6 +217,13 @@ impl Database {
                             Error::DatabaseError(format!("Migration v14→v15 failed: {}", e))
                         })?;
                 }
+                if v < 16 {
+                    tracing::info!("Running migration v15 → v16 (notifications table)");
+                    conn.execute_batch(schema::MIGRATE_V15_TO_V16)
+                        .map_err(|e| {
+                            Error::DatabaseError(format!("Migration v15→v16 failed: {}", e))
+                        })?;
+                }
 
                 tracing::info!(
                     "All migrations complete (now at version {})",
@@ -1851,6 +1858,200 @@ impl Database {
         }
 
         Ok(records)
+    }
+
+    // ========================================================================
+    // NOTIFICATION OPERATIONS
+    // ========================================================================
+
+    /// Create a new notification
+    pub fn create_notification(
+        &self,
+        id: &str,
+        notification_type: &str,
+        title: &str,
+        description: Option<&str>,
+        related_did: Option<&str>,
+        related_id: Option<&str>,
+        avatar: Option<&str>,
+    ) -> Result<NotificationRecord> {
+        let conn = self.conn.lock();
+        let now = crate::time::now_timestamp_millis();
+
+        conn.execute(
+            "INSERT INTO notifications (id, type, title, description, related_did, related_id, avatar, read, dismissed, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?)",
+            params![id, notification_type, title, description, related_did, related_id, avatar, now, now],
+        )
+        .map_err(|e| Error::DatabaseError(format!("Failed to create notification: {}", e)))?;
+
+        Ok(NotificationRecord {
+            id: id.to_string(),
+            notification_type: notification_type.to_string(),
+            title: title.to_string(),
+            description: description.map(|s| s.to_string()),
+            related_did: related_did.map(|s| s.to_string()),
+            related_id: related_id.map(|s| s.to_string()),
+            avatar: avatar.map(|s| s.to_string()),
+            read: false,
+            dismissed: false,
+            action_taken: None,
+            created_at: now,
+            updated_at: now,
+        })
+    }
+
+    /// Get notifications with optional filters
+    pub fn get_notifications(
+        &self,
+        notification_type: Option<&str>,
+        read: Option<bool>,
+        limit: usize,
+        offset: usize,
+    ) -> Result<Vec<NotificationRecord>> {
+        let conn = self.conn.lock();
+
+        let mut sql = String::from(
+            "SELECT id, type, title, description, related_did, related_id, avatar, read, dismissed, action_taken, created_at, updated_at FROM notifications WHERE dismissed = 0"
+        );
+        let mut param_values: Vec<Box<dyn rusqlite::types::ToSql>> = Vec::new();
+
+        if let Some(t) = notification_type {
+            sql.push_str(" AND type = ?");
+            param_values.push(Box::new(t.to_string()));
+        }
+        if let Some(r) = read {
+            sql.push_str(" AND read = ?");
+            param_values.push(Box::new(if r { 1i32 } else { 0i32 }));
+        }
+
+        sql.push_str(" ORDER BY created_at DESC LIMIT ? OFFSET ?");
+        param_values.push(Box::new(limit as i64));
+        param_values.push(Box::new(offset as i64));
+
+        let params_refs: Vec<&dyn rusqlite::types::ToSql> = param_values.iter().map(|p| p.as_ref()).collect();
+
+        let mut stmt = conn
+            .prepare(&sql)
+            .map_err(|e| Error::DatabaseError(format!("Failed to prepare query: {}", e)))?;
+
+        let rows = stmt
+            .query_map(params_refs.as_slice(), |row| {
+                Ok(NotificationRecord {
+                    id: row.get(0)?,
+                    notification_type: row.get(1)?,
+                    title: row.get(2)?,
+                    description: row.get(3)?,
+                    related_did: row.get(4)?,
+                    related_id: row.get(5)?,
+                    avatar: row.get(6)?,
+                    read: row.get::<_, i32>(7)? != 0,
+                    dismissed: row.get::<_, i32>(8)? != 0,
+                    action_taken: row.get(9)?,
+                    created_at: row.get(10)?,
+                    updated_at: row.get(11)?,
+                })
+            })
+            .map_err(|e| Error::DatabaseError(format!("Failed to query notifications: {}", e)))?;
+
+        let mut records = Vec::new();
+        for row in rows {
+            records.push(
+                row.map_err(|e| {
+                    Error::DatabaseError(format!("Failed to read notification: {}", e))
+                })?,
+            );
+        }
+
+        Ok(records)
+    }
+
+    /// Mark a single notification as read
+    pub fn mark_notification_read(&self, id: &str) -> Result<bool> {
+        let conn = self.conn.lock();
+        let now = crate::time::now_timestamp_millis();
+        let rows = conn
+            .execute(
+                "UPDATE notifications SET read = 1, updated_at = ? WHERE id = ?",
+                params![now, id],
+            )
+            .map_err(|e| Error::DatabaseError(format!("Failed to mark notification read: {}", e)))?;
+        Ok(rows > 0)
+    }
+
+    /// Mark all notifications as read, optionally filtered by type
+    pub fn mark_all_notifications_read(&self, notification_type: Option<&str>) -> Result<i32> {
+        let conn = self.conn.lock();
+        let now = crate::time::now_timestamp_millis();
+        let rows = match notification_type {
+            Some(t) => conn.execute(
+                "UPDATE notifications SET read = 1, updated_at = ? WHERE read = 0 AND type = ?",
+                params![now, t],
+            ),
+            None => conn.execute(
+                "UPDATE notifications SET read = 1, updated_at = ? WHERE read = 0",
+                params![now],
+            ),
+        }
+        .map_err(|e| Error::DatabaseError(format!("Failed to mark all notifications read: {}", e)))?;
+        Ok(rows as i32)
+    }
+
+    /// Dismiss (soft-delete) a notification
+    pub fn dismiss_notification(&self, id: &str) -> Result<bool> {
+        let conn = self.conn.lock();
+        let now = crate::time::now_timestamp_millis();
+        let rows = conn
+            .execute(
+                "UPDATE notifications SET dismissed = 1, updated_at = ? WHERE id = ?",
+                params![now, id],
+            )
+            .map_err(|e| Error::DatabaseError(format!("Failed to dismiss notification: {}", e)))?;
+        Ok(rows > 0)
+    }
+
+    /// Get unread notification counts by category
+    pub fn get_notification_unread_counts(&self) -> Result<serde_json::Value> {
+        let conn = self.conn.lock();
+        let mut stmt = conn
+            .prepare(
+                "SELECT type, COUNT(*) as cnt FROM notifications WHERE read = 0 AND dismissed = 0 GROUP BY type",
+            )
+            .map_err(|e| Error::DatabaseError(format!("Failed to prepare query: {}", e)))?;
+
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+            })
+            .map_err(|e| Error::DatabaseError(format!("Failed to query unread counts: {}", e)))?;
+
+        let mut social: i64 = 0;
+        let mut calls: i64 = 0;
+        let mut mentions: i64 = 0;
+        let mut system: i64 = 0;
+
+        for row in rows {
+            let (t, cnt) = row.map_err(|e| {
+                Error::DatabaseError(format!("Failed to read unread count: {}", e))
+            })?;
+            match t.as_str() {
+                "friend_request_received" | "friend_request_accepted" | "friend_request_rejected"
+                | "group_invite" | "community_invite" => social += cnt,
+                "call_missed" | "call_completed" => calls += cnt,
+                "mention" => mentions += cnt,
+                "system" => system += cnt,
+                _ => system += cnt,
+            }
+        }
+
+        let all = social + calls + mentions + system;
+        Ok(serde_json::json!({
+            "all": all,
+            "social": social,
+            "calls": calls,
+            "mentions": mentions,
+            "system": system,
+        }))
     }
 
     // ========================================================================
@@ -5875,6 +6076,35 @@ pub struct CallHistoryRecord {
     pub duration_ms: Option<i64>,
     /// When the record was created (Unix timestamp ms)
     pub created_at: i64,
+}
+
+/// A notification record from the database
+#[derive(Debug, Clone)]
+pub struct NotificationRecord {
+    /// Notification ID
+    pub id: String,
+    /// Notification type (e.g., "friend_request_received", "call_missed")
+    pub notification_type: String,
+    /// Primary text
+    pub title: String,
+    /// Secondary descriptive text
+    pub description: Option<String>,
+    /// Related user DID
+    pub related_did: Option<String>,
+    /// Related resource ID (request ID, call ID, etc.)
+    pub related_id: Option<String>,
+    /// Avatar URL or data URI
+    pub avatar: Option<String>,
+    /// Whether this notification has been read
+    pub read: bool,
+    /// Whether this notification has been dismissed
+    pub dismissed: bool,
+    /// Action taken (e.g., "accepted", "declined")
+    pub action_taken: Option<String>,
+    /// When the notification was created (Unix timestamp ms)
+    pub created_at: i64,
+    /// When the notification was last updated (Unix timestamp ms)
+    pub updated_at: i64,
 }
 
 #[allow(missing_docs)]

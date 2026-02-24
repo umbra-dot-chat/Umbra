@@ -1,4 +1,4 @@
-import React, { useCallback } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { Platform, ScrollView, View, Pressable, Text as RNText } from 'react-native';
 import {
   Avatar, ChatBubble, Text, TypingIndicator, useTheme,
@@ -10,7 +10,8 @@ import { InlineMsgGroup } from './InlineMsgGroup';
 import { DmFileMessage } from '@/components/messaging/DmFileMessage';
 import { SlotRenderer } from '@/components/plugins/SlotRenderer';
 import { useMessaging } from '@/contexts/MessagingContext';
-import type { Message } from '@umbra/service';
+import { parseMessageContent, buildEmojiMap, type EmojiMap } from '@/utils/parseMessageContent';
+import type { Message, CommunityEmoji } from '@umbra/service';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -50,6 +51,8 @@ export interface ChatAreaProps {
   onCopyMessage?: (text: string) => void;
   /** Content rendered at the very top of the scroll area, scrolls away with messages. */
   stickyHeader?: React.ReactNode;
+  /** Custom emoji (built-in + community) for inline rendering in messages. */
+  customEmoji?: CommunityEmoji[];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -284,10 +287,17 @@ export function ChatArea({
   onReplyTo, onOpenThread, onShowProfile,
   onToggleReaction, onEditMessage, onDeleteMessage, onPinMessage, onForwardMessage, onCopyMessage,
   stickyHeader,
+  customEmoji,
 }: ChatAreaProps) {
   const { theme } = useTheme();
   const themeColors = theme.colors;
   const { displayMode } = useMessaging();
+
+  // Build emoji map for inline custom emoji rendering in messages
+  const emojiMap = useMemo<EmojiMap>(
+    () => buildEmojiMap(customEmoji ?? []),
+    [customEmoji],
+  );
   const isInline = displayMode === 'inline';
 
   if (isLoading) {
@@ -424,7 +434,18 @@ export function ChatArea({
             const isOwn = msg.senderDid === myDid;
             const fileInfo = tryParseFileMessage(msg);
 
-            const displayContent = fileInfo ? null : text;
+            const displayContent = fileInfo ? null : (
+              emojiMap.size > 0
+                ? parseMessageContent(text, emojiMap, undefined, {
+                    textColor: themeColors.text.primary,
+                    linkColor: themeColors.text.link ?? '#5865F2',
+                    codeBgColor: themeColors.background.sunken,
+                    codeTextColor: themeColors.text.primary,
+                    spoilerBgColor: themeColors.text.muted,
+                    quoteBorderColor: themeColors.border.subtle,
+                  })
+                : text
+            );
 
             // Build reaction chips for Wisp ChatBubble
             const reactionChips = msg.reactions?.map((r) => ({

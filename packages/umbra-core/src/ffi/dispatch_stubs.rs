@@ -1539,3 +1539,161 @@ pub fn clear_reencryption_flag(args: &str) -> DResult {
 
     ok_json(serde_json::json!({"ok": true}))
 }
+
+// ── Notifications ──────────────────────────────────────────────────────────
+// Notification persistence backed by the SQLite notifications table (schema v16).
+
+pub fn notifications_create(args: &str) -> DResult {
+    use super::dispatcher::{json_parse, ok_json, require_str};
+    use super::state::get_state;
+
+    let data = json_parse(args)?;
+    let id = require_str(&data, "id")?;
+    let notification_type = require_str(&data, "type")?;
+    let title = require_str(&data, "title")?;
+    let description = data["description"].as_str();
+    let related_did = data["related_did"].as_str();
+    let related_id = data["related_id"].as_str();
+    let avatar = data["avatar"].as_str();
+
+    let state = get_state().map_err(|e| err(100, e))?;
+    let state = state.read();
+    let db = state
+        .database
+        .as_ref()
+        .ok_or_else(|| err(400, "Database not initialized"))?;
+
+    let record = db
+        .create_notification(id, notification_type, title, description, related_did, related_id, avatar)
+        .map_err(|e| err(e.code(), e))?;
+
+    ok_json(serde_json::json!({
+        "id": record.id,
+        "created_at": record.created_at,
+    }))
+}
+
+pub fn notifications_get(args: &str) -> DResult {
+    use super::dispatcher::json_parse;
+    use super::state::get_state;
+
+    let data = json_parse(args)?;
+    let notification_type = data["type"].as_str();
+    let read = data["read"].as_bool();
+    let limit = data["limit"].as_i64().unwrap_or(100) as usize;
+    let offset = data["offset"].as_i64().unwrap_or(0) as usize;
+
+    let state = get_state().map_err(|e| err(100, e))?;
+    let state = state.read();
+    let db = state
+        .database
+        .as_ref()
+        .ok_or_else(|| err(400, "Database not initialized"))?;
+
+    let records = db
+        .get_notifications(notification_type, read, limit, offset)
+        .map_err(|e| err(e.code(), e))?;
+
+    let arr: Vec<serde_json::Value> = records
+        .iter()
+        .map(|n| {
+            serde_json::json!({
+                "id": n.id,
+                "type": n.notification_type,
+                "title": n.title,
+                "description": n.description,
+                "related_did": n.related_did,
+                "related_id": n.related_id,
+                "avatar": n.avatar,
+                "read": n.read,
+                "dismissed": n.dismissed,
+                "action_taken": n.action_taken,
+                "created_at": n.created_at,
+                "updated_at": n.updated_at,
+            })
+        })
+        .collect();
+
+    Ok(serde_json::to_string(&arr).unwrap_or_default())
+}
+
+pub fn notifications_mark_read(args: &str) -> DResult {
+    use super::dispatcher::{json_parse, require_str};
+    use super::state::get_state;
+
+    let data = json_parse(args)?;
+    let id = require_str(&data, "id")?;
+
+    let state = get_state().map_err(|e| err(100, e))?;
+    let state = state.read();
+    let db = state
+        .database
+        .as_ref()
+        .ok_or_else(|| err(400, "Database not initialized"))?;
+
+    db.mark_notification_read(id)
+        .map_err(|e| err(e.code(), e))?;
+
+    Ok(r#"{"success":true}"#.to_string())
+}
+
+pub fn notifications_mark_all_read(args: &str) -> DResult {
+    use super::dispatcher::json_parse;
+    use super::state::get_state;
+
+    let data = json_parse(args)?;
+    let notification_type = data["type"].as_str();
+
+    let state = get_state().map_err(|e| err(100, e))?;
+    let state = state.read();
+    let db = state
+        .database
+        .as_ref()
+        .ok_or_else(|| err(400, "Database not initialized"))?;
+
+    let count = db
+        .mark_all_notifications_read(notification_type)
+        .map_err(|e| err(e.code(), e))?;
+
+    Ok(serde_json::json!({"success": true, "count": count}).to_string())
+}
+
+pub fn notifications_dismiss(args: &str) -> DResult {
+    use super::dispatcher::{json_parse, require_str};
+    use super::state::get_state;
+
+    let data = json_parse(args)?;
+    let id = require_str(&data, "id")?;
+
+    let state = get_state().map_err(|e| err(100, e))?;
+    let state = state.read();
+    let db = state
+        .database
+        .as_ref()
+        .ok_or_else(|| err(400, "Database not initialized"))?;
+
+    db.dismiss_notification(id)
+        .map_err(|e| err(e.code(), e))?;
+
+    Ok(r#"{"success":true}"#.to_string())
+}
+
+pub fn notifications_unread_counts(args: &str) -> DResult {
+    use super::dispatcher::json_parse;
+    use super::state::get_state;
+
+    let _data = json_parse(args)?;
+
+    let state = get_state().map_err(|e| err(100, e))?;
+    let state = state.read();
+    let db = state
+        .database
+        .as_ref()
+        .ok_or_else(|| err(400, "Database not initialized"))?;
+
+    let counts = db
+        .get_notification_unread_counts()
+        .map_err(|e| err(e.code(), e))?;
+
+    Ok(serde_json::to_string(&counts).unwrap_or_default())
+}

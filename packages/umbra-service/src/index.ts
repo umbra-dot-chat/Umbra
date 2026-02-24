@@ -265,6 +265,15 @@ export {
 } from './community';
 export type { RelayInviteResolution } from './community';
 
+// Notifications
+export {
+  createNotification, getNotifications, markNotificationRead,
+  markAllNotificationsRead, dismissNotification, getUnreadCounts,
+} from './notifications';
+export type {
+  NotificationRecord, NotificationType, UnreadCounts, NotificationCategory,
+} from './notifications';
+
 // Main service class
 export { UmbraService } from './service';
 

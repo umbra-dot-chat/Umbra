@@ -7,7 +7,7 @@
 
 import React, { useCallback, useMemo, useState } from 'react';
 import { View, Platform } from 'react-native';
-import { StickerManagementPanel, Text, Button, useTheme } from '@coexist/wisp-react-native';
+import { Text, Button, useTheme, StickerManagementPanel } from '@coexist/wisp-react-native';
 import type { StickerPack as WispStickerPack } from '@coexist/wisp-core/types/StickerManagementPanel.types';
 
 import { useUmbra } from '@/contexts/UmbraContext';

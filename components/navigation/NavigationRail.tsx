@@ -16,7 +16,7 @@ import React from 'react';
 import { Image, Pressable, ScrollView, View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 import { Text, Skeleton, useTheme, NotificationBadge } from '@coexist/wisp-react-native';
-import { UmbraIcon, FolderIcon, PlusIcon, SettingsIcon } from '@/components/icons';
+import { UmbraIcon, FolderIcon, PlusIcon, SettingsIcon, BellIcon } from '@/components/icons';
 import type { Community } from '@umbra/service';
 
 // ---------------------------------------------------------------------------
@@ -63,6 +63,10 @@ export interface NavigationRailProps {
   loading?: boolean;
   /** Aggregated notification count for the home badge (shown when not on home) */
   homeNotificationCount?: number;
+  /** Notification bell badge count (total unread notifications) */
+  notificationCount?: number;
+  /** Called when the notification bell is pressed */
+  onNotificationsPress?: () => void;
   /** Safe area top inset passed from parent layout. @default 0 */
   safeAreaTop?: number;
   /** Safe area bottom inset passed from parent layout. @default 0 */
@@ -89,6 +93,8 @@ export function NavigationRail({
   onAvatarPress,
   loading,
   homeNotificationCount,
+  notificationCount,
+  onNotificationsPress,
   safeAreaTop = 0,
   safeAreaBottom = 0,
 }: NavigationRailProps) {
@@ -253,6 +259,21 @@ export function NavigationRail({
                 )}
               </Pressable>
             </View>
+          )}
+
+          {/* Notification bell — between avatar and settings */}
+          {onNotificationsPress && (
+            <RailItem
+              active={false}
+              onPress={onNotificationsPress}
+              theme={theme}
+              badgeCount={notificationCount || undefined}
+            >
+              <BellIcon
+                size={20}
+                color={theme.colors.text.secondary}
+              />
+            </RailItem>
           )}
 
           <RailItem

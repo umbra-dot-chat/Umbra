@@ -1,22 +1,30 @@
 /**
  * Full-screen PIN lock overlay.
  *
- * Renders on top of the entire app when a PIN is set but not yet verified
- * for the current session. Blocks all interaction until the correct PIN
- * is entered.
+ * Used in two contexts:
+ *   1. Session unlock — when a PIN is set but not yet verified (AuthGate).
+ *      Uses `verifyPin` from AuthContext internally.
+ *   2. Account switch — when re-logging into a stored account with a PIN.
+ *      The parent passes `onVerify` and `subtitle` props.
+ *
+ * When `onVerify` is provided it takes precedence over the built-in
+ * `verifyPin` call, allowing the parent to handle verification.
  */
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { View, Animated, type ViewStyle } from 'react-native';
+import { Image, View, Animated, Platform, Pressable, type ViewStyle } from 'react-native';
 import {
   Text,
   VStack,
   Presence,
   useTheme,
 } from '@coexist/wisp-react-native';
-import { ShieldIcon } from '@/components/icons';
 import { useAuth } from '@/contexts/AuthContext';
 import { GrowablePinInput } from './GrowablePinInput';
+import { ArrowLeftIcon } from '@/components/icons';
+
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const lockMascot = require('@/assets/images/lock-mascot.png');
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -27,10 +35,26 @@ const COOLDOWN_SECONDS = 30;
 const PIN_LENGTH = 5;
 
 // ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+interface PinLockScreenProps {
+  /**
+   * Custom verification callback. Return `true` if PIN is correct.
+   * When omitted, falls back to `AuthContext.verifyPin`.
+   */
+  onVerify?: (pin: string) => boolean;
+  /** Optional subtitle shown below "Welcome Back". */
+  subtitle?: string;
+  /** Show a back button. When pressed, calls `onBack`. */
+  onBack?: () => void;
+}
+
+// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
-export function PinLockScreen() {
+export function PinLockScreen({ onVerify, subtitle, onBack }: PinLockScreenProps) {
   const { verifyPin } = useAuth();
   const { theme } = useTheme();
 
@@ -75,11 +99,8 @@ export function PinLockScreen() {
     (pin: string) => {
       if (cooldown > 0) return;
 
-      const success = verifyPin(pin);
-      if (success) {
-        // AuthContext sets isPinVerified = true, AuthGate will hide this screen
-        return;
-      }
+      const success = onVerify ? onVerify(pin) : verifyPin(pin);
+      if (success) return; // parent or AuthContext handles the rest
 
       const newAttempts = attempts + 1;
       setAttempts(newAttempts);
@@ -93,23 +114,49 @@ export function PinLockScreen() {
         setError(`Incorrect PIN. ${MAX_ATTEMPTS - newAttempts} attempts remaining.`);
       }
     },
-    [verifyPin, attempts, cooldown, triggerShake],
+    [verifyPin, onVerify, attempts, cooldown, triggerShake],
   );
 
   const isLocked = cooldown > 0;
 
   return (
     <View style={[containerStyle, { backgroundColor: theme.colors.background.canvas }]}>
+      {/* Optional back button */}
+      {onBack && (
+        <Pressable
+          onPress={onBack}
+          style={{
+            position: 'absolute',
+            top: Platform.OS === 'web' ? 24 : 56,
+            left: 20,
+            width: 40,
+            height: 40,
+            borderRadius: 20,
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 1,
+          }}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <ArrowLeftIcon size={24} color={theme.colors.text.primary} />
+        </Pressable>
+      )}
+
       <Presence visible animation="scaleIn">
         <VStack gap="xl" style={{ alignItems: 'center', paddingHorizontal: 32 }}>
-          <ShieldIcon size={48} color={theme.colors.text.muted} />
+          <Image
+            source={lockMascot}
+            style={{ width: 240, height: 240 }}
+            resizeMode="contain"
+            accessibilityLabel="Lock mascot"
+          />
 
           <VStack gap="xs" style={{ alignItems: 'center' }}>
             <Text size="display-sm" weight="bold">
               Welcome Back
             </Text>
             <Text size="sm" color="secondary" align="center">
-              Enter your PIN to unlock
+              {subtitle ?? 'Enter your PIN to unlock'}
             </Text>
           </VStack>
 

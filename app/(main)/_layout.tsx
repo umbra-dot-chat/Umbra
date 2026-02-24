@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { Platform, View } from 'react-native';
 import { Slot, usePathname, useRouter } from 'expo-router';
-import { HStack, useTheme } from '@coexist/wisp-react-native';
+import { HStack, useTheme, CallPipWidget, CommunityCreateDialog } from '@coexist/wisp-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useUmbra } from '@/contexts/UmbraContext';
@@ -9,8 +9,10 @@ import { ActiveConversationProvider, useActiveConversation } from '@/contexts/Ac
 import { useConversations } from '@/hooks/useConversations';
 import { useFriends } from '@/hooks/useFriends';
 import { useGroups } from '@/hooks/useGroups';
-import { useFriendNotifications } from '@/hooks/useFriendNotifications';
 import { useMessageNotifications } from '@/hooks/useMessageNotifications';
+import { NotificationProvider, useNotifications } from '@/contexts/NotificationContext';
+import { useNotificationListener } from '@/hooks/useNotificationListener';
+import { NotificationDrawerContainer } from '@/components/notifications/NotificationDrawerContainer';
 import { ChatSidebar } from '@/components/sidebar/ChatSidebar';
 import { SettingsDialog } from '@/components/modals/SettingsDialog';
 import { GuideDialog } from '@/components/modals/GuideDialog';
@@ -19,7 +21,6 @@ import { NewDmDialog } from '@/components/modals/NewDmDialog';
 import { ProfilePopover } from '@/components/modals/ProfilePopover';
 import { ProfilePopoverProvider, useProfilePopoverContext } from '@/contexts/ProfilePopoverContext';
 import { CallProvider, useCallContext } from '@/contexts/CallContext';
-import { CallPipWidget } from '@coexist/wisp-react-native';
 import { IncomingCallOverlay } from '@/components/call/IncomingCallOverlay';
 import { CommandPalette } from '@/components/modals/CommandPalette';
 import { PluginMarketplace } from '@/components/modals/PluginMarketplace';
@@ -32,7 +33,6 @@ import { useCommunities } from '@/hooks/useCommunities';
 import { NavigationRail } from '@/components/navigation/NavigationRail';
 import { AccountSwitcher } from '@/components/navigation/AccountSwitcher';
 import { CommunityLayoutSidebar } from '@/components/sidebar/CommunityLayoutSidebar';
-import { CommunityCreateDialog } from '@coexist/wisp-react-native';
 import type { Community, Friend, MessageEvent, MappedCommunityStructure, CommunityImportResult } from '@umbra/service';
 import { createCommunityFromDiscordImport } from '@umbra/service';
 import { useAuth } from '@/contexts/AuthContext';
@@ -100,8 +100,11 @@ function MainLayoutInner() {
   // Whether the core service is still initializing (WASM + identity)
   const coreLoading = !isReady || !identity;
 
-  // Friend notifications (toast on incoming requests, acceptances)
-  useFriendNotifications();
+  // Notification listener — creates persistent notification records from events
+  useNotificationListener();
+
+  // Notification drawer state
+  const { totalUnread, openDrawer: openNotificationDrawer } = useNotifications();
 
   // Upload progress for nav rail ring indicator
   const { uploadRingProgress } = useUploadProgress();
@@ -484,6 +487,8 @@ function MainLayoutInner() {
                     onAvatarPress={() => { playSound('dialog_open'); setAccountSwitcherOpen(true); }}
                     loading={coreLoading || communitiesLoading}
                     homeNotificationCount={homeNotificationCount}
+                    notificationCount={totalUnread}
+                    onNotificationsPress={() => { playSound('dialog_open'); openNotificationDrawer(); }}
                     safeAreaTop={0}
                     safeAreaBottom={insets.bottom}
                   />
@@ -684,6 +689,7 @@ function MainLayoutInner() {
       />
 
       <IncomingCallOverlay />
+      <NotificationDrawerContainer />
     </View>
   );
 }
@@ -695,9 +701,11 @@ export default function MainLayout() {
         <CommunityProvider>
           <CallProvider>
             <VoiceChannelProvider>
-              <ProfilePopoverProvider>
-                <MainLayoutInner />
-              </ProfilePopoverProvider>
+              <NotificationProvider>
+                <ProfilePopoverProvider>
+                  <MainLayoutInner />
+                </ProfilePopoverProvider>
+              </NotificationProvider>
             </VoiceChannelProvider>
           </CallProvider>
         </CommunityProvider>

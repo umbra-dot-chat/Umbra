@@ -236,7 +236,7 @@ export function ChatHeader({ active, rightPanel, togglePanel, onShowProfile, onV
 
   // ── Desktop layout (unchanged) ──
   return (
-    <Navbar variant="transparent" style={{ borderBottomWidth: 1, borderBottomColor: themeColors.border.subtle }}>
+    <Navbar variant="transparent" style={{ borderBottomWidth: 1, borderBottomColor: themeColors.border.subtle, paddingLeft: 12 }}>
       <NavbarBrand>
         <HStack style={{ alignItems: 'center', gap: 10 }}>
           {active && (
@@ -247,12 +247,11 @@ export function ChatHeader({ active, rightPanel, togglePanel, onShowProfile, onV
                 ))}
               </AvatarGroup>
             ) : (
-              <Button
-                variant="tertiary"
-                size="sm"
+              <Pressable
                 onPress={(e) => onShowProfile(active.name, e, active.online ? 'online' : 'offline')}
-                iconLeft={<Avatar name={active.name} size="sm" status={active.online ? 'online' : undefined} />}
-              />
+              >
+                <Avatar name={active.name} size="sm" status={active.online ? 'online' : undefined} />
+              </Pressable>
             )
           )}
           <View style={{ flex: 1, minWidth: 0 }}>

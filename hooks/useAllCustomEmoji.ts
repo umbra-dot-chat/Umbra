@@ -12,6 +12,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import type { EmojiItem } from '@coexist/wisp-core/types/EmojiPicker.types';
 import type { StickerPickerPack } from '@coexist/wisp-core/types/StickerPicker.types';
 import type { CommunityEmoji, CommunitySticker, StickerPack } from '@umbra/service';
+import { getBuiltInCommunityEmoji, getBuiltInEmojiItems } from '@/constants/builtInEmoji';
 
 export function useAllCustomEmoji() {
   const { service, isReady } = useUmbra();
@@ -82,10 +83,13 @@ export function useAllCustomEmoji() {
     return unsubscribe;
   }, [service, fetchAll]);
 
-  // Transform to EmojiItem[] for the picker
+  // Built-in emoji (always available)
+  const builtInItems = useMemo(() => getBuiltInEmojiItems(), []);
+  const builtInCommunityEmoji = useMemo(() => getBuiltInCommunityEmoji(), []);
+
+  // Transform to EmojiItem[] for the picker (built-in + community)
   const customEmojiItems = useMemo<EmojiItem[]>(() => {
-    if (allEmoji.length === 0) return [];
-    return allEmoji.map((e) => ({
+    const communityItems = allEmoji.map((e) => ({
       emoji: `:${e.name}:`,
       name: e.name,
       category: 'custom' as const,
@@ -93,7 +97,13 @@ export function useAllCustomEmoji() {
       imageUrl: e.imageUrl,
       animated: e.animated,
     }));
-  }, [allEmoji]);
+    return [...builtInItems, ...communityItems];
+  }, [allEmoji, builtInItems]);
+
+  // All emoji as CommunityEmoji[] for building emojiMaps (built-in + community)
+  const allCommunityEmoji = useMemo<CommunityEmoji[]>(() => {
+    return [...builtInCommunityEmoji, ...allEmoji];
+  }, [allEmoji, builtInCommunityEmoji]);
 
   // Transform to StickerPickerPack[] for the picker
   const stickerPickerPacks = useMemo<StickerPickerPack[]>(() => {
@@ -124,5 +134,5 @@ export function useAllCustomEmoji() {
     return Array.from(packMap.values()).filter((p) => p.stickers.length > 0);
   }, [allStickers, allStickerPacks]);
 
-  return { customEmojiItems, stickerPickerPacks };
+  return { customEmojiItems, stickerPickerPacks, allCommunityEmoji };
 }

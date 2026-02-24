@@ -9,7 +9,7 @@
 
 import React, { useMemo, useCallback, useState } from 'react';
 import { View, Pressable } from 'react-native';
-import { InviteManager, QRCode, Text, useTheme } from '@coexist/wisp-react-native';
+import { QRCode, Text, useTheme, InviteManager } from '@coexist/wisp-react-native';
 import type { InviteLink, InviteCreateOptions } from '@coexist/wisp-react-native';
 import { defaultSpacing } from '@coexist/wisp-core/theme/create-theme';
 import * as Clipboard from 'expo-clipboard';

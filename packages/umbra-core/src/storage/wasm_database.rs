@@ -181,6 +181,11 @@ impl Database {
             sql_bridge_execute_batch(schema::MIGRATE_V14_TO_V15).map_err(js_err)?;
             tracing::info!("Migration v14 → v15 complete");
         }
+        if from_version < 16 {
+            tracing::info!("Running migration v15 → v16 (notifications table)");
+            sql_bridge_execute_batch(schema::MIGRATE_V15_TO_V16).map_err(js_err)?;
+            tracing::info!("Migration v15 → v16 complete");
+        }
         Ok(())
     }
 
@@ -1256,6 +1261,159 @@ impl Database {
             ended_at: row["ended_at"].as_i64(),
             duration_ms: row["duration_ms"].as_i64(),
             created_at: row["created_at"].as_i64().unwrap_or(0),
+        }
+    }
+
+    // ========================================================================
+    // NOTIFICATION OPERATIONS
+    // ========================================================================
+
+    /// Create a new notification
+    pub fn create_notification(
+        &self,
+        id: &str,
+        notification_type: &str,
+        title: &str,
+        description: Option<&str>,
+        related_did: Option<&str>,
+        related_id: Option<&str>,
+        avatar: Option<&str>,
+    ) -> Result<NotificationRecord> {
+        let now = crate::time::now_timestamp_millis();
+        self.exec(
+            "INSERT INTO notifications (id, type, title, description, related_did, related_id, avatar, read, dismissed, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 0, ?, ?)",
+            json!([id, notification_type, title, description, related_did, related_id, avatar, now, now]),
+        )?;
+        Ok(NotificationRecord {
+            id: id.to_string(),
+            notification_type: notification_type.to_string(),
+            title: title.to_string(),
+            description: description.map(|s| s.to_string()),
+            related_did: related_did.map(|s| s.to_string()),
+            related_id: related_id.map(|s| s.to_string()),
+            avatar: avatar.map(|s| s.to_string()),
+            read: false,
+            dismissed: false,
+            action_taken: None,
+            created_at: now,
+            updated_at: now,
+        })
+    }
+
+    /// Get notifications with optional filters
+    pub fn get_notifications(
+        &self,
+        notification_type: Option<&str>,
+        read: Option<bool>,
+        limit: usize,
+        offset: usize,
+    ) -> Result<Vec<NotificationRecord>> {
+        let mut sql = String::from(
+            "SELECT id, type, title, description, related_did, related_id, avatar, read, dismissed, action_taken, created_at, updated_at FROM notifications WHERE dismissed = 0"
+        );
+        let mut params: Vec<serde_json::Value> = Vec::new();
+
+        if let Some(t) = notification_type {
+            sql.push_str(" AND type = ?");
+            params.push(json!(t));
+        }
+        if let Some(r) = read {
+            sql.push_str(" AND read = ?");
+            params.push(json!(if r { 1 } else { 0 }));
+        }
+
+        sql.push_str(" ORDER BY created_at DESC LIMIT ? OFFSET ?");
+        params.push(json!(limit as i64));
+        params.push(json!(offset as i64));
+
+        let rows = self.query(&sql, serde_json::Value::Array(params))?;
+        Ok(rows.iter().map(Self::parse_notification).collect())
+    }
+
+    /// Mark a single notification as read
+    pub fn mark_notification_read(&self, id: &str) -> Result<bool> {
+        let now = crate::time::now_timestamp_millis();
+        let affected = self.exec(
+            "UPDATE notifications SET read = 1, updated_at = ? WHERE id = ?",
+            json!([now, id]),
+        )?;
+        Ok(affected > 0)
+    }
+
+    /// Mark all notifications as read, optionally filtered by type
+    pub fn mark_all_notifications_read(&self, notification_type: Option<&str>) -> Result<i32> {
+        let now = crate::time::now_timestamp_millis();
+        match notification_type {
+            Some(t) => self.exec(
+                "UPDATE notifications SET read = 1, updated_at = ? WHERE read = 0 AND type = ?",
+                json!([now, t]),
+            ),
+            None => self.exec(
+                "UPDATE notifications SET read = 1, updated_at = ? WHERE read = 0",
+                json!([now]),
+            ),
+        }
+    }
+
+    /// Dismiss (soft-delete) a notification
+    pub fn dismiss_notification(&self, id: &str) -> Result<bool> {
+        let now = crate::time::now_timestamp_millis();
+        let affected = self.exec(
+            "UPDATE notifications SET dismissed = 1, updated_at = ? WHERE id = ?",
+            json!([now, id]),
+        )?;
+        Ok(affected > 0)
+    }
+
+    /// Get unread counts per category
+    pub fn get_notification_unread_counts(&self) -> Result<serde_json::Value> {
+        let rows = self.query(
+            "SELECT type, COUNT(*) as cnt FROM notifications WHERE read = 0 AND dismissed = 0 GROUP BY type",
+            json!([]),
+        )?;
+
+        let mut social = 0i64;
+        let mut calls = 0i64;
+        let mut mentions = 0i64;
+        let mut system = 0i64;
+
+        for row in &rows {
+            let t = row["type"].as_str().unwrap_or("");
+            let cnt = row["cnt"].as_i64().unwrap_or(0);
+            match t {
+                "friend_request_received" | "friend_request_accepted" | "friend_request_rejected"
+                | "group_invite" | "community_invite" => social += cnt,
+                "call_missed" | "call_completed" => calls += cnt,
+                "mention" => mentions += cnt,
+                "system" => system += cnt,
+                _ => system += cnt,
+            }
+        }
+
+        let all = social + calls + mentions + system;
+        Ok(json!({
+            "all": all,
+            "social": social,
+            "calls": calls,
+            "mentions": mentions,
+            "system": system,
+        }))
+    }
+
+    fn parse_notification(row: &serde_json::Value) -> NotificationRecord {
+        NotificationRecord {
+            id: row["id"].as_str().unwrap_or("").to_string(),
+            notification_type: row["type"].as_str().unwrap_or("").to_string(),
+            title: row["title"].as_str().unwrap_or("").to_string(),
+            description: row["description"].as_str().map(|s| s.to_string()),
+            related_did: row["related_did"].as_str().map(|s| s.to_string()),
+            related_id: row["related_id"].as_str().map(|s| s.to_string()),
+            avatar: row["avatar"].as_str().map(|s| s.to_string()),
+            read: row["read"].as_i64().unwrap_or(0) != 0,
+            dismissed: row["dismissed"].as_i64().unwrap_or(0) != 0,
+            action_taken: row["action_taken"].as_str().map(|s| s.to_string()),
+            created_at: row["created_at"].as_i64().unwrap_or(0),
+            updated_at: row["updated_at"].as_i64().unwrap_or(0),
         }
     }
 
@@ -4648,6 +4806,27 @@ pub struct CallHistoryRecord {
     pub ended_at: Option<i64>,
     pub duration_ms: Option<i64>,
     pub created_at: i64,
+}
+
+// ============================================================================
+// NOTIFICATION RECORD TYPE
+// ============================================================================
+
+/// A notification record from the database
+#[derive(Debug, Clone)]
+pub struct NotificationRecord {
+    pub id: String,
+    pub notification_type: String,
+    pub title: String,
+    pub description: Option<String>,
+    pub related_did: Option<String>,
+    pub related_id: Option<String>,
+    pub avatar: Option<String>,
+    pub read: bool,
+    pub dismissed: bool,
+    pub action_taken: Option<String>,
+    pub created_at: i64,
+    pub updated_at: i64,
 }
 
 // ============================================================================

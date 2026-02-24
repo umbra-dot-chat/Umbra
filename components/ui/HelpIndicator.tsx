@@ -167,8 +167,11 @@ export function HelpIndicator({
 
   const iconOpacity = viewed ? 0.5 : 1;
 
+  // Extra padding so the glow ring (1.8× scale) isn't clipped by parent overflow
+  const glowPad = size * 0.5;
+
   return (
-    <View style={[{ alignItems: 'center', justifyContent: 'center' }, style]}>
+    <View style={[{ alignItems: 'center', justifyContent: 'center', overflow: 'visible' as const, padding: glowPad, margin: -glowPad }, style]}>
       {/* Glow ring (Ghost HotspotIndicator style) */}
       {active && !viewed && (
         <Animated.View

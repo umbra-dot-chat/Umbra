@@ -2,10 +2,10 @@ import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { View, ScrollView, Platform, Text as RNText, Dimensions, useWindowDimensions, Animated, Pressable, Image } from 'react-native';
 import { Text, Button, Card, VStack, HStack, Separator, Presence, useTheme } from '@coexist/wisp-react-native';
 import { useBlobPath, AnimatedBlobs } from '@/components/auth/AnimatedBlobs';
-import { WalletIcon, DownloadIcon, KeyIcon, LockIcon, ShieldIcon, ArrowLeftIcon } from '@/components/icons';
+import { WalletIcon, DownloadIcon, KeyIcon, LockIcon } from '@/components/icons';
 import { CreateWalletFlow } from '@/components/auth/CreateWalletFlow';
 import { ImportWalletFlow } from '@/components/auth/ImportWalletFlow';
-import { GrowablePinInput } from '@/components/auth/GrowablePinInput';
+import { PinLockScreen } from '@/components/auth/PinLockScreen';
 import { HelpIndicator } from '@/components/ui/HelpIndicator';
 import { HelpText, HelpHighlight, HelpListItem } from '@/components/ui/HelpContent';
 import { useAuth, type StoredAccount } from '@/contexts/AuthContext';
@@ -137,7 +137,7 @@ function AuthContent({ inverted, onCreateWallet, onImportWallet, taglineIndex, t
   const btnIconColor = inverted ? tc.text.primary : tc.background.canvas;
 
   // ── Branding block ──────────────────────────────────────────────────────
-  // Ghost logo: PNG assets matching the loading screen, 25% smaller (225px).
+  // Ghost logo: PNG assets, 25% smaller than loading screen (225px).
   // Normal layer: dark mode → white ghost, light mode → black ghost
   // Inverted layer (on blob): dark mode → black ghost, light mode → white ghost
   const GHOST_SIZE = 225;
@@ -531,91 +531,32 @@ export default function AuthScreen() {
   const [showCreate, setShowCreate] = useState(false);
   const [showImport, setShowImport] = useState(false);
 
-  // PIN verification full-screen overlay state for stored accounts
+  // PIN verification for stored accounts with PIN protection
   const [pinDialogAccount, setPinDialogAccount] = useState<StoredAccount | null>(null);
-  const [pinValue, setPinValue] = useState('');
-  const [pinError, setPinError] = useState<string | null>(null);
-  const [pinAttempts, setPinAttempts] = useState(0);
-  const [pinCooldown, setPinCooldown] = useState(0);
-  const pinShakeAnim = useRef(new Animated.Value(0)).current;
-
-  const PIN_MAX_ATTEMPTS = 5;
-  const PIN_COOLDOWN_SECONDS = 30;
-
-  // Cooldown timer for PIN attempts
-  useEffect(() => {
-    if (pinCooldown <= 0) return;
-    const timer = setInterval(() => {
-      setPinCooldown((prev) => {
-        if (prev <= 1) {
-          clearInterval(timer);
-          setPinAttempts(0);
-          setPinError(null);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => clearInterval(timer);
-  }, [pinCooldown]);
-
-  const triggerPinShake = useCallback(() => {
-    pinShakeAnim.setValue(0);
-    Animated.sequence([
-      Animated.timing(pinShakeAnim, { toValue: 10, duration: 50, useNativeDriver: true }),
-      Animated.timing(pinShakeAnim, { toValue: -10, duration: 50, useNativeDriver: true }),
-      Animated.timing(pinShakeAnim, { toValue: 8, duration: 50, useNativeDriver: true }),
-      Animated.timing(pinShakeAnim, { toValue: -8, duration: 50, useNativeDriver: true }),
-      Animated.timing(pinShakeAnim, { toValue: 4, duration: 50, useNativeDriver: true }),
-      Animated.timing(pinShakeAnim, { toValue: 0, duration: 50, useNativeDriver: true }),
-    ]).start();
-  }, [pinShakeAnim]);
 
   const handleCreateWallet = () => setShowCreate(true);
   const handleImportWallet = () => setShowImport(true);
 
   const handleAccountPress = useCallback((account: StoredAccount) => {
     if (account.pin) {
-      // Account has PIN protection — show full-screen PIN overlay
       setPinDialogAccount(account);
-      setPinValue('');
-      setPinError(null);
-      setPinAttempts(0);
-      setPinCooldown(0);
     } else {
-      // No PIN — re-login immediately
       loginFromStoredAccount(account.did);
     }
   }, [loginFromStoredAccount]);
 
-  const handlePinSubmit = useCallback((pin: string) => {
-    if (!pinDialogAccount) return;
-    if (pinCooldown > 0) return;
-
+  const handlePinVerify = useCallback((pin: string): boolean => {
+    if (!pinDialogAccount) return false;
     if (pin === pinDialogAccount.pin) {
       setPinDialogAccount(null);
       loginFromStoredAccount(pinDialogAccount.did);
-    } else {
-      const newAttempts = pinAttempts + 1;
-      setPinAttempts(newAttempts);
-      setPinValue('');
-      triggerPinShake();
-
-      if (newAttempts >= PIN_MAX_ATTEMPTS) {
-        setPinError(`Too many attempts. Try again in ${PIN_COOLDOWN_SECONDS}s.`);
-        setPinCooldown(PIN_COOLDOWN_SECONDS);
-      } else {
-        setPinError(`Incorrect PIN. ${PIN_MAX_ATTEMPTS - newAttempts} attempts remaining.`);
-      }
+      return true;
     }
-  }, [pinDialogAccount, loginFromStoredAccount, pinAttempts, pinCooldown, triggerPinShake]);
+    return false;
+  }, [pinDialogAccount, loginFromStoredAccount]);
 
   const handlePinDialogClose = useCallback(() => {
     setPinDialogAccount(null);
-    setPinValue('');
-    setPinError(null);
-    setPinAttempts(0);
-    setPinCooldown(0);
   }, []);
 
   // Tagline slot-machine rotation — shared across both AuthContent layers
@@ -681,6 +622,7 @@ export default function AuthScreen() {
       isDark={isDark}
       tc={tc}
       accounts={accounts}
+
     />
   );
 
@@ -714,6 +656,7 @@ export default function AuthScreen() {
               tc={tc}
               accounts={accounts}
               onAccountPress={handleAccountPress}
+        
             />
 
             {/* Layer 3: Inverted content — absolute overlay on the SAME
@@ -777,72 +720,11 @@ export default function AuthScreen() {
 
       {/* Full-screen PIN verification overlay for stored accounts */}
       {!!pinDialogAccount && (
-        <View style={{
-          position: 'absolute',
-          top: 0, left: 0, right: 0, bottom: 0,
-          justifyContent: 'center',
-          alignItems: 'center',
-          backgroundColor: tc.background.canvas,
-          zIndex: 9999,
-        }}>
-          {/* Back button */}
-          <Pressable
-            onPress={handlePinDialogClose}
-            style={{
-              position: 'absolute',
-              top: Platform.OS === 'web' ? 24 : 56,
-              left: 20,
-              width: 40,
-              height: 40,
-              borderRadius: 20,
-              alignItems: 'center',
-              justifyContent: 'center',
-              zIndex: 1,
-            }}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <ArrowLeftIcon size={24} color={tc.text.primary} />
-          </Pressable>
-
-          <Presence visible animation="scaleIn">
-            <VStack gap="xl" style={{ alignItems: 'center', paddingHorizontal: 32 }}>
-              <ShieldIcon size={48} color={tc.text.muted} />
-
-              <VStack gap="xs" style={{ alignItems: 'center' }}>
-                <Text size="display-sm" weight="bold">
-                  Welcome Back
-                </Text>
-                <Text size="sm" color="secondary" align="center">
-                  Enter your PIN to sign in as {pinDialogAccount.displayName}
-                </Text>
-              </VStack>
-
-              <Animated.View style={{ transform: [{ translateX: pinShakeAnim }] }}>
-                <GrowablePinInput
-                  minLength={5}
-                  maxLength={5}
-                  value={pinValue}
-                  onChange={setPinValue}
-                  onComplete={handlePinSubmit}
-                  mask
-                  autoFocus
-                  disabled={pinCooldown > 0}
-                  error={!!pinError}
-                />
-              </Animated.View>
-
-              {pinError && (
-                <Presence visible animation="fadeIn">
-                  <Text size="sm" color="danger" align="center">
-                    {pinCooldown > 0
-                      ? `Too many attempts. Try again in ${pinCooldown}s.`
-                      : pinError}
-                  </Text>
-                </Presence>
-              )}
-            </VStack>
-          </Presence>
-        </View>
+        <PinLockScreen
+          onVerify={handlePinVerify}
+          subtitle={`Enter your PIN to sign in as ${pinDialogAccount.displayName}`}
+          onBack={handlePinDialogClose}
+        />
       )}
     </View>
   );

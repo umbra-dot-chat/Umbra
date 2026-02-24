@@ -5,10 +5,10 @@ import {
   Text,
   useTheme,
   Avatar,
-  AddFriendInput,
   Input,
   SegmentedControl,
   Spinner,
+  AddFriendInput,
 } from '@coexist/wisp-react-native';
 import {
   FriendListItem,

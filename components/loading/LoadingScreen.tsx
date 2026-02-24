@@ -1,18 +1,15 @@
-import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { View, Platform, Animated, Dimensions, Image, Text as RNText } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { View, Platform, Animated, Dimensions, Text as RNText, Image, type ImageSourcePropType } from 'react-native';
 import { useTheme } from '@coexist/wisp-react-native';
 import { useBlobPath, AnimatedBlobs } from '@/components/auth/AnimatedBlobs';
 import { TAGLINES } from '@/app/(auth)/index';
 import Svg, { Path } from 'react-native-svg';
 
-// ---------------------------------------------------------------------------
-// Ghost logo assets — black and white variants for theme + blob inversion
-// ---------------------------------------------------------------------------
-
+// Ghost logo assets — static images, no animation
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const ghostBlack = require('@/assets/images/ghost-black.png');
+const ghostBlack: ImageSourcePropType = require('@/assets/images/ghost-black.png');
 // eslint-disable-next-line @typescript-eslint/no-var-requires
-const ghostWhite = require('@/assets/images/ghost-white.png');
+const ghostWhite: ImageSourcePropType = require('@/assets/images/ghost-white.png');
 
 // ---------------------------------------------------------------------------
 // Types
@@ -244,7 +241,7 @@ export function LoadingScreen({ steps, onComplete }: LoadingScreenProps) {
 
 // ---------------------------------------------------------------------------
 // Inner content — rendered twice (normal + inverted for blob clip)
-// Displays: Ghost logo + animated progress bar
+// Displays: Ghost logo + progress bar
 // ---------------------------------------------------------------------------
 
 const GHOST_SIZE = 300;
@@ -309,10 +306,7 @@ function LoadingContent({
       {/* Ghost logo */}
       <Image
         source={ghostSource}
-        style={{
-          width: GHOST_SIZE,
-          height: GHOST_SIZE,
-        }}
+        style={{ width: GHOST_SIZE, height: GHOST_SIZE }}
         resizeMode="contain"
       />
 

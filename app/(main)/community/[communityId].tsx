@@ -25,10 +25,11 @@ import type { GestureResponderEvent } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import {
-  useTheme, Text, Avatar, CombinedPicker,
-  MemberList, MessageInput, MessageList, E2EEKeyExchangeUI, PinnedMessages,
-  type MemberListSection, type MemberListMember, type MessageListEntry,
+  useTheme, Text, Avatar,
+  MessageInput,
+  CombinedPicker, MemberList, MessageList, PinnedMessages,
 } from '@coexist/wisp-react-native';
+import type { MemberListSection, MemberListMember, MessageListEntry } from '@coexist/wisp-react-native';
 import type { EmojiItem } from '@coexist/wisp-core/types/EmojiPicker.types';
 import type { StickerPickerPack } from '@coexist/wisp-core/types/StickerPicker.types';
 
@@ -43,6 +44,8 @@ import { MemberContextMenu } from '@/components/community/MemberContextMenu';
 import type { MemberContextMenuRole } from '@/components/community/MemberContextMenu';
 import { useRightPanel } from '@/hooks/useRightPanel';
 import { useUmbra } from '@/contexts/UmbraContext';
+import { parseMessageContent, buildEmojiMap } from '@/utils/parseMessageContent';
+import { getBuiltInCommunityEmoji } from '@/constants/builtInEmoji';
 import { useMessaging } from '@/contexts/MessagingContext';
 import { PANEL_WIDTH } from '@/types/panels';
 import { VolumeIcon, ArrowLeftIcon } from '@/components/icons';
@@ -297,10 +300,20 @@ export default function CommunityPage() {
   const myRoles = memberRolesMap[myDid] ?? [];
   const isOwner = community?.ownerDid === myDid;
 
-  // Transform community emoji to EmojiPicker items
+  // Built-in emoji (always available)
+  const builtInEmoji = useMemo(() => getBuiltInCommunityEmoji(), []);
+
+  // Transform community emoji to EmojiPicker items (built-in + community)
   const customEmojiItems = useMemo<EmojiItem[]>(() => {
-    if (!communityEmoji || communityEmoji.length === 0) return [];
-    return communityEmoji.map((e) => ({
+    const builtInItems = builtInEmoji.map((e) => ({
+      emoji: `:${e.name}:`,
+      name: e.name,
+      category: 'custom' as const,
+      keywords: [e.name, 'ghost', 'umbra', 'logo'],
+      imageUrl: e.imageUrl,
+      animated: e.animated,
+    }));
+    const communityItems = (communityEmoji ?? []).map((e) => ({
       emoji: `:${e.name}:`,
       name: e.name,
       category: 'custom' as const,
@@ -308,7 +321,14 @@ export default function CommunityPage() {
       imageUrl: e.imageUrl,
       animated: e.animated,
     }));
-  }, [communityEmoji]);
+    return [...builtInItems, ...communityItems];
+  }, [communityEmoji, builtInEmoji]);
+
+  // Build emoji map for inline rendering in messages (built-in + community)
+  const emojiMap = useMemo(
+    () => buildEmojiMap([...builtInEmoji, ...(communityEmoji ?? [])]),
+    [builtInEmoji, communityEmoji],
+  );
 
   // Transform community stickers into StickerPicker packs
   const stickerPickerPacks = useMemo<StickerPickerPack[]>(() => {
@@ -614,7 +634,16 @@ export default function CommunityPage() {
           )
         : undefined;
 
-      const parsedContent = msg.content;
+      const parsedContent = emojiMap.size > 0 && typeof msg.content === 'string'
+        ? parseMessageContent(msg.content, emojiMap, undefined, {
+            textColor: theme.colors.text.primary,
+            linkColor: theme.colors.text.link ?? '#5865F2',
+            codeBgColor: theme.colors.background.sunken,
+            codeTextColor: theme.colors.text.primary,
+            spoilerBgColor: theme.colors.text.muted,
+            quoteBorderColor: theme.colors.border.subtle,
+          })
+        : msg.content;
 
       entries.push({
         type: 'message',
@@ -633,7 +662,7 @@ export default function CommunityPage() {
     }
 
     return entries;
-  }, [messages, myDid, memberNameMap, seatByPlatformUserId, theme]);
+  }, [messages, myDid, memberNameMap, seatByPlatformUserId, theme, emojiMap]);
 
   // ---------------------------------------------------------------------------
   // Handlers
@@ -853,18 +882,7 @@ export default function CommunityPage() {
                 entries={messageEntries}
                 displayMode={displayMode}
                 skeleton={msgsLoading && messageEntries.length === 0}
-                stickyHeader={
-                  activeChannel.e2eeEnabled ? (
-                    <E2EEKeyExchangeUI
-                      status={(activeChannel as MockChannel).e2eeStatus ?? 'active'}
-                      keyVersion={(activeChannel as MockChannel).e2eeKeyVersion}
-                      errorMessage={(activeChannel as MockChannel).e2eeErrorMessage}
-                      onRetry={() => {}}
-                      onRotateKey={() => {}}
-                      rotating={(activeChannel as MockChannel).e2eeStatus === 'rotating'}
-                    />
-                  ) : undefined
-                }
+                stickyHeader={undefined}
               />
             </View>
 

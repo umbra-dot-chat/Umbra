@@ -53,7 +53,7 @@
 //! ```
 
 /// Current schema version
-pub const SCHEMA_VERSION: i32 = 15;
+pub const SCHEMA_VERSION: i32 = 16;
 
 /// SQL to create all tables
 pub const CREATE_TABLES: &str = r#"
@@ -279,6 +279,25 @@ CREATE TABLE IF NOT EXISTS call_history (
     FOREIGN KEY (conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_call_history_conversation ON call_history(conversation_id, started_at DESC);
+
+-- Notifications (unified notification system)
+CREATE TABLE IF NOT EXISTS notifications (
+    id TEXT PRIMARY KEY,
+    type TEXT NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT,
+    related_did TEXT,
+    related_id TEXT,
+    avatar TEXT,
+    read INTEGER NOT NULL DEFAULT 0,
+    dismissed INTEGER NOT NULL DEFAULT 0,
+    action_taken TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(read, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_notifications_type ON notifications(type, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_notifications_dismissed ON notifications(dismissed) WHERE dismissed = 0;
 
 -- Plugin key-value storage (namespaced per plugin)
 CREATE TABLE IF NOT EXISTS plugin_kv (
@@ -1661,9 +1680,35 @@ ALTER TABLE friend_requests ADD COLUMN from_avatar TEXT;
 UPDATE schema_version SET version = 15;
 "#;
 
+/// Migration v15 → v16:
+/// - Add notifications table for persisted notification records
+pub const MIGRATE_V15_TO_V16: &str = r#"
+-- Notifications table for the unified notification system
+CREATE TABLE IF NOT EXISTS notifications (
+    id TEXT PRIMARY KEY,
+    type TEXT NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT,
+    related_did TEXT,
+    related_id TEXT,
+    avatar TEXT,
+    read INTEGER NOT NULL DEFAULT 0,
+    dismissed INTEGER NOT NULL DEFAULT 0,
+    action_taken TEXT,
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_notifications_read ON notifications(read, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_notifications_type ON notifications(type, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_notifications_dismissed ON notifications(dismissed) WHERE dismissed = 0;
+
+UPDATE schema_version SET version = 16;
+"#;
+
 /// SQL to drop all tables (for testing/reset)
 #[allow(dead_code)]
 pub const DROP_TABLES: &str = r#"
+DROP TABLE IF EXISTS notifications;
 DROP TABLE IF EXISTS sticker_placements;
 DROP TABLE IF EXISTS community_sticker_packs;
 DROP TABLE IF EXISTS community_seats;

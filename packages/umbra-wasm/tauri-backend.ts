@@ -441,6 +441,26 @@ export function createTauriBackend(
       return invoke('calls_get_all_history', { json }).then(ensureJsonString) as any;
     },
 
+    // ── Notifications ───────────────────────────────────────────────
+    umbra_wasm_notifications_create: (json: string) => {
+      return invoke('notifications_create', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_notifications_get: (json: string) => {
+      return invoke('notifications_get', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_notifications_mark_read: (json: string) => {
+      return invoke('notifications_mark_read', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_notifications_mark_all_read: (json: string) => {
+      return invoke('notifications_mark_all_read', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_notifications_dismiss: (json: string) => {
+      return invoke('notifications_dismiss', { json }).then(ensureJsonString) as any;
+    },
+    umbra_wasm_notifications_unread_counts: (json: string) => {
+      return invoke('notifications_unread_counts', { json }).then(ensureJsonString) as any;
+    },
+
     // ── Events ─────────────────────────────────────────────────────
     umbra_wasm_subscribe_events: (callback: (event_json: string) => void) => {
       // TODO: Wire up Tauri event system (tauri::Emitter / listen)

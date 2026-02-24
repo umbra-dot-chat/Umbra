@@ -8,7 +8,7 @@
 
 import React from 'react';
 import { View } from 'react-native';
-import { Avatar, Text, CallTimer, CallControls, useTheme } from '@coexist/wisp-react-native';
+import { Avatar, Text, useTheme, CallControls, CallTimer } from '@coexist/wisp-react-native';
 import { useCall } from '@/hooks/useCall';
 
 const noop = () => {};

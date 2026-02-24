@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { KeyboardAvoidingView, Platform, View } from 'react-native';
+import { KeyboardAvoidingView, Platform, View, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Text, useTheme, E2EEKeyExchangeUI } from '@coexist/wisp-react-native';
+import { Text, useTheme } from '@coexist/wisp-react-native';
 import { useHoverMessage } from '@/hooks/useHoverMessage';
 import { useRightPanel } from '@/hooks/useRightPanel';
 import { useProfilePopoverContext } from '@/contexts/ProfilePopoverContext';
@@ -35,10 +35,23 @@ import { useNetwork } from '@/hooks/useNetwork';
 // Empty conversation state
 // ─────────────────────────────────────────────────────────────────────────────
 
+// Ghost logo assets — theme-aware
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const ghostBlack = require('@/assets/images/ghost-black.png');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const ghostWhite = require('@/assets/images/ghost-white.png');
+
 function EmptyConversation() {
-  const { theme } = useTheme();
+  const { theme, mode } = useTheme();
+  const isDark = mode === 'dark';
+  const ghostSource = isDark ? ghostWhite : ghostBlack;
   return (
     <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40 }}>
+      <Image
+        source={ghostSource}
+        style={{ width: 275, height: 275, marginBottom: 16 }}
+        resizeMode="contain"
+      />
       <Text size="display-sm" weight="bold" style={{ color: theme.colors.text.primary, marginBottom: 8 }}>
         Welcome to Umbra
       </Text>
@@ -154,7 +167,7 @@ export default function ChatPage() {
   // Custom hooks
   const { hoveredMessage, handleHoverIn, handleHoverOut } = useHoverMessage();
   const { rightPanel, visiblePanel, panelWidth, togglePanel, resizePanel, panelContentWidth } = useRightPanel();
-  const { customEmojiItems, stickerPickerPacks } = useAllCustomEmoji();
+  const { customEmojiItems, stickerPickerPacks, allCommunityEmoji } = useAllCustomEmoji();
 
   // Open search panel when requested from CommandPalette
   useEffect(() => {
@@ -472,15 +485,7 @@ export default function ChatPage() {
             if (resolvedConversationId) forwardMessage(msgId, resolvedConversationId);
           }}
           onCopyMessage={handleCopyMessage}
-          stickyHeader={
-            resolvedConversationId ? (
-              <E2EEKeyExchangeUI
-                status="active"
-                keyVersion={1}
-                compact
-              />
-            ) : undefined
-          }
+          customEmoji={allCommunityEmoji}
         />
         <SlotRenderer slot="chat-toolbar" props={{ conversationId: resolvedConversationId }} />
         <ChatInput

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState, useCallback, useMemo } from 'react';
-import { MessageSearch, type SearchResult } from '@coexist/wisp-react-native';
+import { MessageSearch } from '@coexist/wisp-react-native';
+import type { SearchResult } from '@coexist/wisp-react-native';
 import { useUmbra } from '@/contexts/UmbraContext';
 import { useFriends } from '@/hooks/useFriends';
 import { useAuth } from '@/contexts/AuthContext';

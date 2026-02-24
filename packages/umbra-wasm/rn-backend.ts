@@ -303,6 +303,14 @@ function createNativeBackend(native: NativeUmbraCore): UmbraWasmModule {
     umbra_wasm_calls_get_history: (json: string) => call('calls_get_history', JSON.parse(json)),
     umbra_wasm_calls_get_all_history: (json?: string) => call('calls_get_all_history', json ? JSON.parse(json) : {}),
 
+    // ── Notifications (via dispatcher) ───────────────────────────────────
+    umbra_wasm_notifications_create: (json: string) => call('notifications_create', JSON.parse(json)),
+    umbra_wasm_notifications_get: (json: string) => call('notifications_get', JSON.parse(json)),
+    umbra_wasm_notifications_mark_read: (json: string) => call('notifications_mark_read', JSON.parse(json)),
+    umbra_wasm_notifications_mark_all_read: (json: string) => call('notifications_mark_all_read', JSON.parse(json)),
+    umbra_wasm_notifications_dismiss: (json: string) => call('notifications_dismiss', JSON.parse(json)),
+    umbra_wasm_notifications_unread_counts: (json: string) => call('notifications_unread_counts', JSON.parse(json)),
+
     // ── Crypto (via dispatcher) ─────────────────────────────────────────
     umbra_wasm_crypto_sign: (data: any) => call('crypto_sign', { data }),
     umbra_wasm_crypto_verify: (public_key_hex: string, data: any, signature: any) =>
@@ -598,6 +606,12 @@ function createStubBackend(): UmbraWasmModule {
     umbra_wasm_calls_end: () => notImplemented('calls_end'),
     umbra_wasm_calls_get_history: () => JSON.stringify([]),
     umbra_wasm_calls_get_all_history: () => JSON.stringify([]),
+    umbra_wasm_notifications_create: () => notImplemented('notifications_create'),
+    umbra_wasm_notifications_get: () => JSON.stringify([]),
+    umbra_wasm_notifications_mark_read: () => JSON.stringify({ success: true }),
+    umbra_wasm_notifications_mark_all_read: () => JSON.stringify({ success: true, count: 0 }),
+    umbra_wasm_notifications_dismiss: () => JSON.stringify({ success: true }),
+    umbra_wasm_notifications_unread_counts: () => JSON.stringify({ all: 0, social: 0, calls: 0, mentions: 0, system: 0 }),
     umbra_wasm_crypto_sign: () => notImplemented('crypto_sign'),
     umbra_wasm_crypto_verify: () => notImplemented('crypto_verify'),
     umbra_wasm_crypto_encrypt_for_peer: () => notImplemented('crypto_encrypt_for_peer'),

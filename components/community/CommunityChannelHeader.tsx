@@ -11,7 +11,7 @@
 
 import React, { useMemo } from 'react';
 import { View, Pressable } from 'react-native';
-import { ChannelHeader, useTheme } from '@coexist/wisp-react-native';
+import { useTheme, ChannelHeader } from '@coexist/wisp-react-native';
 import type { ChannelHeaderType, ChannelHeaderAction } from '@coexist/wisp-react-native';
 import type { RightPanel } from '@/types/panels';
 import { SearchIcon, PinIcon, UsersIcon, SettingsIcon, ArrowLeftIcon } from '@/components/icons';
