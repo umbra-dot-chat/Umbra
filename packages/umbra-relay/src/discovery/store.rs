@@ -53,6 +53,10 @@ pub struct DiscoveryStore {
     /// Stored temporarily so mobile clients can poll for results.
     profile_results: Arc<DashMap<String, crate::discovery::types::ImportedProfile>>,
 
+    /// Community import results (state_nonce → access_token).
+    /// Stored temporarily so Tauri/mobile clients can poll for results.
+    community_import_results: Arc<DashMap<String, String>>,
+
     /// Configuration for hashing.
     config: Arc<DiscoveryConfig>,
 
@@ -71,6 +75,7 @@ impl DiscoveryStore {
             username_index: Arc::new(DashMap::new()),
             name_tags: Arc::new(DashMap::new()),
             profile_results: Arc::new(DashMap::new()),
+            community_import_results: Arc::new(DashMap::new()),
             config: Arc::new(config),
             data_dir,
         }
@@ -650,6 +655,19 @@ impl DiscoveryStore {
         state: &str,
     ) -> Option<crate::discovery::types::ImportedProfile> {
         self.profile_results.remove(state).map(|(_, p)| p)
+    }
+
+    // ── Community Import Results ────────────────────────────────────────────
+
+    /// Store a community import result (access token) for polling.
+    pub fn store_community_import_result(&self, state: &str, access_token: String) {
+        self.community_import_results
+            .insert(state.to_string(), access_token);
+    }
+
+    /// Retrieve and remove a community import result.
+    pub fn take_community_import_result(&self, state: &str) -> Option<String> {
+        self.community_import_results.remove(state).map(|(_, t)| t)
     }
 
     // ── Stats ────────────────────────────────────────────────────────────────

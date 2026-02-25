@@ -63,6 +63,16 @@ export function PinLockScreen({ onVerify, subtitle, onBack }: PinLockScreenProps
   const [attempts, setAttempts] = useState(0);
   const [cooldown, setCooldown] = useState(0);
 
+  // Overlay fade-in animation
+  const overlayOpacity = useRef(new Animated.Value(0)).current;
+  useEffect(() => {
+    Animated.timing(overlayOpacity, {
+      toValue: 1,
+      duration: 300,
+      useNativeDriver: true,
+    }).start();
+  }, []);
+
   // Shake animation
   const shakeAnim = useRef(new Animated.Value(0)).current;
 
@@ -120,7 +130,7 @@ export function PinLockScreen({ onVerify, subtitle, onBack }: PinLockScreenProps
   const isLocked = cooldown > 0;
 
   return (
-    <View style={[containerStyle, { backgroundColor: theme.colors.background.canvas }]}>
+    <Animated.View style={[containerStyle, { backgroundColor: theme.colors.background.canvas, opacity: overlayOpacity }]}>
       {/* Optional back button */}
       {onBack && (
         <Pressable
@@ -183,7 +193,7 @@ export function PinLockScreen({ onVerify, subtitle, onBack }: PinLockScreenProps
           )}
         </VStack>
       </Presence>
-    </View>
+    </Animated.View>
   );
 }
 

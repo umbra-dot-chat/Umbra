@@ -842,3 +842,51 @@ export function parseMessageContent(
     </Text>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Public emoji-only detection helper
+// ---------------------------------------------------------------------------
+
+/**
+ * Check whether a raw message string contains only emoji (and whitespace).
+ * This is a lightweight check that works on raw text without needing a full
+ * token parse — it strips custom emoji shortcodes (:name:) and whitespace,
+ * then checks if the remainder is all Unicode emoji.
+ *
+ * Returns `true` if the message is emoji-only (1+ emoji, no other content).
+ */
+export function isEmojiOnlyMessage(text: string): boolean {
+  if (!text || text.length === 0) return false;
+
+  // Reject block-level formatting (code blocks, headings, lists, quotes)
+  if (/^```|^#{1,3}\s|^>\s|^- |^\d+\.\s/m.test(text)) return false;
+
+  // Reject inline formatting markers
+  if (/\*\*|__|~~|\|\||`/.test(text)) return false;
+
+  // Reject links
+  if (/\[.*?\]\(.*?\)|https?:\/\//.test(text)) return false;
+
+  // Reject sticker/gif patterns
+  if (STICKER_PATTERN.test(text) || GIF_PATTERN.test(text)) return false;
+
+  // Strip custom emoji shortcodes (:name:) — use a fresh regex to avoid
+  // lastIndex issues with the module-level `g`-flagged EMOJI_PATTERN.
+  const emojiShortcodeRe = /:([a-zA-Z0-9_]{2,32}):/g;
+  const withoutCustom = text.replace(emojiShortcodeRe, '');
+  const hadCustomEmoji = withoutCustom !== text;
+
+  // Strip whitespace
+  const stripped = withoutCustom.replace(/\s/g, '');
+
+  // If nothing left, the message was all custom emoji (and/or whitespace)
+  if (stripped.length === 0) {
+    return hadCustomEmoji;
+  }
+
+  // Check if remainder is all Unicode emoji
+  const emojiMatches = stripped.match(UNICODE_EMOJI_RE);
+  if (!emojiMatches) return false;
+
+  return emojiMatches.join('') === stripped;
+}

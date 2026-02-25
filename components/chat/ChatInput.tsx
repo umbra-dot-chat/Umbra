@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
-import { Platform, View } from 'react-native';
+import { Platform, Pressable, View } from 'react-native';
 import {
   Avatar, MessageInput, useTheme,
   CombinedPicker, MentionAutocomplete,
@@ -152,6 +152,17 @@ export function ChatInput({
 
   return (
     <>
+      {/* Transparent backdrop — closes picker when tapping outside */}
+      {emojiOpen && (
+        <Pressable
+          onPress={onToggleEmoji}
+          style={Platform.OS === 'web'
+            ? { position: 'fixed' as any, top: 0, left: 0, right: 0, bottom: 0, zIndex: 19 }
+            : { position: 'absolute', top: -5000, left: -5000, right: -5000, bottom: -5000, zIndex: 19 }
+          }
+          accessibilityLabel="Close picker"
+        />
+      )}
       <AnimatedPresence
         visible={emojiOpen}
         preset="slideUp"

@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { View, ScrollView, Platform, Text as RNText, Dimensions, useWindowDimensions, Animated, Pressable, Image } from 'react-native';
+import { View, ScrollView, Platform, Text as RNText, Dimensions, useWindowDimensions, Animated, Easing, Pressable, Image } from 'react-native';
 import { Text, Button, Card, VStack, HStack, Separator, Presence, useTheme } from '@coexist/wisp-react-native';
 import { useBlobPath, AnimatedBlobs } from '@/components/auth/AnimatedBlobs';
 import { WalletIcon, DownloadIcon, KeyIcon, LockIcon } from '@/components/icons';
@@ -19,10 +19,10 @@ const ghostBlack = require('@/assets/images/ghost-black.png');
 const ghostWhite = require('@/assets/images/ghost-white.png');
 
 // ---------------------------------------------------------------------------
-// Shared content rendered twice: normal (black text) + inverted (white text
-// clipped to blob shape). The inverted layer sits on top so text edges that
-// overlap the blob appear white at the pixel level.
+// Breakpoint for side-by-side layout
 // ---------------------------------------------------------------------------
+
+const WIDE_BREAKPOINT = 800;
 
 // ---------------------------------------------------------------------------
 // Slot-machine tagline rotation
@@ -86,6 +86,10 @@ export const TAGLINES = [
 const TAGLINE_INTERVAL = 3500; // ms between rotations
 const TAGLINE_ANIM_DURATION = 500; // ms for the slide transition
 
+// ---------------------------------------------------------------------------
+// AuthContent — rendered twice (normal + inverted/clipped to blob shape)
+// ---------------------------------------------------------------------------
+
 interface AuthContentProps {
   inverted?: boolean;
   onCreateWallet: () => void;
@@ -109,9 +113,11 @@ interface AuthContentProps {
   accounts?: StoredAccount[];
   /** Called when user taps a stored account */
   onAccountPress?: (account: StoredAccount) => void;
+  /** Whether to use side-by-side layout */
+  isWide: boolean;
 }
 
-function AuthContent({ inverted, onCreateWallet, onImportWallet, taglineIndex, taglineSlideAnim, taglineLineHeight, isDark, tc, accounts, onAccountPress }: AuthContentProps) {
+function AuthContent({ inverted, onCreateWallet, onImportWallet, taglineIndex, taglineSlideAnim, taglineLineHeight, isDark, tc, accounts, onAccountPress, isWide }: AuthContentProps) {
   // Normal layer: use theme text colors. Inverted layer: flip — bg color on blob.
   const textColor = inverted ? tc.background.canvas : tc.text.primary;
   const mutedColor = inverted
@@ -122,37 +128,38 @@ function AuthContent({ inverted, onCreateWallet, onImportWallet, taglineIndex, t
   const hasAccounts = accounts && accounts.length > 0;
 
   // Inverted card/button/separator styles
-  // Inside the blob, colors flip: dark theme blob is light, so borders should be dark.
   const invertedBorder = isDark ? 'rgba(0,0,0,0.25)' : 'rgba(255,255,255,0.35)';
   const invertedBorderSubtle = isDark ? 'rgba(0,0,0,0.15)' : 'rgba(255,255,255,0.25)';
-  // Cards must be solid-filled — inverted uses blob fill color (tc.text.primary),
-  // normal uses canvas so the card is opaque black/white matching the theme.
   const invertedCardStyle = inverted
     ? { backgroundColor: tc.text.primary, borderColor: invertedBorder }
     : { backgroundColor: tc.background.canvas };
   const invertedSepStyle = inverted
     ? { backgroundColor: invertedBorderSubtle }
     : undefined;
-  // Button icon color: inverted uses text color (on canvas bg button), normal uses canvas (on primary button)
   const btnIconColor = inverted ? tc.text.primary : tc.background.canvas;
 
-  // ── Branding block ──────────────────────────────────────────────────────
-  // Ghost logo: PNG assets, 25% smaller than loading screen (225px).
-  // Normal layer: dark mode → white ghost, light mode → black ghost
-  // Inverted layer (on blob): dark mode → black ghost, light mode → white ghost
-  const GHOST_SIZE = 225;
+  // Ghost logo
+  const GHOST_SIZE = isWide ? 280 : 225;
   const ghostSource = inverted
     ? (isDark ? ghostBlack : ghostWhite)
     : (isDark ? ghostWhite : ghostBlack);
+
+  // ── Branding block (ghost + tagline) ────────────────────────────────────
   const brandingBlock = (
-    <VStack gap="none" style={{ alignItems: 'center', marginBottom: hasAccounts ? 8 : 16, width: '100%' }}>
+    <VStack gap="none" style={{
+      alignItems: 'center',
+      justifyContent: isWide ? 'center' : undefined,
+      marginBottom: isWide ? 0 : (hasAccounts ? 8 : 16),
+      width: '100%',
+      flex: isWide ? 1 : undefined,
+    }}>
       <Image
         source={ghostSource}
         style={{ width: GHOST_SIZE, height: GHOST_SIZE }}
         resizeMode="contain"
       />
       {/* Slot-machine tagline rotation */}
-      <View style={{ height: taglineLineHeight, overflow: 'hidden' }}>
+      <View style={{ height: taglineLineHeight, overflow: 'hidden', maxWidth: 360 }}>
         <Animated.View style={{ transform: [{ translateY: taglineSlideAnim }] }}>
           <Text
             size="md"
@@ -166,296 +173,316 @@ function AuthContent({ inverted, onCreateWallet, onImportWallet, taglineIndex, t
     </VStack>
   );
 
+  // ── Controls block (cards/accounts) ─────────────────────────────────────
+  const controlsBlock = (
+    <VStack gap="xl" style={{
+      alignItems: 'center',
+      width: '100%',
+      flex: isWide ? 1 : undefined,
+      maxWidth: isWide ? 420 : undefined,
+    }}>
+      {hasAccounts ? (
+        /* ── Compact layout: accounts + small action buttons ──────────── */
+        <>
+          {/* Stored accounts list */}
+          <Card
+            variant="outlined"
+            padding="lg"
+            radius="md"
+            style={{ width: '100%', ...invertedCardStyle }}
+          >
+            <VStack gap="md">
+              <VStack gap="xs">
+                <Text size="lg" weight="semibold" style={{ color: textColor }}>
+                  Your Accounts
+                </Text>
+                <Text size="sm" style={{ color: mutedColor }}>
+                  Tap an account to sign back in.
+                </Text>
+              </VStack>
+              {accounts.map((account) => (
+                <Pressable
+                  key={account.did}
+                  onPress={() => onAccountPress?.(account)}
+                  style={({ pressed }) => ({
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    padding: 12,
+                    borderRadius: 8,
+                    backgroundColor: inverted
+                      ? tc.text.primary
+                      : tc.background.canvas,
+                    borderWidth: 1,
+                    borderColor: inverted
+                      ? (isDark ? 'rgba(0,0,0,0.15)' : 'rgba(255,255,255,0.2)')
+                      : tc.border.subtle,
+                    opacity: pressed && !inverted ? 0.8 : 1,
+                  })}
+                >
+                  <View style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: 20,
+                    backgroundColor: inverted ? (isDark ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.3)') : (tc.accent?.primary ?? '#5865F2'),
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    overflow: 'hidden',
+                    marginRight: 12,
+                  }}>
+                    {!inverted && account.avatar ? (
+                      <Image source={{ uri: account.avatar }} style={{ width: 40, height: 40 }} />
+                    ) : (
+                      <Text size="sm" weight="bold" style={{ color: inverted ? textColor : '#fff' }}>
+                        {(account.displayName ?? '?').charAt(0).toUpperCase()}
+                      </Text>
+                    )}
+                  </View>
+                  <View style={{ flex: 1 }}>
+                    <Text size="md" weight="semibold" style={{ color: textColor }}>
+                      {account.displayName}
+                    </Text>
+                    <Text size="xs" style={{ color: mutedColor }}>
+                      {account.did.slice(0, 24)}...
+                    </Text>
+                  </View>
+                  {account.pin && (
+                    <LockIcon size={16} color={mutedColor} />
+                  )}
+                </Pressable>
+              ))}
+            </VStack>
+          </Card>
+
+          {/* Compact action row: Create / Import as small buttons */}
+          <HStack gap="md" style={{ width: '100%', alignItems: 'center' }}>
+            <View style={{ flex: 1 }}>
+              <Separator spacing="none" style={invertedSepStyle} />
+            </View>
+            <Text size="sm" style={{ color: mutedColor }}>
+              or
+            </Text>
+            <View style={{ flex: 1 }}>
+              <Separator spacing="none" style={invertedSepStyle} />
+            </View>
+          </HStack>
+          <HStack gap="sm" style={{ width: '100%' }}>
+            {inverted ? (
+              <>
+                <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 36, borderRadius: 8, backgroundColor: tc.background.canvas, borderWidth: 1, borderColor: tc.background.canvas }}>
+                  <WalletIcon size={16} color={tc.text.primary} />
+                  <RNText style={{ fontSize: 14, fontWeight: '500', color: tc.text.primary }}>Create New</RNText>
+                </View>
+                <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 36, borderRadius: 8, backgroundColor: tc.background.canvas, borderWidth: 1, borderColor: tc.background.canvas }}>
+                  <DownloadIcon size={16} color={tc.text.primary} />
+                  <RNText style={{ fontSize: 14, fontWeight: '500', color: tc.text.primary }}>Import</RNText>
+                </View>
+              </>
+            ) : (
+              <>
+                <Button
+                  variant="secondary"
+                  size="md"
+                  shape="rounded"
+                  style={{ flex: 1 }}
+                  onPress={onCreateWallet}
+                  iconLeft={<WalletIcon size={16} color={tc.text.primary} />}
+                >
+                  Create New
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="md"
+                  shape="rounded"
+                  style={{ flex: 1 }}
+                  onPress={onImportWallet}
+                  iconLeft={<DownloadIcon size={16} color={tc.text.primary} />}
+                >
+                  Import
+                </Button>
+              </>
+            )}
+          </HStack>
+
+          <Text
+            size="xs"
+            align="center"
+            style={{ color: mutedColor }}
+          >
+            Your private keys never leave your device
+          </Text>
+        </>
+      ) : (
+        /* ── Original layout: full Create + Import cards ──────────────── */
+        <>
+          {/* Create Account */}
+          <Card
+            variant="outlined"
+            padding="lg"
+            radius="md"
+            style={{ width: '100%', ...invertedCardStyle }}
+          >
+            <VStack gap="md">
+              <VStack gap="xs">
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Text
+                    size="lg"
+                    weight="semibold"
+                    style={{ color: textColor }}
+                  >
+                    Create Account
+                  </Text>
+                  {!inverted && (
+                    <HelpIndicator
+                      id="auth-create"
+                      title="Creating an Account"
+                      priority={85}
+                      size={14}
+                    >
+                      <HelpText>
+                        Generate a new account with a unique key pair. This becomes your identity on the Umbra network.
+                      </HelpText>
+                      <HelpHighlight icon={<KeyIcon size={22} color="#6366f1" />}>
+                        You'll receive a 12-word recovery phrase. Write it down and keep it safe — it's the only way to restore your identity.
+                      </HelpHighlight>
+                      <HelpListItem>Your keys never leave your device</HelpListItem>
+                      <HelpListItem>No email or phone number required</HelpListItem>
+                      <HelpListItem>Fully self-sovereign identity</HelpListItem>
+                    </HelpIndicator>
+                  )}
+                </View>
+                <Text
+                  size="sm"
+                  style={{ color: mutedColor }}
+                >
+                  Generate a new account to get started. Your keys, your messages.
+                </Text>
+              </VStack>
+              {inverted ? (
+                <View style={{ width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, height: 40, borderRadius: 8, backgroundColor: tc.background.canvas, borderWidth: 1, borderColor: tc.background.canvas }}>
+                  <WalletIcon size={18} color={tc.text.primary} />
+                  <RNText style={{ fontSize: 16, fontWeight: '500', color: tc.text.primary }}>Create New Account</RNText>
+                </View>
+              ) : (
+                <Button
+                  variant="primary"
+                  size="lg"
+                  shape="rounded"
+                  fullWidth
+                  onPress={onCreateWallet}
+                  iconLeft={<WalletIcon size={18} color={btnIconColor} />}
+                >
+                  Create New Account
+                </Button>
+              )}
+            </VStack>
+          </Card>
+
+          {/* Divider */}
+          <HStack gap="md" style={{ width: '100%', alignItems: 'center' }}>
+            <View style={{ flex: 1 }}>
+              <Separator spacing="none" style={invertedSepStyle} />
+            </View>
+            <Text
+              size="sm"
+              style={{ color: mutedColor }}
+            >
+              or
+            </Text>
+            <View style={{ flex: 1 }}>
+              <Separator spacing="none" style={invertedSepStyle} />
+            </View>
+          </HStack>
+
+          {/* Import Account */}
+          <Card
+            variant="outlined"
+            padding="lg"
+            radius="md"
+            style={{ width: '100%', ...invertedCardStyle }}
+          >
+            <VStack gap="md">
+              <VStack gap="xs">
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                  <Text
+                    size="lg"
+                    weight="semibold"
+                    style={{ color: textColor }}
+                  >
+                    Import Account
+                  </Text>
+                  {!inverted && (
+                    <HelpIndicator
+                      id="auth-import"
+                      title="Importing an Account"
+                      priority={90}
+                      size={14}
+                    >
+                      <HelpText>
+                        Restore your identity using a previously saved recovery phrase (12 or 24 words).
+                      </HelpText>
+                      <HelpHighlight icon={<DownloadIcon size={22} color="#6366f1" />}>
+                        This recovers your exact DID, keys, and identity — your friends will recognize you automatically.
+                      </HelpHighlight>
+                      <HelpListItem>Use the same recovery phrase from account creation</HelpListItem>
+                      <HelpListItem>Works across devices and platforms</HelpListItem>
+                    </HelpIndicator>
+                  )}
+                </View>
+                <Text
+                  size="sm"
+                  style={{ color: mutedColor }}
+                >
+                  Already have an account? Import your existing account to continue.
+                </Text>
+              </VStack>
+              {inverted ? (
+                <View style={{ width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, height: 40, borderRadius: 8, backgroundColor: tc.background.canvas, borderWidth: 1, borderColor: tc.background.canvas }}>
+                  <DownloadIcon size={18} color={tc.text.primary} />
+                  <RNText style={{ fontSize: 16, fontWeight: '500', color: tc.text.primary }}>Import Existing Account</RNText>
+                </View>
+              ) : (
+                <Button
+                  variant="primary"
+                  size="lg"
+                  shape="rounded"
+                  fullWidth
+                  onPress={onImportWallet}
+                  iconLeft={<DownloadIcon size={18} color={btnIconColor} />}
+                >
+                  Import Existing Account
+                </Button>
+              )}
+            </VStack>
+          </Card>
+
+          {/* Footer */}
+          <Text
+            size="xs"
+            align="center"
+            style={{ color: mutedColor, marginTop: 8 }}
+          >
+            Your private keys never leave your device
+          </Text>
+        </>
+      )}
+    </VStack>
+  );
+
+  // ── Layout: side-by-side on wide screens, stacked on narrow ─────────────
+  if (isWide) {
+    return (
+      <View style={{ width: '100%', flexDirection: 'row', alignItems: 'center', gap: 48 }}>
+        {brandingBlock}
+        {controlsBlock}
+      </View>
+    );
+  }
+
   return (
     <View style={{ width: '100%' }}>
       <VStack gap="xl" style={{ alignItems: 'center' }}>
         {brandingBlock}
-
-        {hasAccounts ? (
-          /* ── Compact layout: accounts + small action buttons ──────────── */
-          <>
-            {/* Stored accounts list */}
-            <Card
-              variant="outlined"
-              padding="lg"
-              radius="md"
-              style={{ width: '100%', ...invertedCardStyle }}
-            >
-              <VStack gap="md">
-                <VStack gap="xs">
-                  <Text size="lg" weight="semibold" style={{ color: textColor }}>
-                    Your Accounts
-                  </Text>
-                  <Text size="sm" style={{ color: mutedColor }}>
-                    Tap an account to sign back in.
-                  </Text>
-                </VStack>
-                {accounts.map((account) => (
-                  <Pressable
-                    key={account.did}
-                    onPress={() => onAccountPress?.(account)}
-                    style={({ pressed }) => ({
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      padding: 12,
-                      borderRadius: 8,
-                      backgroundColor: inverted
-                        ? tc.text.primary
-                        : tc.background.canvas,
-                      borderWidth: 1,
-                      borderColor: inverted
-                        ? (isDark ? 'rgba(0,0,0,0.15)' : 'rgba(255,255,255,0.2)')
-                        : tc.border.subtle,
-                      opacity: pressed && !inverted ? 0.8 : 1,
-                    })}
-                  >
-                    <View style={{
-                      width: 40,
-                      height: 40,
-                      borderRadius: 20,
-                      backgroundColor: inverted ? (isDark ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.3)') : (tc.accent?.primary ?? '#5865F2'),
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      overflow: 'hidden',
-                      marginRight: 12,
-                    }}>
-                      {!inverted && account.avatar ? (
-                        <Image source={{ uri: account.avatar }} style={{ width: 40, height: 40 }} />
-                      ) : (
-                        <Text size="sm" weight="bold" style={{ color: inverted ? textColor : '#fff' }}>
-                          {(account.displayName ?? '?').charAt(0).toUpperCase()}
-                        </Text>
-                      )}
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <Text size="md" weight="semibold" style={{ color: textColor }}>
-                        {account.displayName}
-                      </Text>
-                      <Text size="xs" style={{ color: mutedColor }}>
-                        {account.did.slice(0, 24)}...
-                      </Text>
-                    </View>
-                    {account.pin && (
-                      <LockIcon size={16} color={mutedColor} />
-                    )}
-                  </Pressable>
-                ))}
-              </VStack>
-            </Card>
-
-            {/* Compact action row: Create / Import as small buttons */}
-            <HStack gap="md" style={{ width: '100%', alignItems: 'center' }}>
-              <View style={{ flex: 1 }}>
-                <Separator spacing="none" style={invertedSepStyle} />
-              </View>
-              <Text size="sm" style={{ color: mutedColor }}>
-                or
-              </Text>
-              <View style={{ flex: 1 }}>
-                <Separator spacing="none" style={invertedSepStyle} />
-              </View>
-            </HStack>
-            <HStack gap="sm" style={{ width: '100%' }}>
-              {inverted ? (
-                /* Inverted layer: plain Views matching Button shape so we control all colors */
-                <>
-                  <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 36, borderRadius: 8, backgroundColor: tc.background.canvas, borderWidth: 1, borderColor: tc.background.canvas }}>
-                    <WalletIcon size={16} color={tc.text.primary} />
-                    <RNText style={{ fontSize: 14, fontWeight: '500', color: tc.text.primary }}>Create New</RNText>
-                  </View>
-                  <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 36, borderRadius: 8, backgroundColor: tc.background.canvas, borderWidth: 1, borderColor: tc.background.canvas }}>
-                    <DownloadIcon size={16} color={tc.text.primary} />
-                    <RNText style={{ fontSize: 14, fontWeight: '500', color: tc.text.primary }}>Import</RNText>
-                  </View>
-                </>
-              ) : (
-                <>
-                  <Button
-                    variant="secondary"
-                    size="md"
-                    shape="rounded"
-                    style={{ flex: 1 }}
-                    onPress={onCreateWallet}
-                    iconLeft={<WalletIcon size={16} color={tc.text.primary} />}
-                  >
-                    Create New
-                  </Button>
-                  <Button
-                    variant="secondary"
-                    size="md"
-                    shape="rounded"
-                    style={{ flex: 1 }}
-                    onPress={onImportWallet}
-                    iconLeft={<DownloadIcon size={16} color={tc.text.primary} />}
-                  >
-                    Import
-                  </Button>
-                </>
-              )}
-            </HStack>
-
-            <Text
-              size="xs"
-              align="center"
-              style={{ color: mutedColor }}
-            >
-              Your private keys never leave your device
-            </Text>
-          </>
-        ) : (
-          /* ── Original layout: full Create + Import cards ──────────────── */
-          <>
-            {/* Create Account */}
-            <Card
-              variant="outlined"
-              padding="lg"
-              radius="md"
-              style={{ width: '100%', ...invertedCardStyle }}
-            >
-              <VStack gap="md">
-                <VStack gap="xs">
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <Text
-                      size="lg"
-                      weight="semibold"
-                      style={{ color: textColor }}
-                    >
-                      Create Account
-                    </Text>
-                    {!inverted && (
-                      <HelpIndicator
-                        id="auth-create"
-                        title="Creating an Account"
-                        priority={85}
-                        size={14}
-                      >
-                        <HelpText>
-                          Generate a new account with a unique key pair. This becomes your identity on the Umbra network.
-                        </HelpText>
-                        <HelpHighlight icon={<KeyIcon size={22} color="#6366f1" />}>
-                          You'll receive a 12-word recovery phrase. Write it down and keep it safe — it's the only way to restore your identity.
-                        </HelpHighlight>
-                        <HelpListItem>Your keys never leave your device</HelpListItem>
-                        <HelpListItem>No email or phone number required</HelpListItem>
-                        <HelpListItem>Fully self-sovereign identity</HelpListItem>
-                      </HelpIndicator>
-                    )}
-                  </View>
-                  <Text
-                    size="sm"
-                    style={{ color: mutedColor }}
-                  >
-                    Generate a new account to get started. Your keys, your messages.
-                  </Text>
-                </VStack>
-                {inverted ? (
-                  <View style={{ width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, height: 40, borderRadius: 8, backgroundColor: tc.background.canvas, borderWidth: 1, borderColor: tc.background.canvas }}>
-                    <WalletIcon size={18} color={tc.text.primary} />
-                    <RNText style={{ fontSize: 16, fontWeight: '500', color: tc.text.primary }}>Create New Account</RNText>
-                  </View>
-                ) : (
-                  <Button
-                    variant="primary"
-                    size="lg"
-                    shape="rounded"
-                    fullWidth
-                    onPress={onCreateWallet}
-                    iconLeft={<WalletIcon size={18} color={btnIconColor} />}
-                  >
-                    Create New Account
-                  </Button>
-                )}
-              </VStack>
-            </Card>
-
-            {/* Divider */}
-            <HStack gap="md" style={{ width: '100%', alignItems: 'center' }}>
-              <View style={{ flex: 1 }}>
-                <Separator spacing="none" style={invertedSepStyle} />
-              </View>
-              <Text
-                size="sm"
-                style={{ color: mutedColor }}
-              >
-                or
-              </Text>
-              <View style={{ flex: 1 }}>
-                <Separator spacing="none" style={invertedSepStyle} />
-              </View>
-            </HStack>
-
-            {/* Import Account */}
-            <Card
-              variant="outlined"
-              padding="lg"
-              radius="md"
-              style={{ width: '100%', ...invertedCardStyle }}
-            >
-              <VStack gap="md">
-                <VStack gap="xs">
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                    <Text
-                      size="lg"
-                      weight="semibold"
-                      style={{ color: textColor }}
-                    >
-                      Import Account
-                    </Text>
-                    {!inverted && (
-                      <HelpIndicator
-                        id="auth-import"
-                        title="Importing an Account"
-                        priority={90}
-                        size={14}
-                      >
-                        <HelpText>
-                          Restore your identity using a previously saved recovery phrase (12 or 24 words).
-                        </HelpText>
-                        <HelpHighlight icon={<DownloadIcon size={22} color="#6366f1" />}>
-                          This recovers your exact DID, keys, and identity — your friends will recognize you automatically.
-                        </HelpHighlight>
-                        <HelpListItem>Use the same recovery phrase from account creation</HelpListItem>
-                        <HelpListItem>Works across devices and platforms</HelpListItem>
-                      </HelpIndicator>
-                    )}
-                  </View>
-                  <Text
-                    size="sm"
-                    style={{ color: mutedColor }}
-                  >
-                    Already have an account? Import your existing account to continue.
-                  </Text>
-                </VStack>
-                {inverted ? (
-                  <View style={{ width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, height: 40, borderRadius: 8, backgroundColor: tc.background.canvas, borderWidth: 1, borderColor: tc.background.canvas }}>
-                    <DownloadIcon size={18} color={tc.text.primary} />
-                    <RNText style={{ fontSize: 16, fontWeight: '500', color: tc.text.primary }}>Import Existing Account</RNText>
-                  </View>
-                ) : (
-                  <Button
-                    variant="primary"
-                    size="lg"
-                    shape="rounded"
-                    fullWidth
-                    onPress={onImportWallet}
-                    iconLeft={<DownloadIcon size={18} color={btnIconColor} />}
-                  >
-                    Import Existing Account
-                  </Button>
-                )}
-              </VStack>
-            </Card>
-
-            {/* Footer */}
-            <Text
-              size="xs"
-              align="center"
-              style={{ color: mutedColor, marginTop: 8 }}
-            >
-              Your private keys never leave your device
-            </Text>
-          </>
-        )}
+        {controlsBlock}
       </VStack>
     </View>
   );
@@ -465,11 +492,6 @@ function AuthContent({ inverted, onCreateWallet, onImportWallet, taglineIndex, t
 // Native inverted layer — uses MaskedView + SVG blob as mask
 // ---------------------------------------------------------------------------
 
-/**
- * Native-only inverted layer — uses MaskedView to clip content to the blob shape.
- * MaskedView uses the alpha channel of the mask element: black (opaque) regions
- * reveal the children, transparent regions hide them.
- */
 function NativeInvertedLayer({
   pathData,
   children,
@@ -517,12 +539,18 @@ function NativeInvertedLayer({
   );
 }
 
+// ---------------------------------------------------------------------------
+// AuthScreen (default export)
+// ---------------------------------------------------------------------------
+
 export default function AuthScreen() {
-  const { pathData } = useBlobPath(); // single source of truth for blob shape
-  const { height: windowHeight } = useWindowDimensions();
+  const { pathData } = useBlobPath();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const { theme, mode } = useTheme();
   const isDark = mode === 'dark';
   const tc = theme.colors;
+
+  const isWide = windowWidth >= WIDE_BREAKPOINT;
 
   // Multi-account: stored accounts for re-login
   const { accounts, loginFromStoredAccount } = useAuth();
@@ -530,6 +558,29 @@ export default function AuthScreen() {
   // Flow visibility state
   const [showCreate, setShowCreate] = useState(false);
   const [showImport, setShowImport] = useState(false);
+
+  // Mount entrance animation — fade-in + slide-up for the content block
+  const contentEntranceOpacity = useRef(new Animated.Value(0)).current;
+  const contentEntranceTranslateY = useRef(new Animated.Value(24)).current;
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      Animated.parallel([
+        Animated.timing(contentEntranceOpacity, {
+          toValue: 1,
+          duration: 500,
+          useNativeDriver: true,
+        }),
+        Animated.timing(contentEntranceTranslateY, {
+          toValue: 0,
+          duration: 500,
+          easing: Easing.bezier(0, 0, 0.2, 1) as any,
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }, 200);
+    return () => clearTimeout(timer);
+  }, []);
 
   // PIN verification for stored accounts with PIN protection
   const [pinDialogAccount, setPinDialogAccount] = useState<StoredAccount | null>(null);
@@ -559,27 +610,24 @@ export default function AuthScreen() {
     setPinDialogAccount(null);
   }, []);
 
-  // Tagline slot-machine rotation — shared across both AuthContent layers
-  const taglineLineHeight = 24; // matches Text size="md" line height
+  // Tagline slot-machine rotation
+  const taglineLineHeight = 24;
   const [taglineIndex, setTaglineIndex] = useState(() => Math.floor(Math.random() * TAGLINES.length));
   const taglineSlideAnim = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
     const interval = setInterval(() => {
-      // Slide current tagline up and out
       Animated.timing(taglineSlideAnim, {
         toValue: -taglineLineHeight,
         duration: TAGLINE_ANIM_DURATION,
         useNativeDriver: true,
       }).start(() => {
-        // Swap to next tagline, position it below
         setTaglineIndex((prev) => {
           let next;
           do { next = Math.floor(Math.random() * TAGLINES.length); } while (next === prev && TAGLINES.length > 1);
           return next;
         });
         taglineSlideAnim.setValue(taglineLineHeight);
-        // Slide new tagline up into view
         Animated.timing(taglineSlideAnim, {
           toValue: 0,
           duration: TAGLINE_ANIM_DURATION,
@@ -599,30 +647,27 @@ export default function AuthScreen() {
       ? ({ clipPath: `path('${pathData}')` } as any)
       : undefined;
 
-  // -------------------------------------------------------------------------
-  // Single-ScrollView architecture: all three layers live inside ONE
-  // ScrollView so they scroll & bounce together on iOS.
-  //
-  //   ScrollView
-  //     └─ contentWrapper (minHeight: screen, relative)
-  //         ├─ Layer 1: AnimatedBlobs (absolute fill)
-  //         ├─ Layer 2: AuthContent (normal, centered)
-  //         └─ Layer 3: Inverted AuthContent (absolute fill, clipped to blob)
-  // -------------------------------------------------------------------------
+  // Max width for the content container — wider for side-by-side layout
+  const contentMaxWidth = isWide ? 900 : 420;
 
-  // Inverted AuthContent props (no onAccountPress — pointerEvents="none" on wrapper)
+  // Shared props for AuthContent
+  const sharedContentProps = {
+    taglineIndex,
+    taglineSlideAnim,
+    taglineLineHeight,
+    isDark,
+    tc,
+    accounts,
+    isWide,
+  };
+
+  // Inverted AuthContent (no onAccountPress — pointerEvents="none" on wrapper)
   const invertedContentElement = (
     <AuthContent
       inverted
       onCreateWallet={handleCreateWallet}
       onImportWallet={handleImportWallet}
-      taglineIndex={taglineIndex}
-      taglineSlideAnim={taglineSlideAnim}
-      taglineLineHeight={taglineLineHeight}
-      isDark={isDark}
-      tc={tc}
-      accounts={accounts}
-
+      {...sharedContentProps}
     />
   );
 
@@ -637,56 +682,50 @@ export default function AuthScreen() {
         alwaysBounceVertical={true}
       >
         {/* All layers in one container — scrolls & bounces as a unit */}
-        <View style={{ minHeight: windowHeight, justifyContent: 'center', alignItems: 'center', padding: 24 }}>
-          {/* Layer 1: Blob fill — color inverts with theme */}
+        <View style={{ minHeight: windowHeight, justifyContent: 'center', alignItems: 'center', padding: isWide ? 48 : 24 }}>
+          {/* Layer 1: Blob fill */}
           <AnimatedBlobs pathData={pathData} color={tc.text.primary} />
 
-          {/* Layers 2 & 3 share ONE relative container so the inverted
-              overlay is pixel-identical to the normal content — no separate
-              flex centering that could round differently. */}
-          <View style={{ width: '100%', maxWidth: 420, position: 'relative' }}>
-            {/* Layer 2: Normal content (themed text on canvas bg) */}
-            <AuthContent
-              onCreateWallet={handleCreateWallet}
-              onImportWallet={handleImportWallet}
-              taglineIndex={taglineIndex}
-              taglineSlideAnim={taglineSlideAnim}
-              taglineLineHeight={taglineLineHeight}
-              isDark={isDark}
-              tc={tc}
-              accounts={accounts}
-              onAccountPress={handleAccountPress}
-        
-            />
+          {/* Animated entrance wrapper */}
+          <Animated.View style={{
+            width: '100%',
+            alignItems: 'center',
+            opacity: contentEntranceOpacity,
+            transform: [{ translateY: contentEntranceTranslateY }],
+          }}>
+            <View style={{ width: '100%', maxWidth: contentMaxWidth, position: 'relative' }}>
+              {/* Layer 2: Normal content */}
+              <AuthContent
+                onCreateWallet={handleCreateWallet}
+                onImportWallet={handleImportWallet}
+                onAccountPress={handleAccountPress}
+                {...sharedContentProps}
+              />
+            </View>
+          </Animated.View>
 
-            {/* Layer 3: Inverted content — absolute overlay on the SAME
-                container as Layer 2, then the full-screen clip-path wrapper
-                is applied outside.  On native, MaskedView wraps the whole
-                thing; on web, we put the absolute overlay inside a full-screen
-                clip-path element but position it at the same scroll-relative
-                location. */}
-          </View>
-
-          {/* Full-screen clip-path wrapper — clips to blob shape */}
+          {/* Layer 3: Inverted content clipped to blob shape */}
           {isNative ? (
             <NativeInvertedLayer pathData={pathData}>
-              <View
+              <Animated.View
                 style={{
                   position: 'absolute',
                   top: 0, left: 0, right: 0, bottom: 0,
                   justifyContent: 'center',
                   alignItems: 'center',
-                  padding: 24,
+                  padding: isWide ? 48 : 24,
+                  opacity: contentEntranceOpacity,
+                  transform: [{ translateY: contentEntranceTranslateY }],
                 }}
                 pointerEvents="none"
               >
-                <View style={{ width: '100%', maxWidth: 420 }}>
+                <View style={{ width: '100%', maxWidth: contentMaxWidth }}>
                   {invertedContentElement}
                 </View>
-              </View>
+              </Animated.View>
             </NativeInvertedLayer>
           ) : (
-            <View
+            <Animated.View
               style={[
                 {
                   position: 'absolute',
@@ -694,21 +733,23 @@ export default function AuthScreen() {
                   display: 'flex',
                   justifyContent: 'center',
                   alignItems: 'center',
-                  padding: 24,
-                },
+                  padding: isWide ? 48 : 24,
+                  opacity: contentEntranceOpacity,
+                  transform: [{ translateY: contentEntranceTranslateY }],
+                } as any,
                 clipStyle,
               ]}
               pointerEvents="none"
             >
-              <View style={{ width: '100%', maxWidth: 420 }}>
+              <View style={{ width: '100%', maxWidth: contentMaxWidth }}>
                 {invertedContentElement}
               </View>
-            </View>
+            </Animated.View>
           )}
         </View>
       </ScrollView>
 
-      {/* Wallet flow modals — outside scroll so they overlay */}
+      {/* Wallet flow modals */}
       <CreateWalletFlow
         open={showCreate}
         onClose={() => setShowCreate(false)}
@@ -718,7 +759,7 @@ export default function AuthScreen() {
         onClose={() => setShowImport(false)}
       />
 
-      {/* Full-screen PIN verification overlay for stored accounts */}
+      {/* Full-screen PIN verification overlay */}
       {!!pinDialogAccount && (
         <PinLockScreen
           onVerify={handlePinVerify}

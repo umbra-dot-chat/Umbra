@@ -9,6 +9,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Platform as RNPlatform } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
+import { isTauri } from '@umbra/wasm';
 
 import * as api from './api';
 import type {
@@ -139,8 +140,37 @@ export function useLinkedAccounts(did: string | null) {
         // Use profile import OAuth with DID — relay will auto-link the account
         const { redirectUrl, state } = await api.startProfileImport(platform, did);
 
-        if (RNPlatform.OS === 'web') {
-          // Open OAuth in popup
+        if (RNPlatform.OS === 'web' && isTauri()) {
+          // Tauri: open in system browser, poll relay for result
+          const { open } = await import('@tauri-apps/plugin-shell');
+          await open(redirectUrl);
+
+          // Poll relay for the OAuth result
+          const relayUrl = api.getRelayUrl();
+          const pollUrl = `${relayUrl}/profile/import/result/${state}`;
+          let attempts = 0;
+          const maxAttempts = 60;
+          while (attempts < maxAttempts) {
+            attempts++;
+            try {
+              const res = await fetch(pollUrl);
+              if (res.ok) {
+                const result = await res.json();
+                if (result.success && result.profile) {
+                  await fetchStatus();
+                  setIsLoading(false);
+                  return true;
+                }
+              }
+            } catch {
+              // Network error, keep polling
+            }
+            await new Promise((r) => setTimeout(r, 2000));
+          }
+          setIsLoading(false);
+          return false;
+        } else if (RNPlatform.OS === 'web') {
+          // Web: Open OAuth in popup
           popupRef.current = openOAuthPopup(redirectUrl);
 
           if (!popupRef.current) {

@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import { Animated, Easing, Platform, View, useWindowDimensions } from 'react-native';
+import { Animated, Easing, PanResponder, Platform, View, useWindowDimensions } from 'react-native';
 import { Slot, usePathname, useRouter } from 'expo-router';
 import { HStack, useTheme, CallPipWidget, CommunityCreateDialog } from '@coexist/wisp-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -86,10 +86,126 @@ function MainLayoutInner() {
   const { activeChannelId: communityActiveChannelId } = useCommunityContext();
   const insets = Platform.OS !== 'web' ? useSafeAreaInsets() : { top: 0, bottom: 0, left: 0, right: 0 };
 
-  // Mobile sidebar ↔ content slide animation
-  const sidebarTranslateX = useRef(new Animated.Value(0)).current;
-  const contentTranslateX = useRef(new Animated.Value(screenWidth)).current;
+  // Mobile sidebar ↔ content swipe gesture
+  // swipeProgress: 0 = sidebar visible, 1 = content visible
+  const swipeProgress = useRef(new Animated.Value(0)).current;
+  const swipeProgressValue = useRef(0); // JS-side mirror for gesture math
   const prevMobileShowContentRef = useRef<boolean | null>(null);
+  const isSwipingRef = useRef(false);
+
+  // Edge swipe detection: how far from the left edge a swipe can start (px)
+  const EDGE_SWIPE_WIDTH = 25;
+  // Velocity threshold (px/ms) — a fast flick overrides position threshold
+  const VELOCITY_THRESHOLD = 0.4;
+  // Position threshold — snap if past this fraction
+  const POSITION_THRESHOLD = 0.4;
+
+  // Track swipeProgress JS value via listener
+  useEffect(() => {
+    const id = swipeProgress.addListener(({ value }) => {
+      swipeProgressValue.current = value;
+    });
+    return () => swipeProgress.removeListener(id);
+  }, [swipeProgress]);
+
+  // Derive translateX from swipeProgress (clamped to prevent over-scrolling)
+  const sidebarTranslateX = swipeProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, -screenWidth],
+    extrapolate: 'clamp',
+  });
+  const contentTranslateX = swipeProgress.interpolate({
+    inputRange: [0, 1],
+    outputRange: [screenWidth, 0],
+    extrapolate: 'clamp',
+  });
+
+  // Animate to a target (0 or 1) with spring-like timing
+  const animateToTarget = useCallback((target: number) => {
+    Animated.timing(swipeProgress, {
+      toValue: target,
+      duration: 250,
+      easing: Easing.bezier(0, 0, 0.2, 1),
+      useNativeDriver: true,
+    }).start();
+  }, [swipeProgress]);
+
+  // Refs for values that change but need to be read inside PanResponder
+  const isMobileRef = useRef(isMobile);
+  isMobileRef.current = isMobile;
+  const screenWidthRef = useRef(screenWidth);
+  screenWidthRef.current = screenWidth;
+  const touchStartXRef = useRef(0);
+
+  // PanResponder for swipe gestures on the mobile layout
+  const panResponder = useMemo(
+    () => PanResponder.create({
+      onStartShouldSetPanResponder: () => false,
+      onStartShouldSetPanResponderCapture: (evt) => {
+        // Record the initial touch X for edge detection
+        touchStartXRef.current = evt.nativeEvent.pageX;
+        return false; // don't claim yet — wait for movement
+      },
+      onMoveShouldSetPanResponder: (_evt, gestureState) => {
+        if (!isMobileRef.current) return false;
+        const { dx, dy } = gestureState;
+        const absDx = Math.abs(dx);
+        const absDy = Math.abs(dy);
+
+        // Must be a horizontal swipe (not vertical scroll)
+        if (absDx < 8 || absDy > absDx) return false;
+
+        const currentProgress = swipeProgressValue.current;
+
+        if (currentProgress > 0.5) {
+          // Content is showing — only allow right swipe from left edge to reveal sidebar
+          return dx > 0 && touchStartXRef.current < EDGE_SWIPE_WIDTH;
+        } else {
+          // Sidebar is showing — allow left swipe anywhere to show content
+          return dx < 0;
+        }
+      },
+      onPanResponderGrant: () => {
+        isSwipingRef.current = true;
+        // Flatten any running animation so offset is correct
+        swipeProgress.setOffset(swipeProgressValue.current);
+        swipeProgress.setValue(0);
+      },
+      onPanResponderMove: (_evt, gestureState) => {
+        // Convert dx to progress delta: negative dx = moving toward content (progress increases)
+        const progressDelta = -gestureState.dx / screenWidthRef.current;
+        swipeProgress.setValue(progressDelta);
+      },
+      onPanResponderRelease: (_evt, gestureState) => {
+        isSwipingRef.current = false;
+        // Flatten offset into value
+        swipeProgress.flattenOffset();
+        const currentProgress = swipeProgressValue.current;
+        const velocity = -gestureState.vx; // positive = toward content
+
+        let target: number;
+        if (Math.abs(velocity) > VELOCITY_THRESHOLD) {
+          // Fast flick — follow direction
+          target = velocity > 0 ? 1 : 0;
+        } else {
+          // Slow drag — snap based on position
+          target = currentProgress > POSITION_THRESHOLD ? 1 : 0;
+        }
+
+        // Clamp
+        target = Math.max(0, Math.min(1, target));
+        animateToTarget(target);
+      },
+      onPanResponderTerminate: () => {
+        isSwipingRef.current = false;
+        swipeProgress.flattenOffset();
+        // Snap to nearest
+        const target = swipeProgressValue.current > 0.5 ? 1 : 0;
+        animateToTarget(target);
+      },
+    }),
+    [swipeProgress, animateToTarget],
+  );
 
   // Service + data hooks
   const { service, isReady } = useUmbra();
@@ -448,56 +564,38 @@ function MainLayoutInner() {
     (activeCommunityId && communityActiveChannelId)        // Community channel selected
   );
 
-  // Drive sidebar ↔ content slide animation on mobile
+  // Drive sidebar ↔ content animation on mobile when state changes programmatically.
+  // We track a "navigation key" that changes whenever the user selects a new destination,
+  // so even if mobileShowContent stays true (switching chats), we re-animate to content.
+  const mobileNavKey = `${activeId}|${activeCommunityId}|${communityActiveChannelId}|${isFilesActive}|${isFriendsActive}`;
+  const prevNavKeyRef = useRef(mobileNavKey);
+
   useEffect(() => {
     if (!isMobile) return;
+
+    const target = mobileShowContent ? 1 : 0;
 
     // On first render, snap to position without animation
     if (prevMobileShowContentRef.current === null) {
       prevMobileShowContentRef.current = mobileShowContent;
-      sidebarTranslateX.setValue(mobileShowContent ? -screenWidth : 0);
-      contentTranslateX.setValue(mobileShowContent ? 0 : screenWidth);
+      prevNavKeyRef.current = mobileNavKey;
+      swipeProgress.setValue(target);
       return;
     }
 
-    // No change — skip
-    if (prevMobileShowContentRef.current === mobileShowContent) return;
-    prevMobileShowContentRef.current = mobileShowContent;
+    // Don't override an active swipe gesture
+    if (isSwipingRef.current) return;
 
-    if (mobileShowContent) {
-      // Slide sidebar left, slide content in from right
-      Animated.parallel([
-        Animated.timing(sidebarTranslateX, {
-          toValue: -screenWidth,
-          duration: 250,
-          easing: Easing.bezier(0, 0, 0.2, 1),
-          useNativeDriver: true,
-        }),
-        Animated.timing(contentTranslateX, {
-          toValue: 0,
-          duration: 250,
-          easing: Easing.bezier(0, 0, 0.2, 1),
-          useNativeDriver: true,
-        }),
-      ]).start();
-    } else {
-      // Slide sidebar back in, slide content out to the right
-      Animated.parallel([
-        Animated.timing(sidebarTranslateX, {
-          toValue: 0,
-          duration: 250,
-          easing: Easing.bezier(0, 0, 0.2, 1),
-          useNativeDriver: true,
-        }),
-        Animated.timing(contentTranslateX, {
-          toValue: screenWidth,
-          duration: 250,
-          easing: Easing.bezier(0, 0, 0.2, 1),
-          useNativeDriver: true,
-        }),
-      ]).start();
+    const navChanged = prevNavKeyRef.current !== mobileNavKey;
+    const stateChanged = prevMobileShowContentRef.current !== mobileShowContent;
+    prevMobileShowContentRef.current = mobileShowContent;
+    prevNavKeyRef.current = mobileNavKey;
+
+    // Animate if state changed, or if nav key changed and we're not already at target
+    if (stateChanged || (navChanged && Math.abs(swipeProgressValue.current - target) > 0.01)) {
+      animateToTarget(target);
     }
-  }, [isMobile, mobileShowContent, screenWidth]);
+  }, [isMobile, mobileShowContent, mobileNavKey, animateToTarget]);
 
   // Calculate total unread message count across all conversations
   const totalUnreadMessages = useMemo(() => {
@@ -539,8 +637,8 @@ function MainLayoutInner() {
         />
       )}
       {isMobile ? (
-        /* ─── Mobile: both views always mounted, slide via translateX ─── */
-        <View style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+        /* ─── Mobile: both views always mounted, slide via translateX + swipe gesture ─── */
+        <View {...panResponder.panHandlers} style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
           {/* Sidebar layer */}
           <Animated.View style={{
             position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,

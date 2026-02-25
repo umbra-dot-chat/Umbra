@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import { View, Pressable, ScrollView, Text as RNText, Platform, Image, Linking, Modal, SafeAreaView } from 'react-native';
+import { Animated, Easing, View, Pressable, ScrollView, Text as RNText, Platform, Image, Linking, Modal, SafeAreaView, useWindowDimensions } from 'react-native';
 import type { ViewStyle, TextStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -4079,12 +4079,77 @@ export function SettingsDialog({ open, onClose, onOpenMarketplace, initialSectio
 
   const contentScrollRef = useRef<ScrollView>(null);
 
+  // Settings content crossfade animation
+  const contentOpacity = useRef(new Animated.Value(1)).current;
+  const isFadingRef = useRef(false);
+
+  // Mobile sidebar ↔ content slide animation
+  const { width: settingsScreenWidth } = useWindowDimensions();
+  const mobileSidebarX = useRef(new Animated.Value(0)).current;
+  const mobileContentX = useRef(new Animated.Value(settingsScreenWidth)).current;
+  const prevMobileSidebarRef = useRef(true);
+
+  // Drive mobile sidebar/content slide when mobileShowSidebar changes
+  useEffect(() => {
+    if (!isMobile || !open) return;
+    if (prevMobileSidebarRef.current === mobileShowSidebar) return;
+    prevMobileSidebarRef.current = mobileShowSidebar;
+
+    if (mobileShowSidebar) {
+      // Slide sidebar in from left, content out to right
+      Animated.parallel([
+        Animated.timing(mobileSidebarX, { toValue: 0, duration: 250, easing: Easing.bezier(0, 0, 0.2, 1), useNativeDriver: true }),
+        Animated.timing(mobileContentX, { toValue: settingsScreenWidth, duration: 250, easing: Easing.bezier(0, 0, 0.2, 1), useNativeDriver: true }),
+      ]).start();
+    } else {
+      // Slide sidebar out to left, content in from right
+      Animated.parallel([
+        Animated.timing(mobileSidebarX, { toValue: -settingsScreenWidth, duration: 250, easing: Easing.bezier(0, 0, 0.2, 1), useNativeDriver: true }),
+        Animated.timing(mobileContentX, { toValue: 0, duration: 250, easing: Easing.bezier(0, 0, 0.2, 1), useNativeDriver: true }),
+      ]).start();
+    }
+  }, [isMobile, open, mobileShowSidebar, settingsScreenWidth]);
+
+  // Reset mobile animation positions when dialog opens
+  useEffect(() => {
+    if (open && isMobile) {
+      prevMobileSidebarRef.current = true;
+      mobileSidebarX.setValue(0);
+      mobileContentX.setValue(settingsScreenWidth);
+    }
+  }, [open, isMobile]);
+
   const handleSectionChange = useCallback((sectionId: SettingsSection) => {
-    setActiveSection(sectionId);
-    const subs = SUBCATEGORIES[sectionId];
-    setActiveSubsection(subs ? subs[0].id : null);
+    // On desktop: crossfade content when switching sections
+    if (!isMobile && !isFadingRef.current) {
+      isFadingRef.current = true;
+      Animated.timing(contentOpacity, {
+        toValue: 0,
+        duration: 100,
+        easing: Easing.out(Easing.ease),
+        useNativeDriver: true,
+      }).start(() => {
+        setActiveSection(sectionId);
+        const subs = SUBCATEGORIES[sectionId];
+        setActiveSubsection(subs ? subs[0].id : null);
+        // Scroll to top on section change
+        contentScrollRef.current?.scrollTo?.({ y: 0, animated: false });
+        Animated.timing(contentOpacity, {
+          toValue: 1,
+          duration: 150,
+          easing: Easing.out(Easing.ease),
+          useNativeDriver: true,
+        }).start(() => {
+          isFadingRef.current = false;
+        });
+      });
+    } else {
+      setActiveSection(sectionId);
+      const subs = SUBCATEGORIES[sectionId];
+      setActiveSubsection(subs ? subs[0].id : null);
+    }
     if (isMobile) setMobileShowSidebar(false);
-  }, [isMobile]);
+  }, [isMobile, contentOpacity]);
 
   const handleSubsectionClick = useCallback((subId: string) => {
     setActiveSubsection(subId);
@@ -4340,7 +4405,9 @@ export function SettingsDialog({ open, onClose, onOpenMarketplace, initialSectio
         contentContainerStyle={{ padding: isMobile ? 16 : 28 }}
         showsVerticalScrollIndicator={false}
       >
-        {renderSection()}
+        <Animated.View style={{ opacity: contentOpacity }}>
+          {renderSection()}
+        </Animated.View>
       </ScrollView>
     </View>
   );
@@ -4358,8 +4425,21 @@ export function SettingsDialog({ open, onClose, onOpenMarketplace, initialSectio
       <HelpPopoverHost />
       <View style={modalStyle}>
         {isMobile ? (
-          // Mobile: exclusive sidebar / content views
-          mobileShowSidebar ? sidebarContent : contentArea
+          // Mobile: both views always mounted, slide via translateX
+          <View style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+            <Animated.View style={{
+              position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+              transform: [{ translateX: mobileSidebarX }],
+            }}>
+              {sidebarContent}
+            </Animated.View>
+            <Animated.View style={{
+              position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+              transform: [{ translateX: mobileContentX }],
+            }}>
+              {contentArea}
+            </Animated.View>
+          </View>
         ) : (
           // Desktop: side-by-side
           <>

@@ -8,6 +8,7 @@
  */
 
 import { useState, useCallback, useEffect, useRef } from 'react';
+import { isTauri } from '@umbra/wasm';
 import type {
   DiscordGuildInfo,
   DiscordImportedStructure,
@@ -28,6 +29,38 @@ import { mapDiscordToUmbra, validateImportStructure, getAvatarUrl, snowflakeToTi
  * Configuration for the relay endpoint.
  */
 const RELAY_BASE_URL = process.env.EXPO_PUBLIC_RELAY_URL || 'https://relay.umbra.chat';
+
+/**
+ * Open a URL in the system browser via Tauri shell plugin.
+ */
+async function tauriShellOpen(url: string): Promise<void> {
+  const { open } = await import('@tauri-apps/plugin-shell');
+  await open(url);
+}
+
+/**
+ * Poll the relay for a community import result (for Tauri/mobile where postMessage isn't available).
+ */
+async function pollCommunityImportResult(
+  state: string,
+  maxAttempts = 60,
+  intervalMs = 2000,
+): Promise<string | null> {
+  const pollUrl = `${RELAY_BASE_URL}/community/import/discord/result/${encodeURIComponent(state)}`;
+  for (let i = 0; i < maxAttempts; i++) {
+    try {
+      const res = await fetch(pollUrl);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.token) return data.token;
+      }
+    } catch {
+      // Network error, keep polling
+    }
+    await new Promise((r) => setTimeout(r, intervalMs));
+  }
+  return null;
+}
 
 /**
  * State phases for the import flow.
@@ -586,8 +619,10 @@ export function useDiscordCommunityImport(): UseDiscordCommunityImportState & Us
     setError(null);
     setIsLoading(true);
 
+    const runningInTauri = isTauri();
+
     // Check if window.open is available (may be undefined on mobile web views)
-    const canOpenPopup = typeof window !== 'undefined' && typeof window.open === 'function';
+    const canOpenPopup = !runningInTauri && typeof window !== 'undefined' && typeof window.open === 'function';
 
     let popup: Window | null = null;
 
@@ -621,8 +656,21 @@ export function useDiscordCommunityImport(): UseDiscordCommunityImportState & Us
 
       const data = await response.json();
 
-      if (popup && !popup.closed) {
-        // Desktop: Navigate the already-open popup to the Discord OAuth URL
+      if (runningInTauri) {
+        // Tauri: open in system browser, poll relay for result
+        await tauriShellOpen(data.redirect_url);
+        const token = await pollCommunityImportResult(data.state);
+        if (token) {
+          authSucceededRef.current = true;
+          setAccessToken(token);
+          setPhase('selecting_server');
+          setError(null);
+        } else {
+          setPhase('idle');
+        }
+        setIsLoading(false);
+      } else if (popup && !popup.closed) {
+        // Desktop web: Navigate the already-open popup to the Discord OAuth URL
         popup.location.href = data.redirect_url;
 
         // Poll for popup close (in case user closes without completing)
@@ -790,8 +838,10 @@ export function useDiscordCommunityImport(): UseDiscordCommunityImportState & Us
     setError(null);
     setBotStatus('inviting');
 
+    const runningInTauri = isTauri();
+
     // Check if window.open is available
-    const canOpenPopup = typeof window !== 'undefined' && typeof window.open === 'function';
+    const canOpenPopup = !runningInTauri && typeof window !== 'undefined' && typeof window.open === 'function';
 
     let popup: Window | null = null;
 
@@ -831,8 +881,11 @@ export function useDiscordCommunityImport(): UseDiscordCommunityImportState & Us
         return;
       }
 
-      if (popup && !popup.closed) {
-        // Desktop: Navigate popup to Discord bot authorization page
+      if (runningInTauri) {
+        // Tauri: open in system browser
+        await tauriShellOpen(data.invite_url);
+      } else if (popup && !popup.closed) {
+        // Desktop web: Navigate popup to Discord bot authorization page
         popup.location.href = data.invite_url;
       } else {
         // Mobile fallback: redirect in the same window

@@ -2,8 +2,9 @@ mod state;
 mod commands;
 
 use state::AppState;
-use tauri::Manager;
+use tauri::webview::NewWindowResponse;
 use tauri::window::Color;
+use tauri::WebviewUrl;
 
 pub fn run() {
     // Set up tracing for native desktop
@@ -22,10 +23,52 @@ pub fn run() {
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_deep_link::init())
         .setup(|app| {
-            // Set window background to black to match the dark theme
-            if let Some(window) = app.get_webview_window("main") {
-                let _ = window.set_background_color(Some(Color(0, 0, 0, 255)));
-            }
+            let handle = app.handle().clone();
+            let handle2 = handle.clone();
+
+            // Build the main window+webview manually so we can attach navigation handlers.
+            // The window config was removed from tauri.conf.json to enable this.
+            let window = tauri::WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
+                .title("Umbra")
+                .inner_size(1280.0, 800.0)
+                .resizable(true)
+                .fullscreen(false)
+                .title_bar_style(tauri::TitleBarStyle::Overlay)
+                .hidden_title(true)
+                .decorations(true)
+                .theme(Some(tauri::Theme::Dark))
+                // Block external navigations — open them in the system browser instead.
+                // This prevents OAuth flows (Discord, etc.) from taking over the app window.
+                .on_navigation(move |url| {
+                    let scheme = url.scheme();
+                    let host = url.host_str().unwrap_or("");
+
+                    // Allow internal navigations
+                    if scheme == "tauri" || scheme == "asset" {
+                        return true;
+                    }
+                    if host == "localhost" || host == "127.0.0.1" {
+                        return true;
+                    }
+
+                    // External URL — open in system browser and block
+                    tracing::info!("Blocking external navigation, opening in browser: {}", url);
+                    let _ = tauri_plugin_shell::ShellExt::shell(&handle)
+                        .open(url.as_str(), None::<tauri_plugin_shell::open::Program>);
+                    false
+                })
+                // Handle window.open() calls — open in system browser instead of blocking.
+                // This fixes OAuth popups (Discord sign-in, bot invite, etc.).
+                .on_new_window(move |url, _features| {
+                    tracing::info!("Intercepting window.open, opening in browser: {}", url);
+                    let _ = tauri_plugin_shell::ShellExt::shell(&handle2)
+                        .open(url.as_str(), None::<tauri_plugin_shell::open::Program>);
+                    NewWindowResponse::Deny
+                })
+                .build()?;
+
+            let _ = window.set_background_color(Some(Color(0, 0, 0, 255)));
+
             Ok(())
         })
         .manage(AppState::new())

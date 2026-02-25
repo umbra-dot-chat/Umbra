@@ -20,7 +20,7 @@
  */
 
 import React, { useMemo, useCallback, useState, useRef } from 'react';
-import { View, Image, Animated, Pressable } from 'react-native';
+import { Platform, View, Image, Animated, Pressable } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { GestureResponderEvent } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
@@ -51,6 +51,7 @@ import { useMessaging } from '@/contexts/MessagingContext';
 import { PANEL_WIDTH } from '@/types/panels';
 import { VolumeIcon, ArrowLeftIcon } from '@/components/icons';
 import { FileChannelContent } from '@/components/community/FileChannelContent';
+import { AnimatedPresence } from '@/components/ui/AnimatedPresence';
 
 // ---------------------------------------------------------------------------
 // Channel type mapping
@@ -890,24 +891,38 @@ export default function CommunityPage() {
 
             {/* Message Input */}
             <View style={{ position: 'relative', padding: 12 }}>
+              {/* Transparent backdrop — closes picker when tapping outside */}
               {emojiOpen && (
-                <View style={{ position: 'absolute', bottom: 64, right: 12, zIndex: 20 }}>
-                  <CombinedPicker
-                    size="md"
-                    customEmojis={customEmojiItems.length > 0 ? customEmojiItems : undefined}
-                    relayUrl={process.env.EXPO_PUBLIC_RELAY_URL || 'https://relay.umbra.chat'}
-                    onEmojiSelect={(emoji: string, item?: EmojiItem) => {
-                      const text = item?.imageUrl ? `:${item.name}:` : emoji;
-                      setMessageText((prev) => prev + text);
-                      setEmojiOpen(false);
-                    }}
-                    onGifSelect={(gif) => {
-                      handleSendMessage(`gif::${gif.url}`);
-                      setEmojiOpen(false);
-                    }}
-                  />
-                </View>
+                <Pressable
+                  onPress={() => setEmojiOpen(false)}
+                  style={Platform.OS === 'web'
+                    ? { position: 'fixed' as any, top: 0, left: 0, right: 0, bottom: 0, zIndex: 19 }
+                    : { position: 'absolute', top: -5000, left: -5000, right: -5000, bottom: -5000, zIndex: 19 }
+                  }
+                  accessibilityLabel="Close picker"
+                />
               )}
+              <AnimatedPresence
+                visible={emojiOpen}
+                preset="slideUp"
+                slideDistance={16}
+                style={{ position: 'absolute', bottom: 64, right: 12, zIndex: 20 }}
+              >
+                <CombinedPicker
+                  size="md"
+                  customEmojis={customEmojiItems.length > 0 ? customEmojiItems : undefined}
+                  relayUrl={process.env.EXPO_PUBLIC_RELAY_URL || 'https://relay.umbra.chat'}
+                  onEmojiSelect={(emoji: string, item?: EmojiItem) => {
+                    const text = item?.imageUrl ? `:${item.name}:` : emoji;
+                    setMessageText((prev) => prev + text);
+                    setEmojiOpen(false);
+                  }}
+                  onGifSelect={(gif) => {
+                    handleSendMessage(`gif::${gif.url}`);
+                    setEmojiOpen(false);
+                  }}
+                />
+              </AnimatedPresence>
               <MessageInput
                 value={messageText}
                 onValueChange={setMessageText}

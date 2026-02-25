@@ -10,7 +10,7 @@ import { InlineMsgGroup } from './InlineMsgGroup';
 import { DmFileMessage } from '@/components/messaging/DmFileMessage';
 import { SlotRenderer } from '@/components/plugins/SlotRenderer';
 import { useMessaging } from '@/contexts/MessagingContext';
-import { parseMessageContent, buildEmojiMap, type EmojiMap } from '@/utils/parseMessageContent';
+import { parseMessageContent, buildEmojiMap, isEmojiOnlyMessage, type EmojiMap } from '@/utils/parseMessageContent';
 import type { Message, CommunityEmoji } from '@umbra/service';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -494,6 +494,9 @@ export function ChatArea({
                 : text
             );
 
+            // Emoji-only messages: hide bubble background in bubble view
+            const emojiOnly = !fileInfo && isEmojiOnlyMessage(text);
+
             // Build reaction chips for Wisp ChatBubble
             const reactionChips = msg.reactions?.map((r) => ({
               emoji: r.emoji,
@@ -567,6 +570,7 @@ export function ChatArea({
                       replyTo={replyTo}
                       edited={msg.edited}
                       forwarded={msg.forwarded}
+                      emojiOnly={emojiOnly}
                     >
                       {fileInfo ? (
                         <DmFileMessage

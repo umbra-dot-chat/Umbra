@@ -359,6 +359,11 @@ async fn main() {
             "/community/import/discord/callback",
             get(discovery::oauth::community_import::callback_discord_community_import),
         )
+        // Community import result polling (for Tauri/mobile clients)
+        .route(
+            "/community/import/discord/result/:state",
+            get(discovery::oauth::community_import::get_community_import_result),
+        )
         .route(
             "/community/import/discord/guilds",
             get(discovery::oauth::community_import::get_discord_guilds),

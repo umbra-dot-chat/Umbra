@@ -91,6 +91,10 @@ declare module '/umbra_core.js' {
  * Types are provided by the package itself; this fallback
  * prevents TS errors when the package is not installed (web/mobile).
  */
+declare module '@tauri-apps/plugin-shell' {
+  export function open(url: string): Promise<void>;
+}
+
 declare module '@tauri-apps/plugin-updater' {
   export function check(): Promise<any>;
 }

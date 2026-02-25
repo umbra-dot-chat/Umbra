@@ -529,6 +529,9 @@ pub async fn callback_discord_community_import(
 
     tracing::info!("Discord community import OAuth completed successfully");
 
+    // Store result for Tauri/mobile polling
+    store.store_community_import_result(&query.state, token.access_token.clone());
+
     // Return the access token via postMessage
     community_import_success_html(&token.access_token).into_response()
 }
@@ -1669,5 +1672,38 @@ fn map_discord_audit_action(action_type: u64) -> (&'static str, &'static str) {
         132 => ("soundboard_sound_delete", "soundboard"),
         // Default
         _ => ("unknown", "unknown"),
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Community Import Result Polling (for Tauri/mobile clients)
+// ---------------------------------------------------------------------------
+
+/// Poll for a community import result by state nonce.
+///
+/// Tauri/mobile clients call this after opening the OAuth URL in the system browser.
+/// Returns the access token if the OAuth callback has completed, or 404 if pending.
+/// The result is consumed (deleted) on successful retrieval.
+pub async fn get_community_import_result(
+    State((store, _config)): State<(DiscoveryStore, DiscoveryConfig)>,
+    Path(state): Path<String>,
+) -> impl IntoResponse {
+    match store.take_community_import_result(&state) {
+        Some(token) => {
+            tracing::info!(state = state.as_str(), "Community import result retrieved");
+            Json(serde_json::json!({
+                "success": true,
+                "token": token,
+            }))
+            .into_response()
+        }
+        None => (
+            StatusCode::NOT_FOUND,
+            Json(serde_json::json!({
+                "success": false,
+                "error": "pending",
+            })),
+        )
+            .into_response(),
     }
 }

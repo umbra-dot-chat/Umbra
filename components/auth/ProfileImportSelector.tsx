@@ -20,6 +20,7 @@ import {
 } from '@coexist/wisp-react-native';
 import Svg, { Path } from 'react-native-svg';
 import * as WebBrowser from 'expo-web-browser';
+import { isTauri } from '@umbra/wasm';
 
 // Types
 export type ImportPlatform = 'discord' | 'github' | 'steam' | 'bluesky';
@@ -247,8 +248,43 @@ export function ProfileImportSelector({
       if (data.redirect_url) {
         setStatus('fetching');
 
-        if (Platform.OS === 'web') {
-          // Open OAuth URL in popup
+        if (Platform.OS === 'web' && isTauri()) {
+          // Tauri: open in system browser, poll relay for result
+          const stateParam = data.state;
+          const { open } = await import('@tauri-apps/plugin-shell');
+          await open(data.redirect_url);
+
+          // Poll relay for the OAuth result
+          const pollUrl = `${relayUrl}/profile/import/result/${stateParam}`;
+          let attempts = 0;
+          const maxAttempts = 60; // 60 × 2s = 120 seconds max
+          const pollForResult = async () => {
+            while (attempts < maxAttempts) {
+              attempts++;
+              try {
+                const res = await fetch(pollUrl);
+                if (res.ok) {
+                  const result = await res.json();
+                  if (result.success && result.profile) {
+                    const normalized = normalizeProfile(result.profile);
+                    setImportedProfile(normalized);
+                    setStatus('success');
+                    onProfileImported(normalized);
+                    return;
+                  }
+                }
+              } catch {
+                // Network error, keep polling
+              }
+              await new Promise((r) => setTimeout(r, 2000));
+            }
+            // Timed out
+            setError('Login timed out. Please try again.');
+            setStatus('error');
+          };
+          pollForResult();
+        } else if (Platform.OS === 'web') {
+          // Web: Open OAuth URL in popup
           const width = 500;
           const height = 700;
           const left = window.screenX + (window.outerWidth - width) / 2;

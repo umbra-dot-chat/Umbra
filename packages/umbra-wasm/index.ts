@@ -18,7 +18,7 @@
  * ```
  */
 
-export { initUmbraWasm, getWasm, isWasmReady, enablePersistence, isReactNative, resetWasm } from './loader';
+export { initUmbraWasm, getWasm, isWasmReady, enablePersistence, isReactNative, isTauri, resetWasm } from './loader';
 export type { UmbraWasmModule } from './loader';
 export { EventBridge, eventBridge } from './event-bridge';
 export type { EventDomain, UmbraEvent, EventListener, DomainListener } from './event-bridge';

@@ -15,6 +15,7 @@ import type { RoleMember, InviteCreateOptions } from '@coexist/wisp-react-native
 import { defaultSpacing, defaultRadii } from '@coexist/wisp-core/theme/create-theme';
 import Svg, { Path, Circle, Line, Polyline } from 'react-native-svg';
 
+import { isTauri } from '@umbra/wasm';
 import { useUmbra } from '@/contexts/UmbraContext';
 import { useAuth } from '@/contexts/AuthContext';
 import type { Community, CommunityMember, CommunityRole, CommunitySeat, CommunityEmoji, CommunitySticker, StickerPack } from '@umbra/service';
@@ -446,14 +447,209 @@ export function CommunitySettingsDialog({
   const bridgePopupRef = useRef<Window | null>(null);
   const bridgeAuthRef = useRef(false);
 
-  const handleBridgeSetup = useCallback(() => {
+  /**
+   * Run the bridge setup flow after obtaining a Discord OAuth token.
+   */
+  const doBridgeSetupWithToken = useCallback(async (token: string) => {
+    setBridgeSetupStatus('registering');
+
+    try {
+      // 1. Fetch guilds
+      const guildsRes = await fetch(`${RELAY}/community/import/discord/guilds?token=${encodeURIComponent(token)}`);
+      if (!guildsRes.ok) throw new Error('Failed to fetch Discord servers');
+      const guildsData = await guildsRes.json();
+      const guilds: Array<{ id: string; name: string }> = guildsData.guilds || [];
+
+      // 2. Find the guild that matches this community (name match, then fallback to first with bot)
+      let targetGuild: { id: string; name: string } | null = null;
+      let fallbackGuild: { id: string; name: string } | null = null;
+      const communityName = community?.name?.toLowerCase().trim();
+
+      for (const guild of guilds) {
+        try {
+          const botRes = await fetch(`${RELAY}/community/import/discord/bot-status?guild_id=${encodeURIComponent(guild.id)}`);
+          if (botRes.ok) {
+            const botData = await botRes.json();
+            if (botData.bot_enabled && botData.in_guild) {
+              if (communityName && guild.name.toLowerCase().trim() === communityName) {
+                targetGuild = guild;
+                break;
+              }
+              if (!fallbackGuild) fallbackGuild = guild;
+            }
+          }
+        } catch { /* skip */ }
+      }
+      if (!targetGuild) targetGuild = fallbackGuild;
+
+      if (!targetGuild) {
+        throw new Error(
+          guilds.length === 0
+            ? 'No Discord servers found. Make sure you have Manage Server permission.'
+            : 'No Discord server found with the Umbra bot. Please invite the bot first.'
+        );
+      }
+
+      console.log(`[bridge-setup] Matched guild: "${targetGuild.name}" (${targetGuild.id})`);
+
+      // 3. Fetch guild structure to get Discord channel IDs
+      const warnings: string[] = [];
+      await new Promise((r) => setTimeout(r, 1500));
+
+      let structData: any = null;
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const structRes = await fetch(
+          `${RELAY}/community/import/discord/guild/${targetGuild.id}/structure?token=${encodeURIComponent(token)}`
+        );
+        if (!structRes.ok) {
+          if (attempt < 2) {
+            warnings.push(`Discord rate limit hit (attempt ${attempt + 1}/3), retrying...`);
+            await new Promise((r) => setTimeout(r, 2000));
+            continue;
+          }
+          throw new Error('Failed to fetch server structure');
+        }
+        structData = await structRes.json();
+        if (structData.success) break;
+        if (attempt < 2 && structData.error?.includes('verify guild access')) {
+          warnings.push(`Discord rate limit: "${structData.error}" (attempt ${attempt + 1}/3)`);
+          await new Promise((r) => setTimeout(r, 2000));
+          continue;
+        }
+        throw new Error(structData.error || 'Failed to fetch structure');
+      }
+      if (!structData?.success) throw new Error('Failed to fetch server structure after retries');
+
+      const discordChannels: Array<{ id: string; name: string; channelType: string; parentId?: string }> =
+        structData.structure?.channels || [];
+
+      // 4. Get existing Umbra channels
+      const umbraChannels = await service.getAllChannels(communityId);
+
+      // 5. Match by name
+      const channelMapping = discordChannels
+        .filter((dc) => dc.channelType === 'text' || dc.channelType === 'announcement' || dc.channelType === 'forum')
+        .map((dc) => {
+          const match = umbraChannels.find(
+            (uc) => uc.name.toLowerCase().trim() === dc.name.toLowerCase().trim()
+          );
+          if (!match) return null;
+          return { discordChannelId: dc.id, umbraChannelId: match.id, name: dc.name };
+        })
+        .filter(Boolean) as { discordChannelId: string; umbraChannelId: string; name: string }[];
+
+      if (channelMapping.length === 0) {
+        throw new Error('No matching channels found between Discord and this community.');
+      }
+
+      // 6. Get community member DIDs
+      let memberDids: string[] = [];
+      try {
+        const freshMembers = await service.getCommunityMembers(communityId);
+        memberDids = freshMembers.map((m: any) => m.memberDid);
+      } catch {
+        const communityMembers = members || [];
+        memberDids = communityMembers.map((m) => m.memberDid);
+      }
+
+      // 7. Fetch Discord members for seat list
+      let seatList: { discordUserId: string; discordUsername: string; avatarUrl: string | null; seatDid: null }[] = [];
+      try {
+        const membersRes = await fetch(
+          `${RELAY}/community/import/discord/guild/${targetGuild.id}/members?token=${encodeURIComponent(token)}`
+        );
+        if (membersRes.ok) {
+          const membersData = await membersRes.json();
+          if (membersData.hasMembersIntent && membersData.members?.length) {
+            seatList = membersData.members
+              .filter((m: any) => !m.bot)
+              .map((m: any) => ({
+                discordUserId: m.userId,
+                discordUsername: m.username,
+                avatarUrl: m.avatar
+                  ? `https://cdn.discordapp.com/avatars/${m.userId}/${m.avatar}.png`
+                  : null,
+                seatDid: null,
+              }));
+          }
+        }
+      } catch {
+        warnings.push('Could not fetch Discord member list for seat data (non-critical)');
+      }
+
+      // 8. Register bridge
+      const registerRes = await fetch(`${RELAY}/api/bridge/register`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          communityId,
+          guildId: targetGuild.id,
+          channels: channelMapping,
+          seats: seatList,
+          memberDids,
+        }),
+      });
+
+      if (!registerRes.ok) throw new Error('Failed to register bridge with relay');
+      const registerData = await registerRes.json();
+      if (registerData.ok && registerData.data) {
+        setBridgeConfig(registerData.data);
+        if (registerData.data.bridgeDid && service) {
+          try {
+            await service.joinCommunity(communityId, registerData.data.bridgeDid, 'Bridge Bot');
+          } catch { /* may already be member */ }
+        }
+      }
+
+      if (warnings.length > 0) setBridgeWarnings(warnings);
+      setBridgeSetupStatus('idle');
+    } catch (err: any) {
+      setBridgeSetupStatus('error');
+      setBridgeSetupError(err.message || 'Bridge setup failed');
+    }
+  }, [service, communityId, community, members, RELAY]);
+
+  const handleBridgeSetup = useCallback(async () => {
     if (bridgeSetupStatus === 'connecting' || bridgeSetupStatus === 'registering') return;
     if (!service || !communityId) return;
 
     setBridgeSetupStatus('connecting');
     setBridgeSetupError(null);
 
-    // Open popup immediately (user gesture context)
+    if (isTauri()) {
+      // Tauri: open in system browser, poll relay for token
+      try {
+        const res = await fetch(`${RELAY}/community/import/discord/start`, { method: 'POST' });
+        if (!res.ok) throw new Error('Failed to start Discord auth');
+        const data = await res.json();
+
+        const { open } = await import('@tauri-apps/plugin-shell');
+        await open(data.redirect_url);
+
+        // Poll for result
+        const pollUrl = `${RELAY}/community/import/discord/result/${encodeURIComponent(data.state)}`;
+        for (let i = 0; i < 60; i++) {
+          await new Promise((r) => setTimeout(r, 2000));
+          try {
+            const pollRes = await fetch(pollUrl);
+            if (pollRes.ok) {
+              const pollData = await pollRes.json();
+              if (pollData.success && pollData.token) {
+                await doBridgeSetupWithToken(pollData.token);
+                return;
+              }
+            }
+          } catch { /* keep polling */ }
+        }
+        setBridgeSetupStatus('idle');
+      } catch (err: any) {
+        setBridgeSetupStatus('error');
+        setBridgeSetupError(err.message || 'Failed to start authentication');
+      }
+      return;
+    }
+
+    // Web: popup flow
     const w = 500, h = 700;
     const left = window.screenX + (window.innerWidth - w) / 2;
     const top = window.screenY + (window.innerHeight - h) / 2;
@@ -468,191 +664,16 @@ export function CommunitySettingsDialog({
       return;
     }
 
-    // Listen for OAuth callback
     bridgeAuthRef.current = false;
     const handleMessage = async (event: MessageEvent) => {
       if (event.data?.type !== 'UMBRA_COMMUNITY_IMPORT' || !event.data.success || !event.data.token) return;
       bridgeAuthRef.current = true;
       if (typeof window !== 'undefined') window.removeEventListener('message', handleMessage);
-
-      const token = event.data.token;
-      setBridgeSetupStatus('registering');
-
-      try {
-        // 1. Fetch guilds
-        const guildsRes = await fetch(`${RELAY}/community/import/discord/guilds?token=${encodeURIComponent(token)}`);
-        if (!guildsRes.ok) throw new Error('Failed to fetch Discord servers');
-        const guildsData = await guildsRes.json();
-        const guilds: Array<{ id: string; name: string }> = guildsData.guilds || [];
-
-        // 2. Find the guild that matches this community (name match, then fallback to first with bot)
-        let targetGuild: { id: string; name: string } | null = null;
-        let fallbackGuild: { id: string; name: string } | null = null;
-        const communityName = community?.name?.toLowerCase().trim();
-
-        for (const guild of guilds) {
-          try {
-            const botRes = await fetch(`${RELAY}/community/import/discord/bot-status?guild_id=${encodeURIComponent(guild.id)}`);
-            if (botRes.ok) {
-              const botData = await botRes.json();
-              if (botData.bot_enabled && botData.in_guild) {
-                if (communityName && guild.name.toLowerCase().trim() === communityName) {
-                  targetGuild = guild;
-                  break;
-                }
-                if (!fallbackGuild) fallbackGuild = guild;
-              }
-            }
-          } catch { /* skip */ }
-        }
-        if (!targetGuild) targetGuild = fallbackGuild;
-
-        if (!targetGuild) {
-          throw new Error(
-            guilds.length === 0
-              ? 'No Discord servers found. Make sure you have Manage Server permission.'
-              : 'No Discord server found with the Umbra bot. Please invite the bot first.'
-          );
-        }
-
-        console.log(`[bridge-setup] Matched guild: "${targetGuild.name}" (${targetGuild.id})`);
-
-        // 3. Fetch guild structure to get Discord channel IDs
-        // Brief delay to avoid Discord rate limits (structure endpoint re-verifies guild access)
-        const warnings: string[] = [];
-        await new Promise((r) => setTimeout(r, 1500));
-
-        let structData: any = null;
-        for (let attempt = 0; attempt < 3; attempt++) {
-          const structRes = await fetch(
-            `${RELAY}/community/import/discord/guild/${targetGuild.id}/structure?token=${encodeURIComponent(token)}`
-          );
-          if (!structRes.ok) {
-            if (attempt < 2) {
-              warnings.push(`Discord rate limit hit (attempt ${attempt + 1}/3), retrying...`);
-              await new Promise((r) => setTimeout(r, 2000));
-              continue;
-            }
-            throw new Error('Failed to fetch server structure');
-          }
-          structData = await structRes.json();
-          if (structData.success) break;
-          // Retry on rate-limit related failures
-          if (attempt < 2 && structData.error?.includes('verify guild access')) {
-            warnings.push(`Discord rate limit: "${structData.error}" (attempt ${attempt + 1}/3)`);
-            console.log(`[bridge-setup] Rate limited, retrying in 2s (attempt ${attempt + 1}/3)`);
-            await new Promise((r) => setTimeout(r, 2000));
-            continue;
-          }
-          throw new Error(structData.error || 'Failed to fetch structure');
-        }
-        if (!structData?.success) throw new Error('Failed to fetch server structure after retries');
-
-        const discordChannels: Array<{ id: string; name: string; channelType: string; parentId?: string }> =
-          structData.structure?.channels || [];
-
-        // 4. Get existing Umbra channels for this community
-        const umbraChannels = await service.getAllChannels(communityId);
-
-        // 5. Match Discord channels to Umbra channels by name
-        const channelMapping = discordChannels
-          .filter((dc) => dc.channelType === 'text' || dc.channelType === 'announcement' || dc.channelType === 'forum')
-          .map((dc) => {
-            const match = umbraChannels.find(
-              (uc) => uc.name.toLowerCase().trim() === dc.name.toLowerCase().trim()
-            );
-            if (!match) return null;
-            return {
-              discordChannelId: dc.id,
-              umbraChannelId: match.id,
-              name: dc.name,
-            };
-          })
-          .filter(Boolean) as { discordChannelId: string; umbraChannelId: string; name: string }[];
-
-        console.log(`[bridge-setup] Discord channels: ${discordChannels.length}, Umbra channels: ${umbraChannels.length}, Matched: ${channelMapping.length}`);
-
-        if (channelMapping.length === 0) {
-          throw new Error('No matching channels found between Discord and this community.');
-        }
-
-        // 6. Get community member DIDs from the service (not the stale members prop)
-        let memberDids: string[] = [];
-        try {
-          const freshMembers = await service.getCommunityMembers(communityId);
-          memberDids = freshMembers.map((m: any) => m.memberDid);
-          console.log(`[bridge-setup] Fetched ${memberDids.length} community member DIDs`);
-        } catch (err) {
-          console.warn('[bridge-setup] Failed to fetch members from service, falling back to props');
-          const communityMembers = members || [];
-          memberDids = communityMembers.map((m) => m.memberDid);
-        }
-
-        // 7. Fetch Discord members for seat list
-        let seatList: { discordUserId: string; discordUsername: string; avatarUrl: string | null; seatDid: null }[] = [];
-        try {
-          const membersRes = await fetch(
-            `${RELAY}/community/import/discord/guild/${targetGuild.id}/members?token=${encodeURIComponent(token)}`
-          );
-          if (membersRes.ok) {
-            const membersData = await membersRes.json();
-            if (membersData.hasMembersIntent && membersData.members?.length) {
-              seatList = membersData.members
-                .filter((m: any) => !m.bot)
-                .map((m: any) => ({
-                  discordUserId: m.userId,
-                  discordUsername: m.username,
-                  avatarUrl: m.avatar
-                    ? `https://cdn.discordapp.com/avatars/${m.userId}/${m.avatar}.png`
-                    : null,
-                  seatDid: null,
-                }));
-            }
-          }
-        } catch {
-          warnings.push('Could not fetch Discord member list for seat data (non-critical)');
-        }
-
-        // 8. Register bridge with relay
-        const registerRes = await fetch(`${RELAY}/api/bridge/register`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            communityId,
-            guildId: targetGuild.id,
-            channels: channelMapping,
-            seats: seatList,
-            memberDids,
-          }),
-        });
-
-        if (!registerRes.ok) throw new Error('Failed to register bridge with relay');
-        const registerData = await registerRes.json();
-        if (registerData.ok && registerData.data) {
-          setBridgeConfig(registerData.data);
-          // Add bridge bot DID as community member if available
-          if (registerData.data.bridgeDid && service) {
-            try {
-              await service.joinCommunity(communityId, registerData.data.bridgeDid, 'Bridge Bot');
-              console.log(`[bridge-setup] Added bridge bot as community member: ${registerData.data.bridgeDid}`);
-            } catch { /* may already be member */ }
-          }
-        }
-
-        // Surface any warnings from the setup process
-        if (warnings.length > 0) {
-          setBridgeWarnings(warnings);
-        }
-        setBridgeSetupStatus('idle');
-      } catch (err: any) {
-        setBridgeSetupStatus('error');
-        setBridgeSetupError(err.message || 'Bridge setup failed');
-      }
+      await doBridgeSetupWithToken(event.data.token);
     };
 
     if (typeof window !== 'undefined') window.addEventListener('message', handleMessage);
 
-    // Start OAuth flow
     fetch(`${RELAY}/community/import/discord/start`, { method: 'POST' })
       .then(async (res) => {
         if (!res.ok) throw new Error('Failed to start Discord auth');
@@ -668,7 +689,6 @@ export function CommunitySettingsDialog({
         if (typeof window !== 'undefined') window.removeEventListener('message', handleMessage);
       });
 
-    // Poll for popup close
     const pollTimer = setInterval(() => {
       if (bridgePopupRef.current?.closed) {
         clearInterval(pollTimer);
@@ -678,7 +698,7 @@ export function CommunitySettingsDialog({
         }
       }
     }, 500);
-  }, [bridgeSetupStatus, service, communityId, community, members, RELAY]);
+  }, [bridgeSetupStatus, service, communityId, community, members, RELAY, doBridgeSetupWithToken]);
 
   const handleDeleteSeat = useCallback(async (seatId: string) => {
     if (!service || !identity?.did) return;
@@ -702,13 +722,118 @@ export function CommunitySettingsDialog({
   const fetchPopupRef = useRef<Window | null>(null);
   const fetchAuthRef = useRef(false);
 
-  const handleFetchUsers = useCallback(() => {
+  /**
+   * Fetch Discord users and create seats, given an OAuth token.
+   */
+  const doFetchUsersWithToken = useCallback(async (token: string) => {
+    const RELAY = process.env.EXPO_PUBLIC_RELAY_URL || 'https://relay.umbra.chat';
+    try {
+      const guildsRes = await fetch(`${RELAY}/community/import/discord/guilds?token=${encodeURIComponent(token)}`);
+      if (!guildsRes.ok) throw new Error('Failed to fetch guilds');
+      const guildsData = await guildsRes.json();
+      const guilds: Array<{ id: string; name: string }> = guildsData.guilds || [];
+
+      if (guilds.length === 0) { setFetchingUsers(false); return; }
+
+      let targetGuild: { id: string; name: string } | null = null;
+      let fallbackGuild: { id: string; name: string } | null = null;
+      const communityName = community?.name?.toLowerCase().trim();
+
+      for (const guild of guilds) {
+        try {
+          const botRes = await fetch(`${RELAY}/community/import/discord/bot-status?guild_id=${encodeURIComponent(guild.id)}`);
+          if (botRes.ok) {
+            const botData = await botRes.json();
+            if (botData.bot_enabled && botData.in_guild) {
+              if (communityName && guild.name.toLowerCase().trim() === communityName) {
+                targetGuild = guild;
+                break;
+              }
+              if (!fallbackGuild) fallbackGuild = guild;
+            }
+          }
+        } catch { /* skip */ }
+      }
+      if (!targetGuild) targetGuild = fallbackGuild;
+
+      if (!targetGuild) { setFetchingUsers(false); return; }
+
+      const membersRes = await fetch(
+        `${RELAY}/community/import/discord/guild/${targetGuild.id}/members?token=${encodeURIComponent(token)}`
+      );
+      if (!membersRes.ok) throw new Error(`Failed to fetch members (${membersRes.status})`);
+
+      const membersData = await membersRes.json();
+      if (!membersData.hasMembersIntent || !membersData.members?.length) {
+        setFetchingUsers(false);
+        return;
+      }
+
+      const humanMembers = membersData.members.filter((m: any) => !m.bot);
+      const seatData = humanMembers.map((m: any) => ({
+        platform: 'discord',
+        platform_user_id: m.userId,
+        platform_username: m.username,
+        nickname: m.nickname ?? undefined,
+        avatar_url: m.avatar
+          ? `https://cdn.discordapp.com/avatars/${m.userId}/${m.avatar}.png`
+          : undefined,
+        role_ids: [],
+      }));
+
+      const CHUNK_SIZE = 100;
+      for (let i = 0; i < seatData.length; i += CHUNK_SIZE) {
+        const chunk = seatData.slice(i, i + CHUNK_SIZE);
+        await service.createSeatsBatch(communityId, chunk);
+        if (i + CHUNK_SIZE < seatData.length) await new Promise((r) => setTimeout(r, 0));
+      }
+
+      setSeatsLoaded(false);
+    } catch (err) {
+      console.error('[fetch-users] Error:', err);
+    } finally {
+      setFetchingUsers(false);
+    }
+  }, [service, communityId, community]);
+
+  const handleFetchUsers = useCallback(async () => {
     if (fetchingUsers || !service) return;
     setFetchingUsers(true);
 
     const RELAY = process.env.EXPO_PUBLIC_RELAY_URL || 'https://relay.umbra.chat';
 
-    // Open popup immediately (user gesture context)
+    if (isTauri()) {
+      // Tauri: open in system browser, poll relay for token
+      try {
+        const res = await fetch(`${RELAY}/community/import/discord/start`, { method: 'POST' });
+        if (!res.ok) throw new Error('Failed to start OAuth');
+        const data = await res.json();
+
+        const { open } = await import('@tauri-apps/plugin-shell');
+        await open(data.redirect_url);
+
+        const pollUrl = `${RELAY}/community/import/discord/result/${encodeURIComponent(data.state)}`;
+        for (let i = 0; i < 60; i++) {
+          await new Promise((r) => setTimeout(r, 2000));
+          try {
+            const pollRes = await fetch(pollUrl);
+            if (pollRes.ok) {
+              const pollData = await pollRes.json();
+              if (pollData.success && pollData.token) {
+                await doFetchUsersWithToken(pollData.token);
+                return;
+              }
+            }
+          } catch { /* keep polling */ }
+        }
+        setFetchingUsers(false);
+      } catch {
+        setFetchingUsers(false);
+      }
+      return;
+    }
+
+    // Web: popup flow
     const w = 500, h = 700;
     const left = window.screenX + (window.innerWidth - w) / 2;
     const top = window.screenY + (window.innerHeight - h) / 2;
@@ -722,119 +847,16 @@ export function CommunitySettingsDialog({
       return;
     }
 
-    // Listen for OAuth callback
     fetchAuthRef.current = false;
     const handleMessage = async (event: MessageEvent) => {
       if (event.data?.type !== 'UMBRA_COMMUNITY_IMPORT' || !event.data.success || !event.data.token) return;
       fetchAuthRef.current = true;
       if (typeof window !== 'undefined') window.removeEventListener('message', handleMessage);
-
-      const token = event.data.token;
-
-      try {
-        // Step 1: Fetch guilds
-        const guildsRes = await fetch(`${RELAY}/community/import/discord/guilds?token=${encodeURIComponent(token)}`);
-        if (!guildsRes.ok) throw new Error('Failed to fetch guilds');
-        const guildsData = await guildsRes.json();
-        const guilds: Array<{ id: string; name: string }> = guildsData.guilds || [];
-
-        if (guilds.length === 0) {
-          console.warn('[fetch-users] No guilds found');
-          setFetchingUsers(false);
-          return;
-        }
-
-        // Step 2: Find the guild that matches this community.
-        // First try to match by community name (imported communities keep the guild name).
-        // Fall back to first guild where the bot is present.
-        let targetGuild: { id: string; name: string } | null = null;
-        let fallbackGuild: { id: string; name: string } | null = null;
-        const communityName = community?.name?.toLowerCase().trim();
-
-        for (const guild of guilds) {
-          try {
-            const botRes = await fetch(`${RELAY}/community/import/discord/bot-status?guild_id=${encodeURIComponent(guild.id)}`);
-            if (botRes.ok) {
-              const botData = await botRes.json();
-              if (botData.bot_enabled && botData.in_guild) {
-                // Check if this guild's name matches the community name
-                if (communityName && guild.name.toLowerCase().trim() === communityName) {
-                  targetGuild = guild;
-                  break; // Exact match — use this one
-                }
-                // Otherwise remember it as a fallback
-                if (!fallbackGuild) fallbackGuild = guild;
-              }
-            }
-          } catch { /* skip */ }
-        }
-
-        // Use name-matched guild, otherwise fall back to first guild with bot
-        if (!targetGuild) targetGuild = fallbackGuild;
-
-        if (!targetGuild) {
-          console.warn('[fetch-users] No guild found with bot. Guilds:', guilds.map(g => g.name));
-          setFetchingUsers(false);
-          return;
-        }
-
-        console.log(`[fetch-users] Fetching members from "${targetGuild.name}" (${targetGuild.id})`);
-
-        // Step 3: Fetch members
-        const membersRes = await fetch(
-          `${RELAY}/community/import/discord/guild/${targetGuild.id}/members?token=${encodeURIComponent(token)}`
-        );
-        if (!membersRes.ok) throw new Error(`Failed to fetch members (${membersRes.status})`);
-
-        const membersData = await membersRes.json();
-        if (!membersData.hasMembersIntent || !membersData.members?.length) {
-          console.warn('[fetch-users] No members or missing GUILD_MEMBERS intent');
-          setFetchingUsers(false);
-          return;
-        }
-
-        // Filter out bots
-        const humanMembers = membersData.members.filter((m: any) => !m.bot);
-        console.log(`[fetch-users] Got ${humanMembers.length} human members`);
-
-        // Step 4: Create seats in chunks to avoid blocking the UI
-        const seatData = humanMembers.map((m: any) => ({
-          platform: 'discord',
-          platform_user_id: m.userId,
-          platform_username: m.username,
-          nickname: m.nickname ?? undefined,
-          avatar_url: m.avatar
-            ? `https://cdn.discordapp.com/avatars/${m.userId}/${m.avatar}.png`
-            : undefined,
-          role_ids: [], // No role mapping for quick fetch
-        }));
-
-        const CHUNK_SIZE = 100;
-        let totalCreated = 0;
-        for (let i = 0; i < seatData.length; i += CHUNK_SIZE) {
-          const chunk = seatData.slice(i, i + CHUNK_SIZE);
-          const created = await service.createSeatsBatch(communityId, chunk);
-          totalCreated += created;
-          console.log(`[fetch-users] Chunk ${Math.floor(i / CHUNK_SIZE) + 1}: created ${created} seats (${totalCreated} / ${seatData.length})`);
-          // Yield to event loop
-          if (i + CHUNK_SIZE < seatData.length) {
-            await new Promise((r) => setTimeout(r, 0));
-          }
-        }
-        console.log(`[fetch-users] Created ${totalCreated} seats total`);
-
-        // Reload seats
-        setSeatsLoaded(false);
-      } catch (err) {
-        console.error('[fetch-users] Error:', err);
-      } finally {
-        setFetchingUsers(false);
-      }
+      await doFetchUsersWithToken(event.data.token);
     };
 
     if (typeof window !== 'undefined') window.addEventListener('message', handleMessage);
 
-    // Start OAuth flow
     fetch(`${RELAY}/community/import/discord/start`, { method: 'POST' })
       .then(async (res) => {
         if (!res.ok) throw new Error('Failed to start OAuth');
@@ -849,7 +871,6 @@ export function CommunitySettingsDialog({
         if (typeof window !== 'undefined') window.removeEventListener('message', handleMessage);
       });
 
-    // Poll for popup close
     const pollTimer = setInterval(() => {
       if (fetchPopupRef.current?.closed) {
         clearInterval(pollTimer);
@@ -859,7 +880,7 @@ export function CommunitySettingsDialog({
         }
       }
     }, 500);
-  }, [fetchingUsers, service, communityId]);
+  }, [fetchingUsers, service, communityId, doFetchUsersWithToken]);
 
   const handleSaveOverview = useCallback(async (updates: { name?: string; description?: string }) => {
     if (!service || !identity?.did) return;
