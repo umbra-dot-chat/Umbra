@@ -1,8 +1,10 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { Pressable, View, useWindowDimensions, Platform } from 'react-native';
+import { Animated, Pressable, View, useWindowDimensions, Platform } from 'react-native';
 import { Text, useTheme, MessageActionBar } from '@coexist/wisp-react-native';
 import { ReplyIcon, ThreadIcon, CopyIcon, ForwardIcon, PinIcon, TrashIcon, EditIcon } from '@/components/icons';
 import { SlotRenderer } from '@/components/plugins/SlotRenderer';
+import { useAnimatedToggle } from '@/hooks/useAnimatedToggle';
+import { AnimatedPresence } from '@/components/ui/AnimatedPresence';
 
 // Lazy-load createPortal only on web to avoid react-dom import in native/test
 let createPortal: ((children: React.ReactNode, container: Element) => React.ReactPortal) | null = null;
@@ -101,6 +103,11 @@ export function HoverBubble({
   const colors = theme.colors;
   const { width: winW, height: winH } = useWindowDimensions();
 
+  // Animated action bar fade
+  const { animatedValue: barOpacity, shouldRender: shouldRenderBar } = useAnimatedToggle(showBar, {
+    duration: 150,
+  });
+
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuPos, setMenuPos] = useState({ x: 0, y: 0 });
   const pressableRef = useRef<View>(null);
@@ -169,28 +176,30 @@ export function HoverBubble({
           position: 'relative' as any,
         }}
       >
-        <View
-          style={{
-            position: 'absolute' as any,
-            top: -28,
-            ...(isOut ? { right: 0 } : { left: 0 }),
-            zIndex: 10,
-            opacity: showBar ? 1 : 0,
-            pointerEvents: showBar ? ('auto' as any) : ('none' as any),
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 4,
-          }}
-        >
-          <MessageActionBar actions={actions} />
-          {message && (
-            <SlotRenderer
-              slot="message-actions"
-              props={{ message }}
-              style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
-            />
-          )}
-        </View>
+        {shouldRenderBar && (
+          <Animated.View
+            style={{
+              position: 'absolute' as any,
+              top: -28,
+              ...(isOut ? { right: 0 } : { left: 0 }),
+              zIndex: 10,
+              opacity: barOpacity,
+              pointerEvents: showBar ? ('auto' as any) : ('none' as any),
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 4,
+            }}
+          >
+            <MessageActionBar actions={actions} />
+            {message && (
+              <SlotRenderer
+                slot="message-actions"
+                props={{ message }}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
+              />
+            )}
+          </Animated.View>
+        )}
         {children}
       </Pressable>
 
@@ -210,27 +219,34 @@ export function HoverBubble({
             }}
           />
           {/* Menu */}
-          <View
+          <AnimatedPresence
+            visible={menuOpen}
+            preset="scaleIn"
+            options={{ duration: 150 }}
             style={{
               position: 'fixed' as any,
               left: menuPos.x,
               top: menuPos.y,
               width: MENU_WIDTH,
               zIndex: 9999,
-              backgroundColor: colors.background.canvas,
-              borderRadius: 10,
-              borderWidth: 1,
-              borderColor: colors.border.subtle,
-              paddingVertical: MENU_PADDING,
-              paddingHorizontal: 4,
-              // Shadow
-              shadowColor: '#000',
-              shadowOffset: { width: 0, height: 8 },
-              shadowOpacity: 0.15,
-              shadowRadius: 24,
-              elevation: 8,
             }}
           >
+            <View
+              style={{
+                backgroundColor: colors.background.canvas,
+                borderRadius: 10,
+                borderWidth: 1,
+                borderColor: colors.border.subtle,
+                paddingVertical: MENU_PADDING,
+                paddingHorizontal: 4,
+                // Shadow
+                shadowColor: '#000',
+                shadowOffset: { width: 0, height: 8 },
+                shadowOpacity: 0.15,
+                shadowRadius: 24,
+                elevation: 8,
+              }}
+            >
             <ContextMenuItem
               icon={<ReplyIcon size={14} color={colors.text.secondary} />}
               label="Reply"
@@ -285,7 +301,8 @@ export function HoverBubble({
               danger
               colors={colors}
             />
-          </View>
+            </View>
+          </AnimatedPresence>
         </>,
         document.body,
       )}

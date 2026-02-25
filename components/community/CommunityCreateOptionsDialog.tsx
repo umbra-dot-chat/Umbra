@@ -7,10 +7,16 @@
  */
 
 import React from 'react';
-import { View, Pressable } from 'react-native';
+import { View, Pressable, Image } from 'react-native';
 import { Dialog, Text, useTheme } from '@coexist/wisp-react-native';
 import { defaultSpacing, defaultRadii } from '@coexist/wisp-core/theme/create-theme';
 import Svg, { Path, Circle, Line, Polyline } from 'react-native-svg';
+
+// Community chat ghost illustrations — theme-aware
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const communityChatBlack = require('@/assets/images/community-chat-black.png');
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const communityChatWhite = require('@/assets/images/community-chat-white.png');
 
 // ---------------------------------------------------------------------------
 // Icons
@@ -81,8 +87,10 @@ export function CommunityCreateOptionsDialog({
   onSelectDiscord,
   onSelectJoin,
 }: CommunityCreateOptionsDialogProps) {
-  const { theme } = useTheme();
+  const { theme, mode } = useTheme();
   const tc = theme.colors;
+  const isDark = mode === 'dark';
+  const chatIllustration = isDark ? communityChatWhite : communityChatBlack;
 
   const options = [
     {
@@ -119,6 +127,14 @@ export function CommunityCreateOptionsDialog({
       size="sm"
     >
       <View style={{ gap: defaultSpacing.md }}>
+        <View style={{ alignItems: 'center' }}>
+          <Image
+            source={chatIllustration}
+            style={{ width: 250, height: 250 }}
+            resizeMode="contain"
+          />
+        </View>
+
         <Text size="sm" style={{ color: tc.text.muted }}>
           Create a new community or join an existing one.
         </Text>

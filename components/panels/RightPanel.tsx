@@ -8,6 +8,7 @@ import { useNetwork } from '@/hooks/useNetwork';
 import { SearchPanel } from './SearchPanel';
 import { DmSharedFilesPanel } from '@/components/messaging/DmSharedFilesPanel';
 import { useIsMobile } from '@/hooks/useIsMobile';
+import { AnimatedPresence } from '@/components/ui/AnimatedPresence';
 
 export interface RightPanelProps {
   panelWidth: Animated.Value;
@@ -108,11 +109,13 @@ export function RightPanel({
     </>
   );
 
-  // Mobile: full-screen overlay
+  // Mobile: full-screen overlay with slide-in animation
   if (isMobile) {
-    if (!visiblePanel) return null;
     return (
-      <View
+      <AnimatedPresence
+        visible={!!visiblePanel}
+        preset="slideLeft"
+        slideDistance={40}
         style={{
           position: 'absolute',
           top: 0,
@@ -124,7 +127,7 @@ export function RightPanel({
         }}
       >
         {panelContent}
-      </View>
+      </AnimatedPresence>
     );
   }
 

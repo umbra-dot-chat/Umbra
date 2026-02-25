@@ -125,12 +125,12 @@ export function SoundProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const kvGet = useCallback((key: string): string | null => {
+  const kvGet = useCallback(async (key: string): Promise<string | null> => {
     try {
       const wasm = getWasm();
       if (!wasm) return null;
-      const result = (wasm as any).umbra_wasm_plugin_kv_get(KV_NAMESPACE, key);
-      const parsed = JSON.parse(result);
+      const result = await (wasm as any).umbra_wasm_plugin_kv_get(KV_NAMESPACE, key);
+      const parsed = typeof result === 'string' ? JSON.parse(result) : result;
       return parsed.value ?? null;
     } catch {
       return null;
@@ -143,84 +143,88 @@ export function SoundProvider({ children }: { children: React.ReactNode }) {
     if (!isReady || initialRestoreRef.current) return;
     initialRestoreRef.current = true;
 
-    const engine = engineRef.current;
+    async function restorePreferences() {
+      const engine = engineRef.current;
 
-    // Master volume
-    const savedVol = kvGet(KEY_MASTER_VOLUME);
-    if (savedVol !== null) {
-      const v = parseFloat(savedVol);
-      if (!isNaN(v)) {
-        setMasterVolumeState(v);
-        engine.setMasterVolume(v);
+      // Master volume
+      const savedVol = await kvGet(KEY_MASTER_VOLUME);
+      if (savedVol !== null) {
+        const v = parseFloat(savedVol);
+        if (!isNaN(v)) {
+          setMasterVolumeState(v);
+          engine.setMasterVolume(v);
+        }
+      } else {
+        engine.setMasterVolume(DEFAULT_MASTER_VOLUME);
       }
-    } else {
-      engine.setMasterVolume(DEFAULT_MASTER_VOLUME);
-    }
 
-    // Muted
-    const savedMuted = kvGet(KEY_MUTED);
-    if (savedMuted !== null) {
-      const m = savedMuted === 'true';
-      setMutedState(m);
-      engine.setMuted(m);
-    }
+      // Muted
+      const savedMuted = await kvGet(KEY_MUTED);
+      if (savedMuted !== null) {
+        const m = savedMuted === 'true';
+        setMutedState(m);
+        engine.setMuted(m);
+      }
 
-    // Category volumes
-    const savedCat = kvGet(KEY_CATEGORY_VOLUMES);
-    if (savedCat) {
-      try {
-        const parsed = JSON.parse(savedCat);
-        const vols = defaultCategoryVolumes();
-        for (const cat of SOUND_CATEGORIES) {
-          if (typeof parsed[cat] === 'number') {
-            vols[cat] = parsed[cat];
-            engine.setCategoryVolume(cat, parsed[cat]);
+      // Category volumes
+      const savedCat = await kvGet(KEY_CATEGORY_VOLUMES);
+      if (savedCat) {
+        try {
+          const parsed = JSON.parse(savedCat);
+          const vols = defaultCategoryVolumes();
+          for (const cat of SOUND_CATEGORIES) {
+            if (typeof parsed[cat] === 'number') {
+              vols[cat] = parsed[cat];
+              engine.setCategoryVolume(cat, parsed[cat]);
+            }
+          }
+          setCategoryVolumesState(vols);
+        } catch {
+          // ignore corrupt data
+        }
+      }
+
+      // Category enabled/disabled
+      const savedEnabled = await kvGet(KEY_CATEGORY_ENABLED);
+      if (savedEnabled) {
+        try {
+          const parsed = JSON.parse(savedEnabled);
+          const enabled = defaultCategoryEnabled();
+          for (const cat of SOUND_CATEGORIES) {
+            if (typeof parsed[cat] === 'boolean') {
+              enabled[cat] = parsed[cat];
+              engine.setCategoryEnabled(cat, parsed[cat]);
+            }
+          }
+          setCategoryEnabledState(enabled);
+        } catch {
+          // ignore corrupt data — use defaults
+          const defaults = defaultCategoryEnabled();
+          for (const cat of SOUND_CATEGORIES) {
+            engine.setCategoryEnabled(cat, defaults[cat]);
           }
         }
-        setCategoryVolumesState(vols);
-      } catch {
-        // ignore corrupt data
-      }
-    }
-
-    // Category enabled/disabled
-    const savedEnabled = kvGet(KEY_CATEGORY_ENABLED);
-    if (savedEnabled) {
-      try {
-        const parsed = JSON.parse(savedEnabled);
-        const enabled = defaultCategoryEnabled();
-        for (const cat of SOUND_CATEGORIES) {
-          if (typeof parsed[cat] === 'boolean') {
-            enabled[cat] = parsed[cat];
-            engine.setCategoryEnabled(cat, parsed[cat]);
-          }
-        }
-        setCategoryEnabledState(enabled);
-      } catch {
-        // ignore corrupt data — use defaults
+      } else {
+        // Apply defaults to engine
         const defaults = defaultCategoryEnabled();
         for (const cat of SOUND_CATEGORIES) {
           engine.setCategoryEnabled(cat, defaults[cat]);
         }
       }
-    } else {
-      // Apply defaults to engine
-      const defaults = defaultCategoryEnabled();
-      for (const cat of SOUND_CATEGORIES) {
-        engine.setCategoryEnabled(cat, defaults[cat]);
+
+      // Theme
+      const savedTheme = await kvGet(KEY_THEME);
+      if (savedTheme) {
+        setActiveThemeState(savedTheme as SoundThemeId);
+        engine.setActiveTheme(savedTheme as SoundThemeId);
+      } else {
+        engine.setActiveTheme(DEFAULT_THEME);
       }
+
+      setLoaded(true);
     }
 
-    // Theme
-    const savedTheme = kvGet(KEY_THEME);
-    if (savedTheme) {
-      setActiveThemeState(savedTheme as SoundThemeId);
-      engine.setActiveTheme(savedTheme as SoundThemeId);
-    } else {
-      engine.setActiveTheme(DEFAULT_THEME);
-    }
-
-    setLoaded(true);
+    restorePreferences();
   }, [isReady, kvGet]);
 
   // ── Resume AudioContext on first user interaction ──────────────────

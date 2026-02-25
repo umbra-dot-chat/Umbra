@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Platform } from 'react-native';
 import type { PlatformDownload, AppUpdateState } from '@/types/version';
+import appJson from '@/app.json';
 
-// Current app version from package.json / app.json
-const APP_VERSION = '1.5.0';
+const APP_VERSION = appJson.expo.version;
 
 const GITHUB_REPO = 'InfamousVague/Umbra';
 const GITHUB_API_URL = `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`;
@@ -13,6 +13,7 @@ const CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
 
 // Storage key prefix for dismiss state
 const DISMISS_KEY_PREFIX = 'umbra_update_dismissed_';
+const INSTALL_DISMISS_KEY = 'umbra_install_prompt_dismissed';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -20,7 +21,7 @@ const DISMISS_KEY_PREFIX = 'umbra_update_dismissed_';
 
 /** Detect if running inside Tauri (desktop) */
 function isTauri(): boolean {
-  return typeof window !== 'undefined' && '__TAURI__' in window;
+  return typeof window !== 'undefined' && !!(window as any).__TAURI_INTERNALS__;
 }
 
 /** Detect the user's OS for download recommendation */
@@ -215,6 +216,16 @@ export function useAppUpdate(): AppUpdateState {
   const [desktopProgress, setDesktopProgress] = useState(0);
   const tauriUpdateRef = useRef<any>(null);
 
+  // Web OTA state
+  const [webPhase, setWebPhase] = useState<'idle' | 'preloading' | 'ready' | 'error'>('idle');
+  const [webProgress, setWebProgress] = useState(0);
+  const [webStatusText, setWebStatusText] = useState('');
+
+  // Web install prompt dismiss state (separate from version update dismiss)
+  const [isInstallDismissed, setIsInstallDismissed] = useState(() => {
+    return getStorageItem(INSTALL_DISMISS_KEY) === 'true';
+  });
+
   // Check for dismissed state on mount
   useEffect(() => {
     if (latestVersion) {
@@ -280,13 +291,18 @@ export function useAppUpdate(): AppUpdateState {
       setDesktopPhase('downloading');
       setDesktopProgress(0);
 
+      let totalBytes = 0;
+      let downloadedBytes = 0;
+
       await update.downloadAndInstall((event: any) => {
-        if (event.event === 'Started' && event.data?.contentLength) {
-          // Total size known
+        if (event.event === 'Started') {
+          totalBytes = event.data?.contentLength || 0;
+          downloadedBytes = 0;
         } else if (event.event === 'Progress') {
-          const chunkLength = event.data?.chunkLength || 0;
-          const contentLength = event.data?.contentLength || 1;
-          setDesktopProgress((prev) => Math.min(100, prev + (chunkLength / contentLength) * 100));
+          downloadedBytes += event.data?.chunkLength || 0;
+          if (totalBytes > 0) {
+            setDesktopProgress(Math.min(100, (downloadedBytes / totalBytes) * 100));
+          }
         } else if (event.event === 'Finished') {
           setDesktopProgress(100);
           setDesktopPhase('ready');
@@ -310,6 +326,81 @@ export function useAppUpdate(): AppUpdateState {
     }
   }, []);
 
+  // Web OTA: preload new assets then reload without cache
+  const preloadAndReload = useCallback(async () => {
+    if (!isWeb) return;
+
+    try {
+      setWebPhase('preloading');
+      setWebProgress(0);
+      setWebStatusText('Checking for updates...');
+
+      // Step 1: Fetch the fresh index.html (cache-busted) to discover new asset URLs
+      setWebProgress(10);
+      setWebStatusText('Fetching latest version...');
+      const indexRes = await fetch('/', { cache: 'no-store' });
+      if (!indexRes.ok) throw new Error(`Failed to fetch index: ${indexRes.status}`);
+      const html = await indexRes.text();
+
+      // Step 2: Parse out JS and CSS asset URLs from the HTML
+      const assetUrls: string[] = [];
+      const scriptMatches = html.matchAll(/<script[^>]+src=["']([^"']+)["']/gi);
+      for (const m of scriptMatches) assetUrls.push(m[1]);
+      const linkMatches = html.matchAll(/<link[^>]+href=["']([^"']+\.css[^"']*)["']/gi);
+      for (const m of linkMatches) assetUrls.push(m[1]);
+
+      setWebProgress(20);
+      setWebStatusText(`Preloading ${assetUrls.length} assets...`);
+
+      // Step 3: Preload each asset so the browser caches them before reload
+      const total = assetUrls.length || 1;
+      let loaded = 0;
+
+      await Promise.allSettled(
+        assetUrls.map(async (url) => {
+          try {
+            const fullUrl = url.startsWith('http') ? url : `${window.location.origin}${url.startsWith('/') ? '' : '/'}${url}`;
+            await fetch(fullUrl, { cache: 'reload' });
+          } catch {
+            // Non-critical — the browser will fetch on reload anyway
+          } finally {
+            loaded++;
+            setWebProgress(20 + Math.round((loaded / total) * 70));
+            setWebStatusText(`Preloading assets (${loaded}/${total})...`);
+          }
+        }),
+      );
+
+      // Step 4: Clear any service worker caches
+      setWebProgress(95);
+      setWebStatusText('Finalizing...');
+      if ('caches' in window) {
+        try {
+          const cacheNames = await caches.keys();
+          await Promise.all(cacheNames.map((name) => caches.delete(name)));
+        } catch {
+          // Not critical
+        }
+      }
+
+      // Step 5: Ready — user sees "Update ready" and can confirm
+      setWebProgress(100);
+      setWebStatusText('Ready to update!');
+      setWebPhase('ready');
+    } catch (err) {
+      console.error('[useAppUpdate] Web preload failed:', err);
+      setWebPhase('error');
+      setWebStatusText('Preload failed');
+    }
+  }, [isWeb]);
+
+  // Web OTA: perform the actual reload (called after preload completes)
+  const webReload = useCallback(() => {
+    if (typeof window !== 'undefined') {
+      window.location.reload();
+    }
+  }, []);
+
   // Initial fetch + periodic check
   useEffect(() => {
     fetchLatestRelease();
@@ -328,11 +419,11 @@ export function useAppUpdate(): AppUpdateState {
     return () => clearInterval(interval);
   }, [fetchLatestRelease, checkTauriUpdate, isDesktop]);
 
-  // Determine if there's an update
+  // Determine if there's an actual version update available
   const hasUpdate = latestVersion ? isNewerVersion(latestVersion, APP_VERSION) : false;
 
-  // For web users, always show the install prompt (even if same version)
-  const shouldShow = isWeb || hasUpdate;
+  // Show the banner if there's a real update OR if web user hasn't dismissed the install prompt
+  const shouldShow = hasUpdate || isWeb;
 
   // Find the best download for the current platform
   const userPlatform = detectPlatform();
@@ -340,15 +431,22 @@ export function useAppUpdate(): AppUpdateState {
     ? downloads.find((d) => d.platform === userPlatform) || null
     : null;
 
-  // Dismiss handler
+  // Dismiss handler (for version update banners)
   const dismiss = useCallback(() => {
     const version = latestVersion || APP_VERSION;
     setStorageItem(`${DISMISS_KEY_PREFIX}${version}`, 'true');
     setIsDismissed(true);
   }, [latestVersion]);
 
+  // Dismiss handler for web install-as-app prompt
+  const dismissInstall = useCallback(() => {
+    setStorageItem(INSTALL_DISMISS_KEY, 'true');
+    setIsInstallDismissed(true);
+  }, []);
+
   return {
     hasUpdate: shouldShow,
+    hasVersionUpdate: hasUpdate,
     isWebUser: isWeb,
     isDesktopUser: isDesktop,
     currentVersion: APP_VERSION,
@@ -356,7 +454,9 @@ export function useAppUpdate(): AppUpdateState {
     downloads,
     primaryDownload,
     dismiss,
+    dismissInstall,
     isDismissed,
+    isInstallDismissed,
     isLoading,
     releaseUrl,
     checkForUpdate: fetchLatestRelease,
@@ -366,6 +466,13 @@ export function useAppUpdate(): AppUpdateState {
       phase: desktopPhase,
       downloadAndInstall,
       restart,
+    },
+    webUpdate: {
+      available: isWeb && hasUpdate,
+      phase: webPhase,
+      progress: webProgress,
+      statusText: webStatusText,
+      preloadAndReload: webPhase === 'ready' ? webReload : preloadAndReload,
     },
   };
 }

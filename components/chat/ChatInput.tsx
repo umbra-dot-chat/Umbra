@@ -5,10 +5,11 @@ import {
   CombinedPicker, MentionAutocomplete,
 } from '@coexist/wisp-react-native';
 import type { EmojiItem } from '@coexist/wisp-core/types/EmojiPicker.types';
-import type { StickerPickerPack } from '@coexist/wisp-core/types/StickerPicker.types';
+import type { GifItem } from '@coexist/wisp-core/types/GifPicker.types';
 import { useFriends } from '@/hooks/useFriends';
 import { useNetwork } from '@/hooks/useNetwork';
 import { useMention } from '@/hooks/useMention';
+import { AnimatedPresence } from '@/components/ui/AnimatedPresence';
 
 export interface ChatInputProps {
   message: string;
@@ -26,17 +27,17 @@ export interface ChatInputProps {
   onAttachmentClick?: () => void;
   /** Custom community emoji for the picker */
   customEmojis?: EmojiItem[];
-  /** Sticker packs for the picker */
-  stickerPacks?: StickerPickerPack[];
-  /** Called when a sticker is selected */
-  onStickerSelect?: (stickerId: string, packId: string) => void;
+  /** Relay URL for GIF picker proxy */
+  relayUrl?: string;
+  /** Called when a GIF is selected */
+  onGifSelect?: (gif: GifItem) => void;
 }
 
 export function ChatInput({
   message, onMessageChange, emojiOpen, onToggleEmoji,
   replyingTo, onClearReply, onSubmit,
   editing, onCancelEdit, onAttachmentClick,
-  customEmojis, stickerPacks, onStickerSelect,
+  customEmojis, relayUrl, onGifSelect,
 }: ChatInputProps) {
   const { theme } = useTheme();
   const { friends } = useFriends();
@@ -151,23 +152,26 @@ export function ChatInput({
 
   return (
     <>
-      {emojiOpen && (
-        <View style={{ position: 'absolute', bottom: 64, right: 12, zIndex: 20 }}>
-          <CombinedPicker
-            size="md"
-            onEmojiSelect={(emoji) => {
-              onMessageChange(message + emoji);
-              onToggleEmoji();
-            }}
-            customEmojis={customEmojis}
-            stickerPacks={stickerPacks}
-            onStickerSelect={(stickerId, packId) => {
-              onStickerSelect?.(stickerId, packId);
-              onToggleEmoji();
-            }}
-          />
-        </View>
-      )}
+      <AnimatedPresence
+        visible={emojiOpen}
+        preset="slideUp"
+        slideDistance={16}
+        style={{ position: 'absolute', bottom: 64, right: 12, zIndex: 20 }}
+      >
+        <CombinedPicker
+          size="md"
+          onEmojiSelect={(emoji) => {
+            onMessageChange(message + emoji);
+            onToggleEmoji();
+          }}
+          customEmojis={customEmojis}
+          relayUrl={relayUrl}
+          onGifSelect={(gif) => {
+            onGifSelect?.(gif);
+            onToggleEmoji();
+          }}
+        />
+      </AnimatedPresence>
       <View ref={inputWrapperRef} style={{ padding: 12 }}>
         {/* Mention autocomplete dropdown */}
         {mentionOpen && (

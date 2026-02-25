@@ -1043,15 +1043,17 @@ export function CommunitySettingsDialog({
 
       case 'invites':
         return (
-          <CommunityInvitePanel
-            communityId={communityId}
-            invites={invites || []}
-            onCreateInvite={onCreateInvite}
-            onDeleteInvite={onDeleteInvite}
-            creating={inviteCreating}
-            loading={invitesLoading}
-            title="Invites"
-          />
+          <View style={{ flex: 1, padding: defaultSpacing.md }}>
+            <CommunityInvitePanel
+              communityId={communityId}
+              invites={invites || []}
+              onCreateInvite={onCreateInvite}
+              onDeleteInvite={onDeleteInvite}
+              creating={inviteCreating}
+              loading={invitesLoading}
+              title="Invites"
+            />
+          </View>
         );
 
       case 'bridge':

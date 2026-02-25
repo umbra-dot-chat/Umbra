@@ -21,6 +21,7 @@
 
 import React, { useMemo, useCallback, useState, useRef } from 'react';
 import { View, Image, Animated, Pressable } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { GestureResponderEvent } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { useIsMobile } from '@/hooks/useIsMobile';
@@ -272,6 +273,7 @@ export default function CommunityPage() {
   const { theme } = useTheme();
   const { identity } = useAuth();
   const { service } = useUmbra();
+  const insets = useSafeAreaInsets();
   const myDid = identity?.did ?? '';
   const isMock = communityId?.startsWith('mock-') ?? false;
 
@@ -893,14 +895,14 @@ export default function CommunityPage() {
                   <CombinedPicker
                     size="md"
                     customEmojis={customEmojiItems.length > 0 ? customEmojiItems : undefined}
-                    stickerPacks={stickerPickerPacks.length > 0 ? stickerPickerPacks : undefined}
+                    relayUrl={process.env.EXPO_PUBLIC_RELAY_URL || 'https://relay.umbra.chat'}
                     onEmojiSelect={(emoji: string, item?: EmojiItem) => {
                       const text = item?.imageUrl ? `:${item.name}:` : emoji;
                       setMessageText((prev) => prev + text);
                       setEmojiOpen(false);
                     }}
-                    onStickerSelect={(stickerId: string) => {
-                      handleSendMessage(`sticker::${stickerId}`);
+                    onGifSelect={(gif) => {
+                      handleSendMessage(`gif::${gif.url}`);
                       setEmojiOpen(false);
                     }}
                   />
@@ -921,6 +923,10 @@ export default function CommunityPage() {
                   setEmojiOpen((prev) => !prev);
                 }}
               />
+              {/* Safe area spacing below the input */}
+              {insets.bottom > 0 && (
+                <View style={{ height: insets.bottom }} />
+              )}
             </View>
           </>
         ) : (

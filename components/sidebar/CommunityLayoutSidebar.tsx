@@ -28,6 +28,10 @@ import {
 
 import { SettingsIcon, FileTextIcon, ShieldIcon, BellIcon, LogOutIcon, PlusIcon, VolumeIcon, TrashIcon, QrCodeIcon, ShareIcon } from '@/components/icons';
 import { QRCardDialog } from '@/components/qr/QRCardDialog';
+
+// Default community icon — the colored Umbra ghost app icon
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const defaultCommunityIcon = require('@/assets/images/icon.png');
 import { VoiceChannelBar } from '@/components/community/VoiceChannelBar';
 import { VoiceChannelUsers } from '@/components/community/VoiceChannelUsers';
 import { useVoiceChannel } from '@/contexts/VoiceChannelContext';
@@ -48,6 +52,8 @@ import { SpaceContextMenu } from '@/components/community/SpaceContextMenu';
 import { CategoryContextMenu } from '@/components/community/CategoryContextMenu';
 import { InputDialog } from '@/components/community/InputDialog';
 import { ConfirmDialog } from '@/components/community/ConfirmDialog';
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const umbraDeadImage = require('@/assets/emoji/umbra-dead.png');
 import { ChannelCreateDialog } from '@/components/community/ChannelCreateDialog';
 import type { CreateChannelType } from '@/components/community/ChannelCreateDialog';
 import { MoveToCategoryDialog } from '@/components/community/MoveToCategoryDialog';
@@ -211,6 +217,9 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
 
   const { joinVoiceChannel, voiceParticipants, speakingDids } = useVoiceChannel();
 
+  // Track the communityId so we can detect switches
+  const prevCommunityIdRef = useRef(communityId);
+
   // Fetch real community data (skipped for mock communities)
   const {
     community,
@@ -323,13 +332,13 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
     return {
       name: community?.name ?? 'Loading...',
       subtitle: `${members.length} member${members.length !== 1 ? 's' : ''}`,
-      icon: community?.iconUrl ? (
+      icon: (
         <Image
-          source={{ uri: community.iconUrl }}
+          source={community?.iconUrl ? { uri: community.iconUrl } : defaultCommunityIcon}
           style={{ width: 24, height: 24, borderRadius: 6 }}
           resizeMode="cover"
         />
-      ) : undefined,
+      ),
     };
   }, [isMock, community?.name, community?.iconUrl, members.length]);
 
@@ -338,12 +347,28 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
     return spaces.map((s) => ({ id: s.id, name: s.name }));
   }, [isMock, spaces]);
 
-  // Auto-select first space
+  // Auto-select first space.
+  // When switching communities, the activeSpaceId holds an ID from the old
+  // community. We detect this by checking if the current activeSpaceId exists
+  // in the new community's space list. If not, reset and pick the first space.
   useEffect(() => {
-    if (wispSpaces.length > 0 && !activeSpaceId) {
-      setActiveSpaceId(wispSpaces[0]?.id ?? null);
+    if (wispSpaces.length === 0) return;
+
+    const communityChanged = communityId !== prevCommunityIdRef.current;
+    if (communityChanged) {
+      prevCommunityIdRef.current = communityId;
     }
-  }, [wispSpaces, activeSpaceId, setActiveSpaceId]);
+
+    const spaceExists = activeSpaceId && wispSpaces.some((s) => s.id === activeSpaceId);
+
+    if (!spaceExists) {
+      setActiveSpaceId(wispSpaces[0]?.id ?? null);
+      // Also reset channel since it belongs to the old space
+      if (communityChanged || !spaceExists) {
+        setActiveChannelId(null);
+      }
+    }
+  }, [wispSpaces, activeSpaceId, communityId, setActiveSpaceId, setActiveChannelId]);
 
   // Auto-select first channel
   useEffect(() => {
@@ -1769,6 +1794,7 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
         message={`Are you sure you want to permanently delete "${community?.name || 'this community'}"? This will delete all channels, messages, roles, and members. This action cannot be undone.`}
         confirmLabel="Delete Community"
         onConfirm={handleDeleteConfirm}
+        image={umbraDeadImage}
       />
 
       {/* QR Invite Dialog */}

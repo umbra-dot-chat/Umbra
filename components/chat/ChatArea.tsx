@@ -1,7 +1,7 @@
-import React, { useCallback, useMemo } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Platform, ScrollView, View, Pressable, Text as RNText } from 'react-native';
 import {
-  Avatar, ChatBubble, Text, TypingIndicator, useTheme,
+  Avatar, ChatBubble, Text, TypingIndicator, NewMessageDivider, useTheme,
 } from '@coexist/wisp-react-native';
 import { SmileIcon, ReplyIcon, ThreadIcon, MoreIcon } from '@/components/icons';
 import { HoverBubble } from './HoverBubble';
@@ -53,6 +53,8 @@ export interface ChatAreaProps {
   stickyHeader?: React.ReactNode;
   /** Custom emoji (built-in + community) for inline rendering in messages. */
   customEmoji?: CommunityEmoji[];
+  /** ID of the first unread message — divider is shown before it. */
+  firstUnreadMessageId?: string | null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -288,6 +290,7 @@ export function ChatArea({
   onToggleReaction, onEditMessage, onDeleteMessage, onPinMessage, onForwardMessage, onCopyMessage,
   stickyHeader,
   customEmoji,
+  firstUnreadMessageId,
 }: ChatAreaProps) {
   const { theme } = useTheme();
   const themeColors = theme.colors;
@@ -299,6 +302,39 @@ export function ChatArea({
     [customEmoji],
   );
   const isInline = displayMode === 'inline';
+
+  // ── Scroll-to-bottom logic ──
+  const scrollRef = useRef<ScrollView>(null);
+  // Track whether the user is near the bottom so we auto-scroll on new messages
+  // but don't yank them back if they scrolled up to read history.
+  const isNearBottomRef = useRef(true);
+  const prevMessageCountRef = useRef(messages.length);
+
+  const handleScroll = useCallback((e: any) => {
+    const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
+    // Consider "near bottom" if within 150px of the end
+    const distanceFromBottom = contentSize.height - layoutMeasurement.height - contentOffset.y;
+    isNearBottomRef.current = distanceFromBottom < 150;
+  }, []);
+
+  // When new messages arrive, auto-scroll if user is near the bottom
+  useEffect(() => {
+    if (messages.length > prevMessageCountRef.current && isNearBottomRef.current) {
+      // Small delay so layout has time to update before scrolling
+      setTimeout(() => {
+        scrollRef.current?.scrollToEnd({ animated: true });
+      }, 50);
+    }
+    prevMessageCountRef.current = messages.length;
+  }, [messages.length]);
+
+  // Scroll to end when content first renders (show most recent messages)
+  const handleContentSizeChange = useCallback((_w: number, _h: number) => {
+    // Only auto-scroll to end if user hasn't scrolled up
+    if (isNearBottomRef.current) {
+      scrollRef.current?.scrollToEnd({ animated: false });
+    }
+  }, []);
 
   if (isLoading) {
     return <LoadingSkeleton />;
@@ -352,8 +388,12 @@ export function ChatArea({
 
   return (
     <ScrollView
+      ref={scrollRef}
       style={{ flex: 1 }}
       contentContainerStyle={{ padding: 16, gap: 8 }}
+      onScroll={handleScroll}
+      scrollEventThrottle={100}
+      onContentSizeChange={handleContentSizeChange}
     >
       {/* Scrollable header content (e.g. E2EE banner) */}
       {stickyHeader}
@@ -371,6 +411,10 @@ export function ChatArea({
         const timeStr = formatTime(firstMsg.timestamp);
         const firstText = getMessageText(firstMsg);
 
+        // Show "New" divider before the group containing the first unread message
+        const showUnreadDivider = firstUnreadMessageId != null &&
+          group.some((m) => m.id === firstUnreadMessageId);
+
         // ── Call event: render as a centered system-style row ──
         if (isCallEventMessage(firstText)) {
           const parsed = parseCallEvent(firstText);
@@ -387,6 +431,9 @@ export function ChatArea({
                 paddingVertical: 6,
               }}
             >
+              {showUnreadDivider && (
+                <NewMessageDivider style={{ marginBottom: 8, alignSelf: 'stretch' }} />
+              )}
               <View
                 style={{
                   flexDirection: 'row',
@@ -570,36 +617,44 @@ export function ChatArea({
         if (isInline) {
           // ── Inline layout (Slack/Discord style) ──
           return (
-            <InlineMsgGroup
-              key={`group-${groupIdx}`}
-              sender={senderName}
-              avatar={renderAvatar(senderDid, senderName)}
-              timestamp={timeStr}
-              status={isOutgoing ? (firstMsg.status as string) : undefined}
-              senderColor={isGroupChat ? memberColor(senderDid) : undefined}
-              themeColors={themeColors}
-              onAvatarPress={(e: any) => onShowProfile(senderName, e)}
-            >
-              {renderMessages(true)}
-            </InlineMsgGroup>
+            <React.Fragment key={`group-${groupIdx}`}>
+              {showUnreadDivider && (
+                <NewMessageDivider style={{ marginVertical: 4 }} />
+              )}
+              <InlineMsgGroup
+                sender={senderName}
+                avatar={renderAvatar(senderDid, senderName)}
+                timestamp={timeStr}
+                status={isOutgoing ? (firstMsg.status as string) : undefined}
+                senderColor={isGroupChat ? memberColor(senderDid) : undefined}
+                themeColors={themeColors}
+                onAvatarPress={(e: any) => onShowProfile(senderName, e)}
+              >
+                {renderMessages(true)}
+              </InlineMsgGroup>
+            </React.Fragment>
           );
         }
 
         // ── Bubble layout (default) ──
         return (
-          <MsgGroup
-            key={`group-${groupIdx}`}
-            align={isOutgoing ? 'outgoing' : 'incoming'}
-            sender={senderName}
-            avatar={renderAvatar(senderDid, senderName)}
-            timestamp={timeStr}
-            status={isOutgoing ? (firstMsg.status as string) : undefined}
-            senderColor={isGroupChat && !isOutgoing ? memberColor(senderDid) : undefined}
-            themeColors={themeColors}
-            onAvatarPress={(e: any) => onShowProfile(senderName, e)}
-          >
-            {renderMessages(false)}
-          </MsgGroup>
+          <React.Fragment key={`group-${groupIdx}`}>
+            {showUnreadDivider && (
+              <NewMessageDivider style={{ marginVertical: 4 }} />
+            )}
+            <MsgGroup
+              align={isOutgoing ? 'outgoing' : 'incoming'}
+              sender={senderName}
+              avatar={renderAvatar(senderDid, senderName)}
+              timestamp={timeStr}
+              status={isOutgoing ? (firstMsg.status as string) : undefined}
+              senderColor={isGroupChat && !isOutgoing ? memberColor(senderDid) : undefined}
+              themeColors={themeColors}
+              onAvatarPress={(e: any) => onShowProfile(senderName, e)}
+            >
+              {renderMessages(false)}
+            </MsgGroup>
+          </React.Fragment>
         );
       })}
 

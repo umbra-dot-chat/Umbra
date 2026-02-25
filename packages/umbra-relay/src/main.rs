@@ -18,6 +18,7 @@
 mod asset;
 mod bridge;
 mod discovery;
+mod gif;
 mod federation;
 mod handler;
 mod protocol;
@@ -419,6 +420,19 @@ async fn main() {
         )
         .with_state((discovery_store, discovery_config));
 
+    // GIF proxy (Tenor)
+    let gif_config = gif::config::GifConfig::from_env();
+    if gif_config.enabled() {
+        tracing::info!("Tenor GIF proxy enabled");
+    } else {
+        tracing::warn!("Tenor GIF proxy disabled (set TENOR_API_KEY to enable)");
+    }
+
+    let gif_router = Router::new()
+        .route("/api/gif/search", get(gif::api::search))
+        .route("/api/gif/trending", get(gif::api::trending))
+        .with_state(gif_config);
+
     // Build main router
     let cors = CorsLayer::new()
         .allow_origin(Any)
@@ -436,6 +450,7 @@ async fn main() {
         .merge(discovery_router)
         .merge(bridge_router)
         .merge(asset_router)
+        .merge(gif_router)
         .layer(cors)
         .layer(TraceLayer::new_for_http());
 

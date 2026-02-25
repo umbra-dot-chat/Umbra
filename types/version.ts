@@ -38,8 +38,10 @@ export interface VersionManifest {
 
 /** State returned by the useAppUpdate hook */
 export interface AppUpdateState {
-  /** Whether a newer version is available (always true for web users) */
+  /** Whether the banner should show (update available OR web install prompt) */
   hasUpdate: boolean;
+  /** Whether there is an actual newer version (not just the install prompt) */
+  hasVersionUpdate: boolean;
   /** Whether the current user is on the web platform */
   isWebUser: boolean;
   /** Whether the current user is on a desktop (Tauri) platform */
@@ -52,10 +54,14 @@ export interface AppUpdateState {
   downloads: PlatformDownload[];
   /** Best download for the user's current platform */
   primaryDownload: PlatformDownload | null;
-  /** Dismiss the banner for this version */
+  /** Dismiss the update banner for this version */
   dismiss: () => void;
-  /** Whether the user has dismissed the banner */
+  /** Dismiss the web install-as-app prompt */
+  dismissInstall: () => void;
+  /** Whether the user has dismissed the update banner */
   isDismissed: boolean;
+  /** Whether the user has dismissed the install-as-app prompt */
+  isInstallDismissed: boolean;
   /** Whether the hook is still fetching */
   isLoading: boolean;
   /** Release notes URL */
@@ -74,5 +80,18 @@ export interface AppUpdateState {
     downloadAndInstall: () => void;
     /** Restart the app after install */
     restart: () => void;
+  };
+  /** Web OTA update state */
+  webUpdate: {
+    /** Whether a newer version is actually available on the web */
+    available: boolean;
+    /** Current phase: idle | preloading | ready | error */
+    phase: 'idle' | 'preloading' | 'ready' | 'error';
+    /** Preload progress (0-100) */
+    progress: number;
+    /** Status message shown during preload */
+    statusText: string;
+    /** Preload new assets then reload the page */
+    preloadAndReload: () => void;
   };
 }

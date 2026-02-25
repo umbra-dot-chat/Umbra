@@ -13,11 +13,16 @@
  */
 
 import React from 'react';
-import { Image, Pressable, ScrollView, View } from 'react-native';
+import { Animated, Image, Pressable, ScrollView, View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
 import { Text, Skeleton, useTheme, NotificationBadge } from '@coexist/wisp-react-native';
 import { UmbraIcon, FolderIcon, PlusIcon, SettingsIcon, BellIcon } from '@/components/icons';
 import type { Community } from '@umbra/service';
+import { useAnimatedToggle } from '@/hooks/useAnimatedToggle';
+
+// Default community icon — the colored Umbra ghost app icon
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const defaultCommunityIcon = require('@/assets/images/icon.png');
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -186,17 +191,11 @@ export function NavigationRail({
                   theme={theme}
                   iconUrl={community.iconUrl}
                 >
-                  <Text
-                    size="sm"
-                    weight="bold"
-                    style={{
-                      color: isActive
-                        ? theme.colors.text.inverse
-                        : theme.colors.text.secondary,
-                    }}
-                  >
-                    {community.name.charAt(0).toUpperCase()}
-                  </Text>
+                  <Image
+                    source={defaultCommunityIcon}
+                    style={{ width: ICON_SIZE, height: ICON_SIZE }}
+                    resizeMode="cover"
+                  />
                 </RailItem>
               );
             })}
@@ -312,12 +311,13 @@ interface RailItemProps {
 
 function RailItem({ active, onPress, accentColor, theme, children, ringProgress, iconUrl, badgeCount }: RailItemProps) {
   const showRing = ringProgress != null && ringProgress > 0 && ringProgress < 100;
+  const { animatedValue: indicatorAnim, shouldRender: showIndicator } = useAnimatedToggle(active, { duration: 150 });
 
   return (
     <View style={{ width: '100%', alignItems: 'center', marginBottom: 4, position: 'relative' }}>
       {/* Active indicator pill on the left edge */}
-      {active && (
-        <View
+      {showIndicator && (
+        <Animated.View
           style={{
             position: 'absolute',
             left: 0,
@@ -328,6 +328,13 @@ function RailItem({ active, onPress, accentColor, theme, children, ringProgress,
             borderTopRightRadius: ACTIVE_INDICATOR_WIDTH,
             borderBottomRightRadius: ACTIVE_INDICATOR_WIDTH,
             backgroundColor: theme.colors.text.primary,
+            opacity: indicatorAnim,
+            transform: [{
+              scaleY: indicatorAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0.5, 1],
+              }),
+            }],
           }}
         />
       )}

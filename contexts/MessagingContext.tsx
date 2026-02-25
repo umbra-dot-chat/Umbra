@@ -71,12 +71,12 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  const kvGet = useCallback((key: string): string | null => {
+  const kvGet = useCallback(async (key: string): Promise<string | null> => {
     try {
       const wasm = getWasm();
       if (!wasm) return null;
-      const result = (wasm as any).umbra_wasm_plugin_kv_get(KV_NAMESPACE, key);
-      const parsed = JSON.parse(result);
+      const result = await (wasm as any).umbra_wasm_plugin_kv_get(KV_NAMESPACE, key);
+      const parsed = typeof result === 'string' ? JSON.parse(result) : result;
       return parsed.value ?? null;
     } catch {
       return null;
@@ -89,12 +89,16 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
     if (!isReady || initialRestoreRef.current) return;
     initialRestoreRef.current = true;
 
-    const savedMode = kvGet(KEY_DISPLAY_MODE);
-    if (savedMode === 'bubble' || savedMode === 'inline') {
-      setDisplayModeState(savedMode);
+    async function restorePreferences() {
+      const savedMode = await kvGet(KEY_DISPLAY_MODE);
+      if (savedMode === 'bubble' || savedMode === 'inline') {
+        setDisplayModeState(savedMode);
+      }
+
+      setLoaded(true);
     }
 
-    setLoaded(true);
+    restorePreferences();
   }, [isReady, kvGet]);
 
   // ── Relay sync: listen for incoming metadata updates ─────────────────

@@ -277,8 +277,8 @@ export function PluginProvider({ children }: { children: React.ReactNode }) {
     try {
       const wasm = getWasm();
       if (!wasm) return null;
-      const result = (wasm as any).umbra_wasm_plugin_kv_get(SYSTEM_PLUGIN_ID, `plugin_state:${pluginId}`);
-      const parsed = JSON.parse(result);
+      const result = await (wasm as any).umbra_wasm_plugin_kv_get(SYSTEM_PLUGIN_ID, `plugin_state:${pluginId}`);
+      const parsed = typeof result === 'string' ? JSON.parse(result) : result;
       const value = parsed.value ?? null;
       if (value === 'enabled' || value === 'disabled') return value;
       return null;

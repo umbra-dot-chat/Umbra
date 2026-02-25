@@ -26,6 +26,7 @@ import { resolveShortcode } from '@/constants/emojiShortcodes';
 // ---------------------------------------------------------------------------
 
 const STICKER_PATTERN = /^sticker::(.+)$/;
+const GIF_PATTERN = /^gif::(.+)$/;
 const EMOJI_PATTERN = /:([a-zA-Z0-9_]{2,32}):/g;
 
 // ---------------------------------------------------------------------------
@@ -75,6 +76,15 @@ export function isStickerMessage(content: string): boolean {
 
 export function extractStickerId(content: string): string | null {
   const match = content.match(STICKER_PATTERN);
+  return match ? match[1] : null;
+}
+
+export function isGifMessage(content: string): boolean {
+  return GIF_PATTERN.test(content);
+}
+
+export function extractGifUrl(content: string): string | null {
+  const match = content.match(GIF_PATTERN);
   return match ? match[1] : null;
 }
 
@@ -144,7 +154,7 @@ type InlineToken =
  *  8: custom emoji :name:
  */
 const INLINE_RE =
-  /`([^`]+)`|\|\|(.+?)\|\||\*\*(.+?)\*\*|__(.+?)__(?!_)|~~(.+?)~~|\*(.+?)\*|\[([^\]]+)\]\(([^)]+)\)|:([a-zA-Z0-9_]{2,32}):/gs;
+  /`([^`]+)`|\|\|(.+?)\|\||\*\*(.+?)\*\*|__(.+?)__(?!_)|~~(.+?)~~|\*(.+?)\*|\[([^\]]+)\]\(([^)]+)\)|:([a-zA-Z0-9_-]{2,32}):/gs;
 
 function parseInline(text: string, emojiMap: EmojiMap): InlineToken[] {
   const tokens: InlineToken[] = [];
@@ -663,16 +673,17 @@ function analyzeEmojiOnly(tokens: InlineToken[]): EmojiOnlyInfo | null {
 /**
  * Custom emoji (image-based) scaling — these act like stickers.
  *
- *   1 emoji  → 5×   (14px base → 70px)
- *   3 emoji  → 4×   (14px base → 56px)
- *   5 emoji  → 3×   (14px base → 42px)
+ *   1 emoji  → 20×  (14px base → 280px)
+ *   2 emoji  → 14×  (14px base → 196px)
+ *   3 emoji  → 10×  (14px base → 140px)
+ *   5 emoji  → 6×   (14px base → 84px)
  *   ≥10      → 1.5× (14px base → 21px)
  */
 function customEmojiMultiplier(count: number): number {
   if (count <= 0) return 1;
   if (count >= 10) return 1.5;
-  // Linear: 1 → 5×, 10 → 1.5×
-  return 5 - (count - 1) * (3.5 / 9);
+  // Linear: 1 → 20×, 10 → 1.5×
+  return 20 - (count - 1) * (18.5 / 9);
 }
 
 /**
@@ -741,6 +752,21 @@ export function parseMessageContent(
         );
       }
     }
+  }
+
+  // GIF message
+  const gifUrl = extractGifUrl(content);
+  if (gifUrl) {
+    return (
+      <View style={{ alignItems: 'flex-start' }}>
+        <Image
+          source={{ uri: gifUrl }}
+          style={{ width: 250, height: 200, borderRadius: 8 }}
+          resizeMode="contain"
+          accessibilityLabel="GIF"
+        />
+      </View>
+    );
   }
 
   // Quick check: does the content have any formatting markers?

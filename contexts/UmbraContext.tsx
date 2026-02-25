@@ -97,6 +97,13 @@ export function UmbraProvider({ children, config }: UmbraProviderProps) {
 
         await UmbraService.initialize(initConfig);
 
+        // Yield to let the native bridge (Expo Modules / TurboModule) finish
+        // any pending async work before downstream contexts start firing
+        // FFI calls. Without this, multiple plugin_kv_get calls hit the
+        // bridge simultaneously on startup and can trigger Hermes GC heap
+        // corruption via concurrent NSException-to-JSError conversion.
+        await new Promise((r) => setTimeout(r, 0));
+
         if (!cancelled) {
           setVersion(UmbraService.getVersion());
           setIsReady(true);

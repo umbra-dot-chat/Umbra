@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import { Platform, View } from 'react-native';
+import { Animated, Easing, Platform, View, useWindowDimensions } from 'react-native';
 import { Slot, usePathname, useRouter } from 'expo-router';
 import { HStack, useTheme, CallPipWidget, CommunityCreateDialog } from '@coexist/wisp-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -82,8 +82,14 @@ function MainLayoutInner() {
   const { selectedMember, popoverAnchor, closeProfile } = useProfilePopoverContext();
   const { playSound } = useSound();
   const isMobile = useIsMobile();
+  const { width: screenWidth } = useWindowDimensions();
   const { activeChannelId: communityActiveChannelId } = useCommunityContext();
   const insets = Platform.OS !== 'web' ? useSafeAreaInsets() : { top: 0, bottom: 0, left: 0, right: 0 };
+
+  // Mobile sidebar ↔ content slide animation
+  const sidebarTranslateX = useRef(new Animated.Value(0)).current;
+  const contentTranslateX = useRef(new Animated.Value(screenWidth)).current;
+  const prevMobileShowContentRef = useRef<boolean | null>(null);
 
   // Service + data hooks
   const { service, isReady } = useUmbra();
@@ -236,8 +242,8 @@ function MainLayoutInner() {
       if (
         (event.type === 'messageReceived' || event.type === 'messageSent')
       ) {
-        const content = event.message.content;
-        if (content.type === 'text') {
+        const content = event.message?.content;
+        if (content?.type === 'text') {
           setLastMessages((prev) => ({
             ...prev,
             [event.message.conversationId]: content.text,
@@ -434,6 +440,65 @@ function MainLayoutInner() {
 
   const isFriendsActive = pathname === '/friends';
 
+  // Mobile: whether to show content instead of sidebar
+  const mobileShowContent = isMobile && !!(
+    activeId ||                                           // DM chat is open
+    isFilesActive ||                                      // Files page
+    isFriendsActive ||                                    // Friends page
+    (activeCommunityId && communityActiveChannelId)        // Community channel selected
+  );
+
+  // Drive sidebar ↔ content slide animation on mobile
+  useEffect(() => {
+    if (!isMobile) return;
+
+    // On first render, snap to position without animation
+    if (prevMobileShowContentRef.current === null) {
+      prevMobileShowContentRef.current = mobileShowContent;
+      sidebarTranslateX.setValue(mobileShowContent ? -screenWidth : 0);
+      contentTranslateX.setValue(mobileShowContent ? 0 : screenWidth);
+      return;
+    }
+
+    // No change — skip
+    if (prevMobileShowContentRef.current === mobileShowContent) return;
+    prevMobileShowContentRef.current = mobileShowContent;
+
+    if (mobileShowContent) {
+      // Slide sidebar left, slide content in from right
+      Animated.parallel([
+        Animated.timing(sidebarTranslateX, {
+          toValue: -screenWidth,
+          duration: 250,
+          easing: Easing.bezier(0, 0, 0.2, 1),
+          useNativeDriver: true,
+        }),
+        Animated.timing(contentTranslateX, {
+          toValue: 0,
+          duration: 250,
+          easing: Easing.bezier(0, 0, 0.2, 1),
+          useNativeDriver: true,
+        }),
+      ]).start();
+    } else {
+      // Slide sidebar back in, slide content out to the right
+      Animated.parallel([
+        Animated.timing(sidebarTranslateX, {
+          toValue: 0,
+          duration: 250,
+          easing: Easing.bezier(0, 0, 0.2, 1),
+          useNativeDriver: true,
+        }),
+        Animated.timing(contentTranslateX, {
+          toValue: screenWidth,
+          duration: 250,
+          easing: Easing.bezier(0, 0, 0.2, 1),
+          useNativeDriver: true,
+        }),
+      ]).start();
+    }
+  }, [isMobile, mobileShowContent, screenWidth]);
+
   // Calculate total unread message count across all conversations
   const totalUnreadMessages = useMemo(() => {
     return conversations.reduce((sum, c) => sum + (c.unreadCount || 0), 0);
@@ -442,97 +507,207 @@ function MainLayoutInner() {
   // Aggregate notification count for home badge (friend requests + unread messages)
   const homeNotificationCount = incomingRequests.length + totalUnreadMessages;
 
+  // Detect Tauri desktop for overlay title bar handling
+  const isTauriDesktop = Platform.OS === 'web' && typeof window !== 'undefined' && !!(window as any).__TAURI_INTERNALS__;
+  // On macOS Tauri with overlay title bar, traffic lights need ~28px clearance
+  const tauriTitleBarHeight = isTauriDesktop ? 28 : 0;
+  const effectiveTopInset = Math.max(insets.top, tauriTitleBarHeight);
+
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.background.canvas }}>
       <InstallBanner />
-      {(() => {
-        // Mobile: sidebar and content are mutually exclusive (separate full-screen views)
-        // Desktop: both are always visible side-by-side
-        const mobileShowContent = isMobile && (
-          activeId ||                                           // DM chat is open
-          isFilesActive ||                                      // Files page
-          isFriendsActive ||                                    // Friends page
-          (activeCommunityId && communityActiveChannelId)        // Community channel selected
-        );
-        const showSidebar = !isMobile || !mobileShowContent;
-        const showContent = !isMobile || !!mobileShowContent;
+      {/* Tauri overlay title bar: full-width drag region pinned to top */}
+      {isTauriDesktop && (
+        <div
+          onMouseDown={async (e) => {
+            // Only drag on primary button (left click), not on traffic light area
+            if (e.button !== 0) return;
+            try {
+              const { getCurrentWindow } = await import('@tauri-apps/api/window');
+              await getCurrentWindow().startDragging();
+            } catch {}
+          }}
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            height: tauriTitleBarHeight,
+            zIndex: 10000,
+            cursor: 'default',
+          }}
+        />
+      )}
+      {isMobile ? (
+        /* ─── Mobile: both views always mounted, slide via translateX ─── */
+        <View style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+          {/* Sidebar layer */}
+          <Animated.View style={{
+            position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+            transform: [{ translateX: sidebarTranslateX }],
+          }}>
+            <View style={{ flex: 1 }}>
+              {effectiveTopInset > 0 && (
+                <View style={{
+                  height: effectiveTopInset,
+                  backgroundColor: theme.colors.background.surface,
+                  borderBottomWidth: 1,
+                  borderBottomColor: theme.colors.border.subtle,
+                }} />
+              )}
+              <HStack gap={0} style={{ flex: 1 }}>
+                <NavigationRail
+                  isHomeActive={isHomeActive}
+                  onHomePress={handleHomePress}
+                  isFilesActive={isFilesActive}
+                  onFilesPress={handleFilesPress}
+                  uploadRingProgress={uploadRingProgress}
+                  communities={communities}
+                  activeCommunityId={activeCommunityId}
+                  onCommunityPress={handleCommunityPress}
+                  onCreateCommunity={() => { playSound('dialog_open'); setCreateCommunityOptionsOpen(true); }}
+                  onOpenSettings={() => { playSound('dialog_open'); openSettings(); }}
+                  userAvatar={identity?.avatar}
+                  userDisplayName={identity?.displayName}
+                  onAvatarPress={() => { playSound('dialog_open'); setAccountSwitcherOpen(true); }}
+                  loading={coreLoading || communitiesLoading}
+                  homeNotificationCount={homeNotificationCount}
+                  notificationCount={totalUnread}
+                  onNotificationsPress={() => { playSound('dialog_open'); openNotificationDrawer(); }}
+                  safeAreaTop={0}
+                  safeAreaBottom={insets.bottom}
+                />
+                <View style={{ flex: 1 }}>
+                  {activeCommunityId ? (
+                    <CommunityLayoutSidebar communityId={activeCommunityId} />
+                  ) : (
+                    <ChatSidebar
+                      search={search}
+                      onSearchChange={setSearch}
+                      conversations={filtered}
+                      activeId={activeId}
+                      onSelectConversation={(id) => {
+                        setActiveId(id);
+                        if (pathname !== '/') {
+                          router.push('/');
+                        }
+                      }}
+                      onFriendsPress={() => router.push('/friends')}
+                      onNewDm={() => { playSound('dialog_open'); setNewDmOpen(true); }}
+                      onCreateGroup={() => { playSound('dialog_open'); setCreateGroupOpen(true); }}
+                      onGuidePress={() => { playSound('dialog_open'); setGuideOpen(true); }}
+                      onMarketplacePress={() => { playSound('dialog_open'); setMarketplaceOpen(true); }}
+                      isFriendsActive={isFriendsActive}
+                      pendingInvites={pendingInvites}
+                      onAcceptInvite={handleAcceptInvite}
+                      onDeclineInvite={handleDeclineInvite}
+                      loading={coreLoading || conversationsLoading}
+                      pendingFriendRequests={incomingRequests.length}
+                    />
+                  )}
+                </View>
+              </HStack>
+            </View>
+          </Animated.View>
 
-        return (
-          <HStack gap={0} style={{ flex: 1 }}>
-            {showSidebar && (
-              <View style={{ flexDirection: 'column', width: isMobile ? undefined : (64 + sidebarWidth), flex: isMobile ? 1 : undefined, flexShrink: 0 }}>
-                {/* Safe area header — spans rail + sidebar, same surface color */}
-                {insets.top > 0 && (
-                  <View style={{
-                    height: insets.top,
-                    backgroundColor: theme.colors.background.surface,
-                    borderBottomWidth: 1,
-                    borderBottomColor: theme.colors.border.subtle,
-                  }} />
-                )}
-                <HStack gap={0} style={{ flex: 1 }}>
-                  <NavigationRail
-                    isHomeActive={isHomeActive}
-                    onHomePress={handleHomePress}
-                    isFilesActive={isFilesActive}
-                    onFilesPress={handleFilesPress}
-                    uploadRingProgress={uploadRingProgress}
-                    communities={communities}
-                    activeCommunityId={activeCommunityId}
-                    onCommunityPress={handleCommunityPress}
-                    onCreateCommunity={() => { playSound('dialog_open'); setCreateCommunityOptionsOpen(true); }}
-                    onOpenSettings={() => { playSound('dialog_open'); openSettings(); }}
-                    userAvatar={identity?.avatar}
-                    userDisplayName={identity?.displayName}
-                    onAvatarPress={() => { playSound('dialog_open'); setAccountSwitcherOpen(true); }}
-                    loading={coreLoading || communitiesLoading}
-                    homeNotificationCount={homeNotificationCount}
-                    notificationCount={totalUnread}
-                    onNotificationsPress={() => { playSound('dialog_open'); openNotificationDrawer(); }}
-                    safeAreaTop={0}
-                    safeAreaBottom={insets.bottom}
+          {/* Content layer */}
+          <Animated.View style={{
+            position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+            transform: [{ translateX: contentTranslateX }],
+          }}>
+            <View style={{ flex: 1 }}>
+              {effectiveTopInset > 0 && (
+                <View style={{
+                  height: effectiveTopInset,
+                  backgroundColor: theme.colors.background.canvas,
+                  borderBottomWidth: 1,
+                  borderBottomColor: theme.colors.border.subtle,
+                }} />
+              )}
+              <Slot />
+            </View>
+          </Animated.View>
+        </View>
+      ) : (
+        /* ─── Desktop: side-by-side layout ─── */
+        <HStack gap={0} style={{ flex: 1 }}>
+          <View style={{ flexDirection: 'column', width: 64 + sidebarWidth, flexShrink: 0 }}>
+            {/* Safe area header — spans rail + sidebar, same surface color */}
+            {effectiveTopInset > 0 && (
+              <View style={{
+                height: effectiveTopInset,
+                backgroundColor: theme.colors.background.surface,
+                borderBottomWidth: 1,
+                borderBottomColor: theme.colors.border.subtle,
+              }} />
+            )}
+            <HStack gap={0} style={{ flex: 1 }}>
+              <NavigationRail
+                isHomeActive={isHomeActive}
+                onHomePress={handleHomePress}
+                isFilesActive={isFilesActive}
+                onFilesPress={handleFilesPress}
+                uploadRingProgress={uploadRingProgress}
+                communities={communities}
+                activeCommunityId={activeCommunityId}
+                onCommunityPress={handleCommunityPress}
+                onCreateCommunity={() => { playSound('dialog_open'); setCreateCommunityOptionsOpen(true); }}
+                onOpenSettings={() => { playSound('dialog_open'); openSettings(); }}
+                userAvatar={identity?.avatar}
+                userDisplayName={identity?.displayName}
+                onAvatarPress={() => { playSound('dialog_open'); setAccountSwitcherOpen(true); }}
+                loading={coreLoading || communitiesLoading}
+                homeNotificationCount={homeNotificationCount}
+                notificationCount={totalUnread}
+                onNotificationsPress={() => { playSound('dialog_open'); openNotificationDrawer(); }}
+                safeAreaTop={0}
+                safeAreaBottom={insets.bottom}
+              />
+              <View style={{ flex: 1 }}>
+                {activeCommunityId ? (
+                  <CommunityLayoutSidebar communityId={activeCommunityId} />
+                ) : (
+                  <ChatSidebar
+                    search={search}
+                    onSearchChange={setSearch}
+                    conversations={filtered}
+                    activeId={activeId}
+                    onSelectConversation={(id) => {
+                      setActiveId(id);
+                      if (pathname !== '/') {
+                        router.push('/');
+                      }
+                    }}
+                    onFriendsPress={() => router.push('/friends')}
+                    onNewDm={() => { playSound('dialog_open'); setNewDmOpen(true); }}
+                    onCreateGroup={() => { playSound('dialog_open'); setCreateGroupOpen(true); }}
+                    onGuidePress={() => { playSound('dialog_open'); setGuideOpen(true); }}
+                    onMarketplacePress={() => { playSound('dialog_open'); setMarketplaceOpen(true); }}
+                    isFriendsActive={isFriendsActive}
+                    pendingInvites={pendingInvites}
+                    onAcceptInvite={handleAcceptInvite}
+                    onDeclineInvite={handleDeclineInvite}
+                    loading={coreLoading || conversationsLoading}
+                    pendingFriendRequests={incomingRequests.length}
                   />
-                  <View style={{ flex: 1 }}>
-                    {activeCommunityId ? (
-                      <CommunityLayoutSidebar communityId={activeCommunityId} />
-                    ) : (
-                      <ChatSidebar
-                        search={search}
-                        onSearchChange={setSearch}
-                        conversations={filtered}
-                        activeId={activeId}
-                        onSelectConversation={(id) => {
-                          setActiveId(id);
-                          if (pathname !== '/') {
-                            router.push('/');
-                          }
-                        }}
-                        onFriendsPress={() => router.push('/friends')}
-                        onNewDm={() => { playSound('dialog_open'); setNewDmOpen(true); }}
-                        onCreateGroup={() => { playSound('dialog_open'); setCreateGroupOpen(true); }}
-                        onGuidePress={() => { playSound('dialog_open'); setGuideOpen(true); }}
-                        onMarketplacePress={() => { playSound('dialog_open'); setMarketplaceOpen(true); }}
-                        isFriendsActive={isFriendsActive}
-                        pendingInvites={pendingInvites}
-                        onAcceptInvite={handleAcceptInvite}
-                        onDeclineInvite={handleDeclineInvite}
-                        loading={coreLoading || conversationsLoading}
-                        pendingFriendRequests={incomingRequests.length}
-                      />
-                    )}
-                  </View>
-                </HStack>
+                )}
               </View>
+            </HStack>
+          </View>
+          <ResizeHandle onResize={handleSidebarResize} />
+          <View style={{ flex: 1 }}>
+            {effectiveTopInset > 0 && (
+              <View style={{
+                height: effectiveTopInset,
+                backgroundColor: theme.colors.background.canvas,
+                borderBottomWidth: 1,
+                borderBottomColor: theme.colors.border.subtle,
+              }} />
             )}
-            {!isMobile && <ResizeHandle onResize={handleSidebarResize} />}
-            {showContent && (
-              <View style={{ flex: 1, paddingTop: insets.top }}>
-                <Slot />
-              </View>
-            )}
-          </HStack>
-        );
-      })()}
+            <Slot />
+          </View>
+        </HStack>
+      )}
 
       <ProfilePopover
         selectedMember={selectedMember}

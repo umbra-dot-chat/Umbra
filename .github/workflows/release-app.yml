@@ -119,26 +119,30 @@ jobs:
           name: ${{ matrix.artifact }}
           path: src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg
 
-      - name: Upload macOS signature
+      - name: Upload macOS updater artifact
         if: startsWith(matrix.platform, 'macos')
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact }}-sig
-          path: src-tauri/target/${{ matrix.target }}/release/bundle/dmg/*.dmg.sig
+          name: ${{ matrix.artifact }}-updater
+          path: |
+            src-tauri/target/${{ matrix.target }}/release/bundle/macos/*.tar.gz
+            src-tauri/target/${{ matrix.target }}/release/bundle/macos/*.tar.gz.sig
 
       - name: Upload Windows artifact
         if: matrix.platform == 'windows'
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.artifact }}
-          path: src-tauri/target/${{ matrix.target }}/release/bundle/msi/*.msi
+          path: src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*.exe
 
-      - name: Upload Windows signature
+      - name: Upload Windows updater artifact
         if: matrix.platform == 'windows'
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact }}-sig
-          path: src-tauri/target/${{ matrix.target }}/release/bundle/msi/*.msi.sig
+          name: ${{ matrix.artifact }}-updater
+          path: |
+            src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*.nsis.zip
+            src-tauri/target/${{ matrix.target }}/release/bundle/nsis/*.nsis.zip.sig
 
       - name: Upload Linux artifact
         if: matrix.platform == 'linux'
@@ -149,13 +153,14 @@ jobs:
             src-tauri/target/${{ matrix.target }}/release/bundle/deb/*.deb
             src-tauri/target/${{ matrix.target }}/release/bundle/appimage/*.AppImage
 
-      - name: Upload Linux signature
+      - name: Upload Linux updater artifact
         if: matrix.platform == 'linux'
         uses: actions/upload-artifact@v4
         with:
-          name: ${{ matrix.artifact }}-sig
+          name: ${{ matrix.artifact }}-updater
           path: |
-            src-tauri/target/${{ matrix.target }}/release/bundle/appimage/*.AppImage.sig
+            src-tauri/target/${{ matrix.target }}/release/bundle/appimage/*.AppImage.tar.gz
+            src-tauri/target/${{ matrix.target }}/release/bundle/appimage/*.AppImage.tar.gz.sig
 
   build-ios:
     name: Build iOS
@@ -255,10 +260,13 @@ jobs:
         run: |
           mkdir -p release
 
-          # Flatten artifact directories
-          find artifacts -type f \( -name "*.dmg" -o -name "*.msi" -o -name "*.deb" -o -name "*.AppImage" \) -exec cp {} release/ \;
+          # Flatten artifact directories — installer artifacts
+          find artifacts -type f \( -name "*.dmg" -o -name "*.exe" -o -name "*.deb" -o -name "*.AppImage" \) -exec cp {} release/ \;
 
-          # Copy signature files
+          # Copy updater artifacts (.tar.gz for macOS/Linux, .nsis.zip for Windows)
+          find artifacts -type f \( -name "*.tar.gz" -o -name "*.nsis.zip" \) ! -name "*.sig" -exec cp {} release/ \;
+
+          # Copy all signature files
           find artifacts -type f -name "*.sig" -exec cp {} release/ \;
 
           # Zip web build
@@ -273,13 +281,13 @@ jobs:
           PUB_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           REPO="${{ github.repository }}"
 
-          # Read signature files if they exist
+          # Read signature files from updater artifacts
           MACOS_ARM_SIG=""
           MACOS_INTEL_SIG=""
           WINDOWS_SIG=""
           LINUX_SIG=""
 
-          for f in release/*.dmg.sig; do
+          for f in release/*.app.tar.gz.sig; do
             [ -f "$f" ] || continue
             if echo "$f" | grep -qi "aarch64\|arm"; then
               MACOS_ARM_SIG=$(cat "$f")
@@ -288,23 +296,23 @@ jobs:
             fi
           done
 
-          for f in release/*.msi.sig; do
+          for f in release/*.nsis.zip.sig; do
             [ -f "$f" ] || continue
             WINDOWS_SIG=$(cat "$f")
           done
 
-          for f in release/*.AppImage.sig; do
+          for f in release/*.AppImage.tar.gz.sig; do
             [ -f "$f" ] || continue
             LINUX_SIG=$(cat "$f")
           done
 
-          # Find actual filenames — Tauri uses aarch64 for ARM, x64 or x86_64 for Intel
-          MACOS_ARM_FILE=$(ls release/*aarch64*.dmg 2>/dev/null | head -1 | xargs basename 2>/dev/null || echo "")
-          MACOS_INTEL_FILE=$(ls release/*x64*.dmg release/*x86_64*.dmg 2>/dev/null | grep -v aarch64 | head -1 | xargs basename 2>/dev/null || echo "")
-          WINDOWS_FILE=$(ls release/*.msi 2>/dev/null | head -1 | xargs basename 2>/dev/null || echo "")
-          LINUX_FILE=$(ls release/*.AppImage 2>/dev/null | head -1 | xargs basename 2>/dev/null || echo "")
+          # Find updater artifact filenames (.app.tar.gz for macOS, .nsis.zip for Windows, .AppImage.tar.gz for Linux)
+          MACOS_ARM_FILE=$(ls release/*aarch64*.app.tar.gz 2>/dev/null | head -1 | xargs basename 2>/dev/null || echo "")
+          MACOS_INTEL_FILE=$(ls release/*x86_64*.app.tar.gz release/*x64*.app.tar.gz 2>/dev/null | grep -v aarch64 | head -1 | xargs basename 2>/dev/null || echo "")
+          WINDOWS_FILE=$(ls release/*.nsis.zip 2>/dev/null | head -1 | xargs basename 2>/dev/null || echo "")
+          LINUX_FILE=$(ls release/*.AppImage.tar.gz 2>/dev/null | head -1 | xargs basename 2>/dev/null || echo "")
 
-          # Build latest.json for Tauri updater
+          # Build latest.json for Tauri v2 updater
           cat > release/latest.json << EOF
           {
             "version": "$VERSION",

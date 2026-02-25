@@ -21,6 +21,8 @@ export function useAllCustomEmoji() {
   const [allEmoji, setAllEmoji] = useState<CommunityEmoji[]>([]);
   const [allStickers, setAllStickers] = useState<CommunitySticker[]>([]);
   const [allStickerPacks, setAllStickerPacks] = useState<StickerPack[]>([]);
+  // Map communityId → communityName for grouping emoji by source in the picker
+  const [communityNames, setCommunityNames] = useState<Record<string, string>>({});
 
   const fetchAll = useCallback(async () => {
     if (!service || !identity?.did) return;
@@ -40,20 +42,25 @@ export function useAllCustomEmoji() {
         }),
       );
 
-      // Flatten across all communities
+      // Flatten across all communities (preserve community context for grouping)
       const flatEmoji: CommunityEmoji[] = [];
       const flatStickers: CommunitySticker[] = [];
       const flatPacks: StickerPack[] = [];
+      const nameMap: Record<string, string> = {};
 
       for (const r of results) {
         flatEmoji.push(...r.emoji);
         flatStickers.push(...r.stickers);
         flatPacks.push(...r.packs);
+        if (r.communityName) {
+          nameMap[r.communityId] = r.communityName;
+        }
       }
 
       setAllEmoji(flatEmoji);
       setAllStickers(flatStickers);
       setAllStickerPacks(flatPacks);
+      setCommunityNames(nameMap);
     } catch {
       // Silently fail — emoji are non-critical
     }
@@ -88,7 +95,16 @@ export function useAllCustomEmoji() {
   const builtInCommunityEmoji = useMemo(() => getBuiltInCommunityEmoji(), []);
 
   // Transform to EmojiItem[] for the picker (built-in + community)
+  // Each emoji is tagged with groupId/groupName so the picker can render
+  // separate sections per server (Umbra built-ins, Community A, Community B, etc.)
   const customEmojiItems = useMemo<EmojiItem[]>(() => {
+    // Tag built-in emoji with the "Umbra" group
+    const taggedBuiltIn = builtInItems.map((item) => ({
+      ...item,
+      groupId: '__builtin__',
+      groupName: 'Umbra',
+    }));
+
     const communityItems = allEmoji.map((e) => ({
       emoji: `:${e.name}:`,
       name: e.name,
@@ -96,9 +112,11 @@ export function useAllCustomEmoji() {
       keywords: [e.name],
       imageUrl: e.imageUrl,
       animated: e.animated,
+      groupId: e.communityId,
+      groupName: communityNames[e.communityId] ?? e.communityId,
     }));
-    return [...builtInItems, ...communityItems];
-  }, [allEmoji, builtInItems]);
+    return [...taggedBuiltIn, ...communityItems];
+  }, [allEmoji, builtInItems, communityNames]);
 
   // All emoji as CommunityEmoji[] for building emojiMaps (built-in + community)
   const allCommunityEmoji = useMemo<CommunityEmoji[]>(() => {

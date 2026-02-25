@@ -65,6 +65,10 @@ export interface UseMessagesResult {
   pinnedMessages: Message[];
   /** Refresh pinned messages */
   refreshPinned: () => Promise<void>;
+  /** ID of the first new (unread) message received after initial load */
+  firstUnreadMessageId: string | null;
+  /** Clear the unread divider (e.g. after the user has seen the messages) */
+  clearUnreadMarker: () => void;
 }
 
 export function useMessages(conversationId: string | null): UseMessagesResult {
@@ -80,6 +84,12 @@ export function useMessages(conversationId: string | null): UseMessagesResult {
   const [pinnedMessages, setPinnedMessages] = useState<Message[]>([]);
   const offsetRef = useRef(0);
 
+  // Track the first new message received after the initial fetch so we can
+  // render a "New messages" divider in the chat area.
+  const [firstUnreadMessageId, setFirstUnreadMessageId] = useState<string | null>(null);
+  const initialLoadDoneRef = useRef(false);
+  const clearUnreadMarker = useCallback(() => setFirstUnreadMessageId(null), []);
+
   const fetchMessages = useCallback(async () => {
     if (!service || !conversationId) {
       setMessages([]);
@@ -89,6 +99,8 @@ export function useMessages(conversationId: string | null): UseMessagesResult {
 
     try {
       setIsLoading(true);
+      initialLoadDoneRef.current = false;
+      setFirstUnreadMessageId(null);
       const result = await service.getMessages(conversationId, {
         limit: PAGE_SIZE,
         offset: 0,
@@ -97,6 +109,7 @@ export function useMessages(conversationId: string | null): UseMessagesResult {
       offsetRef.current = result.length;
       setHasMore(result.length >= PAGE_SIZE);
       setError(null);
+      initialLoadDoneRef.current = true;
     } catch (err) {
       setError(err instanceof Error ? err : new Error(String(err)));
     } finally {
@@ -155,6 +168,10 @@ export function useMessages(conversationId: string | null): UseMessagesResult {
           // Play receive sound for messages from others
           if (event.type === 'messageReceived' && msg.senderDid !== myDid) {
             playSound('message_receive');
+            // Mark the first incoming message after initial load as the unread boundary
+            if (initialLoadDoneRef.current) {
+              setFirstUnreadMessageId((prev) => prev ?? msg.id);
+            }
           }
           setMessages((prev) => [...prev, msg]);
         }
@@ -388,5 +405,7 @@ export function useMessages(conversationId: string | null): UseMessagesResult {
     sendThreadReply,
     pinnedMessages,
     refreshPinned: fetchPinned,
+    firstUnreadMessageId,
+    clearUnreadMarker,
   };
 }

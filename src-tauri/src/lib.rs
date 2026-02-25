@@ -2,6 +2,8 @@ mod state;
 mod commands;
 
 use state::AppState;
+use tauri::Manager;
+use tauri::window::Color;
 
 pub fn run() {
     // Set up tracing for native desktop
@@ -19,6 +21,13 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_deep_link::init())
+        .setup(|app| {
+            // Set window background to black to match the dark theme
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.set_background_color(Some(Color(0, 0, 0, 255)));
+            }
+            Ok(())
+        })
         .manage(AppState::new())
         .invoke_handler(tauri::generate_handler![
             // Initialization

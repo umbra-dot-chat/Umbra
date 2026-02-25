@@ -110,14 +110,40 @@ function createNativeBackend(native: NativeUmbraCore): UmbraWasmModule {
    * Expo Modules use `AsyncFunction`. We must await the result before
    * checking for error-as-JSON responses.
    *
+   * Calls are serialized through a queue to prevent multiple concurrent
+   * AsyncFunction invocations from flooding the TurboModule bridge.
+   * Without serialization, concurrent calls during startup (e.g. multiple
+   * plugin_kv_get from ThemeContext, SoundContext, MessagingContext) can
+   * trigger NSException-to-JSError conversion on a background thread,
+   * which races with the Hermes JS thread and corrupts the GC heap.
+   *
    * Returns `any` to satisfy UmbraWasmModule interface which expects
    * synchronous strings — downstream parseWasm() handles both strings
    * and promises via `await`.
    */
+  let callQueue: Promise<any> = Promise.resolve();
+
   const call = (method: string, args: Record<string, any> = {}): any => {
-    return native.call(method, JSON.stringify(args)).then(
-      (result: string) => checkNativeResult(result, method)
+    const argsJson = JSON.stringify(args);
+    // Each call gets its own result promise so callers get the right value
+    let resolve: (v: any) => void;
+    let reject: (e: any) => void;
+    const resultPromise = new Promise((res, rej) => { resolve = res; reject = rej; });
+
+    // Chain onto the queue so calls execute one at a time.
+    // Always continue the chain regardless of success/failure of previous calls.
+    callQueue = callQueue.then(() => {}, () => {}).then(() =>
+      native.call(method, argsJson).then(
+        (result: string) => {
+          const checked = checkNativeResult(result, method);
+          resolve!(checked);
+          return checked;
+        },
+        (err: any) => { reject!(err); throw err; }
+      )
     );
+
+    return resultPromise;
   };
 
   return {

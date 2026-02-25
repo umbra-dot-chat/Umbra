@@ -1563,11 +1563,19 @@ export class UmbraService {
    */
   private _dispatchEvent(event: UmbraEvent): void {
     const { domain, data } = event;
+    if (!data || typeof data !== 'object') {
+      console.warn('[UmbraService] Ignoring event with missing/invalid data:', JSON.stringify(event));
+      return;
+    }
     const camelData = snakeToCamel(data) as Record<string, unknown>;
 
     switch (domain) {
       case 'message': {
         // Rust now emits structured content ({ type, text }) and status directly.
+        if (!camelData || !camelData.type) {
+          console.warn('[UmbraService] Ignoring message event with no type:', JSON.stringify(data));
+          break;
+        }
         for (const listener of this._messageListeners) {
           try {
             listener(camelData as unknown as MessageEvent);

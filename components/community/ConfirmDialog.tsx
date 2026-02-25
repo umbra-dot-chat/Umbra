@@ -7,7 +7,7 @@
  */
 
 import React, { useCallback, useState } from 'react';
-import { View } from 'react-native';
+import { View, Image } from 'react-native';
 import { Dialog, Button, Text, useTheme } from '@coexist/wisp-react-native';
 
 // ---------------------------------------------------------------------------
@@ -29,6 +29,8 @@ export interface ConfirmDialogProps {
   onConfirm: () => void | Promise<void>;
   /** Whether a submission is in progress. */
   submitting?: boolean;
+  /** Optional image source displayed above the message (e.g. a warning illustration). */
+  image?: any;
 }
 
 // ---------------------------------------------------------------------------
@@ -43,6 +45,7 @@ export function ConfirmDialog({
   confirmLabel = 'Delete',
   onConfirm,
   submitting = false,
+  image,
 }: ConfirmDialogProps) {
   const { theme } = useTheme();
   const [error, setError] = useState<string | null>(null);
@@ -78,8 +81,15 @@ export function ConfirmDialog({
         </>
       }
     >
-      <View style={{ gap: 8 }}>
-        <Text size="sm" style={{ color: theme.colors.text.secondary }}>
+      <View style={{ gap: 8, alignItems: 'center' }}>
+        {image && (
+          <Image
+            source={image}
+            style={{ width: 160, height: 160, marginBottom: 4 }}
+            resizeMode="contain"
+          />
+        )}
+        <Text size="sm" style={{ color: theme.colors.text.secondary, textAlign: image ? 'center' : undefined }}>
           {message}
         </Text>
         {error && (

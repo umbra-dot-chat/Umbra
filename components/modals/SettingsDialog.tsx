@@ -71,6 +71,8 @@ import { useMediaDevices } from '@/hooks/useMediaDevices';
 import type { VideoQuality, AudioQuality, OpusConfig, OpusApplication, AudioBitrate } from '@/types/call';
 import { VIDEO_QUALITY_PRESETS, AUDIO_QUALITY_PRESETS, DEFAULT_OPUS_CONFIG } from '@/types/call';
 import { useUmbra } from '@/contexts/UmbraContext';
+// eslint-disable-next-line @typescript-eslint/no-var-requires
+const umbraDeadImage = require('@/assets/emoji/umbra-dead.png');
 import { usePlugins } from '@/contexts/PluginContext';
 import { useFonts, FONT_REGISTRY } from '@/contexts/FontContext';
 import { useAppTheme, type TextSize } from '@/contexts/ThemeContext';
@@ -732,7 +734,6 @@ function AccountSection() {
         open={showLogoutConfirm}
         onClose={() => setShowLogoutConfirm(false)}
         title="Log Out?"
-        description="You'll be signed out of this account. Your account data is saved and you can sign back in from the login screen."
         icon={<LogOutIcon size={24} color={tc.status.danger} />}
         size="sm"
         footer={
@@ -751,7 +752,14 @@ function AccountSection() {
             </Button>
           </HStack>
         }
-      />
+      >
+        <View style={{ alignItems: 'center', gap: 12 }}>
+          <Image source={umbraDeadImage} style={{ width: 160, height: 160 }} resizeMode="contain" />
+          <RNText style={{ fontSize: 13, color: tc.text.secondary, textAlign: 'center', lineHeight: 18 }}>
+            You'll be signed out of this account. Your account data is saved and you can sign back in from the login screen.
+          </RNText>
+        </View>
+      </Dialog>
       </View>
     </View>
   );

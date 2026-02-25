@@ -125,6 +125,7 @@ export default function ChatPage() {
     editMessage, deleteMessage, pinMessage, unpinMessage,
     addReaction, removeReaction, forwardMessage,
     getThreadReplies, sendThreadReply, pinnedMessages,
+    firstUnreadMessageId,
   } = useMessages(resolvedConversationId);
 
   // Group member count for the active conversation
@@ -486,6 +487,7 @@ export default function ChatPage() {
           }}
           onCopyMessage={handleCopyMessage}
           customEmoji={allCommunityEmoji}
+          firstUnreadMessageId={firstUnreadMessageId}
         />
         <SlotRenderer slot="chat-toolbar" props={{ conversationId: resolvedConversationId }} />
         <ChatInput
@@ -500,13 +502,17 @@ export default function ChatPage() {
           onCancelEdit={handleCancelEdit}
           onAttachmentClick={handleAttachment}
           customEmojis={customEmojiItems.length > 0 ? customEmojiItems : undefined}
-          stickerPacks={stickerPickerPacks.length > 0 ? stickerPickerPacks : undefined}
-          onStickerSelect={(stickerId) => {
+          relayUrl={process.env.EXPO_PUBLIC_RELAY_URL || 'https://relay.umbra.chat'}
+          onGifSelect={(gif) => {
             if (resolvedConversationId) {
-              sendMessage(`sticker::${stickerId}`);
+              sendMessage(`gif::${gif.url}`);
             }
           }}
         />
+        {/* Safe area spacing below the input */}
+        {insets.bottom > 0 && (
+          <View style={{ height: insets.bottom }} />
+        )}
       </KeyboardAvoidingView>
 
       {rightPanel && <ResizeHandle onResize={resizePanel} />}
