@@ -166,99 +166,102 @@ export function ProfileCard({ style }: ProfileCardProps) {
           </Pressable>
         </View>
 
-        <Separator spacing="sm" />
-
-        {/* DID section */}
-        <View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-            <RNText
-              style={{
-                fontSize: 11,
-                fontWeight: '600',
-                color: tc.text.muted,
-                textTransform: 'uppercase',
-                letterSpacing: 0.5,
-              }}
-            >
-              Decentralized ID
-            </RNText>
-            <HelpIndicator
-              id="profile-did"
-              title="What is a DID?"
-              priority={10}
-              size={14}
-            >
-              <HelpText>
-                Your Decentralized ID (DID) is your unique identity on the network. It's derived from your cryptographic keys and can't be forged.
-              </HelpText>
-              <HelpHighlight icon={<KeyIcon size={22} color={tc.accent.primary} />}>
-                Share your DID with friends so they can send you a connection request. Copy it with the button below.
-              </HelpHighlight>
-              <HelpListItem>Starts with did:key:z6Mk...</HelpListItem>
-              <HelpListItem>Unique to your wallet</HelpListItem>
-              <HelpListItem>Can be shared publicly</HelpListItem>
-            </HelpIndicator>
-          </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <RNText
-              style={{
-                fontSize: 12,
-                color: tc.text.secondary,
-                fontFamily: 'monospace',
-                flex: 1,
-              }}
-              numberOfLines={1}
-            >
-              {truncatedDid}
-            </RNText>
-            <Pressable
-              onPress={handleCopyDid}
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: 4,
-                paddingVertical: 4,
-                paddingHorizontal: 8,
-                borderRadius: 6,
-                backgroundColor: didCopied ? tc.status.successSurface : tc.background.sunken,
-              }}
-            >
-              <CopyIcon size={14} color={didCopied ? tc.status.success : tc.text.secondary} />
-              <RNText
-                style={{
-                  fontSize: 11,
-                  color: didCopied ? tc.status.success : tc.text.secondary,
-                  fontWeight: '500',
-                }}
-              >
-                {didCopied ? 'Copied' : 'Copy'}
-              </RNText>
-            </Pressable>
-            <Pressable
-              onPress={() => setQrCardOpen(true)}
-              style={{
-                flexDirection: 'row',
-                alignItems: 'center',
-                gap: 4,
-                paddingVertical: 4,
-                paddingHorizontal: 8,
-                borderRadius: 6,
-                backgroundColor: tc.background.sunken,
-              }}
-            >
-              <QrCodeIcon size={14} color={tc.text.secondary} />
-              <RNText
-                style={{
-                  fontSize: 11,
-                  color: tc.text.secondary,
-                  fontWeight: '500',
-                }}
-              >
-                QR
-              </RNText>
-            </Pressable>
-          </View>
-        </View>
+        {/* DID section — hidden when user has a username (discoverable via search) */}
+        {!username && (
+          <>
+            <Separator spacing="sm" />
+            <View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                <RNText
+                  style={{
+                    fontSize: 11,
+                    fontWeight: '600',
+                    color: tc.text.muted,
+                    textTransform: 'uppercase',
+                    letterSpacing: 0.5,
+                  }}
+                >
+                  Decentralized ID
+                </RNText>
+                <HelpIndicator
+                  id="profile-did"
+                  title="What is a DID?"
+                  priority={10}
+                  size={14}
+                >
+                  <HelpText>
+                    Your Decentralized ID (DID) is your unique identity on the network. It's derived from your cryptographic keys and can't be forged.
+                  </HelpText>
+                  <HelpHighlight icon={<KeyIcon size={22} color={tc.accent.primary} />}>
+                    Share your DID with friends so they can send you a connection request. Copy it with the button below.
+                  </HelpHighlight>
+                  <HelpListItem>Starts with did:key:z6Mk...</HelpListItem>
+                  <HelpListItem>Unique to your wallet</HelpListItem>
+                  <HelpListItem>Can be shared publicly</HelpListItem>
+                </HelpIndicator>
+              </View>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <RNText
+                  style={{
+                    fontSize: 12,
+                    color: tc.text.secondary,
+                    fontFamily: 'monospace',
+                    flex: 1,
+                  }}
+                  numberOfLines={1}
+                >
+                  {truncatedDid}
+                </RNText>
+                <Pressable
+                  onPress={handleCopyDid}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 4,
+                    paddingVertical: 4,
+                    paddingHorizontal: 8,
+                    borderRadius: 6,
+                    backgroundColor: didCopied ? tc.status.successSurface : tc.background.sunken,
+                  }}
+                >
+                  <CopyIcon size={14} color={didCopied ? tc.status.success : tc.text.secondary} />
+                  <RNText
+                    style={{
+                      fontSize: 11,
+                      color: didCopied ? tc.status.success : tc.text.secondary,
+                      fontWeight: '500',
+                    }}
+                  >
+                    {didCopied ? 'Copied' : 'Copy'}
+                  </RNText>
+                </Pressable>
+                <Pressable
+                  onPress={() => setQrCardOpen(true)}
+                  style={{
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 4,
+                    paddingVertical: 4,
+                    paddingHorizontal: 8,
+                    borderRadius: 6,
+                    backgroundColor: tc.background.sunken,
+                  }}
+                >
+                  <QrCodeIcon size={14} color={tc.text.secondary} />
+                  <RNText
+                    style={{
+                      fontSize: 11,
+                      color: tc.text.secondary,
+                      fontWeight: '500',
+                    }}
+                  >
+                    QR
+                  </RNText>
+                </Pressable>
+              </View>
+            </View>
+          </>
+        )}
 
       </View>
 

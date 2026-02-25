@@ -623,7 +623,8 @@ export function CommunitySettingsDialog({
         if (!res.ok) throw new Error('Failed to start Discord auth');
         const data = await res.json();
 
-        const { open } = await import('@tauri-apps/plugin-shell');
+        // eslint-disable-next-line no-new-func
+        const { open } = await (new Function('m', 'return import(m)') as (m: string) => Promise<any>)('@tauri-apps/plugin-shell');
         await open(data.redirect_url);
 
         // Poll for result
@@ -809,7 +810,8 @@ export function CommunitySettingsDialog({
         if (!res.ok) throw new Error('Failed to start OAuth');
         const data = await res.json();
 
-        const { open } = await import('@tauri-apps/plugin-shell');
+        // eslint-disable-next-line no-new-func
+        const { open } = await (new Function('m', 'return import(m)') as (m: string) => Promise<any>)('@tauri-apps/plugin-shell');
         await open(data.redirect_url);
 
         const pollUrl = `${RELAY}/community/import/discord/result/${encodeURIComponent(data.state)}`;

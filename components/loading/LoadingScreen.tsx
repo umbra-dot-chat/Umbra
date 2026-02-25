@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { View, Platform, Animated, Dimensions, Text as RNText, Image, type ImageSourcePropType } from 'react-native';
 import { useTheme } from '@coexist/wisp-react-native';
 import { useBlobPath, AnimatedBlobs } from '@/components/auth/AnimatedBlobs';
-import { TAGLINES } from '@/app/(auth)/index';
+import { TAGLINES } from '@/constants/taglines';
 import Svg, { Path } from 'react-native-svg';
 
 // Ghost logo assets — static images, no animation

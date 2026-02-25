@@ -251,7 +251,11 @@ export function ProfileImportSelector({
         if (Platform.OS === 'web' && isTauri()) {
           // Tauri: open in system browser, poll relay for result
           const stateParam = data.state;
-          const { open } = await import('@tauri-apps/plugin-shell');
+          // Use indirect import to hide the specifier from Metro's static analysis —
+          // this module only exists on Tauri desktop and Metro can't resolve it for iOS.
+          // eslint-disable-next-line no-new-func
+          const dynamicImport = new Function('m', 'return import(m)') as (m: string) => Promise<any>;
+          const { open } = await dynamicImport('@tauri-apps/plugin-shell');
           await open(data.redirect_url);
 
           // Poll relay for the OAuth result

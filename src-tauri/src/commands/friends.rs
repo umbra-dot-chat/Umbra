@@ -34,7 +34,7 @@ pub async fn send_friend_request(
         from_signing_key: Some(hex::encode(&request.from.public_keys.signing)),
         from_encryption_key: Some(hex::encode(&request.from.public_keys.encryption)),
         from_display_name: Some(request.from.display_name.clone()),
-        from_avatar: None,
+        from_avatar: request.from.avatar.clone(),
         created_at: request.created_at,
         status: "pending".to_string(),
     };
@@ -42,7 +42,21 @@ pub async fn send_friend_request(
     database.store_friend_request(&record)
         .map_err(|e| e.to_string())?;
 
-    // TODO: Send over native TCP network if connected
+    // Build relay envelope for friend request delivery
+    let relay_envelope = serde_json::json!({
+        "envelope": "friend_request",
+        "version": 1,
+        "payload": {
+            "id": request.id,
+            "fromDid": request.from.did,
+            "fromDisplayName": request.from.display_name,
+            "fromAvatar": request.from.avatar,
+            "fromSigningKey": hex::encode(&request.from.public_keys.signing),
+            "fromEncryptionKey": hex::encode(&request.from.public_keys.encryption),
+            "message": request.message,
+            "createdAt": request.created_at,
+        }
+    });
 
     let json = serde_json::json!({
         "id": request.id,
@@ -51,8 +65,13 @@ pub async fn send_friend_request(
         "from_signing_key": hex::encode(&request.from.public_keys.signing),
         "from_encryption_key": hex::encode(&request.from.public_keys.encryption),
         "from_display_name": request.from.display_name,
+        "from_avatar": request.from.avatar,
         "message": request.message,
         "created_at": request.created_at,
+        "relay_messages": [{
+            "to_did": request.to_did,
+            "payload": relay_envelope.to_string(),
+        }],
     });
 
     Ok(json.to_string())
@@ -60,12 +79,16 @@ pub async fn send_friend_request(
 
 /// Accept a friend request.
 ///
-/// Returns JSON: { "request_id", "status", "conversation_id", "friend_did" }
+/// Returns JSON: { "request_id", "status", "conversation_id", "friend_did", "relay_messages" }
 #[tauri::command]
 pub async fn accept_friend_request(
     request_id: String,
     state: tauri::State<'_, AppState>,
 ) -> Result<String, String> {
+    let identity_guard = state.identity.read().await;
+    let identity = identity_guard.as_ref()
+        .ok_or("No identity loaded")?;
+
     let db_guard = state.database.read().await;
     let database = db_guard.as_ref()
         .ok_or("Database not initialized")?;
@@ -106,11 +129,32 @@ pub async fn accept_friend_request(
     database.create_conversation(&conversation_id, friend_did)
         .map_err(|e| format!("Failed to create conversation: {}", e))?;
 
+    // Build relay envelope so the requester knows we accepted
+    let our_signing = hex::encode(&identity.keypair().signing.public_bytes());
+    let our_enc = hex::encode(&identity.keypair().encryption.public_bytes());
+    let relay_envelope = serde_json::json!({
+        "envelope": "friend_response",
+        "version": 1,
+        "payload": {
+            "requestId": request_id,
+            "accepted": true,
+            "fromDid": identity.did_string(),
+            "fromDisplayName": identity.profile().display_name,
+            "fromAvatar": identity.profile().avatar,
+            "fromSigningKey": our_signing,
+            "fromEncryptionKey": our_enc,
+        }
+    });
+
     let json = serde_json::json!({
         "request_id": request_id,
         "status": "accepted",
         "conversation_id": conversation_id,
         "friend_did": friend_did,
+        "relay_messages": [{
+            "to_did": friend_did,
+            "payload": relay_envelope.to_string(),
+        }],
     });
 
     Ok(json.to_string())

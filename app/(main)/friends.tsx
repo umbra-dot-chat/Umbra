@@ -16,7 +16,7 @@ import {
   FriendSection,
 } from '@/components/friends/FriendComponents';
 import { useRouter } from 'expo-router';
-import { UsersIcon, MessageIcon, MoreIcon, UserCheckIcon, QrCodeIcon } from '@/components/icons';
+import { UsersIcon, MessageIcon, MoreIcon, UserCheckIcon, QrCodeIcon, GlobeIcon, UserPlusIcon, BlockIcon } from '@/components/icons';
 import { useFriends } from '@/hooks/useFriends';
 import { ProfileCard } from '@/components/friends/ProfileCard';
 import { HelpIndicator } from '@/components/ui/HelpIndicator';
@@ -417,31 +417,54 @@ export default function FriendsPage() {
             flexDirection: 'row',
             alignItems: 'center',
             paddingHorizontal: 20,
-            paddingTop: 16,
+            paddingVertical: 4,
             borderBottomWidth: 1,
             borderBottomColor: theme.colors.border.subtle,
           }}
         >
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginRight: isMobile ? 12 : 24, paddingBottom: 12 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginRight: isMobile ? 4 : 24 }}>
             <MobileBackButton onPress={() => router.back()} label="Back to conversations" />
-            <UsersIcon size={20} color={theme.colors.text.primary} />
-            {!isMobile && <Text size="lg" weight="bold">Friends</Text>}
+            {!isMobile && (
+              <>
+                <UsersIcon size={20} color={theme.colors.text.primary} />
+                <Text size="lg" weight="bold">Friends</Text>
+              </>
+            )}
           </View>
 
           <TabList style={{ marginBottom: -1, borderBottomWidth: 0 }}>
-            <Tab value="all">All</Tab>
-            <Tab value="online">Online</Tab>
-            <Tab value="pending" badge={incomingRequests.length > 0 ? incomingRequests.length : undefined}>
-              Pending
+            <Tab
+              value="all"
+              icon={<UsersIcon size={18} color={activeTab === 'all' ? theme.colors.text.primary : theme.colors.text.secondary} />}
+            >
+              {isMobile && activeTab !== 'all' ? null : 'All'}
             </Tab>
-            <Tab value="blocked">Blocked</Tab>
+            <Tab
+              value="online"
+              icon={<GlobeIcon size={18} color={activeTab === 'online' ? theme.colors.text.primary : theme.colors.text.secondary} />}
+            >
+              {isMobile && activeTab !== 'online' ? null : 'Online'}
+            </Tab>
+            <Tab
+              value="pending"
+              badge={incomingRequests.length > 0 ? incomingRequests.length : undefined}
+              icon={<UserPlusIcon size={18} color={activeTab === 'pending' ? theme.colors.text.primary : theme.colors.text.secondary} />}
+            >
+              {isMobile && activeTab !== 'pending' ? null : 'Pending'}
+            </Tab>
+            <Tab
+              value="blocked"
+              icon={<BlockIcon size={18} color={activeTab === 'blocked' ? theme.colors.text.primary : theme.colors.text.secondary} />}
+            >
+              {isMobile && activeTab !== 'blocked' ? null : 'Blocked'}
+            </Tab>
           </TabList>
 
           <View style={{ flex: 1 }} />
 
           <Pressable
             onPress={() => setQrCardOpen(true)}
-            style={{ paddingBottom: 12, paddingHorizontal: 8 }}
+            style={{ paddingHorizontal: 8 }}
             hitSlop={6}
           >
             <QrCodeIcon size={20} color={theme.colors.text.secondary} />
@@ -638,7 +661,6 @@ export default function FriendsPage() {
         {/* ─── Pending ─── */}
         <TabPanel value="pending" style={{ flex: 1 }}>
           <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }}>
-            <ProfileCard style={{ marginBottom: 12 }} />
             <View style={{ marginBottom: 16 }}>
               {/* Platform selector */}
               <View style={{ marginBottom: 10 }}>

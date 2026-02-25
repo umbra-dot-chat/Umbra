@@ -34,7 +34,9 @@ const RELAY_BASE_URL = process.env.EXPO_PUBLIC_RELAY_URL || 'https://relay.umbra
  * Open a URL in the system browser via Tauri shell plugin.
  */
 async function tauriShellOpen(url: string): Promise<void> {
-  const { open } = await import('@tauri-apps/plugin-shell');
+  // eslint-disable-next-line no-new-func
+  const dynamicImport = new Function('m', 'return import(m)') as (m: string) => Promise<any>;
+  const { open } = await dynamicImport('@tauri-apps/plugin-shell');
   await open(url);
 }
 

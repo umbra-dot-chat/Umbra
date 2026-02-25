@@ -100,7 +100,7 @@ export function ChatHeader({ active, rightPanel, togglePanel, onShowProfile, onV
       <View style={{
         flexDirection: 'row',
         alignItems: 'center',
-        height: 48,
+        height: 56,
         paddingHorizontal: 4,
         borderBottomWidth: 1,
         borderBottomColor: themeColors.border.subtle,
