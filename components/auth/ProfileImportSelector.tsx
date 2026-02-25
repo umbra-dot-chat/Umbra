@@ -254,8 +254,8 @@ export function ProfileImportSelector({
           // Use indirect import to hide the specifier from Metro's static analysis —
           // this module only exists on Tauri desktop and Metro can't resolve it for iOS.
           // eslint-disable-next-line no-new-func
-          const dynamicImport = new Function('m', 'return import(m)') as (m: string) => Promise<any>;
-          const { open } = await dynamicImport('@tauri-apps/plugin-shell');
+          const _shellPkg = '@tauri-apps/' + 'plugin-shell';
+          const { open } = await import(/* @vite-ignore */ _shellPkg);
           await open(data.redirect_url);
 
           // Poll relay for the OAuth result

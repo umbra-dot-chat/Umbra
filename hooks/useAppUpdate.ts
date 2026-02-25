@@ -267,9 +267,8 @@ export function useAppUpdate(): AppUpdateState {
 
     try {
       // Dynamic import to avoid errors on non-Tauri platforms
-      // eslint-disable-next-line no-new-func
-      const dynamicImport = new Function('m', 'return import(m)') as (m: string) => Promise<any>;
-      const { check } = await dynamicImport('@tauri-apps/plugin-updater');
+      const _updaterPkg = '@tauri-apps/' + 'plugin-updater';
+      const { check } = await import(/* @vite-ignore */ _updaterPkg);
       const update = await check();
 
       if (update) {
@@ -321,9 +320,8 @@ export function useAppUpdate(): AppUpdateState {
   // Restart the app after Tauri update
   const restart = useCallback(async () => {
     try {
-      // eslint-disable-next-line no-new-func
-      const dynamicImport = new Function('m', 'return import(m)') as (m: string) => Promise<any>;
-      const { relaunch } = await dynamicImport('@tauri-apps/plugin-process');
+      const _processPkg = '@tauri-apps/' + 'plugin-process';
+      const { relaunch } = await import(/* @vite-ignore */ _processPkg);
       await relaunch();
     } catch (err) {
       console.error('[useAppUpdate] Restart failed:', err);

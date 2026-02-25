@@ -142,8 +142,8 @@ export function useLinkedAccounts(did: string | null) {
 
         if (RNPlatform.OS === 'web' && isTauri()) {
           // Tauri: open in system browser, poll relay for result
-          // eslint-disable-next-line no-new-func
-          const { open } = await (new Function('m', 'return import(m)') as (m: string) => Promise<any>)('@tauri-apps/plugin-shell');
+          const _shellPkg = '@tauri-apps/' + 'plugin-shell';
+          const { open } = await import(/* @vite-ignore */ _shellPkg);
           await open(redirectUrl);
 
           // Poll relay for the OAuth result

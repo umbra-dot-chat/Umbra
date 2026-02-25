@@ -621,8 +621,8 @@ function MainLayoutInner() {
             // Only drag on primary button (left click), not on traffic light area
             if (e.button !== 0) return;
             try {
-              // eslint-disable-next-line no-new-func
-              const { getCurrentWindow } = await (new Function('m', 'return import(m)') as (m: string) => Promise<any>)('@tauri-apps/api/window');
+              const _winPkg = '@tauri-apps/' + 'api/window';
+              const { getCurrentWindow } = await import(/* @vite-ignore */ _winPkg);
               await getCurrentWindow().startDragging();
             } catch {}
           }}
