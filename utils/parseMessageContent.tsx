@@ -674,31 +674,38 @@ function analyzeEmojiOnly(tokens: InlineToken[]): EmojiOnlyInfo | null {
  * Custom emoji (image-based) scaling — these act like stickers.
  *
  *   1 emoji  → 20×  (14px base → 280px)
- *   2 emoji  → 14×  (14px base → 196px)
- *   3 emoji  → 10×  (14px base → 140px)
- *   5 emoji  → 6×   (14px base → 84px)
- *   ≥10      → 1.5× (14px base → 21px)
+ *   2 emoji  → 15×  (14px base → 210px)
+ *   3 emoji  → 10×  (14px base → 140px)  — half the max size
+ *   4 emoji  → 6×   (14px base → 84px)
+ *   5 emoji  → 4×   (14px base → 56px)
+ *   ≥7       → 2×   (14px base → 28px)   — compact inline
  */
 function customEmojiMultiplier(count: number): number {
   if (count <= 0) return 1;
-  if (count >= 10) return 1.5;
-  // Linear: 1 → 20×, 10 → 1.5×
-  return 20 - (count - 1) * (18.5 / 9);
+  if (count === 1) return 20;
+  if (count === 2) return 15;
+  if (count === 3) return 10;
+  if (count >= 7) return 2;
+  // 4–6: linear from 6× down to 2×
+  return 6 - (count - 4) * (4 / 3);
 }
 
 /**
  * Unicode emoji scaling — moderate enlargement, not sticker-sized.
  *
  *   1 emoji  → 2.5× (14px base → 35px)
- *   3 emoji  → 2×   (14px base → 28px)
- *   5 emoji  → 1.5× (14px base → 21px)
- *   ≥8       → 1×   (normal inline size)
+ *   2 emoji  → 2×   (14px base → 28px)
+ *   3 emoji  → 1.25× (14px base → ~18px) — half the max size
+ *   4 emoji  → 1.1×  (14px base → ~15px)
+ *   ≥5       → 1×   (normal inline size)
  */
 function unicodeEmojiMultiplier(count: number): number {
   if (count <= 0) return 1;
-  if (count >= 8) return 1;
-  // Linear: 1 → 2.5×, 8 → 1×
-  return 2.5 - (count - 1) * (1.5 / 7);
+  if (count === 1) return 2.5;
+  if (count === 2) return 2;
+  if (count === 3) return 1.25;
+  if (count === 4) return 1.1;
+  return 1;
 }
 
 // ---------------------------------------------------------------------------
