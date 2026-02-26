@@ -39,7 +39,7 @@
 //! ```
 
 use parking_lot::Mutex;
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 use std::sync::Arc;
 
 use super::schema;

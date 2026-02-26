@@ -154,9 +154,9 @@ pub fn groups_create(args: &str) -> DResult {
 
     // Generate and store group encryption key
     let group_key: [u8; 32] = {
+        use rand::RngCore;
         let mut key = [0u8; 32];
-        getrandom::getrandom(&mut key)
-            .map_err(|e| err(400, format!("Failed to generate group key: {}", e)))?;
+        rand::rngs::OsRng.fill_bytes(&mut key);
         key
     };
     let wrapping_key = derive_key_wrapping_key(identity);
