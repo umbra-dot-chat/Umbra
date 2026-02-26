@@ -52,6 +52,7 @@ import { PANEL_WIDTH } from '@/types/panels';
 import { VolumeIcon, ArrowLeftIcon } from '@/components/icons';
 import { FileChannelContent } from '@/components/community/FileChannelContent';
 import { AnimatedPresence } from '@/components/ui/AnimatedPresence';
+import { pickFile } from '@/utils/filePicker';
 
 // ---------------------------------------------------------------------------
 // Channel type mapping
@@ -72,82 +73,7 @@ function mapChannelType(type: string): string {
 // Mock channel data — matches CommunityLayoutSidebar mock channel IDs
 // ---------------------------------------------------------------------------
 
-type MockE2EEStatus = 'pending' | 'active' | 'rotating' | 'error';
-
-interface MockChannel {
-  id: string;
-  name: string;
-  channelType: string;
-  topic?: string;
-  e2eeEnabled: boolean;
-  /** Per-channel E2EE mock state — only meaningful when e2eeEnabled is true */
-  e2eeStatus?: MockE2EEStatus;
-  e2eeKeyVersion?: number;
-  e2eeErrorMessage?: string;
-}
-
-// ---------------------------------------------------------------------------
-// Mock member data — populates the right-hand Members panel
-// ---------------------------------------------------------------------------
-
-interface MockMember {
-  memberDid: string;
-  nickname: string;
-  roleId?: string;
-  status: 'online' | 'idle' | 'dnd' | 'offline';
-  statusText?: string;
-}
-
-const MOCK_MEMBERS: MockMember[] = [
-  { memberDid: 'did:key:alice', nickname: 'Alice', roleId: 'role-admin', status: 'online', statusText: 'Deploying v2.0' },
-  { memberDid: 'did:key:infamous', nickname: 'InfamousVague', roleId: 'role-admin', status: 'online', statusText: 'Building the future' },
-  { memberDid: 'did:key:bob', nickname: 'Bob', roleId: 'role-mod', status: 'online', statusText: 'Reviewing PRs' },
-  { memberDid: 'did:key:carol', nickname: 'Carol', roleId: 'role-mod', status: 'idle', statusText: 'AFK for lunch' },
-  { memberDid: 'did:key:dave', nickname: 'Dave', roleId: 'role-mod', status: 'offline' },
-  { memberDid: 'did:key:eve', nickname: 'Eve', status: 'online', statusText: 'Pair programming' },
-  { memberDid: 'did:key:frank', nickname: 'Frank', status: 'online', statusText: 'Listening to lofi' },
-  { memberDid: 'did:key:grace', nickname: 'Grace', status: 'idle', statusText: 'In a meeting' },
-  { memberDid: 'did:key:heidi', nickname: 'Heidi', status: 'online' },
-  { memberDid: 'did:key:ivan', nickname: 'Ivan', status: 'offline' },
-  { memberDid: 'did:key:jay', nickname: 'Jay', status: 'online', statusText: 'Shipping features' },
-  { memberDid: 'did:key:karen', nickname: 'Karen', status: 'dnd', statusText: 'Do not disturb' },
-  { memberDid: 'did:key:leo', nickname: 'Leo', status: 'offline' },
-  { memberDid: 'did:key:mia', nickname: 'Mia', status: 'online', statusText: 'Designing screens' },
-  { memberDid: 'did:key:nate', nickname: 'Nate', status: 'offline' },
-  { memberDid: 'did:key:olivia', nickname: 'Olivia', status: 'online' },
-  { memberDid: 'did:key:peter', nickname: 'Peter', status: 'idle', statusText: 'Getting coffee' },
-  { memberDid: 'did:key:quinn', nickname: 'Quinn', status: 'offline' },
-  { memberDid: 'did:key:rachel', nickname: 'Rachel', status: 'online', statusText: 'Writing tests' },
-  { memberDid: 'did:key:sam', nickname: 'Sam', status: 'offline' },
-];
-
-const MOCK_ROLE_MAP: Record<string, { name: string; color: string; position: number }> = {
-  'role-admin': { name: 'Admin', color: '#e74c3c', position: 2 },
-  'role-mod': { name: 'Moderator', color: '#2ecc71', position: 1 },
-};
-
-const MOCK_CHANNELS: MockChannel[] = [
-  { id: 'welcome', name: 'welcome', channelType: 'text', topic: 'Say hello and introduce yourself to the community', e2eeEnabled: false },
-  { id: 'rules', name: 'rules', channelType: 'announcement', topic: 'Please read the rules before posting anywhere', e2eeEnabled: false },
-  { id: 'announcements', name: 'announcements', channelType: 'announcement', topic: 'Important updates and news from the Umbra team', e2eeEnabled: false },
-  { id: 'general', name: 'general', channelType: 'text', topic: 'Hang out and chat about anything Umbra related', e2eeEnabled: false },
-  { id: 'random', name: 'random', channelType: 'text', topic: 'Off-topic banter, memes, and everything in between', e2eeEnabled: false },
-  { id: 'memes', name: 'memes', channelType: 'text', topic: 'Only the finest memes allowed here', e2eeEnabled: false },
-  { id: 'lounge', name: 'Lounge', channelType: 'voice', topic: 'Chill and hang out with voice chat', e2eeEnabled: false },
-  { id: 'gaming', name: 'Gaming', channelType: 'voice', topic: 'Squad up for some games', e2eeEnabled: false },
-  // Encrypted — active, high key version (stable long-running channel)
-  { id: 'frontend', name: 'frontend', channelType: 'text', topic: 'React Native, TypeScript, and UI discussions', e2eeEnabled: true, e2eeStatus: 'active', e2eeKeyVersion: 7 },
-  // Encrypted — rotating keys (a member was just removed)
-  { id: 'backend', name: 'backend', channelType: 'text', topic: 'APIs, databases, and server architecture', e2eeEnabled: true, e2eeStatus: 'rotating', e2eeKeyVersion: 4 },
-  { id: 'design', name: 'design', channelType: 'text', topic: 'UI/UX design reviews and feedback', e2eeEnabled: false },
-  { id: 'docs', name: 'documentation', channelType: 'text', topic: 'Docs, guides, and how-tos for contributors', e2eeEnabled: false },
-  // Encrypted — error state (peer offline)
-  { id: 'releases', name: 'releases', channelType: 'announcement', topic: 'Release notes, changelogs, and version updates', e2eeEnabled: true, e2eeStatus: 'error', e2eeKeyVersion: 2, e2eeErrorMessage: 'Key exchange failed — admin node unreachable' },
-  { id: 'shared-files', name: 'shared-files', channelType: 'files', topic: 'Upload and share files with the community', e2eeEnabled: false },
-  { id: 'off-topic', name: 'off-topic', channelType: 'text', topic: 'Whatever is on your mind, no judgment', e2eeEnabled: false },
-  // Encrypted — pending (newly created encrypted channel)
-  { id: 'gaming-chat', name: 'gaming', channelType: 'text', topic: 'Looking for group, game recs, and gaming chat', e2eeEnabled: true, e2eeStatus: 'pending', e2eeKeyVersion: 1 },
-];
+// (Mock data removed — all communities now use real backend data)
 
 // ---------------------------------------------------------------------------
 // Empty state
@@ -276,7 +202,6 @@ export default function CommunityPage() {
   const { service } = useUmbra();
   const insets = useSafeAreaInsets();
   const myDid = identity?.did ?? '';
-  const isMock = communityId?.startsWith('mock-') ?? false;
 
   // Read active channel from shared context (set by CommunityLayoutSidebar)
   const { activeChannelId, setActiveChannelId } = useCommunityContext();
@@ -315,6 +240,8 @@ export default function CommunityPage() {
       keywords: [e.name, 'ghost', 'umbra', 'logo'],
       imageUrl: e.imageUrl,
       animated: e.animated,
+      groupId: '__builtin__',
+      groupName: 'Umbra',
     }));
     const communityItems = (communityEmoji ?? []).map((e) => ({
       emoji: `:${e.name}:`,
@@ -323,9 +250,11 @@ export default function CommunityPage() {
       keywords: [e.name],
       imageUrl: e.imageUrl,
       animated: e.animated,
+      groupId: e.communityId,
+      groupName: community?.name ?? e.communityId,
     }));
     return [...builtInItems, ...communityItems];
-  }, [communityEmoji, builtInEmoji]);
+  }, [communityEmoji, builtInEmoji, community?.name]);
 
   // Build emoji map for inline rendering in messages (built-in + community)
   const emojiMap = useMemo(
@@ -365,8 +294,7 @@ export default function CommunityPage() {
     return Array.from(packMap.values()).filter((p) => p.stickers.length > 0);
   }, [communityStickers, communityStickerPacks]);
 
-  // Use mock channels as fallback when no real channels are available
-  const channels = isMock && realChannels.length === 0 ? MOCK_CHANNELS : realChannels;
+  const channels = realChannels;
 
   // Messages for the active channel
   const {
@@ -375,7 +303,7 @@ export default function CommunityPage() {
     sendMessage,
     pinnedMessages,
     unpinMessage,
-  } = useCommunityMessages(isMock ? null : activeChannelId, communityId);
+  } = useCommunityMessages(activeChannelId, communityId);
 
   // Right panel
   const { visiblePanel, panelWidth, togglePanel } = useRightPanel();
@@ -400,63 +328,11 @@ export default function CommunityPage() {
   // Transform members for Wisp MemberList
   // ---------------------------------------------------------------------------
 
-  // Use mock members as fallback for mock communities
-  const effectiveMembers = isMock && members.length === 0 ? MOCK_MEMBERS : members;
-
   const memberSections = useMemo<MemberListSection[]>(() => {
-    // Mock community: group by role, then online/offline within each
-    if (isMock) {
-      const sections = new Map<string, { label: string; position: number; labelColor?: string; members: MemberListMember[] }>();
-
-      // Create role sections with colors
-      for (const [roleId, role] of Object.entries(MOCK_ROLE_MAP)) {
-        sections.set(roleId, {
-          label: role.name,
-          position: role.position,
-          labelColor: role.color,
-          members: [],
-        });
-      }
-      sections.set('online', { label: 'Online', position: -1, members: [] });
-      sections.set('offline', { label: 'Offline', position: -2, members: [] });
-
-      for (const member of MOCK_MEMBERS) {
-        const roleInfo = member.roleId ? MOCK_ROLE_MAP[member.roleId] : undefined;
-        const m: MemberListMember = {
-          id: member.memberDid,
-          name: member.nickname,
-          status: member.status,
-          statusText: member.statusText,
-          roleColor: roleInfo?.color,
-        };
-
-        if (member.roleId && sections.has(member.roleId)) {
-          sections.get(member.roleId)!.members.push(m);
-        } else if (member.status === 'offline') {
-          sections.get('offline')!.members.push(m);
-        } else {
-          sections.get('online')!.members.push(m);
-        }
-      }
-
-      return Array.from(sections.entries())
-        .filter(([, s]) => s.members.length > 0)
-        .sort(([, a], [, b]) => b.position - a.position)
-        .map(([id, section]) => ({
-          id,
-          label: section.label,
-          labelColor: section.labelColor,
-          members: section.members,
-          memberCount: section.members.length,
-        }));
-    }
-
-    // Real community: bucket members by their highest hoisted role
-    // Sort roles descending by position (Owner 1000 → Admin 100 → Mod 50 → Member 0)
+    // Bucket members by their highest hoisted role
     const sortedRoles = [...roles].sort((a: any, b: any) => b.position - a.position);
     const hoistedRoles = sortedRoles.filter((r: any) => r.hoisted);
 
-    // Create buckets: one per hoisted role + catch-all "Members"
     const buckets = new Map<
       string,
       { label: string; position: number; labelColor?: string; members: MemberListMember[] }
@@ -472,23 +348,20 @@ export default function CommunityPage() {
     }
     buckets.set('__members__', { label: 'Members', position: -1, members: [] });
 
-    // Resolve member name: nickname → current user displayName → truncated DID
     const resolveName = (member: any): string => {
       if (member.nickname) return member.nickname;
       if (member.memberDid === myDid && identity?.displayName) return identity.displayName;
       return member.memberDid.slice(0, 16) + '...';
     };
 
-    for (const member of effectiveMembers) {
+    for (const member of members) {
       const memberDid = (member as any).memberDid;
       const assignedRoles = memberRolesMap[memberDid] ?? [];
 
-      // Find the highest hoisted role this member is assigned to
       const highestHoisted = assignedRoles
         .filter((r: any) => r.hoisted)
         .sort((a: any, b: any) => b.position - a.position)[0];
 
-      // Top role for name color
       const topRole = assignedRoles.length > 0
         ? [...assignedRoles].sort((a: any, b: any) => b.position - a.position)[0]
         : undefined;
@@ -518,7 +391,7 @@ export default function CommunityPage() {
         members: section.members,
         memberCount: section.members.length,
       }));
-  }, [isMock, effectiveMembers, roles, memberRolesMap, myDid, identity]);
+  }, [members, roles, memberRolesMap, myDid, identity]);
 
   // ---------------------------------------------------------------------------
   // Transform messages for Wisp MessageList
@@ -527,7 +400,7 @@ export default function CommunityPage() {
   // Build a quick DID → display name lookup for message senders
   const memberNameMap = useMemo(() => {
     const map = new Map<string, string>();
-    for (const member of effectiveMembers) {
+    for (const member of members) {
       const did = (member as any).memberDid;
       const name = (member as any).nickname || undefined;
       if (name) map.set(did, name);
@@ -537,7 +410,7 @@ export default function CommunityPage() {
       map.set(myDid, identity.displayName);
     }
     return map;
-  }, [effectiveMembers, myDid, identity]);
+  }, [members, myDid, identity]);
 
   // Build a platformUserId → CommunitySeat lookup for ghost seat rendering
   const seatByPlatformUserId = useMemo(() => {
@@ -677,6 +550,30 @@ export default function CommunityPage() {
     }
   }, [sendMessage]);
 
+  // File attachment handler
+  const handleAttachment = useCallback(async () => {
+    if (!service || !activeChannelId) return;
+    try {
+      const picked = await pickFile();
+      if (!picked) return;
+
+      const fileId = crypto.randomUUID();
+      const manifest = await service.chunkFile(fileId, picked.filename, picked.dataBase64);
+
+      const fileContent = JSON.stringify({
+        __file: true,
+        fileId,
+        filename: picked.filename,
+        size: picked.size,
+        mimeType: picked.mimeType,
+        storageChunksJson: JSON.stringify(manifest),
+      });
+      await sendMessage(fileContent);
+    } catch (err) {
+      console.error('[CommunityPage] File attachment failed:', err);
+    }
+  }, [service, activeChannelId, sendMessage]);
+
   // Mobile back: clear active channel to return to the community sidebar
   const handleBackPress = useCallback(() => {
     setActiveChannelId(null);
@@ -685,13 +582,6 @@ export default function CommunityPage() {
   // -- Context menu: roles list (non-default roles) -------------------------
 
   const contextMenuRoles = useMemo<MemberContextMenuRole[]>(() => {
-    if (isMock) {
-      return Object.entries(MOCK_ROLE_MAP).map(([id, role]) => ({
-        id,
-        name: role.name,
-        color: role.color,
-      }));
-    }
     return roles
       .filter((r: any) => !r.isPreset && r.name !== 'Member')
       .sort((a: any, b: any) => b.position - a.position)
@@ -700,7 +590,7 @@ export default function CommunityPage() {
         name: r.name,
         color: r.color ?? '#95a5a6',
       }));
-  }, [isMock, roles]);
+  }, [roles]);
 
   // -- Context menu: long-press handler -------------------------------------
 
@@ -710,17 +600,7 @@ export default function CommunityPage() {
       setContextMenuMember({ id: member.id, name: member.name });
       setContextMenuLayout({ x: pageX, y: pageY, width: 0, height: 0 });
 
-      // For mock communities, derive roles from mock data
-      if (isMock) {
-        const mockMember = MOCK_MEMBERS.find((m) => m.memberDid === member.id);
-        const roleIds = new Set<string>();
-        if (mockMember?.roleId) roleIds.add(mockMember.roleId);
-        setContextMenuMemberRoleIds(roleIds);
-        setContextMenuOpen(true);
-        return;
-      }
-
-      // For real communities, fetch member roles from service
+      // Fetch member roles from service
       if (service && communityId) {
         try {
           const memberRoles = await service.getMemberRoles(communityId, member.id);
@@ -732,7 +612,7 @@ export default function CommunityPage() {
       }
       setContextMenuOpen(true);
     },
-    [isMock, service, communityId],
+    [service, communityId],
   );
 
   // -- Context menu: role toggle handler ------------------------------------
@@ -746,8 +626,6 @@ export default function CommunityPage() {
         else next.delete(roleId);
         return next;
       });
-
-      if (isMock) return; // Mock — no backend call
 
       if (service && communityId && myDid) {
         try {
@@ -770,14 +648,14 @@ export default function CommunityPage() {
         }
       }
     },
-    [isMock, service, communityId, myDid, refreshCommunity],
+    [service, communityId, myDid, refreshCommunity],
   );
 
   // -- Context menu: kick handler ---------------------------------------------
 
   const handleKick = useCallback(
     async (memberId: string) => {
-      if (isMock || !service || !communityId) return;
+      if (!service || !communityId) return;
       try {
         await service.kickCommunityMember(communityId, memberId, myDid);
         setContextMenuOpen(false);
@@ -786,14 +664,14 @@ export default function CommunityPage() {
         console.warn('[CommunityPage] Failed to kick member:', err);
       }
     },
-    [isMock, service, communityId, myDid, refreshCommunity],
+    [service, communityId, myDid, refreshCommunity],
   );
 
   // -- Context menu: ban handler ----------------------------------------------
 
   const handleBan = useCallback(
     async (memberId: string) => {
-      if (isMock || !service || !communityId) return;
+      if (!service || !communityId) return;
       try {
         await service.banCommunityMember(communityId, memberId, myDid);
         setContextMenuOpen(false);
@@ -802,7 +680,7 @@ export default function CommunityPage() {
         console.warn('[CommunityPage] Failed to ban member:', err);
       }
     },
-    [isMock, service, communityId, myDid, refreshCommunity],
+    [service, communityId, myDid, refreshCommunity],
   );
 
   // ---------------------------------------------------------------------------
@@ -825,7 +703,7 @@ export default function CommunityPage() {
             )}
             <VoiceCallPanel
               channelName={activeChannel.name}
-              members={effectiveMembers as any}
+              members={members as any}
               myDid={myDid}
               myDisplayName={identity?.displayName}
             />
@@ -844,7 +722,7 @@ export default function CommunityPage() {
               channelName={activeChannel.name}
               communityId={communityId!}
               channelId={activeChannelId!}
-              members={effectiveMembers as any}
+              members={members as any}
             />
           </>
         ) : activeChannel && activeChannel.channelType === 'files' ? (
@@ -933,6 +811,7 @@ export default function CommunityPage() {
                 }}
                 variant="pill"
                 showAttachment
+                onAttachmentClick={handleAttachment}
                 showEmoji
                 onEmojiClick={() => {
                   setEmojiOpen((prev) => !prev);
@@ -967,7 +846,7 @@ export default function CommunityPage() {
             {visiblePanel === 'members' && (
               <MemberList
                 sections={memberSections}
-                title={`Members — ${effectiveMembers.length}`}
+                title={`Members — ${members.length}`}
                 onClose={() => togglePanel('members')}
                 onMemberLongPress={handleMemberLongPress}
               />
@@ -989,7 +868,7 @@ export default function CommunityPage() {
             {visiblePanel === 'members' && (
               <MemberList
                 sections={memberSections}
-                title={`Members — ${effectiveMembers.length}`}
+                title={`Members — ${members.length}`}
                 onClose={() => togglePanel('members')}
                 onMemberLongPress={handleMemberLongPress}
               />
@@ -1015,8 +894,8 @@ export default function CommunityPage() {
         roles={contextMenuRoles}
         memberRoleIds={contextMenuMemberRoleIds}
         onRoleToggle={handleRoleToggle}
-        onKick={!isMock ? handleKick : undefined}
-        onBan={!isMock ? handleBan : undefined}
+        onKick={handleKick}
+        onBan={handleBan}
       />
     </View>
   );

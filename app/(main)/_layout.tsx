@@ -45,16 +45,6 @@ import { ResizeHandle } from '@/components/ui/ResizeHandle';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import { useNetwork } from '@/hooks/useNetwork';
 
-// TODO: Remove mock community once real communities exist
-const MOCK_COMMUNITY: Community = {
-  id: 'mock-community-1',
-  name: 'Umbra HQ',
-  description: 'The official Umbra community',
-  accentColor: '#5865F2',
-  ownerDid: 'did:key:mock',
-  createdAt: Date.now(),
-  updatedAt: Date.now(),
-};
 
 /** Format a relative time string from a Unix timestamp. */
 function formatRelativeTime(ts?: number): string {
@@ -216,8 +206,7 @@ function MainLayoutInner() {
   const { onlineDids } = useNetwork();
   const { communities: realCommunities, createCommunity, isLoading: communitiesLoading } = useCommunities();
 
-  // Merge mock community with real ones (TODO: remove mock once real communities exist)
-  const communities = useMemo(() => [MOCK_COMMUNITY, ...realCommunities], [realCommunities]);
+  const communities = realCommunities;
 
   // Whether the core service is still initializing (WASM + identity)
   const coreLoading = !isReady || !identity;

@@ -13,17 +13,13 @@ import React from 'react';
 import { View, Pressable } from 'react-native';
 import { Text, useTheme } from '@coexist/wisp-react-native';
 import { useVoiceChannel } from '@/contexts/VoiceChannelContext';
-import { RadioIcon, MicIcon, MicOffIcon, VolumeIcon, VolumeMuteIcon, PhoneOffIcon } from '@/components/icons';
+import { RadioIcon, PhoneOffIcon } from '@/components/icons';
 
 export function VoiceChannelBar() {
   const {
     activeChannelId,
     activeChannelName,
-    isMuted,
-    isDeafened,
     isConnecting,
-    toggleMute,
-    toggleDeafen,
     leaveVoiceChannel,
   } = useVoiceChannel();
   const { theme } = useTheme();
@@ -59,48 +55,6 @@ export function VoiceChannelBar() {
         >
           {activeChannelName ?? activeChannelId}
         </Text>
-
-        {/* Mute */}
-        <Pressable
-          onPress={toggleMute}
-          accessibilityLabel={isMuted ? 'Unmute' : 'Mute'}
-          accessibilityRole="button"
-          style={{
-            width: 28,
-            height: 28,
-            borderRadius: 6,
-            alignItems: 'center',
-            justifyContent: 'center',
-            backgroundColor: isMuted ? 'rgba(231,76,60,0.15)' : 'transparent',
-          }}
-        >
-          {isMuted ? (
-            <MicOffIcon size={15} color={c.status.danger} />
-          ) : (
-            <MicIcon size={15} color={c.text.secondary} />
-          )}
-        </Pressable>
-
-        {/* Deafen */}
-        <Pressable
-          onPress={toggleDeafen}
-          accessibilityLabel={isDeafened ? 'Undeafen' : 'Deafen'}
-          accessibilityRole="button"
-          style={{
-            width: 28,
-            height: 28,
-            borderRadius: 6,
-            alignItems: 'center',
-            justifyContent: 'center',
-            backgroundColor: isDeafened ? 'rgba(231,76,60,0.15)' : 'transparent',
-          }}
-        >
-          {isDeafened ? (
-            <VolumeMuteIcon size={15} color={c.status.danger} />
-          ) : (
-            <VolumeIcon size={15} color={c.text.secondary} />
-          )}
-        </Pressable>
 
         {/* Leave */}
         <Pressable

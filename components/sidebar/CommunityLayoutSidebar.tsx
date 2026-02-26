@@ -6,9 +6,6 @@
  * because Sidebar wraps children in a ScrollView, which breaks the
  * CommunitySidebar's internal flex layout (header + tabs + flex:1 channel list).
  *
- * For mock communities (no real backend data), falls back to rich mock
- * data so the sidebar looks populated during development.
- *
  * Channel/space selection state is shared via CommunityContext so the
  * community page ([communityId].tsx) can read which channel is active.
  */
@@ -32,7 +29,7 @@ import { QRCardDialog } from '@/components/qr/QRCardDialog';
 // Default community icon — the colored Umbra ghost app icon
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const defaultCommunityIcon = require('@/assets/images/icon.png');
-import { VoiceChannelBar } from '@/components/community/VoiceChannelBar';
+
 import { VoiceChannelUsers } from '@/components/community/VoiceChannelUsers';
 import { useVoiceChannel } from '@/contexts/VoiceChannelContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -58,120 +55,7 @@ import { ChannelCreateDialog } from '@/components/community/ChannelCreateDialog'
 import type { CreateChannelType } from '@/components/community/ChannelCreateDialog';
 import { MoveToCategoryDialog } from '@/components/community/MoveToCategoryDialog';
 
-// ---------------------------------------------------------------------------
-// Mock data for development (mirrors Wisp storybook examples)
-// ---------------------------------------------------------------------------
-
-const MOCK_COMMUNITY_INFO: CommunityInfo = {
-  name: 'Umbra HQ',
-  subtitle: '1,284 members',
-};
-
-const MOCK_SPACES: WispCommunitySpace[] = [
-  { id: 'general', name: 'General' },
-  { id: 'dev', name: 'Development' },
-  { id: 'social', name: 'Social' },
-];
-
-const MOCK_CATEGORIES: Record<string, ChannelCategory[]> = {
-  general: [
-    {
-      id: 'info',
-      label: 'INFORMATION',
-      channels: [
-        { id: 'welcome', name: 'welcome', type: 'text' as ChannelType },
-        { id: 'rules', name: 'rules', type: 'announcement' as ChannelType },
-        { id: 'announcements', name: 'announcements', type: 'announcement' as ChannelType },
-      ],
-    },
-    {
-      id: 'text',
-      label: 'TEXT CHANNELS',
-      channels: [
-        { id: 'general', name: 'general', type: 'text' as ChannelType, active: true },
-        { id: 'random', name: 'random', type: 'text' as ChannelType },
-        { id: 'memes', name: 'memes', type: 'text' as ChannelType },
-      ],
-    },
-    {
-      id: 'voice',
-      label: 'VOICE CHANNELS',
-      channels: [
-        { id: 'lounge', name: 'Lounge', type: 'voice' as ChannelType },
-        { id: 'gaming', name: 'Gaming', type: 'voice' as ChannelType },
-      ],
-    },
-  ],
-  dev: [
-    {
-      id: 'dev-text',
-      label: 'DEV CHANNELS',
-      channels: [
-        { id: 'frontend', name: 'frontend', type: 'text' as ChannelType, active: true },
-        { id: 'backend', name: 'backend', type: 'text' as ChannelType },
-        { id: 'design', name: 'design', type: 'text' as ChannelType },
-      ],
-    },
-    {
-      id: 'dev-files',
-      label: 'RESOURCES',
-      channels: [
-        { id: 'docs', name: 'documentation', type: 'text' as ChannelType },
-        { id: 'releases', name: 'releases', type: 'announcement' as ChannelType },
-        { id: 'shared-files', name: 'shared-files', type: 'files' as ChannelType },
-      ],
-    },
-  ],
-  social: [
-    {
-      id: 'social-text',
-      label: 'HANGOUT',
-      channels: [
-        { id: 'off-topic', name: 'off-topic', type: 'text' as ChannelType, active: true },
-        { id: 'gaming-chat', name: 'gaming', type: 'text' as ChannelType },
-      ],
-    },
-  ],
-};
-
-// ---------------------------------------------------------------------------
-// Mock role data (ManagedRole format — for mock communities only)
-// ---------------------------------------------------------------------------
-
-const MOCK_ROLES: ManagedRole[] = [
-  { id: 'role-admin', name: 'Admin', color: '#e74c3c', position: 0, permissions: {}, memberCount: 3, hoisted: true, mentionable: true },
-  { id: 'role-mod', name: 'Moderator', color: '#2ecc71', position: 1, permissions: {}, memberCount: 7, hoisted: true, mentionable: true },
-  { id: 'role-member', name: 'Member', color: '#3498db', position: 2, permissions: {}, memberCount: 45, hoisted: false, mentionable: false },
-  { id: 'role-everyone', name: '@everyone', color: '#95a5a6', position: 3, permissions: {}, memberCount: 120, isDefault: true },
-];
-
-const MOCK_PERMISSION_CATEGORIES: RolePermissionCategory[] = [
-  {
-    name: 'General',
-    permissions: [
-      { key: 'view_channels', label: 'View Channels', description: 'View text and voice channels' },
-      { key: 'manage_channels', label: 'Manage Channels', description: 'Create, edit, and delete channels', dangerous: true },
-      { key: 'manage_roles', label: 'Manage Roles', description: 'Create and manage roles', dangerous: true },
-    ],
-  },
-  {
-    name: 'Text',
-    permissions: [
-      { key: 'send_messages', label: 'Send Messages', description: 'Send messages in text channels' },
-      { key: 'embed_links', label: 'Embed Links', description: 'Show URL previews' },
-      { key: 'attach_files', label: 'Attach Files', description: 'Upload files and images' },
-      { key: 'manage_messages', label: 'Manage Messages', description: 'Delete and pin messages from others', dangerous: true },
-    ],
-  },
-  {
-    name: 'Voice',
-    permissions: [
-      { key: 'connect', label: 'Connect', description: 'Join voice channels' },
-      { key: 'speak', label: 'Speak', description: 'Speak in voice channels' },
-      { key: 'mute_members', label: 'Mute Members', description: 'Mute others in voice', dangerous: true },
-    ],
-  },
-];
+// (Mock data removed — all communities now use real backend data)
 
 // ---------------------------------------------------------------------------
 // Channel type mapping
@@ -202,7 +86,6 @@ export interface CommunityLayoutSidebarProps {
 // ---------------------------------------------------------------------------
 
 export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarProps) {
-  const isMock = communityId.startsWith('mock-');
   const router = useRouter();
   const { identity } = useAuth();
   const { service } = useUmbra();
@@ -220,7 +103,6 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
   // Track the communityId so we can detect switches
   const prevCommunityIdRef = useRef(communityId);
 
-  // Fetch real community data (skipped for mock communities)
   const {
     community,
     spaces,
@@ -234,26 +116,25 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
     memberRolesMap,
     isLoading: communityLoading,
     refresh: refreshCommunity,
-  } = useCommunity(isMock ? null : communityId);
+  } = useCommunity(communityId);
 
   // Community sync — dispatch + relay broadcast
   const { syncEvent } = useCommunitySync(communityId);
 
-  // Invite data (skipped for mock communities)
   const {
     invites,
     isLoading: invitesLoading,
     createInvite,
     deleteInvite,
     creating: inviteCreating,
-  } = useCommunityInvites(isMock ? null : communityId);
+  } = useCommunityInvites(communityId);
 
   // Seat claim detection
   const {
     matchingSeats,
     claimSeat: handleClaimSeat,
     dismissSeat: handleDismissSeat,
-  } = useSeatClaim(isMock ? null : communityId, myDid || null);
+  } = useSeatClaim(communityId, myDid || null);
 
   // Collapsed categories (local UI state)
   const [collapsedCategories, setCollapsedCategories] = useState<Set<string>>(new Set());
@@ -266,7 +147,6 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
   // Settings dialog (consolidates roles, invites, and all server settings)
   const [settingsDialogOpen, setSettingsDialogOpen] = useState(false);
   const [settingsInitialSection, setSettingsInitialSection] = useState<CommunitySettingsSection | undefined>(undefined);
-  const [mockRoles, setMockRoles] = useState<ManagedRole[]>(MOCK_ROLES);
   const [selectedRoleId, setSelectedRoleId] = useState<string | undefined>(undefined);
 
   // Channel context menu state
@@ -318,17 +198,15 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
   const [qrInviteOpen, setQrInviteOpen] = useState(false);
 
   // ---------------------------------------------------------------------------
-  // Resolve data — use mock data for mock communities, real data otherwise
+  // Resolve data
   // ---------------------------------------------------------------------------
 
-  // Determine if current user is the community owner
   const isOwner = useMemo(() => {
-    if (isMock || !community || !myDid) return false;
+    if (!community || !myDid) return false;
     return community.ownerDid === myDid;
-  }, [isMock, community, myDid]);
+  }, [community, myDid]);
 
   const communityInfo = useMemo<CommunityInfo>(() => {
-    if (isMock) return MOCK_COMMUNITY_INFO;
     return {
       name: community?.name ?? 'Loading...',
       subtitle: `${members.length} member${members.length !== 1 ? 's' : ''}`,
@@ -340,12 +218,11 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
         />
       ),
     };
-  }, [isMock, community?.name, community?.iconUrl, members.length]);
+  }, [community?.name, community?.iconUrl, members.length]);
 
   const wispSpaces = useMemo<WispCommunitySpace[]>(() => {
-    if (isMock) return MOCK_SPACES;
     return spaces.map((s) => ({ id: s.id, name: s.name }));
-  }, [isMock, spaces]);
+  }, [spaces]);
 
   // Auto-select first space.
   // When switching communities, the activeSpaceId holds an ID from the old
@@ -372,13 +249,7 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
 
   // Auto-select first channel
   useEffect(() => {
-    if (isMock && !activeChannelId && activeSpaceId) {
-      const cats = MOCK_CATEGORIES[activeSpaceId] ?? [];
-      const firstChannel = cats[0]?.channels[0];
-      if (firstChannel) {
-        setActiveChannelId(firstChannel.id);
-      }
-    } else if (!isMock && channels.length > 0 && !activeChannelId) {
+    if (channels.length > 0 && !activeChannelId) {
       const textChannels = channels.filter((c) => c.channelType === 'text');
       const generalChannel = textChannels.find((c) => c.name === 'general');
       const firstChannel = generalChannel ?? textChannels[0] ?? channels[0];
@@ -387,23 +258,9 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
         setActiveSpaceId(firstChannel.spaceId);
       }
     }
-  }, [isMock, channels, activeChannelId, activeSpaceId, setActiveChannelId, setActiveSpaceId]);
+  }, [channels, activeChannelId, setActiveChannelId, setActiveSpaceId]);
 
   const categories = useMemo<ChannelCategory[]>(() => {
-    if (isMock) {
-      const spaceKey = activeSpaceId ?? 'general';
-      const cats = MOCK_CATEGORIES[spaceKey] ?? MOCK_CATEGORIES.general;
-      return cats.map((cat) => ({
-        ...cat,
-        channels: cat.channels.map((ch) => ({
-          ...ch,
-          active: ch.id === activeChannelId,
-        })),
-        collapsed: collapsedCategories.has(cat.id),
-      }));
-    }
-
-    // Build categories from backend data
     const spaceCategories = realCategories
       .filter((c) => c.spaceId === activeSpaceId)
       .sort((a, b) => a.position - b.position);
@@ -445,7 +302,7 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
     }
 
     return cats;
-  }, [isMock, activeSpaceId, realCategories, channels, activeChannelId, collapsedCategories]);
+  }, [activeSpaceId, realCategories, channels, activeChannelId, collapsedCategories]);
 
   // ---------------------------------------------------------------------------
   // Handlers
@@ -504,22 +361,13 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
 
   const handleSpaceChange = useCallback((spaceId: string) => {
     setActiveSpaceId(spaceId);
-    if (isMock) {
-      // Select first channel in mock space
-      const cats = MOCK_CATEGORIES[spaceId] ?? [];
-      const firstChannel = cats[0]?.channels[0];
-      if (firstChannel) {
-        setActiveChannelId(firstChannel.id);
-      }
-    } else {
-      const spaceChannels = channels.filter((c) => c.spaceId === spaceId);
-      const firstText = spaceChannels.find((c) => c.channelType === 'text');
-      const firstChannel = firstText ?? spaceChannels[0];
-      if (firstChannel) {
-        setActiveChannelId(firstChannel.id);
-      }
+    const spaceChannels = channels.filter((c) => c.spaceId === spaceId);
+    const firstText = spaceChannels.find((c) => c.channelType === 'text');
+    const firstChannel = firstText ?? spaceChannels[0];
+    if (firstChannel) {
+      setActiveChannelId(firstChannel.id);
     }
-  }, [isMock, channels, setActiveSpaceId, setActiveChannelId]);
+  }, [channels, setActiveSpaceId, setActiveChannelId]);
 
   // Community header click → measure header position, then open dropdown
   const handleCommunityClick = useCallback(() => {
@@ -540,7 +388,7 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
 
   // Actual leave handler — called from confirmation dialog
   const handleLeaveConfirm = useCallback(async () => {
-    if (!service || !myDid || isMock) return;
+    if (!service || !myDid) return;
     try {
       await service.leaveCommunity(communityId, myDid);
       router.push('/');
@@ -548,7 +396,7 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
       console.warn('[CommunityLayoutSidebar] Failed to leave community:', err);
       throw err;
     }
-  }, [service, myDid, isMock, communityId, router]);
+  }, [service, myDid, communityId, router]);
 
   // Delete community handler — opens confirmation dialog
   const handleDeleteCommunity = useCallback(() => {
@@ -557,7 +405,7 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
 
   // Actual delete handler — called from confirmation dialog
   const handleDeleteConfirm = useCallback(async () => {
-    if (!service || !myDid || isMock) return;
+    if (!service || !myDid) return;
     try {
       await service.deleteCommunity(communityId, myDid);
       router.push('/');
@@ -565,7 +413,7 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
       console.warn('[CommunityLayoutSidebar] Failed to delete community:', err);
       throw err;
     }
-  }, [service, myDid, isMock, communityId, router]);
+  }, [service, myDid, communityId, router]);
 
   // Invite panel handlers
   const handleCreateInvite = useCallback(
@@ -573,7 +421,7 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
       const expiresAt = options.expiresIn
         ? Date.now() + options.expiresIn * 1000
         : undefined;
-      await createInvite(options.maxUses, expiresAt);
+      await createInvite(options.maxUses || undefined, expiresAt);
     },
     [createInvite],
   );
@@ -585,59 +433,6 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
     [deleteInvite],
   );
 
-  // ---------------------------------------------------------------------------
-  // Mock role handlers (only used for mock communities)
-  // ---------------------------------------------------------------------------
-
-  const handleMockRoleUpdate = useCallback((roleId: string, updates: Partial<ManagedRole>) => {
-    setMockRoles((prev) =>
-      prev.map((r) => (r.id === roleId ? { ...r, ...updates } : r)),
-    );
-  }, []);
-
-  const handleMockPermissionToggle = useCallback((roleId: string, permKey: string, value: boolean | null) => {
-    setMockRoles((prev) =>
-      prev.map((r) =>
-        r.id === roleId
-          ? { ...r, permissions: { ...r.permissions, [permKey]: value } }
-          : r,
-      ),
-    );
-  }, []);
-
-  const handleMockRoleCreate = useCallback(() => {
-    const newId = `role-${Date.now()}`;
-    setMockRoles((prev) => [
-      ...prev,
-      {
-        id: newId,
-        name: 'New Role',
-        color: '#95a5a6',
-        position: prev.length,
-        permissions: {},
-        memberCount: 0,
-        hoisted: false,
-        mentionable: false,
-      },
-    ]);
-    setSelectedRoleId(newId);
-  }, []);
-
-  const handleMockRoleDelete = useCallback((roleId: string) => {
-    setMockRoles((prev) => prev.filter((r) => r.id !== roleId));
-    setSelectedRoleId(undefined);
-  }, []);
-
-  const handleMockRoleReorder = useCallback((roleId: string, newPosition: number) => {
-    setMockRoles((prev) => {
-      const updated = [...prev];
-      const draggedIndex = updated.findIndex((r) => r.id === roleId);
-      if (draggedIndex === -1) return prev;
-      const [dragged] = updated.splice(draggedIndex, 1);
-      updated.splice(newPosition, 0, dragged);
-      return updated.map((r, i) => ({ ...r, position: i }));
-    });
-  }, []);
 
   // ---------------------------------------------------------------------------
   // Transform invites for the CommunityInvitePanel wrapper
@@ -730,26 +525,26 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
 
   const handleMemberAdd = useCallback(
     async (roleId: string, memberId: string) => {
-      if (!service || isMock) return;
+      if (!service) return;
       try {
         await service.assignRole(communityId, memberId, roleId, myDid);
       } catch (err) {
         console.warn('[CommunityLayoutSidebar] Failed to assign role:', err);
       }
     },
-    [service, isMock, communityId, myDid],
+    [service, communityId, myDid],
   );
 
   const handleMemberRemove = useCallback(
     async (roleId: string, memberId: string) => {
-      if (!service || isMock) return;
+      if (!service) return;
       try {
         await service.unassignRole(communityId, memberId, roleId, myDid);
       } catch (err) {
         console.warn('[CommunityLayoutSidebar] Failed to unassign role:', err);
       }
     },
-    [service, isMock, communityId, myDid],
+    [service, communityId, myDid],
   );
 
   // ---------------------------------------------------------------------------
@@ -757,7 +552,7 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
   // ---------------------------------------------------------------------------
 
   const handleRoleCreate = useCallback(async () => {
-    if (!service || isMock) return;
+    if (!service) return;
     try {
       const role = await service.createCustomRole(
         communityId,
@@ -774,11 +569,11 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
     } catch (err) {
       console.warn('[CommunityLayoutSidebar] Failed to create role:', err);
     }
-  }, [service, isMock, communityId, myDid]);
+  }, [service, communityId, myDid]);
 
   const handleRoleUpdate = useCallback(
     async (roleId: string, updates: Partial<CommunityRolePanelType>) => {
-      if (!service || isMock) return;
+      if (!service) return;
       try {
         await service.updateRole(roleId, myDid, {
           name: updates.name,
@@ -792,12 +587,12 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
         console.warn('[CommunityLayoutSidebar] Failed to update role:', err);
       }
     },
-    [service, isMock, myDid],
+    [service, myDid],
   );
 
   const handleRoleDelete = useCallback(
     async (roleId: string) => {
-      if (!service || isMock) return;
+      if (!service) return;
       // Prevent deletion of preset roles (Owner, Member)
       const role = rolePanelRoles.find((r) => r.id === roleId);
       if (role?.is_preset) {
@@ -814,12 +609,12 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
         console.warn('[CommunityLayoutSidebar] Failed to delete role:', err);
       }
     },
-    [service, isMock, myDid, selectedRoleId, rolePanelRoles],
+    [service, myDid, selectedRoleId, rolePanelRoles],
   );
 
   const handlePermissionToggle = useCallback(
     async (roleId: string, bitIndex: number, value: boolean | null) => {
-      if (!service || isMock) return;
+      if (!service) return;
       try {
         // Find the current role to get its permissions bitfield
         const role = rolePanelRoles.find((r) => r.id === roleId);
@@ -842,12 +637,12 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
         console.warn('[CommunityLayoutSidebar] Failed to toggle permission:', err);
       }
     },
-    [service, isMock, myDid, rolePanelRoles],
+    [service, myDid, rolePanelRoles],
   );
 
   const handleRoleReorder = useCallback(
     async (roleId: string, newPosition: number) => {
-      if (!service || isMock) return;
+      if (!service) return;
       try {
         await service.updateRole(roleId, myDid, { position: newPosition });
         // Dispatch event to refresh roles (ensure UI updates)
@@ -856,7 +651,7 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
         console.warn('[CommunityLayoutSidebar] Failed to reorder role:', err);
       }
     },
-    [service, isMock, myDid],
+    [service, myDid],
   );
 
   // ---------------------------------------------------------------------------
@@ -864,9 +659,8 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
   // ---------------------------------------------------------------------------
 
   const handleSpaceCreate = useCallback(() => {
-    if (isMock) return;
     setSpaceCreateDialogOpen(true);
-  }, [isMock]);
+  }, []);
 
   const handleSpaceCreateSubmit = useCallback(
     async (name: string) => {
@@ -889,34 +683,34 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
 
   const handleSpaceLongPress = useCallback(
     (spaceId: string, event: GestureResponderEvent) => {
-      if (isMock) return;
+
       const { pageX, pageY } = event.nativeEvent;
       const space = spaces.find((s) => s.id === spaceId);
       setSpaceMenuTarget(space ? { id: space.id, name: space.name } : null);
       setSpaceMenuLayout({ x: pageX, y: pageY, width: 0, height: 0 });
       setSpaceMenuOpen(true);
     },
-    [isMock, spaces],
+    [spaces],
   );
 
   /** Right-click on empty sidebar area → open the active space's context menu. */
   const handleSidebarLongPress = useCallback(
     (event: GestureResponderEvent) => {
-      if (isMock || !activeSpaceId) return;
+      if (!activeSpaceId) return;
       handleSpaceLongPress(activeSpaceId, event);
     },
-    [isMock, activeSpaceId, handleSpaceLongPress],
+    [activeSpaceId, handleSpaceLongPress],
   );
 
   const handleSpaceEdit = useCallback(
     (spaceId: string) => {
-      if (isMock) return;
+
       const currentSpace = spaces.find((s) => s.id === spaceId);
       if (!currentSpace) return;
       setSpaceEditTarget({ id: spaceId, name: currentSpace.name });
       setSpaceEditDialogOpen(true);
     },
-    [isMock, spaces],
+    [spaces],
   );
 
   const handleSpaceEditSubmit = useCallback(
@@ -943,12 +737,12 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
 
   const handleSpaceDelete = useCallback(
     (spaceId: string) => {
-      if (isMock) return;
+
       const currentSpace = spaces.find((s) => s.id === spaceId);
       setSpaceDeleteTarget(currentSpace ? { id: spaceId, name: currentSpace.name } : { id: spaceId, name: 'this space' });
       setSpaceDeleteDialogOpen(true);
     },
-    [isMock, spaces],
+    [spaces],
   );
 
   const handleSpaceDeleteConfirm = useCallback(async () => {
@@ -976,11 +770,11 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
 
   const handleChannelCreate = useCallback(
     (categoryId: string) => {
-      if (isMock || !activeSpaceId) return;
+      if (!activeSpaceId) return;
       setChannelCreateCategoryId(categoryId === '__uncategorized__' ? undefined : categoryId);
       setChannelCreateDialogOpen(true);
     },
-    [isMock, activeSpaceId],
+    [activeSpaceId],
   );
 
   const handleChannelCreateSubmit = useCallback(
@@ -1013,24 +807,23 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
 
   const handleChannelLongPress = useCallback(
     (channel: ChannelItem, event: GestureResponderEvent) => {
-      if (isMock) return;
+
       const { pageX, pageY } = event.nativeEvent;
       setChannelMenuTarget({ id: channel.id, name: channel.name });
       setChannelMenuLayout({ x: pageX, y: pageY, width: 0, height: 0 });
       setChannelMenuOpen(true);
     },
-    [isMock],
+    [],
   );
 
   const handleChannelEdit = useCallback(
     (channelId: string) => {
-      if (isMock) return;
       const channel = channels.find((c) => c.id === channelId);
       if (!channel) return;
       setChannelEditTarget({ id: channelId, name: channel.name });
       setChannelEditDialogOpen(true);
     },
-    [isMock, channels],
+    [channels],
   );
 
   const handleChannelEditSubmit = useCallback(
@@ -1057,12 +850,12 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
 
   const handleChannelDelete = useCallback(
     (channelId: string) => {
-      if (isMock) return;
+
       const channel = channels.find((c) => c.id === channelId);
       setChannelDeleteTarget(channel ? { id: channelId, name: channel.name } : { id: channelId, name: 'this channel' });
       setChannelDeleteDialogOpen(true);
     },
-    [isMock, channels],
+    [channels],
   );
 
   const handleChannelDeleteConfirm = useCallback(async () => {
@@ -1091,9 +884,9 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
   // ---------------------------------------------------------------------------
 
   const handleCategoryCreate = useCallback(() => {
-    if (isMock || !activeSpaceId) return;
+    if (!activeSpaceId) return;
     setCategoryCreateDialogOpen(true);
-  }, [isMock, activeSpaceId]);
+  }, [activeSpaceId]);
 
   const handleCategoryCreateSubmit = useCallback(
     async (name: string) => {
@@ -1115,7 +908,7 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
 
   const handleCategoryLongPress = useCallback(
     (categoryId: string, event: GestureResponderEvent) => {
-      if (isMock) return;
+
       // Don't show context menu for the virtual uncategorized bucket
       if (categoryId === '__uncategorized__') return;
       const { pageX, pageY } = event.nativeEvent;
@@ -1124,7 +917,7 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
       setCategoryMenuLayout({ x: pageX, y: pageY, width: 0, height: 0 });
       setCategoryMenuOpen(true);
     },
-    [isMock, realCategories],
+    [realCategories],
   );
 
   const handleCategoryEdit = useCallback(
@@ -1186,11 +979,11 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
   // Update handleChannelCreate to track the category context
   const handleChannelCreateInCategory = useCallback(
     (categoryId: string) => {
-      if (isMock || !activeSpaceId) return;
+      if (!activeSpaceId) return;
       setChannelCreateCategoryId(categoryId === '__uncategorized__' ? undefined : categoryId);
       setChannelCreateDialogOpen(true);
     },
-    [isMock, activeSpaceId],
+    [activeSpaceId],
   );
 
   // Move channel to a different category
@@ -1487,7 +1280,7 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
       )}
 
       {/* Community banner — shown above channel list when available */}
-      {!isMock && community?.bannerUrl && (
+      {community?.bannerUrl && (
         <Image
           source={{ uri: community.bannerUrl }}
           style={{
@@ -1505,28 +1298,27 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
           spaces={wispSpaces}
           activeSpaceId={activeSpaceId ?? wispSpaces[0]?.id ?? ''}
           onSpaceChange={handleSpaceChange}
-          onSpaceLongPress={!isMock ? handleSpaceLongPress : undefined}
-          onSpaceCreate={!isMock ? handleSpaceCreate : undefined}
+          onSpaceLongPress={handleSpaceLongPress}
+          onSpaceCreate={handleSpaceCreate}
           categories={categories}
           onChannelClick={handleChannelClick}
-          onChannelLongPress={!isMock ? handleChannelLongPress : undefined}
+          onChannelLongPress={handleChannelLongPress}
           onCategoryToggle={handleCategoryToggle}
-          onChannelCreate={!isMock ? handleChannelCreate : undefined}
-          onCategoryLongPress={!isMock ? handleCategoryLongPress : undefined}
+          onChannelCreate={handleChannelCreate}
+          onCategoryLongPress={handleCategoryLongPress}
           onCommunityClick={handleCommunityClick}
           renderChannelExtra={renderChannelExtra}
           renderChannelIcon={renderChannelIcon}
-          draggable={!isMock}
-          onChannelReorder={!isMock ? handleChannelReorder : undefined}
-          onCategoryReorder={!isMock ? handleCategoryReorder : undefined}
-          onSidebarLongPress={!isMock ? handleSidebarLongPress : undefined}
-          loading={!isMock && communityLoading}
-          skeleton={!isMock && communityLoading && !community}
+          draggable
+          onChannelReorder={handleChannelReorder}
+          onCategoryReorder={handleCategoryReorder}
+          onSidebarLongPress={handleSidebarLongPress}
+          loading={communityLoading}
+          skeleton={communityLoading && !community}
         />
       </View>
 
-      {/* Voice channel connection bar */}
-      <VoiceChannelBar />
+      {/* Voice channel controls moved to VoiceCallPanel inline */}
 
       {/* Community header dropdown — positioned via anchorLayout */}
       <DropdownMenu open={dropdownOpen} onOpenChange={setDropdownOpen} anchorLayout={headerLayout}>
@@ -1557,11 +1349,9 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
               QR Invite
             </DropdownMenuItem>
           )}
-          {!isMock && (
-            <DropdownMenuItem icon={<PlusIcon size={16} color={iconColor} />} onSelect={handleCategoryCreate}>
-              Create Category
-            </DropdownMenuItem>
-          )}
+          <DropdownMenuItem icon={<PlusIcon size={16} color={iconColor} />} onSelect={handleCategoryCreate}>
+            Create Category
+          </DropdownMenuItem>
           <DropdownMenuItem icon={<BellIcon size={16} color={iconColor} />} onSelect={() => {}}>
             Notification Settings
           </DropdownMenuItem>
