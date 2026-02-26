@@ -125,8 +125,15 @@ export default function ChatPage() {
     editMessage, deleteMessage, pinMessage, unpinMessage,
     addReaction, removeReaction, forwardMessage,
     getThreadReplies, sendThreadReply, pinnedMessages,
-    firstUnreadMessageId,
-  } = useMessages(resolvedConversationId);
+    firstUnreadMessageId, markAsRead,
+  } = useMessages(resolvedConversationId, activeConversation?.groupId);
+
+  // Mark messages as read when viewing a conversation
+  useEffect(() => {
+    if (!msgsLoading && resolvedConversationId && messages.length > 0) {
+      markAsRead();
+    }
+  }, [msgsLoading, resolvedConversationId, messages.length, markAsRead]);
 
   // Group member count for the active conversation
   const [activeMemberCount, setActiveMemberCount] = useState<number | undefined>(undefined);
@@ -539,7 +546,7 @@ export default function ChatPage() {
         onUploadFile={isDm && resolvedConversationId ? handleAttachment : undefined}
         panelContentWidth={panelContentWidth}
       />
-      <SlotRenderer slot="right-panel" props={{ conversationId: resolvedConversationId }} />
+      {/* Plugin right-panel slot removed — plugins use popup overlays instead */}
       <InputDialog
         open={sharedFolderDialogOpen}
         onClose={() => setSharedFolderDialogOpen(false)}

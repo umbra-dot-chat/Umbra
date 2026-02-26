@@ -137,9 +137,9 @@ export async function getMessages(
       );
       text = await parseWasm<string>(decryptedJson);
     } catch (err) {
-      // Fallback: show raw if decrypt fails (e.g. own messages stored as plaintext)
+      // Fallback: show a user-friendly indicator instead of raw ciphertext
       console.warn('[getMessages] decrypt failed for msg', m.id, err);
-      text = m.contentEncrypted;
+      text = '[Unable to decrypt message]';
     }
     return {
       id: m.id,

@@ -71,7 +71,7 @@ export interface UseMessagesResult {
   clearUnreadMarker: () => void;
 }
 
-export function useMessages(conversationId: string | null): UseMessagesResult {
+export function useMessages(conversationId: string | null, groupId?: string | null): UseMessagesResult {
   const { service, isReady } = useUmbra();
   const { identity } = useAuth();
   const { playSound } = useSound();
@@ -255,7 +255,9 @@ export function useMessages(conversationId: string | null): UseMessagesResult {
 
       try {
         const relayWs = getRelayWs();
-        const message = await service.sendMessage(conversationId, text, relayWs);
+        const message = groupId
+          ? await service.sendGroupMessage(groupId, conversationId, text, relayWs)
+          : await service.sendMessage(conversationId, text, relayWs);
         // Track the relay ack so we can transition sending → sent
         if (message.status === 'sending') {
           pushPendingRelayAck(message.id);
@@ -268,7 +270,7 @@ export function useMessages(conversationId: string | null): UseMessagesResult {
         return null;
       }
     },
-    [service, conversationId, getRelayWs, playSound]
+    [service, conversationId, groupId, getRelayWs, playSound]
   );
 
   const markAsRead = useCallback(async () => {

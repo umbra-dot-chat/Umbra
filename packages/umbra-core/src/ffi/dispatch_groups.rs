@@ -152,6 +152,25 @@ pub fn groups_create(args: &str) -> DResult {
         .create_group_conversation(&conv_id, &group_id)
         .map_err(|e| err(400, format!("Failed to create conversation: {}", e)))?;
 
+    // Generate and store group encryption key
+    let group_key: [u8; 32] = {
+        let mut key = [0u8; 32];
+        getrandom::getrandom(&mut key)
+            .map_err(|e| err(400, format!("Failed to generate group key: {}", e)))?;
+        key
+    };
+    let wrapping_key = derive_key_wrapping_key(identity);
+    let wrap_enc_key = crate::crypto::EncryptionKey::from_bytes(wrapping_key);
+    let aad = format!("group-key:{}:1", group_id);
+    let (nonce, ciphertext) = crate::crypto::encrypt(&wrap_enc_key, &group_key, aad.as_bytes())
+        .map_err(|e| err(400, format!("Failed to encrypt group key: {}", e)))?;
+    let mut stored_key = Vec::with_capacity(12 + ciphertext.len());
+    stored_key.extend_from_slice(&nonce.0);
+    stored_key.extend_from_slice(&ciphertext);
+    database
+        .store_group_key(&group_id, 1, &stored_key, now)
+        .map_err(|e| err(400, format!("Failed to store group key: {}", e)))?;
+
     emit_event(
         "groups",
         &serde_json::json!({
