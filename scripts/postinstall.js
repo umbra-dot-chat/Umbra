@@ -73,6 +73,69 @@ if (fs.existsSync(xcodeBuildPath)) {
   console.log('[postinstall] @expo/cli XcodeBuild.js not found — skipping patch');
 }
 
+// ── Patch React Native RCTUITextView for iOS 26 crash ────────────────────────
+// On iOS 26, accessing inputAssistantItem during TextInput initialization
+// triggers an ICU locale crash in CoreUI/CFBundle. Wrapping the access in
+// @try/@catch prevents the startup crash.
+// See: https://github.com/facebook/react-native/issues/54859
+const rctTextViewPath = path.join(
+  UMBRA_DIR, 'node_modules', 'react-native', 'Libraries', 'Text', 'TextInput', 'Multiline', 'RCTUITextView.mm'
+);
+if (fs.existsSync(rctTextViewPath)) {
+  let rnSrc = fs.readFileSync(rctTextViewPath, 'utf8');
+  const oldCode = `  // Initialize the initial values only once
+  if (_initialValueLeadingBarButtonGroups == nil) {
+    // Capture initial values of leading and trailing button groups
+    _initialValueLeadingBarButtonGroups = self.inputAssistantItem.leadingBarButtonGroups;
+    _initialValueTrailingBarButtonGroups = self.inputAssistantItem.trailingBarButtonGroups;
+  }
+
+  if (disableKeyboardShortcuts) {
+    self.inputAssistantItem.leadingBarButtonGroups = @[];
+    self.inputAssistantItem.trailingBarButtonGroups = @[];
+  } else {
+    // Restore the initial values
+    self.inputAssistantItem.leadingBarButtonGroups = _initialValueLeadingBarButtonGroups;
+    self.inputAssistantItem.trailingBarButtonGroups = _initialValueTrailingBarButtonGroups;
+  }`;
+  const newCode = `  // Wrapped in @try/@catch to prevent crash on iOS 26 where accessing
+  // inputAssistantItem triggers ICU locale resolution that can crash.
+  // See: https://github.com/facebook/react-native/issues/54859
+  @try {
+    // Initialize the initial values only once
+    if (_initialValueLeadingBarButtonGroups == nil) {
+      // Capture initial values of leading and trailing button groups
+      _initialValueLeadingBarButtonGroups = self.inputAssistantItem.leadingBarButtonGroups;
+      _initialValueTrailingBarButtonGroups = self.inputAssistantItem.trailingBarButtonGroups;
+    }
+
+    if (disableKeyboardShortcuts) {
+      self.inputAssistantItem.leadingBarButtonGroups = @[];
+      self.inputAssistantItem.trailingBarButtonGroups = @[];
+    } else {
+      // Restore the initial values
+      self.inputAssistantItem.leadingBarButtonGroups = _initialValueLeadingBarButtonGroups;
+      self.inputAssistantItem.trailingBarButtonGroups = _initialValueTrailingBarButtonGroups;
+    }
+  }
+  @catch (NSException *exception) {
+    // On iOS 26, inputAssistantItem access can trigger an ICU locale crash.
+    // Silently ignore -- keyboard shortcuts may not be disabled but the app won't crash.
+    NSLog(@"[RCTUITextView] Failed to configure keyboard shortcuts: %@", exception);
+  }`;
+  if (rnSrc.includes(oldCode)) {
+    rnSrc = rnSrc.replace(oldCode, newCode);
+    fs.writeFileSync(rctTextViewPath, rnSrc);
+    console.log('[postinstall] Patched RCTUITextView.mm — iOS 26 inputAssistantItem crash fix');
+  } else if (rnSrc.includes('@try {')) {
+    console.log('[postinstall] RCTUITextView.mm — already patched');
+  } else {
+    console.log('[postinstall] RCTUITextView.mm — patch target not found (may be fixed upstream)');
+  }
+} else {
+  console.log('[postinstall] RCTUITextView.mm not found — skipping iOS 26 crash patch');
+}
+
 // Check if local Wisp repo exists
 const hasWisp = fs.existsSync(path.join(WISP_DIR, 'packages'));
 
