@@ -73,6 +73,10 @@ pub fn run() {
         })
         .manage(AppState::new())
         .invoke_handler(tauri::generate_handler![
+            // FFI Dispatcher (generic routing for OTA-updatable logic)
+            commands::core::init_ffi_state,
+            commands::core::umbra_call,
+
             // Initialization
             commands::identity::init,
             commands::identity::init_database,

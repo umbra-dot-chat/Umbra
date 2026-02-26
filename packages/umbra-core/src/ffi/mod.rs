@@ -92,5 +92,11 @@ pub use types::*;
 #[cfg(feature = "ffi")]
 pub use c_api::*;
 
+#[cfg(feature = "ffi")]
+pub use dispatcher::dispatch;
+
+#[cfg(feature = "ffi")]
+pub use state::{get_state as get_ffi_state, init_state, FfiState};
+
 #[cfg(feature = "wasm")]
 pub use wasm::*;

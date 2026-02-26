@@ -17,7 +17,7 @@ tauri-plugin-deep-link = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["full"] }
-umbra-core = { path = "../packages/umbra-core" }
+umbra-core = { path = "../packages/umbra-core", features = ["ffi"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 hex = "0.4"

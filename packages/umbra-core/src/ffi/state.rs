@@ -33,7 +33,7 @@ pub type EventCallback =
 
 /// FFI state holding all services
 #[allow(dead_code)]
-pub(crate) struct FfiState {
+pub struct FfiState {
     pub identity: Option<Identity>,
     pub network: Option<Arc<NetworkService>>,
     pub discovery: Option<Arc<DiscoveryService>>,
@@ -69,10 +69,10 @@ pub(crate) fn get_runtime() -> &'static Runtime {
     RUNTIME.get_or_init(|| Runtime::new().expect("Failed to create Tokio runtime"))
 }
 
-pub(crate) fn get_state() -> crate::Result<Arc<RwLock<FfiState>>> {
+pub fn get_state() -> crate::Result<Arc<RwLock<FfiState>>> {
     STATE.get().cloned().ok_or(crate::Error::NotInitialized)
 }
 
-pub(crate) fn init_state(state: FfiState) -> Result<(), ()> {
+pub fn init_state(state: FfiState) -> Result<(), ()> {
     STATE.set(Arc::new(RwLock::new(state))).map_err(|_| ())
 }

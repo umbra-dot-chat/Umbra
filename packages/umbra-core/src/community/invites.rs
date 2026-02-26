@@ -75,9 +75,9 @@ impl super::CommunityService {
             }
         }
 
-        // Check max uses
+        // Check max uses (0 means unlimited)
         if let Some(max_uses) = invite.max_uses {
-            if invite.use_count >= max_uses {
+            if max_uses > 0 && invite.use_count >= max_uses {
                 return Err(Error::InviteMaxUsesReached);
             }
         }

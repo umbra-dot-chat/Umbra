@@ -2,11 +2,15 @@
  * Tauri Backend Adapter
  *
  * Implements the same UmbraWasmModule interface as the WASM loader,
- * but routes all calls through Tauri IPC (`invoke()`) to the native
- * Rust backend instead of wasm-bindgen.
+ * but routes most calls through a single `umbra_call` Tauri IPC command
+ * which forwards to the FFI dispatcher in umbra-core.
  *
- * This allows the same service layer and hooks to work seamlessly
- * on both web (WASM) and desktop (Tauri native).
+ * This means business-logic changes can be shipped via frontend OTA
+ * without rebuilding the native binary, as long as the dispatcher
+ * in the linked umbra-core library handles the method.
+ *
+ * A handful of methods that rely on Tauri-side state (identity hydration,
+ * network start/stop, relay WebSocket) still use dedicated Tauri commands.
  */
 
 import type { UmbraWasmModule } from './loader';
@@ -37,10 +41,30 @@ function ensureJsonString(value: unknown): string {
 export function createTauriBackend(
   invoke: (cmd: string, args?: Record<string, unknown>) => Promise<unknown>
 ): UmbraWasmModule {
+  // ── Helper: route through the FFI dispatcher ──────────────────────
+  //
+  // All methods that follow the pattern "take a dispatcher method name
+  // and a JSON args string" are routed through this single call.
+  const call = (method: string, args: string = '{}'): Promise<string> =>
+    invoke('umbra_call', { method, args }).then(ensureJsonString);
+
+  // fire-and-forget variant (logs errors instead of throwing)
+  const callQuiet = (method: string, args: string = '{}'): void => {
+    call(method, args).catch((e: unknown) =>
+      console.warn(`[tauri-backend] ${method}:`, e)
+    );
+  };
+
   return {
     // ── Initialization ─────────────────────────────────────────────
+    // These still use dedicated Tauri commands because they manage
+    // Tauri-side AppState (separate from the FFI dispatcher state).
     umbra_wasm_init: () => {
-      // Tracing is set up in the Rust backend automatically on startup
+      // Initialize the FFI dispatcher state + database
+      invoke('init_ffi_state').catch((e: unknown) =>
+        console.warn('[tauri-backend] init_ffi_state:', e)
+      );
+      // Also init the legacy Tauri-side state (tracing etc.)
       invoke('init').catch((e: unknown) =>
         console.warn('[tauri-backend] init:', e)
       );
@@ -51,43 +75,40 @@ export function createTauriBackend(
     },
 
     umbra_wasm_version: () => {
-      // Sync in the interface — return placeholder; real version
-      // is logged by the Rust backend at startup
       return '0.1.0 (desktop)';
     },
 
     // ── Identity ───────────────────────────────────────────────────
+    // Identity create/restore go through the dispatcher so the
+    // identity is stored in FfiState (which the dispatcher reads).
+    // We also hydrate Tauri-side AppState via set_identity.
     umbra_wasm_identity_create: (display_name: string) => {
-      return invoke('create_identity', { displayName: display_name })
-        .then(ensureJsonString) as any;
+      return call('identity_create', JSON.stringify({ display_name })) as any;
     },
 
     umbra_wasm_identity_restore: (recovery_phrase: string, display_name: string) => {
-      return invoke('restore_identity', {
-        recoveryPhrase: recovery_phrase,
-        displayName: display_name,
-      }).then(ensureJsonString) as any;
+      return call('identity_restore', JSON.stringify({ recovery_phrase, display_name })) as any;
     },
 
     umbra_wasm_identity_set: (json: string) => {
-      // Return the promise so callers can await hydration completing
-      return invoke('set_identity', { json }).catch((e: unknown) =>
+      // Hydrate Tauri-side AppState (for network commands that need it)
+      invoke('set_identity', { json }).catch((e: unknown) =>
         console.warn('[tauri-backend] set_identity:', e)
-      ) as any;
+      );
+      // Also tell the dispatcher about the identity
+      // (set_identity in dispatcher is handled via identity_create/restore)
     },
 
     umbra_wasm_identity_get_did: () => {
-      return invoke('get_did').then(ensureJsonString) as any;
+      return call('identity_get_did') as any;
     },
 
     umbra_wasm_identity_get_profile: () => {
-      return invoke('get_profile').then(ensureJsonString) as any;
+      return call('identity_get_profile') as any;
     },
 
     umbra_wasm_identity_update_profile: (json: string) => {
-      invoke('update_profile', { json }).catch((e: unknown) =>
-        console.warn('[tauri-backend] update_profile:', e)
-      );
+      callQuiet('identity_update_profile', json);
     },
 
     // ── Discovery ──────────────────────────────────────────────────
@@ -101,71 +122,61 @@ export function createTauriBackend(
 
     // ── Friends ────────────────────────────────────────────────────
     umbra_wasm_friends_send_request: (did: string, message?: string) => {
-      return invoke('send_friend_request', {
-        did,
-        message: message ?? null,
-      }).then(ensureJsonString) as any;
+      return call('friends_send_request', JSON.stringify({ did, message: message ?? null })) as any;
     },
 
     umbra_wasm_friends_accept_request: (request_id: string) => {
-      return invoke('accept_friend_request', { requestId: request_id })
-        .then(ensureJsonString) as any;
+      return call('friends_accept_request', JSON.stringify({ request_id })) as any;
     },
 
     umbra_wasm_friends_reject_request: (request_id: string) => {
-      invoke('reject_friend_request', { requestId: request_id }).catch(
-        (e: unknown) => console.warn('[tauri-backend] reject_friend_request:', e)
-      );
+      callQuiet('friends_reject_request', JSON.stringify({ request_id }));
     },
 
     umbra_wasm_friends_list: () => {
-      return invoke('list_friends').then(ensureJsonString) as any;
+      return call('friends_list') as any;
     },
 
     umbra_wasm_friends_pending_requests: (direction: string) => {
-      return invoke('pending_requests', { direction }).then(ensureJsonString) as any;
+      return call('friends_pending_requests', JSON.stringify({ direction })) as any;
     },
 
     umbra_wasm_friends_remove: (did: string) => {
-      return invoke('remove_friend', { did }) as any;
+      return call('friends_remove', JSON.stringify({ did })) as any;
     },
 
     umbra_wasm_friends_block: (did: string, reason?: string) => {
-      invoke('block_user', { did, reason: reason ?? null }).catch(
-        (e: unknown) => console.warn('[tauri-backend] block_user:', e)
-      );
+      callQuiet('friends_block', JSON.stringify({ did, reason: reason ?? null }));
     },
 
     umbra_wasm_friends_unblock: (did: string) => {
-      return invoke('unblock_user', { did }) as any;
+      return call('friends_unblock', JSON.stringify({ did })) as any;
     },
 
     umbra_wasm_friends_store_incoming: (json: string) => {
-      invoke('store_incoming_friend_request', { json }).catch(
-        (e: unknown) => console.warn('[tauri-backend] store_incoming_friend_request:', e)
-      );
+      callQuiet('friends_store_incoming', json);
     },
 
     umbra_wasm_friends_accept_from_relay: (json: string) => {
-      return invoke('accept_friend_from_relay', { json }).then(ensureJsonString).catch(
+      return call('friends_accept_from_relay', json).catch(
         (e: unknown) => {
-          console.warn('[tauri-backend] accept_friend_from_relay:', e);
+          console.warn('[tauri-backend] friends_accept_from_relay:', e);
           return JSON.stringify({ error: String(e) });
         }
       ) as any;
     },
 
     umbra_wasm_friends_build_accept_ack: (json: string) => {
-      return invoke('build_friend_accept_ack', { json }).then(ensureJsonString) as any;
+      return call('friends_build_accept_ack', json) as any;
     },
 
     // ── Messaging (core) ───────────────────────────────────────────
     umbra_wasm_messaging_get_conversations: () => {
-      return invoke('get_conversations').then(ensureJsonString) as any;
+      return call('messaging_get_conversations') as any;
     },
 
     umbra_wasm_messaging_create_dm_conversation: (friendDid: string) => {
-      return invoke('create_dm_conversation', { friendDid }).then(ensureJsonString) as any;
+      return call('messaging_create_dm_conversation', JSON.stringify({ friend_did: friendDid })) as any;
     },
 
     umbra_wasm_messaging_get_messages: (
@@ -173,11 +184,7 @@ export function createTauriBackend(
       limit: number,
       offset: number
     ) => {
-      return invoke('get_messages', {
-        conversationId: conversation_id,
-        limit,
-        offset,
-      }).then(ensureJsonString) as any;
+      return call('messaging_get_messages', JSON.stringify({ conversation_id, limit, offset })) as any;
     },
 
     umbra_wasm_messaging_send: (
@@ -185,17 +192,15 @@ export function createTauriBackend(
       content: string,
       reply_to_id?: string
     ) => {
-      return invoke('send_message', {
-        conversationId: conversation_id,
+      return call('messaging_send', JSON.stringify({
+        conversation_id,
         content,
-        replyToId: reply_to_id ?? null,
-      }).then(ensureJsonString) as any;
+        reply_to_id: reply_to_id ?? null,
+      })) as any;
     },
 
     umbra_wasm_messaging_mark_read: (conversation_id: string) => {
-      return invoke('mark_read', {
-        conversationId: conversation_id,
-      }) as any;
+      return call('messaging_mark_read', JSON.stringify({ conversation_id })) as any;
     },
 
     umbra_wasm_messaging_decrypt: (
@@ -205,151 +210,151 @@ export function createTauriBackend(
       sender_did: string,
       timestamp: number
     ) => {
-      return invoke('decrypt_message', {
-        conversationId: conversation_id,
-        contentEncryptedB64: content_encrypted_b64,
-        nonceHex: nonce_hex,
-        senderDid: sender_did,
+      return call('messaging_decrypt', JSON.stringify({
+        conversation_id,
+        content_encrypted_b64,
+        nonce_hex,
+        sender_did,
         timestamp,
-      }).then(ensureJsonString) as any;
+      })) as any;
     },
 
     umbra_wasm_messaging_store_incoming: (json: string) => {
-      invoke('store_incoming_message', { json }).catch(
-        (e: unknown) => console.warn('[tauri-backend] store_incoming_message:', e)
-      );
+      callQuiet('messaging_store_incoming', json);
     },
 
     umbra_wasm_messaging_build_typing_envelope: (json: string) => {
-      return invoke('build_typing_envelope', { json }).then(ensureJsonString) as any;
+      return call('messaging_build_typing_envelope', json) as any;
     },
 
     umbra_wasm_messaging_build_receipt_envelope: (json: string) => {
-      return invoke('build_receipt_envelope', { json }).then(ensureJsonString) as any;
+      return call('messaging_build_receipt_envelope', json) as any;
     },
 
     // ── Messaging (extended — JSON args) ────────────────────────────
     umbra_wasm_messaging_edit: (json: string) => {
-      return invoke('edit_message', { json }).then(ensureJsonString) as any;
+      return call('messaging_edit', json) as any;
     },
 
     umbra_wasm_messaging_delete: (json: string) => {
-      return invoke('delete_message', { json }).then(ensureJsonString) as any;
+      return call('messaging_delete', json) as any;
     },
 
     umbra_wasm_messaging_pin: (json: string) => {
-      return invoke('pin_message', { json }).then(ensureJsonString) as any;
+      return call('messaging_pin', json) as any;
     },
 
     umbra_wasm_messaging_unpin: (json: string) => {
-      return invoke('unpin_message', { json }).then(ensureJsonString) as any;
+      return call('messaging_unpin', json) as any;
     },
 
     umbra_wasm_messaging_add_reaction: (json: string) => {
-      return invoke('add_reaction', { json }).then(ensureJsonString) as any;
+      return call('messaging_add_reaction', json) as any;
     },
 
     umbra_wasm_messaging_remove_reaction: (json: string) => {
-      return invoke('remove_reaction', { json }).then(ensureJsonString) as any;
+      return call('messaging_remove_reaction', json) as any;
     },
 
     umbra_wasm_messaging_forward: (json: string) => {
-      return invoke('forward_message', { json }).then(ensureJsonString) as any;
+      return call('messaging_forward', json) as any;
     },
 
     umbra_wasm_messaging_get_thread: (json: string) => {
-      return invoke('get_thread', { json }).then(ensureJsonString) as any;
+      return call('messaging_get_thread', json) as any;
     },
 
     umbra_wasm_messaging_reply_thread: (json: string) => {
-      return invoke('reply_thread', { json }).then(ensureJsonString) as any;
+      return call('messaging_reply_thread', json) as any;
     },
 
     umbra_wasm_messaging_get_pinned: (json: string) => {
-      return invoke('get_pinned', { json }).then(ensureJsonString) as any;
+      return call('messaging_get_pinned', json) as any;
     },
 
     // ── Groups ──────────────────────────────────────────────────────
     umbra_wasm_groups_create: (json: string) => {
-      return invoke('groups_create', { json }).then(ensureJsonString) as any;
+      return call('groups_create', json) as any;
     },
 
     umbra_wasm_groups_get: (groupId: string) => {
-      return invoke('groups_get', { groupId }).then(ensureJsonString) as any;
+      return call('groups_get', JSON.stringify({ group_id: groupId })) as any;
     },
 
     umbra_wasm_groups_list: () => {
-      return invoke('groups_list').then(ensureJsonString) as any;
+      return call('groups_list') as any;
     },
 
     umbra_wasm_groups_update: (json: string) => {
-      return invoke('groups_update', { json }).then(ensureJsonString) as any;
+      return call('groups_update', json) as any;
     },
 
     umbra_wasm_groups_delete: (groupId: string) => {
-      return invoke('groups_delete', { groupId }).then(ensureJsonString) as any;
+      return call('groups_delete', JSON.stringify({ group_id: groupId })) as any;
     },
 
     umbra_wasm_groups_add_member: (json: string) => {
-      return invoke('groups_add_member', { json }).then(ensureJsonString) as any;
+      return call('groups_add_member', json) as any;
     },
 
     umbra_wasm_groups_remove_member: (json: string) => {
-      return invoke('groups_remove_member', { json }).then(ensureJsonString) as any;
+      return call('groups_remove_member', json) as any;
     },
 
     umbra_wasm_groups_get_members: (groupId: string) => {
-      return invoke('groups_get_members', { groupId }).then(ensureJsonString) as any;
+      return call('groups_get_members', JSON.stringify({ group_id: groupId })) as any;
     },
 
     // ── Groups — Encryption ────────────────────────────────────────
     umbra_wasm_groups_generate_key: (groupId: string) => {
-      return invoke('groups_generate_key', { groupId }).then(ensureJsonString) as any;
+      return call('groups_generate_key', JSON.stringify({ group_id: groupId })) as any;
     },
 
     umbra_wasm_groups_rotate_key: (groupId: string) => {
-      return invoke('groups_rotate_key', { groupId }).then(ensureJsonString) as any;
+      return call('groups_rotate_key', JSON.stringify({ group_id: groupId })) as any;
     },
 
     umbra_wasm_groups_import_key: (json: string) => {
-      return invoke('groups_import_key', { json }).then(ensureJsonString) as any;
+      return call('groups_import_key', json) as any;
     },
 
     umbra_wasm_groups_encrypt_message: (json: string) => {
-      return invoke('groups_encrypt_message', { json }).then(ensureJsonString) as any;
+      return call('groups_encrypt_message', json) as any;
     },
 
     umbra_wasm_groups_decrypt_message: (json: string) => {
-      return invoke('groups_decrypt_message', { json }).then(ensureJsonString) as any;
+      return call('groups_decrypt_message', json) as any;
     },
 
     umbra_wasm_groups_encrypt_key_for_member: (json: string) => {
-      return invoke('groups_encrypt_key_for_member', { json }).then(ensureJsonString) as any;
+      return call('groups_encrypt_key_for_member', json) as any;
     },
 
     // ── Groups — Invitations ───────────────────────────────────────
     umbra_wasm_groups_store_invite: (json: string) => {
-      return invoke('groups_store_invite', { json }).then(ensureJsonString) as any;
+      return call('groups_store_invite', json) as any;
     },
 
     umbra_wasm_groups_get_pending_invites: () => {
-      return invoke('groups_get_pending_invites').then(ensureJsonString) as any;
+      return call('groups_get_pending_invites') as any;
     },
 
     umbra_wasm_groups_accept_invite: (inviteId: string) => {
-      return invoke('groups_accept_invite', { inviteId }).then(ensureJsonString) as any;
+      return call('groups_accept_invite', JSON.stringify({ invite_id: inviteId })) as any;
     },
 
     umbra_wasm_groups_decline_invite: (inviteId: string) => {
-      return invoke('groups_decline_invite', { inviteId }).then(ensureJsonString) as any;
+      return call('groups_decline_invite', JSON.stringify({ invite_id: inviteId })) as any;
     },
 
     // ── Messaging — Delivery status ────────────────────────────────
     umbra_wasm_messaging_update_status: (json: string) => {
-      return invoke('messaging_update_status', { json }).then(ensureJsonString) as any;
+      return call('messaging_update_status', json) as any;
     },
 
     // ── Network ────────────────────────────────────────────────────
+    // Network commands stay as dedicated Tauri commands because they
+    // manage Tauri-side state (WebRTC, relay WebSocket connections).
     umbra_wasm_network_status: () => {
       return invoke('network_status').then(ensureJsonString) as any;
     },
@@ -388,6 +393,7 @@ export function createTauriBackend(
     },
 
     // ── Relay ──────────────────────────────────────────────────────
+    // Relay commands stay as dedicated Tauri commands (WebSocket state)
     umbra_wasm_relay_connect: (relay_url: string) => {
       return invoke('relay_connect', { relayUrl: relay_url })
         .then(ensureJsonString) as Promise<string>;
@@ -426,51 +432,51 @@ export function createTauriBackend(
 
     // ── Calls ──────────────────────────────────────────────────────
     umbra_wasm_calls_store: (json: string) => {
-      return invoke('calls_store', { json }).then(ensureJsonString) as any;
+      return call('calls_store', json) as any;
     },
 
     umbra_wasm_calls_end: (json: string) => {
-      return invoke('calls_end', { json }).then(ensureJsonString) as any;
+      return call('calls_end', json) as any;
     },
 
     umbra_wasm_calls_get_history: (json: string) => {
-      return invoke('calls_get_history', { json }).then(ensureJsonString) as any;
+      return call('calls_get_history', json) as any;
     },
 
     umbra_wasm_calls_get_all_history: (json: string) => {
-      return invoke('calls_get_all_history', { json }).then(ensureJsonString) as any;
+      return call('calls_get_all_history', json) as any;
     },
 
     // ── Notifications ───────────────────────────────────────────────
     umbra_wasm_notifications_create: (json: string) => {
-      return invoke('notifications_create', { json }).then(ensureJsonString) as any;
+      return call('notifications_create', json) as any;
     },
     umbra_wasm_notifications_get: (json: string) => {
-      return invoke('notifications_get', { json }).then(ensureJsonString) as any;
+      return call('notifications_get', json) as any;
     },
     umbra_wasm_notifications_mark_read: (json: string) => {
-      return invoke('notifications_mark_read', { json }).then(ensureJsonString) as any;
+      return call('notifications_mark_read', json) as any;
     },
     umbra_wasm_notifications_mark_all_read: (json: string) => {
-      return invoke('notifications_mark_all_read', { json }).then(ensureJsonString) as any;
+      return call('notifications_mark_all_read', json) as any;
     },
     umbra_wasm_notifications_dismiss: (json: string) => {
-      return invoke('notifications_dismiss', { json }).then(ensureJsonString) as any;
+      return call('notifications_dismiss', json) as any;
     },
     umbra_wasm_notifications_unread_counts: (json: string) => {
-      return invoke('notifications_unread_counts', { json }).then(ensureJsonString) as any;
+      return call('notifications_unread_counts', json) as any;
     },
 
     // ── Events ─────────────────────────────────────────────────────
     umbra_wasm_subscribe_events: (callback: (event_json: string) => void) => {
       // TODO: Wire up Tauri event system (tauri::Emitter / listen)
-      // For now, store the callback for when events are implemented
       console.debug('[tauri-backend] subscribe_events registered');
     },
 
     // ── Crypto ─────────────────────────────────────────────────────
+    // Sign/verify stay as dedicated Tauri commands because they pass
+    // Uint8Array which needs special serialization (Array.from).
     umbra_wasm_crypto_sign: (data: Uint8Array) => {
-      // Tauri IPC serializes as JSON, so convert Uint8Array → number[]
       return invoke('sign', { data: Array.from(data) }) as any;
     },
 
@@ -487,512 +493,515 @@ export function createTauriBackend(
     },
 
     umbra_wasm_crypto_encrypt_for_peer: (json: string) => {
-      return invoke('crypto_encrypt_for_peer', { json }).then(ensureJsonString) as any;
+      return call('crypto_encrypt_for_peer', json) as any;
     },
 
     umbra_wasm_crypto_decrypt_from_peer: (json: string) => {
-      return invoke('crypto_decrypt_from_peer', { json }).then(ensureJsonString) as any;
+      return call('crypto_decrypt_from_peer', json) as any;
     },
 
-    // ── Plugin KV Storage (via Tauri IPC) ──────────────────────────
+    // ── Plugin KV Storage ──────────────────────────────────────────
     umbra_wasm_plugin_kv_get: (pluginId: string, key: string) => {
-      return invoke('plugin_kv_get', { pluginId, key }).then(ensureJsonString) as any;
+      return call('plugin_kv_get', JSON.stringify({ plugin_id: pluginId, key })) as any;
     },
 
     umbra_wasm_plugin_kv_set: (pluginId: string, key: string, value: string) => {
-      return invoke('plugin_kv_set', { pluginId, key, value }).then(ensureJsonString) as any;
+      return call('plugin_kv_set', JSON.stringify({ plugin_id: pluginId, key, value })) as any;
     },
 
     umbra_wasm_plugin_kv_delete: (pluginId: string, key: string) => {
-      return invoke('plugin_kv_delete', { pluginId, key }).then(ensureJsonString) as any;
+      return call('plugin_kv_delete', JSON.stringify({ plugin_id: pluginId, key })) as any;
     },
 
     umbra_wasm_plugin_kv_list: (pluginId: string, prefix: string) => {
-      return invoke('plugin_kv_list', { pluginId, prefix }).then(ensureJsonString) as any;
+      return call('plugin_kv_list', JSON.stringify({ plugin_id: pluginId, prefix })) as any;
     },
 
-    // ── Plugin Bundle Storage (via Tauri IPC) ──────────────────────
+    // ── Plugin Bundle Storage ──────────────────────────────────────
     umbra_wasm_plugin_bundle_save: (pluginId: string, manifest: string, bundle: string) => {
-      return invoke('plugin_bundle_save', { pluginId, manifest, bundle }).then(ensureJsonString) as any;
+      return call('plugin_bundle_save', JSON.stringify({ plugin_id: pluginId, manifest, bundle })) as any;
     },
 
     umbra_wasm_plugin_bundle_load: (pluginId: string) => {
-      return invoke('plugin_bundle_load', { pluginId }).then(ensureJsonString) as any;
+      return call('plugin_bundle_load', JSON.stringify({ plugin_id: pluginId })) as any;
     },
 
     umbra_wasm_plugin_bundle_delete: (pluginId: string) => {
-      return invoke('plugin_bundle_delete', { pluginId }).then(ensureJsonString) as any;
+      return call('plugin_bundle_delete', JSON.stringify({ plugin_id: pluginId })) as any;
     },
 
     umbra_wasm_plugin_bundle_list: () => {
-      return invoke('plugin_bundle_list').then(ensureJsonString) as any;
+      return call('plugin_bundle_list') as any;
     },
 
     // ── Community — Core ────────────────────────────────────────────
     umbra_wasm_community_create: (json: string) => {
-      return invoke('community_create', { json }).then(ensureJsonString) as any;
+      return call('community_create', json) as any;
+    },
+    umbra_wasm_community_find_by_origin: (originId: string) => {
+      return call('community_find_by_origin', JSON.stringify({ origin_id: originId })) as any;
     },
     umbra_wasm_community_get: (communityId: string) => {
-      return invoke('community_get', { communityId }).then(ensureJsonString) as any;
+      return call('community_get', JSON.stringify({ community_id: communityId })) as any;
     },
     umbra_wasm_community_get_mine: (memberDid: string) => {
-      return invoke('community_get_mine', { memberDid }).then(ensureJsonString) as any;
+      return call('community_get_mine', JSON.stringify({ member_did: memberDid })) as any;
     },
     umbra_wasm_community_update: (json: string) => {
-      return invoke('community_update', { json }).then(ensureJsonString) as any;
+      return call('community_update', json) as any;
     },
     umbra_wasm_community_delete: (json: string) => {
-      return invoke('community_delete', { json }).then(ensureJsonString) as any;
+      return call('community_delete', json) as any;
     },
     umbra_wasm_community_transfer_ownership: (json: string) => {
-      return invoke('community_transfer_ownership', { json }).then(ensureJsonString) as any;
+      return call('community_transfer_ownership', json) as any;
     },
     umbra_wasm_community_update_branding: (json: string) => {
-      return invoke('community_update_branding', { json }).then(ensureJsonString) as any;
+      return call('community_update_branding', json) as any;
     },
 
     // ── Community — Spaces ──────────────────────────────────────────
     umbra_wasm_community_space_create: (json: string) => {
-      return invoke('community_space_create', { json }).then(ensureJsonString) as any;
+      return call('community_space_create', json) as any;
     },
     umbra_wasm_community_space_list: (communityId: string) => {
-      return invoke('community_space_list', { communityId }).then(ensureJsonString) as any;
+      return call('community_space_list', JSON.stringify({ community_id: communityId })) as any;
     },
     umbra_wasm_community_space_update: (json: string) => {
-      return invoke('community_space_update', { json }).then(ensureJsonString) as any;
+      return call('community_space_update', json) as any;
     },
     umbra_wasm_community_space_reorder: (json: string) => {
-      return invoke('community_space_reorder', { json }).then(ensureJsonString) as any;
+      return call('community_space_reorder', json) as any;
     },
     umbra_wasm_community_space_delete: (json: string) => {
-      return invoke('community_space_delete', { json }).then(ensureJsonString) as any;
+      return call('community_space_delete', json) as any;
     },
 
     // ── Community — Categories ──────────────────────────────────────
     umbra_wasm_community_category_create: (json: string) => {
-      return invoke('community_category_create', { json }).then(ensureJsonString) as any;
+      return call('community_category_create', json) as any;
     },
     umbra_wasm_community_category_list: (spaceId: string) => {
-      return invoke('community_category_list', { spaceId }).then(ensureJsonString) as any;
+      return call('community_category_list', JSON.stringify({ space_id: spaceId })) as any;
     },
     umbra_wasm_community_category_list_all: (communityId: string) => {
-      return invoke('community_category_list_all', { communityId }).then(ensureJsonString) as any;
+      return call('community_category_list_all', JSON.stringify({ community_id: communityId })) as any;
     },
     umbra_wasm_community_category_update: (json: string) => {
-      return invoke('community_category_update', { json }).then(ensureJsonString) as any;
+      return call('community_category_update', json) as any;
     },
     umbra_wasm_community_category_reorder: (json: string) => {
-      return invoke('community_category_reorder', { json }).then(ensureJsonString) as any;
+      return call('community_category_reorder', json) as any;
     },
     umbra_wasm_community_category_delete: (json: string) => {
-      return invoke('community_category_delete', { json }).then(ensureJsonString) as any;
+      return call('community_category_delete', json) as any;
     },
     umbra_wasm_community_channel_move_category: (json: string) => {
-      return invoke('community_channel_move_category', { json }).then(ensureJsonString) as any;
+      return call('community_channel_move_category', json) as any;
     },
 
     // ── Community — Channels ────────────────────────────────────────
     umbra_wasm_community_channel_create: (json: string) => {
-      return invoke('community_channel_create', { json }).then(ensureJsonString) as any;
+      return call('community_channel_create', json) as any;
     },
     umbra_wasm_community_channel_list: (spaceId: string) => {
-      return invoke('community_channel_list', { spaceId }).then(ensureJsonString) as any;
+      return call('community_channel_list', JSON.stringify({ space_id: spaceId })) as any;
     },
     umbra_wasm_community_channel_list_all: (communityId: string) => {
-      return invoke('community_channel_list_all', { communityId }).then(ensureJsonString) as any;
+      return call('community_channel_list_all', JSON.stringify({ community_id: communityId })) as any;
     },
     umbra_wasm_community_channel_get: (channelId: string) => {
-      return invoke('community_channel_get', { channelId }).then(ensureJsonString) as any;
+      return call('community_channel_get', JSON.stringify({ channel_id: channelId })) as any;
     },
     umbra_wasm_community_channel_update: (json: string) => {
-      return invoke('community_channel_update', { json }).then(ensureJsonString) as any;
+      return call('community_channel_update', json) as any;
     },
     umbra_wasm_community_channel_set_slow_mode: (json: string) => {
-      return invoke('community_channel_set_slow_mode', { json }).then(ensureJsonString) as any;
+      return call('community_channel_set_slow_mode', json) as any;
     },
     umbra_wasm_community_channel_set_e2ee: (json: string) => {
-      return invoke('community_channel_set_e2ee', { json }).then(ensureJsonString) as any;
+      return call('community_channel_set_e2ee', json) as any;
     },
     umbra_wasm_community_channel_delete: (json: string) => {
-      return invoke('community_channel_delete', { json }).then(ensureJsonString) as any;
+      return call('community_channel_delete', json) as any;
     },
     umbra_wasm_community_channel_reorder: (json: string) => {
-      return invoke('community_channel_reorder', { json }).then(ensureJsonString) as any;
+      return call('community_channel_reorder', json) as any;
     },
 
     // ── Community — Members ─────────────────────────────────────────
     umbra_wasm_community_join: (json: string) => {
-      return invoke('community_join', { json }).then(ensureJsonString) as any;
+      return call('community_join', json) as any;
     },
     umbra_wasm_community_leave: (json: string) => {
-      return invoke('community_leave', { json }).then(ensureJsonString) as any;
+      return call('community_leave', json) as any;
     },
     umbra_wasm_community_kick: (json: string) => {
-      return invoke('community_kick', { json }).then(ensureJsonString) as any;
+      return call('community_kick', json) as any;
     },
     umbra_wasm_community_ban: (json: string) => {
-      return invoke('community_ban', { json }).then(ensureJsonString) as any;
+      return call('community_ban', json) as any;
     },
     umbra_wasm_community_unban: (json: string) => {
-      return invoke('community_unban', { json }).then(ensureJsonString) as any;
+      return call('community_unban', json) as any;
     },
     umbra_wasm_community_member_list: (communityId: string) => {
-      return invoke('community_member_list', { communityId }).then(ensureJsonString) as any;
+      return call('community_member_list', JSON.stringify({ community_id: communityId })) as any;
     },
     umbra_wasm_community_member_get: (communityId: string, memberDid: string) => {
-      return invoke('community_member_get', { communityId, memberDid }).then(ensureJsonString) as any;
+      return call('community_member_get', JSON.stringify({ community_id: communityId, member_did: memberDid })) as any;
     },
     umbra_wasm_community_member_update_profile: (json: string) => {
-      return invoke('community_member_update_profile', { json }).then(ensureJsonString) as any;
+      return call('community_member_update_profile', json) as any;
     },
     umbra_wasm_community_ban_list: (communityId: string) => {
-      return invoke('community_ban_list', { communityId }).then(ensureJsonString) as any;
+      return call('community_ban_list', JSON.stringify({ community_id: communityId })) as any;
     },
 
     // ── Community — Roles ───────────────────────────────────────────
     umbra_wasm_community_role_list: (communityId: string) => {
-      return invoke('community_role_list', { communityId }).then(ensureJsonString) as any;
+      return call('community_role_list', JSON.stringify({ community_id: communityId })) as any;
     },
     umbra_wasm_community_member_roles: (communityId: string, memberDid: string) => {
-      return invoke('community_member_roles', { communityId, memberDid }).then(ensureJsonString) as any;
+      return call('community_member_roles', JSON.stringify({ community_id: communityId, member_did: memberDid })) as any;
     },
     umbra_wasm_community_role_assign: (json: string) => {
-      return invoke('community_role_assign', { json }).then(ensureJsonString) as any;
+      return call('community_role_assign', json) as any;
     },
     umbra_wasm_community_role_unassign: (json: string) => {
-      return invoke('community_role_unassign', { json }).then(ensureJsonString) as any;
+      return call('community_role_unassign', json) as any;
     },
     umbra_wasm_community_custom_role_create: (json: string) => {
-      return invoke('community_custom_role_create', { json }).then(ensureJsonString) as any;
+      return call('community_custom_role_create', json) as any;
     },
     umbra_wasm_community_role_update: (json: string) => {
-      return invoke('community_role_update', { json }).then(ensureJsonString) as any;
+      return call('community_role_update', json) as any;
     },
     umbra_wasm_community_role_update_permissions: (json: string) => {
-      return invoke('community_role_update_permissions', { json }).then(ensureJsonString) as any;
+      return call('community_role_update_permissions', json) as any;
     },
     umbra_wasm_community_role_delete: (json: string) => {
-      return invoke('community_role_delete', { json }).then(ensureJsonString) as any;
+      return call('community_role_delete', json) as any;
     },
 
     // ── Community — Invites ─────────────────────────────────────────
     umbra_wasm_community_invite_create: (json: string) => {
-      return invoke('community_invite_create', { json }).then(ensureJsonString) as any;
+      return call('community_invite_create', json) as any;
     },
     umbra_wasm_community_invite_use: (json: string) => {
-      return invoke('community_invite_use', { json }).then(ensureJsonString) as any;
+      return call('community_invite_use', json) as any;
     },
     umbra_wasm_community_invite_list: (communityId: string) => {
-      return invoke('community_invite_list', { communityId }).then(ensureJsonString) as any;
+      return call('community_invite_list', JSON.stringify({ community_id: communityId })) as any;
     },
     umbra_wasm_community_invite_delete: (json: string) => {
-      return invoke('community_invite_delete', { json }).then(ensureJsonString) as any;
+      return call('community_invite_delete', json) as any;
     },
     umbra_wasm_community_invite_set_vanity: (json: string) => {
-      return invoke('community_invite_set_vanity', { json }).then(ensureJsonString) as any;
+      return call('community_invite_set_vanity', json) as any;
     },
 
     // ── Community — Messages ────────────────────────────────────────
     umbra_wasm_community_message_send: (json: string) => {
-      return invoke('community_message_send', { json }).then(ensureJsonString) as any;
+      return call('community_message_send', json) as any;
     },
     umbra_wasm_community_message_store_received: (json: string) => {
-      return invoke('community_message_store_received', { json }).then(ensureJsonString) as any;
+      return call('community_message_store_received', json) as any;
     },
     umbra_wasm_community_message_list: (json: string) => {
-      return invoke('community_message_list', { json }).then(ensureJsonString) as any;
+      return call('community_message_list', json) as any;
     },
     umbra_wasm_community_message_get: (messageId: string) => {
-      return invoke('community_message_get', { messageId }).then(ensureJsonString) as any;
+      return call('community_message_get', JSON.stringify({ message_id: messageId })) as any;
     },
     umbra_wasm_community_message_edit: (json: string) => {
-      return invoke('community_message_edit', { json }).then(ensureJsonString) as any;
+      return call('community_message_edit', json) as any;
     },
     umbra_wasm_community_message_delete: (messageId: string) => {
-      return invoke('community_message_delete', { messageId }).then(ensureJsonString) as any;
+      return call('community_message_delete', JSON.stringify({ message_id: messageId })) as any;
     },
 
     // ── Community — Reactions ───────────────────────────────────────
     umbra_wasm_community_reaction_add: (json: string) => {
-      return invoke('community_reaction_add', { json }).then(ensureJsonString) as any;
+      return call('community_reaction_add', json) as any;
     },
     umbra_wasm_community_reaction_remove: (json: string) => {
-      return invoke('community_reaction_remove', { json }).then(ensureJsonString) as any;
+      return call('community_reaction_remove', json) as any;
     },
     umbra_wasm_community_reaction_list: (messageId: string) => {
-      return invoke('community_reaction_list', { messageId }).then(ensureJsonString) as any;
+      return call('community_reaction_list', JSON.stringify({ message_id: messageId })) as any;
     },
 
     // ── Community — Emoji ───────────────────────────────────────────
     umbra_wasm_community_emoji_create: (json: string) => {
-      return invoke('community_emoji_create', { json }).then(ensureJsonString) as any;
+      return call('community_emoji_create', json) as any;
     },
     umbra_wasm_community_emoji_list: (communityId: string) => {
-      return invoke('community_emoji_list', { communityId }).then(ensureJsonString) as any;
+      return call('community_emoji_list', JSON.stringify({ community_id: communityId })) as any;
     },
     umbra_wasm_community_emoji_delete: (json: string) => {
-      return invoke('community_emoji_delete', { json }).then(ensureJsonString) as any;
+      return call('community_emoji_delete', json) as any;
     },
     umbra_wasm_community_emoji_rename: (json: string) => {
-      return invoke('community_emoji_rename', { json }).then(ensureJsonString) as any;
+      return call('community_emoji_rename', json) as any;
     },
 
     // ── Community — Stickers ─────────────────────────────────────────
     umbra_wasm_community_sticker_create: (json: string) => {
-      return invoke('community_sticker_create', { json }).then(ensureJsonString) as any;
+      return call('community_sticker_create', json) as any;
     },
     umbra_wasm_community_sticker_list: (communityId: string) => {
-      return invoke('community_sticker_list', { communityId }).then(ensureJsonString) as any;
+      return call('community_sticker_list', JSON.stringify({ community_id: communityId })) as any;
     },
     umbra_wasm_community_sticker_delete: (stickerId: string) => {
-      return invoke('community_sticker_delete', { stickerId }).then(ensureJsonString) as any;
+      return call('community_sticker_delete', JSON.stringify({ sticker_id: stickerId })) as any;
     },
 
     // ── Community — Sticker Packs ─────────────────────────────────────
     umbra_wasm_community_sticker_pack_create: (json: string) => {
-      return invoke('community_sticker_pack_create', { json }).then(ensureJsonString) as any;
+      return call('community_sticker_pack_create', json) as any;
     },
     umbra_wasm_community_sticker_pack_list: (communityId: string) => {
-      return invoke('community_sticker_pack_list', { communityId }).then(ensureJsonString) as any;
+      return call('community_sticker_pack_list', JSON.stringify({ community_id: communityId })) as any;
     },
     umbra_wasm_community_sticker_pack_delete: (packId: string) => {
-      return invoke('community_sticker_pack_delete', { packId }).then(ensureJsonString) as any;
+      return call('community_sticker_pack_delete', JSON.stringify({ pack_id: packId })) as any;
     },
     umbra_wasm_community_sticker_pack_rename: (json: string) => {
-      return invoke('community_sticker_pack_rename', { json }).then(ensureJsonString) as any;
+      return call('community_sticker_pack_rename', json) as any;
     },
 
     // ── Community — Pins ────────────────────────────────────────────
     umbra_wasm_community_pin_message: (json: string) => {
-      return invoke('community_pin_message', { json }).then(ensureJsonString) as any;
+      return call('community_pin_message', json) as any;
     },
     umbra_wasm_community_unpin_message: (json: string) => {
-      return invoke('community_unpin_message', { json }).then(ensureJsonString) as any;
+      return call('community_unpin_message', json) as any;
     },
     umbra_wasm_community_pin_list: (channelId: string) => {
-      return invoke('community_pin_list', { channelId }).then(ensureJsonString) as any;
+      return call('community_pin_list', JSON.stringify({ channel_id: channelId })) as any;
     },
 
     // ── Community — Threads ─────────────────────────────────────────
     umbra_wasm_community_thread_create: (json: string) => {
-      return invoke('community_thread_create', { json }).then(ensureJsonString) as any;
+      return call('community_thread_create', json) as any;
     },
     umbra_wasm_community_thread_get: (threadId: string) => {
-      return invoke('community_thread_get', { threadId }).then(ensureJsonString) as any;
+      return call('community_thread_get', JSON.stringify({ thread_id: threadId })) as any;
     },
     umbra_wasm_community_thread_list: (channelId: string) => {
-      return invoke('community_thread_list', { channelId }).then(ensureJsonString) as any;
+      return call('community_thread_list', JSON.stringify({ channel_id: channelId })) as any;
     },
     umbra_wasm_community_thread_messages: (json: string) => {
-      return invoke('community_thread_messages', { json }).then(ensureJsonString) as any;
+      return call('community_thread_messages', json) as any;
     },
 
     // ── Community — Read Receipts ───────────────────────────────────
     umbra_wasm_community_mark_read: (json: string) => {
-      return invoke('community_mark_read', { json }).then(ensureJsonString) as any;
+      return call('community_mark_read', json) as any;
     },
 
     // ── Community — Files ──────────────────────────────────────────
     umbra_wasm_community_upload_file: (json: string) => {
-      return invoke('community_upload_file', { json }).then(ensureJsonString) as any;
+      return call('community_upload_file', json) as any;
     },
     umbra_wasm_community_get_files: (json: string) => {
-      return invoke('community_get_files', { json }).then(ensureJsonString) as any;
+      return call('community_get_files', json) as any;
     },
     umbra_wasm_community_get_file: (json: string) => {
-      return invoke('community_get_file', { json }).then(ensureJsonString) as any;
+      return call('community_get_file', json) as any;
     },
     umbra_wasm_community_delete_file: (json: string) => {
-      return invoke('community_delete_file', { json }).then(ensureJsonString) as any;
+      return call('community_delete_file', json) as any;
     },
     umbra_wasm_community_record_file_download: (json: string) => {
-      return invoke('community_record_file_download', { json }).then(ensureJsonString) as any;
+      return call('community_record_file_download', json) as any;
     },
     umbra_wasm_community_create_folder: (json: string) => {
-      return invoke('community_create_folder', { json }).then(ensureJsonString) as any;
+      return call('community_create_folder', json) as any;
     },
     umbra_wasm_community_get_folders: (json: string) => {
-      return invoke('community_get_folders', { json }).then(ensureJsonString) as any;
+      return call('community_get_folders', json) as any;
     },
     umbra_wasm_community_delete_folder: (json: string) => {
-      return invoke('community_delete_folder', { json }).then(ensureJsonString) as any;
+      return call('community_delete_folder', json) as any;
     },
 
     // ── DM — Files ────────────────────────────────────────────────
     umbra_wasm_dm_upload_file: (json: string) => {
-      return invoke('dm_upload_file', { json }).then(ensureJsonString) as any;
+      return call('dm_upload_file', json) as any;
     },
     umbra_wasm_dm_get_files: (json: string) => {
-      return invoke('dm_get_files', { json }).then(ensureJsonString) as any;
+      return call('dm_get_files', json) as any;
     },
     umbra_wasm_dm_get_file: (json: string) => {
-      return invoke('dm_get_file', { json }).then(ensureJsonString) as any;
+      return call('dm_get_file', json) as any;
     },
     umbra_wasm_dm_delete_file: (json: string) => {
-      return invoke('dm_delete_file', { json }).then(ensureJsonString) as any;
+      return call('dm_delete_file', json) as any;
     },
     umbra_wasm_dm_record_file_download: (json: string) => {
-      return invoke('dm_record_file_download', { json }).then(ensureJsonString) as any;
+      return call('dm_record_file_download', json) as any;
     },
     umbra_wasm_dm_move_file: (json: string) => {
-      return invoke('dm_move_file', { json }).then(ensureJsonString) as any;
+      return call('dm_move_file', json) as any;
     },
     umbra_wasm_dm_create_folder: (json: string) => {
-      return invoke('dm_create_folder', { json }).then(ensureJsonString) as any;
+      return call('dm_create_folder', json) as any;
     },
     umbra_wasm_dm_get_folders: (json: string) => {
-      return invoke('dm_get_folders', { json }).then(ensureJsonString) as any;
+      return call('dm_get_folders', json) as any;
     },
     umbra_wasm_dm_delete_folder: (json: string) => {
-      return invoke('dm_delete_folder', { json }).then(ensureJsonString) as any;
+      return call('dm_delete_folder', json) as any;
     },
     umbra_wasm_dm_rename_folder: (json: string) => {
-      return invoke('dm_rename_folder', { json }).then(ensureJsonString) as any;
+      return call('dm_rename_folder', json) as any;
     },
 
     // ── Groups — Relay envelope builders ────────────────────────
     umbra_wasm_groups_send_invite: (json: string) => {
-      return invoke('groups_send_invite', { json }).then(ensureJsonString) as any;
+      return call('groups_send_invite', json) as any;
     },
     umbra_wasm_groups_build_invite_accept_envelope: (json: string) => {
-      return invoke('groups_build_invite_accept_envelope', { json }).then(ensureJsonString) as any;
+      return call('groups_build_invite_accept_envelope', json) as any;
     },
     umbra_wasm_groups_build_invite_decline_envelope: (json: string) => {
-      return invoke('groups_build_invite_decline_envelope', { json }).then(ensureJsonString) as any;
+      return call('groups_build_invite_decline_envelope', json) as any;
     },
     umbra_wasm_groups_send_message: (json: string) => {
-      return invoke('groups_send_message', { json }).then(ensureJsonString) as any;
+      return call('groups_send_message', json) as any;
     },
     umbra_wasm_groups_remove_member_with_rotation: (json: string) => {
-      return invoke('groups_remove_member_with_rotation', { json }).then(ensureJsonString) as any;
+      return call('groups_remove_member_with_rotation', json) as any;
     },
 
     // ── Relay envelope builders ───────────────────────────────────
     umbra_wasm_community_build_event_relay_batch: (json: string) => {
-      return invoke('community_build_event_relay_batch', { json }).then(ensureJsonString) as any;
+      return call('community_build_event_relay_batch', json) as any;
     },
     umbra_wasm_build_dm_file_event_envelope: (json: string) => {
-      return invoke('build_dm_file_event_envelope', { json }).then(ensureJsonString) as any;
+      return call('build_dm_file_event_envelope', json) as any;
     },
     umbra_wasm_build_metadata_envelope: (json: string) => {
-      return invoke('build_metadata_envelope', { json }).then(ensureJsonString) as any;
+      return call('build_metadata_envelope', json) as any;
     },
 
     // ── File Chunking ─────────────────────────────────────────────
     umbra_wasm_chunk_file: (json: string) => {
-      return invoke('chunk_file', { json }).then(ensureJsonString) as any;
+      return call('chunk_file', json) as any;
     },
     umbra_wasm_reassemble_file: (json: string) => {
-      return invoke('reassemble_file', { json }).then(ensureJsonString) as any;
+      return call('reassemble_file', json) as any;
     },
     umbra_wasm_get_file_manifest: (json: string) => {
-      return invoke('get_file_manifest', { json }).then(ensureJsonString) as any;
+      return call('get_file_manifest', json) as any;
     },
 
     // ── File Transfer ───────────────────────────────────────────────
     umbra_wasm_transfer_initiate: (json: string) => {
-      return invoke('transfer_initiate', { json }).then(ensureJsonString) as any;
+      return call('transfer_initiate', json) as any;
     },
     umbra_wasm_transfer_accept: (json: string) => {
-      return invoke('transfer_accept', { json }).then(ensureJsonString) as any;
+      return call('transfer_accept', json) as any;
     },
     umbra_wasm_transfer_pause: (transfer_id: string) => {
-      return invoke('transfer_pause', { transfer_id }).then(ensureJsonString) as any;
+      return call('transfer_pause', JSON.stringify({ transfer_id })) as any;
     },
     umbra_wasm_transfer_resume: (transfer_id: string) => {
-      return invoke('transfer_resume', { transfer_id }).then(ensureJsonString) as any;
+      return call('transfer_resume', JSON.stringify({ transfer_id })) as any;
     },
     umbra_wasm_transfer_cancel: (json: string) => {
-      return invoke('transfer_cancel', { json }).then(ensureJsonString) as any;
+      return call('transfer_cancel', json) as any;
     },
     umbra_wasm_transfer_on_message: (json: string) => {
-      return invoke('transfer_on_message', { json }).then(ensureJsonString) as any;
+      return call('transfer_on_message', json) as any;
     },
     umbra_wasm_transfer_list: () => {
-      return invoke('transfer_list').then(ensureJsonString) as any;
+      return call('transfer_list') as any;
     },
     umbra_wasm_transfer_get: (transfer_id: string) => {
-      return invoke('transfer_get', { transfer_id }).then(ensureJsonString) as any;
+      return call('transfer_get', JSON.stringify({ transfer_id })) as any;
     },
     umbra_wasm_transfer_get_incomplete: () => {
-      return invoke('transfer_get_incomplete').then(ensureJsonString) as any;
+      return call('transfer_get_incomplete') as any;
     },
     umbra_wasm_transfer_chunks_to_send: (transfer_id: string) => {
-      return invoke('transfer_chunks_to_send', { transfer_id }).then(ensureJsonString) as any;
+      return call('transfer_chunks_to_send', JSON.stringify({ transfer_id })) as any;
     },
     umbra_wasm_transfer_mark_chunk_sent: (json: string) => {
-      return invoke('transfer_mark_chunk_sent', { json }).then(ensureJsonString) as any;
+      return call('transfer_mark_chunk_sent', json) as any;
     },
 
     // ── DHT — Content Discovery ────────────────────────────────────────
     umbra_wasm_dht_start_providing: (json: string) => {
-      return invoke('dht_start_providing', { json }).then(ensureJsonString) as any;
+      return call('dht_start_providing', json) as any;
     },
     umbra_wasm_dht_get_providers: (json: string) => {
-      return invoke('dht_get_providers', { json }).then(ensureJsonString) as any;
+      return call('dht_get_providers', json) as any;
     },
     umbra_wasm_dht_stop_providing: (json: string) => {
-      return invoke('dht_stop_providing', { json }).then(ensureJsonString) as any;
+      return call('dht_stop_providing', json) as any;
     },
 
     // ── File Encryption (E2EE) ────────────────────────────────────────
     umbra_wasm_file_derive_key: (json: string) => {
-      return invoke('file_derive_key', { json }).then(ensureJsonString) as any;
+      return call('file_derive_key', json) as any;
     },
     umbra_wasm_file_encrypt_chunk: (json: string) => {
-      return invoke('file_encrypt_chunk', { json }).then(ensureJsonString) as any;
+      return call('file_encrypt_chunk', json) as any;
     },
     umbra_wasm_file_decrypt_chunk: (json: string) => {
-      return invoke('file_decrypt_chunk', { json }).then(ensureJsonString) as any;
+      return call('file_decrypt_chunk', json) as any;
     },
     umbra_wasm_channel_file_derive_key: (json: string) => {
-      return invoke('channel_file_derive_key', { json }).then(ensureJsonString) as any;
+      return call('channel_file_derive_key', json) as any;
     },
     umbra_wasm_compute_key_fingerprint: (json: string) => {
-      return invoke('compute_key_fingerprint', { json }).then(ensureJsonString) as any;
+      return call('compute_key_fingerprint', json) as any;
     },
     umbra_wasm_verify_key_fingerprint: (json: string) => {
-      return invoke('verify_key_fingerprint', { json }).then(ensureJsonString) as any;
+      return call('verify_key_fingerprint', json) as any;
     },
     umbra_wasm_mark_files_for_reencryption: (json: string) => {
-      return invoke('mark_files_for_reencryption', { json }).then(ensureJsonString) as any;
+      return call('mark_files_for_reencryption', json) as any;
     },
     umbra_wasm_get_files_needing_reencryption: (json: string) => {
-      return invoke('get_files_needing_reencryption', { json }).then(ensureJsonString) as any;
+      return call('get_files_needing_reencryption', json) as any;
     },
     umbra_wasm_clear_reencryption_flag: (json: string) => {
-      return invoke('clear_reencryption_flag', { json }).then(ensureJsonString) as any;
+      return call('clear_reencryption_flag', json) as any;
     },
 
     // ── Community Seats (Ghost Member Placeholders) ────────────────────
     umbra_wasm_community_seat_list: (community_id: string) => {
-      return invoke('community_seat_list', { community_id }).then(ensureJsonString) as any;
+      return call('community_seat_list', JSON.stringify({ community_id })) as any;
     },
     umbra_wasm_community_seat_list_unclaimed: (community_id: string) => {
-      return invoke('community_seat_list_unclaimed', { community_id }).then(ensureJsonString) as any;
+      return call('community_seat_list_unclaimed', JSON.stringify({ community_id })) as any;
     },
     umbra_wasm_community_seat_find_match: (json: string) => {
-      return invoke('community_seat_find_match', { json }).then(ensureJsonString) as any;
+      return call('community_seat_find_match', json) as any;
     },
     umbra_wasm_community_seat_claim: (json: string) => {
-      return invoke('community_seat_claim', { json }).then(ensureJsonString) as any;
+      return call('community_seat_claim', json) as any;
     },
     umbra_wasm_community_seat_delete: (json: string) => {
-      return invoke('community_seat_delete', { json }).then(ensureJsonString) as any;
+      return call('community_seat_delete', json) as any;
     },
     umbra_wasm_community_seat_create_batch: (json: string) => {
-      return invoke('community_seat_create_batch', { json }).then(ensureJsonString) as any;
+      return call('community_seat_create_batch', json) as any;
     },
     umbra_wasm_community_seat_count: (community_id: string) => {
-      return invoke('community_seat_count', { community_id }).then(ensureJsonString) as any;
+      return call('community_seat_count', JSON.stringify({ community_id })) as any;
     },
 
     // ── Community Audit Log ─────────────────────────────────────────────
     umbra_wasm_community_audit_log_create_batch: (json: string) => {
-      return invoke('community_audit_log_create_batch', { json }).then(ensureJsonString) as any;
+      return call('community_audit_log_create_batch', json) as any;
     },
     umbra_wasm_community_audit_log_list: (json: string) => {
-      return invoke('community_audit_log_list', { json }).then(ensureJsonString) as any;
+      return call('community_audit_log_list', json) as any;
     },
   };
 }

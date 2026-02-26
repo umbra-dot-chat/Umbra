@@ -74,9 +74,9 @@
 //! └─────────────────────────────────────────────────────────────────────────┘
 //! ```
 
-#[cfg(not(any(target_os = "ios", target_os = "android")))]
+#[cfg(not(target_os = "ios"))]
 use parking_lot::RwLock;
-#[cfg(not(any(target_os = "ios", target_os = "android")))]
+#[cfg(not(target_os = "ios"))]
 use std::collections::HashMap;
 use zeroize::Zeroizing;
 
@@ -103,7 +103,7 @@ pub mod keys {
 pub struct SecureStore {
     /// In-memory storage (for development/testing)
     /// In production, this is backed by platform keychain/keystore
-    #[cfg(not(any(target_os = "ios", target_os = "android")))]
+    #[cfg(not(target_os = "ios"))]
     memory: RwLock<HashMap<String, Vec<u8>>>,
 
     /// Optional encryption key for additional protection
@@ -114,7 +114,7 @@ impl SecureStore {
     /// Create a new secure store
     pub fn new() -> Self {
         Self {
-            #[cfg(not(any(target_os = "ios", target_os = "android")))]
+            #[cfg(not(target_os = "ios"))]
             memory: RwLock::new(HashMap::new()),
             encryption_key: None,
         }
@@ -125,7 +125,7 @@ impl SecureStore {
     /// All data will be encrypted before storage.
     pub fn with_encryption(key: [u8; 32]) -> Self {
         Self {
-            #[cfg(not(any(target_os = "ios", target_os = "android")))]
+            #[cfg(not(target_os = "ios"))]
             memory: RwLock::new(HashMap::new()),
             encryption_key: Some(EncryptionKey::from_bytes(key)),
         }
@@ -190,26 +190,26 @@ impl SecureStore {
     // ========================================================================
 
     // Development/Testing implementation (in-memory)
-    #[cfg(not(any(target_os = "ios", target_os = "android")))]
+    #[cfg(not(target_os = "ios"))]
     fn store_raw(&self, key: &str, value: &[u8]) -> Result<()> {
         let mut storage = self.memory.write();
         storage.insert(key.to_string(), value.to_vec());
         Ok(())
     }
 
-    #[cfg(not(any(target_os = "ios", target_os = "android")))]
+    #[cfg(not(target_os = "ios"))]
     fn retrieve_raw(&self, key: &str) -> Result<Option<Vec<u8>>> {
         let storage = self.memory.read();
         Ok(storage.get(key).cloned())
     }
 
-    #[cfg(not(any(target_os = "ios", target_os = "android")))]
+    #[cfg(not(target_os = "ios"))]
     fn delete_raw(&self, key: &str) -> Result<bool> {
         let mut storage = self.memory.write();
         Ok(storage.remove(key).is_some())
     }
 
-    #[cfg(not(any(target_os = "ios", target_os = "android")))]
+    #[cfg(not(target_os = "ios"))]
     fn exists_raw(&self, key: &str) -> Result<bool> {
         let storage = self.memory.read();
         Ok(storage.contains_key(key))
@@ -287,225 +287,8 @@ impl SecureStore {
         }
     }
 
-    // Android Keystore implementation
-    //
-    // Note: Android secure storage requires JNI access to the Android KeyStore API.
-    // This implementation uses EncryptedSharedPreferences under the hood, which
-    // automatically handles key generation and storage using the Android KeyStore.
-    //
-    // The Kotlin/Java side must provide a JNI bridge that:
-    // 1. Creates an EncryptedSharedPreferences instance with MasterKey
-    // 2. Exposes store/retrieve/delete/exists methods to native code
-    //
-    // This implementation calls those JNI methods.
-
-    #[cfg(target_os = "android")]
-    fn store_raw(&self, key: &str, value: &[u8]) -> Result<()> {
-        use jni::objects::{JObject, JString, JValue};
-        use jni::JNIEnv;
-
-        // Get the JNI environment
-        // Note: This requires the Android app to have set up the JNI context
-        let ctx = android_context::get_context().map_err(|e| {
-            Error::StorageWriteError(format!("Failed to get Android context: {}", e))
-        })?;
-
-        let env = ctx.env();
-        let activity = ctx.activity();
-
-        // Convert key and value to Java objects
-        let j_key = env
-            .new_string(key)
-            .map_err(|e| Error::StorageWriteError(format!("JNI string creation failed: {}", e)))?;
-
-        // Encode value as base64 for easier Java interop
-        let value_b64 = base64::engine::general_purpose::STANDARD.encode(value);
-        let j_value = env
-            .new_string(&value_b64)
-            .map_err(|e| Error::StorageWriteError(format!("JNI string creation failed: {}", e)))?;
-
-        // Call the secure storage method on the activity
-        // The Android side must implement: void secureStore(String key, String value)
-        env.call_method(
-            activity,
-            "secureStore",
-            "(Ljava/lang/String;Ljava/lang/String;)V",
-            &[JValue::Object(&j_key), JValue::Object(&j_value)],
-        )
-        .map_err(|e| Error::StorageWriteError(format!("JNI call failed: {}", e)))?;
-
-        Ok(())
-    }
-
-    #[cfg(target_os = "android")]
-    fn retrieve_raw(&self, key: &str) -> Result<Option<Vec<u8>>> {
-        use jni::objects::{JObject, JString, JValue};
-        use jni::JNIEnv;
-
-        let ctx = android_context::get_context().map_err(|e| {
-            Error::StorageReadError(format!("Failed to get Android context: {}", e))
-        })?;
-
-        let env = ctx.env();
-        let activity = ctx.activity();
-
-        let j_key = env
-            .new_string(key)
-            .map_err(|e| Error::StorageReadError(format!("JNI string creation failed: {}", e)))?;
-
-        // Call the secure retrieval method
-        // The Android side must implement: String secureRetrieve(String key)
-        let result = env
-            .call_method(
-                activity,
-                "secureRetrieve",
-                "(Ljava/lang/String;)Ljava/lang/String;",
-                &[JValue::Object(&j_key)],
-            )
-            .map_err(|e| Error::StorageReadError(format!("JNI call failed: {}", e)))?;
-
-        // Convert the result
-        let j_result: JObject = result
-            .l()
-            .map_err(|e| Error::StorageReadError(format!("JNI result conversion failed: {}", e)))?;
-
-        if j_result.is_null() {
-            return Ok(None);
-        }
-
-        let result_str: String = env
-            .get_string(&JString::from(j_result))
-            .map_err(|e| Error::StorageReadError(format!("JNI string conversion failed: {}", e)))?
-            .into();
-
-        // Decode from base64
-        let decoded = base64::engine::general_purpose::STANDARD
-            .decode(&result_str)
-            .map_err(|e| Error::StorageReadError(format!("Base64 decode failed: {}", e)))?;
-
-        Ok(Some(decoded))
-    }
-
-    #[cfg(target_os = "android")]
-    fn delete_raw(&self, key: &str) -> Result<bool> {
-        use jni::objects::{JObject, JString, JValue};
-        use jni::JNIEnv;
-
-        let ctx = android_context::get_context().map_err(|e| {
-            Error::StorageWriteError(format!("Failed to get Android context: {}", e))
-        })?;
-
-        let env = ctx.env();
-        let activity = ctx.activity();
-
-        let j_key = env
-            .new_string(key)
-            .map_err(|e| Error::StorageWriteError(format!("JNI string creation failed: {}", e)))?;
-
-        // Call the secure delete method
-        // The Android side must implement: boolean secureDelete(String key)
-        let result = env
-            .call_method(
-                activity,
-                "secureDelete",
-                "(Ljava/lang/String;)Z",
-                &[JValue::Object(&j_key)],
-            )
-            .map_err(|e| Error::StorageWriteError(format!("JNI call failed: {}", e)))?;
-
-        let deleted = result.z().map_err(|e| {
-            Error::StorageWriteError(format!("JNI result conversion failed: {}", e))
-        })?;
-
-        Ok(deleted)
-    }
-
-    #[cfg(target_os = "android")]
-    fn exists_raw(&self, key: &str) -> Result<bool> {
-        use jni::objects::{JObject, JString, JValue};
-        use jni::JNIEnv;
-
-        let ctx = android_context::get_context().map_err(|e| {
-            Error::StorageReadError(format!("Failed to get Android context: {}", e))
-        })?;
-
-        let env = ctx.env();
-        let activity = ctx.activity();
-
-        let j_key = env
-            .new_string(key)
-            .map_err(|e| Error::StorageReadError(format!("JNI string creation failed: {}", e)))?;
-
-        // Call the secure exists method
-        // The Android side must implement: boolean secureExists(String key)
-        let result = env
-            .call_method(
-                activity,
-                "secureExists",
-                "(Ljava/lang/String;)Z",
-                &[JValue::Object(&j_key)],
-            )
-            .map_err(|e| Error::StorageReadError(format!("JNI call failed: {}", e)))?;
-
-        let exists = result
-            .z()
-            .map_err(|e| Error::StorageReadError(format!("JNI result conversion failed: {}", e)))?;
-
-        Ok(exists)
-    }
-}
-
-// ============================================================================
-// ANDROID CONTEXT HELPER
-// ============================================================================
-
-/// Android context helper module for JNI access
-#[cfg(target_os = "android")]
-mod android_context {
-    use jni::objects::JObject;
-    use jni::{JNIEnv, JavaVM};
-    use std::sync::OnceLock;
-
-    static JAVA_VM: OnceLock<JavaVM> = OnceLock::new();
-    static ACTIVITY: OnceLock<jni::objects::GlobalRef> = OnceLock::new();
-
-    /// Initialize the Android context from JNI
-    ///
-    /// This must be called from the Android app's native initialization code.
-    pub fn init(vm: JavaVM, activity: jni::objects::GlobalRef) {
-        let _ = JAVA_VM.set(vm);
-        let _ = ACTIVITY.set(activity);
-    }
-
-    /// Context handle for accessing JNI
-    pub struct AndroidContext<'a> {
-        env: JNIEnv<'a>,
-        activity: &'a JObject<'a>,
-    }
-
-    impl<'a> AndroidContext<'a> {
-        pub fn env(&self) -> &JNIEnv<'a> {
-            &self.env
-        }
-
-        pub fn activity(&self) -> &JObject<'a> {
-            self.activity
-        }
-    }
-
-    /// Get the Android context
-    pub fn get_context<'a>() -> Result<AndroidContext<'a>, &'static str> {
-        let vm = JAVA_VM.get().ok_or("JavaVM not initialized")?;
-        let activity = ACTIVITY.get().ok_or("Activity not initialized")?;
-
-        let env = vm
-            .attach_current_thread()
-            .map_err(|_| "Failed to attach to JNI thread")?;
-
-        // This is a simplified version - actual implementation would need
-        // proper lifetime handling for the JNI environment
-        Err("Android context access not fully implemented - requires proper JNI lifecycle management")
-    }
+    // Android: Uses in-memory storage for now.
+    // TODO: Implement Android Keystore via the dispatcher FFI pattern.
 }
 
 impl Default for SecureStore {
