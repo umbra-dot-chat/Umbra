@@ -13,12 +13,14 @@ import type {
   PluginKVStore,
   PluginSQLStore,
   PluginCommand,
+  PluginShortcut,
   PluginMessage,
   PluginFriend,
   PluginConversation,
   MessageEventPayload,
   FriendEventPayload,
   ConversationEventPayload,
+  VoiceParticipantEvent,
 } from '@umbra/plugin-sdk';
 
 // =============================================================================
@@ -71,6 +73,21 @@ export interface ServiceBridge {
 
   // Commands
   registerCommand(pluginId: string, cmd: PluginCommand): () => void;
+
+  // Voice
+  isInVoiceCall(): boolean;
+  getVoiceParticipants(): Array<{ did: string; displayName: string }>;
+  getVoiceStream(did: string): MediaStream | null;
+  getLocalVoiceStream(): MediaStream | null;
+  getScreenShareStream(): MediaStream | null;
+  onVoiceParticipant(cb: (event: VoiceParticipantEvent) => void): () => void;
+
+  // Call signaling
+  sendCallSignal(payload: any): void;
+  onCallSignal(cb: (event: any) => void): () => void;
+
+  // Shortcuts
+  registerShortcut(pluginId: string, shortcut: PluginShortcut): () => void;
 }
 
 // =============================================================================
@@ -187,6 +204,54 @@ export function createSandboxedAPI(
     registerCommand: (cmd) => {
       requirePermission('commands', 'registerCommand');
       const unsub = bridge.registerCommand(pluginId, cmd);
+      subscriptions.push(unsub);
+      return unsub;
+    },
+
+    // ── Voice ─────────────────────────────────────────────────────────
+    isInVoiceCall: () => {
+      requirePermission('voice:read', 'isInVoiceCall');
+      return bridge.isInVoiceCall();
+    },
+    getVoiceParticipants: () => {
+      requirePermission('voice:read', 'getVoiceParticipants');
+      return bridge.getVoiceParticipants();
+    },
+    getVoiceStream: (did) => {
+      requirePermission('voice:read', 'getVoiceStream');
+      return bridge.getVoiceStream(did);
+    },
+    getLocalVoiceStream: () => {
+      requirePermission('voice:read', 'getLocalVoiceStream');
+      return bridge.getLocalVoiceStream();
+    },
+    getScreenShareStream: () => {
+      requirePermission('voice:read', 'getScreenShareStream');
+      return bridge.getScreenShareStream();
+    },
+    onVoiceParticipant: (cb) => {
+      requirePermission('voice:read', 'onVoiceParticipant');
+      const unsub = bridge.onVoiceParticipant(cb);
+      subscriptions.push(unsub);
+      return unsub;
+    },
+
+    // ── Call signaling ────────────────────────────────────────────────
+    sendCallSignal: (payload) => {
+      requirePermission('voice:read', 'sendCallSignal');
+      bridge.sendCallSignal(payload);
+    },
+    onCallSignal: (cb) => {
+      requirePermission('voice:read', 'onCallSignal');
+      const unsub = bridge.onCallSignal(cb);
+      subscriptions.push(unsub);
+      return unsub;
+    },
+
+    // ── Shortcuts ─────────────────────────────────────────────────────
+    registerShortcut: (shortcut) => {
+      requirePermission('shortcuts', 'registerShortcut');
+      const unsub = bridge.registerShortcut(pluginId, shortcut);
       subscriptions.push(unsub);
       return unsub;
     },

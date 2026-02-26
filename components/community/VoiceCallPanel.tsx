@@ -9,8 +9,10 @@
  */
 
 import React, { useMemo } from 'react';
+import { View } from 'react-native';
 import { GroupCallPanel } from '@coexist/wisp-react-native';
 import { useVoiceChannel } from '@/contexts/VoiceChannelContext';
+import { SlotRenderer } from '@/components/plugins/SlotRenderer';
 import type { CommunityMember } from '@umbra/service';
 import type { GroupCallParticipant } from '@coexist/wisp-core/types/GroupCallPanel.types';
 
@@ -92,24 +94,43 @@ export function VoiceCallPanel({
     });
   }, [channelParticipantDids, myDid, myDisplayName, memberMap, isMuted, isDeafened, speakingDids]);
 
+  const slotProps = useMemo(() => ({
+    channelName,
+    participants: channelParticipantDids,
+    speakingDids: Array.from(speakingDids),
+  }), [channelName, channelParticipantDids, speakingDids]);
+
+  const extraControls = (
+    <SlotRenderer slot="voice-call-controls" props={slotProps} style={{ flexDirection: 'row', alignItems: 'center' }} />
+  );
+
   return (
-    <GroupCallPanel
-      participants={groupCallParticipants}
-      localDid={myDid}
-      localStream={null}
-      groupName={channelName}
-      callType="audio"
-      connectedAt={null}
-      isConnecting={isConnecting}
-      isMuted={isMuted}
-      isCameraOff={true}
-      isScreenSharing={false}
-      isDeafened={isDeafened}
-      layout="voice"
-      onToggleMute={toggleMute}
-      onToggleCamera={() => {}}
-      onEndCall={leaveVoiceChannel}
-      onToggleDeafen={toggleDeafen}
-    />
+    <View style={{ flex: 1, position: 'relative' }}>
+      <SlotRenderer slot="voice-call-header" props={slotProps} />
+      <GroupCallPanel
+        participants={groupCallParticipants}
+        localDid={myDid}
+        localStream={null}
+        groupName={channelName}
+        callType="audio"
+        connectedAt={null}
+        isConnecting={isConnecting}
+        isMuted={isMuted}
+        isCameraOff={true}
+        isScreenSharing={false}
+        isDeafened={isDeafened}
+        layout="voice"
+        onToggleMute={toggleMute}
+        onToggleCamera={() => {}}
+        onEndCall={leaveVoiceChannel}
+        onToggleDeafen={toggleDeafen}
+        extraControls={extraControls}
+      />
+      <SlotRenderer
+        slot="voice-call-overlay"
+        props={slotProps}
+        style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, pointerEvents: 'box-none' }}
+      />
+    </View>
   );
 }

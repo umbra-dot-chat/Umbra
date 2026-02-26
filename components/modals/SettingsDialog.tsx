@@ -87,6 +87,7 @@ import {
 import { useMessaging } from '@/contexts/MessagingContext';
 import type { MessageDisplayMode } from '@/contexts/MessagingContext';
 import { SlotRenderer } from '@/components/plugins/SlotRenderer';
+import { ShortcutRegistry } from '@/services/ShortcutRegistry';
 import { clearDatabaseExport, getSqlDatabase } from '@umbra/wasm';
 import { useAppUpdate } from '@/hooks/useAppUpdate';
 import { useIsMobile } from '@/hooks/useIsMobile';
@@ -106,7 +107,7 @@ const AtSignInputIcon = AtSignIcon as InputIcon;
 // Types
 // ---------------------------------------------------------------------------
 
-export type SettingsSection = 'account' | 'profile' | 'appearance' | 'messaging' | 'notifications' | 'sounds' | 'privacy' | 'audio-video' | 'network' | 'data' | 'plugins' | 'about';
+export type SettingsSection = 'account' | 'profile' | 'appearance' | 'messaging' | 'notifications' | 'sounds' | 'privacy' | 'audio-video' | 'network' | 'data' | 'plugins' | 'keyboard-shortcuts' | 'about';
 
 export interface SettingsDialogProps {
   open: boolean;
@@ -133,6 +134,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'network', label: 'Network', icon: GlobeIcon },
   { id: 'data', label: 'Data', icon: DatabaseIcon },
   { id: 'plugins', label: 'Plugins', icon: ZapIcon },
+  { id: 'keyboard-shortcuts', label: 'Shortcuts', icon: KeyIcon },
   { id: 'about', label: 'About', icon: BookOpenIcon },
 ];
 
@@ -3670,6 +3672,78 @@ function PluginSettingsCard({
 // ---------------------------------------------------------------------------
 // About Section
 // ---------------------------------------------------------------------------
+// Keyboard Shortcuts
+// ---------------------------------------------------------------------------
+
+function KeyboardShortcutsSection() {
+  const { theme } = useTheme();
+  const tc = theme.colors;
+  const allShortcuts = ShortcutRegistry.getAllFlat();
+
+  return (
+    <View style={{ gap: 16 }}>
+      <Text size="lg" weight="bold" style={{ color: tc.text.primary }}>
+        Keyboard Shortcuts
+      </Text>
+      <Text size="sm" style={{ color: tc.text.muted }}>
+        Shortcuts registered by plugins and the app. Press the key combination to trigger the action.
+      </Text>
+
+      {allShortcuts.length === 0 ? (
+        <Card style={{ padding: 24, alignItems: 'center' }}>
+          <KeyIcon size={32} color={tc.text.muted} />
+          <Text size="sm" style={{ color: tc.text.muted, marginTop: 8 }}>
+            No keyboard shortcuts registered yet. Install plugins that register shortcuts to see them here.
+          </Text>
+        </Card>
+      ) : (
+        <View style={{ gap: 8 }}>
+          {allShortcuts.map(({ pluginId, shortcut }) => (
+            <View
+              key={`${pluginId}:${shortcut.id}`}
+              style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                paddingVertical: 8,
+                paddingHorizontal: 12,
+                borderRadius: 8,
+                backgroundColor: tc.background.raised,
+              }}
+            >
+              <View style={{ flex: 1, gap: 2 }}>
+                <Text size="sm" weight="semibold" style={{ color: tc.text.primary }}>
+                  {shortcut.label}
+                </Text>
+                {shortcut.category && (
+                  <Text size="xs" style={{ color: tc.text.muted }}>
+                    {shortcut.category}
+                  </Text>
+                )}
+              </View>
+              <View
+                style={{
+                  paddingHorizontal: 8,
+                  paddingVertical: 4,
+                  borderRadius: 4,
+                  backgroundColor: tc.background.sunken,
+                  borderWidth: 1,
+                  borderColor: tc.border.subtle,
+                }}
+              >
+                <Text size="xs" weight="mono" style={{ color: tc.text.secondary }}>
+                  {shortcut.keys}
+                </Text>
+              </View>
+            </View>
+          ))}
+        </View>
+      )}
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
 
 function AboutSection() {
   const { theme } = useTheme();
@@ -4268,6 +4342,8 @@ export function SettingsDialog({ open, onClose, onOpenMarketplace, initialSectio
         return <DataManagementSection />;
       case 'plugins':
         return <PluginsSection onOpenMarketplace={onOpenMarketplace} />;
+      case 'keyboard-shortcuts':
+        return <KeyboardShortcutsSection />;
       case 'about':
         return <AboutSection />;
     }

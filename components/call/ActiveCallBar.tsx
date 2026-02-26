@@ -10,6 +10,7 @@ import React from 'react';
 import { View } from 'react-native';
 import { Avatar, Text, useTheme, CallControls, CallTimer } from '@coexist/wisp-react-native';
 import { useCall } from '@/hooks/useCall';
+import { SlotRenderer } from '@/components/plugins/SlotRenderer';
 
 const noop = () => {};
 
@@ -63,6 +64,9 @@ export function ActiveCallBar() {
           <CallTimer startedAt={activeCall.connectedAt} size="sm" color="rgba(255,255,255,0.8)" />
         ) : null}
       </View>
+
+      {/* Plugin slot: voice-call-controls */}
+      <SlotRenderer slot="voice-call-controls" style={{ flexDirection: 'row', alignItems: 'center' }} />
 
       {/* Controls — Wisp CallControls in compact layout */}
       <CallControls

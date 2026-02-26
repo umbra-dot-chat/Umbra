@@ -71,7 +71,9 @@ export type PluginPermission =
   | 'storage:sql'
   | 'network:local'
   | 'notifications'
-  | 'commands';
+  | 'commands'
+  | 'voice:read'
+  | 'shortcuts';
 
 // =============================================================================
 // SLOTS
@@ -90,7 +92,10 @@ export type SlotName =
   | 'chat-header'
   | 'message-decorator'
   | 'right-panel'
-  | 'command-palette';
+  | 'command-palette'
+  | 'voice-call-controls'
+  | 'voice-call-header'
+  | 'voice-call-overlay';
 
 /** Manifest entry binding a component export to a slot. */
 export interface SlotRegistration {
@@ -193,6 +198,30 @@ export interface PluginAPI {
   // ── Commands ───────────────────────────────────────────────────────────────
   /** Register a command palette entry. Requires `commands`. Returns unregister fn. */
   registerCommand(cmd: PluginCommand): () => void;
+
+  // ── Voice (requires voice:read) ──────────────────────────────────────────
+  /** Whether the user is currently in a voice call or voice channel. */
+  isInVoiceCall(): boolean;
+  /** Get current voice participants with display names. */
+  getVoiceParticipants(): Array<{ did: string; displayName: string }>;
+  /** Get a remote participant's audio stream by DID. */
+  getVoiceStream(did: string): MediaStream | null;
+  /** Get the local user's audio stream. */
+  getLocalVoiceStream(): MediaStream | null;
+  /** Get the screen share audio stream, if any. */
+  getScreenShareStream(): MediaStream | null;
+  /** Subscribe to participant join/leave events. Returns unsubscribe fn. */
+  onVoiceParticipant(cb: (event: VoiceParticipantEvent) => void): () => void;
+
+  // ── Call room signaling (for broadcasting plugin data) ───────────────────
+  /** Send a custom signal payload to all call participants. */
+  sendCallSignal(payload: any): void;
+  /** Subscribe to custom call signal events. Returns unsubscribe fn. */
+  onCallSignal(cb: (event: any) => void): () => void;
+
+  // ── Shortcuts (requires shortcuts) ───────────────────────────────────────
+  /** Register a keyboard shortcut. Returns unregister fn. */
+  registerShortcut(shortcut: PluginShortcut): () => void;
 }
 
 // =============================================================================
@@ -272,4 +301,24 @@ export interface FriendEventPayload {
 export interface ConversationEventPayload {
   type: string;
   conversationId?: string;
+}
+
+// ── Voice types ──────────────────────────────────────────────────────────────
+
+export interface VoiceParticipantEvent {
+  type: 'joined' | 'left';
+  did: string;
+  displayName: string;
+}
+
+// ── Shortcut types ───────────────────────────────────────────────────────────
+
+export interface PluginShortcut {
+  id: string;
+  label: string;
+  /** Key combo string, e.g. "ctrl+shift+r" */
+  keys: string;
+  onTrigger: () => void;
+  /** Category for grouping in settings UI */
+  category?: string;
 }

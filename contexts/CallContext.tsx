@@ -28,6 +28,7 @@ import type { EncryptedCallPayload } from '@/types/call';
 import { useUmbra } from '@/contexts/UmbraContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSound } from '@/contexts/SoundContext';
+import { VoiceStreamBridge } from '@/services/VoiceStreamBridge';
 import { encryptSignal, decryptSignal, isSignalEncryptionAvailable } from '@/services/callCrypto';
 
 // ─── Context Value ───────────────────────────────────────────────────────────
@@ -154,6 +155,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     setActiveCall(null);
     setIsScreenSharing(false);
     setScreenShareStream(null);
+    VoiceStreamBridge.clear();
     try {
       sessionStorage.removeItem('umbra_active_call');
     } catch { /* not available */ }
@@ -244,6 +246,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     // Set up remote stream handler
     manager.onRemoteStream = (stream) => {
       setActiveCall((prev) => prev ? { ...prev, remoteStream: stream } : prev);
+      VoiceStreamBridge.setPeerStream(remoteDid, stream);
     };
 
     // Set up connection state handler
@@ -278,6 +281,12 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     try {
       const sdpOffer = await manager.createOffer(isVideo);
       const localStream = manager.getLocalStream();
+
+      // Register on VoiceStreamBridge for plugin access
+      VoiceStreamBridge.setLocalStream(localStream);
+      VoiceStreamBridge.setActive(true);
+      VoiceStreamBridge.addParticipant({ did: myDid, displayName: myName });
+      VoiceStreamBridge.addParticipant({ did: remoteDid, displayName: remoteDisplayName });
 
       const call: ActiveCall = {
         callId,
@@ -767,6 +776,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
 
           manager.onRemoteStream = (stream) => {
             setActiveCall((prev) => prev ? { ...prev, remoteStream: stream } : prev);
+            VoiceStreamBridge.setPeerStream(payload.senderDid, stream);
           };
 
           manager.onConnectionStateChange = (state) => {
@@ -789,6 +799,11 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
               setActiveCall((prev) => prev ? { ...prev, status: 'reconnecting' } : prev);
             }
           };
+
+          // Register on VoiceStreamBridge for plugin access
+          VoiceStreamBridge.setActive(true);
+          VoiceStreamBridge.addParticipant({ did: myDid, displayName: myName });
+          VoiceStreamBridge.addParticipant({ did: payload.senderDid, displayName: payload.senderDisplayName });
 
           // Set incoming call state
           const call: ActiveCall = {

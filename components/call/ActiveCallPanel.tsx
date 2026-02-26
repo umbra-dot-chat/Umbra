@@ -6,7 +6,9 @@
  */
 
 import React from 'react';
+import { View } from 'react-native';
 import { ActiveCallPanel as WispActiveCallPanel } from '@coexist/wisp-react-native';
+import { SlotRenderer } from '@/components/plugins/SlotRenderer';
 import type { ActiveCall, CallStats, VideoQuality, AudioQuality } from '@/types/call';
 
 interface ActiveCallPanelProps {
@@ -32,19 +34,26 @@ export function ActiveCallPanel({
   onSettings,
 }: ActiveCallPanelProps) {
   return (
-    <WispActiveCallPanel
-      localStream={activeCall.localStream}
-      remoteStream={activeCall.remoteStream}
-      callerName={activeCall.remoteDisplayName}
-      callType={activeCall.callType}
-      isMuted={activeCall.isMuted}
-      isCameraOff={activeCall.isCameraOff}
-      connectedAt={activeCall.connectedAt}
-      onToggleMute={onToggleMute}
-      onToggleCamera={onToggleCamera}
-      onEndCall={onEndCall}
-      onSwitchCamera={onSwitchCamera}
-      onSettings={onSettings}
-    />
+    <View style={{ flex: 1, position: 'relative' }}>
+      <SlotRenderer slot="voice-call-header" />
+      <WispActiveCallPanel
+        localStream={activeCall.localStream}
+        remoteStream={activeCall.remoteStream}
+        callerName={activeCall.remoteDisplayName}
+        callType={activeCall.callType}
+        isMuted={activeCall.isMuted}
+        isCameraOff={activeCall.isCameraOff}
+        connectedAt={activeCall.connectedAt}
+        onToggleMute={onToggleMute}
+        onToggleCamera={onToggleCamera}
+        onEndCall={onEndCall}
+        onSwitchCamera={onSwitchCamera}
+        onSettings={onSettings}
+      />
+      <SlotRenderer
+        slot="voice-call-overlay"
+        style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, pointerEvents: 'box-none' }}
+      />
+    </View>
   );
 }

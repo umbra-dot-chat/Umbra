@@ -43,12 +43,19 @@ import { useAuth } from '@/contexts/AuthContext';
 // in a separate module scope with no access to the app's bundled React.
 // They access React via `window.React || globalThis.React`.
 // ─────────────────────────────────────────────────────────────────────────────
+import * as RN from 'react-native';
+import * as Wisp from '@coexist/wisp-react-native';
+import * as RNSvg from 'react-native-svg';
+
 if (typeof globalThis !== 'undefined' && !(globalThis as any).React) {
   (globalThis as any).React = React;
 }
 if (typeof window !== 'undefined' && !(window as any).React) {
   (window as any).React = React;
 }
+if (!(globalThis as any).ReactNative) (globalThis as any).ReactNative = RN;
+if (!(globalThis as any).WispRN) (globalThis as any).WispRN = Wisp;
+if (!(globalThis as any).ReactNativeSvg) (globalThis as any).ReactNativeSvg = RNSvg;
 
 import type {
   SlotName,
@@ -56,13 +63,18 @@ import type {
   PluginManifest,
   PluginAPI,
   PluginCommand,
+  PluginShortcut,
   PluginMessage,
   PluginFriend,
   PluginConversation,
   MessageEventPayload,
   FriendEventPayload,
   ConversationEventPayload,
+  VoiceParticipantEvent,
 } from '@umbra/plugin-sdk';
+
+import { VoiceStreamBridge } from '@/services/VoiceStreamBridge';
+import { ShortcutRegistry } from '@/services/ShortcutRegistry';
 
 import {
   PluginRegistry,
@@ -245,6 +257,25 @@ export function PluginProvider({ children }: { children: React.ReactNode }) {
           );
           updateCommands();
         };
+      },
+
+      // ── Voice ────────────────────────────────────────────────────────
+      isInVoiceCall: () => VoiceStreamBridge.isActive(),
+      getVoiceParticipants: () => VoiceStreamBridge.getParticipants(),
+      getVoiceStream: (did: string) => VoiceStreamBridge.getPeerStream(did),
+      getLocalVoiceStream: () => VoiceStreamBridge.getLocalStream(),
+      getScreenShareStream: () => VoiceStreamBridge.getScreenShareStream(),
+      onVoiceParticipant: (cb: (event: VoiceParticipantEvent) => void) => {
+        return VoiceStreamBridge.onParticipantChange(cb);
+      },
+
+      // ── Call signaling ───────────────────────────────────────────────
+      sendCallSignal: (payload: any) => VoiceStreamBridge.sendSignal(payload),
+      onCallSignal: (cb: (event: any) => void) => VoiceStreamBridge.onSignal(cb),
+
+      // ── Shortcuts ────────────────────────────────────────────────────
+      registerShortcut: (pluginId: string, shortcut: PluginShortcut) => {
+        return ShortcutRegistry.register(pluginId, shortcut);
       },
     };
   }, [service, identity]);

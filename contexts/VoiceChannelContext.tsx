@@ -17,6 +17,7 @@ import React, {
   useState,
 } from 'react';
 import { GroupCallManager } from '@/services/GroupCallManager';
+import { VoiceStreamBridge } from '@/services/VoiceStreamBridge';
 import { useUmbra } from '@/contexts/UmbraContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSound } from '@/contexts/SoundContext';
@@ -162,6 +163,11 @@ export function VoiceChannelProvider({ children }: { children: React.ReactNode }
 
           try {
             const signal = JSON.parse(payload);
+            // Forward plugin signals to VoiceStreamBridge
+            if (signal.type === 'plugin-signal') {
+              VoiceStreamBridge.emitSignal(signal.payload);
+              break;
+            }
             if (signal.type === 'offer') {
               manager.acceptOfferFromPeer(fromDid, signal.sdp, false).then((answerSdp) => {
                 if (roomId) {
@@ -296,10 +302,13 @@ export function VoiceChannelProvider({ children }: { children: React.ReactNode }
       console.log('[VoiceChannel] Remote stream from', did);
       // Set up audio analysis for the new remote stream
       manager.setupPeerAudioAnalysis(did, stream);
+      // Register on VoiceStreamBridge for plugin access
+      VoiceStreamBridge.setPeerStream(did, stream);
     };
 
     manager.onRemoteStreamRemoved = (did) => {
       console.log('[VoiceChannel] Remote stream removed from', did);
+      VoiceStreamBridge.removePeerStream(did);
     };
 
     manager.onConnectionStateChange = (did, state) => {
@@ -346,6 +355,20 @@ export function VoiceChannelProvider({ children }: { children: React.ReactNode }
       groupCallManagerRef.current = null;
       return;
     }
+
+    // Register local stream on bridge for plugin access
+    VoiceStreamBridge.setLocalStream(manager.getLocalStream());
+    VoiceStreamBridge.setActive(true);
+
+    // Wire call room signal sender for plugin signaling
+    VoiceStreamBridge.setSignalSender((payload: any) => {
+      if (roomId) {
+        service.sendCallRoomSignal(roomId, '__broadcast__', JSON.stringify({
+          type: 'plugin-signal',
+          payload,
+        }));
+      }
+    });
 
     // Create call room on relay (uses channelId as group_id)
     // The `callRoomCreated` event handler will store the roomId and join
@@ -406,6 +429,9 @@ export function VoiceChannelProvider({ children }: { children: React.ReactNode }
       groupCallManagerRef.current.close();
       groupCallManagerRef.current = null;
     }
+
+    // Clear VoiceStreamBridge
+    VoiceStreamBridge.clear();
 
     // Remove ourselves from voice participants map
     if (currentChannelId) {

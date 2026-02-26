@@ -73,6 +73,9 @@ export function validateManifest(manifest: unknown): ValidationResult {
       'message-decorator',
       'right-panel',
       'command-palette',
+      'voice-call-controls',
+      'voice-call-header',
+      'voice-call-overlay',
     ]);
     for (const s of m.slots) {
       if (typeof s === 'object' && s && typeof (s as any).slot === 'string') {
@@ -149,9 +152,12 @@ export class PluginLoader {
         const exports: Record<string, any> = {};
         const moduleObj = { exports };
         // eslint-disable-next-line no-new-func
-        const factory = new Function('module', 'exports', 'React', cjsCode);
+        const factory = new Function('module', 'exports', 'React', 'ReactNative', 'WispRN', 'ReactNativeSvg', cjsCode);
         const React = require('react');
-        factory(moduleObj, exports, React);
+        const ReactNative = (globalThis as any).ReactNative ?? {};
+        const WispRN = (globalThis as any).WispRN ?? {};
+        const ReactNativeSvg = (globalThis as any).ReactNativeSvg ?? {};
+        factory(moduleObj, exports, React, ReactNative, WispRN, ReactNativeSvg);
         mod = moduleObj.exports;
       }
 
