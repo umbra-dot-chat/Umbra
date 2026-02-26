@@ -69,6 +69,8 @@ let _reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let _keepAliveTimer: ReturnType<typeof setInterval> | null = null;
 /** The last DID used for relay registration (needed for reconnect without AuthContext). */
 let _lastRelayDid: string | null = null;
+/** The DID that was actually sent in the most recent relay `register` message. */
+let _registeredRelayDid: string | null = null;
 /** The last service reference (needed for reconnect from module-level scope). */
 let _lastService: any = null;
 /** The index into DEFAULT_RELAY_SERVERS currently being tried. */
@@ -340,9 +342,12 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
               try {
                 const invites = await service.getCommunityInvites(community.id);
                 const members = await service.getCommunityMembers(community.id);
+                let ownerNickname: string | undefined;
+                try { const ownerMember = await service.getCommunityMember(community.id, myDid); ownerNickname = ownerMember?.nickname; } catch { /* ignore */ }
                 for (const invite of invites) {
                   if (ws.readyState !== WebSocket.OPEN) break;
-                  service.publishCommunityInviteToRelay(ws, invite, community.name, community.description, community.iconUrl, members.length);
+                  const invitePayload = JSON.stringify({ owner_did: myDid, owner_nickname: ownerNickname ?? null, owner_avatar: null });
+                  service.publishCommunityInviteToRelay(ws, invite, community.name, community.description, community.iconUrl, members.length, invitePayload);
                   published++;
                 }
               } catch { /* Best-effort */ }
@@ -450,7 +455,46 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
 
           } else if (envelope.envelope === 'community_event' && envelope.version === 1) {
             const communityPayload = envelope.payload as CommunityEventPayload;
-            service.dispatchCommunityEvent(communityPayload.event);
+            const event = communityPayload.event;
+
+            // Resolve remote community/channel IDs to local equivalents using origin mapping.
+            // Each peer generates its own local IDs when importing a community from relay.
+            // The canonical communityId in the envelope is the owner's original community ID.
+            // - For joiners: findCommunityByOrigin(canonicalId) → their local ID
+            // - For the owner: findCommunityByOrigin returns null, but the canonical ID IS their local ID
+            try {
+              const remoteCommunityId = communityPayload.communityId;
+              let localCommunityId = await service.findCommunityByOrigin(remoteCommunityId);
+
+              // Fallback: if not found by origin, check if we own a community with this exact ID
+              // (the owner's local ID === the canonical ID, so origin_community_id is null)
+              if (!localCommunityId) {
+                try {
+                  const directCommunity = await service.getCommunity(remoteCommunityId);
+                  if (directCommunity) localCommunityId = remoteCommunityId;
+                } catch { /* community not found — skip */ }
+              }
+
+              if (localCommunityId) {
+                // Resolve channelName to local channelId for message/channel events
+                if ('channelName' in event && event.channelName && 'channelId' in event) {
+                  const channels = await service.getAllChannels(localCommunityId);
+                  const match = channels.find((ch: any) => ch.name === event.channelName);
+                  if (match) (event as any).channelId = match.id;
+                }
+                // Update communityId references to local ID
+                if ('communityId' in event) (event as any).communityId = localCommunityId;
+
+                // Handle memberJoined: add new member to our local community DB
+                if (event.type === 'memberJoined') {
+                  try {
+                    await service.joinCommunity(localCommunityId, event.memberDid, event.memberNickname);
+                  } catch { /* may already exist — AlreadyMember is expected */ }
+                }
+              }
+            } catch { /* best-effort — fall through to dispatch with original IDs */ }
+
+            service.dispatchCommunityEvent(event);
 
           } else if (envelope.envelope === 'dm_file_event' && envelope.version === 1) {
             const dmFilePayload = envelope.payload as DmFileEventPayload;
@@ -534,7 +578,39 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
               try { await service.updateMessageStatus(statusPayload.messageId, statusPayload.status); service.dispatchMessageEvent({ type: 'messageStatusChanged', messageId: statusPayload.messageId, status: statusPayload.status }); } catch (err) { console.warn('[useNetwork] Failed to update offline message status:', err); }
             } else if (envelope.envelope === 'community_event' && envelope.version === 1) {
               const communityPayload = envelope.payload as CommunityEventPayload;
-              service.dispatchCommunityEvent(communityPayload.event);
+              const offlineEvent = communityPayload.event;
+              // Resolve remote IDs to local (same logic as online handler)
+              try {
+                let localId = await service.findCommunityByOrigin(communityPayload.communityId);
+                // Fallback: owner's local ID === canonical ID (no origin_community_id set)
+                if (!localId) {
+                  try {
+                    const directCommunity = await service.getCommunity(communityPayload.communityId);
+                    if (directCommunity) localId = communityPayload.communityId;
+                  } catch { /* not found */ }
+                }
+                if (localId) {
+                  if ('channelName' in offlineEvent && offlineEvent.channelName && 'channelId' in offlineEvent) {
+                    const chs = await service.getAllChannels(localId);
+                    const m = chs.find((ch: any) => ch.name === offlineEvent.channelName);
+                    if (m) (offlineEvent as any).channelId = m.id;
+                  }
+                  if ('communityId' in offlineEvent) (offlineEvent as any).communityId = localId;
+                  if (offlineEvent.type === 'memberJoined') {
+                    try { await service.joinCommunity(localId, offlineEvent.memberDid, offlineEvent.memberNickname); } catch { /* already exists */ }
+                  }
+                  // Persist offline community messages to local DB so they appear after navigation
+                  if (offlineEvent.type === 'communityMessageSent' && offlineEvent.content && offlineEvent.channelId) {
+                    try {
+                      await service.storeReceivedCommunityMessage(
+                        offlineEvent.messageId, offlineEvent.channelId, offlineEvent.senderDid,
+                        offlineEvent.content, Date.now(), offlineEvent.metadata,
+                      );
+                    } catch { /* best-effort — may already exist */ }
+                  }
+                }
+              } catch { /* best-effort */ }
+              service.dispatchCommunityEvent(offlineEvent);
             } else if (envelope.envelope === 'dm_file_event' && envelope.version === 1) {
               const dmFilePayload = envelope.payload as DmFileEventPayload;
               service.dispatchDmFileEvent(dmFilePayload);
@@ -629,6 +705,7 @@ _attemptReconnect = async function(serverUrl: string): Promise<void> {
     ws.onopen = () => {
       console.log('[Reconnect] Connected to', serverUrl);
       ws.send(registerMessage);
+      _registeredRelayDid = _lastRelayDid;
       _notifyRelayState(true, serverUrl);
       _reconnectAttempt = 0;
       _currentServerIndex = 0;
@@ -845,16 +922,36 @@ export function useNetwork(): UseNetworkResult {
   const connectRelay = useCallback(async (url: string) => {
     if (!service) return;
 
-    // If already connected or connecting, skip
+    // If already connected or connecting, skip — but ensure the current
+    // service instance has the WS reference (critical after account switch,
+    // where the reconnect manager may have created the WS on the old instance).
     if (_relayWs && _relayWs.readyState === WebSocket.OPEN) {
-      console.log('[useNetwork] Relay already connected, skipping');
-      relayWsRef.current = _relayWs;
-      _notifyRelayState(true, url);
-      return;
+      // If DID changed, close old WS and fall through to open a fresh one
+      // (the relay doesn't support re-registration on the same connection)
+      if (identity?.did && _registeredRelayDid && _registeredRelayDid !== identity.did) {
+        console.log('[useNetwork] DID changed — closing old relay WS to reconnect with new DID');
+        _relayWs.close();
+        _relayWs = null;
+        _registeredRelayDid = null;
+        _clearKeepAlive();
+        // Fall through to create a new connection below
+      } else {
+        console.log('[useNetwork] Relay already connected, syncing to current service');
+        relayWsRef.current = _relayWs;
+        service.setRelayWs(_relayWs);
+        _lastService = service;
+        _notifyRelayState(true, url);
+        return;
+      }
     }
     if (_relayConnectPromise) {
       console.log('[useNetwork] Relay connection already in progress, waiting...');
       await _relayConnectPromise;
+      // After waiting, ensure this service instance has the WS reference
+      if (_relayWs && _relayWs.readyState === WebSocket.OPEN) {
+        service.setRelayWs(_relayWs);
+        _lastService = service;
+      }
       return;
     }
 
@@ -910,6 +1007,7 @@ export function useNetwork(): UseNetworkResult {
           if (registerMessage) {
             console.log('[useNetwork] Sending register message to relay');
             ws.send(registerMessage);
+            _registeredRelayDid = identity?.did ?? null;
           } else {
             console.warn('[useNetwork] No register message available — relay may not know our DID');
           }
@@ -1015,12 +1113,63 @@ export function useNetwork(): UseNetworkResult {
     autoStart();
   }, [isReady, service, identity, initStage, connectRelay]);
 
-  // ── AppState listener — reconnect when app returns to foreground ──────
+  // ── AppState listener + account-switch relay sync ─────────────────────
+  //
+  // This effect fires whenever `service` or `identity.did` changes.
+  // After an account switch:
+  //   1. The UmbraProvider remounts (new service instance)
+  //   2. _hasAutoStarted is still true (module-level flag)
+  //   3. The relay WS may still be OPEN from the reconnect manager
+  //   4. But the relay has the OLD DID registered
+  //
+  // This effect fixes all three issues: syncs the WS to the new service,
+  // re-registers with the relay for the new DID, and if the WS is dead,
+  // resets _hasAutoStarted so the auto-start effect can fire.
   useEffect(() => {
     if (!service || !identity?.did) return;
+
+    // Detect account switch: the relay is registered with a different DID
+    const needsReRegister = _registeredRelayDid !== null && _registeredRelayDid !== identity.did;
+
     // Keep module-level refs fresh for reconnect manager
     _lastService = service;
     _lastRelayDid = identity.did;
+
+    if (needsReRegister) {
+      // Account switched — the relay doesn't support re-registration on the
+      // same WS, so we must close the old connection and open a fresh one
+      // registered to the new DID.
+      console.log('[useNetwork] Account switched — closing old relay WS and reconnecting for new DID:', identity.did.slice(0, 24) + '...');
+
+      // Mark as intentional so onclose won't trigger the reconnect manager
+      _intentionalDisconnect = true;
+      _clearReconnectTimer();
+      _clearKeepAlive();
+
+      if (_relayWs) {
+        _relayWs.close();
+        _relayWs = null;
+      }
+      _registeredRelayDid = null;
+      _relayConnectPromise = null;
+      _notifyRelayState(false, null);
+      service.setRelayWs(null as any);
+
+      // Use connectRelay to open a fresh connection with the new DID.
+      // Small delay to let the service finish hydration after switch.
+      setTimeout(() => {
+        _intentionalDisconnect = false;
+        connectRelay(PRIMARY_RELAY_URL).catch((err: any) => {
+          console.warn('[useNetwork] Post-switch relay reconnect failed:', err);
+          // Fall back to reconnect manager
+          _resetReconnectState();
+          _scheduleReconnect();
+        });
+      }, 500);
+    } else if (_relayWs && _relayWs.readyState === WebSocket.OPEN) {
+      // Same DID, just sync WS to the (potentially new) service instance
+      service.setRelayWs(_relayWs);
+    }
 
     const handleAppStateChange = (nextState: AppStateStatus) => {
       if (nextState === 'active') {
@@ -1048,7 +1197,7 @@ export function useNetwork(): UseNetworkResult {
 
     const sub = AppState.addEventListener('change', handleAppStateChange);
     return () => sub.remove();
-  }, [service, identity?.did]);
+  }, [service, identity?.did, connectRelay]);
 
   const disconnectRelay = useCallback(async () => {
     if (!service) return;

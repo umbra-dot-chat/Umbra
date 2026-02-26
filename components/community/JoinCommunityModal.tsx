@@ -117,6 +117,16 @@ export function JoinCommunityModal({
       // Step 1: Try local DB lookup first
       const communityId = await service.useCommunityInvite(code, identity.did, identity.displayName);
       if (communityId) {
+        // Broadcast memberJoined to other community members via relay
+        try {
+          const relayWs = service.getRelayWs();
+          await service.broadcastCommunityEvent(
+            communityId,
+            { type: 'memberJoined', communityId, memberDid: identity.did, memberNickname: identity.displayName, memberAvatar: identity.avatar },
+            identity.did,
+            relayWs,
+          );
+        } catch { /* best-effort */ }
         onClose();
         router.push(`/community/${communityId}`);
         return;
@@ -135,15 +145,18 @@ export function JoinCommunityModal({
           if (resolved) {
             // Import the resolved community + invite into local DB, then retry
             try {
+              const payload = resolved.invite_payload !== '{}' ? JSON.parse(resolved.invite_payload) : {};
+              const ownerDid = payload.owner_did || identity.did;
+              const ownerNickname = payload.owner_nickname || undefined;
               await service.importCommunityFromRelay(
                 resolved.community_id,
                 resolved.community_name,
                 resolved.community_description,
-                // Use the publisher's DID as owner — we get this from invite_payload if available
-                resolved.invite_payload !== '{}' ? (JSON.parse(resolved.invite_payload).owner_did || identity.did) : identity.did,
+                ownerDid,
                 code,
                 resolved.max_uses,
                 resolved.expires_at,
+                ownerNickname,
               );
             } catch (importErr) {
               console.warn('[JoinCommunityModal] Failed to import from relay:', importErr);
@@ -153,6 +166,19 @@ export function JoinCommunityModal({
             try {
               const communityId = await service.useCommunityInvite(code, identity.did, identity.displayName);
               if (communityId) {
+                // Broadcast memberJoined to other community members via relay
+                console.log('[JoinCommunityModal] Join succeeded, communityId=', communityId, '— broadcasting memberJoined');
+                try {
+                  const relayWs = service.getRelayWs();
+                  console.log('[JoinCommunityModal] relayWs=', relayWs ? `readyState=${relayWs.readyState}` : 'null');
+                  await service.broadcastCommunityEvent(
+                    communityId,
+                    { type: 'memberJoined', communityId, memberDid: identity.did, memberNickname: identity.displayName, memberAvatar: identity.avatar },
+                    identity.did,
+                    relayWs,
+                  );
+                  console.log('[JoinCommunityModal] memberJoined broadcast complete');
+                } catch (broadcastErr) { console.warn('[JoinCommunityModal] memberJoined broadcast failed:', broadcastErr); }
                 onClose();
                 router.push(`/community/${communityId}`);
                 return;

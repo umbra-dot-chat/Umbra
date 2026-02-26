@@ -245,7 +245,9 @@ export function useCommunityMessages(channelId: string | null, communityId?: str
 
   const sendMessage = useCallback(
     async (content: string, replyToId?: string, metadata?: MessageMetadata): Promise<CommunityMessage | null> => {
-      if (!service || !channelId || !identity?.did) return null;
+      if (!service || !channelId || !identity?.did) {
+        return null;
+      }
       try {
         const msg = await service.sendCommunityMessage(channelId, identity.did, content, replyToId, undefined, metadata);
         // Track this as an optimistic add so the event handler doesn't duplicate it
@@ -260,13 +262,20 @@ export function useCommunityMessages(channelId: string | null, communityId?: str
         // Include `content` so recipients can display the message immediately
         // (they don't have it in their local WASM DB). The event handler
         // constructs a CommunityMessage from the event fields for display.
+        // Include `channelName` so receivers can resolve to their local channel ID.
         if (communityId) {
+          let channelName: string | undefined;
+          try {
+            const ch = await service.getChannel(channelId);
+            channelName = ch.name;
+          } catch { /* best-effort */ }
           const relayWs = service.getRelayWs();
           service.broadcastCommunityEvent(
             communityId,
             {
               type: 'communityMessageSent',
               channelId,
+              channelName,
               messageId: msg.id,
               senderDid: identity.did,
               content,
@@ -281,6 +290,7 @@ export function useCommunityMessages(channelId: string | null, communityId?: str
 
         return msg;
       } catch (err) {
+        console.error('[useCommunityMessages] sendMessage FAILED:', err);
         setError(err instanceof Error ? err : new Error(String(err)));
         return null;
       }

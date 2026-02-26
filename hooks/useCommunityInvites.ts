@@ -104,6 +104,11 @@ export function useCommunityInvites(communityId: string | null): UseCommunityInv
           const community = await service.getCommunity(communityId);
           const members = await service.getCommunityMembers(communityId);
           const relayWs = service.getRelayWs();
+          const invitePayload = JSON.stringify({
+            owner_did: identity.did,
+            owner_nickname: identity.displayName,
+            owner_avatar: identity.avatar,
+          });
           service.publishCommunityInviteToRelay(
             relayWs,
             invite,
@@ -111,6 +116,7 @@ export function useCommunityInvites(communityId: string | null): UseCommunityInv
             community.description,
             community.iconUrl,
             members.length,
+            invitePayload,
           );
         } catch (publishErr) {
           // Non-fatal — invite is still created locally
