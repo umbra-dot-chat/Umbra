@@ -1,7 +1,7 @@
 {
   "name": "umbra",
   "main": "expo-router/entry",
-  "version": "1.6.0",
+  "version": "1.8.0",
   "scripts": {
     "eas-build-pre-install": "bash eas-hooks/eas-build-pre-install.sh",
     "eas-build-post-install": "bash eas-hooks/eas-build-post-install.sh",
