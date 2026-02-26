@@ -13,6 +13,17 @@ use uuid::Uuid;
 use crate::federation::Federation;
 use crate::protocol::{CallRoom, OfflineMessage, PublishedInvite, ServerMessage, SignalingSession};
 
+/// Result of attempting to route a message to a DID.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RouteResult {
+    /// Delivered directly to a locally-connected client.
+    DeliveredLocally,
+    /// Forwarded to a federated peer relay (delivery NOT guaranteed).
+    ForwardedToPeer,
+    /// Recipient is unreachable — not local or on any federated peer.
+    Unreachable,
+}
+
 /// Maximum number of offline messages to store per DID.
 const DEFAULT_MAX_OFFLINE_PER_DID: usize = 1000;
 
@@ -196,14 +207,14 @@ impl RelayState {
     }
 
     /// Send an encrypted message to a DID, routing through federation if needed.
-    /// Returns true if delivered locally, false if offline (may have been forwarded).
+    /// Returns a `RouteResult` indicating how (or whether) the message was routed.
     pub fn route_message(
         &self,
         from_did: &str,
         to_did: &str,
         payload: &str,
         timestamp: i64,
-    ) -> bool {
+    ) -> RouteResult {
         // Try local delivery first
         let local_msg = ServerMessage::Message {
             from_did: from_did.to_string(),
@@ -211,17 +222,17 @@ impl RelayState {
             timestamp,
         };
         if self.send_to_client(to_did, local_msg) {
-            return true;
+            return RouteResult::DeliveredLocally;
         }
 
         // Try federation
         if let Some(ref fed) = self.federation {
             if fed.forward_message(from_did, to_did, payload, timestamp) {
-                return true;
+                return RouteResult::ForwardedToPeer;
             }
         }
 
-        false
+        RouteResult::Unreachable
     }
 
     /// Get the number of currently connected clients.
@@ -624,9 +635,9 @@ impl RelayState {
                 }
             }
 
-            // Check max uses
+            // Check max uses (0 means unlimited)
             if let Some(max_uses) = invite.max_uses {
-                if invite.use_count >= max_uses {
+                if max_uses > 0 && invite.use_count >= max_uses {
                     drop(invite);
                     self.published_invites.remove(code);
                     return None;

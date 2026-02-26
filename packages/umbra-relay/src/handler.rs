@@ -9,7 +9,7 @@ use futures::{SinkExt, StreamExt};
 use tokio::sync::mpsc;
 
 use crate::protocol::{ClientMessage, PeerMessage, ServerMessage};
-use crate::state::RelayState;
+use crate::state::{RelayState, RouteResult};
 
 /// Handle a single WebSocket connection.
 ///
@@ -299,19 +299,39 @@ fn handle_signal(state: &RelayState, from_did: &str, to_did: &str, payload: &str
 
 /// Send an encrypted message to a peer (or queue it for offline delivery).
 /// Tries local delivery first, then federation, then offline queue.
+/// When federation forwards a message, we also queue locally as a safety net
+/// — the recipient may not be reachable on the federated peer either, and
+/// they will fetch offline messages from *this* relay when they reconnect.
 fn handle_send(state: &RelayState, from_did: &str, to_did: &str, payload: &str) {
     let timestamp = Utc::now().timestamp();
 
     // Try local + federation routing
-    if !state.route_message(from_did, to_did, payload, timestamp) {
-        // Peer is unreachable — queue for later delivery
-        state.queue_offline_message(to_did, from_did, payload, timestamp);
+    match state.route_message(from_did, to_did, payload, timestamp) {
+        RouteResult::DeliveredLocally => {
+            // Message delivered directly — no need to queue
+        }
+        RouteResult::ForwardedToPeer => {
+            // Forwarded to a federated peer, but delivery is not guaranteed
+            // (the recipient may go offline on the peer before it's delivered).
+            // Queue locally as a safety net — the client will deduplicate.
+            state.queue_offline_message(to_did, from_did, payload, timestamp);
 
-        tracing::debug!(
-            from = from_did,
-            to = to_did,
-            "Message target offline, queued for later delivery"
-        );
+            tracing::debug!(
+                from = from_did,
+                to = to_did,
+                "Message forwarded to peer + queued locally as safety net"
+            );
+        }
+        RouteResult::Unreachable => {
+            // Peer is unreachable everywhere — queue for later delivery
+            state.queue_offline_message(to_did, from_did, payload, timestamp);
+
+            tracing::debug!(
+                from = from_did,
+                to = to_did,
+                "Message target offline, queued for later delivery"
+            );
+        }
     }
 
     // Acknowledge receipt
