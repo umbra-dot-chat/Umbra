@@ -224,6 +224,13 @@ impl Database {
                             Error::DatabaseError(format!("Migration v15→v16 failed: {}", e))
                         })?;
                 }
+                if v < 17 {
+                    tracing::info!("Running migration v16 → v17 (community origin ID)");
+                    conn.execute_batch(schema::MIGRATE_V16_TO_V17)
+                        .map_err(|e| {
+                            Error::DatabaseError(format!("Migration v16→v17 failed: {}", e))
+                        })?;
+                }
 
                 tracing::info!(
                     "All migrations complete (now at version {})",
@@ -2065,30 +2072,45 @@ impl Database {
         name: &str,
         description: Option<&str>,
         owner_did: &str,
+        origin_community_id: Option<&str>,
         created_at: i64,
     ) -> Result<()> {
         let conn = self.conn.lock();
         conn.execute(
-            "INSERT INTO communities (id, name, description, owner_did, created_at, updated_at)
-             VALUES (?, ?, ?, ?, ?, ?)",
-            params![id, name, description, owner_did, created_at, created_at],
+            "INSERT INTO communities (id, name, description, owner_did, origin_community_id, created_at, updated_at)
+             VALUES (?, ?, ?, ?, ?, ?, ?)",
+            params![id, name, description, owner_did, origin_community_id, created_at, created_at],
         )
         .map_err(|e| Error::DatabaseError(format!("Failed to create community: {}", e)))?;
         Ok(())
+    }
+
+    /// Find a community by its origin (remote) community ID.
+    pub fn find_community_by_origin(&self, origin_id: &str) -> Result<Option<String>> {
+        let conn = self.conn.lock();
+        let mut stmt = conn
+            .prepare("SELECT id FROM communities WHERE origin_community_id = ? LIMIT 1")
+            .map_err(|e| Error::DatabaseError(format!("Failed to prepare find_community_by_origin: {}", e)))?;
+        let result = stmt
+            .query_row(params![origin_id], |row| row.get::<_, String>(0))
+            .optional()
+            .map_err(|e| Error::DatabaseError(format!("Failed to find community by origin: {}", e)))?;
+        Ok(result)
     }
 
     /// Get a community by ID
     pub fn get_community(&self, id: &str) -> Result<Option<CommunityRecord>> {
         let conn = self.conn.lock();
         let result = conn.query_row(
-            "SELECT id, name, description, icon_url, banner_url, splash_url, accent_color, custom_css, owner_did, vanity_url, created_at, updated_at
+            "SELECT id, name, description, icon_url, banner_url, splash_url, accent_color, custom_css, owner_did, vanity_url, origin_community_id, created_at, updated_at
              FROM communities WHERE id = ?",
             params![id],
             |row| Ok(CommunityRecord {
                 id: row.get(0)?, name: row.get(1)?, description: row.get(2)?,
                 icon_url: row.get(3)?, banner_url: row.get(4)?, splash_url: row.get(5)?,
                 accent_color: row.get(6)?, custom_css: row.get(7)?, owner_did: row.get(8)?,
-                vanity_url: row.get(9)?, created_at: row.get(10)?, updated_at: row.get(11)?,
+                vanity_url: row.get(9)?, origin_community_id: row.get(10)?,
+                created_at: row.get(11)?, updated_at: row.get(12)?,
             }),
         );
         match result {
@@ -2105,7 +2127,7 @@ impl Database {
     pub fn get_communities_for_member(&self, member_did: &str) -> Result<Vec<CommunityRecord>> {
         let conn = self.conn.lock();
         let mut stmt = conn.prepare(
-            "SELECT c.id, c.name, c.description, c.icon_url, c.banner_url, c.splash_url, c.accent_color, c.custom_css, c.owner_did, c.vanity_url, c.created_at, c.updated_at
+            "SELECT c.id, c.name, c.description, c.icon_url, c.banner_url, c.splash_url, c.accent_color, c.custom_css, c.owner_did, c.vanity_url, c.origin_community_id, c.created_at, c.updated_at
              FROM communities c
              INNER JOIN community_members cm ON c.id = cm.community_id
              WHERE cm.member_did = ?
@@ -2125,8 +2147,9 @@ impl Database {
                     custom_css: row.get(7)?,
                     owner_did: row.get(8)?,
                     vanity_url: row.get(9)?,
-                    created_at: row.get(10)?,
-                    updated_at: row.get(11)?,
+                    origin_community_id: row.get(10)?,
+                    created_at: row.get(11)?,
+                    updated_at: row.get(12)?,
                 })
             })
             .map_err(|e| Error::DatabaseError(format!("Failed to query communities: {}", e)))?;
@@ -6121,6 +6144,7 @@ pub struct CommunityRecord {
     pub custom_css: Option<String>,
     pub owner_did: String,
     pub vanity_url: Option<String>,
+    pub origin_community_id: Option<String>,
     pub created_at: i64,
     pub updated_at: i64,
 }

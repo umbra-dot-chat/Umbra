@@ -774,6 +774,8 @@ export interface Community {
   ownerDid: string;
   /** Vanity URL slug */
   vanityUrl?: string;
+  /** Origin community ID for cross-peer deduplication */
+  originCommunityId?: string;
   /** Created timestamp */
   createdAt: number;
   /** Updated timestamp */
@@ -1276,20 +1278,20 @@ export type CommunityEvent =
   | { type: 'channelCreated'; communityId: string; channelId: string }
   | { type: 'channelUpdated'; communityId: string; channelId: string }
   | { type: 'channelDeleted'; communityId: string; channelId: string }
-  | { type: 'memberJoined'; communityId: string; memberDid: string }
+  | { type: 'memberJoined'; communityId: string; memberDid: string; memberNickname?: string; memberAvatar?: string }
   | { type: 'memberLeft'; communityId: string; memberDid: string }
   | { type: 'memberKicked'; communityId: string; memberDid: string }
   | { type: 'memberBanned'; communityId: string; memberDid: string }
   | { type: 'memberUnbanned'; communityId: string; memberDid: string }
   | { type: 'roleAssigned'; communityId: string; memberDid: string; roleId: string }
   | { type: 'roleUnassigned'; communityId: string; memberDid: string; roleId: string }
-  | { type: 'communityMessageSent'; channelId: string; messageId: string; senderDid: string; content?: string; senderDisplayName?: string; senderAvatarUrl?: string; platformUserId?: string; platform?: string; metadata?: MessageMetadata }
-  | { type: 'communityMessageEdited'; channelId: string; messageId: string }
-  | { type: 'communityMessageDeleted'; channelId: string; messageId: string }
+  | { type: 'communityMessageSent'; channelId: string; channelName?: string; messageId: string; senderDid: string; content?: string; senderDisplayName?: string; senderAvatarUrl?: string; platformUserId?: string; platform?: string; metadata?: MessageMetadata }
+  | { type: 'communityMessageEdited'; channelId: string; channelName?: string; messageId: string }
+  | { type: 'communityMessageDeleted'; channelId: string; channelName?: string; messageId: string }
   | { type: 'communityReactionAdded'; messageId: string; emoji: string; memberDid: string }
   | { type: 'communityReactionRemoved'; messageId: string; emoji: string; memberDid: string }
-  | { type: 'communityMessagePinned'; channelId: string; messageId: string }
-  | { type: 'communityMessageUnpinned'; channelId: string; messageId: string }
+  | { type: 'communityMessagePinned'; channelId: string; channelName?: string; messageId: string }
+  | { type: 'communityMessageUnpinned'; channelId: string; channelName?: string; messageId: string }
   | { type: 'communityRoleCreated'; communityId: string; roleId: string }
   | { type: 'communityRoleUpdated'; roleId: string }
   | { type: 'communityRolePermissionsUpdated'; roleId: string }

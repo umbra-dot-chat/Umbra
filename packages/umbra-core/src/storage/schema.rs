@@ -53,7 +53,7 @@
 //! ```
 
 /// Current schema version
-pub const SCHEMA_VERSION: i32 = 16;
+pub const SCHEMA_VERSION: i32 = 17;
 
 /// SQL to create all tables
 pub const CREATE_TABLES: &str = r#"
@@ -333,10 +333,12 @@ CREATE TABLE IF NOT EXISTS communities (
     custom_css TEXT,
     owner_did TEXT NOT NULL,
     vanity_url TEXT UNIQUE,
+    origin_community_id TEXT,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_communities_owner ON communities(owner_did);
+CREATE INDEX IF NOT EXISTS idx_communities_origin ON communities(origin_community_id);
 
 -- Spaces (one level of organization within a community)
 CREATE TABLE IF NOT EXISTS community_spaces (
@@ -460,6 +462,7 @@ CREATE TABLE IF NOT EXISTS community_messages (
     edited_at INTEGER,
     deleted_for_everyone INTEGER NOT NULL DEFAULT 0,
     created_at INTEGER NOT NULL,
+    metadata_json TEXT,
     FOREIGN KEY (channel_id) REFERENCES community_channels(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_community_messages_channel ON community_messages(channel_id, created_at DESC);
@@ -1015,10 +1018,12 @@ CREATE TABLE IF NOT EXISTS communities (
     custom_css TEXT,
     owner_did TEXT NOT NULL,
     vanity_url TEXT UNIQUE,
+    origin_community_id TEXT,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_communities_owner ON communities(owner_did);
+CREATE INDEX IF NOT EXISTS idx_communities_origin ON communities(origin_community_id);
 
 -- Spaces
 CREATE TABLE IF NOT EXISTS community_spaces (
@@ -1703,6 +1708,14 @@ CREATE INDEX IF NOT EXISTS idx_notifications_type ON notifications(type, created
 CREATE INDEX IF NOT EXISTS idx_notifications_dismissed ON notifications(dismissed) WHERE dismissed = 0;
 
 UPDATE schema_version SET version = 16;
+"#;
+
+/// Migration v16 → v17: add origin_community_id for cross-peer community deduplication.
+pub const MIGRATE_V16_TO_V17: &str = r#"
+ALTER TABLE communities ADD COLUMN origin_community_id TEXT;
+CREATE INDEX IF NOT EXISTS idx_communities_origin ON communities(origin_community_id);
+
+UPDATE schema_version SET version = 17;
 "#;
 
 /// SQL to drop all tables (for testing/reset)

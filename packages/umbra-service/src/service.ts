@@ -1015,10 +1015,16 @@ export class UmbraService {
     inviteCode: string,
     maxUses?: number | null,
     expiresAt?: number | null,
+    ownerNickname?: string,
   ): Promise<void> {
     return communityModule.importCommunityFromRelay(
-      communityId, communityName, description, ownerDid, inviteCode, maxUses, expiresAt,
+      communityId, communityName, description, ownerDid, inviteCode, maxUses, expiresAt, ownerNickname,
     );
+  }
+
+  /** Find a community by its origin (remote) community ID. */
+  findCommunityByOrigin(originId: string): Promise<string | null> {
+    return communityModule.findCommunityByOrigin(originId);
   }
 
   /** Import community from an invite payload JSON string (relay-resolved). */

@@ -40,13 +40,14 @@ impl CommunityService {
         description: Option<&str>,
         owner_did: &str,
         owner_nickname: Option<&str>,
+        origin_community_id: Option<&str>,
     ) -> Result<CommunityCreateResult> {
         let now = crate::time::now_timestamp();
         let community_id = generate_id();
 
         // 1. Create community record
         self.db()
-            .create_community_record(&community_id, name, description, owner_did, now)?;
+            .create_community_record(&community_id, name, description, owner_did, origin_community_id, now)?;
 
         // 2. Create default space
         let space_id = generate_id();

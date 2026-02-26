@@ -12,10 +12,11 @@ pub fn community_create(args: &str) -> DResult {
     let description = data["description"].as_str();
     let owner_did = require_str(&data, "owner_did")?;
     let owner_nickname = data["owner_nickname"].as_str();
+    let origin_community_id = data["origin_community_id"].as_str();
 
     let svc = community_service()?;
     let result = svc
-        .create_community(name, description, owner_did, owner_nickname)
+        .create_community(name, description, owner_did, owner_nickname, origin_community_id)
         .map_err(|e| err(e.code(), e))?;
 
     emit_event(

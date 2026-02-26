@@ -67,15 +67,26 @@ export async function createCommunity(
   ownerDid: string,
   description?: string,
   ownerNickname?: string,
+  originCommunityId?: string,
 ): Promise<CommunityCreateResult> {
   const json = JSON.stringify({
     name,
     owner_did: ownerDid,
     description: description ?? null,
     owner_nickname: ownerNickname ?? null,
+    origin_community_id: originCommunityId ?? null,
   });
   const resultJson = wasm().umbra_wasm_community_create(json);
   return await parseWasm<CommunityCreateResult>(resultJson);
+}
+
+/**
+ * Find a community by its origin (remote) community ID.
+ * Returns the local community ID if found, null otherwise.
+ */
+export async function findCommunityByOrigin(originId: string): Promise<string | null> {
+  const resultJson = wasm().umbra_wasm_community_find_by_origin(originId);
+  return await parseWasm<string | null>(resultJson);
 }
 
 /**
@@ -681,7 +692,7 @@ export async function createInvite(
   const json = JSON.stringify({
     community_id: communityId,
     creator_did: creatorDid,
-    max_uses: maxUses ?? null,
+    max_uses: maxUses || null,
     expires_at: expiresAt ?? null,
   });
   const resultJson = wasm().umbra_wasm_community_invite_create(json);
@@ -694,7 +705,9 @@ export async function createInvite(
 export async function useInvite(code: string, memberDid: string, nickname?: string): Promise<string> {
   const json = JSON.stringify({ code, member_did: memberDid, nickname: nickname ?? null });
   const resultJson = wasm().umbra_wasm_community_invite_use(json);
-  return await parseWasm<string>(resultJson);
+  const result = await parseWasm<string | { communityId: string }>(resultJson);
+  // WASM returns { community_id: "..." } which parseWasm converts to { communityId: "..." }
+  return typeof result === 'string' ? result : result.communityId;
 }
 
 /**
@@ -726,31 +739,42 @@ export async function deleteInvite(inviteId: string, actorDid: string): Promise<
  * community ID, so that `useInvite → join_community` succeeds.
  */
 export async function importCommunityFromRelay(
-  _remoteCommunityId: string,
+  remoteCommunityId: string,
   communityName: string,
   description: string | null,
   ownerDid: string,
   inviteCode: string,
   maxUses?: number | null,
   expiresAt?: number | null,
+  ownerNickname?: string,
 ): Promise<void> {
-  // Create the community locally (this also creates default spaces/channels)
+  // Check if we already imported this community (dedup on retried invites)
   let localCommunityId: string | undefined;
   try {
-    const result = await createCommunity(communityName, ownerDid, description ?? undefined);
-    localCommunityId = result.communityId;
-  } catch (err: any) {
-    // If community already exists (e.g. re-resolving same invite), try to find it
-    const msg = err?.message || String(err);
-    if (msg.includes('already') || msg.includes('exists') || msg.includes('UNIQUE')) {
-      // Community already exists locally — try to find it by name + owner
-      try {
-        const communities = await getCommunities(ownerDid);
-        const match = communities.find((c) => c.name === communityName);
-        if (match) localCommunityId = match.id;
-      } catch { /* ignore */ }
-    } else {
-      throw err;
+    const existingId = await findCommunityByOrigin(remoteCommunityId);
+    if (existingId) {
+      localCommunityId = existingId;
+    }
+  } catch { /* ignore — fall through to creation */ }
+
+  // Create the community locally (this also creates default spaces/channels)
+  if (!localCommunityId) {
+    try {
+      const result = await createCommunity(communityName, ownerDid, description ?? undefined, ownerNickname, remoteCommunityId);
+      localCommunityId = result.communityId;
+    } catch (err: any) {
+      // If community already exists (e.g. re-resolving same invite), try to find it
+      const msg = err?.message || String(err);
+      if (msg.includes('already') || msg.includes('exists') || msg.includes('UNIQUE')) {
+        // Community already exists locally — try to find it by name + owner
+        try {
+          const communities = await getCommunities(ownerDid);
+          const match = communities.find((c) => c.name === communityName);
+          if (match) localCommunityId = match.id;
+        } catch { /* ignore */ }
+      } else {
+        throw err;
+      }
     }
   }
 
@@ -837,7 +861,7 @@ export function publishInviteToRelay(
     community_description: communityDescription ?? null,
     community_icon: communityIcon ?? null,
     member_count: memberCount ?? 1,
-    max_uses: invite.maxUses ?? null,
+    max_uses: invite.maxUses || null,
     expires_at: invite.expiresAt ?? null,
     invite_payload: invitePayload ?? '{}',
   };
@@ -1285,18 +1309,37 @@ export async function broadcastCommunityEvent(
   senderDid: string,
   relayWs: WebSocket | null,
 ): Promise<void> {
-  if (!relayWs || relayWs.readyState !== WebSocket.OPEN) return;
+  console.log('[broadcastCommunityEvent]', event.type, 'ws=', relayWs ? `readyState=${relayWs.readyState}` : 'null');
+  if (!relayWs || relayWs.readyState !== WebSocket.OPEN) {
+    console.warn('[broadcastCommunityEvent] SKIPPED — relay WS not open');
+    return;
+  }
+
+  // Resolve to origin community ID so all peers use the same canonical ID.
+  // For the community owner, origin_community_id is NULL — use their local ID
+  // (which IS the canonical origin for everyone else).
+  // For joiners, origin_community_id points to the owner's original ID.
+  let canonicalCommunityId = communityId;
+  try {
+    const community = await getCommunity(communityId);
+    if (community.originCommunityId) {
+      canonicalCommunityId = community.originCommunityId;
+    }
+  } catch { /* best-effort — fall back to local ID */ }
 
   // Build relay batch in Rust (resolves members, excludes sender, builds envelope)
   const json = JSON.stringify({
     community_id: communityId,
     event,
     sender_did: senderDid,
+    canonical_community_id: canonicalCommunityId,
   });
   const resultJson = wasm().umbra_wasm_community_build_event_relay_batch(json);
   const relayMessages = await parseWasm<Array<{ toDid: string; payload: string }>>(resultJson);
 
+  console.log('[broadcastCommunityEvent] Sending to', relayMessages.length, 'members, canonical=', canonicalCommunityId);
   for (const rm of relayMessages) {
+    console.log('[broadcastCommunityEvent] → to_did:', rm.toDid.substring(0, 20) + '...');
     relayWs.send(JSON.stringify({ type: 'send', to_did: rm.toDid, payload: rm.payload }));
   }
 }

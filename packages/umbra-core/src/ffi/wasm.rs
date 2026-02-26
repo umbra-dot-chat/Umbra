@@ -2458,6 +2458,25 @@ pub fn umbra_wasm_groups_create(json: &str) -> Result<JsValue, JsValue> {
         .create_group_conversation(&conv_id, &group_id)
         .map_err(|e| JsValue::from_str(&format!("Failed to create group conversation: {}", e)))?;
 
+    // Generate and store group encryption key
+    let group_key: [u8; 32] = {
+        let mut key = [0u8; 32];
+        getrandom::getrandom(&mut key)
+            .map_err(|e| JsValue::from_str(&format!("Failed to generate group key: {}", e)))?;
+        key
+    };
+    let wrapping_key = derive_key_wrapping_key(identity);
+    let wrap_enc_key = crate::crypto::EncryptionKey::from_bytes(wrapping_key);
+    let aad = format!("group-key:{}:1", group_id);
+    let (nonce, ciphertext) = crate::crypto::encrypt(&wrap_enc_key, &group_key, aad.as_bytes())
+        .map_err(|e| JsValue::from_str(&format!("Failed to encrypt group key: {}", e)))?;
+    let mut stored_key = Vec::with_capacity(12 + ciphertext.len());
+    stored_key.extend_from_slice(&nonce.0);
+    stored_key.extend_from_slice(&ciphertext);
+    database
+        .store_group_key(&group_id, 1, &stored_key, now)
+        .map_err(|e| JsValue::from_str(&format!("Failed to store group key: {}", e)))?;
+
     let result = serde_json::json!({
         "group_id": group_id,
         "conversation_id": conv_id,
@@ -3414,8 +3433,12 @@ pub fn umbra_wasm_messaging_update_status(json: &str) -> Result<(), JsValue> {
 
 /// Build a community_event relay envelope batch for all members except the sender.
 ///
-/// Takes JSON: { "community_id", "event" (any JSON), "sender_did" }
+/// Takes JSON: { "community_id", "event" (any JSON), "sender_did", "canonical_community_id"? }
 /// Returns JSON: [{ "to_did", "payload": "<stringified envelope>" }, ...]
+///
+/// `canonical_community_id` is the origin/owner's community ID used in the envelope payload
+/// so that receivers can resolve it via `findCommunityByOrigin()`. If not provided, falls back
+/// to `community_id` (which is the local ID used for member lookup).
 #[wasm_bindgen]
 pub fn umbra_wasm_community_build_event_relay_batch(json: &str) -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -3432,6 +3455,11 @@ pub fn umbra_wasm_community_build_event_relay_batch(json: &str) -> Result<JsValu
     let community_id = data["community_id"]
         .as_str()
         .ok_or_else(|| JsValue::from_str("Missing community_id"))?;
+    // Use canonical_community_id for the envelope payload (so receivers can resolve via origin mapping).
+    // Falls back to community_id for the owner (who IS the origin, so their local ID is canonical).
+    let canonical_community_id = data["canonical_community_id"]
+        .as_str()
+        .unwrap_or(community_id);
     let event = &data["event"];
     let sender_did = data["sender_did"]
         .as_str()
@@ -3443,7 +3471,7 @@ pub fn umbra_wasm_community_build_event_relay_batch(json: &str) -> Result<JsValu
         "envelope": "community_event",
         "version": 1,
         "payload": {
-            "communityId": community_id,
+            "communityId": canonical_community_id,
             "event": event,
             "senderDid": sender_did,
             "timestamp": timestamp,
@@ -5921,10 +5949,11 @@ pub fn umbra_wasm_community_create(json: &str) -> Result<JsValue, JsValue> {
         .as_str()
         .ok_or_else(|| JsValue::from_str("Missing owner_did"))?;
     let owner_nickname = data["owner_nickname"].as_str();
+    let origin_community_id = data["origin_community_id"].as_str();
 
     let svc = community_service()?;
     let result = svc
-        .create_community(name, description, owner_did, owner_nickname)
+        .create_community(name, description, owner_did, owner_nickname, origin_community_id)
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
 
     let json_result = serde_json::json!({
@@ -5952,6 +5981,26 @@ pub fn umbra_wasm_community_create(json: &str) -> Result<JsValue, JsValue> {
     Ok(JsValue::from_str(&json_result.to_string()))
 }
 
+/// Find a community by its origin (remote) community ID.
+///
+/// Returns JSON string of the local community ID, or null if not found.
+#[wasm_bindgen]
+pub fn umbra_wasm_community_find_by_origin(origin_id: &str) -> Result<JsValue, JsValue> {
+    let state = get_state()?;
+    let state = state.read();
+    let db = state
+        .database
+        .as_ref()
+        .ok_or_else(|| JsValue::from_str("Database not initialized"))?;
+    let result = db
+        .find_community_by_origin(origin_id)
+        .map_err(|e: crate::error::Error| JsValue::from_str(&e.to_string()))?;
+    match result {
+        Some(id) => Ok(JsValue::from_str(&serde_json::json!(id).to_string())),
+        None => Ok(JsValue::from_str("null")),
+    }
+}
+
 /// Get a community by ID.
 ///
 /// Returns JSON: Community object
@@ -5973,6 +6022,7 @@ pub fn umbra_wasm_community_get(community_id: &str) -> Result<JsValue, JsValue> 
         "custom_css": c.custom_css,
         "owner_did": c.owner_did,
         "vanity_url": c.vanity_url,
+        "origin_community_id": c.origin_community_id,
         "created_at": c.created_at,
         "updated_at": c.updated_at,
     });
@@ -6003,6 +6053,7 @@ pub fn umbra_wasm_community_get_mine(member_did: &str) -> Result<JsValue, JsValu
                 "custom_css": c.custom_css,
                 "owner_did": c.owner_did,
                 "vanity_url": c.vanity_url,
+                "origin_community_id": c.origin_community_id,
                 "created_at": c.created_at,
                 "updated_at": c.updated_at,
             })

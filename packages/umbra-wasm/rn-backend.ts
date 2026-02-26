@@ -357,6 +357,7 @@ function createNativeBackend(native: NativeUmbraCore): UmbraWasmModule {
 
     // ── Community — Core (via dispatcher) ───────────────────────────────
     umbra_wasm_community_create: (json: string) => call('community_create', JSON.parse(json)),
+    umbra_wasm_community_find_by_origin: (origin_id: string) => call('community_find_by_origin', { origin_id }),
     umbra_wasm_community_get: (community_id: string) => call('community_get', { community_id }),
     umbra_wasm_community_get_mine: (member_did: string) => call('community_get_mine', { member_did }),
     umbra_wasm_community_update: (json: string) => call('community_update', JSON.parse(json)),
@@ -652,6 +653,7 @@ function createStubBackend(): UmbraWasmModule {
     umbra_wasm_get_files_needing_reencryption: () => notImplemented('get_files_needing_reencryption'),
     umbra_wasm_clear_reencryption_flag: () => notImplemented('clear_reencryption_flag'),
     umbra_wasm_community_create: () => notImplemented('community_create'),
+    umbra_wasm_community_find_by_origin: () => notImplemented('community_find_by_origin'),
     umbra_wasm_community_get: () => notImplemented('community_get'),
     umbra_wasm_community_get_mine: () => notImplemented('community_get_mine'),
     umbra_wasm_community_update: () => notImplemented('community_update'),

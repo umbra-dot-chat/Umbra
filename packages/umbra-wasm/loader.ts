@@ -170,6 +170,7 @@ export interface UmbraWasmModule {
 
   // Community — Core
   umbra_wasm_community_create(json: string): string;
+  umbra_wasm_community_find_by_origin(origin_id: string): string;
   umbra_wasm_community_get(community_id: string): string;
   umbra_wasm_community_get_mine(member_did: string): string;
   umbra_wasm_community_update(json: string): string;
@@ -914,6 +915,8 @@ function buildModule(wasmPkg: any): UmbraWasmModule {
     // ── Community (real WASM) ──────────────────────────────────────
     umbra_wasm_community_create: (json: string) =>
       wasmPkg.umbra_wasm_community_create(json),
+    umbra_wasm_community_find_by_origin: (originId: string) =>
+      wasmPkg.umbra_wasm_community_find_by_origin(originId),
     umbra_wasm_community_get: (communityId: string) =>
       wasmPkg.umbra_wasm_community_get(communityId),
     umbra_wasm_community_get_mine: (memberDid: string) =>

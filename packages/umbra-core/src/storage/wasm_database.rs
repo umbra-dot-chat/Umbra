@@ -104,6 +104,14 @@ impl Database {
                 tracing::debug!("Database schema version: {}", v);
             }
         }
+
+        // Fixup: ensure metadata_json column exists on community_messages.
+        // This handles databases that were created at v13+ via CREATE_TABLES
+        // before the column was added to the base schema.
+        let _ = sql_bridge_execute_batch(
+            "ALTER TABLE community_messages ADD COLUMN metadata_json TEXT;"
+        );
+
         Ok(())
     }
 
@@ -185,6 +193,11 @@ impl Database {
             tracing::info!("Running migration v15 → v16 (notifications table)");
             sql_bridge_execute_batch(schema::MIGRATE_V15_TO_V16).map_err(js_err)?;
             tracing::info!("Migration v15 → v16 complete");
+        }
+        if from_version < 17 {
+            tracing::info!("Running migration v16 → v17 (community origin ID)");
+            sql_bridge_execute_batch(schema::MIGRATE_V16_TO_V17).map_err(js_err)?;
+            tracing::info!("Migration v16 → v17 complete");
         }
         Ok(())
     }
@@ -1435,6 +1448,7 @@ impl Database {
             custom_css: row["custom_css"].as_str().map(|s| s.to_string()),
             owner_did: row["owner_did"].as_str().unwrap_or("").to_string(),
             vanity_url: row["vanity_url"].as_str().map(|s| s.to_string()),
+            origin_community_id: row["origin_community_id"].as_str().map(|s| s.to_string()),
             created_at: row["created_at"].as_i64().unwrap_or(0),
             updated_at: row["updated_at"].as_i64().unwrap_or(0),
         }
@@ -1572,19 +1586,33 @@ impl Database {
         name: &str,
         description: Option<&str>,
         owner_did: &str,
+        origin_community_id: Option<&str>,
         created_at: i64,
     ) -> Result<()> {
         self.exec(
-            "INSERT INTO communities (id, name, description, owner_did, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
-            json!([id, name, description, owner_did, created_at, created_at]),
+            "INSERT INTO communities (id, name, description, owner_did, origin_community_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            json!([id, name, description, owner_did, origin_community_id, created_at, created_at]),
         )?;
         Ok(())
+    }
+
+    /// Find a community by its origin (remote) community ID.
+    pub fn find_community_by_origin(&self, origin_id: &str) -> Result<Option<String>> {
+        let rows = self.query(
+            "SELECT id FROM communities WHERE origin_community_id = ? LIMIT 1",
+            json!([origin_id]),
+        )?;
+        if let Some(row) = rows.first() {
+            Ok(row["id"].as_str().map(|s| s.to_string()))
+        } else {
+            Ok(None)
+        }
     }
 
     /// Get a community by ID
     pub fn get_community(&self, id: &str) -> Result<Option<CommunityRecord>> {
         let rows = self.query(
-            "SELECT id, name, description, icon_url, banner_url, splash_url, accent_color, custom_css, owner_did, vanity_url, created_at, updated_at FROM communities WHERE id = ?",
+            "SELECT id, name, description, icon_url, banner_url, splash_url, accent_color, custom_css, owner_did, vanity_url, origin_community_id, created_at, updated_at FROM communities WHERE id = ?",
             json!([id]),
         )?;
         Ok(rows.first().map(Self::parse_community))
@@ -1593,7 +1621,7 @@ impl Database {
     /// Get communities a member belongs to
     pub fn get_communities_for_member(&self, member_did: &str) -> Result<Vec<CommunityRecord>> {
         let rows = self.query(
-            "SELECT c.id, c.name, c.description, c.icon_url, c.banner_url, c.splash_url, c.accent_color, c.custom_css, c.owner_did, c.vanity_url, c.created_at, c.updated_at FROM communities c INNER JOIN community_members cm ON c.id = cm.community_id WHERE cm.member_did = ? ORDER BY c.name",
+            "SELECT c.id, c.name, c.description, c.icon_url, c.banner_url, c.splash_url, c.accent_color, c.custom_css, c.owner_did, c.vanity_url, c.origin_community_id, c.created_at, c.updated_at FROM communities c INNER JOIN community_members cm ON c.id = cm.community_id WHERE cm.member_did = ? ORDER BY c.name",
             json!([member_did]),
         )?;
         Ok(rows.iter().map(Self::parse_community).collect())
@@ -4846,6 +4874,7 @@ pub struct CommunityRecord {
     pub custom_css: Option<String>,
     pub owner_did: String,
     pub vanity_url: Option<String>,
+    pub origin_community_id: Option<String>,
     pub created_at: i64,
     pub updated_at: i64,
 }
