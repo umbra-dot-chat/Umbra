@@ -29,7 +29,6 @@
  *   :umbra-shush:     — ghost with zipped mouth
  *   :umbra-pregnant:  — pregnant ghost
  *   :umbra-lockeyes:  — ghost with lock eyes
- *   :umbra-chonk:     — chonky ghost
  *   :umbra-clown:     — clown ghost
  *   :umbra-heart:     — heart-shaped ghost
  *   :umbra-horrified: — horrified ghost
@@ -78,7 +77,6 @@ const umbraTwerkSource = require('@/assets/emoji/umbra-twerk.png');
 const umbraBeerSource = require('@/assets/emoji/umbra-beer.png');
 const umbraPregnantSource = require('@/assets/emoji/umbra-pregnant.png');
 const umbraLockeyesSource = require('@/assets/emoji/umbra-lockeyes.png');
-const umbraChonkSource = require('@/assets/emoji/umbra-chonk.png');
 const umbraClownSource = require('@/assets/emoji/umbra-clown.png');
 const umbraHeartSource = require('@/assets/emoji/umbra-heart.png');
 const umbraHorrifiedSource = require('@/assets/emoji/umbra-horrified.png');
@@ -134,7 +132,6 @@ const BUILT_IN_ASSETS: BuiltInAsset[] = [
   { id: '__builtin__umbra_shush', name: 'umbra-shush', source: umbraShushSource, keywords: ['umbra', 'ghost', 'shush', 'quiet', 'secret', 'zip', 'mute', 'silence'], animated: false },
   { id: '__builtin__umbra_pregnant', name: 'umbra-pregnant', source: umbraPregnantSource, keywords: ['umbra', 'ghost', 'pregnant', 'baby', 'expecting', 'belly'], animated: false },
   { id: '__builtin__umbra_lockeyes', name: 'umbra-lockeyes', source: umbraLockeyesSource, keywords: ['umbra', 'ghost', 'lock', 'eyes', 'private', 'secret', 'secure'], animated: false },
-  { id: '__builtin__umbra_chonk', name: 'umbra-chonk', source: umbraChonkSource, keywords: ['umbra', 'ghost', 'chonk', 'chonky', 'thicc', 'round', 'big'], animated: false },
   { id: '__builtin__umbra_clown', name: 'umbra-clown', source: umbraClownSource, keywords: ['umbra', 'ghost', 'clown', 'circus', 'funny', 'nose', 'party'], animated: false },
   { id: '__builtin__umbra_heart', name: 'umbra-heart', source: umbraHeartSource, keywords: ['umbra', 'ghost', 'heart', 'love', 'cute', 'sweet', 'affection'], animated: false },
   { id: '__builtin__umbra_horrified', name: 'umbra-horrified', source: umbraHorrifiedSource, keywords: ['umbra', 'ghost', 'horrified', 'horror', 'creepy', 'terrified', 'scream'], animated: false },

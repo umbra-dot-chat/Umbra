@@ -1,0 +1,77 @@
+# EAS Build ignore — based on .gitignore but includes pre-built jniLibs for Android
+
+# dependencies
+node_modules/
+
+# Expo
+.expo/
+dist/
+web-build/
+expo-env.d.ts
+
+# Native
+.kotlin/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.mobileprovision
+
+# Metro
+.metro-health-check*
+
+# debug
+npm-debug.*
+yarn-debug.*
+yarn-error.*
+
+# macOS
+.DS_Store
+*.pem
+
+# local env files
+.env*.local
+
+# Deployment credentials (NEVER COMMIT)
+.deploy-credentials
+
+# typescript
+*.tsbuildinfo
+
+# generated native folders
+/ios
+/android
+
+# Rust build artifacts
+target/
+**/target/
+Cargo.lock
+!packages/umbra-relay/Cargo.lock
+
+# WASM build output (generated)
+packages/umbra-wasm/pkg/
+packages/umbra-core/pkg/
+public/umbra_core*
+
+# Coverage
+coverage/
+
+# Testing artifacts
+__tests__/**/test-results/
+playwright-report/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Tauri
+src-tauri/target/
+*.dmg
+packages/umbra-relay/.env
+.wisp/
+
+# NOTE: jniLibs/ is NOT excluded here — pre-built .so files are shipped to EAS
+packages/umbra-relay/releases/
