@@ -9,6 +9,7 @@ import type {
   FriendRequest,
   Friend,
   FriendEvent,
+  BlockedUser,
 } from './types';
 
 /**
@@ -152,6 +153,26 @@ export async function blockUser(did: string, reason?: string): Promise<void> {
  */
 export async function unblockUser(did: string): Promise<boolean> {
   return await wasm().umbra_wasm_friends_unblock(did);
+}
+
+/**
+ * Get all blocked users
+ *
+ * @returns Array of blocked users with DID, timestamp, and optional reason
+ */
+export async function getBlockedUsers(): Promise<BlockedUser[]> {
+  try {
+    const resultJson = wasm().umbra_wasm_friends_get_blocked();
+    const raw = await parseWasm<Array<{ did: string; blocked_at: number; reason?: string | null }>>(resultJson);
+    return raw.map((u) => ({
+      did: u.did,
+      blockedAt: u.blocked_at,
+      reason: u.reason ?? undefined,
+    }));
+  } catch (err) {
+    console.warn('[friends] getBlockedUsers failed:', err);
+    return [];
+  }
 }
 
 /**

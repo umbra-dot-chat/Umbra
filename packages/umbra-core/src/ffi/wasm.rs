@@ -976,6 +976,37 @@ pub fn umbra_wasm_friends_unblock(did: &str) -> Result<bool, JsValue> {
         .map_err(|e| JsValue::from_str(&e.to_string()))
 }
 
+/// Get all blocked users as JSON array
+#[wasm_bindgen]
+pub fn umbra_wasm_friends_get_blocked() -> Result<JsValue, JsValue> {
+    let state = get_state()?;
+    let state = state.read();
+
+    let database = state
+        .database
+        .as_ref()
+        .ok_or_else(|| JsValue::from_str("Database not initialized"))?;
+
+    match database.get_blocked_users() {
+        Ok(users) => {
+            let json: Vec<serde_json::Value> = users
+                .iter()
+                .map(|(did, blocked_at, reason)| {
+                    serde_json::json!({
+                        "did": did,
+                        "blocked_at": blocked_at,
+                        "reason": reason,
+                    })
+                })
+                .collect();
+            let json_str = serde_json::to_string(&json)
+                .map_err(|e| JsValue::from_str(&format!("Serialize error: {}", e)))?;
+            Ok(JsValue::from_str(&json_str))
+        }
+        Err(e) => Err(JsValue::from_str(&e.to_string())),
+    }
+}
+
 // ============================================================================
 // MESSAGING
 // ============================================================================

@@ -313,6 +313,18 @@ export interface Conversation {
 }
 
 /**
+ * A blocked user
+ */
+export interface BlockedUser {
+  /** Blocked user's DID */
+  did: string;
+  /** When they were blocked (unix timestamp) */
+  blockedAt: number;
+  /** Optional reason for blocking */
+  reason?: string;
+}
+
+/**
  * A group
  */
 export interface Group {

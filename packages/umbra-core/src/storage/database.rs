@@ -1499,6 +1499,30 @@ impl Database {
         Ok(count > 0)
     }
 
+    /// Get all blocked users
+    pub fn get_blocked_users(&self) -> Result<Vec<(String, i64, Option<String>)>> {
+        let conn = self.conn.lock();
+        let mut stmt = conn
+            .prepare("SELECT did, blocked_at, reason FROM blocked_users ORDER BY blocked_at DESC")
+            .map_err(|e| Error::DatabaseError(format!("Failed to prepare get_blocked_users: {}", e)))?;
+
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, i64>(1)?,
+                    row.get::<_, Option<String>>(2)?,
+                ))
+            })
+            .map_err(|e| Error::DatabaseError(format!("Failed to get blocked users: {}", e)))?;
+
+        let mut result = Vec::new();
+        for row in rows {
+            result.push(row.map_err(|e| Error::DatabaseError(format!("Failed to read blocked user: {}", e)))?);
+        }
+        Ok(result)
+    }
+
     // ========================================================================
     // SETTINGS OPERATIONS
     // ========================================================================

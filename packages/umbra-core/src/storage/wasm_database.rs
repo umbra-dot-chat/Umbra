@@ -1032,6 +1032,23 @@ impl Database {
         Ok(count.unwrap_or(0) > 0)
     }
 
+    /// Get all blocked users
+    pub fn get_blocked_users(&self) -> Result<Vec<(String, i64, Option<String>)>> {
+        let rows = self.query(
+            "SELECT did, blocked_at, reason FROM blocked_users ORDER BY blocked_at DESC",
+            json!([]),
+        )?;
+        Ok(rows
+            .iter()
+            .map(|r| {
+                let did = r["did"].as_str().unwrap_or("").to_string();
+                let blocked_at = r["blocked_at"].as_i64().unwrap_or(0);
+                let reason = r["reason"].as_str().map(|s| s.to_string());
+                (did, blocked_at, reason)
+            })
+            .collect())
+    }
+
     // ========================================================================
     // SETTINGS OPERATIONS
     // ========================================================================

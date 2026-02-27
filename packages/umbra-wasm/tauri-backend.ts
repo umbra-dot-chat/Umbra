@@ -153,6 +153,10 @@ export function createTauriBackend(
       return call('friends_unblock', JSON.stringify({ did })) as any;
     },
 
+    umbra_wasm_friends_get_blocked: () => {
+      return call('friends_get_blocked') as any;
+    },
+
     umbra_wasm_friends_store_incoming: (json: string) => {
       callQuiet('friends_store_incoming', json);
     },

@@ -69,7 +69,7 @@ export { ErrorCode, UmbraError } from './errors';
 // Types
 export type {
   ChatMessagePayload, ConnectionInfo, Conversation, CreateIdentityResult, DiscoveryEvent, DiscoveryResult, Friend, FriendAcceptAckPayload, FriendEvent, FriendRequest, FriendRequestPayload,
-  FriendResponsePayload, Group, GroupEvent, GroupInvitePayload,
+  BlockedUser, FriendResponsePayload, Group, GroupEvent, GroupInvitePayload,
   GroupInviteResponsePayload, GroupKeyRotationPayload, GroupMember, GroupMemberRemovedPayload, GroupMessagePayload, Identity, InitConfig, Message, MessageAttachment, MessageContent, MessageEvent, MessageReaction, MessageStatus, MessageStatusPayload, NetworkStatus, PendingGroupInvite, ProfileUpdate, PublicIdentity, PublicKeys, RelayAcceptResult, RelayEnvelope, RelayEvent, RelaySession, RelayStatus, ReplyTo, TypingIndicatorPayload,
   Community, CommunityCreateResult, CommunitySpace, CommunityCategory, CommunityChannel, CommunityMember, CommunityRole, CommunitySeat, CommunityMessage, CommunityInvite, CommunityEvent, CommunityEventPayload,
   CommunityFileRecord, CommunityFileFolderRecord,
@@ -273,6 +273,9 @@ export {
 export type {
   NotificationRecord, NotificationType, UnreadCounts, NotificationCategory,
 } from './notifications';
+
+// Messaging helpers
+export { createDmConversation } from './messaging';
 
 // Main service class
 export { UmbraService } from './service';

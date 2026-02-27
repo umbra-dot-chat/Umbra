@@ -63,6 +63,7 @@ export interface UmbraWasmModule {
   umbra_wasm_friends_remove(did: string): boolean;
   umbra_wasm_friends_block(did: string, reason?: string): void;
   umbra_wasm_friends_unblock(did: string): boolean;
+  umbra_wasm_friends_get_blocked(): string;
   umbra_wasm_friends_store_incoming(json: string): void;
   umbra_wasm_friends_accept_from_relay(json: string): string;
   umbra_wasm_friends_build_accept_ack(json: string): string;
@@ -732,6 +733,8 @@ function buildModule(wasmPkg: any): UmbraWasmModule {
     umbra_wasm_friends_block: (did: string, reason?: string) =>
       wasmPkg.umbra_wasm_friends_block(did, reason ?? null),
     umbra_wasm_friends_unblock: (did: string) => wasmPkg.umbra_wasm_friends_unblock(did),
+    umbra_wasm_friends_get_blocked: () =>
+      wasmPkg.umbra_wasm_friends_get_blocked(),
     umbra_wasm_friends_store_incoming: (json: string) =>
       wasmPkg.umbra_wasm_friends_store_incoming(json),
     umbra_wasm_friends_accept_from_relay: (json: string) =>

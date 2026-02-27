@@ -321,6 +321,10 @@ export class UmbraService {
     return friends.unblockUser(did);
   }
 
+  getBlockedUsers(): Promise<import('./types').BlockedUser[]> {
+    return friends.getBlockedUsers();
+  }
+
   storeIncomingRequest(request: FriendRequest): Promise<boolean> {
     return friends.storeIncomingRequest(request);
   }
