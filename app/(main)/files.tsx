@@ -25,7 +25,7 @@ import {
   DownloadIcon,
   PlusIcon,
   LockIcon,
-} from '@/components/icons';
+} from '@/components/ui';
 import { pickFile, readFileAsBase64 } from '@/utils/filePicker';
 import { MobileBackButton } from '@/components/ui/MobileBackButton';
 

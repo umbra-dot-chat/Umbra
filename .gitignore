@@ -58,6 +58,7 @@ public/umbra_core*
 coverage/
 
 # Testing artifacts
+/test-results/
 __tests__/**/test-results/
 playwright-report/
 

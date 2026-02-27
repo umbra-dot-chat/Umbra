@@ -18,7 +18,7 @@ import { View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useTheme } from '@coexist/wisp-react-native';
 import { useAuth } from '@/contexts/AuthContext';
-import { JoinCommunityModal } from '@/components/community/JoinCommunityModal';
+import { JoinCommunityModal } from '@/components/community/invite/JoinCommunityModal';
 import { usePendingInvite } from '@/hooks/usePendingInvite';
 
 export default function InvitePage() {

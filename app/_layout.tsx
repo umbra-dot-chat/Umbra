@@ -15,8 +15,8 @@ import { SoundProvider } from '@/contexts/SoundContext';
 import { MessagingProvider } from '@/contexts/MessagingContext';
 import { HelpPopoverHost } from '@/components/ui/HelpPopoverHost';
 import { PinLockScreen } from '@/components/auth/PinLockScreen';
-import { LoadingScreen } from '@/components/loading/LoadingScreen';
-import type { LoadingStep } from '@/components/loading/LoadingScreen';
+import { LoadingScreen } from '@/components/ui/LoadingScreen';
+import type { LoadingStep } from '@/components/ui/LoadingScreen';
 import { usePendingInvite } from '@/hooks/usePendingInvite';
 import * as Linking from 'expo-linking';
 

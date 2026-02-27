@@ -47,6 +47,28 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
     return { type: 'sourceFile', filePath: emptyModule };
   }
 
+  // Resolve @/ alias to src/ (matches tsconfig.json paths)
+  // Falls back to project root for assets (images, fonts, etc.)
+  if (moduleName.startsWith('@/')) {
+    const subPath = moduleName.slice(2);
+
+    // Try src/ first (code files)
+    const srcPath = path.resolve(__dirname, 'src', subPath);
+    const codeExtensions = ['.ts', '.tsx', '.js', '.jsx', '/index.ts', '/index.tsx', '/index.js', '/index.jsx'];
+    for (const ext of codeExtensions) {
+      const fullPath = srcPath + ext;
+      if (fs.existsSync(fullPath)) {
+        return { type: 'sourceFile', filePath: fullPath };
+      }
+    }
+
+    // Fallback to project root (assets, etc.)
+    const rootPath = path.resolve(__dirname, subPath);
+    if (fs.existsSync(rootPath) && fs.statSync(rootPath).isFile()) {
+      return { type: 'sourceFile', filePath: rootPath };
+    }
+  }
+
   // Intercept deep imports from @coexist/wisp-core (e.g. @coexist/wisp-core/animation/presets)
   if (moduleName.startsWith('@coexist/wisp-core/')) {
     const subPath = moduleName.replace('@coexist/wisp-core/', '');

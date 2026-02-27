@@ -4,7 +4,7 @@
     "strict": true,
     "paths": {
       "@/*": [
-        "./*"
+        "./src/*"
       ],
       "@umbra/plugin-sdk": [
         "./packages/umbra-plugin-sdk/src/index"
@@ -30,7 +30,6 @@
     "node_modules",
     "packages/umbra-core",
     "packages/umbra-relay",
-    "packages/umbra-bridge-bot",
-    "testing"
+    "packages/umbra-bridge-bot"
   ]
 }

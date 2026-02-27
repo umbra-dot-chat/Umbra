@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { View, ScrollView, Platform, Text as RNText, Dimensions, useWindowDimensions, Animated, Easing, Pressable, Image } from 'react-native';
 import { Text, Button, Card, VStack, HStack, Separator, Presence, useTheme } from '@coexist/wisp-react-native';
 import { useBlobPath, AnimatedBlobs } from '@/components/auth/AnimatedBlobs';
-import { WalletIcon, DownloadIcon, KeyIcon, LockIcon } from '@/components/icons';
+import { WalletIcon, DownloadIcon, KeyIcon, LockIcon } from '@/components/ui';
 import { CreateWalletFlow } from '@/components/auth/CreateWalletFlow';
 import { ImportWalletFlow } from '@/components/auth/ImportWalletFlow';
 import { PinLockScreen } from '@/components/auth/PinLockScreen';
