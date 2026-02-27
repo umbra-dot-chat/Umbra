@@ -25,14 +25,14 @@ jest.mock('@coexist/wisp-react-native', () => ({
   }),
 }));
 
-jest.mock('@/components/icons', () => ({
+jest.mock('@/components/ui', () => ({
   AudioWaveIcon: ({ size, color }: any) => {
     const { View } = require('react-native');
     return <View testID="audio-wave-icon" />;
   },
 }));
 
-import { VoiceChannelUsers } from '@/components/community/VoiceChannelUsers';
+import { VoiceChannelUsers } from '@/components/community/voice/VoiceChannelUsers';
 import type { CommunityMember } from '@umbra/service';
 
 const MEMBERS: CommunityMember[] = [

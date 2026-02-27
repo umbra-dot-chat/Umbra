@@ -90,7 +90,7 @@ jest.mock('@coexist/wisp-react-native', () => {
 
 jest.mock('@coexist/wisp-core/types/GroupCallPanel.types', () => ({}));
 
-import { VoiceCallPanel } from '@/components/community/VoiceCallPanel';
+import { VoiceCallPanel } from '@/components/community/voice/VoiceCallPanel';
 import type { CommunityMember } from '@umbra/service';
 
 const MEMBERS: CommunityMember[] = [

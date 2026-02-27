@@ -8,7 +8,7 @@
  */
 import React from 'react';
 import { render } from '@testing-library/react-native';
-import ChatPage from '@/app/(main)/index';
+import ChatPage from '../../app/(main)/index';
 import { HelpProvider } from '@/contexts/HelpContext';
 
 jest.mock('@/contexts/UmbraContext', () => ({

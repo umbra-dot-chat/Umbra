@@ -1,7 +1,7 @@
 import React from 'react';
 import { render } from '@testing-library/react-native';
 import { Animated } from 'react-native';
-import { RightPanel } from '@/components/panels/RightPanel';
+import { RightPanel } from '@/components/ui/RightPanel';
 
 jest.mock('@/hooks/useFriends', () => ({
   useFriends: () => ({

@@ -38,7 +38,19 @@ module.exports = {
   Input: mockComponent('Input'),
   TextArea: mockComponent('TextArea'),
   Select: mockComponent('Select'),
-  Button: mockComponent('Button'),
+  Button: React.forwardRef((props, ref) => {
+    const { Pressable } = require('react-native');
+    return React.createElement(Pressable, {
+      ...props,
+      ref,
+      testID: props.testID || 'Button',
+      onPress: props.onPress,
+      disabled: props.disabled,
+    }, typeof props.children === 'string'
+      ? React.createElement(RNText, {}, props.children)
+      : props.children
+    );
+  }),
   Checkbox: mockComponent('Checkbox'),
   Spinner: mockComponent('Spinner'),
   PinInput: mockComponent('PinInput'),
@@ -54,7 +66,17 @@ module.exports = {
   Card: mockComponent('Card'),
   Alert: mockComponent('Alert'),
   Overlay: ({ children, open }) => open ? React.createElement(View, { testID: 'Overlay' }, children) : null,
-  Dialog: mockComponent('Dialog'),
+  Dialog: (() => {
+    const Comp = React.forwardRef((props, ref) => {
+      if (!props.open) return null;
+      return React.createElement(View, { ref, testID: props.testID || 'Dialog' },
+        props.children,
+        props.footer
+      );
+    });
+    Comp.displayName = 'Dialog';
+    return Comp;
+  })(),
   Presence: ({ children, visible }) => visible !== false ? React.createElement(View, { testID: 'Presence' }, children) : null,
   Separator: mockComponent('Separator'),
   QRCode: mockComponent('QRCode'),

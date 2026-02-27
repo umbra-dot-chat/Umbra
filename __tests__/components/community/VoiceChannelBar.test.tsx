@@ -44,7 +44,7 @@ jest.mock('@coexist/wisp-react-native', () => ({
   }),
 }));
 
-jest.mock('@/components/icons', () => ({
+jest.mock('@/components/ui', () => ({
   RadioIcon: () => null,
   MicIcon: () => null,
   MicOffIcon: () => null,
@@ -62,7 +62,7 @@ jest.mock('react-native-svg', () => ({
   Line: () => null,
 }));
 
-import { VoiceChannelBar } from '@/components/community/VoiceChannelBar';
+import { VoiceChannelBar } from '@/components/community/voice/VoiceChannelBar';
 
 // ── Tests ──────────────────────────────────────────────────────────────────
 

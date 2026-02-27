@@ -5,6 +5,14 @@ jest.mock('@/contexts/UmbraContext', () => ({
   useUmbra: jest.fn(),
 }));
 
+jest.mock('@/hooks/useNetwork', () => ({
+  useNetwork: () => ({
+    onlineDids: new Set(),
+    connectionStatus: 'connected',
+    getRelayWs: jest.fn().mockReturnValue(null),
+  }),
+}));
+
 jest.mock('@/contexts/AuthContext', () => ({
   useAuth: jest.fn().mockReturnValue({
     identity: { did: 'did:key:z6MkMe', displayName: 'Me', createdAt: Date.now() / 1000 },
@@ -92,6 +100,7 @@ function createMockService(overrides = {}) {
     removeFriend: jest.fn().mockResolvedValue(true),
     blockUser: jest.fn().mockResolvedValue(undefined),
     unblockUser: jest.fn().mockResolvedValue(true),
+    getBlockedUsers: jest.fn().mockResolvedValue([]),
     getNetworkStatus: jest.fn().mockResolvedValue({
       isRunning: false,
       peerCount: 0,

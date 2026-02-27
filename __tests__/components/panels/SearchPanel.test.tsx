@@ -1,7 +1,7 @@
 import React from 'react';
 import { render } from '@testing-library/react-native';
 import { View } from 'react-native';
-import { SearchPanel } from '@/components/panels/SearchPanel';
+import { SearchPanel } from '@/components/ui/SearchPanel';
 
 // MessageSearch is now imported from the main @coexist/wisp-react-native package
 // which is mocked in jest.setup.js, so no additional mock is needed here

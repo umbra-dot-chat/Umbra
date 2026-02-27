@@ -62,7 +62,7 @@ jest.mock('@coexist/wisp-react-native', () => ({
   }),
 }));
 
-jest.mock('@/components/icons', () => ({
+jest.mock('@/components/ui', () => ({
   PhoneIcon: () => null,
   PhoneOffIcon: () => null,
   VideoIcon: () => null,
