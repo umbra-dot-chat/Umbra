@@ -1,14 +1,16 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useMemo } from 'react';
 import { View, ScrollView, Pressable } from 'react-native';
 import {
   Tabs, TabList, Tab, TabPanel,
   Text,
+  Button,
   useTheme,
   Avatar,
   Input,
   SegmentedControl,
   Spinner,
   AddFriendInput,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator,
 } from '@coexist/wisp-react-native';
 import {
   FriendListItem,
@@ -16,14 +18,18 @@ import {
   FriendSection,
 } from '@/components/friends/FriendComponents';
 import { useRouter } from 'expo-router';
-import { UsersIcon, MessageIcon, MoreIcon, UserCheckIcon, QrCodeIcon, GlobeIcon, UserPlusIcon, BlockIcon } from '@/components/icons';
+import { UsersIcon, MessageIcon, MoreIcon, UserCheckIcon, QrCodeIcon, GlobeIcon, UserPlusIcon, BlockIcon } from '@/components/ui';
 import { useFriends } from '@/hooks/useFriends';
+import { useConversations } from '@/hooks/useConversations';
+import { useActiveConversation } from '@/contexts/ActiveConversationContext';
 import { ProfileCard } from '@/components/friends/ProfileCard';
 import { HelpIndicator } from '@/components/ui/HelpIndicator';
 import { HelpText, HelpHighlight, HelpListItem } from '@/components/ui/HelpContent';
 import { FriendSuggestionCard } from '@/components/discovery/FriendSuggestionCard';
-import { QRCardDialog, parseScannedQR } from '@/components/qr/QRCardDialog';
-import { searchByUsername, searchUsernames, lookupUsername } from '@umbra/service';
+import { QRCardDialog, parseScannedQR } from '@/components/ui/QRCardDialog';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
+import { InputDialog } from '@/components/ui/InputDialog';
+import { searchByUsername, searchUsernames, lookupUsername, createDmConversation } from '@umbra/service';
 import type { Friend, FriendRequest, DiscoverySearchResult, UsernameSearchResult } from '@umbra/service';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSound } from '@/contexts/SoundContext';
@@ -103,12 +109,17 @@ export default function FriendsPage() {
     friends,
     incomingRequests,
     outgoingRequests,
+    blockedUsers,
     isLoading,
     sendRequest,
     acceptRequest,
     rejectRequest,
+    removeFriend,
+    blockUser,
     unblockUser,
   } = useFriends();
+  const { conversations } = useConversations();
+  const { setActiveId } = useActiveConversation();
   const { onlineDids } = useNetwork();
 
   const [activeTab, setActiveTab] = useState('all');
@@ -122,6 +133,26 @@ export default function FriendsPage() {
     state: 'idle' | 'loading' | 'success' | 'error';
     message?: string;
   }>({ state: 'idle' });
+
+  // Context menu + dialog state
+  const [contextMenuOpen, setContextMenuOpen] = useState(false);
+  const [contextMenuFriend, setContextMenuFriend] = useState<Friend | null>(null);
+  const [contextMenuAnchor, setContextMenuAnchor] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
+  const [confirmRemoveOpen, setConfirmRemoveOpen] = useState(false);
+  const [confirmBlockOpen, setConfirmBlockOpen] = useState(false);
+  const [blockReasonOpen, setBlockReasonOpen] = useState(false);
+  const [actionSubmitting, setActionSubmitting] = useState(false);
+
+  // Map friendDid → conversationId for quick DM navigation
+  const friendDmMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const c of conversations) {
+      if (c.type === 'dm' && c.friendDid) {
+        map[c.friendDid] = c.id;
+      }
+    }
+    return map;
+  }, [conversations]);
 
   // Platform search state (generic for all platforms)
   const [searchPlatform, setSearchPlatform] = useState<SearchPlatform>('umbra');
@@ -332,24 +363,87 @@ export default function FriendsPage() {
     setTimeout(() => setAddFriendFeedback({ state: 'idle' }), 3000);
   };
 
+  // ------ Navigation to DM ------
+
+  const handleMessageFriend = useCallback(async (friendDid: string) => {
+    let convoId = friendDmMap[friendDid];
+    if (!convoId) {
+      // Create a DM conversation if one doesn't exist yet
+      try {
+        convoId = await createDmConversation(friendDid);
+      } catch {
+        // Fallback: navigate to chat home
+        router.push('/');
+        return;
+      }
+    }
+    setActiveId(convoId);
+    router.push('/');
+  }, [friendDmMap, setActiveId, router]);
+
+  // ------ Context menu handlers ------
+
+  const handleOpenContextMenu = useCallback((friend: Friend, event: any) => {
+    // Get anchor position from the press event target
+    const target = event?.currentTarget || event?.target;
+    if (target?.measureInWindow) {
+      target.measureInWindow((x: number, y: number, width: number, height: number) => {
+        setContextMenuAnchor({ x, y, width, height });
+        setContextMenuFriend(friend);
+        setContextMenuOpen(true);
+      });
+    } else {
+      // Fallback: open without anchor
+      setContextMenuFriend(friend);
+      setContextMenuOpen(true);
+    }
+  }, []);
+
+  const handleRemoveFriend = useCallback(async () => {
+    if (!contextMenuFriend) return;
+    setActionSubmitting(true);
+    try {
+      await removeFriend(contextMenuFriend.did);
+      setConfirmRemoveOpen(false);
+      setContextMenuFriend(null);
+    } finally {
+      setActionSubmitting(false);
+    }
+  }, [contextMenuFriend, removeFriend]);
+
+  const handleBlockFriend = useCallback(async () => {
+    if (!contextMenuFriend) return;
+    // Close block confirm, open reason input
+    setConfirmBlockOpen(false);
+    setBlockReasonOpen(true);
+  }, [contextMenuFriend]);
+
+  const handleBlockWithReason = useCallback(async (reason: string) => {
+    if (!contextMenuFriend) return;
+    setActionSubmitting(true);
+    try {
+      await blockUser(contextMenuFriend.did, reason || undefined);
+      setBlockReasonOpen(false);
+      setContextMenuFriend(null);
+    } finally {
+      setActionSubmitting(false);
+    }
+  }, [contextMenuFriend, blockUser]);
+
   // ------ Actions for friend items ------
 
-  const friendActions = (_friendDid: string) => [
+  const friendActions = (friend: Friend) => [
     {
       id: 'message',
       label: 'Message',
       icon: <MessageIcon size={20} color={iconColor} />,
-      onPress: () => {
-        // Navigate to chat page — the conversation for this friend
-        // will be auto-selected by the chat page
-        router.push('/');
-      },
+      onPress: () => handleMessageFriend(friend.did),
     },
     {
       id: 'more',
       label: 'More',
       icon: <MoreIcon size={20} color={iconColor} />,
-      onPress: () => {},
+      onPress: (event: any) => handleOpenContextMenu(friend, event),
     },
   ];
 
@@ -363,7 +457,7 @@ export default function FriendsPage() {
       avatar={<Avatar name={friend.displayName} src={friend.avatar} size="md" status={toAvatarStatus(getFriendStatus(friend, onlineDids))} />}
       status={getFriendStatus(friend, onlineDids)}
       statusText={friend.status}
-      actions={friendActions(friend.did)}
+      actions={friendActions(friend)}
       flat
     />
   );
@@ -825,9 +919,27 @@ export default function FriendsPage() {
           <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }}>
             <FriendSection
               title="Blocked Users"
-              count={0}
+              count={blockedUsers.length}
               emptyMessage="No blocked users."
-            />
+            >
+              {blockedUsers.map((blocked) => (
+                <FriendListItem
+                  key={blocked.did}
+                  name={blocked.did.slice(0, 24) + '...'}
+                  username={blocked.reason ? `Reason: ${blocked.reason}` : formatRelativeTime(blocked.blockedAt)}
+                  avatar={<Avatar name={blocked.did.slice(8, 12)} size="md" />}
+                  status="offline"
+                  actions={[
+                    {
+                      id: 'unblock',
+                      label: 'Unblock',
+                      onPress: () => handleUnblock(blocked.did),
+                    },
+                  ]}
+                  flat
+                />
+              ))}
+            </FriendSection>
           </ScrollView>
         </TabPanel>
       </Tabs>
@@ -846,6 +958,80 @@ export default function FriendsPage() {
             handleAddFriend(parsed.value);
           }
         }}
+      />
+
+      {/* Friend context menu (More button) */}
+      <DropdownMenu
+        open={contextMenuOpen}
+        onOpenChange={(open) => {
+          setContextMenuOpen(open);
+        }}
+        anchorLayout={contextMenuAnchor}
+      >
+        <DropdownMenuContent>
+          <DropdownMenuItem
+            onSelect={() => {
+              setContextMenuOpen(false);
+              if (contextMenuFriend) handleMessageFriend(contextMenuFriend.did);
+            }}
+          >
+            Message
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            onSelect={() => {
+              setContextMenuOpen(false);
+              setConfirmRemoveOpen(true);
+            }}
+          >
+            Remove Friend
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            danger
+            onSelect={() => {
+              setContextMenuOpen(false);
+              setConfirmBlockOpen(true);
+            }}
+          >
+            Block User
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      {/* Remove friend confirmation */}
+      <ConfirmDialog
+        open={confirmRemoveOpen}
+        onClose={() => { setConfirmRemoveOpen(false); setContextMenuFriend(null); }}
+        title="Remove Friend"
+        message={`Are you sure you want to remove ${contextMenuFriend?.displayName ?? 'this user'} from your friends? You will no longer be able to message them.`}
+        confirmLabel="Remove"
+        onConfirm={handleRemoveFriend}
+        submitting={actionSubmitting}
+      />
+
+      {/* Block user confirmation */}
+      <ConfirmDialog
+        open={confirmBlockOpen}
+        onClose={() => { setConfirmBlockOpen(false); setContextMenuFriend(null); }}
+        title="Block User"
+        message={`Are you sure you want to block ${contextMenuFriend?.displayName ?? 'this user'}? They will not be able to send you messages or friend requests.`}
+        confirmLabel="Block"
+        onConfirm={handleBlockFriend}
+        submitting={actionSubmitting}
+      />
+
+      {/* Block reason input */}
+      <InputDialog
+        open={blockReasonOpen}
+        onClose={() => { setBlockReasonOpen(false); setContextMenuFriend(null); }}
+        title="Block Reason (Optional)"
+        label="Why are you blocking this user?"
+        placeholder="Spam, harassment, etc."
+        submitLabel="Block"
+        onSubmit={handleBlockWithReason}
+        submitting={actionSubmitting}
+        minLength={0}
+        maxLength={200}
       />
     </View>
   );

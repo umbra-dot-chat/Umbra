@@ -16,16 +16,17 @@ import { useActiveConversation } from '@/contexts/ActiveConversationContext';
 import { ChatHeader } from '@/components/chat/ChatHeader';
 import { ChatArea } from '@/components/chat/ChatArea';
 import { ChatInput } from '@/components/chat/ChatInput';
-import { RightPanel } from '@/components/panels/RightPanel';
+import { RightPanel } from '@/components/ui/RightPanel';
 import { SlotRenderer } from '@/components/plugins/SlotRenderer';
-import { MessageIcon } from '@/components/icons';
+import { MessageIcon } from '@/components/ui';
 import { HelpIndicator } from '@/components/ui/HelpIndicator';
 import { HelpText, HelpHighlight, HelpListItem } from '@/components/ui/HelpContent';
 import { ActiveCallBar } from '@/components/call/ActiveCallBar';
 import { ActiveCallPanel } from '@/components/call/ActiveCallPanel';
 import { useCall } from '@/hooks/useCall';
 import { pickFile } from '@/utils/filePicker';
-import { InputDialog } from '@/components/community/InputDialog';
+import { InputDialog } from '@/components/ui/InputDialog';
+import { ForwardDialog } from '@/components/chat/ForwardDialog';
 import { useSettingsDialog } from '@/contexts/SettingsDialogContext';
 import { ResizeHandle } from '@/components/ui/ResizeHandle';
 import { useAllCustomEmoji } from '@/hooks/useAllCustomEmoji';
@@ -168,6 +169,10 @@ export default function ChatPage() {
 
   // Edit mode state
   const [editingMessage, setEditingMessage] = useState<{ messageId: string; text: string } | null>(null);
+
+  // Forward dialog state
+  const [forwardDialogOpen, setForwardDialogOpen] = useState(false);
+  const [forwardMessageId, setForwardMessageId] = useState<string | null>(null);
 
   // Panel & search state
   const [searchQuery, setSearchQuery] = useState('');
@@ -489,8 +494,8 @@ export default function ChatPage() {
           onDeleteMessage={deleteMessage}
           onPinMessage={pinMessage}
           onForwardMessage={(msgId) => {
-            // For now, forward to the same conversation (demo)
-            if (resolvedConversationId) forwardMessage(msgId, resolvedConversationId);
+            setForwardMessageId(msgId);
+            setForwardDialogOpen(true);
           }}
           onCopyMessage={handleCopyMessage}
           customEmoji={allCommunityEmoji}
@@ -556,6 +561,16 @@ export default function ChatPage() {
         submitLabel="Create"
         submitting={sharedFolderDialogSubmitting}
         onSubmit={handleSharedFolderDialogSubmit}
+      />
+
+      <ForwardDialog
+        open={forwardDialogOpen}
+        onClose={() => { setForwardDialogOpen(false); setForwardMessageId(null); }}
+        onSelectConversation={(convoId) => {
+          if (forwardMessageId) forwardMessage(forwardMessageId, convoId);
+          setForwardDialogOpen(false);
+          setForwardMessageId(null);
+        }}
       />
     </View>
   );
