@@ -1,0 +1,24 @@
+[package]
+name = "umbra-cli"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Terminal chat client for Umbra — encrypted P2P messaging in your terminal"
+
+[[bin]]
+name = "umbra"
+path = "src/main.rs"
+
+[dependencies]
+umbra-core = { path = "../umbra-core" }
+ratatui = "0.29"
+crossterm = "0.28"
+tokio = { version = "1", features = ["rt-multi-thread", "sync", "macros", "time"] }
+color-eyre = "0.6"
+unicode-width = "0.2"
+reqwest = { version = "0.12", features = ["json"] }
+open = "5"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rusqlite = { version = "0.31", features = ["bundled"] }
+dirs = "5"
