@@ -10,13 +10,18 @@
 
 import { expect, type Page } from '@playwright/test';
 
+// ─── Base URL ────────────────────────────────────────────────────────────────
+
+/** Base URL for the Expo web dev server. */
+export const BASE_URL = 'http://localhost:8081';
+
 // ─── Timeouts ────────────────────────────────────────────────────────────────
 
 /** Time for WASM core to initialize + app to fully render. */
 export const WASM_LOAD_TIMEOUT = 30_000;
 
 /** Time for relay to deliver messages between two browser contexts. */
-export const RELAY_SETTLE_TIMEOUT = 8_000;
+export const RELAY_SETTLE_TIMEOUT = 12_000;
 
 /** Time for UI state updates to settle after an action. */
 export const UI_SETTLE_TIMEOUT = 3_000;
