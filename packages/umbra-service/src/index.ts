@@ -70,7 +70,7 @@ export { ErrorCode, UmbraError } from './errors';
 export type {
   ChatMessagePayload, ConnectionInfo, Conversation, CreateIdentityResult, DiscoveryEvent, DiscoveryResult, Friend, FriendAcceptAckPayload, FriendEvent, FriendRequest, FriendRequestPayload,
   BlockedUser, FriendResponsePayload, Group, GroupEvent, GroupInvitePayload,
-  GroupInviteResponsePayload, GroupKeyRotationPayload, GroupMember, GroupMemberRemovedPayload, GroupMessagePayload, Identity, InitConfig, Message, MessageAttachment, MessageContent, MessageEvent, MessageReaction, MessageStatus, MessageStatusPayload, NetworkStatus, PendingGroupInvite, ProfileUpdate, PublicIdentity, PublicKeys, RelayAcceptResult, RelayEnvelope, RelayEvent, RelaySession, RelayStatus, ReplyTo, TypingIndicatorPayload,
+  GroupInviteResponsePayload, GroupKeyRotationPayload, GroupMember, GroupMemberRemovedPayload, GroupMessagePayload, Identity, InitConfig, KeyRotationPayload, Message, MessageAttachment, MessageContent, MessageEvent, MessageReaction, MessageStatus, MessageStatusPayload, NetworkStatus, PendingGroupInvite, ProfileUpdate, PublicIdentity, PublicKeys, RelayAcceptResult, RelayEnvelope, RelayEvent, RelaySession, RelayStatus, ReplyTo, TypingIndicatorPayload,
   Community, CommunityCreateResult, CommunitySpace, CommunityCategory, CommunityChannel, CommunityMember, CommunityRole, CommunitySeat, CommunityMessage, CommunityInvite, CommunityEvent, CommunityEventPayload,
   CommunityFileRecord, CommunityFileFolderRecord,
   CommunityEmoji, CommunitySticker, StickerPack,
@@ -80,6 +80,8 @@ export type {
   TransferProgress, TransferDirection, TransferState, TransportType,
   IncomingTransferRequest, FileTransferEvent,
   AccountMetadataPayload,
+  AccountBackupManifestPayload,
+  AccountBackupChunkPayload,
   MetadataEvent,
 } from './types';
 
@@ -127,6 +129,13 @@ export type {
 
 // Metadata sync
 export { syncMetadataViaRelay } from './metadata';
+
+// Account backup
+export {
+  createAccountBackup, restoreAccountBackup,
+  parseBackupManifest, parseBackupChunks, restoreFromChunks,
+} from './backup';
+export type { BackupResult, RestoreResult, BackupManifest, BackupChunk } from './backup';
 
 // Discovery service
 export {
@@ -274,8 +283,19 @@ export type {
   NotificationRecord, NotificationType, UnreadCounts, NotificationCategory,
 } from './notifications';
 
+// Identity helpers
+export { rotateEncryptionKey } from './identity';
+
+// Friends helpers
+export { updateFriendEncryptionKey } from './friends';
+
 // Messaging helpers
 export { createDmConversation } from './messaging';
+export type { FileMessagePayload } from './messaging';
+
+// Instance coordinator (multi-instance detection)
+export { startInstanceCoordinator } from './instance-coordinator';
+export type { InstanceCoordinator, InstanceInfo } from './instance-coordinator';
 
 // Main service class
 export { UmbraService } from './service';

@@ -39,6 +39,7 @@ export enum ErrorCode {
   InvalidKey = 304,
   KeyExchangeFailed = 305,
   RngFailed = 306,
+  DecryptionKeyMismatch = 307,
 
   // Storage (400-499)
   StorageNotInitialized = 400,

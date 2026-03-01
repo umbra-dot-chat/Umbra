@@ -79,6 +79,7 @@ import * as identity from './identity';
 import * as network from './network';
 import * as friends from './friends';
 import * as messaging from './messaging';
+import type { FileMessagePayload } from './messaging';
 import * as calling from './calling';
 import * as groups from './groups';
 import * as crypto from './crypto';
@@ -88,6 +89,7 @@ import * as dmFiles from './dm-files';
 import * as chunkingModule from './chunking';
 import * as fileTransfer from './file-transfer';
 import * as fileEncryption from './file-encryption';
+import * as backup from './backup';
 
 /**
  * Main Umbra Service class
@@ -212,6 +214,18 @@ export class UmbraService {
 
   getPublicIdentity(): Promise<PublicIdentity> {
     return identity.getPublicIdentity();
+  }
+
+  rotateEncryptionKey(relayWs?: WebSocket | null): Promise<{ newEncryptionKey: string; friendCount: number }> {
+    return identity.rotateEncryptionKey(relayWs);
+  }
+
+  createAccountBackup(relayWs: WebSocket, ownDid: string): Promise<backup.BackupResult> {
+    return backup.createAccountBackup(relayWs, ownDid);
+  }
+
+  restoreAccountBackup(relayWs: WebSocket, ownDid: string): Promise<backup.RestoreResult | null> {
+    return backup.restoreAccountBackup(relayWs, ownDid);
   }
 
   // ===========================================================================
@@ -347,6 +361,14 @@ export class UmbraService {
     return friends.sendFriendAcceptAck(accepterDid, myDid, relayWs);
   }
 
+  updateFriendEncryptionKey(
+    fromDid: string,
+    newEncryptionKey: string,
+    signature: string,
+  ): Promise<void> {
+    return friends.updateFriendEncryptionKey(fromDid, newEncryptionKey, signature);
+  }
+
   onFriendEvent(callback: (event: FriendEvent) => void): () => void {
     this._friendListeners.push(callback);
     return () => {
@@ -385,6 +407,14 @@ export class UmbraService {
     relayWs?: WebSocket | null
   ): Promise<Message> {
     return messaging.sendMessage(conversationId, text, relayWs);
+  }
+
+  sendFileMessage(
+    conversationId: string,
+    filePayload: FileMessagePayload,
+    relayWs?: WebSocket | null
+  ): Promise<Message> {
+    return messaging.sendFileMessage(conversationId, filePayload, relayWs);
   }
 
   getMessages(
@@ -707,6 +737,15 @@ export class UmbraService {
     relayWs?: WebSocket | null
   ): Promise<Message> {
     return groups.sendGroupMessage(groupId, conversationId, text, relayWs);
+  }
+
+  sendGroupFileMessage(
+    groupId: string,
+    conversationId: string,
+    filePayload: FileMessagePayload,
+    relayWs?: WebSocket | null
+  ): Promise<Message> {
+    return groups.sendGroupFileMessage(groupId, conversationId, filePayload, relayWs);
   }
 
   removeGroupMemberWithRotation(

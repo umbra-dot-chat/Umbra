@@ -12,7 +12,9 @@ import type {
   PendingGroupInvite,
   GroupInvitePayload,
   Message,
+  MessageContent,
 } from './types';
+import type { FileMessagePayload } from './messaging';
 
 // =============================================================================
 // GROUP CRUD
@@ -412,6 +414,48 @@ export async function sendGroupMessage(
     read: false,
     delivered: false,
     status: 'sent',
+  };
+}
+
+/**
+ * Send a file message to a group.
+ *
+ * Encodes file metadata as a JSON bridge payload, sends it via
+ * `sendGroupMessage`, then returns a Message with proper file content type.
+ *
+ * @param groupId - Group ID
+ * @param conversationId - Conversation ID for the group
+ * @param filePayload - File metadata
+ * @param relayWs - WebSocket for relay delivery
+ * @returns The sent message with file content
+ */
+export async function sendGroupFileMessage(
+  groupId: string,
+  conversationId: string,
+  filePayload: FileMessagePayload,
+  relayWs?: WebSocket | null
+): Promise<Message> {
+  // Encode as JSON bridge text — the WASM layer only supports text content
+  const encoded = JSON.stringify({
+    __file: true,
+    ...filePayload,
+  });
+
+  const message = await sendGroupMessage(groupId, conversationId, encoded, relayWs);
+
+  // Override content to use the typed file variant
+  const fileContent: MessageContent = {
+    type: 'file',
+    fileId: filePayload.fileId,
+    filename: filePayload.filename,
+    size: filePayload.size,
+    mimeType: filePayload.mimeType,
+    storageChunksJson: filePayload.storageChunksJson,
+  };
+
+  return {
+    ...message,
+    content: fileContent,
   };
 }
 

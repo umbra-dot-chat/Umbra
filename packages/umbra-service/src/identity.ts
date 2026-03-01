@@ -156,6 +156,8 @@ export async function getPublicIdentity(): Promise<PublicIdentity> {
     displayName: string;
     status?: string;
     avatar?: string;
+    signingKey?: string;
+    encryptionKey?: string;
   }>(profileJson);
 
   return {
@@ -164,9 +166,39 @@ export async function getPublicIdentity(): Promise<PublicIdentity> {
     status: profile.status ?? undefined,
     avatar: profile.avatar ?? undefined,
     publicKeys: {
-      signing: '', // TODO: expose public keys via WASM
-      encryption: '',
+      signing: profile.signingKey ?? '',
+      encryption: profile.encryptionKey ?? '',
     },
     createdAt: Date.now() / 1000,
   };
+}
+
+/**
+ * Rotate the user's X25519 encryption key.
+ *
+ * Generates a new random encryption keypair, updates secure storage,
+ * and returns relay messages to notify all friends.
+ */
+export async function rotateEncryptionKey(
+  relayWs?: WebSocket | null,
+): Promise<{ newEncryptionKey: string; friendCount: number }> {
+  const resultJson = wasm().umbra_wasm_identity_rotate_encryption_key();
+  const result = await parseWasm<{
+    newEncryptionKey: string;
+    relayMessages?: Array<{ toDid: string; payload: string }>;
+    friendCount: number;
+  }>(resultJson);
+
+  // Send key rotation notifications to all friends via relay
+  if (relayWs && relayWs.readyState === WebSocket.OPEN && result.relayMessages) {
+    for (const rm of result.relayMessages) {
+      try {
+        relayWs.send(JSON.stringify({ type: 'send', to_did: rm.toDid, payload: rm.payload }));
+      } catch (err) {
+        console.error('[rotateEncryptionKey] Failed to send key rotation notification:', err);
+      }
+    }
+  }
+
+  return { newEncryptionKey: result.newEncryptionKey, friendCount: result.friendCount };
 }

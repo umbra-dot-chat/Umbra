@@ -49,6 +49,12 @@ export interface UmbraWasmModule {
   umbra_wasm_identity_get_did(): string;
   umbra_wasm_identity_get_profile(): string;
   umbra_wasm_identity_update_profile(json: string): void;
+  /** Rotate the user's X25519 encryption key */
+  umbra_wasm_identity_rotate_encryption_key(): string;
+  /** Create an encrypted account backup */
+  umbra_wasm_account_create_backup(json: string): string;
+  /** Restore an account from encrypted backup chunks */
+  umbra_wasm_account_restore_backup(json: string): string;
 
   // Discovery
   umbra_wasm_discovery_get_connection_info(): string;
@@ -67,6 +73,8 @@ export interface UmbraWasmModule {
   umbra_wasm_friends_store_incoming(json: string): void;
   umbra_wasm_friends_accept_from_relay(json: string): string;
   umbra_wasm_friends_build_accept_ack(json: string): string;
+  /** Update a friend's encryption key after key rotation */
+  umbra_wasm_friends_update_encryption_key(json: string): string;
 
   // Messaging (core — implemented in Rust WASM)
   umbra_wasm_messaging_get_conversations(): string;
@@ -712,6 +720,14 @@ function buildModule(wasmPkg: any): UmbraWasmModule {
       // No-op: real WASM manages identity via create/restore
       console.debug('[umbra-wasm] identity_set called (no-op — use create or restore)');
     },
+    umbra_wasm_identity_rotate_encryption_key: () =>
+      wasmPkg.umbra_wasm_identity_rotate_encryption_key(),
+    umbra_wasm_account_create_backup: (json: string) =>
+      wasmPkg.umbra_wasm_account_create_backup(json),
+    umbra_wasm_account_restore_backup: (json: string) =>
+      wasmPkg.umbra_wasm_account_restore_backup(json),
+    umbra_wasm_friends_update_encryption_key: (json: string) =>
+      wasmPkg.umbra_wasm_friends_update_encryption_key(json),
 
     // Discovery
     umbra_wasm_discovery_get_connection_info: () =>

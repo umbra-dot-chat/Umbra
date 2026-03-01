@@ -111,6 +111,16 @@ export function createTauriBackend(
       callQuiet('identity_update_profile', json);
     },
 
+    umbra_wasm_identity_rotate_encryption_key: () => {
+      return call('identity_rotate_encryption_key') as any;
+    },
+    umbra_wasm_account_create_backup: (json: string) => {
+      return call('account_create_backup', json) as any;
+    },
+    umbra_wasm_account_restore_backup: (json: string) => {
+      return call('account_restore_backup', json) as any;
+    },
+
     // ── Discovery ──────────────────────────────────────────────────
     umbra_wasm_discovery_get_connection_info: () => {
       return invoke('get_connection_info').then(ensureJsonString) as any;
@@ -172,6 +182,10 @@ export function createTauriBackend(
 
     umbra_wasm_friends_build_accept_ack: (json: string) => {
       return call('friends_build_accept_ack', json) as any;
+    },
+
+    umbra_wasm_friends_update_encryption_key: (json: string) => {
+      return call('friends_update_encryption_key', json) as any;
     },
 
     // ── Messaging (core) ───────────────────────────────────────────

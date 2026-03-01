@@ -7,11 +7,42 @@
 import { wasm, parseWasm } from './helpers';
 import type {
   Message,
+  MessageContent,
   Conversation,
   MessageReaction,
   MessageEvent,
   ChatMessagePayload,
 } from './types';
+
+/**
+ * Payload for sending a file as a message.
+ */
+export interface FileMessagePayload {
+  fileId: string;
+  filename: string;
+  size: number;
+  mimeType: string;
+  storageChunksJson: string;
+}
+
+/**
+ * Categorize a decryption error into a user-friendly message.
+ *
+ * Error codes are prefixed by the WASM layer (e.g. "KEY_MISMATCH:...").
+ */
+function categorizeDecryptError(err: unknown): string {
+  const errStr = String(err);
+  if (errStr.includes('KEY_MISMATCH')) {
+    return '[Encrypted with a different key]';
+  } else if (errStr.includes('FRIEND_NOT_FOUND')) {
+    return '[Sender unknown]';
+  } else if (errStr.includes('CONVERSATION_NOT_FOUND')) {
+    return '[Message from unknown conversation]';
+  } else if (errStr.includes('INVALID_FORMAT')) {
+    return '[Corrupted message]';
+  }
+  return '[Unable to decrypt message]';
+}
 
 /**
  * Get all conversations
@@ -90,6 +121,46 @@ export async function sendMessage(
 }
 
 /**
+ * Send a file message
+ *
+ * Encodes file metadata as a JSON bridge payload, sends it as a text message
+ * via the WASM layer, then returns a Message with proper file content type.
+ *
+ * @param conversationId - Conversation to send to
+ * @param filePayload - File metadata (fileId, filename, size, mimeType, storageChunksJson)
+ * @param relayWs - Optional WebSocket to send via relay
+ * @returns The sent message with file content
+ */
+export async function sendFileMessage(
+  conversationId: string,
+  filePayload: FileMessagePayload,
+  relayWs?: WebSocket | null
+): Promise<Message> {
+  // Encode as JSON bridge text — the WASM layer only supports text content
+  const encoded = JSON.stringify({
+    __file: true,
+    ...filePayload,
+  });
+
+  const message = await sendMessage(conversationId, encoded, relayWs);
+
+  // Override content to use the typed file variant
+  const fileContent: MessageContent = {
+    type: 'file',
+    fileId: filePayload.fileId,
+    filename: filePayload.filename,
+    size: filePayload.size,
+    mimeType: filePayload.mimeType,
+    storageChunksJson: filePayload.storageChunksJson,
+  };
+
+  return {
+    ...message,
+    content: fileContent,
+  };
+}
+
+/**
  * Get messages in a conversation
  *
  * @param conversationId - Conversation ID
@@ -139,7 +210,7 @@ export async function getMessages(
     } catch (err) {
       // Fallback: show a user-friendly indicator instead of raw ciphertext
       console.warn('[getMessages] decrypt failed for msg', m.id, err);
-      text = '[Unable to decrypt message]';
+      text = categorizeDecryptError(err);
     }
     return {
       id: m.id,
@@ -248,8 +319,8 @@ export async function getThreadReplies(parentId: string): Promise<Message[]> {
         m.timestamp
       );
       text = await parseWasm<string>(decryptedJson);
-    } catch {
-      text = m.contentEncrypted || '';
+    } catch (err) {
+      text = categorizeDecryptError(err);
     }
     return {
       id: m.id,
@@ -329,8 +400,8 @@ export async function getPinnedMessages(conversationId: string): Promise<Message
         m.timestamp
       );
       text = await parseWasm<string>(decryptedJson);
-    } catch {
-      text = m.contentEncrypted || '';
+    } catch (err) {
+      text = categorizeDecryptError(err);
     }
     return {
       id: m.id,
@@ -432,6 +503,8 @@ export async function decryptIncomingMessage(payload: ChatMessagePayload): Promi
       '— nonce:', payload.nonce?.slice(0, 16) + '…',
       '— error:', err,
     );
+    const category = categorizeDecryptError(err);
+    console.warn('[decryptIncomingMessage] Category:', category);
     return null;
   }
 }

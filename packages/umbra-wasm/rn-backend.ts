@@ -199,6 +199,12 @@ function createNativeBackend(native: NativeUmbraCore): UmbraWasmModule {
     umbra_wasm_identity_get_did: () => checkNativeResult(native.identityGetDid(), 'identityGetDid'),
     umbra_wasm_identity_get_profile: () => checkNativeResult(ensureJsonString(native.identityGetProfile()), 'identityGetProfile'),
     umbra_wasm_identity_update_profile: (json: string) => checkNativeResult(ensureJsonString(native.identityUpdateProfile(json)), 'identityUpdateProfile'),
+    umbra_wasm_identity_rotate_encryption_key: () =>
+      call('identity_rotate_encryption_key', {}),
+    umbra_wasm_account_create_backup: (json: string) =>
+      call('account_create_backup', JSON.parse(json || '{}')),
+    umbra_wasm_account_restore_backup: (json: string) =>
+      call('account_restore_backup', JSON.parse(json)),
 
     // ── Discovery (direct native calls) ─────────────────────────────────
     umbra_wasm_discovery_get_connection_info: () => checkNativeResult(ensureJsonString(native.discoveryGetConnectionInfo()), 'discoveryGetConnectionInfo'),
@@ -221,6 +227,8 @@ function createNativeBackend(native: NativeUmbraCore): UmbraWasmModule {
     umbra_wasm_friends_store_incoming: (json: string) => call('friends_store_incoming', JSON.parse(json)),
     umbra_wasm_friends_accept_from_relay: (json: string) => call('friends_accept_from_relay', JSON.parse(json)),
     umbra_wasm_friends_build_accept_ack: (json: string) => call('friends_build_accept_ack', JSON.parse(json)),
+    umbra_wasm_friends_update_encryption_key: (json: string) =>
+      call('friends_update_encryption_key', JSON.parse(json)),
 
     // ── Messaging (via dispatcher) ──────────────────────────────────────
     umbra_wasm_messaging_get_conversations: () => call('messaging_get_conversations'),
@@ -565,6 +573,9 @@ function createStubBackend(): UmbraWasmModule {
     umbra_wasm_identity_get_did: () => notImplemented('identity_get_did'),
     umbra_wasm_identity_get_profile: () => notImplemented('identity_get_profile'),
     umbra_wasm_identity_update_profile: () => notImplemented('identity_update_profile'),
+    umbra_wasm_identity_rotate_encryption_key: () => notImplemented('identity_rotate_encryption_key'),
+    umbra_wasm_account_create_backup: () => notImplemented('account_create_backup'),
+    umbra_wasm_account_restore_backup: () => notImplemented('account_restore_backup'),
     umbra_wasm_discovery_get_connection_info: () => notImplemented('discovery_get_connection_info'),
     umbra_wasm_discovery_parse_connection_info: () => notImplemented('discovery_parse_connection_info'),
     umbra_wasm_friends_send_request: () => notImplemented('friends_send_request'),
@@ -579,6 +590,7 @@ function createStubBackend(): UmbraWasmModule {
     umbra_wasm_friends_store_incoming: () => notImplemented('friends_store_incoming'),
     umbra_wasm_friends_accept_from_relay: () => notImplemented('friends_accept_from_relay'),
     umbra_wasm_friends_build_accept_ack: () => notImplemented('friends_build_accept_ack'),
+    umbra_wasm_friends_update_encryption_key: () => notImplemented('friends_update_encryption_key'),
     umbra_wasm_messaging_get_conversations: () => notImplemented('messaging_get_conversations'),
     umbra_wasm_messaging_create_dm_conversation: () => notImplemented('messaging_create_dm_conversation'),
     umbra_wasm_messaging_get_messages: () => notImplemented('messaging_get_messages'),

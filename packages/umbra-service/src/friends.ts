@@ -255,6 +255,26 @@ export async function sendFriendAcceptAck(
 }
 
 /**
+ * Update a friend's encryption key after receiving a key_rotation envelope.
+ *
+ * Verifies the signature using the friend's (unchanged) Ed25519 signing key,
+ * then updates the X25519 encryption key in the database.
+ */
+export async function updateFriendEncryptionKey(
+  fromDid: string,
+  newEncryptionKey: string,
+  signature: string,
+): Promise<void> {
+  const json = JSON.stringify({
+    from_did: fromDid,
+    new_encryption_key: newEncryptionKey,
+    signature,
+  });
+  const resultJson = wasm().umbra_wasm_friends_update_encryption_key(json);
+  await parseWasm<{ updated: boolean }>(resultJson);
+}
+
+/**
  * Friend event listener management
  */
 export type FriendListenerCallback = (event: FriendEvent) => void;

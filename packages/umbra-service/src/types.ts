@@ -162,7 +162,8 @@ export type FriendEvent =
   | { type: 'friendSyncConfirmed'; did: string }
   | { type: 'friendOnline'; did: string }
   | { type: 'friendOffline'; did: string }
-  | { type: 'friendUpdated'; did: string };
+  | { type: 'friendUpdated'; did: string }
+  | { type: 'friendKeyRotated'; did: string; newEncryptionKey?: string };
 
 /**
  * Message content
@@ -467,6 +468,7 @@ export type RelayEnvelope =
   | { envelope: 'group_invite_decline'; version: 1; payload: GroupInviteResponsePayload }
   | { envelope: 'group_message'; version: 1; payload: GroupMessagePayload }
   | { envelope: 'group_key_rotation'; version: 1; payload: GroupKeyRotationPayload }
+  | { envelope: 'key_rotation'; version: 1; payload: KeyRotationPayload }
   | { envelope: 'group_member_removed'; version: 1; payload: GroupMemberRemovedPayload }
   | { envelope: 'message_status'; version: 1; payload: MessageStatusPayload }
   | { envelope: 'typing_indicator'; version: 1; payload: TypingIndicatorPayload }
@@ -478,6 +480,8 @@ export type RelayEnvelope =
   | { envelope: 'community_event'; version: 1; payload: CommunityEventPayload }
   | { envelope: 'dm_file_event'; version: 1; payload: DmFileEventPayload }
   | { envelope: 'account_metadata'; version: 1; payload: AccountMetadataPayload }
+  | { envelope: 'account_backup_manifest'; version: 1; payload: AccountBackupManifestPayload }
+  | { envelope: 'account_backup_chunk'; version: 1; payload: AccountBackupChunkPayload }
   | { envelope: 'presence_online'; version: 1; payload: { timestamp: number } }
   | { envelope: 'presence_ack'; version: 1; payload: { timestamp: number } };
 
@@ -500,7 +504,31 @@ export interface AccountMetadataPayload {
  * Events emitted when account metadata is received via relay sync.
  */
 export type MetadataEvent =
-  | { type: 'metadataReceived'; key: string; value: string; timestamp: number };
+  | { type: 'metadataReceived'; key: string; value: string; timestamp: number }
+  | { type: 'backupRestored'; imported: { settings: number; friends: number; conversations: number; groups: number; blocked_users: number } };
+
+/**
+ * Payload for account backup manifest envelope.
+ */
+export interface AccountBackupManifestPayload {
+  backupId: string;
+  senderDid: string;
+  totalChunks: number;
+  totalSize: number;
+  nonce: string;
+  timestamp: number;
+}
+
+/**
+ * Payload for account backup chunk envelope.
+ */
+export interface AccountBackupChunkPayload {
+  backupId: string;
+  chunkIndex: number;
+  totalChunks: number;
+  data: string;
+  hash: string;
+}
 
 /**
  * Payload for community event relay broadcast
@@ -642,6 +670,18 @@ export interface GroupMessagePayload {
   nonce: string;
   /** Key version used for encryption */
   keyVersion: number;
+  /** Unix timestamp */
+  timestamp: number;
+}
+
+/** Payload for encryption key rotation envelope */
+export interface KeyRotationPayload {
+  /** Sender's DID */
+  fromDid: string;
+  /** New X25519 public encryption key (hex) */
+  newEncryptionKey: string;
+  /** Ed25519 signature over the new key (hex) */
+  signature: string;
   /** Unix timestamp */
   timestamp: number;
 }
