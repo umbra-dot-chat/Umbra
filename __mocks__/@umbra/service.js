@@ -17,6 +17,7 @@ const ErrorCode = {
   RequestPending: 602,
   RequestNotFound: 603,
   UserBlocked: 604,
+  DecryptionKeyMismatch: 307,
   ConversationNotFound: 700,
   Internal: 900,
 };
@@ -86,6 +87,15 @@ const mockInstance = {
   ),
   rejectFriendRequest: jest.fn(() => Promise.resolve()),
   removeFriend: jest.fn(() => Promise.resolve(true)),
+  rotateEncryptionKey: jest.fn(() =>
+    Promise.resolve({ newEncryptionKey: 'a'.repeat(64), friendCount: 2 })
+  ),
+  updateFriendEncryptionKey: jest.fn(() => Promise.resolve()),
+  createAccountBackup: jest.fn(() =>
+    Promise.resolve({ chunkCount: 3, totalSize: 150000 })
+  ),
+  restoreAccountBackup: jest.fn(() => Promise.resolve(null)),
+  getBlockedUsers: jest.fn(() => Promise.resolve([])),
   blockUser: jest.fn(() => Promise.resolve()),
   unblockUser: jest.fn(() => Promise.resolve(true)),
 
@@ -99,6 +109,18 @@ const mockInstance = {
       conversationId: convId,
       senderDid: 'did:key:z6MkTest',
       content: { type: 'text', text },
+      timestamp: Date.now(),
+      read: false,
+      delivered: false,
+      status: 'sent',
+    })
+  ),
+  sendFileMessage: jest.fn((convId, filePayload) =>
+    Promise.resolve({
+      id: `msg-${Date.now()}`,
+      conversationId: convId,
+      senderDid: 'did:key:z6MkTest',
+      content: { type: 'file', ...filePayload },
       timestamp: Date.now(),
       read: false,
       delivered: false,
@@ -225,6 +247,30 @@ const mockInstance = {
       },
     ])
   ),
+  sendGroupMessage: jest.fn((groupId, convId, text) =>
+    Promise.resolve({
+      id: `msg-${Date.now()}`,
+      conversationId: convId,
+      senderDid: 'did:key:z6MkTest',
+      content: { type: 'text', text },
+      timestamp: Date.now(),
+      read: false,
+      delivered: false,
+      status: 'sent',
+    })
+  ),
+  sendGroupFileMessage: jest.fn((groupId, convId, filePayload) =>
+    Promise.resolve({
+      id: `msg-${Date.now()}`,
+      conversationId: convId,
+      senderDid: 'did:key:z6MkTest',
+      content: { type: 'file', ...filePayload },
+      timestamp: Date.now(),
+      read: false,
+      delivered: false,
+      status: 'sent',
+    })
+  ),
 
   // Relay
   connectRelay: jest.fn((url) =>
@@ -270,6 +316,7 @@ const mockInstance = {
   onFriendEvent: jest.fn(() => jest.fn()),
   onDiscoveryEvent: jest.fn(() => jest.fn()),
   onRelayEvent: jest.fn(() => jest.fn()),
+  onDmFileEvent: jest.fn(() => jest.fn()),
 
   // Call events
   onCallEvent: jest.fn(() => jest.fn()),
@@ -363,6 +410,7 @@ const mockInstance = {
   dispatchGroupEvent: jest.fn(),
   dispatchFriendEvent: jest.fn(),
   dispatchMessageEvent: jest.fn(),
+  dispatchDmFileEvent: jest.fn(),
 
   // Community files
   getCommunityFiles: jest.fn(() => Promise.resolve([])),
@@ -535,6 +583,29 @@ const formatBytes = jest.fn((bytes) => {
 const initOpfsBridge = jest.fn(() => false); // false in test env (no OPFS)
 const isOpfsBridgeReady = jest.fn(() => false);
 
+// Metadata sync
+const syncMetadataViaRelay = jest.fn();
+
+// Account backup
+const createAccountBackup = jest.fn(() =>
+  Promise.resolve({ chunkCount: 3, totalSize: 150000 })
+);
+const restoreAccountBackup = jest.fn(() => Promise.resolve(null));
+const parseBackupManifest = jest.fn(() => null);
+const parseBackupChunks = jest.fn(() => []);
+const restoreFromChunks = jest.fn(() =>
+  Promise.resolve({
+    imported: { settings: 5, friends: 3, conversations: 2, groups: 1, blocked_users: 0 },
+  })
+);
+
+// Instance coordinator
+const startInstanceCoordinator = jest.fn(() => ({
+  isPrimary: true,
+  onConflict: jest.fn(),
+  shutdown: jest.fn(),
+}));
+
 module.exports = {
   UmbraService,
   ErrorCode,
@@ -550,4 +621,14 @@ module.exports = {
   // OPFS bridge
   initOpfsBridge,
   isOpfsBridgeReady,
+  // Metadata sync
+  syncMetadataViaRelay,
+  // Account backup
+  createAccountBackup,
+  restoreAccountBackup,
+  parseBackupManifest,
+  parseBackupChunks,
+  restoreFromChunks,
+  // Instance coordinator
+  startInstanceCoordinator,
 };

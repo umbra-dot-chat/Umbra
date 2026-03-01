@@ -1242,6 +1242,24 @@
 - [ ] **T11.14.6** Links: GitHub repository, Release Notes, Web App
 - [ ] **T11.14.7** Platform info display
 
+### 11.15 Account Backup & Recovery
+> `__tests__/e2e/settings/account-backup.spec.ts`
+- [ ] **T-ABK.1** Settings page shows "Backup Account" button
+- [ ] **T-ABK.2** Clicking backup shows progress and success toast
+- [ ] **T-ABK.3** After restore, settings and friend list are populated
+- [ ] **T-ABK.4** Restore with no backup shows "No backup found" message
+
+### 11.16 Multi-Instance Detection
+> `__tests__/e2e/settings/multi-instance.spec.ts`
+- [ ] **T-MI.1** Opening second tab detects instance conflict via service API
+- [ ] **T-MI.2** Instance coordinator reports primary status correctly
+
+### 11.17 Identity Card PDF
+> `__tests__/e2e/settings/identity-card.spec.ts`
+- [ ] **T-ICP.1** Settings Account section shows Identity Card button
+- [ ] **T-ICP.2** Clicking Identity Card opens dialog with preview and Download PDF button
+- [ ] **T-ICP.3** Recovery phrase toggle shows warning when enabled
+
 ---
 
 ## 12. Plugin Marketplace
