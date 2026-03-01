@@ -69,6 +69,22 @@ config.resolver.resolveRequest = (context, moduleName, platform) => {
     }
   }
 
+  // Resolve jspdf to browser/ESM build (Metro picks node build by default which uses dynamic require)
+  if (moduleName === 'jspdf') {
+    const filePath = path.resolve(__dirname, 'node_modules/jspdf/dist/jspdf.es.min.js');
+    if (fs.existsSync(filePath)) {
+      return { type: 'sourceFile', filePath };
+    }
+  }
+
+  // Resolve bare @coexist/wisp-core import (package.json exports can confuse Metro)
+  if (moduleName === '@coexist/wisp-core') {
+    const filePath = path.resolve(__dirname, 'node_modules/@coexist/wisp-core/src/index.ts');
+    if (fs.existsSync(filePath)) {
+      return { type: 'sourceFile', filePath };
+    }
+  }
+
   // Intercept deep imports from @coexist/wisp-core (e.g. @coexist/wisp-core/animation/presets)
   if (moduleName.startsWith('@coexist/wisp-core/')) {
     const subPath = moduleName.replace('@coexist/wisp-core/', '');

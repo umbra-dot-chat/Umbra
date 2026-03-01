@@ -312,32 +312,48 @@ jobs:
           WINDOWS_FILE=$(ls release/*.nsis.zip 2>/dev/null | head -1 | xargs basename 2>/dev/null || echo "")
           LINUX_FILE=$(ls release/*.AppImage.tar.gz 2>/dev/null | head -1 | xargs basename 2>/dev/null || echo "")
 
-          # Build latest.json for Tauri v2 updater
-          cat > release/latest.json << EOF
-          {
-            "version": "$VERSION",
-            "notes": "Umbra $VERSION",
-            "pub_date": "$PUB_DATE",
-            "platforms": {
-              "darwin-aarch64": {
-                "signature": "$MACOS_ARM_SIG",
-                "url": "https://github.com/$REPO/releases/download/$VERSION/$MACOS_ARM_FILE"
-              },
-              "darwin-x86_64": {
-                "signature": "$MACOS_INTEL_SIG",
-                "url": "https://github.com/$REPO/releases/download/$VERSION/$MACOS_INTEL_FILE"
-              },
-              "windows-x86_64": {
-                "signature": "$WINDOWS_SIG",
-                "url": "https://github.com/$REPO/releases/download/$VERSION/$WINDOWS_FILE"
-              },
-              "linux-x86_64": {
-                "signature": "$LINUX_SIG",
-                "url": "https://github.com/$REPO/releases/download/$VERSION/$LINUX_FILE"
-              }
-            }
+          # Validate: at least one platform must have a valid signature
+          HAS_VALID_SIG=false
+          if [ -n "$MACOS_ARM_SIG" ] || [ -n "$MACOS_INTEL_SIG" ] || [ -n "$WINDOWS_SIG" ] || [ -n "$LINUX_SIG" ]; then
+            HAS_VALID_SIG=true
+          fi
+
+          if [ "$HAS_VALID_SIG" = "false" ]; then
+            echo "::warning::No signed updater artifacts found — latest.json will have empty signatures. The Tauri updater will fail for users. Ensure TAURI_SIGNING_PRIVATE_KEY is set in repo secrets."
+          fi
+
+          # Build latest.json — only include platforms that have both a file and a signature
+          echo '{' > release/latest.json
+          echo "  \"version\": \"$VERSION\"," >> release/latest.json
+          echo "  \"notes\": \"Umbra $VERSION\"," >> release/latest.json
+          echo "  \"pub_date\": \"$PUB_DATE\"," >> release/latest.json
+          echo '  "platforms": {' >> release/latest.json
+
+          FIRST=true
+          add_platform() {
+            local key="$1" sig="$2" file="$3"
+            if [ -n "$sig" ] && [ -n "$file" ]; then
+              if [ "$FIRST" = "false" ]; then echo ',' >> release/latest.json; fi
+              FIRST=false
+              cat >> release/latest.json << PLAT
+    "$key": {
+      "signature": "$sig",
+      "url": "https://github.com/$REPO/releases/download/$VERSION/$file"
+    }
+PLAT
+            fi
           }
-          EOF
+
+          add_platform "darwin-aarch64" "$MACOS_ARM_SIG" "$MACOS_ARM_FILE"
+          add_platform "darwin-x86_64" "$MACOS_INTEL_SIG" "$MACOS_INTEL_FILE"
+          add_platform "windows-x86_64" "$WINDOWS_SIG" "$WINDOWS_FILE"
+          add_platform "linux-x86_64" "$LINUX_SIG" "$LINUX_FILE"
+
+          echo '' >> release/latest.json
+          echo '  }' >> release/latest.json
+          echo '}' >> release/latest.json
+
+          echo "has_valid_sig=$HAS_VALID_SIG" >> $GITHUB_OUTPUT
 
       - name: Create Release
         uses: softprops/action-gh-release@v1

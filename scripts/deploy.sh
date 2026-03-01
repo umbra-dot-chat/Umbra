@@ -163,6 +163,46 @@ run_rsync() {
     rsync -avz --delete -e "$RSYNC_SSH" "$src" "$dest"
 }
 
+# Start an SSH ControlMaster for the given host so that multiple
+# ssh/rsync calls reuse a single TCP connection instead of opening
+# (and potentially getting rate-limited by) many separate ones.
+start_ssh_multiplex() {
+    local host="$1"
+    SSH_CONTROL_DIR=$(mktemp -d)
+    SSH_CONTROL_PATH="$SSH_CONTROL_DIR/%r@%h:%p"
+    log_info "Opening persistent SSH connection to $host..."
+    eval "$SSH_CMD -fNM -o ControlPath='$SSH_CONTROL_PATH' -o ServerAliveInterval=30 -o ServerAliveCountMax=5 $SSH_USER@$host"
+}
+
+stop_ssh_multiplex() {
+    local host="$1"
+    if [[ -n "$SSH_CONTROL_PATH" ]]; then
+        eval "$SSH_CMD -O exit -o ControlPath='$SSH_CONTROL_PATH' $SSH_USER@$host 2>/dev/null" || true
+        rm -rf "$SSH_CONTROL_DIR" 2>/dev/null || true
+    fi
+}
+
+# Run rsync reusing the ControlMaster socket when available
+run_rsync_mux() {
+    local src="$1"
+    local dest="$2"
+    local extra_ssh_opts=""
+    if [[ -n "$SSH_CONTROL_PATH" ]]; then
+        extra_ssh_opts="-o ControlPath='$SSH_CONTROL_PATH'"
+    fi
+    rsync -avz --delete -e "$RSYNC_SSH $extra_ssh_opts" "$src" "$dest"
+}
+
+run_ssh_mux() {
+    local host="$1"
+    shift
+    local extra_ssh_opts=""
+    if [[ -n "$SSH_CONTROL_PATH" ]]; then
+        extra_ssh_opts="-o ControlPath='$SSH_CONTROL_PATH'"
+    fi
+    eval "$SSH_CMD $extra_ssh_opts $SSH_USER@$host $*"
+}
+
 # -----------------------------------------------------------------------------
 # Build Functions
 # -----------------------------------------------------------------------------
@@ -199,6 +239,62 @@ build_relay() {
 # Deploy Functions
 # -----------------------------------------------------------------------------
 
+generate_nginx_config() {
+    # Generate an nginx site config into a local temp file.
+    # Called by deploy_frontend — the file is rsynced to the server.
+    local outfile="$1"
+    cat > "$outfile" << EOF
+server {
+    listen 80;
+    server_name ${FRONTEND_HOST};
+
+    root ${FRONTEND_PATH};
+    index index.html;
+
+    # ── MIME types ────────────────────────────────────────────────────
+    # Ensure .wasm and .js files are served with correct Content-Type.
+    # nginx's default mime.types usually covers .js but not .wasm.
+    types {
+        application/wasm                wasm;
+        application/javascript          js mjs;
+        text/html                       html htm;
+        text/css                        css;
+        application/json                json;
+        image/png                       png;
+        image/jpeg                      jpg jpeg;
+        image/svg+xml                   svg svgz;
+        image/x-icon                    ico;
+        font/woff                       woff;
+        font/woff2                      woff2;
+        application/octet-stream        bin;
+    }
+
+    # ── Static assets ─────────────────────────────────────────────────
+    # Expo hashes JS bundles into _expo/static/. Cache aggressively.
+    location /_expo/static/ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+        try_files \$uri =404;
+    }
+
+    # Serve WASM and JS files with COOP/COEP headers (required for
+    # SharedArrayBuffer which some WASM workloads need).
+    location ~ \.(wasm|js)$ {
+        add_header Cross-Origin-Opener-Policy "same-origin";
+        add_header Cross-Origin-Embedder-Policy "require-corp";
+        try_files \$uri =404;
+    }
+
+    # ── SPA fallback ──────────────────────────────────────────────────
+    # Expo Router generates per-route HTML files (index.html, friends.html, etc.).
+    # Try exact file first, then directory index, then SPA fallback.
+    location / {
+        try_files \$uri \$uri/ \$uri.html /index.html;
+    }
+}
+EOF
+}
+
 deploy_frontend() {
     log_info "Deploying frontend to $FRONTEND_HOST..."
 
@@ -212,6 +308,19 @@ deploy_frontend() {
 
     # Sync the dist folder
     run_rsync "$PROJECT_ROOT/dist/" "$SSH_USER@$FRONTEND_SSH_HOST:$FRONTEND_PATH/"
+
+    # Generate and deploy nginx config for WASM MIME types + SPA routing
+    log_info "Deploying nginx configuration (WASM support + SPA routing)..."
+    local nginx_tmp
+    nginx_tmp=$(mktemp)
+    generate_nginx_config "$nginx_tmp"
+
+    # Upload the config file
+    eval "$SCP_CMD '$nginx_tmp' $SSH_USER@$FRONTEND_SSH_HOST:/etc/nginx/sites-available/$FRONTEND_HOST"
+    rm -f "$nginx_tmp"
+
+    # Enable site, validate config, and reload nginx
+    run_ssh "$FRONTEND_SSH_HOST" "'ln -sf /etc/nginx/sites-available/$FRONTEND_HOST /etc/nginx/sites-enabled/$FRONTEND_HOST && nginx -t && systemctl reload nginx'"
 
     log_success "Frontend deployed to https://$FRONTEND_HOST"
 }
@@ -253,39 +362,47 @@ deploy_relay_to_host() {
         return
     fi
 
-    # Create the relay directory
-    eval "$local_ssh_cmd $SSH_USER@$ssh_target 'mkdir -p $path/src $path/bridge-bot/src'"
+    # ── Stage all relay files locally, then rsync once ──────────────
+    # Instead of 7+ separate rsync calls (each opening a new SSH
+    # connection that can get rate-limited or killed), we assemble
+    # everything into a temp directory and do ONE rsync transfer.
+    local staging_dir
+    staging_dir=$(mktemp -d)
+    trap "rm -rf '$staging_dir'" RETURN
 
-    # Copy necessary files
-    rsync -avz --delete -e "$local_rsync_ssh" "$PROJECT_ROOT/packages/umbra-relay/Dockerfile" "$SSH_USER@$ssh_target:$path/"
-    rsync -avz --delete -e "$local_rsync_ssh" "$PROJECT_ROOT/packages/umbra-relay/docker-compose.yml" "$SSH_USER@$ssh_target:$path/"
-    rsync -avz --delete -e "$local_rsync_ssh" "$PROJECT_ROOT/packages/umbra-relay/Cargo.toml" "$SSH_USER@$ssh_target:$path/"
-    rsync -avz --delete -e "$local_rsync_ssh" "$PROJECT_ROOT/packages/umbra-relay/Cargo.lock" "$SSH_USER@$ssh_target:$path/"
+    log_info "Staging relay files..."
 
-    # Copy .env file if it exists (contains OAuth credentials)
+    # Relay core
+    mkdir -p "$staging_dir/src" "$staging_dir/bridge-bot/src"
+    cp "$PROJECT_ROOT/packages/umbra-relay/Dockerfile"           "$staging_dir/"
+    cp "$PROJECT_ROOT/packages/umbra-relay/docker-compose.yml"   "$staging_dir/"
+    cp "$PROJECT_ROOT/packages/umbra-relay/Cargo.toml"           "$staging_dir/"
+    cp "$PROJECT_ROOT/packages/umbra-relay/Cargo.lock"           "$staging_dir/"
+    cp -R "$PROJECT_ROOT/packages/umbra-relay/src/"              "$staging_dir/src/"
+
+    # .env (OAuth credentials) — optional
     if [[ -f "$PROJECT_ROOT/packages/umbra-relay/.env" ]]; then
-        rsync -avz -e "$local_rsync_ssh" "$PROJECT_ROOT/packages/umbra-relay/.env" "$SSH_USER@$ssh_target:$path/"
-        log_info "OAuth credentials (.env) copied to server"
+        cp "$PROJECT_ROOT/packages/umbra-relay/.env" "$staging_dir/"
+        log_info "OAuth credentials (.env) included"
     fi
 
-    # Copy src directory
-    rsync -avz --delete -e "$local_rsync_ssh" "$PROJECT_ROOT/packages/umbra-relay/src/" "$SSH_USER@$ssh_target:$path/src/"
+    # Bridge bot
+    cp "$PROJECT_ROOT/packages/umbra-bridge-bot/package.json"     "$staging_dir/bridge-bot/"
+    cp "$PROJECT_ROOT/packages/umbra-bridge-bot/package-lock.json" "$staging_dir/bridge-bot/" 2>/dev/null || true
+    cp "$PROJECT_ROOT/packages/umbra-bridge-bot/tsconfig.json"    "$staging_dir/bridge-bot/"
+    cp "$PROJECT_ROOT/packages/umbra-bridge-bot/Dockerfile"       "$staging_dir/bridge-bot/"
+    cp -R "$PROJECT_ROOT/packages/umbra-bridge-bot/src/"          "$staging_dir/bridge-bot/src/"
 
-    # Copy bridge bot files
-    log_info "Syncing bridge bot files..."
-    rsync -avz --delete -e "$local_rsync_ssh" \
-        "$PROJECT_ROOT/packages/umbra-bridge-bot/package.json" \
-        "$PROJECT_ROOT/packages/umbra-bridge-bot/package-lock.json" \
-        "$PROJECT_ROOT/packages/umbra-bridge-bot/tsconfig.json" \
-        "$PROJECT_ROOT/packages/umbra-bridge-bot/Dockerfile" \
-        "$SSH_USER@$ssh_target:$path/bridge-bot/"
-    rsync -avz --delete -e "$local_rsync_ssh" \
-        "$PROJECT_ROOT/packages/umbra-bridge-bot/src/" \
-        "$SSH_USER@$ssh_target:$path/bridge-bot/src/"
+    # ── Single rsync transfer ──────────────────────────────────────
+    log_info "Uploading relay files (single transfer)..."
+    eval "$local_ssh_cmd -o ServerAliveInterval=30 -o ServerAliveCountMax=5 $SSH_USER@$ssh_target 'mkdir -p $path'"
+    rsync -avz --delete \
+        -e "$local_rsync_ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=5" \
+        "$staging_dir/" "$SSH_USER@$ssh_target:$path/"
 
-    # Build and restart on the server with federation env vars
+    # ── Build and restart on the server ────────────────────────────
     log_info "Building and starting relay on server..."
-    eval "$local_ssh_cmd $SSH_USER@$ssh_target 'cd $path && \
+    eval "$local_ssh_cmd -o ServerAliveInterval=30 -o ServerAliveCountMax=5 $SSH_USER@$ssh_target 'cd $path && \
         RELAY_REGION=\"$region\" \
         RELAY_LOCATION=\"$location\" \
         RELAY_ID=\"$relay_id\" \
@@ -301,7 +418,7 @@ deploy_relay_to_host() {
         docker compose up -d'"
 
     # Start bridge bot if DISCORD_BOT_TOKEN is configured in .env
-    eval "$local_ssh_cmd $SSH_USER@$ssh_target 'cd $path && \
+    eval "$local_ssh_cmd -o ServerAliveInterval=30 -o ServerAliveCountMax=5 $SSH_USER@$ssh_target 'cd $path && \
         if grep -q \"^DISCORD_BOT_TOKEN=.\" .env 2>/dev/null; then \
             echo \"Starting bridge bot...\"; \
             docker compose --profile bridge build && \
@@ -311,7 +428,7 @@ deploy_relay_to_host() {
         fi'"
 
     # Show status
-    eval "$local_ssh_cmd $SSH_USER@$ssh_target 'cd $path && \
+    eval "$local_ssh_cmd -o ServerAliveInterval=30 -o ServerAliveCountMax=5 $SSH_USER@$ssh_target 'cd $path && \
         docker compose ps && \
         docker compose logs --tail=20'"
 
