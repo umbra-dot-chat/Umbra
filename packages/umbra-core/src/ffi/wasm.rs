@@ -84,6 +84,9 @@ struct WasmState {
     identity: Option<Identity>,
     network: Option<Arc<NetworkService>>,
     database: Option<Arc<Database>>,
+    /// Master seed retained for backup key derivation.
+    /// Set during identity create/restore, cleared on shutdown.
+    backup_seed: Option<[u8; 32]>,
     /// Injector for pushing completed WebRTC connections into the libp2p swarm.
     /// Created when the network starts, used by signaling FFI functions.
     #[cfg(target_arch = "wasm32")]
@@ -96,6 +99,7 @@ impl WasmState {
             identity: None,
             network: None,
             database: None,
+            backup_seed: None,
             #[cfg(target_arch = "wasm32")]
             connection_injector: None,
         }
@@ -170,7 +174,15 @@ pub fn umbra_wasm_identity_create(display_name: &str) -> Result<JsValue, JsValue
     match Identity::create(display_name.to_string()) {
         Ok((identity, recovery_phrase)) => {
             let did = identity.did_string();
-            state.write().identity = Some(identity);
+
+            // Retain seed for backup key derivation
+            let seed = recovery_phrase
+                .to_seed()
+                .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+            let mut s = state.write();
+            s.identity = Some(identity);
+            s.backup_seed = Some(seed);
 
             let result = serde_json::json!({
                 "did": did,
@@ -196,10 +208,17 @@ pub fn umbra_wasm_identity_restore(
     let recovery = RecoveryPhrase::from_phrase(recovery_phrase)
         .map_err(|e| JsValue::from_str(&e.to_string()))?;
 
+    // Retain seed for backup key derivation
+    let seed = recovery
+        .to_seed()
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
     match Identity::from_recovery_phrase(&recovery, display_name.to_string()) {
         Ok(identity) => {
             let did = identity.did_string();
-            state.write().identity = Some(identity);
+            let mut s = state.write();
+            s.identity = Some(identity);
+            s.backup_seed = Some(seed);
             Ok(did)
         }
         Err(e) => Err(JsValue::from_str(&e.to_string())),
@@ -290,6 +309,81 @@ pub fn umbra_wasm_identity_update_profile(json: &str) -> Result<(), JsValue> {
     }
 
     Ok(())
+}
+
+/// Rotate the user's X25519 encryption key.
+///
+/// Generates a new random encryption keypair (NOT derived from the mnemonic),
+/// updates secure storage, signs the new public key with the (unchanged) Ed25519
+/// signing key, and builds relay envelopes to notify all friends.
+///
+/// Returns JSON: `{ newEncryptionKey, relayMessages: [...], friendCount }`
+#[wasm_bindgen]
+pub fn umbra_wasm_identity_rotate_encryption_key() -> Result<JsValue, JsValue> {
+    let state = get_state()?;
+    let mut state = state.write();
+
+    let identity = state
+        .identity
+        .as_mut()
+        .ok_or_else(|| JsValue::from_str("No identity loaded"))?;
+    let database = state
+        .database
+        .as_ref()
+        .ok_or_else(|| JsValue::from_str("Database not initialized"))?;
+
+    let our_did = identity.did_string();
+
+    // Generate new encryption key (random, not mnemonic-derived)
+    let new_pub_key = identity
+        .rotate_encryption_key()
+        .map_err(|e| JsValue::from_str(&format!("Key rotation failed: {}", e)))?;
+    let new_pub_hex = hex::encode(new_pub_key);
+
+    // Sign the new public key so recipients can verify authenticity
+    let signature = crate::crypto::sign(&identity.keypair().signing, &new_pub_key);
+    let signature_hex = hex::encode(signature.as_bytes());
+
+    // Build relay envelopes for all friends
+    let friends = database
+        .get_all_friends()
+        .map_err(|e| JsValue::from_str(&format!("Failed to get friends: {}", e)))?;
+
+    let timestamp = crate::time::now_timestamp();
+    let mut relay_messages = Vec::new();
+
+    for friend in &friends {
+        let envelope = serde_json::json!({
+            "envelope": "key_rotation",
+            "version": 1,
+            "payload": {
+                "fromDid": our_did,
+                "newEncryptionKey": new_pub_hex,
+                "signature": signature_hex,
+                "timestamp": timestamp,
+            }
+        });
+        relay_messages.push(serde_json::json!({
+            "toDid": friend.did,
+            "payload": envelope.to_string(),
+        }));
+    }
+
+    emit_event(
+        "identity",
+        &serde_json::json!({
+            "type": "encryptionKeyRotated",
+            "newEncryptionKey": new_pub_hex,
+            "timestamp": timestamp,
+        }),
+    );
+
+    let result = serde_json::json!({
+        "newEncryptionKey": new_pub_hex,
+        "relayMessages": relay_messages,
+        "friendCount": friends.len(),
+    });
+    Ok(JsValue::from_str(&serde_json::to_string(&result).unwrap()))
 }
 
 // ============================================================================
@@ -823,6 +917,82 @@ pub fn umbra_wasm_friends_build_accept_ack(json: &str) -> Result<JsValue, JsValu
         "payload": envelope.to_string(),
     });
     Ok(JsValue::from_str(&result.to_string()))
+}
+
+/// Update a friend's encryption key after receiving a key_rotation envelope.
+///
+/// Verifies the signature using the friend's (unchanged) Ed25519 signing key,
+/// then updates the X25519 encryption key in the database.
+///
+/// Input JSON: `{ "from_did": "...", "new_encryption_key": "hex", "signature": "hex" }`
+#[wasm_bindgen]
+pub fn umbra_wasm_friends_update_encryption_key(json: &str) -> Result<JsValue, JsValue> {
+    let data: serde_json::Value = serde_json::from_str(json)
+        .map_err(|e| JsValue::from_str(&format!("Invalid JSON: {}", e)))?;
+
+    let from_did = data["from_did"]
+        .as_str()
+        .ok_or_else(|| JsValue::from_str("Missing from_did"))?;
+    let new_enc_key_hex = data["new_encryption_key"]
+        .as_str()
+        .ok_or_else(|| JsValue::from_str("Missing new_encryption_key"))?;
+    let signature_hex = data["signature"]
+        .as_str()
+        .ok_or_else(|| JsValue::from_str("Missing signature"))?;
+
+    let state = get_state()?;
+    let state = state.read();
+    let database = state
+        .database
+        .as_ref()
+        .ok_or_else(|| JsValue::from_str("Database not initialized"))?;
+
+    // Look up the friend to get their signing key for verification
+    let friend = database
+        .get_friend(from_did)
+        .map_err(|e| JsValue::from_str(&format!("DB error: {}", e)))?
+        .ok_or_else(|| JsValue::from_str("Friend not found"))?;
+
+    // Decode the new encryption key
+    let new_key_bytes = hex::decode(new_enc_key_hex)
+        .map_err(|e| JsValue::from_str(&format!("Invalid key hex: {}", e)))?;
+    if new_key_bytes.len() != 32 {
+        return Err(JsValue::from_str("New encryption key must be 32 bytes"));
+    }
+
+    // Verify the signature using the friend's (unchanged) signing key
+    let signing_key_bytes = hex::decode(&friend.signing_key)
+        .map_err(|e| JsValue::from_str(&format!("Invalid signing key: {}", e)))?;
+    let mut sk = [0u8; 32];
+    sk.copy_from_slice(&signing_key_bytes);
+
+    let sig_bytes = hex::decode(signature_hex)
+        .map_err(|e| JsValue::from_str(&format!("Invalid signature hex: {}", e)))?;
+    let signature = crate::crypto::Signature::from_bytes(&sig_bytes)
+        .map_err(|_| JsValue::from_str("Invalid signature format"))?;
+
+    crate::crypto::verify(&sk, &new_key_bytes, &signature)
+        .map_err(|_| JsValue::from_str("Signature verification failed — key rotation rejected"))?;
+
+    // Update the friend's encryption key in the database
+    let mut new_enc = [0u8; 32];
+    new_enc.copy_from_slice(&new_key_bytes);
+    database
+        .update_friend_encryption_key(from_did, &new_enc)
+        .map_err(|e| JsValue::from_str(&format!("Failed to update key: {}", e)))?;
+
+    emit_event(
+        "friend",
+        &serde_json::json!({
+            "type": "friendKeyRotated",
+            "did": from_did,
+            "newEncryptionKey": new_enc_key_hex,
+        }),
+    );
+
+    Ok(JsValue::from_str(
+        &serde_json::json!({"updated": true}).to_string(),
+    ))
 }
 
 /// Reject a friend request
@@ -1436,37 +1606,37 @@ pub fn umbra_wasm_messaging_decrypt(
     // Look up the conversation to find the friend's DID
     let conversation = database
         .get_conversation(conversation_id)
-        .map_err(|e| JsValue::from_str(&format!("Failed to get conversation: {}", e)))?
-        .ok_or_else(|| JsValue::from_str("Conversation not found"))?;
+        .map_err(|e| JsValue::from_str(&format!("CONVERSATION_NOT_FOUND:Failed to get conversation: {}", e)))?
+        .ok_or_else(|| JsValue::from_str("CONVERSATION_NOT_FOUND:Conversation not found"))?;
 
     let friend_did = conversation.friend_did.as_deref().ok_or_else(|| {
-        JsValue::from_str("Cannot decrypt: conversation has no friend_did (group?)")
+        JsValue::from_str("CONVERSATION_NOT_FOUND:Cannot decrypt: conversation has no friend_did (group?)")
     })?;
     let our_did = identity.did_string();
 
     // Look up the friend's encryption key
     let friend_record = database
         .get_friend(friend_did)
-        .map_err(|e| JsValue::from_str(&format!("Failed to get friend: {}", e)))?
-        .ok_or_else(|| JsValue::from_str("Friend not found"))?;
+        .map_err(|e| JsValue::from_str(&format!("FRIEND_NOT_FOUND:Failed to get friend: {}", e)))?
+        .ok_or_else(|| JsValue::from_str("FRIEND_NOT_FOUND:Friend not found"))?;
 
     let friend_encryption_key_bytes = hex::decode(&friend_record.encryption_key)
-        .map_err(|e| JsValue::from_str(&format!("Invalid friend encryption key: {}", e)))?;
+        .map_err(|e| JsValue::from_str(&format!("INVALID_FORMAT:Invalid friend encryption key: {}", e)))?;
     let mut friend_enc_key = [0u8; 32];
     if friend_encryption_key_bytes.len() != 32 {
-        return Err(JsValue::from_str("Friend encryption key must be 32 bytes"));
+        return Err(JsValue::from_str("INVALID_FORMAT:Friend encryption key must be 32 bytes"));
     }
     friend_enc_key.copy_from_slice(&friend_encryption_key_bytes);
 
     // Decode ciphertext and nonce
     let ciphertext = base64::engine::general_purpose::STANDARD
         .decode(content_encrypted_b64)
-        .map_err(|e| JsValue::from_str(&format!("Invalid base64 ciphertext: {}", e)))?;
+        .map_err(|e| JsValue::from_str(&format!("INVALID_FORMAT:Invalid base64 ciphertext: {}", e)))?;
 
     let nonce_bytes = hex::decode(nonce_hex)
-        .map_err(|e| JsValue::from_str(&format!("Invalid nonce hex: {}", e)))?;
+        .map_err(|e| JsValue::from_str(&format!("INVALID_FORMAT:Invalid nonce hex: {}", e)))?;
     if nonce_bytes.len() != 12 {
-        return Err(JsValue::from_str("Nonce must be 12 bytes"));
+        return Err(JsValue::from_str("INVALID_FORMAT:Nonce must be 12 bytes"));
     }
     let mut nonce_arr = [0u8; 12];
     nonce_arr.copy_from_slice(&nonce_bytes);
@@ -1502,7 +1672,7 @@ pub fn umbra_wasm_messaging_decrypt(
             let json = serde_json::json!(text);
             Ok(JsValue::from_str(&json.to_string()))
         }
-        Err(e) => Err(JsValue::from_str(&format!("Decryption failed: {}", e))),
+        Err(_e) => Err(JsValue::from_str("KEY_MISMATCH:Decryption failed — encryption key may have changed")),
     }
 }
 
@@ -3605,6 +3775,198 @@ pub fn umbra_wasm_build_metadata_envelope(json: &str) -> Result<JsValue, JsValue
         "to_did": sender_did,
         "payload": envelope.to_string(),
     });
+    Ok(JsValue::from_str(&result.to_string()))
+}
+
+// ============================================================================
+// ACCOUNT BACKUP
+// ============================================================================
+
+/// Create an encrypted account backup.
+///
+/// Exports the database, compresses, encrypts with a key derived from the
+/// master seed, chunks into 64KB pieces, and builds relay envelopes to send
+/// to the user's own DID.
+///
+/// Returns JSON: { "relayMessages": [{ "to_did", "payload" }], "chunkCount": N, "totalSize": N }
+#[wasm_bindgen]
+pub fn umbra_wasm_account_create_backup(_json: &str) -> Result<JsValue, JsValue> {
+    let state = get_state()?;
+    let state_r = state.read();
+
+    let identity = state_r
+        .identity
+        .as_ref()
+        .ok_or_else(|| JsValue::from_str("No identity loaded"))?;
+    let database = state_r
+        .database
+        .as_ref()
+        .ok_or_else(|| JsValue::from_str("Database not initialized"))?;
+    let seed = state_r
+        .backup_seed
+        .as_ref()
+        .ok_or_else(|| JsValue::from_str("Backup seed not available — identity was not created or restored in this session"))?;
+
+    // 1. Derive backup encryption key
+    let backup_key = crate::crypto::derive_backup_key(seed)
+        .map_err(|e| JsValue::from_str(&format!("Key derivation failed: {}", e)))?;
+
+    // 2. Export database to JSON
+    let export_bytes = database
+        .export_database()
+        .map_err(|e| JsValue::from_str(&format!("Database export failed: {}", e)))?;
+
+    // 3. Compress with flate2-style deflate via miniz_oxide
+    let compressed = miniz_oxide::deflate::compress_to_vec(&export_bytes, 6);
+
+    // 4. Encrypt with AES-256-GCM
+    let enc_key = crate::crypto::EncryptionKey::from_bytes(backup_key);
+    let (nonce, encrypted) = crate::crypto::encrypt(&enc_key, &compressed, b"umbra-backup")
+        .map_err(|e| JsValue::from_str(&format!("Encryption failed: {}", e)))?;
+
+    let total_size = encrypted.len();
+
+    // 5. Chunk into 64KB pieces
+    const CHUNK_SIZE: usize = 64 * 1024;
+    let chunks: Vec<&[u8]> = encrypted.chunks(CHUNK_SIZE).collect();
+    let total_chunks = chunks.len();
+    let own_did = identity.did_string();
+    let timestamp = crate::time::now_timestamp_millis();
+    let backup_id = format!("backup-{}", timestamp);
+
+    // 6. Build relay envelopes
+    let mut relay_messages = Vec::new();
+
+    // Manifest envelope
+    let manifest_envelope = serde_json::json!({
+        "envelope": "account_backup_manifest",
+        "version": 1,
+        "payload": {
+            "backupId": backup_id,
+            "senderDid": own_did,
+            "totalChunks": total_chunks,
+            "totalSize": total_size,
+            "nonce": hex::encode(nonce.as_bytes()),
+            "timestamp": timestamp,
+        }
+    });
+    relay_messages.push(serde_json::json!({
+        "to_did": own_did,
+        "payload": manifest_envelope.to_string(),
+    }));
+
+    // Chunk envelopes
+    for (i, chunk) in chunks.iter().enumerate() {
+        let chunk_hash = {
+            let digest = Sha256::digest(chunk);
+            hex::encode(digest)
+        };
+
+        let chunk_envelope = serde_json::json!({
+            "envelope": "account_backup_chunk",
+            "version": 1,
+            "payload": {
+                "backupId": backup_id,
+                "chunkIndex": i,
+                "totalChunks": total_chunks,
+                "data": base64::engine::general_purpose::STANDARD.encode(chunk),
+                "hash": chunk_hash,
+            }
+        });
+        relay_messages.push(serde_json::json!({
+            "to_did": own_did,
+            "payload": chunk_envelope.to_string(),
+        }));
+    }
+
+    let result = serde_json::json!({
+        "relayMessages": relay_messages,
+        "chunkCount": total_chunks,
+        "totalSize": total_size,
+    });
+
+    Ok(JsValue::from_str(&result.to_string()))
+}
+
+/// Restore an account from an encrypted backup.
+///
+/// Takes ordered encrypted chunk data (base64), reassembles, decrypts,
+/// decompresses, and imports into the database.
+///
+/// Takes JSON: { "chunks": ["base64...", ...], "nonce": "hex..." }
+/// Returns JSON: { "imported": { "settings": N, "friends": N, ... } }
+#[wasm_bindgen]
+pub fn umbra_wasm_account_restore_backup(json: &str) -> Result<JsValue, JsValue> {
+    let state = get_state()?;
+    let state_r = state.read();
+
+    let database = state_r
+        .database
+        .as_ref()
+        .ok_or_else(|| JsValue::from_str("Database not initialized"))?;
+    let seed = state_r
+        .backup_seed
+        .as_ref()
+        .ok_or_else(|| JsValue::from_str("Backup seed not available — identity was not created or restored in this session"))?;
+
+    let data: serde_json::Value =
+        serde_json::from_str(json).map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let chunks = data["chunks"]
+        .as_array()
+        .ok_or_else(|| JsValue::from_str("Missing chunks array"))?;
+    let nonce_hex = data["nonce"]
+        .as_str()
+        .ok_or_else(|| JsValue::from_str("Missing nonce"))?;
+
+    // 1. Derive backup encryption key
+    let backup_key = crate::crypto::derive_backup_key(seed)
+        .map_err(|e| JsValue::from_str(&format!("Key derivation failed: {}", e)))?;
+
+    // 2. Reassemble chunks
+    let mut encrypted = Vec::new();
+    for chunk_val in chunks {
+        let chunk_b64 = chunk_val
+            .as_str()
+            .ok_or_else(|| JsValue::from_str("Chunk must be a string"))?;
+        let chunk_bytes = base64::engine::general_purpose::STANDARD
+            .decode(chunk_b64)
+            .map_err(|e| JsValue::from_str(&format!("Invalid base64 chunk: {}", e)))?;
+        encrypted.extend_from_slice(&chunk_bytes);
+    }
+
+    // 3. Decrypt with AES-256-GCM
+    let enc_key = crate::crypto::EncryptionKey::from_bytes(backup_key);
+    let nonce_bytes = hex::decode(nonce_hex)
+        .map_err(|e| JsValue::from_str(&format!("Invalid nonce hex: {}", e)))?;
+    if nonce_bytes.len() != 12 {
+        return Err(JsValue::from_str("Nonce must be 12 bytes"));
+    }
+    let mut nonce_arr = [0u8; 12];
+    nonce_arr.copy_from_slice(&nonce_bytes);
+    let nonce = crate::crypto::Nonce::from_bytes(nonce_arr);
+    let compressed = crate::crypto::decrypt(&enc_key, &nonce, &encrypted, b"umbra-backup")
+        .map_err(|e| JsValue::from_str(&format!("Decryption failed: {}", e)))?;
+
+    // 4. Decompress
+    let decompressed = miniz_oxide::inflate::decompress_to_vec(&compressed)
+        .map_err(|e| JsValue::from_str(&format!("Decompression failed: {:?}", e)))?;
+
+    // 5. Import into database
+    let stats = database
+        .import_database(&decompressed)
+        .map_err(|e| JsValue::from_str(&format!("Database import failed: {}", e)))?;
+
+    let result = serde_json::json!({
+        "imported": {
+            "settings": stats.settings,
+            "friends": stats.friends,
+            "conversations": stats.conversations,
+            "groups": stats.groups,
+            "blocked_users": stats.blocked_users,
+        }
+    });
+
     Ok(JsValue::from_str(&result.to_string()))
 }
 

@@ -147,7 +147,6 @@ pub fn dm_folder_json(f: &crate::storage::DmSharedFolderRecord) -> serde_json::V
     })
 }
 
-#[allow(dead_code)]
 pub fn webhook_json(w: &crate::storage::CommunityWebhookRecord) -> serde_json::Value {
     serde_json::json!({
         "id": w.id, "channel_id": w.channel_id, "name": w.name,
@@ -156,7 +155,6 @@ pub fn webhook_json(w: &crate::storage::CommunityWebhookRecord) -> serde_json::V
     })
 }
 
-#[allow(dead_code)]
 pub fn warning_json(w: &crate::storage::CommunityWarningRecord) -> serde_json::Value {
     serde_json::json!({
         "id": w.id, "community_id": w.community_id, "member_did": w.member_did,
@@ -176,7 +174,6 @@ pub fn seat_json(s: &crate::storage::CommunitySeatRecord) -> serde_json::Value {
     })
 }
 
-#[allow(dead_code)]
 pub fn boost_node_json(n: &crate::storage::BoostNodeRecord) -> serde_json::Value {
     serde_json::json!({
         "id": n.id, "owner_did": n.owner_did, "node_type": n.node_type,
@@ -187,6 +184,35 @@ pub fn boost_node_json(n: &crate::storage::BoostNodeRecord) -> serde_json::Value
         "pairing_token": n.pairing_token, "remote_address": n.remote_address,
         "last_seen_at": n.last_seen_at, "created_at": n.created_at,
         "updated_at": n.updated_at,
+    })
+}
+
+pub fn timeout_json(t: &crate::storage::CommunityTimeoutRecord) -> serde_json::Value {
+    serde_json::json!({
+        "id": t.id, "community_id": t.community_id, "member_did": t.member_did,
+        "reason": t.reason, "timeout_type": t.timeout_type,
+        "issued_by": t.issued_by, "expires_at": t.expires_at,
+        "created_at": t.created_at,
+    })
+}
+
+pub fn member_status_json(s: &crate::storage::CommunityMemberStatusRecord) -> serde_json::Value {
+    serde_json::json!({
+        "community_id": s.community_id, "member_did": s.member_did,
+        "status_text": s.status_text, "status_emoji": s.status_emoji,
+        "expires_at": s.expires_at, "updated_at": s.updated_at,
+    })
+}
+
+pub fn notification_setting_json(
+    s: &crate::storage::CommunityNotificationSettingRecord,
+) -> serde_json::Value {
+    serde_json::json!({
+        "id": s.id, "community_id": s.community_id, "member_did": s.member_did,
+        "target_type": s.target_type, "target_id": s.target_id,
+        "mute_until": s.mute_until, "suppress_everyone": s.suppress_everyone,
+        "suppress_roles": s.suppress_roles, "level": s.level,
+        "updated_at": s.updated_at,
     })
 }
 
@@ -213,6 +239,9 @@ pub fn dispatch(method: &str, args: &str) -> DResult {
         "identity_get_did" => dispatch_identity::identity_get_did(),
         "identity_get_profile" => dispatch_identity::identity_get_profile(),
         "identity_update_profile" => dispatch_identity::identity_update_profile(args),
+        "identity_rotate_encryption_key" => dispatch_identity::identity_rotate_encryption_key(),
+        "account_create_backup" => dispatch_identity::account_create_backup(args),
+        "account_restore_backup" => dispatch_identity::account_restore_backup(args),
 
         // ── Friends ─────────────────────────────────────────────────
         "friends_send_request" => dispatch_friends::friends_send_request(args),
@@ -226,6 +255,8 @@ pub fn dispatch(method: &str, args: &str) -> DResult {
         "friends_remove" => dispatch_friends::friends_remove(args),
         "friends_block" => dispatch_friends::friends_block(args),
         "friends_unblock" => dispatch_friends::friends_unblock(args),
+        "friends_get_blocked" => dispatch_friends::friends_get_blocked(),
+        "friends_update_encryption_key" => dispatch_friends::friends_update_encryption_key(args),
 
         // ── Messaging (DM) ──────────────────────────────────────────
         "messaging_get_conversations" => dispatch_messaging::messaging_get_conversations(),
@@ -428,6 +459,12 @@ pub fn dispatch(method: &str, args: &str) -> DResult {
         "community_message_get" => dispatch_community_msg::community_message_get(args),
         "community_message_edit" => dispatch_community_msg::community_message_edit(args),
         "community_message_delete" => dispatch_community_msg::community_message_delete(args),
+        "community_message_send_encrypted" => {
+            dispatch_community_msg::community_message_send_encrypted(args)
+        }
+        "community_message_delete_for_me" => {
+            dispatch_community_msg::community_message_delete_for_me(args)
+        }
 
         // ── Community — Reactions ───────────────────────────────────
         "community_reaction_add" => dispatch_community_msg::community_reaction_add(args),
@@ -470,6 +507,18 @@ pub fn dispatch(method: &str, args: &str) -> DResult {
 
         // ── Community — Read Receipts ───────────────────────────────
         "community_mark_read" => dispatch_community_msg::community_mark_read(args),
+        "community_read_receipts" => dispatch_community_msg::community_read_receipts(args),
+
+        // ── Community — System Messages ─────────────────────────────
+        "community_send_system_message" => {
+            dispatch_community_msg::community_send_system_message(args)
+        }
+
+        // ── Community — Channel Keys ────────────────────────────────
+        "community_channel_key_store" => dispatch_community_msg::community_channel_key_store(args),
+        "community_channel_key_latest" => {
+            dispatch_community_msg::community_channel_key_latest(args)
+        }
 
         // ── Community — Files ───────────────────────────────────────
         "community_upload_file" => dispatch_community_ext::community_upload_file(args),
@@ -512,6 +561,111 @@ pub fn dispatch(method: &str, args: &str) -> DResult {
         }
         "community_audit_log_list" => dispatch_community_ext::community_audit_log_list(args),
 
+        // ── Community — Search ──────────────────────────────────────
+        "community_search_channel" => dispatch_community_ext::community_search_channel(args),
+        "community_search" => dispatch_community_ext::community_search(args),
+        "community_search_advanced" => dispatch_community_ext::community_search_advanced(args),
+
+        // ── Community — Warnings / Moderation ───────────────────────
+        "community_warn_member" => dispatch_community_ext::community_warn_member(args),
+        "community_member_warnings" => dispatch_community_ext::community_member_warnings(args),
+        "community_warnings" => dispatch_community_ext::community_warnings(args),
+        "community_active_warning_count" => {
+            dispatch_community_ext::community_active_warning_count(args)
+        }
+        "community_warning_delete" => dispatch_community_ext::community_warning_delete(args),
+        "community_check_escalation" => dispatch_community_ext::community_check_escalation(args),
+        "community_check_keyword_filter" => {
+            dispatch_community_ext::community_check_keyword_filter(args)
+        }
+        "community_check_ban_evasion" => {
+            dispatch_community_ext::community_check_ban_evasion(args)
+        }
+
+        // ── Community — Webhooks ────────────────────────────────────
+        "community_webhook_create" => dispatch_community_ext::community_webhook_create(args),
+        "community_webhook_list" => dispatch_community_ext::community_webhook_list(args),
+        "community_webhook_get" => dispatch_community_ext::community_webhook_get(args),
+        "community_webhook_update" => dispatch_community_ext::community_webhook_update(args),
+        "community_webhook_delete" => dispatch_community_ext::community_webhook_delete(args),
+
+        // ── Community — Channel Permission Overrides ────────────────
+        "community_channel_override_set" => {
+            dispatch_community_ext::community_channel_override_set(args)
+        }
+        "community_channel_override_list" => {
+            dispatch_community_ext::community_channel_override_list(args)
+        }
+        "community_channel_override_remove" => {
+            dispatch_community_ext::community_channel_override_remove(args)
+        }
+
+        // ── Community — Boost Nodes ─────────────────────────────────
+        "community_boost_node_register" => {
+            dispatch_community_ext::community_boost_node_register(args)
+        }
+        "community_boost_node_list" => dispatch_community_ext::community_boost_node_list(args),
+        "community_boost_node_get" => dispatch_community_ext::community_boost_node_get(args),
+        "community_boost_node_update" => {
+            dispatch_community_ext::community_boost_node_update(args)
+        }
+        "community_boost_node_heartbeat" => {
+            dispatch_community_ext::community_boost_node_heartbeat(args)
+        }
+        "community_boost_node_delete" => {
+            dispatch_community_ext::community_boost_node_delete(args)
+        }
+
+        // ── Community — Timeouts ────────────────────────────────────
+        "community_timeout_member" => dispatch_community_ext::community_timeout_member(args),
+        "community_remove_timeout" => dispatch_community_ext::community_remove_timeout(args),
+        "community_get_active_timeouts" => {
+            dispatch_community_ext::community_get_active_timeouts(args)
+        }
+        "community_get_timeouts" => dispatch_community_ext::community_get_timeouts(args),
+        "community_is_member_muted" => dispatch_community_ext::community_is_member_muted(args),
+
+        // ── Community — Thread Follow ───────────────────────────────
+        "community_follow_thread" => dispatch_community_ext::community_follow_thread(args),
+        "community_unfollow_thread" => dispatch_community_ext::community_unfollow_thread(args),
+        "community_get_thread_followers" => {
+            dispatch_community_ext::community_get_thread_followers(args)
+        }
+        "community_is_following_thread" => {
+            dispatch_community_ext::community_is_following_thread(args)
+        }
+
+        // ── Community — Member Status ───────────────────────────────
+        "community_set_member_status" => {
+            dispatch_community_ext::community_set_member_status(args)
+        }
+        "community_get_member_status" => {
+            dispatch_community_ext::community_get_member_status(args)
+        }
+        "community_clear_member_status" => {
+            dispatch_community_ext::community_clear_member_status(args)
+        }
+
+        // ── Community — Notification Settings ───────────────────────
+        "community_set_notification_settings" => {
+            dispatch_community_ext::community_set_notification_settings(args)
+        }
+        "community_get_notification_settings" => {
+            dispatch_community_ext::community_get_notification_settings(args)
+        }
+        "community_delete_notification_setting" => {
+            dispatch_community_ext::community_delete_notification_setting(args)
+        }
+
+        // ── Community — Mentions ────────────────────────────────────
+        "community_parse_mentions" => dispatch_community_ext::community_parse_mentions(args),
+
+        // ── Community — Vanity URL ──────────────────────────────────
+        "community_set_vanity_url" => dispatch_community_ext::community_set_vanity_url(args),
+
+        // ── Community — Find by Origin ──────────────────────────────
+        "community_find_by_origin" => dispatch_community_ext::community_find_by_origin(args),
+
         // ── DHT ─────────────────────────────────────────────────────
         "dht_start_providing" => dispatch_stubs::dht_start_providing(args),
         "dht_get_providers" => dispatch_stubs::dht_get_providers(args),
@@ -522,6 +676,12 @@ pub fn dispatch(method: &str, args: &str) -> DResult {
         "secure_retrieve" => dispatch_secure_store::secure_retrieve(args),
         "secure_delete" => dispatch_secure_store::secure_delete(args),
         "secure_exists" => dispatch_secure_store::secure_exists(args),
+
+        // ── Discovery ─────────────────────────────────────────────
+        "discovery_get_connection_info" => dispatch_stubs::discovery_get_connection_info(),
+        "discovery_parse_connection_info" => {
+            dispatch_stubs::discovery_parse_connection_info(args)
+        }
 
         // ── Network — WebRTC (N/A on native) ──────────────────────
         "network_create_offer" => dispatch_stubs::network_create_offer(),

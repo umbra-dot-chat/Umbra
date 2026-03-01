@@ -230,30 +230,30 @@ pub fn messaging_decrypt(args: &str) -> DResult {
     let conv = db
         .get_conversation(conv_id)
         .map_err(|e| err(e.code(), e))?
-        .ok_or_else(|| err(700, "Conversation not found"))?;
+        .ok_or_else(|| err(700, "CONVERSATION_NOT_FOUND: Conversation not found"))?;
     let friend_did = conv
         .friend_did
         .as_deref()
-        .ok_or_else(|| err(700, "No friend_did"))?;
+        .ok_or_else(|| err(700, "CONVERSATION_NOT_FOUND: No friend_did"))?;
     let our_did = identity.did_string();
 
     let friend_rec = db
         .get_friend(friend_did)
         .map_err(|e| err(e.code(), e))?
-        .ok_or_else(|| err(503, "Friend not found"))?;
-    let fek_bytes = hex::decode(&friend_rec.encryption_key).map_err(|e| err(704, e))?;
+        .ok_or_else(|| err(503, "FRIEND_NOT_FOUND: Friend not found"))?;
+    let fek_bytes = hex::decode(&friend_rec.encryption_key).map_err(|e| err(704, format!("INVALID_FORMAT: {}", e)))?;
     let mut fek = [0u8; 32];
     if fek_bytes.len() != 32 {
-        return Err(err(704, "Key must be 32 bytes"));
+        return Err(err(704, "INVALID_FORMAT: Key must be 32 bytes"));
     }
     fek.copy_from_slice(&fek_bytes);
 
     let ciphertext = base64::engine::general_purpose::STANDARD
         .decode(ct_b64)
-        .map_err(|e| err(704, format!("Invalid base64: {}", e)))?;
-    let nonce_bytes = hex::decode(nonce_hex).map_err(|e| err(704, e))?;
+        .map_err(|e| err(704, format!("INVALID_FORMAT: Invalid base64: {}", e)))?;
+    let nonce_bytes = hex::decode(nonce_hex).map_err(|e| err(704, format!("INVALID_FORMAT: {}", e)))?;
     if nonce_bytes.len() != 12 {
-        return Err(err(704, "Nonce must be 12 bytes"));
+        return Err(err(704, "INVALID_FORMAT: Nonce must be 12 bytes"));
     }
     let mut nonce_arr = [0u8; 12];
     nonce_arr.copy_from_slice(&nonce_bytes);
@@ -278,7 +278,7 @@ pub fn messaging_decrypt(args: &str) -> DResult {
         &ciphertext,
         aad.as_bytes(),
     )
-    .map_err(|e| err(704, format!("Decryption failed: {}", e)))?;
+    .map_err(|e| err(704, format!("KEY_MISMATCH: Decryption failed: {}", e)))?;
 
     let text = String::from_utf8_lossy(&plaintext).to_string();
     ok_json(serde_json::json!(text))

@@ -274,3 +274,129 @@ pub fn community_mark_read(args: &str) -> DResult {
     emit_event("community", &serde_json::json!({"type": "communityRead"}));
     ok_success()
 }
+
+// ── Read Receipts (list) ────────────────────────────────────────────────────
+
+pub fn community_read_receipts(args: &str) -> DResult {
+    let data = json_parse(args)?;
+    let channel_id = require_str(&data, "channel_id")?;
+    let svc = community_service()?;
+    let receipts = svc
+        .get_read_receipts(channel_id)
+        .map_err(|e| err(e.code(), e))?;
+    let arr: Vec<serde_json::Value> = receipts
+        .iter()
+        .map(|r| serde_json::json!({
+            "channel_id": r.channel_id, "member_did": r.member_did,
+            "last_read_message_id": r.last_read_message_id, "read_at": r.read_at,
+        }))
+        .collect();
+    Ok(serde_json::to_string(&arr).unwrap_or_default())
+}
+
+// ── Encrypted Messages ──────────────────────────────────────────────────────
+
+pub fn community_message_send_encrypted(args: &str) -> DResult {
+    use base64::Engine as _;
+    let data = json_parse(args)?;
+    let channel_id = require_str(&data, "channel_id")?;
+    let sender_did = require_str(&data, "sender_did")?;
+    let content_b64 = require_str(&data, "content_encrypted_b64")?;
+    let nonce = require_str(&data, "nonce")?;
+    let key_version = data["key_version"]
+        .as_i64()
+        .ok_or_else(|| err(2, "Missing key_version"))? as i32;
+    let reply_to_id = data["reply_to_id"].as_str();
+    let thread_id = data["thread_id"].as_str();
+    let encrypted_bytes = base64::engine::general_purpose::STANDARD
+        .decode(content_b64)
+        .map_err(|e| err(3, format!("Invalid base64: {}", e)))?;
+    let svc = community_service()?;
+    let id = svc
+        .send_encrypted_message(
+            channel_id, sender_did, &encrypted_bytes,
+            nonce, key_version, reply_to_id, thread_id,
+        )
+        .map_err(|e| err(e.code(), e))?;
+    emit_event(
+        "community",
+        &serde_json::json!({
+            "type": "communityMessageSent",
+            "channel_id": channel_id,
+            "message_id": id,
+            "sender_did": sender_did,
+            "is_e2ee": true,
+        }),
+    );
+    ok_json(serde_json::json!({"message_id": id}))
+}
+
+pub fn community_message_delete_for_me(args: &str) -> DResult {
+    let data = json_parse(args)?;
+    let message_id = require_str(&data, "message_id")?;
+    let member_did = require_str(&data, "member_did")?;
+    let svc = community_service()?;
+    svc.delete_message_for_me(message_id, member_did)
+        .map_err(|e| err(e.code(), e))?;
+    ok_success()
+}
+
+// ── System Messages ─────────────────────────────────────────────────────────
+
+pub fn community_send_system_message(args: &str) -> DResult {
+    let data = json_parse(args)?;
+    let channel_id = require_str(&data, "channel_id")?;
+    let content = require_str(&data, "content")?;
+    let svc = community_service()?;
+    let msg = svc
+        .send_system_message(channel_id, content)
+        .map_err(|e| err(e.code(), e))?;
+    emit_event(
+        "community",
+        &serde_json::json!({
+            "type": "systemMessage",
+            "channel_id": channel_id,
+            "message_id": msg.id,
+        }),
+    );
+    ok_json(community_msg_json(&msg))
+}
+
+// ── Channel Keys ────────────────────────────────────────────────────────────
+
+pub fn community_channel_key_store(args: &str) -> DResult {
+    use base64::Engine as _;
+    let data = json_parse(args)?;
+    let channel_id = require_str(&data, "channel_id")?;
+    let key_version = data["key_version"]
+        .as_i64()
+        .ok_or_else(|| err(2, "Missing key_version"))? as i32;
+    let encrypted_key_b64 = require_str(&data, "encrypted_key_b64")?;
+    let key_bytes = base64::engine::general_purpose::STANDARD
+        .decode(encrypted_key_b64)
+        .map_err(|e| err(3, format!("Invalid base64: {}", e)))?;
+    let svc = community_service()?;
+    svc.store_channel_key(channel_id, key_version, &key_bytes)
+        .map_err(|e| err(e.code(), e))?;
+    ok_success()
+}
+
+pub fn community_channel_key_latest(args: &str) -> DResult {
+    use base64::Engine as _;
+    let data = json_parse(args)?;
+    let channel_id = require_str(&data, "channel_id")?;
+    let svc = community_service()?;
+    let key = svc
+        .get_latest_channel_key(channel_id)
+        .map_err(|e| err(e.code(), e))?;
+    match key {
+        Some(k) => {
+            let b64 = base64::engine::general_purpose::STANDARD.encode(&k.encrypted_key);
+            ok_json(serde_json::json!({
+                "channel_id": k.channel_id, "key_version": k.key_version,
+                "encrypted_key_b64": b64, "created_at": k.created_at,
+            }))
+        }
+        None => ok_json(serde_json::json!(null)),
+    }
+}

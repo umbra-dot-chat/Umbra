@@ -251,6 +251,32 @@ impl Identity {
         self.created_at
     }
 
+    /// Rotate the X25519 encryption key.
+    ///
+    /// Generates a new random encryption keypair. The signing keypair
+    /// and DID remain unchanged. Returns the new public encryption key.
+    ///
+    /// ## Security
+    ///
+    /// The new key is NOT derived from the mnemonic — it is purely random.
+    /// After rotation, messages encrypted with the old shared secret
+    /// cannot be decrypted.
+    pub fn rotate_encryption_key(&mut self) -> Result<[u8; 32]> {
+        let new_encryption = crate::crypto::EncryptionKeyPair::generate();
+        let new_public = new_encryption.public_bytes();
+
+        // Reconstruct the keypair with the existing signing key and new encryption key
+        let signing_bytes = self.keypair.signing.secret_bytes();
+        let signing = crate::crypto::SigningKeyPair::from_bytes(&signing_bytes)?;
+
+        self.keypair = KeyPair {
+            signing,
+            encryption: new_encryption,
+        };
+
+        Ok(new_public)
+    }
+
     /// Create a safe copy of this identity for passing into service constructors.
     ///
     /// This reconstructs the keypair from the raw key bytes rather than using

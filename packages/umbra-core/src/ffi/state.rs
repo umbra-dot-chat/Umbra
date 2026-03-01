@@ -45,6 +45,8 @@ pub struct FfiState {
     pub secure_store: Option<SecureStore>,
     pub event_callback: Option<EventCallback>,
     pub storage_path: String,
+    /// Master seed retained for backup key derivation.
+    pub backup_seed: Option<[u8; 32]>,
 }
 
 impl FfiState {
@@ -61,6 +63,7 @@ impl FfiState {
             secure_store: None,
             event_callback: None,
             storage_path,
+            backup_seed: None,
         }
     }
 }

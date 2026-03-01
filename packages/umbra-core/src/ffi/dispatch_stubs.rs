@@ -1193,6 +1193,61 @@ pub fn dht_stop_providing(args: &str) -> DResult {
     ok_json(serde_json::json!({"ok": true}))
 }
 
+// ── Discovery ───────────────────────────────────────────────────────────────
+
+pub fn discovery_get_connection_info() -> DResult {
+    use super::dispatcher::{ok_json};
+    use super::state::get_state;
+
+    let state = get_state().map_err(|e| err(100, e))?;
+    let state = state.read();
+
+    let identity = state
+        .identity
+        .as_ref()
+        .ok_or_else(|| err(400, "No identity loaded"))?;
+    let network = state
+        .network
+        .as_ref()
+        .ok_or_else(|| err(400, "Network not started"))?;
+
+    let info = crate::discovery::ConnectionInfo::from_identity(identity, network);
+
+    ok_json(serde_json::json!({
+        "link": info.to_link().unwrap_or_default(),
+        "json": info.to_json().unwrap_or_default(),
+        "base64": info.to_base64().unwrap_or_default(),
+        "did": info.did,
+        "peer_id": info.peer_id,
+        "addresses": info.addresses,
+        "display_name": info.display_name,
+    }))
+}
+
+pub fn discovery_parse_connection_info(args: &str) -> DResult {
+    use super::dispatcher::{json_parse, ok_json, require_str};
+
+    let data = json_parse(args)?;
+    let info_str = require_str(&data, "info")?;
+
+    let connection_info = if info_str.starts_with("umbra://") {
+        crate::discovery::ConnectionInfo::from_link(info_str)
+    } else if info_str.starts_with('{') {
+        crate::discovery::ConnectionInfo::from_json(info_str)
+    } else {
+        crate::discovery::ConnectionInfo::from_base64(info_str)
+    };
+
+    let info = connection_info.map_err(|e| err(3, format!("Invalid connection info: {}", e)))?;
+
+    ok_json(serde_json::json!({
+        "did": info.did,
+        "peer_id": info.peer_id,
+        "addresses": info.addresses,
+        "display_name": info.display_name,
+    }))
+}
+
 // ── Network — WebRTC (N/A on native — direct P2P used) ─────────────────────
 pub fn network_create_offer() -> DResult {
     Err(err(

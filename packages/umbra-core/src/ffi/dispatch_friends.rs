@@ -415,3 +415,69 @@ pub fn friends_unblock(args: &str) -> DResult {
     let unblocked = db.unblock_user(did).map_err(|e| err(e.code(), e))?;
     ok_json(serde_json::json!({ "unblocked": unblocked }))
 }
+
+pub fn friends_get_blocked() -> DResult {
+    let state = get_state().map_err(|e| err(100, e))?;
+    let state = state.read();
+    let db = state
+        .database
+        .as_ref()
+        .ok_or_else(|| err(400, "Database not initialized"))?;
+    let users = db.get_blocked_users().map_err(|e| err(e.code(), e))?;
+    let arr: Vec<serde_json::Value> = users
+        .iter()
+        .map(|(did, blocked_at, reason)| {
+            serde_json::json!({
+                "did": did,
+                "blocked_at": blocked_at,
+                "reason": reason,
+            })
+        })
+        .collect();
+    Ok(serde_json::to_string(&arr).unwrap_or_default())
+}
+
+pub fn friends_update_encryption_key(args: &str) -> DResult {
+    let data = json_parse(args)?;
+    let from_did = require_str(&data, "from_did")?;
+    let new_key_hex = require_str(&data, "new_encryption_key")?;
+    let signature_hex = require_str(&data, "signature")?;
+
+    let state = get_state().map_err(|e| err(100, e))?;
+    let state = state.read();
+    let db = state
+        .database
+        .as_ref()
+        .ok_or_else(|| err(400, "Database not initialized"))?;
+
+    // Look up friend for signature verification
+    let friend = db
+        .get_friend(from_did)
+        .map_err(|e| err(e.code(), e))?
+        .ok_or_else(|| err(601, "Friend not found"))?;
+
+    // Decode and validate new key
+    let new_key_bytes = hex::decode(new_key_hex).map_err(|e| err(304, format!("Invalid key: {}", e)))?;
+    if new_key_bytes.len() != 32 {
+        return Err(err(304, "Key must be 32 bytes"));
+    }
+
+    // Verify signature using friend's (unchanged) signing key
+    let sk_bytes = hex::decode(&friend.signing_key).map_err(|e| err(304, format!("Invalid signing key: {}", e)))?;
+    let mut sk = [0u8; 32];
+    sk.copy_from_slice(&sk_bytes);
+
+    let sig_bytes = hex::decode(signature_hex).map_err(|e| err(304, format!("Invalid signature: {}", e)))?;
+    let signature = crate::crypto::Signature::from_slice(&sig_bytes)
+        .map_err(|_| err(303, "Invalid signature format"))?;
+    crate::crypto::verify(&sk, &new_key_bytes, &signature)
+        .map_err(|_| err(303, "Signature verification failed"))?;
+
+    // Update friend's encryption key
+    let mut new_enc = [0u8; 32];
+    new_enc.copy_from_slice(&new_key_bytes);
+    db.update_friend_encryption_key(from_did, &new_enc)
+        .map_err(|e| err(e.code(), e))?;
+
+    ok_json(serde_json::json!({"updated": true}))
+}

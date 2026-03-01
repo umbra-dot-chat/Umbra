@@ -431,6 +431,25 @@ impl Database {
         Ok(rows > 0)
     }
 
+    /// Update a friend's encryption key (for key rotation)
+    pub fn update_friend_encryption_key(
+        &self,
+        did: &str,
+        new_encryption_key: &[u8; 32],
+    ) -> Result<bool> {
+        let conn = self.conn.lock();
+        let now = crate::time::now_timestamp();
+        let rows = conn
+            .execute(
+                "UPDATE friends SET encryption_key = ?, updated_at = ? WHERE did = ?",
+                params![hex::encode(new_encryption_key), now, did],
+            )
+            .map_err(|e| {
+                Error::DatabaseError(format!("Failed to update friend encryption key: {}", e))
+            })?;
+        Ok(rows > 0)
+    }
+
     /// Update a friend's avatar
     pub fn update_friend_avatar(&self, did: &str, avatar: Option<&str>) -> Result<bool> {
         let conn = self.conn.lock();
@@ -594,7 +613,7 @@ impl Database {
         let conn = self.conn.lock();
 
         conn.execute(
-            "INSERT INTO messages (id, conversation_id, sender_did, content_encrypted, nonce, timestamp)
+            "INSERT OR IGNORE INTO messages (id, conversation_id, sender_did, content_encrypted, nonce, timestamp)
              VALUES (?, ?, ?, ?, ?, ?)",
             params![
                 id,
@@ -1569,6 +1588,29 @@ impl Database {
             .map_err(|e| Error::DatabaseError(format!("Failed to delete setting: {}", e)))?;
 
         Ok(rows > 0)
+    }
+
+    /// Get all settings as (key, value) pairs
+    pub fn get_all_settings(&self) -> Result<Vec<(String, String)>> {
+        let conn = self.conn.lock();
+        let mut stmt = conn
+            .prepare("SELECT key, value FROM settings ORDER BY key")
+            .map_err(|e| Error::DatabaseError(format!("Failed to prepare get_all_settings: {}", e)))?;
+
+        let rows = stmt
+            .query_map([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                ))
+            })
+            .map_err(|e| Error::DatabaseError(format!("Failed to get all settings: {}", e)))?;
+
+        let mut result = Vec::new();
+        for row in rows {
+            result.push(row.map_err(|e| Error::DatabaseError(format!("Failed to read setting: {}", e)))?);
+        }
+        Ok(result)
     }
 
     // ── Plugin KV Storage ─────────────────────────────────────────────────
@@ -5902,6 +5944,292 @@ impl Database {
 
         Ok((total, unclaimed))
     }
+
+    // ========================================================================
+    // ACCOUNT BACKUP — EXPORT / IMPORT
+    // ========================================================================
+
+    /// Export the database contents as a JSON blob for backup.
+    ///
+    /// Exports settings, friends, conversations, groups, blocked users, and
+    /// notifications. Does NOT export messages (they are too large and are
+    /// separately stored on relays).
+    pub fn export_database(&self) -> Result<Vec<u8>> {
+        let conn = self.conn.lock();
+        let now = crate::time::now_timestamp();
+
+        // ── Settings ──────────────────────────────────────────────────────
+        let mut settings = Vec::new();
+        {
+            let mut stmt = conn
+                .prepare("SELECT key, value FROM settings ORDER BY key")
+                .map_err(|e| Error::DatabaseError(format!("export settings: {}", e)))?;
+            let rows = stmt
+                .query_map([], |row| {
+                    Ok(serde_json::json!({
+                        "key": row.get::<_, String>(0)?,
+                        "value": row.get::<_, String>(1)?,
+                    }))
+                })
+                .map_err(|e| Error::DatabaseError(format!("export settings: {}", e)))?;
+            for row in rows {
+                settings.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?);
+            }
+        }
+
+        // ── Friends ───────────────────────────────────────────────────────
+        let mut friends = Vec::new();
+        {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT did, display_name, signing_key, encryption_key, status, avatar, created_at, updated_at
+                     FROM friends ORDER BY display_name",
+                )
+                .map_err(|e| Error::DatabaseError(format!("export friends: {}", e)))?;
+            let rows = stmt
+                .query_map([], |row| {
+                    Ok(serde_json::json!({
+                        "did": row.get::<_, String>(0)?,
+                        "display_name": row.get::<_, String>(1)?,
+                        "signing_key": row.get::<_, String>(2)?,
+                        "encryption_key": row.get::<_, String>(3)?,
+                        "status": row.get::<_, Option<String>>(4)?,
+                        "avatar": row.get::<_, Option<String>>(5)?,
+                        "created_at": row.get::<_, i64>(6)?,
+                        "updated_at": row.get::<_, i64>(7)?,
+                    }))
+                })
+                .map_err(|e| Error::DatabaseError(format!("export friends: {}", e)))?;
+            for row in rows {
+                friends.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?);
+            }
+        }
+
+        // ── Conversations ─────────────────────────────────────────────────
+        let mut conversations = Vec::new();
+        {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT id, participant_did, created_at, last_message_at
+                     FROM conversations ORDER BY last_message_at DESC",
+                )
+                .map_err(|e| Error::DatabaseError(format!("export conversations: {}", e)))?;
+            let rows = stmt
+                .query_map([], |row| {
+                    Ok(serde_json::json!({
+                        "id": row.get::<_, String>(0)?,
+                        "participant_did": row.get::<_, String>(1)?,
+                        "created_at": row.get::<_, i64>(2)?,
+                        "last_message_at": row.get::<_, i64>(3)?,
+                    }))
+                })
+                .map_err(|e| Error::DatabaseError(format!("export conversations: {}", e)))?;
+            for row in rows {
+                conversations.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?);
+            }
+        }
+
+        // ── Groups ────────────────────────────────────────────────────────
+        let mut groups = Vec::new();
+        {
+            let mut stmt = conn
+                .prepare(
+                    "SELECT id, name, creator_did, created_at, updated_at, avatar, description
+                     FROM groups ORDER BY name",
+                )
+                .map_err(|e| Error::DatabaseError(format!("export groups: {}", e)))?;
+            let rows = stmt
+                .query_map([], |row| {
+                    Ok(serde_json::json!({
+                        "id": row.get::<_, String>(0)?,
+                        "name": row.get::<_, String>(1)?,
+                        "creator_did": row.get::<_, String>(2)?,
+                        "created_at": row.get::<_, i64>(3)?,
+                        "updated_at": row.get::<_, i64>(4)?,
+                        "avatar": row.get::<_, Option<String>>(5)?,
+                        "description": row.get::<_, Option<String>>(6)?,
+                    }))
+                })
+                .map_err(|e| Error::DatabaseError(format!("export groups: {}", e)))?;
+            for row in rows {
+                groups.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?);
+            }
+        }
+
+        // ── Blocked users ─────────────────────────────────────────────────
+        let mut blocked_users = Vec::new();
+        {
+            let mut stmt = conn
+                .prepare("SELECT did, blocked_at, reason FROM blocked_users ORDER BY blocked_at DESC")
+                .map_err(|e| Error::DatabaseError(format!("export blocked_users: {}", e)))?;
+            let rows = stmt
+                .query_map([], |row| {
+                    Ok(serde_json::json!({
+                        "did": row.get::<_, String>(0)?,
+                        "blocked_at": row.get::<_, i64>(1)?,
+                        "reason": row.get::<_, Option<String>>(2)?,
+                    }))
+                })
+                .map_err(|e| Error::DatabaseError(format!("export blocked_users: {}", e)))?;
+            for row in rows {
+                blocked_users.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?);
+            }
+        }
+
+        // ── Assemble ──────────────────────────────────────────────────────
+        let export = serde_json::json!({
+            "version": 1,
+            "exported_at": now,
+            "settings": settings,
+            "friends": friends,
+            "conversations": conversations,
+            "groups": groups,
+            "blocked_users": blocked_users,
+        });
+
+        serde_json::to_vec(&export)
+            .map_err(|e| Error::DatabaseError(format!("Failed to serialize export: {}", e)))
+    }
+
+    /// Import database contents from a JSON backup blob.
+    ///
+    /// Upserts records — existing records are replaced, new ones are inserted.
+    /// Returns a summary of how many records were imported per category.
+    pub fn import_database(&self, data: &[u8]) -> Result<ImportStats> {
+        let export: serde_json::Value = serde_json::from_slice(data)
+            .map_err(|e| Error::DatabaseError(format!("Failed to parse backup: {}", e)))?;
+
+        let version = export.get("version").and_then(|v| v.as_i64()).unwrap_or(0);
+        if version != 1 {
+            return Err(Error::DatabaseError(format!(
+                "Unsupported backup version: {}",
+                version
+            )));
+        }
+
+        let conn = self.conn.lock();
+        let now = crate::time::now_timestamp();
+        let mut stats = ImportStats::default();
+
+        // ── Settings ──────────────────────────────────────────────────────
+        if let Some(settings) = export.get("settings").and_then(|v| v.as_array()) {
+            for s in settings {
+                let key = s.get("key").and_then(|v| v.as_str()).unwrap_or_default();
+                let value = s.get("value").and_then(|v| v.as_str()).unwrap_or_default();
+                if !key.is_empty() {
+                    conn.execute(
+                        "INSERT OR REPLACE INTO settings (key, value, updated_at) VALUES (?, ?, ?)",
+                        params![key, value, now],
+                    )
+                    .map_err(|e| Error::DatabaseError(format!("import setting: {}", e)))?;
+                    stats.settings += 1;
+                }
+            }
+        }
+
+        // ── Friends ───────────────────────────────────────────────────────
+        if let Some(friends) = export.get("friends").and_then(|v| v.as_array()) {
+            for f in friends {
+                let did = f.get("did").and_then(|v| v.as_str()).unwrap_or_default();
+                let display_name = f.get("display_name").and_then(|v| v.as_str()).unwrap_or_default();
+                let signing_key = f.get("signing_key").and_then(|v| v.as_str()).unwrap_or_default();
+                let encryption_key = f.get("encryption_key").and_then(|v| v.as_str()).unwrap_or_default();
+                let status = f.get("status").and_then(|v| v.as_str());
+                let avatar = f.get("avatar").and_then(|v| v.as_str());
+                let created_at = f.get("created_at").and_then(|v| v.as_i64()).unwrap_or(now);
+                let updated_at = f.get("updated_at").and_then(|v| v.as_i64()).unwrap_or(now);
+
+                if !did.is_empty() {
+                    conn.execute(
+                        "INSERT OR REPLACE INTO friends (did, display_name, signing_key, encryption_key, status, avatar, created_at, updated_at)
+                         VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                        params![did, display_name, signing_key, encryption_key, status, avatar, created_at, updated_at],
+                    )
+                    .map_err(|e| Error::DatabaseError(format!("import friend: {}", e)))?;
+                    stats.friends += 1;
+                }
+            }
+        }
+
+        // ── Conversations ─────────────────────────────────────────────────
+        if let Some(convs) = export.get("conversations").and_then(|v| v.as_array()) {
+            for c in convs {
+                let id = c.get("id").and_then(|v| v.as_str()).unwrap_or_default();
+                let participant_did = c.get("participant_did").and_then(|v| v.as_str()).unwrap_or_default();
+                let created_at = c.get("created_at").and_then(|v| v.as_i64()).unwrap_or(now);
+                let last_message_at = c.get("last_message_at").and_then(|v| v.as_i64()).unwrap_or(now);
+
+                if !id.is_empty() {
+                    conn.execute(
+                        "INSERT OR REPLACE INTO conversations (id, participant_did, created_at, last_message_at)
+                         VALUES (?, ?, ?, ?)",
+                        params![id, participant_did, created_at, last_message_at],
+                    )
+                    .map_err(|e| Error::DatabaseError(format!("import conversation: {}", e)))?;
+                    stats.conversations += 1;
+                }
+            }
+        }
+
+        // ── Groups ────────────────────────────────────────────────────────
+        if let Some(groups) = export.get("groups").and_then(|v| v.as_array()) {
+            for g in groups {
+                let id = g.get("id").and_then(|v| v.as_str()).unwrap_or_default();
+                let name = g.get("name").and_then(|v| v.as_str()).unwrap_or_default();
+                let creator_did = g.get("creator_did").and_then(|v| v.as_str()).unwrap_or_default();
+                let created_at = g.get("created_at").and_then(|v| v.as_i64()).unwrap_or(now);
+                let updated_at = g.get("updated_at").and_then(|v| v.as_i64()).unwrap_or(now);
+                let avatar = g.get("avatar").and_then(|v| v.as_str());
+                let description = g.get("description").and_then(|v| v.as_str());
+
+                if !id.is_empty() {
+                    conn.execute(
+                        "INSERT OR REPLACE INTO groups (id, name, creator_did, created_at, updated_at, avatar, description)
+                         VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        params![id, name, creator_did, created_at, updated_at, avatar, description],
+                    )
+                    .map_err(|e| Error::DatabaseError(format!("import group: {}", e)))?;
+                    stats.groups += 1;
+                }
+            }
+        }
+
+        // ── Blocked users ─────────────────────────────────────────────────
+        if let Some(blocked) = export.get("blocked_users").and_then(|v| v.as_array()) {
+            for b in blocked {
+                let did = b.get("did").and_then(|v| v.as_str()).unwrap_or_default();
+                let blocked_at = b.get("blocked_at").and_then(|v| v.as_i64()).unwrap_or(now);
+                let reason = b.get("reason").and_then(|v| v.as_str());
+
+                if !did.is_empty() {
+                    conn.execute(
+                        "INSERT OR REPLACE INTO blocked_users (did, blocked_at, reason)
+                         VALUES (?, ?, ?)",
+                        params![did, blocked_at, reason],
+                    )
+                    .map_err(|e| Error::DatabaseError(format!("import blocked user: {}", e)))?;
+                    stats.blocked_users += 1;
+                }
+            }
+        }
+
+        Ok(stats)
+    }
+}
+
+/// Statistics from a database import operation
+#[derive(Debug, Clone, Default)]
+pub struct ImportStats {
+    /// Number of settings imported
+    pub settings: u32,
+    /// Number of friends imported
+    pub friends: u32,
+    /// Number of conversations imported
+    pub conversations: u32,
+    /// Number of groups imported
+    pub groups: u32,
+    /// Number of blocked users imported
+    pub blocked_users: u32,
 }
 
 // ============================================================================

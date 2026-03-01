@@ -139,6 +139,9 @@ pub mod domain {
 
     /// Domain for key fingerprint derivation
     pub const KEY_FINGERPRINT: &[u8] = b"umbra-key-fingerprint-v1";
+
+    /// Domain for account backup encryption key derivation
+    pub const ACCOUNT_BACKUP: &[u8] = b"umbra-account-backup-v1";
 }
 
 /// Keys derived from a master seed
@@ -233,6 +236,26 @@ pub fn derive_storage_key(signing_key: &[u8; 32], encryption_key: &[u8; 32]) -> 
     combined.zeroize();
 
     Ok(storage_key)
+}
+
+/// Derive a backup encryption key from the master seed.
+///
+/// Used to encrypt account backups before sending to relay or boost nodes.
+/// The key is deterministically derived from the BIP39 seed, so it can be
+/// re-derived from the recovery phrase on any device.
+///
+/// ## Security
+///
+/// Uses a unique domain string to ensure the backup key is independent
+/// from signing and encryption keys, even though they share the same seed.
+pub fn derive_backup_key(seed: &[u8; 32]) -> Result<[u8; 32]> {
+    let hkdf = Hkdf::<Sha256>::new(None, seed);
+
+    let mut backup_key = [0u8; 32];
+    hkdf.expand(domain::ACCOUNT_BACKUP, &mut backup_key)
+        .map_err(|_| Error::KeyDerivationFailed("Failed to derive backup key".into()))?;
+
+    Ok(backup_key)
 }
 
 /// Derive a unique encryption key for a specific file.
@@ -607,5 +630,42 @@ mod tests {
         let key = [42u8; 32];
 
         assert!(!verify_key_fingerprint(&key, "0000000000000000").unwrap());
+    }
+
+    // ========================================================================
+    // Backup key tests
+    // ========================================================================
+
+    #[test]
+    fn test_backup_key_deterministic() {
+        let seed = [42u8; 32];
+
+        let key1 = derive_backup_key(&seed).unwrap();
+        let key2 = derive_backup_key(&seed).unwrap();
+
+        assert_eq!(key1, key2);
+    }
+
+    #[test]
+    fn test_backup_key_different_seeds() {
+        let seed1 = [1u8; 32];
+        let seed2 = [2u8; 32];
+
+        let key1 = derive_backup_key(&seed1).unwrap();
+        let key2 = derive_backup_key(&seed2).unwrap();
+
+        assert_ne!(key1, key2);
+    }
+
+    #[test]
+    fn test_backup_key_differs_from_identity_keys() {
+        let seed = [42u8; 32];
+
+        let identity_keys = derive_keys_from_seed(&seed).unwrap();
+        let backup_key = derive_backup_key(&seed).unwrap();
+
+        // Backup key should be independent from signing and encryption keys
+        assert_ne!(backup_key, identity_keys.signing_key);
+        assert_ne!(backup_key, identity_keys.encryption_key);
     }
 }

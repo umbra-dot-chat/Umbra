@@ -131,6 +131,8 @@ pub use database::{
     GroupKeyRecord,
     GroupMemberRecord,
     GroupRecord,
+    // Account backup import stats
+    ImportStats,
     MessageRecord,
     ReactionRecord,
     // Transfer session record type
