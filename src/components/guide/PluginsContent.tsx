@@ -35,9 +35,7 @@ export default function PluginsContent() {
           { label: 'plugin-sdk/types.ts', path: 'packages/umbra-plugin-sdk/src/types.ts' },
           { label: 'PluginMarketplace.tsx', path: 'components/modals/PluginMarketplace.tsx' },
         ]}
-        testLinks={[
-          { label: 'PluginContext.test.tsx', path: '__tests__/contexts/PluginContext.test.tsx' },
-        ]}
+        testLinks={[]}
       />
 
       <FeatureCard
@@ -54,9 +52,7 @@ export default function PluginsContent() {
         sourceLinks={[
           { label: 'types.ts', path: 'packages/umbra-plugin-sdk/src/types.ts' },
         ]}
-        testLinks={[
-          { label: 'PluginContext.test.tsx', path: '__tests__/contexts/PluginContext.test.tsx' },
-        ]}
+        testLinks={[]}
       />
 
       <FeatureCard
@@ -74,9 +70,7 @@ export default function PluginsContent() {
           { label: 'types.ts', path: 'packages/umbra-plugin-sdk/src/types.ts' },
           { label: 'components.ts', path: 'packages/umbra-plugin-sdk/src/components.ts' },
         ]}
-        testLinks={[
-          { label: 'PluginContext.test.tsx', path: '__tests__/contexts/PluginContext.test.tsx' },
-        ]}
+        testLinks={[]}
       />
 
       <FeatureCard
@@ -93,9 +87,7 @@ export default function PluginsContent() {
         sourceLinks={[
           { label: 'PluginContext.tsx', path: 'contexts/PluginContext.tsx' },
         ]}
-        testLinks={[
-          { label: 'PluginContext.test.tsx', path: '__tests__/contexts/PluginContext.test.tsx' },
-        ]}
+        testLinks={[]}
       />
 
       <FeatureCard
@@ -112,9 +104,7 @@ export default function PluginsContent() {
         sourceLinks={[
           { label: 'types.ts', path: 'packages/umbra-plugin-sdk/src/types.ts' },
         ]}
-        testLinks={[
-          { label: 'PluginContext.test.tsx', path: '__tests__/contexts/PluginContext.test.tsx' },
-        ]}
+        testLinks={[]}
       />
 
       <TechSpec
@@ -168,13 +158,7 @@ export default function PluginsContent() {
         title="Test Coverage Details"
         accentColor="#22C55E"
         entries={[
-          { label: 'Total Tests', value: '54 tests across 3 files' },
-          { label: 'Line Coverage', value: '81%' },
-          { label: 'Branch Coverage', value: '76%' },
-          { label: 'PluginContext', value: '22 tests (84% coverage)' },
-          { label: 'Plugin SDK', value: '18 tests (79% coverage)' },
-          { label: 'Plugin Loader', value: '14 tests (82% coverage)' },
-          { label: 'Edge Cases', value: 'Permission denial, load failure, cleanup' },
+          { label: 'Status', value: 'No Jest tests yet \u2014 Plugin system not yet covered by test suite' },
         ]}
       />
     </View>

@@ -34,9 +34,7 @@ export default function NetworkContent() {
           { label: 'protocol.rs', path: 'packages/umbra-relay/src/protocol.rs' },
         ]}
         testLinks={[
-          { label: 'useNetwork.test.ts', path: '__tests__/hooks/useNetwork.test.ts' },
-          { label: 'relay-e2e.test.ts', path: '__tests__/integration/relay-e2e.test.ts' },
-          { label: 'networking.test.ts', path: '__tests__/integration/networking.test.ts' },
+          { label: 'useNetwork.test.ts', path: '__tests__/settings/useNetwork.test.ts' },
         ]}
       />
 
@@ -58,7 +56,7 @@ export default function NetworkContent() {
           { label: 'network.ts', path: 'config/network.ts' },
         ]}
         testLinks={[
-          { label: 'useNetwork.test.ts', path: '__tests__/hooks/useNetwork.test.ts' },
+          { label: 'useNetwork.test.ts', path: '__tests__/settings/useNetwork.test.ts' },
         ]}
       />
 
@@ -84,9 +82,7 @@ export default function NetworkContent() {
           { label: 'protocol.rs', path: 'packages/umbra-relay/src/protocol.rs' },
           { label: 'network.ts', path: 'config/network.ts' },
         ]}
-        testLinks={[
-          { label: 'networking.test.ts', path: '__tests__/integration/networking.test.ts' },
-        ]}
+        testLinks={[]}
       />
 
       <FeatureCard
@@ -105,7 +101,7 @@ export default function NetworkContent() {
           { label: 'network.ts', path: 'config/network.ts' },
         ]}
         testLinks={[
-          { label: 'useNetwork.test.ts', path: '__tests__/hooks/useNetwork.test.ts' },
+          { label: 'useNetwork.test.ts', path: '__tests__/settings/useNetwork.test.ts' },
         ]}
       />
 
@@ -125,9 +121,7 @@ export default function NetworkContent() {
           { label: 'handler.rs', path: 'packages/umbra-relay/src/handler.rs' },
           { label: 'useNetwork.ts', path: 'hooks/useNetwork.ts' },
         ]}
-        testLinks={[
-          { label: 'relay-e2e.test.ts', path: '__tests__/integration/relay-e2e.test.ts' },
-        ]}
+        testLinks={[]}
       />
 
       <FeatureCard
@@ -145,7 +139,7 @@ export default function NetworkContent() {
           { label: 'network.ts', path: 'config/network.ts' },
         ]}
         testLinks={[
-          { label: 'useNetwork.test.ts', path: '__tests__/hooks/useNetwork.test.ts' },
+          { label: 'useNetwork.test.ts', path: '__tests__/settings/useNetwork.test.ts' },
         ]}
       />
 
@@ -165,9 +159,7 @@ export default function NetworkContent() {
           { label: 'state.rs', path: 'packages/umbra-relay/src/state.rs' },
           { label: 'useNetwork.ts', path: 'hooks/useNetwork.ts' },
         ]}
-        testLinks={[
-          { label: 'relay-e2e.test.ts', path: '__tests__/integration/relay-e2e.test.ts' },
-        ]}
+        testLinks={[]}
       />
 
       <FeatureCard
@@ -186,10 +178,7 @@ export default function NetworkContent() {
           { label: 'GroupCallManager.ts', path: 'services/GroupCallManager.ts' },
           { label: 'useNetwork.ts', path: 'hooks/useNetwork.ts' },
         ]}
-        testLinks={[
-          { label: 'CallManager.test.ts', path: '__tests__/services/CallManager.test.ts' },
-          { label: 'calling.test.ts', path: '__tests__/integration/calling.test.ts' },
-        ]}
+        testLinks={[]}
       />
 
       <TechSpec
@@ -227,14 +216,7 @@ export default function NetworkContent() {
         title="Test Coverage Details"
         accentColor="#22C55E"
         entries={[
-          { label: 'Total Tests', value: '80 tests across 4 files' },
-          { label: 'Line Coverage', value: '87%' },
-          { label: 'Branch Coverage', value: '83%' },
-          { label: 'useNetwork Hook', value: '26 tests (89% coverage)' },
-          { label: 'Relay E2E', value: '18 tests (85% coverage)' },
-          { label: 'Networking', value: '22 tests (88% coverage)' },
-          { label: 'WebSocket', value: '14 tests (86% coverage)' },
-          { label: 'Edge Cases', value: 'Reconnect, timeout, federation' },
+          { label: 'Total Tests', value: '25 tests across 1 file (useNetwork.test.ts)' },
         ]}
       />
     </View>

@@ -37,9 +37,8 @@ export default function MessagingContent() {
           { label: 'useMessages.ts', path: 'hooks/useMessages.ts' },
         ]}
         testLinks={[
-          { label: 'useMessages.test.ts', path: '__tests__/hooks/useMessages.test.ts' },
-          { label: 'messaging-flow.test.ts', path: '__tests__/integration/messaging-flow.test.ts' },
-          { label: 'chat-features.test.ts', path: '__tests__/integration/chat-features.test.ts' },
+          { label: 'useMessages.test.ts', path: '__tests__/messaging/useMessages.test.ts' },
+          { label: 'decrypt-errors.spec.ts', path: '__tests__/e2e/messaging/decrypt-errors.spec.ts' },
         ]}
       />
 
@@ -59,7 +58,7 @@ export default function MessagingContent() {
           { label: 'useNetwork.ts', path: 'hooks/useNetwork.ts' },
         ]}
         testLinks={[
-          { label: 'useMessages.test.ts', path: '__tests__/hooks/useMessages.test.ts' },
+          { label: 'useMessages.test.ts', path: '__tests__/messaging/useMessages.test.ts' },
         ]}
       />
 
@@ -81,9 +80,7 @@ export default function MessagingContent() {
         sourceLinks={[
           { label: 'useMessages.ts', path: 'hooks/useMessages.ts' },
         ]}
-        testLinks={[
-          { label: 'chat-features.test.ts', path: '__tests__/integration/chat-features.test.ts' },
-        ]}
+        testLinks={[]}
       />
 <FeatureCard
         icon={<TrashIcon size={16} color="#EF4444" />}
@@ -103,9 +100,7 @@ export default function MessagingContent() {
         sourceLinks={[
           { label: 'useMessages.ts', path: 'hooks/useMessages.ts' },
         ]}
-        testLinks={[
-          { label: 'chat-features.test.ts', path: '__tests__/integration/chat-features.test.ts' },
-        ]}
+        testLinks={[]}
       />
 
       <FeatureCard
@@ -122,9 +117,7 @@ export default function MessagingContent() {
         sourceLinks={[
           { label: 'useMessages.ts', path: 'hooks/useMessages.ts' },
         ]}
-        testLinks={[
-          { label: 'chat-features.test.ts', path: '__tests__/integration/chat-features.test.ts' },
-        ]}
+        testLinks={[]}
       />
 
       <FeatureCard
@@ -141,9 +134,7 @@ export default function MessagingContent() {
         sourceLinks={[
           { label: 'useMessages.ts', path: 'hooks/useMessages.ts' },
         ]}
-        testLinks={[
-          { label: 'chat-features.test.ts', path: '__tests__/integration/chat-features.test.ts' },
-        ]}
+        testLinks={[]}
       />
 
       <FeatureCard
@@ -164,9 +155,7 @@ export default function MessagingContent() {
           { label: 'useMessages.ts', path: 'hooks/useMessages.ts' },
           { label: 'ChatArea.tsx', path: 'components/chat/ChatArea.tsx' },
         ]}
-        testLinks={[
-          { label: 'ChatArea.test.tsx', path: '__tests__/components/chat/ChatArea.test.tsx' },
-        ]}
+        testLinks={[]}
       />
 
       <FeatureCard
@@ -183,9 +172,7 @@ export default function MessagingContent() {
           { label: 'encryption.rs', path: 'packages/umbra-core/src/crypto/encryption.rs' },
           { label: 'useMessages.ts', path: 'hooks/useMessages.ts' },
         ]}
-        testLinks={[
-          { label: 'chat-features.test.ts', path: '__tests__/integration/chat-features.test.ts' },
-        ]}
+        testLinks={[]}
       />
       <FeatureCard
         icon={<AtSignIcon size={16} color="#14B8A6" />}
@@ -260,9 +247,7 @@ export default function MessagingContent() {
           { label: 'InlineMsgGroup.tsx', path: 'components/chat/InlineMsgGroup.tsx' },
           { label: 'ChatHeader.tsx', path: 'components/chat/ChatHeader.tsx' },
         ]}
-        testLinks={[
-          { label: 'ChatArea.test.tsx', path: '__tests__/components/chat/ChatArea.test.tsx' },
-        ]}
+        testLinks={[]}
       />
 
       <TechSpec
@@ -318,14 +303,11 @@ export default function MessagingContent() {
         title="Test Coverage Details"
         accentColor="#22C55E"
         entries={[
-          { label: 'Total Tests', value: '117 tests across 6 files' },
-          { label: 'Line Coverage', value: '88%' },
-          { label: 'Branch Coverage', value: '84%' },
-          { label: 'useMessages Hook', value: '32 tests (91% coverage)' },
-          { label: 'Integration Flow', value: '22 tests (86% coverage)' },
-          { label: 'Chat Features', value: '28 tests (89% coverage)' },
-          { label: 'ChatArea Component', value: '15 tests (85% coverage)' },
-          { label: 'Edge Cases', value: 'Edit, delete, forward, offline' },
+          { label: 'Total Tests', value: '75 tests across 3 files + 1 E2E spec' },
+          { label: 'useMessages', value: '56 tests (includes decrypt error categorization)' },
+          { label: 'useConversations', value: '12 tests' },
+          { label: 'messaging-context', value: '7 tests' },
+          { label: 'decrypt-errors E2E', value: '3 tests (Playwright)' },
         ]}
       />
     </View>

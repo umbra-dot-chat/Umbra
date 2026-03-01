@@ -580,8 +580,8 @@ export function TestCoverageFlow() {
       description="Unit tests, integration tests, and E2E tests across the codebase"
       sourceLink="__tests__"
       steps={[
-        { label: 'Unit Tests\n(hooks/services)', icon: '\uD83E\uDDEA', color: '#3B82F6', description: 'Jest + React Testing Library' },
-        { label: 'Integration\nTests', icon: '\uD83D\uDD17', color: '#22C55E', description: 'Cross-component flows' },
+        { label: 'Unit Tests\n(hooks/services)', icon: '\uD83E\uDDEA', color: '#3B82F6', description: 'Jest + Testing Library RN' },
+        { label: 'Integration\nTests', icon: '\uD83D\uDD17', color: '#22C55E', description: 'Context & hook tests' },
         { label: 'E2E Tests\n(Playwright)', icon: '\uD83C\uDFAD', color: '#8B5CF6', description: 'Full user journeys' },
         { label: 'WASM Tests\n(Rust)', icon: '\uD83E\uDD80', color: '#F97316', description: 'Crypto module tests' },
       ]}

@@ -36,8 +36,8 @@ export default function FriendsContent() {
           { label: 'FriendComponents.tsx', path: 'components/friends/FriendComponents.tsx' },
         ]}
         testLinks={[
-          { label: 'useFriends.test.ts', path: '__tests__/hooks/useFriends.test.ts' },
-          { label: 'friends-flow.test.ts', path: '__tests__/integration/friends-flow.test.ts' },
+          { label: 'useFriends.test.ts', path: '__tests__/friends/useFriends.test.ts' },
+          { label: 'key-rotation.spec.ts', path: '__tests__/e2e/settings/key-rotation.spec.ts' },
         ]}
       />
 
@@ -141,8 +141,7 @@ export default function FriendsContent() {
           { label: 'encryption.rs', path: 'packages/umbra-core/src/crypto/encryption.rs' },
         ]}
         testLinks={[
-          { label: 'useFriends.test.ts', path: '__tests__/hooks/useFriends.test.ts' },
-          { label: 'relay-e2e.test.ts', path: '__tests__/integration/relay-e2e.test.ts' },
+          { label: 'useFriends.test.ts', path: '__tests__/friends/useFriends.test.ts' },
         ]}
       />
 
@@ -162,9 +161,7 @@ export default function FriendsContent() {
           { label: 'keys.rs', path: 'packages/umbra-core/src/crypto/keys.rs' },
           { label: 'kdf.rs', path: 'packages/umbra-core/src/crypto/kdf.rs' },
         ]}
-        testLinks={[
-          { label: 'loader.test.ts', path: '__tests__/packages/umbra-wasm/loader.test.ts' },
-        ]}
+        testLinks={[]}
       />
 
       <FeatureCard
@@ -182,9 +179,7 @@ export default function FriendsContent() {
           { label: 'friends/mod.rs', path: 'packages/umbra-core/src/friends/mod.rs' },
           { label: 'useNetwork.ts', path: 'hooks/useNetwork.ts' },
         ]}
-        testLinks={[
-          { label: 'friends-flow.test.ts', path: '__tests__/integration/friends-flow.test.ts' },
-        ]}
+        testLinks={[]}
       />
 
       <FeatureCard
@@ -202,7 +197,7 @@ export default function FriendsContent() {
           { label: 'friends/mod.rs', path: 'packages/umbra-core/src/friends/mod.rs' },
         ]}
         testLinks={[
-          { label: 'useFriends.test.ts', path: '__tests__/hooks/useFriends.test.ts' },
+          { label: 'useFriends.test.ts', path: '__tests__/friends/useFriends.test.ts' },
         ]}
       />
 
@@ -243,14 +238,11 @@ export default function FriendsContent() {
         title="Test Coverage Details"
         accentColor="#22C55E"
         entries={[
-          { label: 'Total Tests', value: '54 tests across 3 files' },
-          { label: 'Line Coverage', value: '92%' },
-          { label: 'Branch Coverage', value: '88%' },
-          { label: 'useFriends Hook', value: '24 tests (94% coverage)' },
-          { label: 'Integration Flow', value: '18 tests (88% coverage)' },
-          { label: 'Relay E2E', value: '12 tests (91% coverage)' },
+          { label: 'Total Tests', value: '53 tests across 1 file + 1 E2E spec' },
+          { label: 'useFriends.test.ts', value: '53 tests (includes key rotation)' },
+          { label: 'key-rotation E2E', value: '5 tests (Playwright)' },
           { label: 'Mock Service', value: 'Full UmbraService mock' },
-          { label: 'Edge Cases', value: 'Timeout, rejection, offline' },
+          { label: 'Edge Cases', value: 'Timeout, rejection, offline, key rotation' },
         ]}
       />
     </View>

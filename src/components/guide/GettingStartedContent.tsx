@@ -34,8 +34,7 @@ export default function GettingStartedContent() {
           { label: 'CreateWalletFlow.tsx', path: 'components/auth/CreateWalletFlow.tsx' },
         ]}
         testLinks={[
-          { label: 'identity-flow.test.ts', path: '__tests__/integration/identity-flow.test.ts' },
-          { label: 'UmbraContext.test.tsx', path: '__tests__/contexts/UmbraContext.test.tsx' },
+          { label: 'umbra-context.test.tsx', path: '__tests__/identity/umbra-context.test.tsx' },
         ]}
       />
 
@@ -60,10 +59,7 @@ export default function GettingStartedContent() {
           { label: 'kdf.rs', path: 'packages/umbra-core/src/crypto/kdf.rs' },
           { label: 'ImportWalletFlow.tsx', path: 'components/auth/ImportWalletFlow.tsx' },
         ]}
-        testLinks={[
-          { label: 'loader.test.ts', path: '__tests__/packages/umbra-wasm/loader.test.ts' },
-          { label: 'identity-flow.test.ts', path: '__tests__/integration/identity-flow.test.ts' },
-        ]}
+        testLinks={[]}
       />
 
       <FeatureCard
@@ -82,10 +78,7 @@ export default function GettingStartedContent() {
           { label: 'keys.rs', path: 'packages/umbra-core/src/crypto/keys.rs' },
           { label: 'signing.rs', path: 'packages/umbra-core/src/crypto/signing.rs' },
         ]}
-        testLinks={[
-          { label: 'loader.test.ts', path: '__tests__/packages/umbra-wasm/loader.test.ts' },
-          { label: 'identity-flow.test.ts', path: '__tests__/integration/identity-flow.test.ts' },
-        ]}
+        testLinks={[]}
       />
 
       <FeatureCard
@@ -110,8 +103,7 @@ export default function GettingStartedContent() {
           { label: 'secure_store.rs', path: 'packages/umbra-core/src/storage/secure_store.rs' },
         ]}
         testLinks={[
-          { label: 'AuthContext.test.tsx', path: '__tests__/contexts/AuthContext.test.tsx' },
-          { label: 'persistence.test.ts', path: '__tests__/integration/persistence.test.ts' },
+          { label: 'auth-context.test.tsx', path: '__tests__/identity/auth-context.test.tsx' },
         ]}
       />
 
@@ -152,7 +144,7 @@ export default function GettingStartedContent() {
           { label: 'loader.ts', path: 'packages/umbra-wasm/loader.ts' },
         ]}
         testLinks={[
-          { label: 'UmbraContext.test.tsx', path: '__tests__/contexts/UmbraContext.test.tsx' },
+          { label: 'umbra-context.test.tsx', path: '__tests__/identity/umbra-context.test.tsx' },
         ]}
       />
 
@@ -192,12 +184,9 @@ export default function GettingStartedContent() {
         title="Test Coverage Details"
         accentColor="#22C55E"
         entries={[
-          { label: 'Total Tests', value: '72 tests across 3 files' },
-          { label: 'Line Coverage', value: '85%' },
-          { label: 'Branch Coverage', value: '80%' },
-          { label: 'Identity Flow', value: '22 tests (88% coverage)' },
-          { label: 'UmbraContext', value: '18 tests (84% coverage)' },
-          { label: 'WASM Loader', value: '32 tests (82% coverage)' },
+          { label: 'Total Tests', value: '65 tests across 2 files' },
+          { label: 'auth-context.test.tsx', value: '54 tests' },
+          { label: 'umbra-context.test.tsx', value: '11 tests' },
           { label: 'Edge Cases', value: 'Invalid phrase, PIN lockout, recovery' },
         ]}
       />

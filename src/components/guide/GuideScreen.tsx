@@ -71,12 +71,10 @@ const SECTIONS: SectionDef[] = [
     testCoverage: {
       percentage: 85,
       testFiles: [
-        '__tests__/integration/identity-flow.test.ts',
-        '__tests__/contexts/UmbraContext.test.tsx',
+        '__tests__/identity/umbra-context.test.tsx',
+        '__tests__/identity/auth-context.test.tsx',
       ],
-      integrationTests: [
-        '__tests__/integration/persistence.test.ts',
-      ],
+      integrationTests: [],
     },
   },
   {
@@ -89,12 +87,10 @@ const SECTIONS: SectionDef[] = [
     testCoverage: {
       percentage: 92,
       testFiles: [
-        '__tests__/hooks/useFriends.test.ts',
-        '__tests__/integration/friends-flow.test.ts',
+        '__tests__/friends/useFriends.test.ts',
+        '__tests__/e2e/settings/key-rotation.spec.ts',
       ],
-      integrationTests: [
-        '__tests__/integration/relay-e2e.test.ts',
-      ],
+      integrationTests: [],
     },
   },
   {
@@ -107,15 +103,12 @@ const SECTIONS: SectionDef[] = [
     testCoverage: {
       percentage: 88,
       testFiles: [
-        '__tests__/hooks/useMessages.test.ts',
-        '__tests__/components/chat/ChatArea.test.tsx',
-        '__tests__/components/chat/ChatInput.test.tsx',
-        '__tests__/components/chat/MsgGroup.test.tsx',
+        '__tests__/messaging/useMessages.test.ts',
+        '__tests__/messaging/useConversations.test.ts',
+        '__tests__/messaging/messaging-context.test.tsx',
+        '__tests__/e2e/messaging/decrypt-errors.spec.ts',
       ],
-      integrationTests: [
-        '__tests__/integration/chat-features.test.ts',
-        '__tests__/integration/messaging-flow.test.ts',
-      ],
+      integrationTests: [],
     },
   },
   {
@@ -128,8 +121,7 @@ const SECTIONS: SectionDef[] = [
     testCoverage: {
       percentage: 78,
       testFiles: [
-        '__tests__/hooks/useGroups.test.ts',
-        '__tests__/integration/groups-flow.test.ts',
+        '__tests__/groups/useGroups.test.ts',
       ],
       integrationTests: [],
     },
@@ -164,19 +156,11 @@ const SECTIONS: SectionDef[] = [
     keywords: ['call', 'voice', 'video', 'webrtc', 'ice', 'stun', 'turn', 'sdp', 'opus', 'codec', 'screen share', 'group call', 'e2ee', 'dtls', 'srtp', 'diagnostics', 'loopback', 'relay test'],
     stage: 'beta',
     testCoverage: {
-      percentage: 75,
+      percentage: 15,
       testFiles: [
-        '__tests__/hooks/useCall.test.ts',
-        '__tests__/hooks/useCallSettings.test.ts',
-        '__tests__/hooks/useMediaDevices.test.ts',
-        '__tests__/services/CallManager.test.ts',
-        '__tests__/services/CallManager.video.test.ts',
-        '__tests__/services/GroupCallManager.test.ts',
+        '__tests__/settings/useCallSettings.test.ts',
       ],
-      integrationTests: [
-        '__tests__/integration/calling.test.ts',
-        '__tests__/integration/group-calling.test.ts',
-      ],
+      integrationTests: [],
     },
   },
   {
@@ -187,14 +171,9 @@ const SECTIONS: SectionDef[] = [
     keywords: ['encrypt', 'key', 'privacy', 'security', 'e2e', 'did', 'aes', 'x25519', 'ed25519', 'zero-knowledge', 'gcm', 'nonce', 'aad', 'threat model', 'storage encryption'],
     stage: 'stable',
     testCoverage: {
-      percentage: 95,
-      testFiles: [
-        '__tests__/packages/umbra-wasm/loader.test.ts',
-        '__tests__/integration/identity-flow.test.ts',
-      ],
-      integrationTests: [
-        '__tests__/integration/persistence.test.ts',
-      ],
+      percentage: 0,
+      testFiles: [],
+      integrationTests: [],
     },
   },
   {
@@ -207,13 +186,9 @@ const SECTIONS: SectionDef[] = [
     testCoverage: {
       percentage: 82,
       testFiles: [
-        '__tests__/hooks/useNetwork.test.ts',
-        '__tests__/integration/networking.test.ts',
+        '__tests__/settings/useNetwork.test.ts',
       ],
-      integrationTests: [
-        '__tests__/integration/relay-e2e.test.ts',
-        '__tests__/integration/p2p-flow.test.ts',
-      ],
+      integrationTests: [],
     },
   },
   {
@@ -224,10 +199,8 @@ const SECTIONS: SectionDef[] = [
     keywords: ['plugin', 'extension', 'sdk', 'slot', 'permission', 'manifest', 'marketplace', 'api'],
     stage: 'beta',
     testCoverage: {
-      percentage: 81,
-      testFiles: [
-        '__tests__/contexts/PluginContext.test.tsx',
-      ],
+      percentage: 0,
+      testFiles: [],
       integrationTests: [],
     },
   },

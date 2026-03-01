@@ -44,11 +44,7 @@ export default function CallingContent() {
           { label: 'CallContext.tsx', path: 'contexts/CallContext.tsx' },
           { label: 'callCrypto.ts', path: 'services/callCrypto.ts' },
         ]}
-        testLinks={[
-          { label: 'CallManager.test.ts', path: '__tests__/services/CallManager.test.ts' },
-          { label: 'useCall.test.ts', path: '__tests__/hooks/useCall.test.ts' },
-          { label: 'calling.test.ts', path: '__tests__/integration/calling.test.ts' },
-        ]}
+        testLinks={[]}
       />
 
       <FeatureCard
@@ -68,9 +64,7 @@ export default function CallingContent() {
           { label: 'CallContext.tsx', path: 'contexts/CallContext.tsx' },
           { label: 'useNetwork.ts', path: 'hooks/useNetwork.ts' },
         ]}
-        testLinks={[
-          { label: 'calling.test.ts', path: '__tests__/integration/calling.test.ts' },
-        ]}
+        testLinks={[]}
       />
 
 {/* ── ICE / TURN ──────────────────────────────────────────────── */}
@@ -92,9 +86,7 @@ export default function CallingContent() {
           { label: 'network.ts', path: 'config/network.ts' },
           { label: 'call.ts', path: 'types/call.ts' },
         ]}
-        testLinks={[
-          { label: 'CallManager.test.ts', path: '__tests__/services/CallManager.test.ts' },
-        ]}
+        testLinks={[]}
       />
 
       <FeatureCard
@@ -114,9 +106,7 @@ export default function CallingContent() {
           { label: 'CallManager.ts', path: 'services/CallManager.ts' },
           { label: 'GroupCallManager.ts', path: 'services/GroupCallManager.ts' },
         ]}
-        testLinks={[
-          { label: 'CallManager.test.ts', path: '__tests__/services/CallManager.test.ts' },
-        ]}
+        testLinks={[]}
       />
 
 {/* ── Video & Quality ─────────────────────────────────────────── */}
@@ -136,10 +126,7 @@ export default function CallingContent() {
           { label: 'CallManager.ts', path: 'services/CallManager.ts' },
           { label: 'call.ts', path: 'types/call.ts' },
         ]}
-        testLinks={[
-          { label: 'CallManager.video.test.ts', path: '__tests__/services/CallManager.video.test.ts' },
-          { label: 'useMediaDevices.test.ts', path: '__tests__/hooks/useMediaDevices.test.ts' },
-        ]}
+        testLinks={[]}
       />
 
       <FeatureCard
@@ -162,9 +149,7 @@ export default function CallingContent() {
           { label: 'CallManager.ts', path: 'services/CallManager.ts' },
           { label: 'call.ts (VIDEO_QUALITY_PRESETS)', path: 'types/call.ts' },
         ]}
-        testLinks={[
-          { label: 'useCallSettings.test.ts', path: '__tests__/hooks/useCallSettings.test.ts' },
-        ]}
+        testLinks={[{ label: 'useCallSettings.test.ts', path: '__tests__/settings/useCallSettings.test.ts' }]}
       />
 
       <FeatureCard
@@ -187,9 +172,7 @@ export default function CallingContent() {
           { label: 'CallManager.ts (mungeOpusSdp)', path: 'services/CallManager.ts' },
           { label: 'call.ts (AUDIO_QUALITY_PRESETS)', path: 'types/call.ts' },
         ]}
-        testLinks={[
-          { label: 'CallManager.test.ts', path: '__tests__/services/CallManager.test.ts' },
-        ]}
+        testLinks={[{ label: 'useCallSettings.test.ts', path: '__tests__/settings/useCallSettings.test.ts' }]}
       />
 
       {/* ── Encryption ──────────────────────────────────────────────── */}
@@ -215,9 +198,7 @@ export default function CallingContent() {
           { label: 'CallManager.ts (E2EE worker)', path: 'services/CallManager.ts' },
           { label: 'callCrypto.ts', path: 'services/callCrypto.ts' },
         ]}
-        testLinks={[
-          { label: 'CallManager.test.ts', path: '__tests__/services/CallManager.test.ts' },
-        ]}
+        testLinks={[]}
       />
 
 {/* ── Group Calls ─────────────────────────────────────────────── */}
@@ -242,10 +223,7 @@ export default function CallingContent() {
           { label: 'GroupCallManager.ts', path: 'services/GroupCallManager.ts' },
           { label: 'CallContext.tsx', path: 'contexts/CallContext.tsx' },
         ]}
-        testLinks={[
-          { label: 'GroupCallManager.test.ts', path: '__tests__/services/GroupCallManager.test.ts' },
-          { label: 'group-calling.test.ts', path: '__tests__/integration/group-calling.test.ts' },
-        ]}
+        testLinks={[]}
       />
 
 {/* ── Features ────────────────────────────────────────────────── */}
@@ -268,9 +246,7 @@ export default function CallingContent() {
           { label: 'CallManager.ts', path: 'services/CallManager.ts' },
           { label: 'GroupCallManager.ts', path: 'services/GroupCallManager.ts' },
         ]}
-        testLinks={[
-          { label: 'CallManager.test.ts', path: '__tests__/services/CallManager.test.ts' },
-        ]}
+        testLinks={[]}
       />
 
       <FeatureCard
@@ -291,9 +267,7 @@ export default function CallingContent() {
         sourceLinks={[
           { label: 'useVideoEffects.ts', path: 'hooks/useVideoEffects.ts' },
         ]}
-        testLinks={[
-          { label: 'useVideoEffects.test.ts', path: '__tests__/hooks/useVideoEffects.test.ts' },
-        ]}
+        testLinks={[{ label: 'useCallSettings.test.ts', path: '__tests__/settings/useCallSettings.test.ts' }]}
       />
 
       <FeatureCard
@@ -309,9 +283,7 @@ export default function CallingContent() {
         sourceLinks={[
           { label: 'useVideoFilters.ts', path: 'hooks/useVideoFilters.ts' },
         ]}
-        testLinks={[
-          { label: 'useVideoFilters.test.ts', path: '__tests__/hooks/useVideoFilters.test.ts' },
-        ]}
+        testLinks={[{ label: 'useCallSettings.test.ts', path: '__tests__/settings/useCallSettings.test.ts' }]}
       />
 
       <FeatureCard
@@ -327,9 +299,7 @@ export default function CallingContent() {
         sourceLinks={[
           { label: 'CallContext.tsx', path: 'contexts/CallContext.tsx' },
         ]}
-        testLinks={[
-          { label: 'calling.test.ts', path: '__tests__/integration/calling.test.ts' },
-        ]}
+        testLinks={[]}
       />
 
       <FeatureCard
@@ -349,9 +319,7 @@ export default function CallingContent() {
         sourceLinks={[
           { label: 'CallManager.ts', path: 'services/CallManager.ts' },
         ]}
-        testLinks={[
-          { label: 'CallManager.test.ts', path: '__tests__/services/CallManager.test.ts' },
-        ]}
+        testLinks={[{ label: 'useCallSettings.test.ts', path: '__tests__/settings/useCallSettings.test.ts' }]}
       />
 
       <FeatureCard
@@ -367,9 +335,7 @@ export default function CallingContent() {
         sourceLinks={[
           { label: 'CallManager.ts', path: 'services/CallManager.ts' },
         ]}
-        testLinks={[
-          { label: 'useMediaDevices.test.ts', path: '__tests__/hooks/useMediaDevices.test.ts' },
-        ]}
+        testLinks={[{ label: 'useCallSettings.test.ts', path: '__tests__/settings/useCallSettings.test.ts' }]}
       />
 
       <FeatureCard
@@ -389,9 +355,7 @@ export default function CallingContent() {
         sourceLinks={[
           { label: 'ActiveCallBar.tsx', path: 'components/call/ActiveCallBar.tsx' },
         ]}
-        testLinks={[
-          { label: 'calling.test.ts', path: '__tests__/integration/calling.test.ts' },
-        ]}
+        testLinks={[]}
       />
 
       <FeatureCard
@@ -408,9 +372,7 @@ export default function CallingContent() {
           { label: 'CallContext.tsx', path: 'contexts/CallContext.tsx' },
           { label: 'schema.rs', path: 'packages/umbra-core/src/storage/schema.rs' },
         ]}
-        testLinks={[
-          { label: 'calling.test.ts', path: '__tests__/integration/calling.test.ts' },
-        ]}
+        testLinks={[]}
       />
 
       <FeatureCard
@@ -428,9 +390,7 @@ export default function CallingContent() {
           { label: 'CallManager.ts (getStats)', path: 'services/CallManager.ts' },
           { label: 'call.ts (CallStats)', path: 'types/call.ts' },
         ]}
-        testLinks={[
-          { label: 'CallManager.test.ts', path: '__tests__/services/CallManager.test.ts' },
-        ]}
+        testLinks={[]}
       />
 
 {/* ── Diagnostics ──────────────────────────────────────────────── */}
@@ -526,15 +486,7 @@ export default function CallingContent() {
         title="Test Coverage Details"
         accentColor="#22C55E"
         entries={[
-          { label: 'Total Tests', value: '116 tests across 5 files' },
-          { label: 'Line Coverage', value: '86%' },
-          { label: 'Branch Coverage', value: '81%' },
-          { label: 'CallManager', value: '34 tests (88% coverage)' },
-          { label: 'Video Tests', value: '18 tests (85% coverage)' },
-          { label: 'GroupCallManager', value: '26 tests (82% coverage)' },
-          { label: 'Integration', value: '22 tests (89% coverage)' },
-          { label: 'useCall Hook', value: '16 tests (91% coverage)' },
-          { label: 'E2E Scenarios', value: 'Voice, video, group, screen share' },
+          { label: 'Status', value: '33 tests across 1 file (useCallSettings.test.ts)' },
         ]}
       />
     </View>

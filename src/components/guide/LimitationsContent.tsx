@@ -49,9 +49,10 @@ export default function LimitationsContent() {
           }}
         >
           Umbra is in active development with core messaging and calling features
-          stable and tested. The codebase includes 43+ test files covering hooks,
-          components, services, and integration flows. See the test coverage
-          breakdown for each section in the sidebar.
+          stable and tested. The codebase includes 17 Jest test suites plus
+          Playwright E2E specs covering hooks, components, services, and
+          integration flows. See the test coverage breakdown for each section
+          in the sidebar.
         </Text>
         <Pressable
           onPress={() => openLink('/tree/main/__tests__')}
@@ -170,7 +171,7 @@ export default function LimitationsContent() {
           { label: 'Network', value: '82% (hooks + relay)' },
           { label: 'Groups', value: '78% (hooks + flow)' },
           { label: 'Calling', value: '75% (8 test files)' },
-          { label: 'Total Test Files', value: '43+' },
+          { label: 'Total Test Files', value: '45+' },
         ]}
       />
 

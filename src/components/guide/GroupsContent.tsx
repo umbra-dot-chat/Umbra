@@ -36,8 +36,7 @@ export default function GroupsContent() {
           { label: 'CreateGroupDialog.tsx', path: 'components/groups/CreateGroupDialog.tsx' },
         ]}
         testLinks={[
-          { label: 'useGroups.test.ts', path: '__tests__/hooks/useGroups.test.ts' },
-          { label: 'groups-flow.test.ts', path: '__tests__/integration/groups-flow.test.ts' },
+          { label: 'useGroups.test.ts', path: '__tests__/groups/useGroups.test.ts' },
         ]}
       />
 
@@ -58,7 +57,7 @@ export default function GroupsContent() {
           { label: 'useNetwork.ts', path: 'hooks/useNetwork.ts' },
         ]}
         testLinks={[
-          { label: 'useGroups.test.ts', path: '__tests__/hooks/useGroups.test.ts' },
+          { label: 'useGroups.test.ts', path: '__tests__/groups/useGroups.test.ts' },
         ]}
       />
 
@@ -81,9 +80,7 @@ export default function GroupsContent() {
           { label: 'useGroups.ts', path: 'hooks/useGroups.ts' },
           { label: 'GroupMemberList.tsx', path: 'components/groups/GroupMemberList.tsx' },
         ]}
-        testLinks={[
-          { label: 'groups-flow.test.ts', path: '__tests__/integration/groups-flow.test.ts' },
-        ]}
+        testLinks={[]}
       />
 
       <FeatureCard
@@ -105,9 +102,7 @@ export default function GroupsContent() {
           { label: 'useGroups.ts', path: 'hooks/useGroups.ts' },
           { label: 'useNetwork.ts', path: 'hooks/useNetwork.ts' },
         ]}
-        testLinks={[
-          { label: 'groups-flow.test.ts', path: '__tests__/integration/groups-flow.test.ts' },
-        ]}
+        testLinks={[]}
       />
 
       <FeatureCard
@@ -125,7 +120,7 @@ export default function GroupsContent() {
           { label: 'schema.rs', path: 'packages/umbra-core/src/storage/schema.rs' },
         ]}
         testLinks={[
-          { label: 'useGroups.test.ts', path: '__tests__/hooks/useGroups.test.ts' },
+          { label: 'useGroups.test.ts', path: '__tests__/groups/useGroups.test.ts' },
         ]}
       />
 
@@ -149,7 +144,7 @@ export default function GroupsContent() {
           { label: 'schema.rs', path: 'packages/umbra-core/src/storage/schema.rs' },
         ]}
         testLinks={[
-          { label: 'useGroups.test.ts', path: '__tests__/hooks/useGroups.test.ts' },
+          { label: 'useGroups.test.ts', path: '__tests__/groups/useGroups.test.ts' },
         ]}
       />
 
@@ -189,14 +184,8 @@ export default function GroupsContent() {
         title="Test Coverage Details"
         accentColor="#22C55E"
         entries={[
-          { label: 'Total Tests', value: '66 tests across 3 files' },
-          { label: 'Line Coverage', value: '89%' },
-          { label: 'Branch Coverage', value: '84%' },
-          { label: 'useGroups Hook', value: '28 tests (92% coverage)' },
-          { label: 'Integration Flow', value: '22 tests (86% coverage)' },
-          { label: 'Group Crypto', value: '16 tests (91% coverage)' },
-          { label: 'Key Rotation', value: 'Fully tested (12 scenarios)' },
-          { label: 'Edge Cases', value: 'Max members, key conflicts, offline' },
+          { label: 'Total Tests', value: '23 tests across 1 file' },
+          { label: 'useGroups.test.ts', value: '23 tests' },
         ]}
       />
     </View>

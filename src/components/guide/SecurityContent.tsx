@@ -32,10 +32,7 @@ export default function SecurityContent() {
           { label: 'keys.rs', path: 'packages/umbra-core/src/crypto/keys.rs' },
           { label: 'messaging/mod.rs', path: 'packages/umbra-core/src/messaging/mod.rs' },
         ]}
-        testLinks={[
-          { label: 'loader.test.ts', path: '__tests__/packages/umbra-wasm/loader.test.ts' },
-          { label: 'identity-flow.test.ts', path: '__tests__/integration/identity-flow.test.ts' },
-        ]}
+        testLinks={[]}
       />
 
       <FeatureCard
@@ -53,9 +50,7 @@ export default function SecurityContent() {
         sourceLinks={[
           { label: 'encryption.rs', path: 'packages/umbra-core/src/crypto/encryption.rs' },
         ]}
-        testLinks={[
-          { label: 'loader.test.ts', path: '__tests__/packages/umbra-wasm/loader.test.ts' },
-        ]}
+        testLinks={[]}
       />
 
       <FeatureCard
@@ -76,10 +71,7 @@ export default function SecurityContent() {
           { label: 'signing.rs', path: 'packages/umbra-core/src/crypto/signing.rs' },
           { label: 'secure_store.rs', path: 'packages/umbra-core/src/storage/secure_store.rs' },
         ]}
-        testLinks={[
-          { label: 'loader.test.ts', path: '__tests__/packages/umbra-wasm/loader.test.ts' },
-          { label: 'identity-flow.test.ts', path: '__tests__/integration/identity-flow.test.ts' },
-        ]}
+        testLinks={[]}
       />
 
       <FeatureCard
@@ -98,9 +90,7 @@ export default function SecurityContent() {
           { label: 'did.rs', path: 'packages/umbra-core/src/identity/did.rs' },
           { label: 'identity/mod.rs', path: 'packages/umbra-core/src/identity/mod.rs' },
         ]}
-        testLinks={[
-          { label: 'identity-flow.test.ts', path: '__tests__/integration/identity-flow.test.ts' },
-        ]}
+        testLinks={[]}
       />
 
       <FeatureCard
@@ -120,9 +110,7 @@ export default function SecurityContent() {
           { label: 'protocol.rs', path: 'packages/umbra-relay/src/protocol.rs' },
           { label: 'state.rs', path: 'packages/umbra-relay/src/state.rs' },
         ]}
-        testLinks={[
-          { label: 'relay-e2e.test.ts', path: '__tests__/integration/relay-e2e.test.ts' },
-        ]}
+        testLinks={[]}
       />
 
       <FeatureCard
@@ -147,9 +135,7 @@ export default function SecurityContent() {
           { label: 'encryption.rs', path: 'packages/umbra-core/src/crypto/encryption.rs' },
           { label: 'keys.rs', path: 'packages/umbra-core/src/crypto/keys.rs' },
         ]}
-        testLinks={[
-          { label: 'loader.test.ts', path: '__tests__/packages/umbra-wasm/loader.test.ts' },
-        ]}
+        testLinks={[]}
       />
 
       <FeatureCard
@@ -167,9 +153,7 @@ export default function SecurityContent() {
           { label: 'secure_store.rs', path: 'packages/umbra-core/src/storage/secure_store.rs' },
           { label: 'schema.rs', path: 'packages/umbra-core/src/storage/schema.rs' },
         ]}
-        testLinks={[
-          { label: 'persistence.test.ts', path: '__tests__/integration/persistence.test.ts' },
-        ]}
+        testLinks={[]}
       />
 
       <TechSpec
@@ -207,14 +191,7 @@ export default function SecurityContent() {
         title="Test Coverage Details"
         accentColor="#22C55E"
         entries={[
-          { label: 'Total Tests', value: '92 tests across 4 files' },
-          { label: 'Line Coverage', value: '94%' },
-          { label: 'Branch Coverage', value: '90%' },
-          { label: 'WASM Loader', value: '32 tests (96% coverage)' },
-          { label: 'Identity Flow', value: '18 tests (92% coverage)' },
-          { label: 'Crypto WASM', value: '28 tests (95% coverage)' },
-          { label: 'Secure Store', value: '14 tests (91% coverage)' },
-          { label: 'Edge Cases', value: 'Key rotation, corruption, recovery' },
+          { label: 'Total Tests', value: 'No Jest tests yet — Security features covered by identity tests indirectly' },
         ]}
       />
     </View>
