@@ -29,6 +29,7 @@ import { useCommunitySync } from '@/hooks/useCommunitySync';
 import { useUmbra } from '@/contexts/UmbraContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { canUploadFiles, canManageFiles } from '@/utils/permissions';
+import { triggerWebDownload } from '@/utils/fileDownload';
 import { InputDialog } from '@/components/ui/InputDialog';
 import type {
   CommunityFileRecord,
@@ -93,24 +94,6 @@ function toFolderTreeView(nodes: FileFolderNode[]): FileFolder[] {
     createdBy: node.createdBy,
     createdAt: node.createdAt,
   }));
-}
-
-/** Trigger a file download on web via Blob + anchor tag. */
-function triggerWebDownload(base64Data: string, filename: string, mimeType: string) {
-  const binary = atob(base64Data);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  const blob = new Blob([bytes], { type: mimeType });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  document.body.removeChild(a);
-  URL.revokeObjectURL(url);
 }
 
 /** Read a dropped File into base64. */

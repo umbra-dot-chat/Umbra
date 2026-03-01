@@ -7,6 +7,7 @@ import { useFriends } from '@/hooks/useFriends';
 import { useNetwork } from '@/hooks/useNetwork';
 import { SearchPanel } from './SearchPanel';
 import { DmSharedFilesPanel } from '@/components/chat/DmSharedFilesPanel';
+import { GroupSettingsPanel } from '@/components/groups/GroupSettingsPanel';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import { AnimatedPresence } from '@/components/ui/AnimatedPresence';
 
@@ -32,6 +33,8 @@ export interface RightPanelProps {
   onUploadFile?: () => void;
   /** Actual content width of the panel (for resizable panels) */
   panelContentWidth?: number;
+  /** Group ID for group settings panel */
+  groupId?: string | null;
 }
 
 export function RightPanel({
@@ -41,6 +44,7 @@ export function RightPanel({
   pinnedMessages, onUnpinMessage, onThreadReply,
   conversationId, onSearchResultClick,
   onCreateFolder, onUploadFile, panelContentWidth,
+  groupId,
 }: RightPanelProps) {
   const { theme } = useTheme();
   const { friends } = useFriends();
@@ -104,6 +108,12 @@ export function RightPanel({
           onClose={() => togglePanel('files')}
           onCreateFolder={onCreateFolder}
           onUploadFile={onUploadFile}
+        />
+      )}
+      {visiblePanel === 'settings' && groupId && (
+        <GroupSettingsPanel
+          groupId={groupId}
+          onClose={() => togglePanel('settings')}
         />
       )}
     </>

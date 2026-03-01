@@ -18,6 +18,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useUmbra } from '@/contexts/UmbraContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { useNetwork } from '@/hooks/useNetwork';
 import type { Group, GroupMember, PendingGroupInvite, GroupEvent } from '@umbra/service';
 
@@ -48,6 +49,10 @@ export interface UseGroupsResult {
   acceptInvite: (inviteId: string) => Promise<{ groupId: string; conversationId: string } | null>;
   /** Decline a pending group invite */
   declineInvite: (inviteId: string) => Promise<void>;
+  /** Leave a group (removes self and cleans up local data) */
+  leaveGroup: (groupId: string) => Promise<void>;
+  /** Rotate the group encryption key (generates new key, increments version) */
+  rotateGroupKey: (groupId: string) => Promise<void>;
   /** Refresh the pending invites list */
   refreshInvites: () => Promise<void>;
   /** Refresh the groups list */
@@ -56,6 +61,7 @@ export interface UseGroupsResult {
 
 export function useGroups(): UseGroupsResult {
   const { service, isReady } = useUmbra();
+  const { identity } = useAuth();
   const { getRelayWs } = useNetwork();
   const [groups, setGroups] = useState<Group[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -251,6 +257,38 @@ export function useGroups(): UseGroupsResult {
     [service, getRelayWs, fetchPendingInvites]
   );
 
+  const leaveGroup = useCallback(
+    async (groupId: string) => {
+      if (!service || !identity?.did) return;
+      try {
+        // Remove self from the group
+        await service.removeGroupMember(groupId, identity.did);
+        // Clean up local group data
+        await service.deleteGroup(groupId);
+        await fetchGroups();
+      } catch (err) {
+        const error = err instanceof Error ? err : new Error(String(err));
+        setError(error);
+        throw error;
+      }
+    },
+    [service, identity?.did, fetchGroups],
+  );
+
+  const rotateGroupKey = useCallback(
+    async (groupId: string) => {
+      if (!service) return;
+      try {
+        await service.rotateGroupKey(groupId);
+      } catch (err) {
+        const error = err instanceof Error ? err : new Error(String(err));
+        setError(error);
+        throw error;
+      }
+    },
+    [service],
+  );
+
   return {
     groups,
     isLoading,
@@ -265,6 +303,8 @@ export function useGroups(): UseGroupsResult {
     sendInvite,
     acceptInvite,
     declineInvite,
+    leaveGroup,
+    rotateGroupKey,
     refreshInvites: fetchPendingInvites,
     refresh: fetchGroups,
   };

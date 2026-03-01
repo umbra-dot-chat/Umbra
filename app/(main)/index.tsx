@@ -25,6 +25,7 @@ import { ActiveCallBar } from '@/components/call/ActiveCallBar';
 import { ActiveCallPanel } from '@/components/call/ActiveCallPanel';
 import { useCall } from '@/hooks/useCall';
 import { pickFile } from '@/utils/filePicker';
+import { triggerWebDownload } from '@/utils/fileDownload';
 import { InputDialog } from '@/components/ui/InputDialog';
 import { ForwardDialog } from '@/components/chat/ForwardDialog';
 import { useSettingsDialog } from '@/contexts/SettingsDialogContext';
@@ -122,7 +123,7 @@ export default function ChatPage() {
 
   // Messages for the active conversation
   const {
-    messages, isLoading: msgsLoading, sendMessage,
+    messages, isLoading: msgsLoading, sendMessage, sendFileMessage,
     editMessage, deleteMessage, pinMessage, unpinMessage,
     addReaction, removeReaction, forwardMessage,
     getThreadReplies, sendThreadReply, pinnedMessages,
@@ -314,22 +315,33 @@ export default function ChatPage() {
         picked.dataBase64,
       );
 
-      // 2. Send a message with file metadata encoded as JSON
-      // The WASM messaging layer only supports text content for now,
-      // so we encode file info as a JSON marker that the UI parses.
-      const fileContent = JSON.stringify({
-        __file: true,
+      // 2. Send a file message via the hook's dedicated method
+      await sendFileMessage({
         fileId,
         filename: picked.filename,
         size: picked.size,
         mimeType: picked.mimeType,
         storageChunksJson: JSON.stringify(manifest),
       });
-      await sendMessage(fileContent);
     } catch (err) {
       console.error('[ChatPage] File attachment failed:', err);
     }
-  }, [service, resolvedConversationId, sendMessage]);
+  }, [service, resolvedConversationId, sendFileMessage]);
+
+  // Handle file download from a file attachment card
+  const handleFileDownload = useCallback(async (fileId: string, filename: string, mimeType: string) => {
+    if (!service) return;
+    try {
+      const reassembled = await service.reassembleFile(fileId);
+      if (reassembled && reassembled.dataB64) {
+        triggerWebDownload(reassembled.dataB64, reassembled.filename || filename, mimeType);
+      } else {
+        console.warn('[ChatPage] reassembleFile returned no data for', fileId);
+      }
+    } catch (err) {
+      console.error('[ChatPage] File download failed:', err);
+    }
+  }, [service]);
 
   // Handle creating a shared folder from a DM conversation
   const handleCreateSharedFolder = useCallback(() => {
@@ -500,6 +512,7 @@ export default function ChatPage() {
           onCopyMessage={handleCopyMessage}
           customEmoji={allCommunityEmoji}
           firstUnreadMessageId={firstUnreadMessageId}
+          onFileDownload={handleFileDownload}
         />
         <SlotRenderer slot="chat-toolbar" props={{ conversationId: resolvedConversationId }} />
         <ChatInput
@@ -550,6 +563,7 @@ export default function ChatPage() {
         onCreateFolder={isDm && resolvedConversationId ? handleCreateSharedFolder : undefined}
         onUploadFile={isDm && resolvedConversationId ? handleAttachment : undefined}
         panelContentWidth={panelContentWidth}
+        groupId={activeConversation?.groupId}
       />
       {/* Plugin right-panel slot removed — plugins use popup overlays instead */}
       <InputDialog

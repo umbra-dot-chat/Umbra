@@ -60,6 +60,7 @@ import {
   VolumeIcon,
   MusicIcon,
   ArrowLeftIcon,
+  FileTextIcon,
 } from '@/components/ui';
 import { useNetwork } from '@/hooks/useNetwork';
 import { useCall } from '@/hooks/useCall';
@@ -97,6 +98,7 @@ import { HelpPopoverHost } from '@/components/ui/HelpPopoverHost';
 import { HelpText, HelpHighlight, HelpListItem } from '@/components/ui/HelpContent';
 import { PRIMARY_RELAY_URL, DEFAULT_RELAY_SERVERS } from '@/config';
 import { LinkedAccountsPanel, FriendDiscoveryPanel } from '@/components/discovery';
+import { IdentityCardDialog } from '@/components/modals/IdentityCardDialog';
 
 // Cast icons for Wisp Input compatibility (accepts strokeWidth prop)
 type InputIcon = React.ComponentType<{ size?: number | string; color?: string; strokeWidth?: number }>;
@@ -481,10 +483,12 @@ function SoundToggle({ checked, onChange, ...rest }: React.ComponentProps<typeof
 function AccountSection() {
   const { identity, logout } = useAuth();
   const router = useRouter();
-  const { theme } = useTheme();
+  const { theme, mode } = useTheme();
   const tc = theme.colors;
+  const isDark = mode === 'dark';
   const [didCopied, setDidCopied] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const [showIdentityCard, setShowIdentityCard] = useState(false);
 
   const handleCopyDid = useCallback(() => {
     if (!identity) return;
@@ -631,6 +635,38 @@ function AccountSection() {
               </View>
             </View>
           </Card>
+
+          {/* Account Recovery Details PDF */}
+          <Pressable
+            onPress={() => setShowIdentityCard(true)}
+            style={{
+              flexDirection: 'row',
+              alignItems: 'center',
+              gap: 10,
+              marginTop: 12,
+              paddingVertical: 10,
+              paddingHorizontal: 14,
+              borderRadius: 10,
+              backgroundColor: isDark ? '#18181B' : tc.background.sunken,
+              borderWidth: 1,
+              borderColor: isDark ? '#27272A' : tc.border.subtle,
+            }}
+          >
+            <FileTextIcon size={18} color={tc.text.secondary} />
+            <View style={{ flex: 1 }}>
+              <RNText style={{ fontSize: 13, fontWeight: '600', color: tc.text.primary }}>
+                Account Recovery Details
+              </RNText>
+              <RNText style={{ fontSize: 11, color: tc.text.secondary }}>
+                Download a printable PDF with your DID, QR code, and recovery phrase
+              </RNText>
+            </View>
+            <DownloadIcon size={16} color={tc.text.muted} />
+          </Pressable>
+          <IdentityCardDialog
+            open={showIdentityCard}
+            onClose={() => setShowIdentityCard(false)}
+          />
 
           {/* Linked Accounts */}
           <View style={{ marginTop: 20 }}>

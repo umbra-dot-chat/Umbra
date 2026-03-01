@@ -43,11 +43,19 @@ import type {
   GroupMessagePayload,
   GroupKeyRotationPayload,
   GroupMemberRemovedPayload,
+  KeyRotationPayload,
   MessageStatusPayload,
   FriendRequest,
   CommunityEventPayload,
   DmFileEventPayload,
   AccountMetadataPayload,
+  AccountBackupManifestPayload,
+  AccountBackupChunkPayload,
+} from '@umbra/service';
+import {
+  parseBackupManifest,
+  parseBackupChunks,
+  restoreFromChunks,
 } from '@umbra/service';
 import { PRIMARY_RELAY_URL, DEFAULT_RELAY_SERVERS, NETWORK_CONFIG } from '@/config';
 
@@ -81,6 +89,42 @@ let _currentServerIndex = 0;
 // When the relay sends back an `ack`, we pop the oldest entry and
 // transition that message's status from 'sending' → 'sent'.
 const _pendingRelayAcks: string[] = [];
+
+/**
+ * If decrypted message text is a JSON bridge file payload (`{"__file":true,...}`),
+ * register it in dm_shared_files so it appears in the Shared Files panel.
+ * Non-fatal — errors are silently swallowed so message processing continues.
+ */
+export async function maybeRegisterIncomingFile(
+  service: any,
+  conversationId: string,
+  senderDid: string,
+  decryptedText: string,
+): Promise<void> {
+  if (!decryptedText.startsWith('{"__file":true')) return;
+  try {
+    const parsed = JSON.parse(decryptedText);
+    if (!parsed.__file || !parsed.fileId || !parsed.filename) return;
+    const record = await service.uploadDmFile(
+      conversationId,
+      null, // folderId — root level
+      parsed.filename,
+      null, // description
+      parsed.size ?? 0,
+      parsed.mimeType ?? 'application/octet-stream',
+      parsed.storageChunksJson ?? '{}',
+      senderDid,
+    );
+    service.dispatchDmFileEvent({
+      conversationId,
+      senderDid,
+      timestamp: Date.now(),
+      event: { type: 'fileUploaded', file: record },
+    });
+  } catch {
+    // Non-fatal — best effort; don't block message processing
+  }
+}
 
 /**
  * Push a messageId onto the pending relay ack queue.
@@ -403,6 +447,7 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
                 service.dispatchMessageEvent({ type: 'threadReplyReceived', message: { id: chatPayload.messageId, conversationId: chatPayload.conversationId, senderDid: chatPayload.senderDid, content: { type: 'text', text: decryptedText }, timestamp: chatPayload.timestamp, read: false, delivered: true, status: 'delivered', threadId: chatPayload.threadId }, parentId: chatPayload.threadId });
               } else {
                 service.dispatchMessageEvent({ type: 'messageReceived', message: { id: chatPayload.messageId, conversationId: chatPayload.conversationId, senderDid: chatPayload.senderDid, content: { type: 'text', text: decryptedText }, timestamp: chatPayload.timestamp, read: false, delivered: true, status: 'delivered' } });
+                await maybeRegisterIncomingFile(service, chatPayload.conversationId, chatPayload.senderDid, decryptedText);
               }
               service.sendDeliveryReceipt(chatPayload.messageId, chatPayload.conversationId, chatPayload.senderDid, 'delivered', ws).catch((err: any) => console.warn('[useNetwork] Failed to send delivery receipt:', err));
             } catch (err) { console.warn('[useNetwork] Failed to store incoming chat message:', err); }
@@ -429,11 +474,19 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
               const storePayload: ChatMessagePayload = { messageId: groupMsgPayload.messageId, conversationId: groupMsgPayload.conversationId, senderDid: groupMsgPayload.senderDid, contentEncrypted: groupMsgPayload.ciphertext, nonce: groupMsgPayload.nonce, timestamp: groupMsgPayload.timestamp };
               await service.storeIncomingMessage(storePayload);
               service.dispatchMessageEvent({ type: 'messageReceived', message: { id: groupMsgPayload.messageId, conversationId: groupMsgPayload.conversationId, senderDid: groupMsgPayload.senderDid, content: { type: 'text', text: plaintext }, timestamp: groupMsgPayload.timestamp, read: false, delivered: true, status: 'delivered' } });
+              await maybeRegisterIncomingFile(service, groupMsgPayload.conversationId, groupMsgPayload.senderDid, plaintext);
             } catch (err) { console.warn('[useNetwork] Failed to process group message:', err); }
 
           } else if (envelope.envelope === 'group_key_rotation' && envelope.version === 1) {
             const keyPayload = envelope.payload as GroupKeyRotationPayload;
             try { await service.importGroupKey(keyPayload.encryptedKey, keyPayload.nonce, keyPayload.senderDid, keyPayload.groupId, keyPayload.keyVersion); service.dispatchGroupEvent({ type: 'keyRotated', groupId: keyPayload.groupId, keyVersion: keyPayload.keyVersion }); } catch (err) { console.warn('[useNetwork] Failed to import rotated group key:', err); }
+
+          } else if (envelope.envelope === 'key_rotation' && envelope.version === 1) {
+            const keyPayload = envelope.payload as KeyRotationPayload;
+            try {
+              await service.updateFriendEncryptionKey(keyPayload.fromDid, keyPayload.newEncryptionKey, keyPayload.signature);
+              service.dispatchFriendEvent({ type: 'friendKeyRotated', did: keyPayload.fromDid });
+            } catch (err) { console.warn('[useNetwork] Failed to process key rotation:', err); }
 
           } else if (envelope.envelope === 'group_member_removed' && envelope.version === 1) {
             const removePayload = envelope.payload as GroupMemberRemovedPayload;
@@ -504,6 +557,10 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
             const metaPayload = envelope.payload as AccountMetadataPayload;
             service.dispatchMetadataEvent({ type: 'metadataReceived', key: metaPayload.key, value: metaPayload.value, timestamp: metaPayload.timestamp });
 
+          } else if (envelope.envelope === 'account_backup_manifest' || envelope.envelope === 'account_backup_chunk') {
+            // Backup envelopes are collected during offline fetch, not processed in real-time
+            console.log('[useNetwork] Ignoring live backup envelope (only processed during offline fetch)');
+
           } else if (envelope.envelope === 'presence_online') {
             if (from_did) {
               const ackEnvelope = JSON.stringify({ envelope: 'presence_ack', version: 1, payload: { timestamp: Date.now() } });
@@ -521,6 +578,7 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
       case 'offline_messages': {
         const messages = msg.messages || [];
         console.log('[useNetwork] Received', messages.length, 'offline messages');
+        const _backupEnvelopes: any[] = [];
 
         for (const offlineMsg of messages) {
           try {
@@ -551,7 +609,7 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
                 const decryptedText = await service.decryptIncomingMessage(chatPayload);
                 if (!decryptedText) { console.warn('[useNetwork] Offline decryption failed for', chatPayload.messageId);
                 } else if (chatPayload.threadId) { service.dispatchMessageEvent({ type: 'threadReplyReceived', message: { id: chatPayload.messageId, conversationId: chatPayload.conversationId, senderDid: chatPayload.senderDid, content: { type: 'text', text: decryptedText }, timestamp: chatPayload.timestamp, read: false, delivered: true, status: 'delivered', threadId: chatPayload.threadId }, parentId: chatPayload.threadId });
-                } else { service.dispatchMessageEvent({ type: 'messageReceived', message: { id: chatPayload.messageId, conversationId: chatPayload.conversationId, senderDid: chatPayload.senderDid, content: { type: 'text', text: decryptedText }, timestamp: chatPayload.timestamp, read: false, delivered: true, status: 'delivered' } }); }
+                } else { service.dispatchMessageEvent({ type: 'messageReceived', message: { id: chatPayload.messageId, conversationId: chatPayload.conversationId, senderDid: chatPayload.senderDid, content: { type: 'text', text: decryptedText }, timestamp: chatPayload.timestamp, read: false, delivered: true, status: 'delivered' } }); await maybeRegisterIncomingFile(service, chatPayload.conversationId, chatPayload.senderDid, decryptedText); }
               } catch (err) { console.warn('[useNetwork] Failed to store offline chat message:', err); }
             } else if (envelope.envelope === 'group_invite' && envelope.version === 1) {
               const invitePayload = envelope.payload as GroupInvitePayload;
@@ -566,10 +624,17 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
                 const storePayload: ChatMessagePayload = { messageId: groupMsgPayload.messageId, conversationId: groupMsgPayload.conversationId, senderDid: groupMsgPayload.senderDid, contentEncrypted: groupMsgPayload.ciphertext, nonce: groupMsgPayload.nonce, timestamp: groupMsgPayload.timestamp };
                 await service.storeIncomingMessage(storePayload);
                 service.dispatchMessageEvent({ type: 'messageReceived', message: { id: groupMsgPayload.messageId, conversationId: groupMsgPayload.conversationId, senderDid: groupMsgPayload.senderDid, content: { type: 'text', text: plaintext }, timestamp: groupMsgPayload.timestamp, read: false, delivered: true, status: 'delivered' } });
+                await maybeRegisterIncomingFile(service, groupMsgPayload.conversationId, groupMsgPayload.senderDid, plaintext);
               } catch (err) { console.warn('[useNetwork] Failed to process offline group message:', err); }
             } else if (envelope.envelope === 'group_key_rotation' && envelope.version === 1) {
               const keyPayload = envelope.payload as GroupKeyRotationPayload;
               try { await service.importGroupKey(keyPayload.encryptedKey, keyPayload.nonce, keyPayload.senderDid, keyPayload.groupId, keyPayload.keyVersion); service.dispatchGroupEvent({ type: 'keyRotated', groupId: keyPayload.groupId, keyVersion: keyPayload.keyVersion }); } catch (err) { console.warn('[useNetwork] Failed to import offline rotated group key:', err); }
+            } else if (envelope.envelope === 'key_rotation' && envelope.version === 1) {
+              const keyPayload = envelope.payload as KeyRotationPayload;
+              try {
+                await service.updateFriendEncryptionKey(keyPayload.fromDid, keyPayload.newEncryptionKey, keyPayload.signature);
+                service.dispatchFriendEvent({ type: 'friendKeyRotated', did: keyPayload.fromDid });
+              } catch (err) { console.warn('[useNetwork] Failed to process offline key rotation:', err); }
             } else if (envelope.envelope === 'group_member_removed' && envelope.version === 1) {
               const removePayload = envelope.payload as GroupMemberRemovedPayload;
               service.dispatchGroupEvent({ type: 'memberRemoved', groupId: removePayload.groupId, removedDid: removePayload.removedDid });
@@ -617,11 +682,37 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
             } else if (envelope.envelope === 'account_metadata' && envelope.version === 1) {
               const metaPayload = envelope.payload as AccountMetadataPayload;
               service.dispatchMetadataEvent({ type: 'metadataReceived', key: metaPayload.key, value: metaPayload.value, timestamp: metaPayload.timestamp });
+            } else if (envelope.envelope === 'account_backup_manifest' || envelope.envelope === 'account_backup_chunk') {
+              // Collected below after the loop
+              _backupEnvelopes.push(envelope);
             } else if (envelope.envelope === 'presence_online' || envelope.envelope === 'presence_ack') {
               // Stale presence from when we were offline — ignore silently
             }
           } catch (parseErr) {
             console.log('[useNetwork] Offline message parse error:', parseErr);
+          }
+        }
+
+        // Process backup envelopes if any were collected
+        if (_backupEnvelopes.length > 0) {
+          try {
+            const manifest = parseBackupManifest(_backupEnvelopes);
+            if (manifest) {
+              const chunks = parseBackupChunks(_backupEnvelopes, manifest.backupId);
+              if (chunks.length === manifest.totalChunks) {
+                console.log(`[useNetwork] Found complete backup (${manifest.totalChunks} chunks), restoring...`);
+                const result = await restoreFromChunks(chunks, manifest.nonce);
+                console.log('[useNetwork] Backup restored:', result.imported);
+                service.dispatchMetadataEvent({
+                  type: 'backupRestored',
+                  imported: result.imported,
+                });
+              } else {
+                console.warn(`[useNetwork] Incomplete backup: ${chunks.length}/${manifest.totalChunks} chunks`);
+              }
+            }
+          } catch (backupErr) {
+            console.warn('[useNetwork] Backup restore error:', backupErr);
           }
         }
         break;

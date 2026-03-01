@@ -22,7 +22,7 @@ import { useUmbra } from '@/contexts/UmbraContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSound } from '@/contexts/SoundContext';
 import { useNetwork, pushPendingRelayAck } from '@/hooks/useNetwork';
-import type { Message, MessageEvent } from '@umbra/service';
+import type { Message, MessageEvent, FileMessagePayload } from '@umbra/service';
 
 const PAGE_SIZE = 50;
 
@@ -39,6 +39,8 @@ export interface UseMessagesResult {
   loadMore: () => Promise<void>;
   /** Send a new text message */
   sendMessage: (text: string, replyToId?: string) => Promise<Message | null>;
+  /** Send a file message */
+  sendFileMessage: (filePayload: FileMessagePayload) => Promise<Message | null>;
   /** Mark all messages in this conversation as read */
   markAsRead: () => Promise<void>;
   /** Refresh the message list */
@@ -163,8 +165,11 @@ export function useMessages(conversationId: string | null, groupId?: string | nu
         }
         if (msg.conversationId === conversationId) {
           // Don't append messages with empty content (e.g. from decryption failure)
-          const text = typeof msg.content === 'string' ? msg.content : (msg.content?.type === 'text' ? msg.content.text : undefined);
-          if (!text) return;
+          const hasContent =
+            typeof msg.content === 'string'
+            || msg.content?.type === 'text'
+            || msg.content?.type === 'file';
+          if (!hasContent) return;
           // Play receive sound for messages from others
           if (event.type === 'messageReceived' && msg.senderDid !== myDid) {
             playSound('message_receive');
@@ -271,6 +276,54 @@ export function useMessages(conversationId: string | null, groupId?: string | nu
       }
     },
     [service, conversationId, groupId, getRelayWs, playSound]
+  );
+
+  const sendFileMessage = useCallback(
+    async (filePayload: FileMessagePayload): Promise<Message | null> => {
+      if (!service || !conversationId) return null;
+
+      try {
+        const relayWs = getRelayWs();
+        const message = groupId
+          ? await service.sendGroupFileMessage(groupId, conversationId, filePayload, relayWs)
+          : await service.sendFileMessage(conversationId, filePayload, relayWs);
+        if (message.status === 'sending') {
+          pushPendingRelayAck(message.id);
+        }
+        playSound('message_send');
+
+        // Register in dm_shared_files so it appears in the Shared Files panel
+        if (myDid) {
+          try {
+            const record = await service.uploadDmFile(
+              conversationId,
+              null,                          // folderId — root level for chat attachments
+              filePayload.filename,
+              null,                          // description
+              filePayload.size,
+              filePayload.mimeType,
+              filePayload.storageChunksJson,
+              myDid,
+            );
+            service.dispatchDmFileEvent({
+              conversationId,
+              senderDid: myDid,
+              timestamp: Date.now(),
+              event: { type: 'fileUploaded', file: record },
+            });
+          } catch (err) {
+            // Non-fatal: the message was sent, just the shared files entry failed
+            console.warn('[useMessages] Failed to register file in shared files:', err);
+          }
+        }
+
+        return message;
+      } catch (err) {
+        setError(err instanceof Error ? err : new Error(String(err)));
+        return null;
+      }
+    },
+    [service, conversationId, groupId, getRelayWs, playSound, myDid]
   );
 
   const markAsRead = useCallback(async () => {
@@ -394,6 +447,7 @@ export function useMessages(conversationId: string | null, groupId?: string | nu
     hasMore,
     loadMore,
     sendMessage,
+    sendFileMessage,
     markAsRead,
     refresh: fetchMessages,
     editMessage,

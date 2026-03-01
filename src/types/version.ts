@@ -76,6 +76,8 @@ export interface AppUpdateState {
     progress: number;
     /** Current phase: idle | downloading | ready | error */
     phase: 'idle' | 'downloading' | 'ready' | 'error';
+    /** Error message when phase is 'error' */
+    error: string | null;
     /** Start the download + install process */
     downloadAndInstall: () => void;
     /** Restart the app after install */

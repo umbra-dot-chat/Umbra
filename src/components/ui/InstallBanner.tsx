@@ -45,6 +45,7 @@ export function InstallBanner() {
   if (!globallyHidden) {
     // Desktop OTA: error phase
     if (update.isDesktopUser && update.desktopUpdate.phase === 'error') {
+      const errorMsg = update.desktopUpdate.error;
       bannerContent = (
         <View
           style={{
@@ -58,7 +59,7 @@ export function InstallBanner() {
           }}
         >
           <RNText style={{ color: tc.text.inverse, fontSize: 13, fontWeight: '600' }}>
-            Update failed
+            Update failed{errorMsg ? `: ${errorMsg}` : ''}
           </RNText>
           <Pressable
             onPress={update.desktopUpdate.downloadAndInstall}

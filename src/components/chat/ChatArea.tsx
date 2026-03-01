@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, ScrollView, View, Pressable, Text as RNText } from 'react-native';
 import {
   Avatar, ChatBubble, Text, TypingIndicator, NewMessageDivider, useTheme,
@@ -55,6 +55,8 @@ export interface ChatAreaProps {
   customEmoji?: CommunityEmoji[];
   /** ID of the first unread message — divider is shown before it. */
   firstUnreadMessageId?: string | null;
+  /** Called when the user taps the download button on a file attachment card. */
+  onFileDownload?: (fileId: string, filename: string, mimeType: string) => Promise<void> | void;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -291,10 +293,24 @@ export function ChatArea({
   stickyHeader,
   customEmoji,
   firstUnreadMessageId,
+  onFileDownload,
 }: ChatAreaProps) {
   const { theme } = useTheme();
   const themeColors = theme.colors;
   const { displayMode } = useMessaging();
+
+  // ── Download state ──
+  const [downloadingFileId, setDownloadingFileId] = useState<string | null>(null);
+
+  const handleFileDownload = useCallback(async (fileId: string, filename: string, mimeType: string) => {
+    if (!onFileDownload) return;
+    setDownloadingFileId(fileId);
+    try {
+      await onFileDownload(fileId, filename, mimeType);
+    } finally {
+      setDownloadingFileId(null);
+    }
+  }, [onFileDownload]);
 
   // Build emoji map for inline custom emoji rendering in messages
   const emojiMap = useMemo<EmojiMap>(
@@ -550,6 +566,11 @@ export function ChatArea({
                           mimeType={fileInfo.mimeType}
                           thumbnail={fileInfo.thumbnail}
                           isOutgoing={isOwn}
+                          variant="inline"
+                          onDownload={onFileDownload
+                            ? () => handleFileDownload(fileInfo.fileId, fileInfo.filename, fileInfo.mimeType)
+                            : undefined}
+                          isDownloading={downloadingFileId === fileInfo.fileId}
                         />
                       ) : typeof displayContent === 'string' ? (
                         <RNText style={{ fontSize: 14, color: themeColors.text.primary, lineHeight: 20 }}>
@@ -580,6 +601,11 @@ export function ChatArea({
                           mimeType={fileInfo.mimeType}
                           thumbnail={fileInfo.thumbnail}
                           isOutgoing={isOwn}
+                          variant="bubble"
+                          onDownload={onFileDownload
+                            ? () => handleFileDownload(fileInfo.fileId, fileInfo.filename, fileInfo.mimeType)
+                            : undefined}
+                          isDownloading={downloadingFileId === fileInfo.fileId}
                         />
                       ) : (
                         displayContent

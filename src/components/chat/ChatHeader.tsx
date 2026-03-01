@@ -6,7 +6,7 @@ import {
   Text, useTheme,
 } from '@coexist/wisp-react-native';
 import type { RightPanel } from '@/types/panels';
-import { SearchIcon, PinIcon, UsersIcon, PhoneIcon, VideoIcon, FolderIcon, ArrowLeftIcon, MoreIcon, XIcon } from '@/components/ui';
+import { SearchIcon, PinIcon, UsersIcon, PhoneIcon, VideoIcon, FolderIcon, ArrowLeftIcon, MoreIcon, XIcon, SettingsIcon } from '@/components/ui';
 import { useIsMobile } from '@/hooks/useIsMobile';
 
 export interface ChatHeaderProps {
@@ -73,6 +73,15 @@ export function ChatHeader({ active, rightPanel, togglePanel, onShowProfile, onV
         accessibilityLabel="Toggle members"
         iconLeft={<UsersIcon size={18} color={themeColors.text.secondary} />}
       />
+      {active?.group && (
+        <Button
+          variant={rightPanel === 'settings' ? 'secondary' : 'tertiary'}
+          size="sm"
+          onPress={() => { togglePanel('settings'); setMobileMenuOpen(false); }}
+          accessibilityLabel="Group settings"
+          iconLeft={<SettingsIcon size={18} color={themeColors.text.secondary} />}
+        />
+      )}
     </>
   );
 

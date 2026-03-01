@@ -214,6 +214,7 @@ export function useAppUpdate(): AppUpdateState {
   // Desktop OTA state
   const [desktopPhase, setDesktopPhase] = useState<'idle' | 'downloading' | 'ready' | 'error'>('idle');
   const [desktopProgress, setDesktopProgress] = useState(0);
+  const [desktopError, setDesktopError] = useState<string | null>(null);
   const tauriUpdateRef = useRef<any>(null);
 
   // Web OTA state
@@ -278,8 +279,14 @@ export function useAppUpdate(): AppUpdateState {
           setLatestVersion(version);
         }
       }
-    } catch (err) {
-      console.warn('[useAppUpdate] Tauri update check failed:', err);
+    } catch (err: any) {
+      const message = err?.message || err?.toString() || 'Unknown error';
+      console.warn('[useAppUpdate] Tauri update check failed:', message);
+      // If the check itself fails (e.g. no matching platform in manifest),
+      // surface the error so the user knows why
+      if (message.includes('platform') || message.includes('signature') || message.includes('manifest')) {
+        setDesktopError(message);
+      }
     }
   }, [isDesktop]);
 
@@ -291,6 +298,7 @@ export function useAppUpdate(): AppUpdateState {
     try {
       setDesktopPhase('downloading');
       setDesktopProgress(0);
+      setDesktopError(null);
 
       let totalBytes = 0;
       let downloadedBytes = 0;
@@ -311,8 +319,10 @@ export function useAppUpdate(): AppUpdateState {
       });
 
       setDesktopPhase('ready');
-    } catch (err) {
-      console.error('[useAppUpdate] Download failed:', err);
+    } catch (err: any) {
+      const message = err?.message || err?.toString() || 'Unknown error';
+      console.error('[useAppUpdate] Download failed:', message);
+      setDesktopError(message);
       setDesktopPhase('error');
     }
   }, []);
@@ -466,6 +476,7 @@ export function useAppUpdate(): AppUpdateState {
       available: isDesktop && (hasUpdate || !!tauriUpdateRef.current),
       progress: desktopProgress,
       phase: desktopPhase,
+      error: desktopError,
       downloadAndInstall,
       restart,
     },

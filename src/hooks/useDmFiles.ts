@@ -151,7 +151,10 @@ export function useDmFiles(conversationId: string | null): UseDmFilesResult {
 
       const evt = event.event;
       if (evt.type === 'fileUploaded') {
-        setAllFiles((prev) => [evt.file, ...prev]);
+        setAllFiles((prev) => {
+          if (prev.some((f) => f.id === evt.file.id)) return prev;
+          return [evt.file, ...prev];
+        });
       } else if (evt.type === 'fileDeleted') {
         setAllFiles((prev) => prev.filter((f) => f.id !== evt.fileId));
       } else if (evt.type === 'fileMoved') {
