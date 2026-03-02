@@ -34,6 +34,8 @@
     "test:e2e": "npx playwright test --config=__tests__/e2e/playwright.config.ts",
     "test:e2e:headed": "npx playwright test --config=__tests__/e2e/playwright.config.ts --headed",
     "test:e2e:friends": "npx playwright test --config=__tests__/e2e/playwright.config.ts __tests__/e2e/friends/",
+    "build:cli": "cd packages/umbra-cli && cargo build --release",
+    "cli": "cd packages/umbra-cli && cargo run",
     "deploy": "./scripts/deploy.sh",
     "deploy:frontend": "./scripts/deploy.sh frontend",
     "deploy:relay": "./scripts/deploy.sh relay"
