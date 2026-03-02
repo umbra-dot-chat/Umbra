@@ -43,6 +43,10 @@ export interface DmFileMessageProps {
   isDownloading?: boolean;
   /** Whether this file is end-to-end encrypted */
   isEncrypted?: boolean;
+  /** Whether a P2P upload is active for this file (recipient is downloading) */
+  isUploading?: boolean;
+  /** P2P upload progress 0→1 (sender sees while recipient downloads) */
+  uploadProgress?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -69,6 +73,8 @@ export function DmFileMessage({
   onDownload,
   isDownloading = false,
   isEncrypted = false,
+  isUploading = false,
+  uploadProgress = 0,
 }: DmFileMessageProps) {
   const { theme } = useTheme();
   const colors = theme.colors;
@@ -198,7 +204,10 @@ export function DmFileMessage({
           </Text>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 1 }}>
             <Text size="xs" style={{ color: textMuted }}>
-              {formatFileSize(size)} · {typeIcon.label}
+              {formatFileSize(size)}
+              {isUploading
+                ? ` · Sending ${Math.round(uploadProgress * 100)}%`
+                : ` · ${typeIcon.label}`}
             </Text>
             {isEncrypted && (
               <LockIcon size={10} color={accentColor} />
@@ -207,7 +216,7 @@ export function DmFileMessage({
         </View>
 
         {/* Download button / spinning progress ring */}
-        {onDownload && (
+        {onDownload && !isUploading && (
           <Pressable
             onPress={() => { if (!isDownloading) onDownload(fileId); }}
             disabled={isDownloading}
@@ -264,6 +273,28 @@ export function DmFileMessage({
           </Pressable>
         )}
       </View>
+
+      {/* P2P upload progress bar — visible when recipient is downloading */}
+      {isUploading && (
+        <View
+          style={{
+            height: 3,
+            backgroundColor: needsInverse
+              ? (isLight ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.10)')
+              : cardBorder,
+            overflow: 'hidden',
+          }}
+        >
+          <View
+            style={{
+              width: `${Math.round(uploadProgress * 100)}%`,
+              height: '100%',
+              backgroundColor: needsInverse ? colors.text.inverse : accentColor,
+              borderRadius: 2,
+            }}
+          />
+        </View>
+      )}
     </View>
   );
 }

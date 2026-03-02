@@ -57,6 +57,8 @@ export interface ChatAreaProps {
   firstUnreadMessageId?: string | null;
   /** Called when the user taps the download button on a file attachment card. */
   onFileDownload?: (fileId: string, filename: string, mimeType: string) => Promise<void> | void;
+  /** Active P2P uploads keyed by fileId — shows upload progress on sent file cards. */
+  activeUploads?: Map<string, { progress: number }>;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -294,6 +296,7 @@ export function ChatArea({
   customEmoji,
   firstUnreadMessageId,
   onFileDownload,
+  activeUploads,
 }: ChatAreaProps) {
   const { theme } = useTheme();
   const themeColors = theme.colors;
@@ -558,21 +561,26 @@ export function ChatArea({
                           </RNText>
                         </View>
                       )}
-                      {fileInfo ? (
-                        <DmFileMessage
-                          fileId={fileInfo.fileId}
-                          filename={fileInfo.filename}
-                          size={fileInfo.size}
-                          mimeType={fileInfo.mimeType}
-                          thumbnail={fileInfo.thumbnail}
-                          isOutgoing={isOwn}
-                          variant="inline"
-                          onDownload={onFileDownload
-                            ? () => handleFileDownload(fileInfo.fileId, fileInfo.filename, fileInfo.mimeType)
-                            : undefined}
-                          isDownloading={downloadingFileId === fileInfo.fileId}
-                        />
-                      ) : typeof displayContent === 'string' ? (
+                      {fileInfo ? (() => {
+                        const upload = isOwn ? activeUploads?.get(fileInfo.fileId) : undefined;
+                        return (
+                          <DmFileMessage
+                            fileId={fileInfo.fileId}
+                            filename={fileInfo.filename}
+                            size={fileInfo.size}
+                            mimeType={fileInfo.mimeType}
+                            thumbnail={fileInfo.thumbnail}
+                            isOutgoing={isOwn}
+                            variant="inline"
+                            onDownload={onFileDownload
+                              ? () => handleFileDownload(fileInfo.fileId, fileInfo.filename, fileInfo.mimeType)
+                              : undefined}
+                            isDownloading={downloadingFileId === fileInfo.fileId}
+                            isUploading={!!upload}
+                            uploadProgress={upload?.progress ?? 0}
+                          />
+                        );
+                      })() : typeof displayContent === 'string' ? (
                         <RNText style={{ fontSize: 14, color: themeColors.text.primary, lineHeight: 20 }}>
                           {displayContent}
                         </RNText>
@@ -593,21 +601,26 @@ export function ChatArea({
                       forwarded={msg.forwarded}
                       emojiOnly={emojiOnly}
                     >
-                      {fileInfo ? (
-                        <DmFileMessage
-                          fileId={fileInfo.fileId}
-                          filename={fileInfo.filename}
-                          size={fileInfo.size}
-                          mimeType={fileInfo.mimeType}
-                          thumbnail={fileInfo.thumbnail}
-                          isOutgoing={isOwn}
-                          variant="bubble"
-                          onDownload={onFileDownload
-                            ? () => handleFileDownload(fileInfo.fileId, fileInfo.filename, fileInfo.mimeType)
-                            : undefined}
-                          isDownloading={downloadingFileId === fileInfo.fileId}
-                        />
-                      ) : (
+                      {fileInfo ? (() => {
+                        const upload = isOwn ? activeUploads?.get(fileInfo.fileId) : undefined;
+                        return (
+                          <DmFileMessage
+                            fileId={fileInfo.fileId}
+                            filename={fileInfo.filename}
+                            size={fileInfo.size}
+                            mimeType={fileInfo.mimeType}
+                            thumbnail={fileInfo.thumbnail}
+                            isOutgoing={isOwn}
+                            variant="bubble"
+                            onDownload={onFileDownload
+                              ? () => handleFileDownload(fileInfo.fileId, fileInfo.filename, fileInfo.mimeType)
+                              : undefined}
+                            isDownloading={downloadingFileId === fileInfo.fileId}
+                            isUploading={!!upload}
+                            uploadProgress={upload?.progress ?? 0}
+                          />
+                        );
+                      })() : (
                         displayContent
                       )}
                     </ChatBubble>
