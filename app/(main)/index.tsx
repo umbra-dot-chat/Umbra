@@ -24,14 +24,17 @@ import { HelpText, HelpHighlight, HelpListItem } from '@/components/ui/HelpConte
 import { ActiveCallBar } from '@/components/call/ActiveCallBar';
 import { ActiveCallPanel } from '@/components/call/ActiveCallPanel';
 import { useCall } from '@/hooks/useCall';
-import { pickFile } from '@/utils/filePicker';
+import { pickFile, pickFileHandle } from '@/utils/filePicker';
 import { triggerWebDownload } from '@/utils/fileDownload';
+import { PendingAttachmentBar } from '@/components/chat/PendingAttachmentBar';
+import type { PendingAttachment } from '@/components/chat/PendingAttachmentBar';
 import { InputDialog } from '@/components/ui/InputDialog';
 import { ForwardDialog } from '@/components/chat/ForwardDialog';
 import { useSettingsDialog } from '@/contexts/SettingsDialogContext';
 import { ResizeHandle } from '@/components/ui/ResizeHandle';
 import { useAllCustomEmoji } from '@/hooks/useAllCustomEmoji';
 import { useNetwork } from '@/hooks/useNetwork';
+import { useFileTransfer } from '@/hooks/useFileTransfer';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Empty conversation state
@@ -96,6 +99,18 @@ export default function ChatPage() {
   const { friends } = useFriends();
   const { groups, getMembers } = useGroups();
   const { onlineDids } = useNetwork();
+  const { activeTransfers } = useFileTransfer();
+
+  // Build a map of active P2P uploads keyed by fileId for the chat area
+  const activeUploadsMap = useMemo(() => {
+    const map = new Map<string, { progress: number }>();
+    for (const t of activeTransfers) {
+      if (t.direction === 'upload' && t.totalBytes > 0) {
+        map.set(t.fileId, { progress: t.bytesTransferred / t.totalBytes });
+      }
+    }
+    return map;
+  }, [activeTransfers]);
 
   // Build DID → display name and DID → avatar maps from the friends list
   const friendNames = useMemo(() => {
@@ -167,6 +182,9 @@ export default function ChatPage() {
   const [message, setMessage] = useState('');
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [replyingTo, setReplyingTo] = useState<{ sender: string; text: string } | null>(null);
+
+  // Pending file attachment — queued until user sends the message
+  const [pendingAttachment, setPendingAttachment] = useState<(PendingAttachment & { storageChunksJson?: string }) | null>(null);
 
   // Edit mode state
   const [editingMessage, setEditingMessage] = useState<{ messageId: string; text: string } | null>(null);
@@ -254,7 +272,11 @@ export default function ChatPage() {
   // Handle sending a message (or editing)
   const handleSubmit = useCallback(async (msg: string) => {
     setEmojiOpen(false);
-    if (!msg.trim()) return;
+    const hasText = msg.trim().length > 0;
+    const hasFile = pendingAttachment?.status === 'ready' && pendingAttachment.storageChunksJson;
+
+    // Nothing to send
+    if (!hasText && !hasFile) return;
 
     sendStopTyping(); // Clear typing indicator on send
 
@@ -262,9 +284,31 @@ export default function ChatPage() {
       await editMessage(editingMessage.messageId, msg.trim());
       setEditingMessage(null);
     } else if (resolvedConversationId) {
-      await sendMessage(msg.trim());
+      // Send the queued file attachment first (if any)
+      if (hasFile && pendingAttachment) {
+        await sendFileMessage({
+          fileId: pendingAttachment.fileId,
+          filename: pendingAttachment.filename,
+          size: pendingAttachment.size,
+          mimeType: pendingAttachment.mimeType,
+          storageChunksJson: pendingAttachment.storageChunksJson!,
+        });
+        setPendingAttachment(null);
+      }
+      // Then send the text message (if any)
+      if (hasText) {
+        await sendMessage(msg.trim());
+      }
     }
-  }, [editingMessage, editMessage, resolvedConversationId, sendMessage, sendStopTyping]);
+  }, [editingMessage, editMessage, resolvedConversationId, sendMessage, sendFileMessage, sendStopTyping, pendingAttachment]);
+
+  // Handle send triggered from the attachment bar (supports file-only sends)
+  const handleSendFromBar = useCallback(() => {
+    const msg = message;
+    setMessage('');
+    setReplyingTo(null);
+    handleSubmit(msg);
+  }, [message, handleSubmit]);
 
   // Handle entering edit mode
   const handleEditMessage = useCallback((messageId: string) => {
@@ -300,33 +344,71 @@ export default function ChatPage() {
     }
   }, []);
 
-  // Handle file attachment
+  // Handle file attachment — queues the file; actual send happens in handleSubmit
   const handleAttachment = useCallback(async () => {
     if (!service || !resolvedConversationId) return;
     try {
-      const picked = await pickFile();
-      if (!picked) return; // User cancelled
+      // Phase 1: Get file metadata instantly (no data read yet)
+      const handle = await pickFileHandle();
 
-      // 1. Chunk the file
+      // Fallback for mobile / unsupported — use legacy one-shot picker
+      if (!handle) {
+        const picked = await pickFile();
+        if (!picked) return;
+        const fileId = crypto.randomUUID();
+        setPendingAttachment({
+          fileId, filename: picked.filename, size: picked.size,
+          mimeType: picked.mimeType, status: 'processing', progress: 0,
+        });
+        await new Promise<void>((resolve) => requestAnimationFrame(() => { requestAnimationFrame(() => resolve()); }));
+        const manifest = await service.chunkFile(fileId, picked.filename, picked.dataBase64);
+        setPendingAttachment((prev) => {
+          if (!prev || prev.fileId !== fileId) return prev;
+          return { ...prev, status: 'ready', progress: 1, storageChunksJson: JSON.stringify(manifest) };
+        });
+        return;
+      }
+
       const fileId = crypto.randomUUID();
-      const manifest = await service.chunkFile(
-        fileId,
-        picked.filename,
-        picked.dataBase64,
-      );
 
-      // 2. Send a file message via the hook's dedicated method
-      await sendFileMessage({
+      // Show attachment bar immediately with 0% progress
+      setPendingAttachment({
         fileId,
-        filename: picked.filename,
-        size: picked.size,
-        mimeType: picked.mimeType,
-        storageChunksJson: JSON.stringify(manifest),
+        filename: handle.filename,
+        size: handle.size,
+        mimeType: handle.mimeType,
+        status: 'processing',
+        progress: 0,
+      });
+
+      // Phase 2: Read raw bytes from disk (fast on SSD)
+      const buffer = await handle.file.arrayBuffer();
+      setPendingAttachment((prev) => {
+        if (!prev || prev.fileId !== fileId) return prev;
+        return { ...prev, progress: 0.5 };
+      });
+
+      // Yield to let React render the progress update
+      await new Promise<void>((resolve) => requestAnimationFrame(() => { requestAnimationFrame(() => resolve()); }));
+
+      // Phase 3: Pass raw bytes directly to WASM — no base64 conversion needed
+      const manifest = await service.chunkFileBytes(fileId, handle.filename, new Uint8Array(buffer));
+
+      // Done — update to "ready" state
+      setPendingAttachment((prev) => {
+        if (!prev || prev.fileId !== fileId) return prev;
+        return {
+          ...prev,
+          status: 'ready',
+          progress: 1,
+          storageChunksJson: JSON.stringify(manifest),
+        };
       });
     } catch (err) {
       console.error('[ChatPage] File attachment failed:', err);
+      setPendingAttachment(null);
     }
-  }, [service, resolvedConversationId, sendFileMessage]);
+  }, [service, resolvedConversationId]);
 
   // Handle file download from a file attachment card
   const handleFileDownload = useCallback(async (fileId: string, filename: string, mimeType: string) => {
@@ -513,8 +595,16 @@ export default function ChatPage() {
           customEmoji={allCommunityEmoji}
           firstUnreadMessageId={firstUnreadMessageId}
           onFileDownload={handleFileDownload}
+          activeUploads={activeUploadsMap}
         />
         <SlotRenderer slot="chat-toolbar" props={{ conversationId: resolvedConversationId }} />
+        {pendingAttachment && (
+          <PendingAttachmentBar
+            attachment={pendingAttachment}
+            onRemove={() => setPendingAttachment(null)}
+            onSend={handleSendFromBar}
+          />
+        )}
         <ChatInput
           message={message}
           onMessageChange={(msg) => { setMessage(msg); if (msg.length > 0) sendTyping(); }}
