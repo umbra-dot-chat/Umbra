@@ -67,7 +67,8 @@
             "deploymentTarget": "16.0"
           }
         }
-      ]
+      ],
+      "./plugins/suppress-os-logs"
     ],
     "experiments": {
       "typedRoutes": true
