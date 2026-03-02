@@ -439,6 +439,9 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
           } else if (envelope.envelope === 'chat_message' && envelope.version === 1) {
             const chatPayload = envelope.payload as ChatMessagePayload;
             try {
+              // Ensure conversation exists before decrypt (handles edge cases where
+              // friend acceptance relay was missed or conversation wasn't created yet)
+              try { await service.createDmConversation(chatPayload.senderDid); } catch { /* friend may not exist yet */ }
               await service.storeIncomingMessage(chatPayload);
               const decryptedText = await service.decryptIncomingMessage(chatPayload);
               if (!decryptedText) {
@@ -605,6 +608,7 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
             } else if (envelope.envelope === 'chat_message' && envelope.version === 1) {
               const chatPayload = envelope.payload as ChatMessagePayload;
               try {
+                try { await service.createDmConversation(chatPayload.senderDid); } catch { /* friend may not exist yet */ }
                 await service.storeIncomingMessage(chatPayload);
                 const decryptedText = await service.decryptIncomingMessage(chatPayload);
                 if (!decryptedText) { console.warn('[useNetwork] Offline decryption failed for', chatPayload.messageId);
