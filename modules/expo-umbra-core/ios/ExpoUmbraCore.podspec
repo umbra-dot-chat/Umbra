@@ -37,5 +37,11 @@ Pod::Spec.new do |s|
   s.pod_target_xcconfig = {
     'OTHER_LDFLAGS' => '-lresolv -lc++',
     'HEADER_SEARCH_PATHS' => '"${PODS_TARGET_SRCROOT}"',
+    'EXCLUDED_ARCHS[sdk=iphonesimulator*]' => 'x86_64',
+  }
+
+  # Also exclude x86_64 from user project simulator builds
+  s.user_target_xcconfig = {
+    'EXCLUDED_ARCHS[sdk=iphonesimulator*]' => 'x86_64',
   }
 end
