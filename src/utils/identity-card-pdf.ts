@@ -6,8 +6,19 @@
  * profile picture, and optionally the 24-word recovery phrase.
  */
 
-import { jsPDF } from 'jspdf';
 import qrcode from 'qrcode-generator';
+
+// jsPDF is loaded lazily to avoid crashing React Native on iOS/Android.
+// The library uses Node.js `latin1` encoding at import time which doesn't
+// exist in the Hermes runtime. PDF generation is web-only anyway.
+let _jsPDF: typeof import('jspdf')['jsPDF'] | null = null;
+async function loadJsPDF() {
+  if (!_jsPDF) {
+    const mod = await import('jspdf');
+    _jsPDF = mod.jsPDF;
+  }
+  return _jsPDF;
+}
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -44,7 +55,7 @@ function generateQrMatrix(data: string): { matrix: boolean[][]; moduleCount: num
   return { matrix, moduleCount: count };
 }
 
-function drawQrCode(doc: jsPDF, data: string, x: number, y: number, size: number) {
+function drawQrCode(doc: any, data: string, x: number, y: number, size: number) {
   const { matrix, moduleCount } = generateQrMatrix(data);
   const moduleSize = size / moduleCount;
 
@@ -68,13 +79,13 @@ function drawQrCode(doc: jsPDF, data: string, x: number, y: number, size: number
   }
 }
 
-function drawHorizontalRule(doc: jsPDF, x: number, y: number, w: number) {
+function drawHorizontalRule(doc: any, x: number, y: number, w: number) {
   doc.setDrawColor(0, 0, 0);
   doc.setLineWidth(0.3);
   doc.line(x, y, x + w, y);
 }
 
-function drawThinRule(doc: jsPDF, x: number, y: number, w: number) {
+function drawThinRule(doc: any, x: number, y: number, w: number) {
   doc.setDrawColor(180, 180, 180);
   doc.setLineWidth(0.15);
   doc.line(x, y, x + w, y);
@@ -82,7 +93,8 @@ function drawThinRule(doc: jsPDF, x: number, y: number, w: number) {
 
 // ── Main PDF generator ─────────────────────────────────────────────────
 
-export function generateIdentityCardPDF(data: IdentityCardData): jsPDF {
+export async function generateIdentityCardPDF(data: IdentityCardData) {
+  const jsPDF = await loadJsPDF();
   const showPhrase = data.includeRecoveryPhrase && data.recoveryPhrase && data.recoveryPhrase.length === 24;
 
   // A4 portrait
@@ -271,7 +283,7 @@ export function generateIdentityCardPDF(data: IdentityCardData): jsPDF {
   return doc;
 }
 
-function drawAvatarFallback(doc: jsPDF, name: string, x: number, y: number, size: number) {
+function drawAvatarFallback(doc: any, name: string, x: number, y: number, size: number) {
   doc.setFillColor(230, 230, 230);
   doc.rect(x, y, size, size, 'F');
   doc.setFont('helvetica', 'bold');
@@ -283,8 +295,8 @@ function drawAvatarFallback(doc: jsPDF, name: string, x: number, y: number, size
 /**
  * Generate the PDF and trigger a browser download.
  */
-export function downloadIdentityCardPDF(data: IdentityCardData): void {
-  const doc = generateIdentityCardPDF(data);
+export async function downloadIdentityCardPDF(data: IdentityCardData): Promise<void> {
+  const doc = await generateIdentityCardPDF(data);
   const safeName = data.displayName.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase();
   doc.save(`umbra-recovery-${safeName}.pdf`);
 }
@@ -292,8 +304,8 @@ export function downloadIdentityCardPDF(data: IdentityCardData): void {
 /**
  * Generate the PDF and return a Blob URL for preview.
  */
-export function getIdentityCardPreviewUrl(data: IdentityCardData): string {
-  const doc = generateIdentityCardPDF(data);
+export async function getIdentityCardPreviewUrl(data: IdentityCardData): Promise<string> {
+  const doc = await generateIdentityCardPDF(data);
   const blob = doc.output('blob');
   return URL.createObjectURL(blob);
 }

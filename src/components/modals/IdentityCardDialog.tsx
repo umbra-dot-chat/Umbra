@@ -65,19 +65,25 @@ export function IdentityCardDialog({ open, onClose }: IdentityCardDialogProps) {
   useEffect(() => {
     if (!open || !cardData || Platform.OS !== 'web') return;
 
+    let cancelled = false;
+
     if (prevUrlRef.current) {
       URL.revokeObjectURL(prevUrlRef.current);
     }
 
-    try {
-      const url = getIdentityCardPreviewUrl(cardData);
-      setPreviewUrl(url);
-      prevUrlRef.current = url;
-    } catch {
-      setPreviewUrl(null);
-    }
+    getIdentityCardPreviewUrl(cardData)
+      .then((url) => {
+        if (!cancelled) {
+          setPreviewUrl(url);
+          prevUrlRef.current = url;
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setPreviewUrl(null);
+      });
 
     return () => {
+      cancelled = true;
       if (prevUrlRef.current) {
         URL.revokeObjectURL(prevUrlRef.current);
         prevUrlRef.current = null;
@@ -95,9 +101,9 @@ export function IdentityCardDialog({ open, onClose }: IdentityCardDialogProps) {
     }
   }, [open]);
 
-  const handleDownload = useCallback(() => {
+  const handleDownload = useCallback(async () => {
     if (!cardData) return;
-    downloadIdentityCardPDF(cardData);
+    await downloadIdentityCardPDF(cardData);
   }, [cardData]);
 
   const handleTogglePhrase = useCallback((val: boolean) => {
