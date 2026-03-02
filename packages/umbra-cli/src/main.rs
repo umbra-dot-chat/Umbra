@@ -11,11 +11,13 @@ mod api;
 mod app;
 mod db;
 mod event;
+mod relay;
 mod tui;
 mod ui;
 
 use app::{App, AsyncAction, AsyncResult};
 use event::{AppEvent, EventHandler};
+use relay::{RelayEvent, RelayHandle};
 use tokio::sync::mpsc;
 
 #[tokio::main]
@@ -41,18 +43,36 @@ async fn main() -> color_eyre::Result<()> {
     // Channel for async operation results
     let (async_tx, mut async_rx) = mpsc::unbounded_channel::<AsyncResult>();
 
+    // Channel for relay events
+    let (relay_tx, mut relay_rx) = mpsc::unbounded_channel::<RelayEvent>();
+
+    // Start relay connection if we have an identity
+    if let Some(ref did) = app.my_did {
+        app.relay_handle = Some(RelayHandle::connect(did.clone(), relay_tx.clone()));
+    }
+
     // Main event loop
     while !app.should_quit {
         // Render the current screen
         terminal.draw(|frame| ui::render(frame, &app))?;
 
-        // Wait for terminal events or async results
+        // Wait for terminal events, async results, or relay events
         tokio::select! {
             event = events.next() => {
                 match event? {
                     AppEvent::Key(key) => {
                         if let Some(action) = app.handle_key(key) {
                             spawn_async_action(action, async_tx.clone());
+                        }
+
+                        // Check if identity was just created/imported and relay not started
+                        if app.my_did.is_some() && app.relay_handle.is_none() {
+                            if let Some(ref did) = app.my_did {
+                                app.relay_handle = Some(RelayHandle::connect(
+                                    did.clone(),
+                                    relay_tx.clone(),
+                                ));
+                            }
                         }
                     }
                     AppEvent::Tick => {
@@ -70,6 +90,11 @@ async fn main() -> color_eyre::Result<()> {
                     if let Some(action) = app.handle_async_result(result) {
                         spawn_async_action(action, async_tx.clone());
                     }
+                }
+            }
+            relay_event = relay_rx.recv() => {
+                if let Some(event) = relay_event {
+                    app.handle_relay_event(event);
                 }
             }
         }
