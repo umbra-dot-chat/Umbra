@@ -1316,6 +1316,14 @@ export class UmbraService {
     return chunkingModule.chunkFile(fileId, filename, dataBase64, chunkSize);
   }
 
+  /**
+   * Chunk a file from raw bytes — no base64 encoding overhead.
+   * Pass a Uint8Array directly; the data goes straight to WASM.
+   */
+  chunkFileBytes(fileId: string, filename: string, data: Uint8Array, chunkSize?: number): Promise<ChunkManifest> {
+    return chunkingModule.chunkFileBytes(fileId, filename, data, chunkSize);
+  }
+
   reassembleFile(fileId: string): Promise<ReassembledFile> {
     return chunkingModule.reassembleFile(fileId);
   }

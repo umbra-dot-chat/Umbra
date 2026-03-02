@@ -11213,6 +11213,76 @@ pub fn umbra_wasm_chunk_file(json: &str) -> Result<JsValue, JsValue> {
     Ok(JsValue::from_str(&result))
 }
 
+/// Chunk a file from raw bytes (no base64 encoding needed).
+///
+/// Accepts binary data directly as a Uint8Array from JavaScript,
+/// avoiding the overhead of base64 encoding/decoding.
+///
+/// Parameters: file_id (string), filename (string), data (&[u8]), chunk_size (optional u32)
+/// Returns JSON: ChunkManifest
+#[wasm_bindgen]
+pub fn umbra_wasm_chunk_file_bytes(
+    file_id: &str,
+    filename: &str,
+    data: &[u8],
+    chunk_size: Option<u32>,
+) -> Result<JsValue, JsValue> {
+    use crate::storage::chunking;
+
+    let cs = chunk_size
+        .map(|v| v as usize)
+        .unwrap_or(chunking::DEFAULT_CHUNK_SIZE);
+
+    let (manifest, chunks) = chunking::chunk_file(file_id, filename, data, cs)
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    // Store chunks in database
+    let state = get_state()?;
+    let state_read = state.read();
+    let database = state_read
+        .database
+        .as_ref()
+        .ok_or_else(|| JsValue::from_str("Database not initialized"))?;
+
+    let now = crate::time::now_timestamp();
+    for chunk in &chunks {
+        database
+            .store_chunk(
+                &chunk.chunk_id,
+                &chunk.file_id,
+                chunk.chunk_index as i32,
+                &chunk.data,
+                chunk.data.len() as i64,
+                now,
+            )
+            .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    }
+
+    // Store manifest
+    let chunks_json = serde_json::to_string(&manifest.chunks)
+        .map_err(|e| JsValue::from_str(&format!("Failed to serialize chunks: {}", e)))?;
+    database
+        .store_manifest(
+            file_id,
+            filename,
+            manifest.total_size as i64,
+            manifest.chunk_size as i64,
+            manifest.total_chunks as i32,
+            &chunks_json,
+            &manifest.file_hash,
+            false,
+            None,
+            now,
+        )
+        .map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    // Return manifest as JSON
+    let result = serde_json::to_string(&manifest)
+        .map_err(|e| JsValue::from_str(&format!("Failed to serialize manifest: {}", e)))?;
+
+    Ok(JsValue::from_str(&result))
+}
+
 /// Reassemble a file from stored chunks.
 ///
 /// Takes JSON: { file_id } (manifest must be stored)

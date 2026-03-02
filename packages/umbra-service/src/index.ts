@@ -86,7 +86,7 @@ export type {
 } from './types';
 
 // File chunking
-export { chunkFile, reassembleFile, getFileManifest } from './chunking';
+export { chunkFile, chunkFileBytes, reassembleFile, getFileManifest } from './chunking';
 
 // File encryption (E2EE)
 export {

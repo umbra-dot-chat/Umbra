@@ -511,6 +511,17 @@ function createNativeBackend(native: NativeUmbraCore): UmbraWasmModule {
 
     // ── File Chunking (via dispatcher) ──────────────────────────────────
     umbra_wasm_chunk_file: (json: string) => call('chunk_file', JSON.parse(json)),
+    umbra_wasm_chunk_file_bytes: (file_id: string, filename: string, data: Uint8Array, chunk_size?: number) => {
+      // RN dispatcher doesn't have direct bytes FFI — encode to base64 and use the JSON path
+      const BATCH = 8192;
+      const parts: string[] = [];
+      for (let i = 0; i < data.length; i += BATCH) {
+        const slice = data.subarray(i, Math.min(i + BATCH, data.length));
+        parts.push(String.fromCharCode.apply(null, slice as unknown as number[]));
+      }
+      const data_b64 = btoa(parts.join(''));
+      return call('chunk_file', { file_id, filename, data_b64, ...(chunk_size !== undefined ? { chunk_size } : {}) });
+    },
     umbra_wasm_reassemble_file: (json: string) => call('reassemble_file', JSON.parse(json)),
     umbra_wasm_get_file_manifest: (file_id: string) => call('get_file_manifest', { file_id }),
 
@@ -772,6 +783,7 @@ function createStubBackend(): UmbraWasmModule {
     umbra_wasm_build_dm_file_event_envelope: () => notImplemented('build_dm_file_event_envelope'),
     umbra_wasm_build_metadata_envelope: () => notImplemented('build_metadata_envelope'),
     umbra_wasm_chunk_file: () => notImplemented('chunk_file'),
+    umbra_wasm_chunk_file_bytes: () => notImplemented('chunk_file_bytes'),
     umbra_wasm_reassemble_file: () => notImplemented('reassemble_file'),
     umbra_wasm_get_file_manifest: () => notImplemented('get_file_manifest'),
     umbra_wasm_transfer_initiate: () => notImplemented('transfer_initiate'),

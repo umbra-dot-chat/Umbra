@@ -40,6 +40,34 @@ export async function chunkFile(
   return await parseWasm<ChunkManifest>(resultJson);
 }
 
+// ── Chunk File (raw bytes) ─────────────────────────────────────────────────
+
+/**
+ * Split a file into content-addressed chunks from raw bytes — no base64
+ * encoding needed. The Uint8Array is passed directly to WASM, avoiding
+ * the overhead of base64 encode (JS) → decode (Rust).
+ *
+ * @param fileId - Unique file identifier (UUID)
+ * @param filename - Display filename
+ * @param data - File contents as a Uint8Array
+ * @param chunkSize - Optional chunk size in bytes (default 256KB)
+ * @returns The chunk manifest describing all chunks
+ */
+export async function chunkFileBytes(
+  fileId: string,
+  filename: string,
+  data: Uint8Array,
+  chunkSize?: number,
+): Promise<ChunkManifest> {
+  const resultJson = wasm().umbra_wasm_chunk_file_bytes(
+    fileId,
+    filename,
+    data,
+    chunkSize,
+  );
+  return await parseWasm<ChunkManifest>(resultJson);
+}
+
 // ── Reassemble File ────────────────────────────────────────────────────────
 
 /**

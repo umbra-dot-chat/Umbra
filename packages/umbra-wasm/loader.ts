@@ -322,6 +322,7 @@ export interface UmbraWasmModule {
 
   // File Chunking (real WASM)
   umbra_wasm_chunk_file(json: string): string;
+  umbra_wasm_chunk_file_bytes(file_id: string, filename: string, data: Uint8Array, chunk_size?: number): string;
   umbra_wasm_reassemble_file(json: string): string;
   umbra_wasm_get_file_manifest(json: string): string;
 
@@ -1182,6 +1183,8 @@ function buildModule(wasmPkg: any): UmbraWasmModule {
     // ── File Chunking (real WASM) ───────────────────────────────────
     umbra_wasm_chunk_file: (json: string) =>
       wasmPkg.umbra_wasm_chunk_file(json),
+    umbra_wasm_chunk_file_bytes: (file_id: string, filename: string, data: Uint8Array, chunk_size?: number) =>
+      wasmPkg.umbra_wasm_chunk_file_bytes(file_id, filename, data, chunk_size),
     umbra_wasm_reassemble_file: (json: string) =>
       wasmPkg.umbra_wasm_reassemble_file(json),
     umbra_wasm_get_file_manifest: (json: string) =>

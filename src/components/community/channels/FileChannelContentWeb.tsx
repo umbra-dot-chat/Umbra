@@ -96,19 +96,10 @@ function toFolderTreeView(nodes: FileFolderNode[]): FileFolder[] {
   }));
 }
 
-/** Read a dropped File into base64. */
-function readFileAsBase64(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => {
-      const result = reader.result as string;
-      // Strip the data URL prefix (e.g., "data:image/png;base64,")
-      const base64 = result.split(',')[1] ?? result;
-      resolve(base64);
-    };
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
+/** Read a dropped File into a Uint8Array for direct WASM processing. */
+async function readFileAsBytes(file: File): Promise<Uint8Array> {
+  const buffer = await file.arrayBuffer();
+  return new Uint8Array(buffer);
 }
 
 // ---------------------------------------------------------------------------
@@ -264,9 +255,9 @@ export function FileChannelContentWeb({
           setUploadFileName(file.name);
           setUploadProgress(Math.round(((i) / nativeFiles.length) * 100));
 
-          const dataBase64 = await readFileAsBase64(file);
+          const fileBytes = await readFileAsBytes(file);
           const fileId = crypto.randomUUID();
-          const manifest = await service.chunkFile(fileId, file.name, dataBase64);
+          const manifest = await service.chunkFileBytes(fileId, file.name, fileBytes);
 
           const record = await uploadFile(
             file.name,

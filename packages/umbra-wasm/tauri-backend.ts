@@ -909,6 +909,18 @@ export function createTauriBackend(
     umbra_wasm_chunk_file: (json: string) => {
       return call('chunk_file', json) as any;
     },
+    umbra_wasm_chunk_file_bytes: (file_id: string, filename: string, data: Uint8Array, chunk_size?: number) => {
+      // Tauri IPC uses JSON — encode bytes to base64 for the existing chunk_file command
+      const BATCH = 8192;
+      const parts: string[] = [];
+      for (let i = 0; i < data.length; i += BATCH) {
+        const slice = data.subarray(i, Math.min(i + BATCH, data.length));
+        parts.push(String.fromCharCode.apply(null, slice as unknown as number[]));
+      }
+      const data_b64 = btoa(parts.join(''));
+      const json = JSON.stringify({ file_id, filename, data_b64, ...(chunk_size !== undefined ? { chunk_size } : {}) });
+      return call('chunk_file', json) as any;
+    },
     umbra_wasm_reassemble_file: (json: string) => {
       return call('reassemble_file', json) as any;
     },

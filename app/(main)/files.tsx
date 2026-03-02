@@ -26,7 +26,7 @@ import {
   PlusIcon,
   LockIcon,
 } from '@/components/ui';
-import { pickFile, readFileAsBase64 } from '@/utils/filePicker';
+import { pickFile, pickFileHandle } from '@/utils/filePicker';
 import { MobileBackButton } from '@/components/ui/MobileBackButton';
 
 // ---------------------------------------------------------------------------
@@ -446,9 +446,9 @@ function FolderDetailView({
   const processFileUpload = useCallback(async (nativeFile: File) => {
     if (!service || !myDid) return;
     try {
-      const dataBase64 = await readFileAsBase64(nativeFile);
+      const buffer = await nativeFile.arrayBuffer();
       const fileId = crypto.randomUUID();
-      const manifest = await service.chunkFile(fileId, nativeFile.name, dataBase64);
+      const manifest = await service.chunkFileBytes(fileId, nativeFile.name, new Uint8Array(buffer));
       const record = await service.uploadDmFile(
         folder.conversationId,
         folder.folder.id,
