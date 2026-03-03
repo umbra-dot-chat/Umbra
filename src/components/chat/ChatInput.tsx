@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Platform, Pressable, View } from 'react-native';
+import { TEST_IDS } from '@/constants/test-ids';
 import {
   Avatar, MessageInput, useTheme,
   CombinedPicker, MentionAutocomplete,
@@ -183,7 +184,7 @@ export function ChatInput({
           }}
         />
       </AnimatedPresence>
-      <View ref={inputWrapperRef} style={{ padding: 12 }}>
+      <View ref={inputWrapperRef} testID={TEST_IDS.INPUT.CONTAINER} style={{ padding: 12 }}>
         {/* Mention autocomplete dropdown */}
         {mentionOpen && (
           <View style={{ position: 'absolute', bottom: 64, left: 12, right: 12, zIndex: 15 }}>
@@ -198,6 +199,7 @@ export function ChatInput({
           </View>
         )}
         <MessageInput
+          testID={TEST_IDS.INPUT.TEXT_INPUT}
           value={message}
           onValueChange={handleValueChange}
           onSelectionChange={handleSelectionChange}

@@ -17,6 +17,10 @@ export interface SeedPhraseInputProps {
   onPasteAll?: (words: string[]) => void;
   /** Error message to display below the grid */
   error?: string | null;
+  /** Test ID for the seed phrase input grid container */
+  testID?: string;
+  /** Test ID for the paste button */
+  pasteButtonTestID?: string;
 }
 
 export function SeedPhraseInput({
@@ -24,6 +28,8 @@ export function SeedPhraseInput({
   onWordChange,
   onPasteAll,
   error,
+  testID,
+  pasteButtonTestID,
 }: SeedPhraseInputProps) {
   const inputRefs = useRef<(TextInput | null)[]>([]);
 
@@ -71,7 +77,7 @@ export function SeedPhraseInput({
   }, [onPasteAll]);
 
   return (
-    <View>
+    <View testID={testID} accessibilityLabel={testID ? 'Seed phrase input' : undefined}>
       {/* 3-column grid */}
       <View style={gridStyle}>
         {words.map((word, i) => (
@@ -102,6 +108,8 @@ export function SeedPhraseInput({
           size="sm"
           onPress={handlePasteFromClipboard}
           iconLeft={<ClipboardIcon size={14} />}
+          testID={pasteButtonTestID}
+          accessibilityLabel={pasteButtonTestID ? 'Paste from clipboard' : undefined}
         >
           Paste from clipboard
         </Button>

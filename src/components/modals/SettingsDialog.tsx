@@ -97,6 +97,7 @@ import { HelpIndicator } from '@/components/ui/HelpIndicator';
 import { HelpPopoverHost } from '@/components/ui/HelpPopoverHost';
 import { HelpText, HelpHighlight, HelpListItem } from '@/components/ui/HelpContent';
 import { PRIMARY_RELAY_URL, DEFAULT_RELAY_SERVERS } from '@/config';
+import { TEST_IDS } from '@/constants/test-ids';
 import { LinkedAccountsPanel, FriendDiscoveryPanel } from '@/components/discovery';
 import { IdentityCardDialog } from '@/components/modals/IdentityCardDialog';
 
@@ -139,6 +140,22 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'keyboard-shortcuts', label: 'Shortcuts', icon: KeyIcon },
   { id: 'about', label: 'About', icon: BookOpenIcon },
 ];
+
+const NAV_TEST_IDS: Record<SettingsSection, string> = {
+  'account': TEST_IDS.SETTINGS.NAV_ACCOUNT,
+  'profile': TEST_IDS.SETTINGS.NAV_PROFILE,
+  'appearance': TEST_IDS.SETTINGS.NAV_APPEARANCE,
+  'messaging': TEST_IDS.SETTINGS.NAV_MESSAGING,
+  'notifications': TEST_IDS.SETTINGS.NAV_NOTIFICATIONS,
+  'sounds': TEST_IDS.SETTINGS.NAV_SOUNDS,
+  'privacy': TEST_IDS.SETTINGS.NAV_PRIVACY,
+  'audio-video': TEST_IDS.SETTINGS.NAV_AUDIO_VIDEO,
+  'network': TEST_IDS.SETTINGS.NAV_NETWORK,
+  'data': TEST_IDS.SETTINGS.NAV_DATA,
+  'plugins': TEST_IDS.SETTINGS.NAV_PLUGINS,
+  'keyboard-shortcuts': TEST_IDS.SETTINGS.NAV_SHORTCUTS,
+  'about': TEST_IDS.SETTINGS.NAV_ABOUT,
+};
 
 interface SubNavItem { id: string; label: string; }
 
@@ -604,6 +621,7 @@ function AccountSection() {
                 </View>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                   <RNText
+                    testID={TEST_IDS.SETTINGS.DID_DISPLAY}
                     style={{
                       fontSize: 12,
                       color: tc.text.secondary,
@@ -760,6 +778,7 @@ function AccountSection() {
           onPress={() => setShowLogoutConfirm(true)}
           iconLeft={<LogOutIcon size={16} color={tc.status.danger} />}
           style={{ borderColor: tc.status.dangerBorder, backgroundColor: tc.status.dangerSurface }}
+          testID={TEST_IDS.SETTINGS.LOGOUT_BUTTON}
         >
           <RNText style={{ color: tc.status.danger, fontWeight: '600', fontSize: 14 }}>
             Log Out
@@ -959,6 +978,7 @@ function ProfileSection() {
             icon={UserInputIcon}
             size="md"
             fullWidth
+            testID={TEST_IDS.SETTINGS.DISPLAY_NAME_INPUT}
           />
         </SettingRow>
       </View>
@@ -4390,7 +4410,7 @@ export function SettingsDialog({ open, onClose, onOpenMarketplace, initialSectio
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: isMobile ? 8 : 0 }}>
         <RNText style={sidebarTitleStyle}>Settings</RNText>
         {isMobile && (
-          <Pressable onPress={onClose} style={{ padding: 8 }}>
+          <Pressable onPress={onClose} style={{ padding: 8 }} testID={TEST_IDS.SETTINGS.CLOSE_BUTTON}>
             <XIcon size={20} color={tc.text.secondary} />
           </Pressable>
         )}
@@ -4407,6 +4427,7 @@ export function SettingsDialog({ open, onClose, onOpenMarketplace, initialSectio
             {/* Top-level nav item */}
             <Pressable
               onPress={() => handleSectionChange(item.id)}
+              testID={NAV_TEST_IDS[item.id]}
               style={({ pressed }) => ({
                 flexDirection: 'row',
                 alignItems: 'center',
@@ -4535,7 +4556,7 @@ export function SettingsDialog({ open, onClose, onOpenMarketplace, initialSectio
     >
 
       <HelpPopoverHost />
-      <View style={modalStyle}>
+      <View style={modalStyle} testID={TEST_IDS.SETTINGS.DIALOG}>
         {isMobile ? (
           // Mobile: both views always mounted, slide via translateX
           <View style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>

@@ -19,6 +19,7 @@ import { Text, Skeleton, useTheme, NotificationBadge } from '@coexist/wisp-react
 import { UmbraIcon, FolderIcon, PlusIcon, SettingsIcon, BellIcon } from '@/components/ui';
 import type { Community } from '@umbra/service';
 import { useAnimatedToggle } from '@/hooks/useAnimatedToggle';
+import { TEST_IDS } from '@/constants/test-ids';
 
 // Default community icon — the colored Umbra ghost app icon
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -107,6 +108,7 @@ export function NavigationRail({
 
   return (
     <View
+      testID={TEST_IDS.NAV.RAIL}
       style={{
         width: RAIL_WIDTH,
         backgroundColor: theme.colors.background.surface,
@@ -124,6 +126,7 @@ export function NavigationRail({
         accentColor={theme.colors.accent.primary}
         theme={theme}
         badgeCount={!isHomeActive && homeNotificationCount ? homeNotificationCount : undefined}
+        testID={TEST_IDS.NAV.HOME}
       >
         <UmbraIcon
           size={22}
@@ -139,6 +142,7 @@ export function NavigationRail({
           accentColor={theme.colors.accent.primary}
           theme={theme}
           ringProgress={uploadRingProgress}
+          testID={TEST_IDS.NAV.FILES}
         >
           <FolderIcon
             size={22}
@@ -190,6 +194,7 @@ export function NavigationRail({
                   accentColor={community.accentColor}
                   theme={theme}
                   iconUrl={community.iconUrl}
+                  testID={TEST_IDS.NAV.COMMUNITY_ITEM}
                 >
                   <Image
                     source={defaultCommunityIcon}
@@ -207,6 +212,7 @@ export function NavigationRail({
           active={false}
           onPress={onCreateCommunity}
           theme={theme}
+          testID={TEST_IDS.NAV.CREATE_COMMUNITY}
         >
           <PlusIcon
             size={20}
@@ -232,6 +238,7 @@ export function NavigationRail({
           {onAvatarPress && (
             <View style={{ marginBottom: 4, width: '100%', alignItems: 'center' }}>
               <Pressable
+                testID={TEST_IDS.NAV.AVATAR}
                 onPress={onAvatarPress}
                 style={({ pressed }) => ({
                   width: ICON_SIZE,
@@ -267,6 +274,7 @@ export function NavigationRail({
               onPress={onNotificationsPress}
               theme={theme}
               badgeCount={notificationCount || undefined}
+              testID={TEST_IDS.NAV.NOTIFICATIONS}
             >
               <BellIcon
                 size={20}
@@ -279,6 +287,7 @@ export function NavigationRail({
             active={false}
             onPress={onOpenSettings}
             theme={theme}
+            testID={TEST_IDS.NAV.SETTINGS}
           >
             <SettingsIcon
               size={20}
@@ -307,9 +316,11 @@ interface RailItemProps {
   iconUrl?: string;
   /** Optional notification badge count rendered on the icon */
   badgeCount?: number;
+  /** Optional testID for E2E testing */
+  testID?: string;
 }
 
-function RailItem({ active, onPress, accentColor, theme, children, ringProgress, iconUrl, badgeCount }: RailItemProps) {
+function RailItem({ active, onPress, accentColor, theme, children, ringProgress, iconUrl, badgeCount, testID }: RailItemProps) {
   const showRing = ringProgress != null && ringProgress > 0 && ringProgress < 100;
   const { animatedValue: indicatorAnim, shouldRender: showIndicator } = useAnimatedToggle(active, { duration: 150 });
 
@@ -384,6 +395,7 @@ function RailItem({ active, onPress, accentColor, theme, children, ringProgress,
         invisible={!badgeCount}
       >
         <Pressable
+          testID={testID}
           onPress={onPress}
           style={({ pressed }) => ({
             width: ICON_SIZE,

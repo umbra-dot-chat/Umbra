@@ -18,6 +18,7 @@ import {
 } from '@coexist/wisp-react-native';
 import { KeyIcon } from '@/components/ui';
 import { GrowablePinInput } from './GrowablePinInput';
+import { TEST_IDS } from '@/constants/test-ids';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -87,7 +88,7 @@ export function PinSetupStep({ onComplete }: PinSetupStepProps) {
           <KeyIcon size={40} color="#6366f1" />
 
           <VStack gap="xs" style={{ alignItems: 'center' }}>
-            <Text size="xl" weight="bold">
+            <Text size="xl" weight="bold" testID={TEST_IDS.PIN.CONFIRM_TITLE}>
               Confirm Your PIN
             </Text>
             <Text size="sm" color="secondary" align="center">
@@ -96,7 +97,7 @@ export function PinSetupStep({ onComplete }: PinSetupStepProps) {
           </VStack>
 
           {error && (
-            <Alert variant="danger" description={error} />
+            <Alert variant="danger" description={error} testID={TEST_IDS.PIN.ERROR_TEXT} />
           )}
 
           <GrowablePinInput
@@ -125,7 +126,7 @@ export function PinSetupStep({ onComplete }: PinSetupStepProps) {
       <KeyIcon size={40} color="#6366f1" />
 
       <VStack gap="xs" style={{ alignItems: 'center' }}>
-        <Text size="xl" weight="bold">
+        <Text size="xl" weight="bold" testID={TEST_IDS.PIN.SETUP_TITLE}>
           Secure Your Account
         </Text>
         <Text size="sm" color="secondary" align="center">
@@ -144,7 +145,7 @@ export function PinSetupStep({ onComplete }: PinSetupStepProps) {
         autoFocus
       />
 
-      <Pressable onPress={handleSkip}>
+      <Pressable onPress={handleSkip} testID={TEST_IDS.PIN.SKIP_BUTTON}>
         <Text size="sm" color="muted" style={{ textDecorationLine: 'underline' }}>
           Skip for now
         </Text>

@@ -250,10 +250,10 @@ export function useDiscordCommunityImport(): UseDiscordCommunityImportState & Us
     }
   }, []);
 
-  // Mobile fallback: Check URL hash for Discord import token on mount
+  // Web fallback: Check URL hash for Discord import token on mount
   // When popups aren't available, the relay redirects back with #discord_import_token=TOKEN
   useEffect(() => {
-    if (typeof window === 'undefined') return;
+    if (typeof window === 'undefined' || !window.location) return;
     const hash = window.location.hash;
     if (hash.startsWith('#discord_import_token=')) {
       const token = decodeURIComponent(hash.replace('#discord_import_token=', ''));

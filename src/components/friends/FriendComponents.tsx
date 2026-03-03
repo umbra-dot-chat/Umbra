@@ -9,6 +9,7 @@
 
 import React, { useState } from 'react';
 import { View } from 'react-native';
+import { TEST_IDS } from '@/constants/test-ids';
 import {
   Text, Button, HStack, VStack, Avatar,
   useTheme,
@@ -60,6 +61,7 @@ export function FriendListItem({
 
   return (
     <HStack
+      testID={TEST_IDS.FRIENDS.CARD}
       style={{
         alignItems: 'center',
         paddingVertical: 6,
@@ -74,7 +76,7 @@ export function FriendListItem({
 
       {/* Info */}
       <VStack style={{ flex: 1, gap: 1 }}>
-        <Text size="sm" weight="medium">{name}</Text>
+        <Text testID={TEST_IDS.FRIENDS.CARD_NAME} size="sm" weight="medium">{name}</Text>
         {(username || statusText) && (
           <Text size="xs" style={{ color: tc.text.muted }} numberOfLines={1}>
             {statusText || username}
@@ -133,6 +135,7 @@ export function FriendRequestItem({
 
   return (
     <HStack
+      testID={TEST_IDS.FRIENDS.CARD}
       style={{
         alignItems: 'center',
         paddingVertical: 6,
@@ -145,7 +148,7 @@ export function FriendRequestItem({
       {avatar ?? <Avatar name={name} size="sm" />}
 
       <VStack style={{ flex: 1, gap: 1 }}>
-        <Text size="sm" weight="medium">{name}</Text>
+        <Text testID={TEST_IDS.FRIENDS.CARD_NAME} size="sm" weight="medium">{name}</Text>
         {username && (
           <Text size="xs" style={{ color: tc.text.muted }} numberOfLines={1}>
             {username}
@@ -158,10 +161,10 @@ export function FriendRequestItem({
 
       {type === 'incoming' && (
         <HStack style={{ gap: 6 }}>
-          <Button variant="success" size="xs" onPress={onAccept}>
+          <Button testID={TEST_IDS.FRIENDS.CARD_ACCEPT} variant="success" size="xs" onPress={onAccept}>
             Accept
           </Button>
-          <Button variant="secondary" size="xs" onPress={onDecline}>
+          <Button testID={TEST_IDS.FRIENDS.CARD_REJECT} variant="secondary" size="xs" onPress={onDecline}>
             Decline
           </Button>
         </HStack>

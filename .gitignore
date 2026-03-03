@@ -61,6 +61,7 @@ coverage/
 /test-results/
 __tests__/**/test-results/
 playwright-report/
+__tests__/e2e-ios/artifacts/
 
 # IDE
 .idea/

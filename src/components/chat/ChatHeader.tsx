@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Animated, Pressable, View } from 'react-native';
+import { TEST_IDS } from '@/constants/test-ids';
 import {
   Avatar, AvatarGroup, Button, HStack,
   Navbar, NavbarBrand, NavbarContent,
@@ -44,6 +45,7 @@ export function ChatHeader({ active, rightPanel, togglePanel, onShowProfile, onV
   const utilityButtons = (
     <>
       <Button
+        testID={TEST_IDS.CHAT.SEARCH_BUTTON}
         variant={rightPanel === 'search' ? 'secondary' : 'tertiary'}
         size="sm"
         onPress={() => { togglePanel('search'); setMobileMenuOpen(false); }}
@@ -52,6 +54,7 @@ export function ChatHeader({ active, rightPanel, togglePanel, onShowProfile, onV
       />
       {showFilesButton && (
         <Button
+          testID={TEST_IDS.CHAT.FILES_BUTTON}
           variant={rightPanel === 'files' ? 'secondary' : 'tertiary'}
           size="sm"
           onPress={() => { togglePanel('files'); setMobileMenuOpen(false); }}
@@ -60,6 +63,7 @@ export function ChatHeader({ active, rightPanel, togglePanel, onShowProfile, onV
         />
       )}
       <Button
+        testID={TEST_IDS.CHAT.PINS_BUTTON}
         variant={rightPanel === 'pins' ? 'secondary' : 'tertiary'}
         size="sm"
         onPress={() => { togglePanel('pins'); setMobileMenuOpen(false); }}
@@ -67,6 +71,7 @@ export function ChatHeader({ active, rightPanel, togglePanel, onShowProfile, onV
         iconLeft={<PinIcon size={18} color={themeColors.text.secondary} />}
       />
       <Button
+        testID={TEST_IDS.CHAT.MEMBERS_BUTTON}
         variant={rightPanel === 'members' ? 'secondary' : 'tertiary'}
         size="sm"
         onPress={() => { togglePanel('members'); setMobileMenuOpen(false); }}
@@ -106,7 +111,7 @@ export function ChatHeader({ active, rightPanel, togglePanel, onShowProfile, onV
     });
 
     return (
-      <View style={{
+      <View testID={TEST_IDS.CHAT.HEADER} style={{
         flexDirection: 'row',
         alignItems: 'center',
         height: 56,
@@ -117,6 +122,7 @@ export function ChatHeader({ active, rightPanel, togglePanel, onShowProfile, onV
         {/* Back button — always visible, left edge */}
         {onBack && (
           <Pressable
+            testID={TEST_IDS.CHAT.HEADER_BACK}
             onPress={onBack}
             hitSlop={8}
             style={{ padding: 8 }}
@@ -145,18 +151,18 @@ export function ChatHeader({ active, rightPanel, togglePanel, onShowProfile, onV
                   ))}
                 </AvatarGroup>
               ) : (
-                <Pressable onPress={(e) => onShowProfile(active.name, e, active.online ? 'online' : 'offline')}>
+                <Pressable testID={TEST_IDS.CHAT.HEADER_AVATAR} onPress={(e) => onShowProfile(active.name, e, active.online ? 'online' : 'offline')}>
                   <Avatar name={active.name} size="sm" status={active.online ? 'online' : undefined} />
                 </Pressable>
               )
             )}
             {!mobileMenuOpen && (
               <View style={{ flex: 1, minWidth: 0 }}>
-                <Text size="md" weight="bold" numberOfLines={1}>
+                <Text testID={TEST_IDS.CHAT.HEADER_NAME} size="md" weight="bold" numberOfLines={1}>
                   {active ? active.name : 'Chat'}
                 </Text>
                 {active && active.group && active.memberCount != null && (
-                  <Text size="xs" style={{ color: themeColors.text.secondary }}>
+                  <Text testID={TEST_IDS.CHAT.HEADER_STATUS} size="xs" style={{ color: themeColors.text.secondary }}>
                     {active.memberCount} {active.memberCount === 1 ? 'member' : 'members'}
                   </Text>
                 )}
@@ -203,6 +209,7 @@ export function ChatHeader({ active, rightPanel, togglePanel, onShowProfile, onV
             {showCallButtons && (
               <>
                 <Pressable
+                  testID={TEST_IDS.CHAT.CALL_VOICE}
                   onPress={onVoiceCall}
                   hitSlop={4}
                   style={{ padding: 8 }}
@@ -211,6 +218,7 @@ export function ChatHeader({ active, rightPanel, togglePanel, onShowProfile, onV
                   <PhoneIcon size={18} color={themeColors.text.secondary} />
                 </Pressable>
                 <Pressable
+                  testID={TEST_IDS.CHAT.CALL_VIDEO}
                   onPress={onVideoCall}
                   hitSlop={4}
                   style={{ padding: 8 }}
@@ -245,7 +253,7 @@ export function ChatHeader({ active, rightPanel, togglePanel, onShowProfile, onV
 
   // ── Desktop layout (unchanged) ──
   return (
-    <Navbar variant="transparent" style={{ borderBottomWidth: 1, borderBottomColor: themeColors.border.subtle, paddingLeft: 12 }}>
+    <Navbar testID={TEST_IDS.CHAT.HEADER} variant="transparent" style={{ borderBottomWidth: 1, borderBottomColor: themeColors.border.subtle, paddingLeft: 12 }}>
       <NavbarBrand>
         <HStack style={{ alignItems: 'center', gap: 10 }}>
           {active && (
@@ -257,6 +265,7 @@ export function ChatHeader({ active, rightPanel, togglePanel, onShowProfile, onV
               </AvatarGroup>
             ) : (
               <Pressable
+                testID={TEST_IDS.CHAT.HEADER_AVATAR}
                 onPress={(e) => onShowProfile(active.name, e, active.online ? 'online' : 'offline')}
               >
                 <Avatar name={active.name} size="sm" status={active.online ? 'online' : undefined} />
@@ -264,11 +273,11 @@ export function ChatHeader({ active, rightPanel, togglePanel, onShowProfile, onV
             )
           )}
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Text size="md" weight="bold" numberOfLines={1}>
+            <Text testID={TEST_IDS.CHAT.HEADER_NAME} size="md" weight="bold" numberOfLines={1}>
               {active ? active.name : 'Chat'}
             </Text>
             {active && active.group && active.memberCount != null && (
-              <Text size="xs" style={{ color: themeColors.text.secondary }}>
+              <Text testID={TEST_IDS.CHAT.HEADER_STATUS} size="xs" style={{ color: themeColors.text.secondary }}>
                 {active.memberCount} {active.memberCount === 1 ? 'member' : 'members'}
               </Text>
             )}
@@ -279,6 +288,7 @@ export function ChatHeader({ active, rightPanel, togglePanel, onShowProfile, onV
         {showCallButtons && (
           <>
             <Button
+              testID={TEST_IDS.CHAT.CALL_VOICE}
               variant="tertiary"
               size="sm"
               onPress={onVoiceCall}
@@ -286,6 +296,7 @@ export function ChatHeader({ active, rightPanel, togglePanel, onShowProfile, onV
               iconLeft={<PhoneIcon size={18} color={themeColors.text.secondary} />}
             />
             <Button
+              testID={TEST_IDS.CHAT.CALL_VIDEO}
               variant="tertiary"
               size="sm"
               onPress={onVideoCall}

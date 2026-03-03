@@ -13,6 +13,7 @@ import React, { useCallback, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { NewChatMenu } from './NewChatMenu';
 import { SlotRenderer } from '@/components/plugins/SlotRenderer';
+import { TEST_IDS } from '@/constants/test-ids';
 
 export interface ChatSidebarProps {
   search: string;
@@ -60,11 +61,12 @@ function ChatSidebarInner({
   }, []);
 
   return (
-      <Sidebar width="wide" style={{ paddingHorizontal: 8, paddingTop: 20, width: '100%' }}>
+      <Sidebar testID={TEST_IDS.SIDEBAR.CONTAINER} width="wide" style={{ paddingHorizontal: 8, paddingTop: 20, width: '100%' }}>
         {/* Search bar */}
         <SidebarSection>
           <View style={{ paddingHorizontal: 6 }}>
             <SearchInput
+              testID={TEST_IDS.SIDEBAR.SEARCH_INPUT}
               value={search}
               onValueChange={onSearchChange}
               placeholder="Search..."
@@ -80,6 +82,7 @@ function ChatSidebarInner({
         <SidebarSection style={{ marginTop: 12 }}>
           <View style={{ marginHorizontal: 6 }}>
               <Button
+                testID={TEST_IDS.SIDEBAR.FRIENDS_BUTTON}
                 variant={isFriendsActive ? 'secondary' : 'tertiary'}
                 onSurface
                 size="md"
@@ -112,6 +115,7 @@ function ChatSidebarInner({
           {onGuidePress && (
             <View style={{ marginHorizontal: 6, marginTop: 2 }}>
               <Button
+                testID={TEST_IDS.SIDEBAR.GUIDE_BUTTON}
                 variant="tertiary"
                 onSurface
                 size="md"
@@ -128,6 +132,7 @@ function ChatSidebarInner({
           {onMarketplacePress && (
             <View style={{ marginHorizontal: 6, marginTop: 2 }}>
               <Button
+                testID={TEST_IDS.SIDEBAR.MARKETPLACE_BUTTON}
                 variant="tertiary"
                 onSurface
                 size="md"
@@ -205,6 +210,7 @@ function ChatSidebarInner({
             {(onNewDm || onCreateGroup) && (
               <View style={{ position: 'relative', zIndex: 200 }}>
                 <Button
+                  testID={TEST_IDS.SIDEBAR.NEW_CHAT_BUTTON}
                   variant="tertiary"
                   onSurface
                   size="xs"
@@ -223,7 +229,7 @@ function ChatSidebarInner({
               </View>
             )}
           </View>
-          <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+          <ScrollView testID={TEST_IDS.SIDEBAR.CONVERSATION_LIST} style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
             {loading ? (
               /* Skeleton conversation list items */
               <>
@@ -250,6 +256,7 @@ function ChatSidebarInner({
               conversations.map((c) => (
                 <ConversationListItem
                   key={c.id}
+                  testID={TEST_IDS.SIDEBAR.CONVERSATION_ITEM}
                   name={c.name}
                   lastMessage={c.last}
                   timestamp={c.time}

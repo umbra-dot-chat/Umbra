@@ -22,6 +22,7 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { GrowablePinInput } from './GrowablePinInput';
 import { ArrowLeftIcon } from '@/components/ui';
+import { TEST_IDS } from '@/constants/test-ids';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const lockMascot = require('@/assets/images/lock-mascot.png');
@@ -130,7 +131,7 @@ export function PinLockScreen({ onVerify, subtitle, onBack }: PinLockScreenProps
   const isLocked = cooldown > 0;
 
   return (
-    <Animated.View style={[containerStyle, { backgroundColor: theme.colors.background.canvas, opacity: overlayOpacity }]}>
+    <Animated.View style={[containerStyle, { backgroundColor: theme.colors.background.canvas, opacity: overlayOpacity }]} testID={TEST_IDS.PIN.LOCK_SCREEN}>
       {/* Optional back button */}
       {onBack && (
         <Pressable
@@ -147,6 +148,7 @@ export function PinLockScreen({ onVerify, subtitle, onBack }: PinLockScreenProps
             zIndex: 1,
           }}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          testID={TEST_IDS.PIN.LOCK_BACK}
         >
           <ArrowLeftIcon size={24} color={theme.colors.text.primary} />
         </Pressable>
@@ -162,10 +164,10 @@ export function PinLockScreen({ onVerify, subtitle, onBack }: PinLockScreenProps
           />
 
           <VStack gap="xs" style={{ alignItems: 'center' }}>
-            <Text size="display-sm" weight="bold">
+            <Text size="display-sm" weight="bold" testID={TEST_IDS.PIN.LOCK_TITLE}>
               Welcome Back
             </Text>
-            <Text size="sm" color="secondary" align="center">
+            <Text size="sm" color="secondary" align="center" testID={TEST_IDS.PIN.LOCK_SUBTITLE}>
               {subtitle ?? 'Enter your PIN to unlock'}
             </Text>
           </VStack>
@@ -186,7 +188,12 @@ export function PinLockScreen({ onVerify, subtitle, onBack }: PinLockScreenProps
 
           {error && (
             <Presence visible animation="fadeIn">
-              <Text size="sm" color="danger" align="center">
+              <Text
+                size="sm"
+                color="danger"
+                align="center"
+                testID={isLocked ? TEST_IDS.PIN.LOCK_COOLDOWN : TEST_IDS.PIN.LOCK_ERROR}
+              >
                 {isLocked ? `Too many attempts. Try again in ${cooldown}s.` : error}
               </Text>
             </Presence>

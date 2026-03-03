@@ -46,6 +46,7 @@ import {
 } from '@/components/ui';
 import type { MarketplaceListing } from '@umbra/plugin-runtime';
 import type { PluginPermission, PluginInstance } from '@umbra/plugin-sdk';
+import { TEST_IDS } from '@/constants/test-ids';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -1248,6 +1249,7 @@ export function PluginMarketplace({ open, onClose }: PluginMarketplaceProps) {
                     <Pressable
                       key={tab}
                       onPress={() => setPluginTab(tab)}
+                      testID={tab === 'browse' ? TEST_IDS.PLUGINS.TAB_BROWSE : TEST_IDS.PLUGINS.TAB_INSTALLED}
                       style={{ paddingHorizontal: 14, paddingVertical: 7, borderRadius: 6, backgroundColor: pluginTab === tab ? tc.accent.primary : 'transparent' }}
                     >
                       <RNText style={{ fontSize: 13, fontWeight: pluginTab === tab ? '600' : '400', color: pluginTab === tab ? tc.text.inverse : tc.text.secondary }}>
@@ -1260,7 +1262,7 @@ export function PluginMarketplace({ open, onClose }: PluginMarketplaceProps) {
                 {pluginTab === 'browse' ? (
                   <View style={{ flex: 1 }}>
                     <View style={{ paddingHorizontal: 20, paddingTop: 12, gap: 10 }}>
-                      <SearchInput value={search} onValueChange={setSearch} placeholder="Search plugins..." size="md" fullWidth onClear={() => setSearch('')} />
+                      <SearchInput value={search} onValueChange={setSearch} placeholder="Search plugins..." size="md" fullWidth onClear={() => setSearch('')} testID={TEST_IDS.PLUGINS.SEARCH_INPUT} />
                       {categories.length > 0 && (
                         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                           <View style={{ flexDirection: 'row', gap: 6 }}>
@@ -1359,6 +1361,7 @@ export function PluginMarketplace({ open, onClose }: PluginMarketplaceProps) {
     return (
       <Overlay open={open} backdrop="dim" center onBackdropPress={handleClose} animationType="fade">
         <View
+          testID={TEST_IDS.PLUGINS.MARKETPLACE}
           style={{
             width: windowWidth,
             height: windowHeight,
@@ -1465,6 +1468,7 @@ export function PluginMarketplace({ open, onClose }: PluginMarketplaceProps) {
   return (
     <Overlay open={open} backdrop="dim" center onBackdropPress={handleClose} animationType="fade">
       <View
+        testID={TEST_IDS.PLUGINS.MARKETPLACE}
         style={{
           width: 860, maxWidth: '95%', height: 600, maxHeight: '90%',
           flexDirection: 'row', borderRadius: 16, overflow: 'hidden',

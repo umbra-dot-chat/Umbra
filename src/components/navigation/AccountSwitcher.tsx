@@ -15,6 +15,7 @@ import { Text, useTheme } from '@coexist/wisp-react-native';
 import { PlusIcon, CheckIcon, TrashIcon } from '@/components/ui';
 import { GrowablePinInput } from '@/components/auth/GrowablePinInput';
 import type { StoredAccount } from '@/contexts/AuthContext';
+import { TEST_IDS } from '@/constants/test-ids';
 
 // ---------------------------------------------------------------------------
 // Props
@@ -234,7 +235,7 @@ export function AccountSwitcher({
       />
 
       {/* Popover */}
-      <View style={popoverStyle}>
+      <View testID={TEST_IDS.ACCOUNT.SWITCHER} style={popoverStyle}>
         {/* Header */}
         <View
           style={{
@@ -260,6 +261,7 @@ export function AccountSwitcher({
             return (
               <Pressable
                 key={account.did}
+                testID={TEST_IDS.ACCOUNT.ITEM}
                 onPress={() => handleAccountPress(account.did)}
                 style={({ pressed }) => ({
                   flexDirection: 'row',
@@ -328,6 +330,7 @@ export function AccountSwitcher({
                   <CheckIcon size={16} color={tc.accent.primary} />
                 ) : onRemoveAccount ? (
                   <Pressable
+                    testID={TEST_IDS.ACCOUNT.REMOVE_BUTTON}
                     onPress={(e) => {
                       e.stopPropagation?.();
                       handleRemovePress(account);
@@ -349,6 +352,7 @@ export function AccountSwitcher({
 
         {/* Add account button */}
         <Pressable
+          testID={TEST_IDS.ACCOUNT.ADD_BUTTON}
           onPress={handleAddPress}
           style={({ pressed }) => ({
             flexDirection: 'row',

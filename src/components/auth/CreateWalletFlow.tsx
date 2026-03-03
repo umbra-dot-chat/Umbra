@@ -41,6 +41,7 @@ import {
 import UmbraService from '@umbra/service';
 import type { Identity } from '@umbra/service';
 import { enablePersistence } from '@umbra/wasm';
+import { TEST_IDS } from '@/constants/test-ids';
 
 // ---------------------------------------------------------------------------
 // Step definitions
@@ -321,16 +322,20 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
               onChangeText={setDisplayName}
               fullWidth
               autoFocus
+              testID={TEST_IDS.CREATE.NAME_INPUT}
+              accessibilityLabel="Display name input"
             />
 
             <Separator spacing="lg" />
 
             {/* Profile import section */}
             {!importedProfile ? (
-              <ProfileImportSelector
-                onProfileImported={handleProfileImported}
-                compact
-              />
+              <View testID={TEST_IDS.CREATE.IMPORT_PROFILE_BUTTON} accessibilityLabel="Import profile from another platform">
+                <ProfileImportSelector
+                  onProfileImported={handleProfileImported}
+                  compact
+                />
+              </View>
             ) : (
               <VStack gap="md">
                 <HStack style={{ justifyContent: 'space-between', alignItems: 'center' }}>
@@ -407,7 +412,9 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
             ) : error ? (
               <Alert variant="danger" title="Error" description={error} />
             ) : seedPhrase ? (
-              <SeedPhraseGrid words={seedPhrase} showCopy />
+              <View testID={TEST_IDS.CREATE.SEED_PHRASE_GRID} accessibilityLabel="Recovery seed phrase grid">
+                <SeedPhraseGrid words={seedPhrase} showCopy />
+              </View>
             ) : null}
           </VStack>
         );
@@ -436,12 +443,18 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
               onChange={setBackupConfirmed}
               label="I have written down my recovery phrase and stored it securely"
               description="I understand that losing this phrase means losing access to my account forever."
+              testID={TEST_IDS.CREATE.BACKUP_CHECKBOX}
+              accessibilityLabel="Confirm backup checkbox"
             />
           </VStack>
         );
 
       case 3:
-        return <PinSetupStep onComplete={handlePinComplete} />;
+        return (
+          <View testID={TEST_IDS.CREATE.PIN_STEP} accessibilityLabel="PIN setup step">
+            <PinSetupStep onComplete={handlePinComplete} />
+          </View>
+        );
 
       case 4:
         return (
@@ -470,6 +483,8 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
                   autoFocus
                   autoCapitalize="none"
                   autoCorrect={false}
+                  testID={TEST_IDS.CREATE.USERNAME_INPUT}
+                  accessibilityLabel="Username input"
                 />
 
                 <Text size="xs" color="muted">
@@ -511,7 +526,7 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
 
       case 5:
         return (
-          <VStack gap="lg" style={{ paddingVertical: 16 }}>
+          <VStack gap="lg" style={{ paddingVertical: 16 }} testID={TEST_IDS.CREATE.SUCCESS_SCREEN} accessibilityLabel="Account created success screen">
             <View style={{ alignItems: 'center' }}>
               <Presence visible animation="scaleIn">
                 <CheckCircleIcon size={64} color="#22c55e" />
@@ -562,6 +577,8 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
                 onChange={setRememberMe}
                 label="Remember me on this device"
                 description="Stay logged in between sessions. Your identity will be stored locally."
+                testID={TEST_IDS.CREATE.REMEMBER_ME_CHECKBOX}
+                accessibilityLabel="Remember me checkbox"
               />
             </Presence>
           </VStack>
@@ -586,6 +603,8 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
               onPress={goNext}
               disabled={!displayName.trim()}
               iconRight={<ArrowRightIcon size={16} color="#FFFFFF" />}
+              testID={TEST_IDS.CREATE.NAME_NEXT}
+              accessibilityLabel="Continue to next step"
             >
               Continue
             </Button>
@@ -600,6 +619,8 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
               onPress={goNext}
               disabled={!seedPhrase || isLoading}
               iconRight={<ArrowRightIcon size={16} color="#FFFFFF" />}
+              testID={TEST_IDS.CREATE.SEED_NEXT}
+              accessibilityLabel="Continue after seed phrase"
             >
               Continue
             </Button>
@@ -614,6 +635,8 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
               onPress={goNext}
               disabled={!backupConfirmed}
               iconRight={<ArrowRightIcon size={16} color="#FFFFFF" />}
+              testID={TEST_IDS.CREATE.BACKUP_NEXT}
+              accessibilityLabel="Continue after backup confirmation"
             >
               Continue
             </Button>
@@ -630,7 +653,12 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
           <HStack gap="md" style={{ justifyContent: 'space-between' }}>
             {!usernameResult ? (
               <>
-                <Button variant="tertiary" onPress={handleSkipUsername}>
+                <Button
+                  variant="tertiary"
+                  onPress={handleSkipUsername}
+                  testID={TEST_IDS.CREATE.USERNAME_SKIP}
+                  accessibilityLabel="Skip username registration"
+                >
                   Skip for now
                 </Button>
                 <Button
@@ -638,6 +666,8 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
                   onPress={handleRegisterUsername}
                   disabled={!usernameInput.trim() || usernameLoading}
                   iconRight={<ArrowRightIcon size={16} color="#FFFFFF" />}
+                  testID={TEST_IDS.CREATE.USERNAME_REGISTER}
+                  accessibilityLabel="Register username"
                 >
                   Claim Username
                 </Button>
@@ -663,6 +693,8 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
               onPress={handleComplete}
               size="lg"
               fullWidth
+              testID={TEST_IDS.CREATE.SUCCESS_DONE}
+              accessibilityLabel="Get started"
             >
               Get Started
             </Button>
@@ -684,6 +716,10 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
         currentStep={currentStep}
         allowBackdropClose={isFirstStep}
         footer={renderFooter()}
+        testID={TEST_IDS.CREATE.FLOW}
+        accessibilityLabel="Create wallet flow"
+        backButtonTestID={TEST_IDS.CREATE.BACK_BUTTON}
+        backButtonAccessibilityLabel="Go back"
       >
         {renderStepContent()}
       </WalletFlowLayout>

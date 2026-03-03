@@ -9,6 +9,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, TextInput, Pressable, type ViewStyle, type TextStyle } from 'react-native';
 import { Text, useTheme } from '@coexist/wisp-react-native';
+import { TEST_IDS } from '@/constants/test-ids';
 
 // ---------------------------------------------------------------------------
 // Props
@@ -161,15 +162,17 @@ export function GrowablePinInput({
         autoFocus={autoFocus}
         caretHidden
         style={hiddenInputStyle}
+        testID={TEST_IDS.PIN.HIDDEN_INPUT}
       />
 
       {/* Visible cells */}
       <Pressable
         onPress={focusInput}
         style={{ flexDirection: 'row', gap, alignItems: 'center' }}
+        testID={TEST_IDS.PIN.INPUT}
       >
         {chars.map((char, i) => (
-          <View key={i} style={cellStyle(i)}>
+          <View key={i} style={cellStyle(i)} testID={`${TEST_IDS.PIN.CELL}.${i}`}>
             {char ? (
               mask ? (
                 <View style={dotStyle} />

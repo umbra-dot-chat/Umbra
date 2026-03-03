@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, ScrollView, View, Pressable, Text as RNText } from 'react-native';
+import { TEST_IDS } from '@/constants/test-ids';
 import {
   Avatar, ChatBubble, Text, TypingIndicator, NewMessageDivider, useTheme,
 } from '@coexist/wisp-react-native';
@@ -260,7 +261,7 @@ function groupMessages(messages: Message[]): Message[][] {
 function EmptyMessages() {
   const { theme } = useTheme();
   return (
-    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40 }}>
+    <View testID={TEST_IDS.CHAT_AREA.EMPTY_STATE} style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40 }}>
       <Text size="xl" weight="bold" style={{ color: theme.colors.text.primary, marginBottom: 8 }}>
         No messages yet
       </Text>
@@ -408,6 +409,7 @@ export function ChatArea({
   return (
     <ScrollView
       ref={scrollRef}
+      testID={TEST_IDS.CHAT_AREA.MESSAGE_LIST}
       style={{ flex: 1 }}
       contentContainerStyle={{ padding: 16, gap: 8 }}
       onScroll={handleScroll}
@@ -703,6 +705,7 @@ export function ChatArea({
       {/* Typing indicator */}
       {typingUser && (
         <TypingIndicator
+          testID={TEST_IDS.CHAT_AREA.TYPING_INDICATOR}
           animation="pulse"
           bubble
           avatar={<Avatar name={typingUser} size="sm" />}

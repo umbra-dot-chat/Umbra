@@ -31,6 +31,14 @@ export interface WalletFlowLayoutProps {
   footer: React.ReactNode;
   /** Whether tapping the backdrop closes the flow (only safe on step 0). @default false */
   allowBackdropClose?: boolean;
+  /** Test ID for E2E testing */
+  testID?: string;
+  /** Accessibility label for screen readers */
+  accessibilityLabel?: string;
+  /** Test ID for the back/close button */
+  backButtonTestID?: string;
+  /** Accessibility label for the back/close button */
+  backButtonAccessibilityLabel?: string;
 }
 
 export function WalletFlowLayout({
@@ -43,6 +51,10 @@ export function WalletFlowLayout({
   children,
   footer,
   allowBackdropClose = false,
+  testID,
+  accessibilityLabel,
+  backButtonTestID,
+  backButtonAccessibilityLabel,
 }: WalletFlowLayoutProps) {
   const insets = useSafeAreaInsets();
   const isNative = Platform.OS !== 'web';
@@ -85,6 +97,8 @@ export function WalletFlowLayout({
               onPress={handleHeaderBack}
               style={headerBackButton}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              testID={backButtonTestID}
+              accessibilityLabel={backButtonAccessibilityLabel}
             >
               {isFirstStep ? (
                 <XIcon size={20} color={tc.text.primary} />
@@ -105,7 +119,7 @@ export function WalletFlowLayout({
         </View>
       )}
 
-      {/* Step indicator — use xs on native to fit more steps on narrow screens */}
+      {/* Step indicator — xs on native (compact), sm on web */}
       <View style={{ paddingHorizontal: isNative ? 20 : 24, paddingTop: isNative ? 12 : 24, paddingBottom: isNative ? 12 : 16 }}>
         <ProgressSteps
           steps={steps}
@@ -142,7 +156,7 @@ export function WalletFlowLayout({
   // Native: full-screen view
   if (isNative) {
     return (
-      <View style={[fullScreenStyle, { backgroundColor: tc.background.canvas }]}>
+      <View style={[fullScreenStyle, { backgroundColor: tc.background.canvas }]} testID={testID} accessibilityLabel={accessibilityLabel}>
         {content}
       </View>
     );
@@ -157,7 +171,7 @@ export function WalletFlowLayout({
       onBackdropPress={allowBackdropClose ? onClose : undefined}
       useModal={false}
     >
-      <View style={[modalStyle, { backgroundColor: tc.background.raised ?? tc.background.canvas }]}>
+      <View style={[modalStyle, { backgroundColor: tc.background.raised ?? tc.background.canvas }]} testID={testID} accessibilityLabel={accessibilityLabel}>
         {content}
       </View>
     </Overlay>

@@ -26,6 +26,7 @@ import { useFriends } from '@/hooks/useFriends';
 import { useNetwork } from '@/hooks/useNetwork';
 import { useGroups } from '@/hooks/useGroups';
 import type { Friend } from '@umbra/service';
+import { TEST_IDS } from '@/constants/test-ids';
 
 export interface CreateGroupDialogProps {
   open: boolean;
@@ -149,7 +150,7 @@ export function CreateGroupDialog({ open, onClose, onCreated }: CreateGroupDialo
 
   return (
     <Dialog open={open} onClose={handleClose}>
-      <View style={styles.container}>
+      <View style={styles.container} testID={TEST_IDS.GROUPS.CREATE_DIALOG}>
         <HStack style={{ alignItems: 'center', gap: 8 }}>
           <UsersIcon size={20} color={theme.colors.accent.primary} />
           <Text style={styles.header}>Create Group & Invite Members</Text>
@@ -163,6 +164,7 @@ export function CreateGroupDialog({ open, onClose, onCreated }: CreateGroupDialo
               onChangeText={setName}
               placeholder="Enter group name..."
               style={{ width: '100%' }}
+              testID={TEST_IDS.GROUPS.NAME_INPUT}
             />
           </VStack>
 
@@ -174,6 +176,7 @@ export function CreateGroupDialog({ open, onClose, onCreated }: CreateGroupDialo
               placeholder="What's this group about?"
               numberOfLines={2}
               style={{ width: '100%' }}
+              testID={TEST_IDS.GROUPS.DESCRIPTION_INPUT}
             />
           </VStack>
 
@@ -189,6 +192,7 @@ export function CreateGroupDialog({ open, onClose, onCreated }: CreateGroupDialo
               emptyMessage="No friends to add yet"
               maxHeight={200}
               searchPlaceholder="Search friends..."
+              testID={TEST_IDS.GROUPS.MEMBER_PICKER}
             />
           </VStack>
         </VStack>
@@ -208,12 +212,13 @@ export function CreateGroupDialog({ open, onClose, onCreated }: CreateGroupDialo
         )}
 
         <View style={styles.buttons}>
-          <Button variant="tertiary" onPress={handleClose}>
+          <Button variant="tertiary" onPress={handleClose} testID={TEST_IDS.GROUPS.CANCEL_BUTTON}>
             Cancel
           </Button>
           <Button
             onPress={handleCreate}
             disabled={!name.trim() || selectedFriends.size === 0 || selectedFriends.size > 255 || isCreating || !!successMessage}
+            testID={TEST_IDS.GROUPS.CREATE_BUTTON}
           >
             {isCreating ? 'Sending Invites...' : 'Create & Invite'}
           </Button>

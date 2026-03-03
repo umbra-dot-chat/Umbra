@@ -3,6 +3,7 @@ import { View, ScrollView, Platform, Text as RNText, Dimensions, useWindowDimens
 import { Text, Button, Card, VStack, HStack, Separator, Presence, useTheme } from '@coexist/wisp-react-native';
 import { useBlobPath, AnimatedBlobs } from '@/components/auth/AnimatedBlobs';
 import { WalletIcon, DownloadIcon, KeyIcon, LockIcon } from '@/components/ui';
+import { TEST_IDS } from '@/constants/test-ids';
 import { CreateWalletFlow } from '@/components/auth/CreateWalletFlow';
 import { ImportWalletFlow } from '@/components/auth/ImportWalletFlow';
 import { PinLockScreen } from '@/components/auth/PinLockScreen';
@@ -99,6 +100,8 @@ function AuthContent({ inverted, onCreateWallet, onImportWallet, taglineIndex, t
         source={ghostSource}
         style={{ width: GHOST_SIZE, height: GHOST_SIZE }}
         resizeMode="contain"
+        testID={TEST_IDS.AUTH.LOGO}
+        accessibilityLabel="Umbra logo"
       />
       {/* Slot-machine tagline rotation */}
       <View style={{ height: taglineLineHeight, overflow: 'hidden', maxWidth: 360 }}>
@@ -145,6 +148,8 @@ function AuthContent({ inverted, onCreateWallet, onImportWallet, taglineIndex, t
               {accounts.map((account) => (
                 <Pressable
                   key={account.did}
+                  testID={TEST_IDS.AUTH.ACCOUNT_ITEM}
+                  accessibilityLabel={`Account ${account.displayName}`}
                   onPress={() => onAccountPress?.(account)}
                   style={({ pressed }) => ({
                     flexDirection: 'row',
@@ -227,6 +232,8 @@ function AuthContent({ inverted, onCreateWallet, onImportWallet, taglineIndex, t
                   shape="rounded"
                   style={{ flex: 1 }}
                   onPress={onCreateWallet}
+                  testID={TEST_IDS.AUTH.CREATE_BUTTON}
+                  accessibilityLabel="Create new account"
                   iconLeft={<WalletIcon size={16} color={tc.text.primary} />}
                 >
                   Create New
@@ -237,6 +244,8 @@ function AuthContent({ inverted, onCreateWallet, onImportWallet, taglineIndex, t
                   shape="rounded"
                   style={{ flex: 1 }}
                   onPress={onImportWallet}
+                  testID={TEST_IDS.AUTH.IMPORT_BUTTON}
+                  accessibilityLabel="Import existing account"
                   iconLeft={<DownloadIcon size={16} color={tc.text.primary} />}
                 >
                   Import
@@ -311,6 +320,8 @@ function AuthContent({ inverted, onCreateWallet, onImportWallet, taglineIndex, t
                   shape="rounded"
                   fullWidth
                   onPress={onCreateWallet}
+                  testID={TEST_IDS.AUTH.CREATE_BUTTON}
+                  accessibilityLabel="Create new account"
                   iconLeft={<WalletIcon size={18} color={btnIconColor} />}
                 >
                   Create New Account
@@ -389,6 +400,8 @@ function AuthContent({ inverted, onCreateWallet, onImportWallet, taglineIndex, t
                   shape="rounded"
                   fullWidth
                   onPress={onImportWallet}
+                  testID={TEST_IDS.AUTH.IMPORT_BUTTON}
+                  accessibilityLabel="Import existing account"
                   iconLeft={<DownloadIcon size={18} color={btnIconColor} />}
                 >
                   Import Existing Account
@@ -614,7 +627,7 @@ export default function AuthScreen() {
   );
 
   return (
-    <View style={{ flex: 1, backgroundColor: tc.background.canvas }}>
+    <View testID={TEST_IDS.AUTH.SCREEN} accessibilityLabel="Authentication screen" style={{ flex: 1, backgroundColor: tc.background.canvas }}>
       <ScrollView
         contentContainerStyle={{
           flexGrow: 1,

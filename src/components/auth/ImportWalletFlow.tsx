@@ -9,6 +9,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import { View } from 'react-native';
+import { TEST_IDS } from '@/constants/test-ids';
 import {
   Text,
   Button,
@@ -224,6 +225,8 @@ export function ImportWalletFlow({ open, onClose }: ImportWalletFlowProps) {
               onWordChange={handleWordChange}
               onPasteAll={handlePasteAll}
               error={phraseError}
+              testID={TEST_IDS.IMPORT.SEED_INPUT}
+              pasteButtonTestID={TEST_IDS.IMPORT.SEED_PASTE}
             />
           </VStack>
         );
@@ -247,12 +250,18 @@ export function ImportWalletFlow({ open, onClose }: ImportWalletFlowProps) {
               onChangeText={setDisplayName}
               fullWidth
               autoFocus
+              testID={TEST_IDS.IMPORT.NAME_INPUT}
+              accessibilityLabel="Display name"
             />
           </VStack>
         );
 
       case 2:
-        return <PinSetupStep onComplete={handlePinComplete} />;
+        return (
+          <View testID={TEST_IDS.IMPORT.PIN_STEP} accessibilityLabel="PIN setup step">
+            <PinSetupStep onComplete={handlePinComplete} />
+          </View>
+        );
 
       case 3:
         if (isLoading) {
@@ -268,13 +277,13 @@ export function ImportWalletFlow({ open, onClose }: ImportWalletFlowProps) {
 
         if (error) {
           return (
-            <VStack gap="lg" style={{ alignItems: 'center', paddingVertical: 16 }}>
+            <VStack gap="lg" style={{ alignItems: 'center', paddingVertical: 16 }} testID={TEST_IDS.IMPORT.ERROR_SCREEN} accessibilityLabel="Import error screen">
               <Alert
                 variant="danger"
                 title="Restore Failed"
                 description={error}
               />
-              <Button variant="primary" onPress={handleRetry}>
+              <Button variant="primary" onPress={handleRetry} testID={TEST_IDS.IMPORT.RETRY_BUTTON} accessibilityLabel="Try again">
                 Try Again
               </Button>
             </VStack>
@@ -282,7 +291,7 @@ export function ImportWalletFlow({ open, onClose }: ImportWalletFlowProps) {
         }
 
         return (
-          <VStack gap="lg" style={{ alignItems: 'center', paddingVertical: 16 }}>
+          <VStack gap="lg" style={{ alignItems: 'center', paddingVertical: 16 }} testID={TEST_IDS.IMPORT.SUCCESS_SCREEN} accessibilityLabel="Import success screen">
             <Presence visible animation="scaleIn">
               <CheckCircleIcon size={64} color="#22c55e" />
             </Presence>
@@ -339,6 +348,8 @@ export function ImportWalletFlow({ open, onClose }: ImportWalletFlowProps) {
               variant="primary"
               onPress={validateAndAdvance}
               iconRight={<ArrowRightIcon size={16} color="#FFFFFF" />}
+              testID={TEST_IDS.IMPORT.SEED_NEXT}
+              accessibilityLabel="Continue to next step"
             >
               Continue
             </Button>
@@ -353,6 +364,8 @@ export function ImportWalletFlow({ open, onClose }: ImportWalletFlowProps) {
               onPress={goNext}
               disabled={!displayName.trim()}
               iconRight={<ArrowRightIcon size={16} color="#FFFFFF" />}
+              testID={TEST_IDS.IMPORT.NAME_NEXT}
+              accessibilityLabel="Continue to next step"
             >
               Continue
             </Button>
@@ -381,6 +394,8 @@ export function ImportWalletFlow({ open, onClose }: ImportWalletFlowProps) {
                 variant="tertiary"
                 onPress={handleRetry}
                 iconLeft={<ArrowLeftIcon size={16} />}
+                testID={TEST_IDS.IMPORT.RETRY_BUTTON}
+                accessibilityLabel="Start over"
               >
                 Start Over
               </Button>
@@ -395,6 +410,8 @@ export function ImportWalletFlow({ open, onClose }: ImportWalletFlowProps) {
               onPress={handleComplete}
               size="lg"
               fullWidth
+              testID={TEST_IDS.IMPORT.DONE_BUTTON}
+              accessibilityLabel="Get started"
             >
               Get Started
             </Button>
@@ -415,6 +432,10 @@ export function ImportWalletFlow({ open, onClose }: ImportWalletFlowProps) {
       currentStep={currentStep}
       allowBackdropClose={isFirstStep}
       footer={renderFooter()}
+      testID={TEST_IDS.IMPORT.FLOW}
+      accessibilityLabel="Import wallet flow"
+      backButtonTestID={TEST_IDS.IMPORT.BACK_BUTTON}
+      backButtonAccessibilityLabel="Back"
     >
       {renderStepContent()}
     </WalletFlowLayout>

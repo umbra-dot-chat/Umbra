@@ -2,6 +2,7 @@ import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { KeyboardAvoidingView, Platform, View, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text, useTheme } from '@coexist/wisp-react-native';
+import { TEST_IDS } from '@/constants/test-ids';
 import { useHoverMessage } from '@/hooks/useHoverMessage';
 import { useRightPanel } from '@/hooks/useRightPanel';
 import { useProfilePopoverContext } from '@/contexts/ProfilePopoverContext';
@@ -51,13 +52,13 @@ function EmptyConversation() {
   const isDark = mode === 'dark';
   const ghostSource = isDark ? ghostWhite : ghostBlack;
   return (
-    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40 }}>
+    <View testID={TEST_IDS.MAIN.EMPTY_STATE} style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40 }}>
       <Image
         source={ghostSource}
         style={{ width: 275, height: 275, marginBottom: 16 }}
         resizeMode="contain"
       />
-      <Text size="display-sm" weight="bold" style={{ color: theme.colors.text.primary, marginBottom: 8 }}>
+      <Text testID={TEST_IDS.MAIN.WELCOME_TEXT} size="display-sm" weight="bold" style={{ color: theme.colors.text.primary, marginBottom: 8 }}>
         Welcome to Umbra
       </Text>
       <Text size="sm" style={{ color: theme.colors.text.muted, textAlign: 'center', maxWidth: 400, marginBottom: 16 }}>
@@ -525,14 +526,14 @@ export default function ChatPage() {
   // No conversations yet — show welcome
   if (!convsLoading && conversations.length === 0) {
     return (
-      <View style={{ flex: 1 }}>
+      <View testID={TEST_IDS.MAIN.CONTAINER} style={{ flex: 1 }}>
         <EmptyConversation />
       </View>
     );
   }
 
   return (
-    <View style={{ flex: 1, flexDirection: 'row' }}>
+    <View testID={TEST_IDS.MAIN.CONTAINER} style={{ flex: 1, flexDirection: 'row' }}>
       <KeyboardAvoidingView
         style={{ flex: 1, flexDirection: 'column' }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}

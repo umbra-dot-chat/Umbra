@@ -10,6 +10,7 @@ import React, { useCallback, useState } from 'react';
 import { View, Platform, type ViewStyle } from 'react-native';
 import { Text, Button, Card, HStack, Alert } from '@coexist/wisp-react-native';
 import { CopyIcon } from '@/components/ui';
+import { TEST_IDS } from '@/constants/test-ids';
 
 const isMobile = Platform.OS !== 'web';
 
@@ -37,7 +38,7 @@ export function SeedPhraseGrid({ words, showCopy = false }: SeedPhraseGridProps)
 
   return (
     <View>
-      <View style={gridStyle}>
+      <View style={gridStyle} testID={TEST_IDS.SEED.GRID}>
         {words.map((word, i) => (
           <View key={i} style={cellStyle}>
             <Card variant="outlined" radius="sm" padding={isMobile ? 'none' : 'sm'} style={isMobile ? cardStyleMobile : { width: '100%' }}>
@@ -61,12 +62,14 @@ export function SeedPhraseGrid({ words, showCopy = false }: SeedPhraseGridProps)
             size="sm"
             onPress={handleCopy}
             iconLeft={<CopyIcon size={14} />}
+            testID={TEST_IDS.SEED.COPY_BUTTON}
           >
             {copied ? 'Copied!' : 'Copy to clipboard'}
           </Button>
           <Alert
             variant="warning"
             description="Your clipboard may be accessible to other apps. Clear it after use."
+            testID={TEST_IDS.SEED.WARNING}
           />
         </View>
       )}
