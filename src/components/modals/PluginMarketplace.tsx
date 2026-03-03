@@ -95,6 +95,8 @@ const PERMISSION_LABELS: Record<PluginPermission, { label: string; description: 
   'network:local': { label: 'Network Access', description: 'Make requests to external APIs' },
   'notifications': { label: 'Notifications', description: 'Show toast notifications' },
   'commands': { label: 'Commands', description: 'Register command palette entries' },
+  'voice:read': { label: 'Voice Access', description: 'Access voice channel participants and audio streams' },
+  'shortcuts': { label: 'Shortcuts', description: 'Register keyboard shortcuts' },
 };
 
 function getPermissionIcon(perm: PluginPermission, color: string) {

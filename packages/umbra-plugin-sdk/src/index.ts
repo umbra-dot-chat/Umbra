@@ -29,9 +29,11 @@ export type {
   PluginKVStore,
   PluginSQLStore,
   PluginCommand,
+  PluginShortcut,
   MessageEventPayload,
   FriendEventPayload,
   ConversationEventPayload,
+  VoiceParticipantEvent,
 } from './types';
 
 // ── Hooks ────────────────────────────────────────────────────────────────────

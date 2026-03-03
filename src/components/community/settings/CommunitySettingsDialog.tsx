@@ -524,6 +524,7 @@ export function CommunitySettingsDialog({
         structData.structure?.channels || [];
 
       // 4. Get existing Umbra channels
+      if (!service) throw new Error('Service not initialized');
       const umbraChannels = await service.getAllChannels(communityId);
 
       // 5. Match by name
@@ -784,7 +785,7 @@ export function CommunitySettingsDialog({
       const CHUNK_SIZE = 100;
       for (let i = 0; i < seatData.length; i += CHUNK_SIZE) {
         const chunk = seatData.slice(i, i + CHUNK_SIZE);
-        await service.createSeatsBatch(communityId, chunk);
+        await service!.createSeatsBatch(communityId, chunk);
         if (i + CHUNK_SIZE < seatData.length) await new Promise((r) => setTimeout(r, 0));
       }
 

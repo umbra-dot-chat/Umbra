@@ -124,7 +124,6 @@ export function VoiceCallPanel({
         onToggleCamera={() => {}}
         onEndCall={leaveVoiceChannel}
         onToggleDeafen={toggleDeafen}
-        extraControls={extraControls}
       />
       <SlotRenderer
         slot="voice-call-overlay"

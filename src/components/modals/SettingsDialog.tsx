@@ -3767,7 +3767,7 @@ function KeyboardShortcutsSection() {
                   borderColor: tc.border.subtle,
                 }}
               >
-                <Text size="xs" weight="mono" style={{ color: tc.text.secondary }}>
+                <Text size="xs" family="mono" style={{ color: tc.text.secondary }}>
                   {shortcut.keys}
                 </Text>
               </View>

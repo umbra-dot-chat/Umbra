@@ -599,7 +599,6 @@ export function ChatArea({
                       replyTo={replyTo}
                       edited={msg.edited}
                       forwarded={msg.forwarded}
-                      emojiOnly={emojiOnly}
                     >
                       {fileInfo ? (() => {
                         const upload = isOwn ? activeUploads?.get(fileInfo.fileId) : undefined;

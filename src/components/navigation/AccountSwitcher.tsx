@@ -200,7 +200,7 @@ export function AccountSwitcher({
             </Animated.View>
 
             {pinError && (
-              <Text size="xs" style={{ color: tc.status?.dangerText ?? '#ef4444', marginTop: 8 }}>
+              <Text size="xs" style={{ color: tc.status?.danger ?? '#ef4444', marginTop: 8 }}>
                 {pinError}
               </Text>
             )}
