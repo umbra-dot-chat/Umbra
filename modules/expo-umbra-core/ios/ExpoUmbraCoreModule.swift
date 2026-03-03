@@ -45,6 +45,30 @@ public class ExpoUmbraCoreModule: Module {
 
     // MARK: - Helpers
 
+    /// Execute a block that returns a String, catching any NSException.
+    /// If an NSException escapes (from Expo Modules Core argument marshaling,
+    /// Rust FFI panic, or any other ObjC layer), we return an error JSON
+    /// string instead of letting it propagate to the TurboModule bridge.
+    ///
+    /// Without this, `convertNSExceptionToJSError` in RCTTurboModule.mm
+    /// accesses the Hermes runtime from the TurboModule manager queue while
+    /// the main thread is also using it, corrupting the heap (EXC_BAD_ACCESS
+    /// in TransitionMap::uncleanMakeLarge / HiddenClass::addProperty).
+    private func safeFfiCall(_ block: () -> String) -> String {
+        var result: String = "{\"error\": true, \"error_code\": -1, \"error_message\": \"NSException before block executed\"}"
+        let error = ObjCExceptionHelper.tryCatch {
+            result = block()
+        }
+        if let error = error {
+            let escapedMsg = error.localizedDescription
+                .replacingOccurrences(of: "\\", with: "\\\\")
+                .replacingOccurrences(of: "\"", with: "\\\"")
+            NSLog("[ExpoUmbraCore] Caught NSException: %@", error.localizedDescription)
+            return "{\"error\": true, \"error_code\": -1, \"error_message\": \"NSException: \(escapedMsg)\"}"
+        }
+        return result
+    }
+
     /// Convert UmbraCoreResult (C struct) to a Swift String, freeing C memory.
     /// Returns a JSON error string instead of throwing to avoid NSException
     /// crashes in the Hermes/TurboModule bridge during concurrent execution.
@@ -116,209 +140,259 @@ public class ExpoUmbraCoreModule: Module {
         // ── Lifecycle ────────────────────────────────────────────────────────
 
         Function("initialize") { (storagePath: String) -> String in
-            let path = storagePath.isEmpty ? self.getStoragePath() : storagePath
+            return self.safeFfiCall {
+                let path = storagePath.isEmpty ? self.getStoragePath() : storagePath
 
-            try? FileManager.default.createDirectory(
-                atPath: path,
-                withIntermediateDirectories: true,
-                attributes: nil
-            )
+                try? FileManager.default.createDirectory(
+                    atPath: path,
+                    withIntermediateDirectories: true,
+                    attributes: nil
+                )
 
-            let result = path.withCString { cPath in
-                umbra_init(cPath)
+                let result = path.withCString { cPath in
+                    umbra_init(cPath)
+                }
+                return self.processResult(result)
             }
-            return self.processResult(result)
         }
 
         Function("initDatabase") { () -> String in
-            let result = umbra_init_database()
-            return self.processResult(result)
+            return self.safeFfiCall {
+                let result = umbra_init_database()
+                return self.processResult(result)
+            }
         }
 
         Function("shutdown") { () -> String in
-            let result = umbra_shutdown()
-            return self.processResult(result)
+            return self.safeFfiCall {
+                let result = umbra_shutdown()
+                return self.processResult(result)
+            }
         }
 
         Function("version") { () -> String in
-            guard let cStr = umbra_version() else {
-                return "unknown"
+            return self.safeFfiCall {
+                guard let cStr = umbra_version() else {
+                    return "unknown"
+                }
+                let version = String(cString: cStr)
+                umbra_free_string(cStr)
+                return version
             }
-            let version = String(cString: cStr)
-            umbra_free_string(cStr)
-            return version
         }
 
         // ── Identity ─────────────────────────────────────────────────────────
 
         Function("identityCreate") { (displayName: String) -> String in
-            let result = displayName.withCString { cName in
-                umbra_identity_create(cName)
+            return self.safeFfiCall {
+                let result = displayName.withCString { cName in
+                    umbra_identity_create(cName)
+                }
+                return self.processResult(result)
             }
-            return self.processResult(result)
         }
 
         Function("identityRestore") { (recoveryPhrase: String, displayName: String) -> String in
-            let result = recoveryPhrase.withCString { cPhrase in
-                displayName.withCString { cName in
-                    umbra_identity_restore(cPhrase, cName)
+            return self.safeFfiCall {
+                let result = recoveryPhrase.withCString { cPhrase in
+                    displayName.withCString { cName in
+                        umbra_identity_restore(cPhrase, cName)
+                    }
                 }
+                return self.processResult(result)
             }
-            return self.processResult(result)
         }
 
         Function("identityGetDid") { () -> String in
-            let result = umbra_identity_get_did()
-            return self.processResult(result)
+            return self.safeFfiCall {
+                let result = umbra_identity_get_did()
+                return self.processResult(result)
+            }
         }
 
         Function("identityGetProfile") { () -> String in
-            let result = umbra_identity_get_profile()
-            return self.processResult(result)
+            return self.safeFfiCall {
+                let result = umbra_identity_get_profile()
+                return self.processResult(result)
+            }
         }
 
         Function("identityUpdateProfile") { (json: String) -> String in
-            let result = json.withCString { cJson in
-                umbra_identity_update_profile(cJson)
+            return self.safeFfiCall {
+                let result = json.withCString { cJson in
+                    umbra_identity_update_profile(cJson)
+                }
+                return self.processResult(result)
             }
-            return self.processResult(result)
         }
 
         // ── Network ──────────────────────────────────────────────────────────
 
         AsyncFunction("networkStart") { (configJson: String?) -> String in
-            if let config = configJson {
-                let result = config.withCString { cConfig in
-                    umbra_network_start(cConfig)
+            return self.safeFfiCall {
+                if let config = configJson {
+                    let result = config.withCString { cConfig in
+                        umbra_network_start(cConfig)
+                    }
+                    return self.processResult(result)
+                } else {
+                    let result = umbra_network_start(nil)
+                    return self.processResult(result)
                 }
-                return self.processResult(result)
-            } else {
-                let result = umbra_network_start(nil)
-                return self.processResult(result)
             }
         }
 
         AsyncFunction("networkStop") { () -> String in
-            let result = umbra_network_stop()
-            return self.processResult(result)
+            return self.safeFfiCall {
+                let result = umbra_network_stop()
+                return self.processResult(result)
+            }
         }
 
         Function("networkStatus") { () -> String in
-            let result = umbra_network_status()
-            return self.processResult(result)
+            return self.safeFfiCall {
+                let result = umbra_network_status()
+                return self.processResult(result)
+            }
         }
 
         AsyncFunction("networkConnect") { (addr: String) -> String in
-            let result = addr.withCString { cAddr in
-                umbra_network_connect(cAddr)
+            return self.safeFfiCall {
+                let result = addr.withCString { cAddr in
+                    umbra_network_connect(cAddr)
+                }
+                return self.processResult(result)
             }
-            return self.processResult(result)
         }
 
         // ── Discovery ────────────────────────────────────────────────────────
 
         Function("discoveryGetConnectionInfo") { () -> String in
-            let result = umbra_discovery_get_connection_info()
-            return self.processResult(result)
+            return self.safeFfiCall {
+                let result = umbra_discovery_get_connection_info()
+                return self.processResult(result)
+            }
         }
 
         AsyncFunction("discoveryConnectWithInfo") { (info: String) -> String in
-            let result = info.withCString { cInfo in
-                umbra_discovery_connect_with_info(cInfo)
+            return self.safeFfiCall {
+                let result = info.withCString { cInfo in
+                    umbra_discovery_connect_with_info(cInfo)
+                }
+                return self.processResult(result)
             }
-            return self.processResult(result)
         }
 
         AsyncFunction("discoveryLookupPeer") { (did: String) -> String in
-            let result = did.withCString { cDid in
-                umbra_discovery_lookup_peer(cDid)
+            return self.safeFfiCall {
+                let result = did.withCString { cDid in
+                    umbra_discovery_lookup_peer(cDid)
+                }
+                return self.processResult(result)
             }
-            return self.processResult(result)
         }
 
         // ── Friends ──────────────────────────────────────────────────────────
 
         Function("friendsSendRequest") { (did: String, message: String?) -> String in
-            let result: UmbraCoreResult
-            if let msg = message {
-                result = did.withCString { cDid in
-                    msg.withCString { cMsg in
-                        umbra_friends_send_request(cDid, cMsg)
+            return self.safeFfiCall {
+                let result: UmbraCoreResult
+                if let msg = message {
+                    result = did.withCString { cDid in
+                        msg.withCString { cMsg in
+                            umbra_friends_send_request(cDid, cMsg)
+                        }
+                    }
+                } else {
+                    result = did.withCString { cDid in
+                        umbra_friends_send_request(cDid, nil)
                     }
                 }
-            } else {
-                result = did.withCString { cDid in
-                    umbra_friends_send_request(cDid, nil)
-                }
+                return self.processResult(result)
             }
-            return self.processResult(result)
         }
 
         Function("friendsAcceptRequest") { (requestId: String) -> String in
-            let result = requestId.withCString { cId in
-                umbra_friends_accept_request(cId)
+            return self.safeFfiCall {
+                let result = requestId.withCString { cId in
+                    umbra_friends_accept_request(cId)
+                }
+                return self.processResult(result)
             }
-            return self.processResult(result)
         }
 
         Function("friendsRejectRequest") { (requestId: String) -> String in
-            let result = requestId.withCString { cId in
-                umbra_friends_reject_request(cId)
+            return self.safeFfiCall {
+                let result = requestId.withCString { cId in
+                    umbra_friends_reject_request(cId)
+                }
+                return self.processResult(result)
             }
-            return self.processResult(result)
         }
 
         Function("friendsList") { () -> String in
-            let result = umbra_friends_list()
-            return self.processResult(result)
+            return self.safeFfiCall {
+                let result = umbra_friends_list()
+                return self.processResult(result)
+            }
         }
 
         Function("friendsPendingRequests") { () -> String in
-            let result = umbra_friends_pending_requests()
-            return self.processResult(result)
+            return self.safeFfiCall {
+                let result = umbra_friends_pending_requests()
+                return self.processResult(result)
+            }
         }
 
         // ── Messaging ────────────────────────────────────────────────────────
 
         AsyncFunction("messagingSendText") { (recipientDid: String, text: String) -> String in
-            let result = recipientDid.withCString { cDid in
-                text.withCString { cText in
-                    umbra_messaging_send_text(cDid, cText)
+            return self.safeFfiCall {
+                let result = recipientDid.withCString { cDid in
+                    text.withCString { cText in
+                        umbra_messaging_send_text(cDid, cText)
+                    }
                 }
+                return self.processResult(result)
             }
-            return self.processResult(result)
         }
 
         Function("messagingGetConversations") { () -> String in
-            let result = umbra_messaging_get_conversations()
-            return self.processResult(result)
+            return self.safeFfiCall {
+                let result = umbra_messaging_get_conversations()
+                return self.processResult(result)
+            }
         }
 
         Function("messagingGetMessages") { (conversationId: String, limit: Int, beforeId: String?) -> String in
-            let result: UmbraCoreResult
-            if let before = beforeId {
-                result = conversationId.withCString { cId in
-                    before.withCString { cBefore in
-                        umbra_messaging_get_messages(cId, Int32(limit), cBefore)
+            return self.safeFfiCall {
+                let result: UmbraCoreResult
+                if let before = beforeId {
+                    result = conversationId.withCString { cId in
+                        before.withCString { cBefore in
+                            umbra_messaging_get_messages(cId, Int32(limit), cBefore)
+                        }
+                    }
+                } else {
+                    result = conversationId.withCString { cId in
+                        umbra_messaging_get_messages(cId, Int32(limit), nil)
                     }
                 }
-            } else {
-                result = conversationId.withCString { cId in
-                    umbra_messaging_get_messages(cId, Int32(limit), nil)
-                }
+                return self.processResult(result)
             }
-            return self.processResult(result)
         }
 
         // ── Generic Dispatcher ───────────────────────────────────────────
 
         AsyncFunction("call") { (method: String, args: String) -> String in
-            let result = method.withCString { cMethod in
-                args.withCString { cArgs in
-                    umbra_call(cMethod, cArgs)
+            return self.safeFfiCall {
+                let result = method.withCString { cMethod in
+                    args.withCString { cArgs in
+                        umbra_call(cMethod, cArgs)
+                    }
                 }
+                return self.processResult(result)
             }
-            return self.processResult(result)
         }
     }
 }
