@@ -410,7 +410,7 @@ pub async fn start_discord_community_import(
     };
     store.store_oauth_state(state);
 
-    let scopes = DISCORD_COMMUNITY_IMPORT_SCOPES.join("+");
+    let scopes = DISCORD_COMMUNITY_IMPORT_SCOPES.join("%20");
     let auth_url = format!(
         "{}?client_id={}&redirect_uri={}&response_type=code&scope={}&state={}",
         config.discord_auth_url(),
