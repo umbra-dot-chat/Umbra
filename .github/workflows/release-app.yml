@@ -1,4 +1,4 @@
-name: Release App
+name: "Release App"
 
 on:
   push:
@@ -335,12 +335,10 @@ jobs:
             if [ -n "$sig" ] && [ -n "$file" ]; then
               if [ "$FIRST" = "false" ]; then echo ',' >> release/latest.json; fi
               FIRST=false
-              cat >> release/latest.json << PLAT
-    "$key": {
-      "signature": "$sig",
-      "url": "https://github.com/$REPO/releases/download/$VERSION/$file"
-    }
-PLAT
+              echo "    \"$key\": {" >> release/latest.json
+              echo "      \"signature\": \"$sig\"," >> release/latest.json
+              echo "      \"url\": \"https://github.com/$REPO/releases/download/$VERSION/$file\"" >> release/latest.json
+              echo "    }" >> release/latest.json
             fi
           }
 
