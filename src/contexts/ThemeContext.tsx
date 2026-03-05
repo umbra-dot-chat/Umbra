@@ -17,7 +17,8 @@ import React, {
   useMemo,
 } from 'react';
 import { Platform } from 'react-native';
-import { useTheme } from '@coexist/wisp-react-native';
+import { useTheme, MotionProvider } from '@coexist/wisp-react-native';
+import type { MotionPreferences } from '@coexist/wisp-react-native';
 import { getWasm } from '@umbra/wasm';
 import { useUmbra } from '@/contexts/UmbraContext';
 import { useAuth } from '@/contexts/AuthContext';
@@ -65,6 +66,10 @@ export interface ThemeContextValue {
   textSize: TextSize;
   /** Set the text size. */
   setTextSize: (size: TextSize) => void;
+  /** Current motion preferences. */
+  motionPreferences: MotionPreferences;
+  /** Update motion preferences (partial merge). */
+  setMotionPreferences: (prefs: Partial<MotionPreferences>) => void;
 }
 
 const ThemeCtx = createContext<ThemeContextValue | null>(null);
@@ -79,6 +84,7 @@ const KEY_ACCENT_COLOR = 'accent_color';
 const KEY_DARK_MODE = 'dark_mode';
 const KEY_INSTALLED_THEMES = 'installed_themes';
 const KEY_TEXT_SIZE = 'text_size';
+const KEY_MOTION_PREFS = 'motion_prefs';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Deep merge utility (matches Wisp's internal merge logic)
@@ -120,6 +126,11 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [accentColor, setAccentColorState] = useState<string | null>(null);
   const [installedThemeIds, setInstalledThemeIds] = useState<Set<string>>(new Set());
   const [textSize, setTextSizeState] = useState<TextSize>('md');
+  const [motionPrefs, setMotionPrefsState] = useState<MotionPreferences>({
+    reduceMotion: false,
+    enableShimmer: true,
+    enableAnimations: true,
+  });
   const [loaded, setLoaded] = useState(false);
 
   // ── Persistence helpers ──────────────────────────────────────────────
@@ -225,6 +236,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       const savedAccent = await kvGet(KEY_ACCENT_COLOR);
       const savedMode = await kvGet(KEY_DARK_MODE);
       const savedTextSize = await kvGet(KEY_TEXT_SIZE);
+      const savedMotionPrefs = await kvGet(KEY_MOTION_PREFS);
 
       const theme = savedThemeId ? getThemeById(savedThemeId) ?? null : null;
       const accent = savedAccent || null;
@@ -236,6 +248,14 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       if (savedTextSize && (savedTextSize === 'sm' || savedTextSize === 'md' || savedTextSize === 'lg')) {
         setTextSizeState(savedTextSize as TextSize);
         applyTextSize(savedTextSize as TextSize);
+      }
+
+      // Restore motion preferences
+      if (savedMotionPrefs) {
+        try {
+          const parsed = JSON.parse(savedMotionPrefs);
+          setMotionPrefsState((prev) => ({ ...prev, ...parsed }));
+        } catch {}
       }
 
       // Restore mode preference (only if no custom theme)
@@ -348,6 +368,18 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     [applyTextSize, kvSet],
   );
 
+  const setMotionPreferences = useCallback(
+    (prefs: Partial<MotionPreferences>) => {
+      setMotionPrefsState((prev) => {
+        const next = { ...prev, ...prefs };
+        kvSet(KEY_MOTION_PREFS, JSON.stringify(next));
+        markSyncDirty('preferences');
+        return next;
+      });
+    },
+    [kvSet],
+  );
+
   // ── Persist mode changes ─────────────────────────────────────────────
   // When user toggles mode (only available when no custom theme), persist it
 
@@ -374,11 +406,19 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       preferencesLoaded: loaded,
       textSize,
       setTextSize,
+      motionPreferences: motionPrefs,
+      setMotionPreferences,
     }),
-    [activeTheme, installedThemeIds, installTheme, uninstallTheme, setTheme, accentColor, setAccentColor, loaded, textSize, setTextSize],
+    [activeTheme, installedThemeIds, installTheme, uninstallTheme, setTheme, accentColor, setAccentColor, loaded, textSize, setTextSize, motionPrefs, setMotionPreferences],
   );
 
-  return <ThemeCtx.Provider value={value}>{children}</ThemeCtx.Provider>;
+  return (
+    <ThemeCtx.Provider value={value}>
+      <MotionProvider preferences={motionPrefs}>
+        {children}
+      </MotionProvider>
+    </ThemeCtx.Provider>
+  );
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

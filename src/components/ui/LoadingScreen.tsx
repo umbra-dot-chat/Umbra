@@ -5,6 +5,21 @@ import { useBlobPath, AnimatedBlobs } from '@/components/auth/AnimatedBlobs';
 import { TAGLINES } from '@/constants/taglines';
 import Svg, { Path } from 'react-native-svg';
 
+// Inject loading shimmer CSS (web only)
+let loadingCSSInjected = false;
+function injectLoadingCSS() {
+  if (loadingCSSInjected || Platform.OS !== 'web') return;
+  loadingCSSInjected = true;
+  const style = document.createElement('style');
+  style.textContent = `
+    @keyframes wisp-loading-shimmer {
+      0% { background-position: 200% 0; }
+      100% { background-position: -200% 0; }
+    }
+  `;
+  document.head.appendChild(style);
+}
+
 // Ghost logo assets — static images, no animation
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const ghostBlack: ImageSourcePropType = require('@/assets/images/ghost-black.png');
@@ -85,6 +100,7 @@ const TAGLINE_INTERVAL = 3500;
 const TAGLINE_ANIM_DURATION = 500;
 
 export function LoadingScreen({ steps, onComplete }: LoadingScreenProps) {
+  if (Platform.OS === 'web') injectLoadingCSS();
   const { pathData } = useBlobPath();
   const fadeAnim = useRef(new Animated.Value(1)).current;
   const [hidden, setHidden] = useState(false);
@@ -294,6 +310,15 @@ function LoadingContent({
     : (isDark ? 'rgba(255,255,255,0.15)' : 'rgba(0,0,0,0.08)');
   const barFillColor = inverted ? tc.background.canvas : tc.text.primary;
 
+  // Gradient progress bar style (web only)
+  const gradientBarStyle = Platform.OS === 'web' && !inverted
+    ? {
+        background: 'linear-gradient(90deg, #8B5CF6, #EC4899, #3B82F6)',
+        backgroundSize: '200% 100%',
+        animation: 'wisp-loading-shimmer 2s linear infinite',
+      } as any
+    : {};
+
   // Current active step label
   const activeStep = steps.find(s => s.status === 'active');
   const statusLabel = activeStep?.label ?? (completed === steps.length ? 'Ready' : '');
@@ -338,7 +363,7 @@ function LoadingContent({
           }}
         >
           <Animated.View
-            style={{
+            style={[{
               height: '100%',
               borderRadius: 1.5,
               backgroundColor: barFillColor,
@@ -346,7 +371,7 @@ function LoadingContent({
                 inputRange: [0, 1],
                 outputRange: ['0%', '100%'],
               }),
-            }}
+            }, gradientBarStyle]}
           />
         </View>
 

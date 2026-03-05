@@ -1366,7 +1366,7 @@ function ProfileSection() {
 
 function AppearanceSection() {
   const { mode, toggleMode, theme } = useTheme();
-  const { activeTheme, themes, installedThemeIds, setTheme, accentColor, setAccentColor, showModeToggle, textSize, setTextSize } = useAppTheme();
+  const { activeTheme, themes, installedThemeIds, setTheme, accentColor, setAccentColor, showModeToggle, textSize, setTextSize, motionPreferences, setMotionPreferences } = useAppTheme();
   const tc = theme.colors;
 
   // Build theme dropdown options (only installed themes)
@@ -1456,6 +1456,27 @@ function AppearanceSection() {
 
       <View nativeID="sub-font">
         <FontSettingRow />
+      </View>
+
+      <View nativeID="sub-motion">
+        <SettingRow label="Animations" description="Enable or disable all UI animations.">
+          <SoundToggle
+            checked={motionPreferences.enableAnimations}
+            onChange={() => setMotionPreferences({ enableAnimations: !motionPreferences.enableAnimations })}
+          />
+        </SettingRow>
+        <SettingRow label="Shimmer Effects" description="Toggle shimmer sweeps and gradient shifts.">
+          <SoundToggle
+            checked={motionPreferences.enableShimmer}
+            onChange={() => setMotionPreferences({ enableShimmer: !motionPreferences.enableShimmer })}
+          />
+        </SettingRow>
+        <SettingRow label="Reduce Motion" description="Minimize motion for accessibility. Overrides all animation settings.">
+          <SoundToggle
+            checked={motionPreferences.reduceMotion}
+            onChange={() => setMotionPreferences({ reduceMotion: !motionPreferences.reduceMotion })}
+          />
+        </SettingRow>
       </View>
     </View>
   );
