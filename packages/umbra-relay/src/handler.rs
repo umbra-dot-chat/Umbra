@@ -8,6 +8,8 @@ use chrono::Utc;
 use futures::{SinkExt, StreamExt};
 use tokio::sync::mpsc;
 
+use uuid::Uuid;
+
 use crate::protocol::{ClientMessage, PeerMessage, ServerMessage};
 use crate::state::{RelayState, RouteResult};
 
@@ -89,8 +91,9 @@ pub async fn handle_websocket(socket: WebSocket, state: RelayState) {
 
     // ── Step 2: Register Client ───────────────────────────────────────────
 
-    state.register_client(&client_did, tx);
-    tracing::info!(did = client_did.as_str(), "WebSocket registered");
+    let session_id = Uuid::new_v4().to_string();
+    state.register_client(&client_did, &session_id, tx);
+    tracing::info!(did = client_did.as_str(), session_id = session_id.as_str(), "WebSocket registered");
 
     // ── Step 3: Spawn Sender Task ─────────────────────────────────────────
 
@@ -115,7 +118,7 @@ pub async fn handle_websocket(socket: WebSocket, state: RelayState) {
         match msg_result {
             Ok(Message::Text(text)) => match serde_json::from_str::<ClientMessage>(&text) {
                 Ok(client_msg) => {
-                    handle_client_message(&state, &client_did, client_msg).await;
+                    handle_client_message(&state, &client_did, &session_id, client_msg).await;
                 }
                 Err(e) => {
                     tracing::warn!(
@@ -168,13 +171,13 @@ pub async fn handle_websocket(socket: WebSocket, state: RelayState) {
         }
     }
 
-    state.unregister_client(&client_did);
+    state.unregister_client(&client_did, &session_id);
     sender_task.abort();
-    tracing::info!(did = client_did.as_str(), "WebSocket disconnected");
+    tracing::info!(did = client_did.as_str(), session_id = session_id.as_str(), "WebSocket disconnected");
 }
 
 /// Handle a parsed client message.
-async fn handle_client_message(state: &RelayState, from_did: &str, msg: ClientMessage) {
+async fn handle_client_message(state: &RelayState, from_did: &str, session_id: &str, msg: ClientMessage) {
     match msg {
         ClientMessage::Register { .. } => {
             // Already registered — ignore duplicate registrations
@@ -272,7 +275,7 @@ async fn handle_client_message(state: &RelayState, from_did: &str, msg: ClientMe
             version,
             encrypted_data,
         } => {
-            handle_sync_push(state, from_did, &section, version, &encrypted_data);
+            handle_sync_push(state, from_did, session_id, &section, version, &encrypted_data);
         }
 
         ClientMessage::SyncFetch { sections } => {
@@ -991,6 +994,7 @@ pub async fn handle_federation_inbound(
 fn handle_sync_push(
     state: &RelayState,
     from_did: &str,
+    sender_session_id: &str,
     section: &str,
     version: u64,
     encrypted_data: &str,
@@ -1002,21 +1006,23 @@ fn handle_sync_push(
         "Sync push received"
     );
 
-    // Broadcast SyncUpdate to all connected sessions of the same DID.
-    // The relay doesn't store deltas — it just forwards them in real-time.
-    // For persistence, clients use the REST blob endpoints.
-    //
-    // NOTE: Currently we only have one session per DID (online_clients is DID → single sender).
-    // When multi-device is implemented, this will broadcast to all sessions.
-    // For now, the push is a no-op locally but the federation can forward it.
-    //
-    // Future: change online_clients to DID → Vec<ClientSender> for multi-session support.
+    // Broadcast SyncUpdate to all connected sessions of the same DID,
+    // EXCEPT the session that sent the push. This enables real-time sync
+    // between multiple devices logged into the same account.
+    let update_msg = ServerMessage::SyncUpdate {
+        section: section.to_string(),
+        version,
+        encrypted_data: encrypted_data.to_string(),
+    };
+    let delivered = state.send_to_client_except(from_did, sender_session_id, update_msg);
+    if delivered {
+        tracing::debug!(did = from_did, section = section, "Sync delta broadcast to other sessions");
+    }
 
     // If federation is enabled, broadcast to peers so other relays can deliver
     // to sessions of the same DID connected there.
     if let Some(ref fed) = state.federation {
         if let Some(_peer_url) = fed.find_peer_for_did(from_did) {
-            // The DID is also connected on another relay — forward the delta
             let _ = fed.send_to_peer(
                 &_peer_url,
                 crate::protocol::PeerMessage::ForwardMessage {

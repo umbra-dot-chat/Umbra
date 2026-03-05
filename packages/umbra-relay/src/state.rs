@@ -72,13 +72,17 @@ impl Default for RelayConfig {
 /// A connected client's sender channel.
 pub type ClientSender = mpsc::UnboundedSender<ServerMessage>;
 
+/// A unique identifier for a WebSocket session (one per connection).
+pub type SessionId = String;
+
 /// Shared server state.
 #[derive(Clone)]
 pub struct RelayState {
-    /// DID → sender channel for online clients.
-    /// When a client connects and registers, their sender is stored here.
-    /// When they disconnect, it's removed.
-    pub online_clients: Arc<DashMap<String, ClientSender>>,
+    /// DID → list of active sessions (session_id, sender channel).
+    /// A single DID can have multiple concurrent sessions (multi-device).
+    /// When a client connects and registers, their session is appended.
+    /// When they disconnect, their specific session is removed.
+    pub online_clients: Arc<DashMap<String, Vec<(SessionId, ClientSender)>>>,
 
     /// DID → queued offline messages.
     /// Messages sent to offline peers are stored here until they reconnect
@@ -135,40 +139,91 @@ impl RelayState {
 
     // ── Client Management ─────────────────────────────────────────────────
 
-    /// Register a client with their DID and sender channel.
-    /// Broadcasts presence to federated peers if federation is enabled.
-    pub fn register_client(&self, did: &str, sender: ClientSender) {
-        tracing::info!(did = did, "Client registered");
-        self.online_clients.insert(did.to_string(), sender);
+    /// Register a client session with their DID and sender channel.
+    /// Returns the generated session ID.
+    /// Broadcasts presence to federated peers if this is the first session for this DID.
+    pub fn register_client(&self, did: &str, session_id: &str, sender: ClientSender) {
+        let mut sessions = self.online_clients.entry(did.to_string()).or_default();
+        let was_empty = sessions.is_empty();
+        sessions.push((session_id.to_string(), sender));
+        let session_count = sessions.len();
+        drop(sessions);
 
-        // Notify federated peers
-        if let Some(ref fed) = self.federation {
-            fed.broadcast_presence_online(did);
+        tracing::info!(did = did, session_id = session_id, sessions = session_count, "Client session registered");
+
+        // Only broadcast presence when the first session connects
+        if was_empty {
+            if let Some(ref fed) = self.federation {
+                fed.broadcast_presence_online(did);
+            }
         }
     }
 
-    /// Unregister a client when they disconnect.
-    /// Broadcasts presence to federated peers if federation is enabled.
-    pub fn unregister_client(&self, did: &str) {
-        tracing::info!(did = did, "Client unregistered");
-        self.online_clients.remove(did);
+    /// Unregister a specific client session when it disconnects.
+    /// Only broadcasts presence offline when the last session for a DID disconnects.
+    pub fn unregister_client(&self, did: &str, session_id: &str) {
+        let should_broadcast = if let Some(mut sessions) = self.online_clients.get_mut(did) {
+            sessions.retain(|(sid, _)| sid != session_id);
+            let is_empty = sessions.is_empty();
+            drop(sessions);
+            if is_empty {
+                self.online_clients.remove(did);
+                true
+            } else {
+                false
+            }
+        } else {
+            false
+        };
 
-        // Notify federated peers
-        if let Some(ref fed) = self.federation {
-            fed.broadcast_presence_offline(did);
+        tracing::info!(did = did, session_id = session_id, "Client session unregistered");
+
+        if should_broadcast {
+            if let Some(ref fed) = self.federation {
+                fed.broadcast_presence_offline(did);
+            }
         }
     }
 
-    /// Check if a client is currently online.
+    /// Check if a client is currently online (has at least one session).
     #[allow(dead_code)]
     pub fn is_online(&self, did: &str) -> bool {
-        self.online_clients.contains_key(did)
+        self.online_clients
+            .get(did)
+            .map(|sessions| !sessions.is_empty())
+            .unwrap_or(false)
     }
 
-    /// Send a message to an online client. Returns true if sent successfully.
+    /// Send a message to ALL sessions of an online client.
+    /// Returns true if sent to at least one session.
     pub fn send_to_client(&self, did: &str, message: ServerMessage) -> bool {
-        if let Some(sender) = self.online_clients.get(did) {
-            sender.send(message).is_ok()
+        if let Some(sessions) = self.online_clients.get(did) {
+            let mut any_sent = false;
+            for (_, sender) in sessions.iter() {
+                if sender.send(message.clone()).is_ok() {
+                    any_sent = true;
+                }
+            }
+            any_sent
+        } else {
+            false
+        }
+    }
+
+    /// Send a message to all sessions of a DID EXCEPT the specified session.
+    /// Used for sync broadcasts (don't echo back to the sender).
+    /// Returns true if sent to at least one other session.
+    pub fn send_to_client_except(&self, did: &str, exclude_session: &str, message: ServerMessage) -> bool {
+        if let Some(sessions) = self.online_clients.get(did) {
+            let mut any_sent = false;
+            for (sid, sender) in sessions.iter() {
+                if sid != exclude_session {
+                    if sender.send(message.clone()).is_ok() {
+                        any_sent = true;
+                    }
+                }
+            }
+            any_sent
         } else {
             false
         }
@@ -797,13 +852,45 @@ mod tests {
         let state = RelayState::new(test_config());
         let (tx, _rx) = mpsc::unbounded_channel();
 
-        state.register_client("did:key:z6MkAlice", tx);
+        state.register_client("did:key:z6MkAlice", "session-1", tx);
         assert!(state.is_online("did:key:z6MkAlice"));
         assert_eq!(state.online_count(), 1);
 
-        state.unregister_client("did:key:z6MkAlice");
+        state.unregister_client("did:key:z6MkAlice", "session-1");
         assert!(!state.is_online("did:key:z6MkAlice"));
         assert_eq!(state.online_count(), 0);
+    }
+
+    #[test]
+    fn test_multi_session_per_did() {
+        let state = RelayState::new(test_config());
+        let (tx1, mut rx1) = mpsc::unbounded_channel();
+        let (tx2, mut rx2) = mpsc::unbounded_channel();
+
+        state.register_client("did:key:z6MkAlice", "session-1", tx1);
+        state.register_client("did:key:z6MkAlice", "session-2", tx2);
+        assert!(state.is_online("did:key:z6MkAlice"));
+        assert_eq!(state.online_count(), 1); // 1 DID, 2 sessions
+
+        // send_to_client delivers to ALL sessions
+        let sent = state.send_to_client("did:key:z6MkAlice", ServerMessage::Pong);
+        assert!(sent);
+        assert!(rx1.try_recv().is_ok());
+        assert!(rx2.try_recv().is_ok());
+
+        // send_to_client_except delivers only to other sessions
+        let sent = state.send_to_client_except("did:key:z6MkAlice", "session-1", ServerMessage::Pong);
+        assert!(sent);
+        assert!(rx1.try_recv().is_err()); // session-1 excluded
+        assert!(rx2.try_recv().is_ok());
+
+        // Unregister one session — DID should still be online
+        state.unregister_client("did:key:z6MkAlice", "session-1");
+        assert!(state.is_online("did:key:z6MkAlice"));
+
+        // Unregister last session — DID should be offline
+        state.unregister_client("did:key:z6MkAlice", "session-2");
+        assert!(!state.is_online("did:key:z6MkAlice"));
     }
 
     #[test]
@@ -811,7 +898,7 @@ mod tests {
         let state = RelayState::new(test_config());
         let (tx, mut rx) = mpsc::unbounded_channel();
 
-        state.register_client("did:key:z6MkAlice", tx);
+        state.register_client("did:key:z6MkAlice", "session-1", tx);
 
         let sent = state.send_to_client("did:key:z6MkAlice", ServerMessage::Pong);
         assert!(sent);

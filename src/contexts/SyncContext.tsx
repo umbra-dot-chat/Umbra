@@ -52,6 +52,7 @@ import {
 
 const KV_NAMESPACE = '__umbra_system__';
 const KEY_SYNC_ENABLED = '__sync_enabled__';
+const KEY_LAST_SYNCED = '__sync_last_synced__';
 const DEBOUNCE_MS = 5_000;
 const TOKEN_REFRESH_BUFFER_MS = 60_000;
 
@@ -64,6 +65,19 @@ let _pendingSyncOptIn = false;
 /** Set the pending sync opt-in flag (called from CreateWalletFlow). */
 export function setPendingSyncOptIn(value: boolean): void {
   _pendingSyncOptIn = value;
+}
+
+// Module-level dirty callback — preference providers call this to trigger sync
+// without needing React context (they render ABOVE SyncProvider).
+type DirtyCallback = (section?: string) => void;
+let _dirtyCallback: DirtyCallback | null = null;
+
+/**
+ * Mark sync data as dirty from outside React context.
+ * Called by ThemeContext, FontContext, SoundContext, etc. when preferences change.
+ */
+export function markSyncDirty(section?: string): void {
+  _dirtyCallback?.(section);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -103,11 +117,11 @@ const SyncContext = createContext<SyncContextValue | null>(null);
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
-function kvGet(key: string): string | null {
+async function kvGet(key: string): Promise<string | null> {
   try {
     const w = getWasm();
     if (!w) return null;
-    const result = (w as any).umbra_wasm_plugin_kv_get(KV_NAMESPACE, key);
+    const result = await (w as any).umbra_wasm_plugin_kv_get(KV_NAMESPACE, key);
     if (!result) return null;
     const parsed = typeof result === 'string' ? JSON.parse(result) : result;
     return parsed.value ?? null;
@@ -158,24 +172,40 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  // ── Restore sync-enabled flag from per-account KV ─────────────────────
+  // ── Restore sync-enabled flag and lastSyncedAt from per-account KV ──
   useEffect(() => {
     if (!preferencesReady) return;
-    const saved = kvGet(KEY_SYNC_ENABLED);
-    // Also check the module-level pending flag (set by CreateWalletFlow before
-    // login). On RN, the async native bridge may not have completed the KV write
-    // by the time this effect runs.
-    if (saved === 'true' || _pendingSyncOptIn) {
-      setSyncEnabledState(true);
-      if (_pendingSyncOptIn) {
-        _pendingSyncOptIn = false;
-        // Persist to KV (fire-and-forget) so it's available on next app launch
-        kvSet(KEY_SYNC_ENABLED, 'true');
+
+    async function restoreSyncState() {
+      const saved = await kvGet(KEY_SYNC_ENABLED);
+      // Also check the module-level pending flag (set by CreateWalletFlow before
+      // login). On RN, the async native bridge may not have completed the KV write
+      // by the time this effect runs.
+      if (saved === 'true' || _pendingSyncOptIn) {
+        setSyncEnabledState(true);
+        if (_pendingSyncOptIn) {
+          _pendingSyncOptIn = false;
+          // Persist to KV (fire-and-forget) so it's available on next app launch
+          kvSet(KEY_SYNC_ENABLED, 'true');
+        }
+        setSyncStatus('idle');
+      } else {
+        setSyncEnabledState(false);
+        setSyncStatus('disabled');
       }
-    } else {
-      setSyncEnabledState(false);
-      setSyncStatus('disabled');
+
+      // Restore lastSyncedAt
+      const savedTs = await kvGet(KEY_LAST_SYNCED);
+      if (savedTs) {
+        const ts = parseInt(savedTs, 10);
+        if (!isNaN(ts)) {
+          setLastSyncedAt(ts);
+          setSyncStatus('synced');
+        }
+      }
     }
+
+    restoreSyncState();
   }, [preferencesReady, didChanged]);
 
   // ── Relay HTTP URL (reactive — updates when relay connects) ──────────
@@ -240,6 +270,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
         const now = Date.now();
         setLastSyncedAt(now);
         setSyncStatus('synced');
+        kvSet(KEY_LAST_SYNCED, String(now));
         console.log(`[SyncContext] Upload complete (${result.size} bytes)`);
       }
     } catch (err) {
@@ -350,6 +381,35 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       return null;
     }
   }, [identity?.did, relayHttpUrl, ensureAuth]);
+
+  // ── Register module-level dirty callback ────────────────────────────
+  // This allows preference contexts (ThemeContext, FontContext, SoundContext)
+  // which render ABOVE SyncProvider to trigger syncs via markSyncDirty().
+  useEffect(() => {
+    _dirtyCallback = markDirty;
+    return () => {
+      if (_dirtyCallback === markDirty) {
+        _dirtyCallback = null;
+      }
+    };
+  }, [markDirty]);
+
+  // ── Initial sync upload when sync is enabled ──────────────────────
+  // When syncEnabled transitions to true AND we have a relay URL, do an
+  // initial upload so the relay has a copy of the current state.
+  const prevSyncEnabledRef = useRef(false);
+  useEffect(() => {
+    if (syncEnabled && !prevSyncEnabledRef.current && relayHttpUrl && identity?.did) {
+      // Sync just got enabled — do an initial upload after a short delay
+      // to let preference contexts finish mounting.
+      const timer = setTimeout(() => {
+        doSyncUpload();
+      }, 2_000);
+      prevSyncEnabledRef.current = true;
+      return () => clearTimeout(timer);
+    }
+    prevSyncEnabledRef.current = syncEnabled;
+  }, [syncEnabled, relayHttpUrl, identity?.did, doSyncUpload]);
 
   // ── Listen for incoming sync deltas via relay WS ──────────────────────
   useEffect(() => {

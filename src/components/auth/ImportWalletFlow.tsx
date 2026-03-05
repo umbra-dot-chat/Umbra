@@ -44,6 +44,8 @@ import {
 import type { SyncBlobSummary } from '@umbra/service';
 import { enablePersistence, getWasm } from '@umbra/wasm';
 import { getRelayHttpUrl } from '@/hooks/useNetwork';
+import { DEFAULT_RELAY_SERVERS } from '@/config';
+import { setPendingSyncOptIn } from '@/contexts/SyncContext';
 
 // ---------------------------------------------------------------------------
 // Step definitions
@@ -170,9 +172,21 @@ export function ImportWalletFlow({ open, onClose }: ImportWalletFlowProps) {
       const result = await UmbraService.instance.restoreIdentity(words, displayName.trim());
       setIdentity(result);
 
-      // Check relay for existing sync blob
+      // Check relay for existing sync blob.
+      // Derive HTTP URL from config constants since the WebSocket relay
+      // connection may not be established yet during the auth flow.
       try {
-        const relayUrl = getRelayHttpUrl();
+        let relayUrl = getRelayHttpUrl(); // Try active WS connection first
+        if (!relayUrl) {
+          // Derive from config: wss://relay.umbra.chat/ws → https://relay.umbra.chat
+          const wsUrl = DEFAULT_RELAY_SERVERS[0];
+          if (wsUrl) {
+            relayUrl = wsUrl
+              .replace(/^wss:/, 'https:')
+              .replace(/^ws:/, 'http:')
+              .replace(/\/ws\/?$/, '');
+          }
+        }
         if (relayUrl && result.did) {
           // Enable persistence so the sync key derivation can access the seed
           enablePersistence(result.did);
@@ -182,6 +196,7 @@ export function ImportWalletFlow({ open, onClose }: ImportWalletFlowProps) {
             const summary = await parseSyncBlob(blob);
             setSyncSummary(summary);
             setSyncBlob(blob);
+            console.log('[ImportWalletFlow] Sync blob found on relay, showing restore prompt');
           }
         }
       } catch (syncErr) {
@@ -406,7 +421,9 @@ export function ImportWalletFlow({ open, onClose }: ImportWalletFlowProps) {
                           try {
                             await applySyncBlob(syncBlob);
                             setSyncRestored(true);
-                            // Enable sync for this account
+                            // Enable sync for this account — both KV write and module flag
+                            // so SyncContext picks it up regardless of timing.
+                            setPendingSyncOptIn(true);
                             try {
                               const w = getWasm();
                               if (w) {

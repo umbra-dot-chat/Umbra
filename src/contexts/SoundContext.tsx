@@ -22,6 +22,7 @@ import React, {
 } from 'react';
 import { getWasm } from '@umbra/wasm';
 import { useUmbra } from '@/contexts/UmbraContext';
+import { markSyncDirty } from '@/contexts/SyncContext';
 import {
   SoundEngine,
   SOUND_CATEGORIES,
@@ -259,6 +260,7 @@ export function SoundProvider({ children }: { children: React.ReactNode }) {
       setMasterVolumeState(clamped);
       engineRef.current.setMasterVolume(clamped);
       kvSet(KEY_MASTER_VOLUME, String(clamped));
+      markSyncDirty('preferences');
     },
     [kvSet],
   );
@@ -268,6 +270,7 @@ export function SoundProvider({ children }: { children: React.ReactNode }) {
       setMutedState(m);
       engineRef.current.setMuted(m);
       kvSet(KEY_MUTED, m ? 'true' : 'false');
+      markSyncDirty('preferences');
     },
     [kvSet],
   );
@@ -279,6 +282,7 @@ export function SoundProvider({ children }: { children: React.ReactNode }) {
         const next = { ...prev, [cat]: clamped };
         engineRef.current.setCategoryVolume(cat, clamped);
         kvSet(KEY_CATEGORY_VOLUMES, JSON.stringify(next));
+        markSyncDirty('preferences');
         return next;
       });
     },
@@ -291,6 +295,7 @@ export function SoundProvider({ children }: { children: React.ReactNode }) {
         const next = { ...prev, [cat]: enabled };
         engineRef.current.setCategoryEnabled(cat, enabled);
         kvSet(KEY_CATEGORY_ENABLED, JSON.stringify(next));
+        markSyncDirty('preferences');
         return next;
       });
     },
@@ -302,6 +307,7 @@ export function SoundProvider({ children }: { children: React.ReactNode }) {
       setActiveThemeState(id);
       engineRef.current.setActiveTheme(id);
       kvSet(KEY_THEME, id);
+      markSyncDirty('preferences');
 
       // Pre-load audio pack files if switching to an audio theme
       if (id === 'aurora' || id === 'mechanical') {

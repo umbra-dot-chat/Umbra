@@ -22,6 +22,7 @@ import { Platform, Text as RNText, TextInput } from 'react-native';
 import * as ExpoFont from 'expo-font';
 import { getWasm } from '@umbra/wasm';
 import { useUmbra } from '@/contexts/UmbraContext';
+import { markSyncDirty } from '@/contexts/SyncContext';
 import { fetchGoogleFontsCatalog } from '@/services/googleFontsApi';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -418,6 +419,7 @@ export function FontProvider({ children }: { children: React.ReactNode }) {
     setActiveFontState(font);
     applyFont(font);
     saveFontState(FONT_STATE_KEY, fontId);
+    markSyncDirty('preferences');
   }, [allFonts, installedFontIds, installFont, applyFont, saveFontState]);
 
   // ── Context value ───────────────────────────────────────────────────

@@ -22,6 +22,7 @@ import { getWasm } from '@umbra/wasm';
 import { useUmbra } from '@/contexts/UmbraContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useFonts, getFontFamily } from '@/contexts/FontContext';
+import { markSyncDirty } from '@/contexts/SyncContext';
 import type { ThemePreset, DeepPartial } from '@/themes/types';
 import { THEME_REGISTRY, getThemeById } from '@/themes/registry';
 
@@ -267,9 +268,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       setInstalledThemeIds((prev) => {
         const next = new Set(prev);
         next.add(id);
-        // Persist + relay sync
         const value = JSON.stringify(Array.from(next));
         kvSet(KEY_INSTALLED_THEMES, value);
+        markSyncDirty('preferences');
         return next;
       });
     },
@@ -319,6 +320,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       // Persist
       const themeId = theme ? theme.id : '';
       kvSet(KEY_THEME_ID, themeId);
+      markSyncDirty('preferences');
     },
     [activeFontFamily, applyOverrides, kvSet, installedThemeIds, installTheme],
   );
@@ -331,6 +333,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       // Persist
       const value = color ?? '';
       kvSet(KEY_ACCENT_COLOR, value);
+      markSyncDirty('preferences');
     },
     [activeTheme, activeFontFamily, applyOverrides, kvSet],
   );
@@ -340,6 +343,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       setTextSizeState(size);
       applyTextSize(size);
       kvSet(KEY_TEXT_SIZE, size);
+      markSyncDirty('preferences');
     },
     [applyTextSize, kvSet],
   );
@@ -351,6 +355,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     if (!loaded || activeTheme) return;
     const value = mode === 'dark' ? 'true' : 'false';
     kvSet(KEY_DARK_MODE, value);
+    markSyncDirty('preferences');
   }, [mode, loaded, activeTheme, kvSet]);
 
   // ── Context value ────────────────────────────────────────────────────
