@@ -41,6 +41,14 @@ jobs:
       - name: Link Wisp packages
         run: cp -R "$GITHUB_WORKSPACE/.wisp" "$GITHUB_WORKSPACE/../Wisp"
 
+      - name: Debug Wisp contents
+        run: |
+          echo "=== .wisp ===" && ls -la "$GITHUB_WORKSPACE/.wisp/" || true
+          echo "=== .wisp/packages ===" && ls -la "$GITHUB_WORKSPACE/.wisp/packages/" || true
+          echo "=== .wisp/packages/core ===" && ls -la "$GITHUB_WORKSPACE/.wisp/packages/core/" || true
+          echo "=== ../Wisp ===" && ls -la "$GITHUB_WORKSPACE/../Wisp/" || true
+          echo "=== ../Wisp/packages/core ===" && ls -la "$GITHUB_WORKSPACE/../Wisp/packages/core/" || true
+
       - name: Install dependencies
         run: npm ci
 
