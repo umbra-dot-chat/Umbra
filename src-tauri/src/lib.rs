@@ -28,15 +28,22 @@ pub fn run() {
 
             // Build the main window+webview manually so we can attach navigation handlers.
             // The window config was removed from tauri.conf.json to enable this.
-            let window = tauri::WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
+            let mut builder = tauri::WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
                 .title("Umbra")
                 .inner_size(1280.0, 800.0)
                 .resizable(true)
                 .fullscreen(false)
-                .title_bar_style(tauri::TitleBarStyle::Overlay)
-                .hidden_title(true)
                 .decorations(true)
-                .theme(Some(tauri::Theme::Dark))
+                .theme(Some(tauri::Theme::Dark));
+
+            #[cfg(target_os = "macos")]
+            {
+                builder = builder
+                    .title_bar_style(tauri::TitleBarStyle::Overlay)
+                    .hidden_title(true);
+            }
+
+            let window = builder
                 // Block external navigations — open them in the system browser instead.
                 // This prevents OAuth flows (Discord, etc.) from taking over the app window.
                 .on_navigation(move |url| {
