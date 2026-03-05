@@ -7,9 +7,12 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, TextInput, Pressable, type ViewStyle, type TextStyle } from 'react-native';
+import { View, TextInput, Pressable, Animated, Platform, type ViewStyle, type TextStyle } from 'react-native';
 import { Text, useTheme } from '@coexist/wisp-react-native';
 import { TEST_IDS } from '@/constants/test-ids';
+
+// Gradient colors for filled PIN dots
+const PIN_GRADIENT_COLORS = ['#8B5CF6', '#EC4899', '#3B82F6'];
 
 // ---------------------------------------------------------------------------
 // Props
@@ -141,11 +144,23 @@ export function GrowablePinInput({
     textAlign: 'center',
   };
 
+  const dotSize = cellSize * 0.25;
+
+  // Web: use CSS gradient for filled dots
+  const gradientDotWebStyle: any = Platform.OS === 'web'
+    ? {
+        width: dotSize,
+        height: dotSize,
+        borderRadius: dotSize / 2,
+        background: `linear-gradient(135deg, ${PIN_GRADIENT_COLORS.join(', ')})`,
+      }
+    : null;
+
   const dotStyle: ViewStyle = {
-    width: cellSize * 0.25,
-    height: cellSize * 0.25,
-    borderRadius: cellSize * 0.125,
-    backgroundColor: textColor,
+    width: dotSize,
+    height: dotSize,
+    borderRadius: dotSize / 2,
+    backgroundColor: Platform.OS === 'web' ? undefined : textColor,
   };
 
   return (
@@ -175,7 +190,9 @@ export function GrowablePinInput({
           <View key={i} style={cellStyle(i)} testID={`${TEST_IDS.PIN.CELL}.${i}`}>
             {char ? (
               mask ? (
-                <View style={dotStyle} />
+                <AnimatedDot
+                  style={gradientDotWebStyle ?? dotStyle}
+                />
               ) : (
                 <Text style={charStyle}>{char}</Text>
               )
@@ -184,6 +201,25 @@ export function GrowablePinInput({
         ))}
       </Pressable>
     </View>
+  );
+}
+
+/** Dot that springs into view when entering a PIN digit. */
+function AnimatedDot({ style }: { style: ViewStyle }) {
+  const scale = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    scale.setValue(1.3);
+    Animated.spring(scale, {
+      toValue: 1,
+      tension: 300,
+      friction: 10,
+      useNativeDriver: true,
+    }).start();
+  }, []);
+
+  return (
+    <Animated.View style={[style, { transform: [{ scale }] }]} />
   );
 }
 

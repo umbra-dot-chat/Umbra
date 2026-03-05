@@ -279,11 +279,7 @@ function AuthContent({ inverted, onCreateWallet, onImportWallet, taglineIndex, t
             <VStack gap="md">
               <VStack gap="xs">
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <Text
-                    size="lg"
-                    weight="semibold"
-                    style={{ color: textColor }}
-                  >
+                  <Text size="lg" weight="semibold" style={{ color: textColor }}>
                     Create Account
                   </Text>
                   {!inverted && (
@@ -362,11 +358,7 @@ function AuthContent({ inverted, onCreateWallet, onImportWallet, taglineIndex, t
             <VStack gap="md">
               <VStack gap="xs">
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <Text
-                    size="lg"
-                    weight="semibold"
-                    style={{ color: textColor }}
-                  >
+                  <Text size="lg" weight="semibold" style={{ color: textColor }}>
                     Import Account
                   </Text>
                   {!inverted && (
