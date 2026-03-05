@@ -39,14 +39,11 @@ jobs:
           cache: 'npm'
 
       - name: Link Wisp packages
-        run: cp -R "$GITHUB_WORKSPACE/.wisp" "$GITHUB_WORKSPACE/../Wisp"
+        run: cp -rp "$GITHUB_WORKSPACE/.wisp" "$GITHUB_WORKSPACE/../Wisp"
+        shell: bash
 
       - name: Install dependencies
-        run: |
-          npm ci --ignore-scripts
-          rm -rf node_modules/@coexist/wisp-core node_modules/@coexist/wisp-react-native
-          mkdir -p node_modules/@coexist/wisp-core node_modules/@coexist/wisp-react-native
-          node scripts/postinstall.js
+        run: npm ci
 
       - name: Build web
         run: npx expo export --platform web
@@ -111,14 +108,11 @@ jobs:
           sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
 
       - name: Link Wisp packages
-        run: cp -R "$GITHUB_WORKSPACE/.wisp" "$GITHUB_WORKSPACE/../Wisp"
+        run: cp -rp "$GITHUB_WORKSPACE/.wisp" "$GITHUB_WORKSPACE/../Wisp"
+        shell: bash
 
       - name: Install dependencies
-        run: |
-          npm ci --ignore-scripts
-          rm -rf node_modules/@coexist/wisp-core node_modules/@coexist/wisp-react-native
-          mkdir -p node_modules/@coexist/wisp-core node_modules/@coexist/wisp-react-native
-          node scripts/postinstall.js
+        run: npm ci
 
       - name: Build Tauri app
         run: npx tauri build --target ${{ matrix.target }}
@@ -199,14 +193,11 @@ jobs:
           cache: 'npm'
 
       - name: Link Wisp packages
-        run: cp -R "$GITHUB_WORKSPACE/.wisp" "$GITHUB_WORKSPACE/../Wisp"
+        run: cp -rp "$GITHUB_WORKSPACE/.wisp" "$GITHUB_WORKSPACE/../Wisp"
+        shell: bash
 
       - name: Install dependencies
-        run: |
-          npm ci --ignore-scripts
-          rm -rf node_modules/@coexist/wisp-core node_modules/@coexist/wisp-react-native
-          mkdir -p node_modules/@coexist/wisp-core node_modules/@coexist/wisp-react-native
-          node scripts/postinstall.js
+        run: npm ci
 
       - name: Setup EAS CLI
         run: npm install -g eas-cli
@@ -239,14 +230,11 @@ jobs:
           cache: 'npm'
 
       - name: Link Wisp packages
-        run: cp -R "$GITHUB_WORKSPACE/.wisp" "$GITHUB_WORKSPACE/../Wisp"
+        run: cp -rp "$GITHUB_WORKSPACE/.wisp" "$GITHUB_WORKSPACE/../Wisp"
+        shell: bash
 
       - name: Install dependencies
-        run: |
-          npm ci --ignore-scripts
-          rm -rf node_modules/@coexist/wisp-core node_modules/@coexist/wisp-react-native
-          mkdir -p node_modules/@coexist/wisp-core node_modules/@coexist/wisp-react-native
-          node scripts/postinstall.js
+        run: npm ci
 
       - name: Setup EAS CLI
         run: npm install -g eas-cli

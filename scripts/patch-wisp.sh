@@ -78,6 +78,16 @@ fi
 
 echo "Patching Wisp packages from: $WISP_DIR"
 
+# If npm created symlinks for file: deps, replace them with real directories
+if [ -L "$CORE_DEST" ]; then
+  rm "$CORE_DEST"
+  mkdir -p "$CORE_DEST"
+fi
+if [ -L "$RN_DEST" ]; then
+  rm "$RN_DEST"
+  mkdir -p "$RN_DEST"
+fi
+
 # Sync core package
 echo "  -> @coexist/wisp-core"
 rm -rf "$CORE_DEST/src" "$CORE_DEST/dist"
