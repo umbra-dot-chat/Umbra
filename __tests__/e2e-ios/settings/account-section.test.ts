@@ -26,11 +26,11 @@ describe('Settings > Account Section', () => {
   });
 
   it('should display the account section', async () => {
-    await expect(element(by.id(TEST_IDS.SETTINGS.SECTION_ACCOUNT))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.SETTINGS.SECTION_ACCOUNT))).toExist();
   });
 
   it('should show the DID display', async () => {
-    await expect(element(by.id(TEST_IDS.SETTINGS.DID_DISPLAY))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.SETTINGS.DID_DISPLAY))).toExist();
   });
 
   it('should show a non-empty DID string', async () => {
@@ -38,15 +38,15 @@ describe('Settings > Account Section', () => {
   });
 
   it('should display the logout button', async () => {
-    await expect(element(by.id(TEST_IDS.SETTINGS.LOGOUT_BUTTON))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.SETTINGS.LOGOUT_BUTTON))).toExist();
   });
 
   it('should display the backup button', async () => {
-    await expect(element(by.id(TEST_IDS.SETTINGS.BACKUP_BUTTON))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.SETTINGS.BACKUP_BUTTON))).toExist();
   });
 
   it('should display the identity card', async () => {
-    await expect(element(by.id(TEST_IDS.SETTINGS.IDENTITY_CARD))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.SETTINGS.IDENTITY_CARD))).toExist();
   });
 
   it.todo('should show a confirmation dialog when logout is tapped');

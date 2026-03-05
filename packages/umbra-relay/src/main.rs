@@ -23,6 +23,7 @@ mod federation;
 mod handler;
 mod protocol;
 mod state;
+mod sync;
 
 use std::time::Duration;
 
@@ -246,6 +247,39 @@ async fn main() {
         tracing::info!(bridges = bridge_loaded, "Loaded bridge configs from disk");
     }
 
+    // ── Sync Blob Store Setup ──────────────────────────────────────────────
+    let sync_store = match sync::blob_store::SyncBlobStore::new(data_dir.as_deref()) {
+        Ok(store) => {
+            tracing::info!("Sync blob store initialized");
+            std::sync::Arc::new(store)
+        }
+        Err(e) => {
+            tracing::error!("Failed to initialize sync blob store: {}", e);
+            std::process::exit(1);
+        }
+    };
+
+    // Spawn sync cleanup task
+    let sync_cleanup = sync_store.clone();
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(Duration::from_secs(3600)); // hourly
+        loop {
+            interval.tick().await;
+            let (blobs, challenges, tokens) = sync_cleanup.cleanup_expired();
+            if blobs + challenges + tokens > 0 {
+                tracing::info!(
+                    blobs = blobs,
+                    challenges = challenges,
+                    tokens = tokens,
+                    "Sync store cleanup completed"
+                );
+            }
+        }
+    });
+
+    // Build sync router
+    let sync_router = sync::router(sync_store);
+
     // ── Asset Store Setup ────────────────────────────────────────────────
     let asset_store = asset::store::AssetStore::new(data_dir.as_deref());
     let assets_loaded = asset_store.load_from_disk();
@@ -456,6 +490,7 @@ async fn main() {
         .merge(bridge_router)
         .merge(asset_router)
         .merge(gif_router)
+        .merge(sync_router)
         .layer(cors)
         .layer(TraceLayer::new_for_http());
 

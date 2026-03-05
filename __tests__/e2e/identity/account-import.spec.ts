@@ -9,6 +9,7 @@
 
 import { test, expect } from '@playwright/test';
 import {
+  BASE_URL,
   WASM_LOAD_TIMEOUT,
   createIdentity,
 } from '../helpers';
@@ -224,7 +225,7 @@ test.describe('1.2 Account Import', () => {
     browser,
   }) => {
     // Create a fresh identity and capture the seed phrase + DID
-    const context = await browser.newContext();
+    const context = await browser.newContext({ baseURL: BASE_URL });
     const page = await context.newPage();
 
     const { did: originalDid } = await createIdentity(page, 'ImportTestUser');

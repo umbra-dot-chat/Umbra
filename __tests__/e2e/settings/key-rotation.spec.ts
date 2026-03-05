@@ -17,6 +17,7 @@
 
 import { test, expect, type Browser, type Page, type BrowserContext } from '@playwright/test';
 import {
+  BASE_URL,
   WASM_LOAD_TIMEOUT,
   RELAY_SETTLE_TIMEOUT,
   UI_SETTLE_TIMEOUT,
@@ -51,8 +52,8 @@ async function setupDMConversation(
   browser: Browser,
   suffix: string,
 ): Promise<DMSetupResult> {
-  const contextA = await browser.newContext();
-  const contextB = await browser.newContext();
+  const contextA = await browser.newContext({ baseURL: BASE_URL });
+  const contextB = await browser.newContext({ baseURL: BASE_URL });
   const pageA = await contextA.newPage();
   const pageB = await contextB.newPage();
 
@@ -130,7 +131,8 @@ async function rotateKeyViaService(
 // ─── Tests ────────────────────────────────────────────────────────────────
 
 test.describe('11.10 Key Rotation', () => {
-  test.setTimeout(180_000);
+  // DM setup (2 accounts + friendship + relay sync) takes ~2-3 minutes per test
+  test.setTimeout(300_000);
 
   // ─── T-KR.1: rotateEncryptionKey returns new key and friend count ─────
 

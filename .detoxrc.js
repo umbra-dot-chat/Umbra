@@ -17,6 +17,15 @@ module.exports = {
         detoxEnableSynchronization: 0,
       },
     },
+    'ios.debug': {
+      type: 'ios.app',
+      binaryPath: process.env.DETOX_APP_PATH
+        || 'ios/build/Build/Products/Debug-iphonesimulator/Umbra.app',
+      build: 'LANG=en_US.UTF-8 npx expo run:ios --configuration Debug --no-install',
+      launchArgs: {
+        detoxEnableSynchronization: 0,
+      },
+    },
   },
   devices: {
     iphone17pro: {
@@ -36,6 +45,14 @@ module.exports = {
     'ios.release.userB': {
       device: 'iphone17promax',
       app: 'ios.release',
+    },
+    'ios.debug': {
+      device: 'iphone17pro',
+      app: 'ios.debug',
+    },
+    'ios.debug.userB': {
+      device: 'iphone17promax',
+      app: 'ios.debug',
     },
   },
   artifacts: {

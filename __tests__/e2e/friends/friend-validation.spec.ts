@@ -9,6 +9,7 @@
 
 import { test, expect } from '@playwright/test';
 import {
+  BASE_URL,
   WASM_LOAD_TIMEOUT,
   RELAY_SETTLE_TIMEOUT,
   createIdentity,
@@ -105,8 +106,8 @@ test.describe('3.7 Friend Validation', () => {
     // User A creates identity, User B creates identity.
     // A sends request to B, B accepts, then A tries to send again.
 
-    const contextA = await browser.newContext();
-    const contextB = await browser.newContext();
+    const contextA = await browser.newContext({ baseURL: BASE_URL });
+    const contextB = await browser.newContext({ baseURL: BASE_URL });
     const pageA = await contextA.newPage();
     const pageB = await contextB.newPage();
 
@@ -178,8 +179,8 @@ test.describe('3.7 Friend Validation', () => {
   }) => {
     // We need two users: User A blocks User B, then tries to add User B.
 
-    const contextA = await browser.newContext();
-    const contextB = await browser.newContext();
+    const contextA = await browser.newContext({ baseURL: BASE_URL });
+    const contextB = await browser.newContext({ baseURL: BASE_URL });
     const pageA = await contextA.newPage();
     const pageB = await contextB.newPage();
 

@@ -22,9 +22,6 @@ import { Platform, Text as RNText, TextInput } from 'react-native';
 import * as ExpoFont from 'expo-font';
 import { getWasm } from '@umbra/wasm';
 import { useUmbra } from '@/contexts/UmbraContext';
-import { useAuth } from '@/contexts/AuthContext';
-import { syncMetadataViaRelay } from '@umbra/service';
-import type { MetadataEvent } from '@umbra/service';
 import { fetchGoogleFontsCatalog } from '@/services/googleFontsApi';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -231,8 +228,7 @@ const FONT_STATE_KEY = 'active_font';
 const INSTALLED_FONTS_KEY = 'installed_fonts';
 
 export function FontProvider({ children }: { children: React.ReactNode }) {
-  const { isReady, service } = useUmbra();
-  const { identity } = useAuth();
+  const { isReady, preferencesReady, didChanged } = useUmbra();
   const [activeFont, setActiveFontState] = useState<FontEntry>(SYSTEM_FONT);
   const [installedFontIds, setInstalledFontIds] = useState<Set<string>>(new Set(['system']));
   const [loadingFontId, setLoadingFontId] = useState<string | null>(null);
@@ -241,20 +237,6 @@ export function FontProvider({ children }: { children: React.ReactNode }) {
   const pendingFontIdRef = useRef<string | null>(null);
 
   // ── Persistence helpers ──────────────────────────────────────────────
-
-  /** Sync a key/value to other sessions via relay */
-  const relaySync = useCallback((key: string, value: string) => {
-    if (service && identity?.did) {
-      try {
-        const relayWs = service.getRelayWs();
-        if (relayWs) {
-          syncMetadataViaRelay(relayWs, identity.did, key, value);
-        }
-      } catch (err) {
-        console.warn('[FontContext] Failed to sync via relay:', err);
-      }
-    }
-  }, [service, identity]);
 
   const saveFontState = useCallback((key: string, value: string) => {
     try {
@@ -324,7 +306,7 @@ export function FontProvider({ children }: { children: React.ReactNode }) {
   // ── Load saved state on mount ───────────────────────────────────────
 
   useEffect(() => {
-    if (!isReady) return;
+    if (!preferencesReady) return;
 
     async function restoreFontState() {
       // Load installed fonts
@@ -362,7 +344,7 @@ export function FontProvider({ children }: { children: React.ReactNode }) {
     }
 
     restoreFontState();
-  }, [isReady, loadFontState, applyFont]);
+  }, [preferencesReady, didChanged, loadFontState, applyFont]);
 
   // ── Fetch Google Fonts catalog ─────────────────────────────────────
 
@@ -401,52 +383,6 @@ export function FontProvider({ children }: { children: React.ReactNode }) {
       });
   }, [isReady, applyFont]);
 
-  // ── Relay sync: listen for incoming metadata updates ─────────────
-
-  useEffect(() => {
-    if (!service) return;
-
-    const unsub = service.onMetadataEvent((event: MetadataEvent) => {
-      if (event.type !== 'metadataReceived') return;
-
-      if (event.key === FONT_STATE_KEY) {
-        const fontId = event.value;
-        console.log('[FontContext] Relay sync: active font updated to', fontId);
-
-        if (!fontId || fontId === 'system') {
-          setActiveFontState(SYSTEM_FONT);
-          applyFont(SYSTEM_FONT);
-          saveFontState(FONT_STATE_KEY, 'system');
-          return;
-        }
-
-        // Try curated registry first, then allFonts
-        const font = allFonts.find((f) => f.id === fontId);
-        if (font) {
-          loadGoogleFont(font).then(() => {
-            setActiveFontState(font);
-            applyFont(font);
-            saveFontState(FONT_STATE_KEY, fontId);
-            setInstalledFontIds((prev) => {
-              const next = new Set(prev);
-              next.add(fontId);
-              return next;
-            });
-          });
-        }
-      } else if (event.key === INSTALLED_FONTS_KEY) {
-        try {
-          const ids: string[] = JSON.parse(event.value);
-          console.log('[FontContext] Relay sync: installed fonts updated');
-          setInstalledFontIds(new Set(['system', ...ids]));
-          saveFontState(INSTALLED_FONTS_KEY, event.value);
-        } catch {}
-      }
-    });
-
-    return unsub;
-  }, [service, allFonts, applyFont, saveFontState]);
-
   // ── Install a font ──────────────────────────────────────────────────
 
   const installFont = useCallback(async (fontId: string) => {
@@ -459,16 +395,14 @@ export function FontProvider({ children }: { children: React.ReactNode }) {
       setInstalledFontIds((prev) => {
         const next = new Set(prev);
         next.add(fontId);
-        // Persist + relay sync
         const value = JSON.stringify(Array.from(next));
         saveFontState(INSTALLED_FONTS_KEY, value);
-        relaySync(INSTALLED_FONTS_KEY, value);
         return next;
       });
     } finally {
       setLoadingFontId(null);
     }
-  }, [allFonts, saveFontState, relaySync]);
+  }, [allFonts, saveFontState]);
 
   // ── Set active font ─────────────────────────────────────────────────
 
@@ -484,8 +418,7 @@ export function FontProvider({ children }: { children: React.ReactNode }) {
     setActiveFontState(font);
     applyFont(font);
     saveFontState(FONT_STATE_KEY, fontId);
-    relaySync(FONT_STATE_KEY, fontId);
-  }, [allFonts, installedFontIds, installFont, applyFont, saveFontState, relaySync]);
+  }, [allFonts, installedFontIds, installFont, applyFont, saveFontState]);
 
   // ── Context value ───────────────────────────────────────────────────
 

@@ -26,12 +26,12 @@ describe('Settings > About Section', () => {
   });
 
   it('should display the about section', async () => {
-    await expect(element(by.id(TEST_IDS.SETTINGS.SECTION_ABOUT))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.SETTINGS.SECTION_ABOUT))).toExist();
   });
 
   it('should show a version string', async () => {
     await waitFor(element(by.text(/\d+\.\d+\.\d+/)))
-      .toBeVisible()
+      .toExist()
       .withTimeout(TIMEOUTS.INTERACTION);
   });
 

@@ -7,11 +7,27 @@
 /**
  * Default relay servers for signaling and offline messaging.
  * These are tried in order if the primary fails.
+ *
+ * Override with EXPO_PUBLIC_RELAY_URL env var (e.g. http://localhost:9090)
+ * to point the entire app (WebSocket + sync HTTP) at a local relay.
  */
-export const DEFAULT_RELAY_SERVERS = [
-  'wss://relay.umbra.chat/ws',
-  'wss://seoul.relay.umbra.chat/ws',
-] as const;
+const _envRelayWsUrl = (() => {
+  const raw = typeof process !== 'undefined'
+    ? (process.env as any)?.EXPO_PUBLIC_RELAY_URL
+    : null;
+  if (!raw || typeof raw !== 'string') return null;
+  return raw
+    .replace(/^https:/, 'wss:')
+    .replace(/^http:/, 'ws:')
+    .replace(/\/?$/, '/ws');
+})();
+
+export const DEFAULT_RELAY_SERVERS = _envRelayWsUrl
+  ? [_envRelayWsUrl]
+  : [
+      'wss://relay.umbra.chat/ws',
+      'wss://seoul.relay.umbra.chat/ws',
+    ];
 
 /**
  * The primary relay server URL

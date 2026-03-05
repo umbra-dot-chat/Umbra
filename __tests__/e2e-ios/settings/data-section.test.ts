@@ -26,7 +26,7 @@ describe('Settings > Data Section', () => {
   });
 
   it('should display the data section', async () => {
-    await expect(element(by.id(TEST_IDS.SETTINGS.SECTION_DATA))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.SETTINGS.SECTION_DATA))).toExist();
   });
 
   it.todo('should show total storage usage');

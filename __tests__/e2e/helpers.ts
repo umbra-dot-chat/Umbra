@@ -63,6 +63,13 @@ export interface CreateIdentityOptions {
   username?: string;
   /** If true, check the "Remember me" checkbox (default: false). */
   rememberMe?: boolean;
+  /**
+   * Control the sync opt-in checkbox on the success screen.
+   * - `true`: leave it checked (default UI behavior — sync enabled).
+   * - `false`: uncheck it before completing (sync disabled).
+   * - `undefined`: don't touch it (keeps UI default = checked/enabled).
+   */
+  enableSync?: boolean;
 }
 
 /**
@@ -82,6 +89,7 @@ export async function createIdentity(
     pin,
     username,
     rememberMe = false,
+    enableSync,
   } = options;
 
   // Navigate to auth screen
@@ -98,35 +106,36 @@ export async function createIdentity(
     timeout: 10_000,
   });
   await page.getByPlaceholder('Enter your name').fill(name);
-  await page.getByRole('button', { name: 'Continue', exact: true }).click();
+  await page.getByRole('button', { name: 'Continue to next step' }).click();
 
   // ── Step 1: Recovery Phrase ──
   await expect(page.getByText('Your Recovery Phrase').first()).toBeVisible({
     timeout: WASM_LOAD_TIMEOUT,
   });
 
-  // Extract the seed phrase words from the grid
-  // Each word cell has a numbered label and the word text
+  // Extract the seed phrase from the grid cells.
+  // Each cell in the SeedPhraseGrid renders as "N. word" (e.g. "1. abandon").
+  // We strip the numbered prefix to get just the words.
   let seedPhrase = '';
   try {
-    // Wait a moment for the grid to fully render
     await page.waitForTimeout(1_000);
     seedPhrase = await page.evaluate(() => {
-      // The SeedPhraseGrid renders words in cells — look for all word elements
-      const cells = document.querySelectorAll('[data-testid^="seed-word-"]');
-      if (cells.length > 0) {
-        return Array.from(cells)
-          .map((el) => el.textContent?.trim() ?? '')
-          .join(' ');
+      const grid = document.querySelector('[data-testid="seed.grid"]');
+      if (!grid) return '';
+      const cells = grid.children;
+      const words: string[] = [];
+      for (let i = 0; i < cells.length; i++) {
+        const text = cells[i].textContent?.trim() ?? '';
+        const match = text.match(/^\d+\.\s*(.+)$/);
+        if (match) words.push(match[1].trim());
       }
-      // Fallback: try to extract from the grid structure
-      return '';
+      return words.join(' ');
     });
   } catch {
     // Seed phrase extraction is best-effort
   }
 
-  await page.getByRole('button', { name: 'Continue', exact: true }).click();
+  await page.getByRole('button', { name: 'Continue after seed phrase' }).click();
 
   // ── Step 2: Confirm Backup ──
   await expect(
@@ -136,7 +145,7 @@ export async function createIdentity(
     .getByText('I have written down my recovery phrase and stored it securely')
     .first()
     .click();
-  await page.getByRole('button', { name: 'Continue', exact: true }).click();
+  await page.getByRole('button', { name: 'Continue after backup confirmation' }).click();
 
   // ── Step 3: Security PIN ──
   await expect(
@@ -196,6 +205,17 @@ export async function createIdentity(
     .textContent({ timeout: 5_000 })
     .catch(() => '');
   const did = didText?.match(/did:key:\S+/)?.[0] ?? '';
+
+  // Sync opt-in checkbox (default: checked/enabled)
+  if (enableSync === false) {
+    // Uncheck the sync opt-in checkbox to disable sync
+    const syncCheckbox = page.getByText('Enable account sync').first();
+    if (
+      await syncCheckbox.isVisible({ timeout: 2_000 }).catch(() => false)
+    ) {
+      await syncCheckbox.click();
+    }
+  }
 
   // Remember me checkbox
   if (rememberMe) {

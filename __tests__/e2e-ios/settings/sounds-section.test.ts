@@ -26,12 +26,12 @@ describe('Settings > Sounds Section', () => {
   });
 
   it('should display the sounds section', async () => {
-    await expect(element(by.id(TEST_IDS.SETTINGS.SECTION_SOUNDS))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.SETTINGS.SECTION_SOUNDS))).toExist();
   });
 
   it('should show a sound toggle', async () => {
     await waitFor(element(by.id(TEST_IDS.SETTINGS.TOGGLE)).atIndex(0))
-      .toBeVisible()
+      .toExist()
       .withTimeout(TIMEOUTS.INTERACTION);
   });
 

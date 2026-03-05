@@ -95,7 +95,7 @@ function defaultCategoryEnabled(): Record<SoundCategory, boolean> {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function SoundProvider({ children }: { children: React.ReactNode }) {
-  const { isReady } = useUmbra();
+  const { preferencesReady, didChanged } = useUmbra();
 
   // Singleton engine (created once, never destroyed)
   const engineRef = useRef<SoundEngine>(new SoundEngine());
@@ -110,8 +110,6 @@ export function SoundProvider({ children }: { children: React.ReactNode }) {
   );
   const [activeTheme, setActiveThemeState] = useState<SoundThemeId>(DEFAULT_THEME);
   const [loaded, setLoaded] = useState(false);
-
-  const initialRestoreRef = useRef(false);
 
   // ── KV helpers (same pattern as ThemeContext) ──────────────────────
 
@@ -140,8 +138,7 @@ export function SoundProvider({ children }: { children: React.ReactNode }) {
   // ── Restore from KV on mount ──────────────────────────────────────
 
   useEffect(() => {
-    if (!isReady || initialRestoreRef.current) return;
-    initialRestoreRef.current = true;
+    if (!preferencesReady) return;
 
     async function restorePreferences() {
       const engine = engineRef.current;
@@ -225,7 +222,7 @@ export function SoundProvider({ children }: { children: React.ReactNode }) {
     }
 
     restorePreferences();
-  }, [isReady, kvGet]);
+  }, [preferencesReady, didChanged, kvGet]);
 
   // ── Resume AudioContext on first user interaction ──────────────────
 

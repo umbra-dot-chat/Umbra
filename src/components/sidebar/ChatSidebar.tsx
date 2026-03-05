@@ -90,6 +90,8 @@ function ChatSidebarInner({
                 iconLeft={<UsersIcon size={18} color={isFriendsActive ? theme.colors.text.onRaised : theme.colors.text.onRaisedSecondary} />}
                 onPress={onFriendsPress}
                 accessibilityLabel="Friends"
+                accessibilityActions={[{ name: 'activate', label: 'Friends' }]}
+                onAccessibilityAction={(e: any) => { if (e.nativeEvent.actionName === 'activate') onFriendsPress?.(); }}
                 style={{ justifyContent: 'flex-start' }}
               >
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
@@ -252,6 +254,10 @@ function ChatSidebarInner({
                   </View>
                 ))}
               </>
+            ) : conversations.length === 0 ? (
+              <View testID={TEST_IDS.SIDEBAR.EMPTY_STATE} style={{ alignItems: 'center', paddingVertical: 24 }}>
+                <Text size="sm" style={{ color: theme.colors.text.muted }}>No conversations yet</Text>
+              </View>
             ) : (
               conversations.map((c) => (
                 <ConversationListItem

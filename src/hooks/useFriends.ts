@@ -70,9 +70,17 @@ export function useFriends(): UseFriendsResult {
         service.getOutgoingRequests(),
         service.getBlockedUsers(),
       ]);
+      // Filter out outgoing requests whose recipient is already a confirmed
+      // friend.  The WASM layer adds the friend on acceptance but may not
+      // remove the corresponding outgoing request, causing stale entries in
+      // the Pending tab.
+      const friendDids = new Set(friendsList.map((f) => f.did));
+      const filteredOutgoing = outgoing.filter(
+        (req) => !friendDids.has(req.toDid),
+      );
       setFriends(friendsList);
       setIncomingRequests(incoming);
-      setOutgoingRequests(outgoing);
+      setOutgoingRequests(filteredOutgoing);
       setBlockedUsers(blocked);
       setError(null);
     } catch (err) {

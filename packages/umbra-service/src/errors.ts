@@ -74,6 +74,14 @@ export enum ErrorCode {
   DeliveryFailed = 703,
   InvalidMessageContent = 704,
 
+  // Sync (800-899)
+  SyncAuthFailed = 800,
+  SyncUploadFailed = 801,
+  SyncDownloadFailed = 802,
+  SyncDeleteFailed = 803,
+  SyncBlobCorrupted = 804,
+  SyncTokenExpired = 805,
+
   // Internal (900-999)
   Internal = 900,
   NotImplemented = 901,

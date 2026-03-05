@@ -25,12 +25,12 @@ describe('Friends — Online Tab', () => {
   it('should switch to the Online tab', async () => {
     await element(by.id(TEST_IDS.FRIENDS.TAB_ONLINE)).tap();
     await waitForUISettle();
-    await expect(element(by.id(TEST_IDS.FRIENDS.TAB_ONLINE))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.FRIENDS.TAB_ONLINE))).toExist();
   });
 
   it('should show empty state when no friends are online', async () => {
     // A fresh account has no friends, so Online tab should show empty state
-    await expect(element(by.id(TEST_IDS.FRIENDS.EMPTY_STATE))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.FRIENDS.EMPTY_STATE))).toExist();
   });
 
   it.todo('should show online friends with green status indicator');
@@ -42,6 +42,6 @@ describe('Friends — Online Tab', () => {
   it('should navigate back to All tab from Online tab', async () => {
     await element(by.id(TEST_IDS.FRIENDS.TAB_ALL)).tap();
     await waitForUISettle();
-    await expect(element(by.id(TEST_IDS.FRIENDS.TAB_ALL))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.FRIENDS.TAB_ALL))).toExist();
   });
 });

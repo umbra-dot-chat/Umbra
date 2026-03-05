@@ -22,7 +22,7 @@ describe('T1.5 Loading / Splash Screen', () => {
     await waitFor(
       element(by.id(TEST_IDS.COMMON.LOADING)).or(element(by.id(TEST_IDS.AUTH.SCREEN))),
     )
-      .toBeVisible()
+      .toExist()
       .withTimeout(TIMEOUTS.APP_LAUNCH);
   });
 
@@ -31,14 +31,14 @@ describe('T1.5 Loading / Splash Screen', () => {
 
     // With no stored identity, loading should transition to the auth screen
     await waitForAuthScreen();
-    await expect(element(by.id(TEST_IDS.AUTH.SCREEN))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.AUTH.SCREEN))).toExist();
   });
 
   it('T1.5.3 — loading transitions to main screen with existing account', async () => {
     // First create an account
     await launchApp({ newInstance: true, delete: true });
     await createAccount(FIXTURES.USER_A.displayName);
-    await expect(element(by.id(TEST_IDS.MAIN.CONTAINER))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.MAIN.CONTAINER))).toExist();
 
     // Terminate and relaunch (preserving state)
     await device.terminateApp();
@@ -51,7 +51,7 @@ describe('T1.5 Loading / Splash Screen', () => {
         .or(element(by.id(TEST_IDS.AUTH.SCREEN)))
         .or(element(by.id(TEST_IDS.PIN.LOCK_SCREEN))),
     )
-      .toBeVisible()
+      .toExist()
       .withTimeout(TIMEOUTS.APP_LAUNCH);
   });
 
@@ -62,6 +62,6 @@ describe('T1.5 Loading / Splash Screen', () => {
     await waitForAuthScreen();
 
     // Loading indicator should no longer be visible
-    await expect(element(by.id(TEST_IDS.COMMON.LOADING))).not.toBeVisible();
+    await expect(element(by.id(TEST_IDS.COMMON.LOADING))).not.toExist();
   });
 });

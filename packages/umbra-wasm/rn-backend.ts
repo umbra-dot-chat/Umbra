@@ -206,6 +206,16 @@ function createNativeBackend(native: NativeUmbraCore): UmbraWasmModule {
     umbra_wasm_account_restore_backup: (json: string) =>
       call('account_restore_backup', JSON.parse(json)),
 
+    // ── Account Sync ────────────────────────────────────────────────────
+    umbra_wasm_sync_create_blob: (json: string) =>
+      call('sync_create_blob', JSON.parse(json || '{}')),
+    umbra_wasm_sync_parse_blob: (json: string) =>
+      call('sync_parse_blob', JSON.parse(json)),
+    umbra_wasm_sync_apply_blob: (json: string) =>
+      call('sync_apply_blob', JSON.parse(json)),
+    umbra_wasm_sync_sign_challenge: (json: string) =>
+      call('sync_sign_challenge', JSON.parse(json)),
+
     // ── Discovery (direct native calls) ─────────────────────────────────
     umbra_wasm_discovery_get_connection_info: () => checkNativeResult(ensureJsonString(native.discoveryGetConnectionInfo()), 'discoveryGetConnectionInfo'),
     umbra_wasm_discovery_parse_connection_info: (info: string) => info,
@@ -587,6 +597,10 @@ function createStubBackend(): UmbraWasmModule {
     umbra_wasm_identity_rotate_encryption_key: () => notImplemented('identity_rotate_encryption_key'),
     umbra_wasm_account_create_backup: () => notImplemented('account_create_backup'),
     umbra_wasm_account_restore_backup: () => notImplemented('account_restore_backup'),
+    umbra_wasm_sync_create_blob: () => notImplemented('sync_create_blob'),
+    umbra_wasm_sync_parse_blob: () => notImplemented('sync_parse_blob'),
+    umbra_wasm_sync_apply_blob: () => notImplemented('sync_apply_blob'),
+    umbra_wasm_sync_sign_challenge: () => notImplemented('sync_sign_challenge'),
     umbra_wasm_discovery_get_connection_info: () => notImplemented('discovery_get_connection_info'),
     umbra_wasm_discovery_parse_connection_info: () => notImplemented('discovery_parse_connection_info'),
     umbra_wasm_friends_send_request: () => notImplemented('friends_send_request'),

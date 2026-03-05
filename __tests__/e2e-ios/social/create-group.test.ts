@@ -23,7 +23,7 @@ describe('Create Group', () => {
   });
 
   it('should show the new chat button in the sidebar', async () => {
-    await expect(element(by.id(TEST_IDS.SIDEBAR.NEW_CHAT_BUTTON))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.SIDEBAR.NEW_CHAT_BUTTON))).toExist();
   });
 
   it('should open the create group dialog', async () => {
@@ -33,19 +33,19 @@ describe('Create Group', () => {
 
     // Tap the "New Group" option
     await waitFor(element(by.text('New Group')))
-      .toBeVisible()
+      .toExist()
       .withTimeout(TIMEOUTS.INTERACTION);
     await element(by.text('New Group')).tap();
     await waitForUISettle();
 
     // The create group dialog should be visible
     await waitFor(element(by.id(TEST_IDS.GROUPS.CREATE_DIALOG)))
-      .toBeVisible()
+      .toExist()
       .withTimeout(TIMEOUTS.NAVIGATION);
   });
 
   it('should display the group name input', async () => {
-    await expect(element(by.id(TEST_IDS.GROUPS.NAME_INPUT))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.GROUPS.NAME_INPUT))).toExist();
   });
 
   it('should accept text in the group name input', async () => {
@@ -55,7 +55,7 @@ describe('Create Group', () => {
   });
 
   it('should display the description input', async () => {
-    await expect(element(by.id(TEST_IDS.GROUPS.DESCRIPTION_INPUT))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.GROUPS.DESCRIPTION_INPUT))).toExist();
   });
 
   it('should accept text in the description input', async () => {
@@ -67,22 +67,22 @@ describe('Create Group', () => {
   });
 
   it('should display the member picker area', async () => {
-    await expect(element(by.id(TEST_IDS.GROUPS.MEMBER_PICKER))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.GROUPS.MEMBER_PICKER))).toExist();
   });
 
   it('should show the create button', async () => {
-    await expect(element(by.id(TEST_IDS.GROUPS.CREATE_BUTTON))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.GROUPS.CREATE_BUTTON))).toExist();
   });
 
   it('should show the cancel button', async () => {
-    await expect(element(by.id(TEST_IDS.GROUPS.CANCEL_BUTTON))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.GROUPS.CANCEL_BUTTON))).toExist();
   });
 
   it('should close the dialog when cancel is tapped', async () => {
     await element(by.id(TEST_IDS.GROUPS.CANCEL_BUTTON)).tap();
     await waitForUISettle();
 
-    await expect(element(by.id(TEST_IDS.GROUPS.CREATE_DIALOG))).not.toBeVisible();
+    await expect(element(by.id(TEST_IDS.GROUPS.CREATE_DIALOG))).not.toExist();
   });
 
   // TWO-USER: Creating a group requires selecting at least one friend

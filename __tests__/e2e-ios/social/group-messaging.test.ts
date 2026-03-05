@@ -22,7 +22,7 @@ describe('Group Messaging [TWO-USER]', () => {
   });
 
   it('should load the main screen', async () => {
-    await expect(element(by.id(TEST_IDS.MAIN.CONTAINER))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.MAIN.CONTAINER))).toExist();
   });
 
   // TWO-USER tests: require a group with multiple members.

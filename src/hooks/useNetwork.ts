@@ -84,6 +84,46 @@ let _lastService: any = null;
 /** The index into DEFAULT_RELAY_SERVERS currently being tried. */
 let _currentServerIndex = 0;
 
+// ── Sync update callback registration ────────────────────────────────
+// SyncContext registers a callback to receive real-time sync deltas
+// from the relay WebSocket.
+type SyncUpdateCallback = (data: { section: string; version: number; encryptedData: string }) => void;
+const _syncUpdateCallbacks = new Set<SyncUpdateCallback>();
+
+/** Register a callback for incoming sync update messages. */
+export function registerSyncUpdateCallback(cb: SyncUpdateCallback): void {
+  _syncUpdateCallbacks.add(cb);
+}
+
+/** Unregister a sync update callback. */
+export function unregisterSyncUpdateCallback(cb: SyncUpdateCallback): void {
+  _syncUpdateCallbacks.delete(cb);
+}
+
+/**
+ * Get the relay HTTP URL derived from the active WebSocket URL.
+ * Converts `wss://host/ws` → `https://host`.
+ */
+export function getRelayHttpUrl(): string | null {
+  const wsUrl = _relayUrl;
+  if (!wsUrl) return null;
+  return wsUrl
+    .replace(/^wss:/, 'https:')
+    .replace(/^ws:/, 'http:')
+    .replace(/\/ws\/?$/, '');
+}
+
+/**
+ * Subscribe to relay connection state changes.
+ * Returns an unsubscribe function.
+ */
+export function subscribeRelayState(
+  cb: (connected: boolean, url: string | null) => void,
+): () => void {
+  _relayListeners.add(cb);
+  return () => { _relayListeners.delete(cb); };
+}
+
 // Pending message queue for relay ack tracking.
 // When we send a chat message via relay, we push the messageId here.
 // When the relay sends back an `ack`, we pop the oldest entry and
@@ -741,6 +781,21 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
       case 'pong': break;
       case 'session_created': case 'session_joined': case 'signal': break;
       case 'error': console.error('[useNetwork] Relay error:', msg.message); break;
+      case 'sync_update': {
+        // Real-time sync delta from another session of the same DID
+        for (const cb of _syncUpdateCallbacks) {
+          try {
+            cb({
+              section: msg.section,
+              version: msg.version,
+              encryptedData: msg.encrypted_data,
+            });
+          } catch (e) {
+            console.error('[useNetwork] Sync update callback error:', e);
+          }
+        }
+        break;
+      }
       default: console.log('[useNetwork] Unknown relay message type:', msg.type);
     }
   } catch (err) {

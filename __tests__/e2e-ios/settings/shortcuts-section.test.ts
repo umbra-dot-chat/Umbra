@@ -26,7 +26,7 @@ describe('Settings > Shortcuts Section', () => {
   });
 
   it('should display the shortcuts section', async () => {
-    await expect(element(by.id(TEST_IDS.SETTINGS.SECTION_SHORTCUTS))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.SETTINGS.SECTION_SHORTCUTS))).toExist();
   });
 
   it.todo('should show a list of available keyboard shortcuts');

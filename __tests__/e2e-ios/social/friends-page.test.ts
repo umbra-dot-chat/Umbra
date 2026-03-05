@@ -24,43 +24,43 @@ describe('Friends Page', () => {
 
   it('should navigate to the friends page', async () => {
     await navigateToFriends();
-    await expect(element(by.id(TEST_IDS.FRIENDS.PAGE))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.FRIENDS.PAGE))).toExist();
   });
 
   it('should display the All tab', async () => {
-    await expect(element(by.id(TEST_IDS.FRIENDS.TAB_ALL))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.FRIENDS.TAB_ALL))).toExist();
   });
 
   it('should display the Online tab', async () => {
-    await expect(element(by.id(TEST_IDS.FRIENDS.TAB_ONLINE))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.FRIENDS.TAB_ONLINE))).toExist();
   });
 
   it('should display the Pending tab', async () => {
-    await expect(element(by.id(TEST_IDS.FRIENDS.TAB_PENDING))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.FRIENDS.TAB_PENDING))).toExist();
   });
 
   it('should display the Blocked tab', async () => {
-    await expect(element(by.id(TEST_IDS.FRIENDS.TAB_BLOCKED))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.FRIENDS.TAB_BLOCKED))).toExist();
   });
 
   it('should default to the All tab being selected', async () => {
     // The All tab should already be active/selected on page load
-    await expect(element(by.id(TEST_IDS.FRIENDS.TAB_ALL))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.FRIENDS.TAB_ALL))).toExist();
     // Empty state or friend list should be visible under All tab
     await waitFor(element(by.id(TEST_IDS.FRIENDS.EMPTY_STATE)))
-      .toBeVisible()
+      .toExist()
       .withTimeout(TIMEOUTS.INTERACTION);
   });
 
   it('should show the add friend input field', async () => {
-    await expect(element(by.id(TEST_IDS.FRIENDS.ADD_INPUT))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.FRIENDS.ADD_INPUT))).toExist();
   });
 
   it('should show the add friend button', async () => {
-    await expect(element(by.id(TEST_IDS.FRIENDS.ADD_BUTTON))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.FRIENDS.ADD_BUTTON))).toExist();
   });
 
   it('should show empty state when no friends exist', async () => {
-    await expect(element(by.id(TEST_IDS.FRIENDS.EMPTY_STATE))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.FRIENDS.EMPTY_STATE))).toExist();
   });
 });

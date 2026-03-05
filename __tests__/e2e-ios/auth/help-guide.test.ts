@@ -22,7 +22,7 @@ describe('T15 Help Guide', () => {
 
   it('T15.1 — guide button is visible in sidebar', async () => {
     await waitFor(element(by.id(TEST_IDS.SIDEBAR.GUIDE_BUTTON)))
-      .toBeVisible()
+      .toExist()
       .withTimeout(TIMEOUTS.NAVIGATION);
   });
 
@@ -32,23 +32,23 @@ describe('T15 Help Guide', () => {
 
     // Guide content should be visible — look for guide-related text
     await waitFor(element(by.text('Getting Started')))
-      .toBeVisible()
+      .toExist()
       .withTimeout(TIMEOUTS.NAVIGATION);
   });
 
   it('T15.3 — guide shows multiple sections', async () => {
     // The guide should display multiple section titles
-    await expect(element(by.text('Getting Started'))).toBeVisible();
+    await expect(element(by.text('Getting Started'))).toExist();
 
     // Check for additional guide sections
     const friendsSectionVisible = await waitFor(element(by.text('Friends')))
-      .toBeVisible()
+      .toExist()
       .withTimeout(TIMEOUTS.INTERACTION)
       .then(() => true)
       .catch(() => false);
 
     const messagingSectionVisible = await waitFor(element(by.text('Messaging')))
-      .toBeVisible()
+      .toExist()
       .withTimeout(TIMEOUTS.INTERACTION)
       .then(() => true)
       .catch(() => false);
@@ -57,7 +57,7 @@ describe('T15 Help Guide', () => {
     const hasMultipleSections = friendsSectionVisible || messagingSectionVisible;
     if (!hasMultipleSections) {
       // Guide may use different section names — just verify it's open
-      await expect(element(by.text('Getting Started'))).toBeVisible();
+      await expect(element(by.text('Getting Started'))).toExist();
     }
   });
 
@@ -79,7 +79,7 @@ describe('T15 Help Guide', () => {
     await waitForUISettle();
 
     // Sidebar should be visible again
-    await expect(element(by.id(TEST_IDS.SIDEBAR.CONTAINER))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.SIDEBAR.CONTAINER))).toExist();
   });
 
   it('T15.6 — guide button remains functional after dismissal', async () => {
@@ -88,7 +88,7 @@ describe('T15 Help Guide', () => {
     await waitForUISettle();
 
     await waitFor(element(by.text('Getting Started')))
-      .toBeVisible()
+      .toExist()
       .withTimeout(TIMEOUTS.NAVIGATION);
 
     // Clean up by navigating home

@@ -100,6 +100,7 @@ import { PRIMARY_RELAY_URL, DEFAULT_RELAY_SERVERS } from '@/config';
 import { TEST_IDS } from '@/constants/test-ids';
 import { LinkedAccountsPanel, FriendDiscoveryPanel } from '@/components/discovery';
 import { IdentityCardDialog } from '@/components/modals/IdentityCardDialog';
+import { useSync } from '@/contexts/SyncContext';
 
 // Cast icons for Wisp Input compatibility (accepts strokeWidth prop)
 type InputIcon = React.ComponentType<{ size?: number | string; color?: string; strokeWidth?: number }>;
@@ -157,12 +158,29 @@ const NAV_TEST_IDS: Record<SettingsSection, string> = {
   'about': TEST_IDS.SETTINGS.NAV_ABOUT,
 };
 
+const SECTION_TEST_IDS: Record<SettingsSection, string> = {
+  'account': TEST_IDS.SETTINGS.SECTION_ACCOUNT,
+  'profile': TEST_IDS.SETTINGS.SECTION_PROFILE,
+  'appearance': TEST_IDS.SETTINGS.SECTION_APPEARANCE,
+  'messaging': TEST_IDS.SETTINGS.SECTION_MESSAGING,
+  'notifications': TEST_IDS.SETTINGS.SECTION_NOTIFICATIONS,
+  'sounds': TEST_IDS.SETTINGS.SECTION_SOUNDS,
+  'privacy': TEST_IDS.SETTINGS.SECTION_PRIVACY,
+  'audio-video': TEST_IDS.SETTINGS.SECTION_AUDIO_VIDEO,
+  'network': TEST_IDS.SETTINGS.SECTION_NETWORK,
+  'data': TEST_IDS.SETTINGS.SECTION_DATA,
+  'plugins': TEST_IDS.SETTINGS.SECTION_PLUGINS,
+  'keyboard-shortcuts': TEST_IDS.SETTINGS.SECTION_SHORTCUTS,
+  'about': TEST_IDS.SETTINGS.SECTION_ABOUT,
+};
+
 interface SubNavItem { id: string; label: string; }
 
 const SUBCATEGORIES: Partial<Record<SettingsSection, SubNavItem[]>> = {
   account: [
     { id: 'identity', label: 'Identity' },
     { id: 'sharing', label: 'Sharing' },
+    { id: 'sync', label: 'Sync' },
     { id: 'danger', label: 'Danger Zone' },
   ],
   appearance: [
@@ -291,11 +309,13 @@ function InlineDropdown({
   value,
   onChange,
   placeholder = 'Select…',
+  testID,
 }: {
   options: InlineDropdownOption[];
   value: string;
   onChange: (value: string) => void;
   placeholder?: string;
+  testID?: string;
 }) {
   const { theme, mode } = useTheme();
   const tc = theme.colors;
@@ -321,7 +341,12 @@ function InlineDropdown({
         return (
           <Pressable
             key={opt.value}
+            testID={testID ? `${testID}.option.${opt.value}` : undefined}
             onPress={() => { onChange(opt.value); setOpen(false); }}
+            accessibilityActions={[{ name: 'activate', label: opt.label }]}
+            onAccessibilityAction={(e: { nativeEvent: { actionName: string } }) => {
+              if (e.nativeEvent.actionName === 'activate') { onChange(opt.value); setOpen(false); }
+            }}
             style={({ pressed }) => ({
               flexDirection: 'row' as const,
               alignItems: 'center' as const,
@@ -394,6 +419,12 @@ function InlineDropdown({
       <Pressable
         ref={triggerRef}
         onPress={() => setOpen((p) => !p)}
+        testID={testID}
+        accessibilityValue={{ text: value }}
+        accessibilityActions={[{ name: 'activate', label: 'Open dropdown' }]}
+        onAccessibilityAction={(e: { nativeEvent: { actionName: string } }) => {
+          if (e.nativeEvent.actionName === 'activate') setOpen((p) => !p);
+        }}
         style={{
           flexDirection: 'row',
           alignItems: 'center',
@@ -494,6 +525,194 @@ function SoundToggle({ checked, onChange, ...rest }: React.ComponentProps<typeof
 }
 
 // ---------------------------------------------------------------------------
+// Account Sync Subsection
+// ---------------------------------------------------------------------------
+
+function AccountSyncSubsection() {
+  const { theme } = useTheme();
+  const tc = theme.colors;
+  const {
+    syncEnabled, syncStatus, lastSyncedAt, syncError,
+    setSyncEnabled, triggerSync, deleteSyncData,
+  } = useSync();
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  const handleSyncNow = useCallback(async () => {
+    setIsSyncing(true);
+    try {
+      await triggerSync();
+    } finally {
+      setIsSyncing(false);
+    }
+  }, [triggerSync]);
+
+  const handleDelete = useCallback(async () => {
+    setIsDeleting(true);
+    try {
+      await deleteSyncData();
+      setShowDeleteConfirm(false);
+    } finally {
+      setIsDeleting(false);
+    }
+  }, [deleteSyncData]);
+
+  const statusLabel = syncStatus === 'synced' ? 'Synced'
+    : syncStatus === 'syncing' ? 'Syncing...'
+    : syncStatus === 'error' ? 'Sync error'
+    : syncStatus === 'disabled' ? 'Disabled'
+    : 'Idle';
+
+  const statusColor = syncStatus === 'synced' ? tc.status.success
+    : syncStatus === 'error' ? tc.status.danger
+    : tc.text.muted;
+
+  const lastSyncLabel = lastSyncedAt
+    ? `Last synced ${new Date(lastSyncedAt).toLocaleString()}`
+    : 'Never synced';
+
+  return (
+    <View style={{ gap: 12 }} testID={TEST_IDS.SYNC.SETTINGS_SECTION}>
+      <View>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <RNText style={{ fontSize: 15, fontWeight: '600', color: tc.text.primary }}>
+            Cross-Device Sync
+          </RNText>
+          <HelpIndicator
+            id="settings-sync"
+            title="Account Sync"
+            priority={45}
+            size={14}
+          >
+            <HelpText>
+              Keep your friends, groups, preferences, and blocked users synced across all your devices.
+            </HelpText>
+            <HelpListItem>Data is encrypted with your recovery phrase</HelpListItem>
+            <HelpListItem>Only you can decrypt your synced data</HelpListItem>
+            <HelpListItem>Messages and files are NOT synced</HelpListItem>
+          </HelpIndicator>
+        </View>
+        <RNText style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
+          Encrypted sync of account data across devices.
+        </RNText>
+      </View>
+
+      {/* Enable/disable toggle */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <View style={{ flex: 1 }}>
+          <RNText style={{ fontSize: 14, color: tc.text.primary }}>
+            Enable sync
+          </RNText>
+          <RNText style={{ fontSize: 12, color: tc.text.muted }}>
+            Automatically sync friends, groups, and preferences
+          </RNText>
+        </View>
+        <Toggle checked={syncEnabled} onChange={setSyncEnabled} testID={TEST_IDS.SYNC.ENABLE_TOGGLE} />
+      </View>
+
+      {/* Status indicator */}
+      {syncEnabled && (
+        <Card variant="outlined" padding="md">
+          <View style={{ gap: 8 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }} testID={TEST_IDS.SYNC.STATUS_INDICATOR}>
+                <View style={{
+                  width: 8, height: 8, borderRadius: 4,
+                  backgroundColor: statusColor,
+                }} />
+                <RNText style={{ fontSize: 13, fontWeight: '600', color: tc.text.primary }} testID={TEST_IDS.SYNC.STATUS_LABEL}>
+                  {statusLabel}
+                </RNText>
+              </View>
+              <RNText style={{ fontSize: 11, color: tc.text.muted }} testID={TEST_IDS.SYNC.LAST_SYNCED}>
+                {lastSyncLabel}
+              </RNText>
+            </View>
+
+            {syncError && (
+              <RNText style={{ fontSize: 12, color: tc.status.danger }}>
+                {syncError}
+              </RNText>
+            )}
+
+            {/* Sync now button */}
+            <Button
+              variant="secondary"
+              onPress={handleSyncNow}
+              testID={TEST_IDS.SYNC.SYNC_NOW_BUTTON}
+              iconLeft={<ActivityIcon size={14} color={tc.text.primary} />}
+              disabled={isSyncing || syncStatus === 'syncing'}
+              accessibilityActions={[{ name: 'activate', label: 'Sync Now' }]}
+              onAccessibilityAction={(e: { nativeEvent: { actionName: string } }) => {
+                if (e.nativeEvent.actionName === 'activate') handleSyncNow();
+              }}
+            >
+              <RNText style={{ fontSize: 13, fontWeight: '600', color: tc.text.primary }}>
+                {isSyncing ? 'Syncing...' : 'Sync Now'}
+              </RNText>
+            </Button>
+
+            {/* Delete synced data */}
+            <Button
+              variant="secondary"
+              onPress={() => setShowDeleteConfirm(true)}
+              testID={TEST_IDS.SYNC.DELETE_BUTTON}
+              iconLeft={<TrashIcon size={14} color={tc.status.danger} />}
+              style={{ borderColor: tc.status.dangerBorder, backgroundColor: tc.status.dangerSurface }}
+              disabled={isDeleting}
+              accessibilityActions={[{ name: 'activate', label: 'Delete Synced Data' }]}
+              onAccessibilityAction={(e: { nativeEvent: { actionName: string } }) => {
+                if (e.nativeEvent.actionName === 'activate') setShowDeleteConfirm(true);
+              }}
+            >
+              <RNText style={{ fontSize: 13, fontWeight: '600', color: tc.status.danger }}>
+                Delete Synced Data
+              </RNText>
+            </Button>
+          </View>
+        </Card>
+      )}
+
+      {/* Delete confirmation dialog */}
+      <Dialog
+        open={showDeleteConfirm}
+        onClose={() => setShowDeleteConfirm(false)}
+        title="Delete Synced Data?"
+        icon={<TrashIcon size={24} color={tc.status.danger} />}
+        size="sm"
+        footer={
+          <HStack gap="sm" style={{ justifyContent: 'flex-end' }}>
+            <Button variant="tertiary" onPress={() => setShowDeleteConfirm(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="secondary"
+              onPress={handleDelete}
+              testID={TEST_IDS.SYNC.DELETE_CONFIRM}
+              style={{ borderColor: tc.status.dangerBorder, backgroundColor: tc.status.dangerSurface }}
+              disabled={isDeleting}
+              accessibilityActions={[{ name: 'activate', label: 'Delete' }]}
+              onAccessibilityAction={(e: { nativeEvent: { actionName: string } }) => {
+                if (e.nativeEvent.actionName === 'activate') handleDelete();
+              }}
+            >
+              <RNText style={{ color: tc.status.danger, fontWeight: '600', fontSize: 14 }}>
+                {isDeleting ? 'Deleting...' : 'Delete'}
+              </RNText>
+            </Button>
+          </HStack>
+        }
+      >
+        <RNText style={{ fontSize: 13, color: tc.text.secondary, textAlign: 'center', lineHeight: 18 }}>
+          This will permanently delete your synced data from the relay server. Your local data will not be affected. This cannot be undone.
+        </RNText>
+      </Dialog>
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Sections
 // ---------------------------------------------------------------------------
 
@@ -506,6 +725,10 @@ function AccountSection() {
   const [didCopied, setDidCopied] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [showIdentityCard, setShowIdentityCard] = useState(false);
+  const [showRotateKeyConfirm, setShowRotateKeyConfirm] = useState(false);
+  const [rotateKeyResult, setRotateKeyResult] = useState<{ newEncryptionKey: string; friendCount: number } | null>(null);
+  const [rotateKeyError, setRotateKeyError] = useState<string | null>(null);
+  const [isRotatingKey, setIsRotatingKey] = useState(false);
 
   const handleCopyDid = useCallback(() => {
     if (!identity) return;
@@ -536,6 +759,26 @@ function AccountSection() {
     logout();
     router.replace('/(auth)');
   }, [logout, router]);
+
+  const { getRelayWs } = useNetwork();
+
+  const handleRotateKey = useCallback(async () => {
+    setShowRotateKeyConfirm(false);
+    setIsRotatingKey(true);
+    setRotateKeyError(null);
+    setRotateKeyResult(null);
+    try {
+      const { UmbraService } = await import('@umbra/service');
+      const svc = UmbraService.instance;
+      const relayWs = getRelayWs();
+      const result = await svc.rotateEncryptionKey(relayWs);
+      setRotateKeyResult(result);
+    } catch (err: any) {
+      setRotateKeyError(err?.message ?? 'Key rotation failed');
+    } finally {
+      setIsRotatingKey(false);
+    }
+  }, [getRelayWs]);
 
   if (!identity) return null;
 
@@ -622,6 +865,7 @@ function AccountSection() {
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                   <RNText
                     testID={TEST_IDS.SETTINGS.DID_DISPLAY}
+                    accessibilityValue={{ text: identity.did }}
                     style={{
                       fontSize: 12,
                       color: tc.text.secondary,
@@ -657,6 +901,7 @@ function AccountSection() {
           {/* Account Recovery Details PDF */}
           <Pressable
             onPress={() => setShowIdentityCard(true)}
+            testID={TEST_IDS.SETTINGS.IDENTITY_CARD}
             style={{
               flexDirection: 'row',
               alignItems: 'center',
@@ -745,6 +990,10 @@ function AccountSection() {
           </View>
       </View>
 
+      <View nativeID="sub-sync">
+        <AccountSyncSubsection />
+      </View>
+
       <View nativeID="sub-danger">
       {/* Danger zone */}
       <View style={{ gap: 12 }}>
@@ -775,16 +1024,112 @@ function AccountSection() {
 
         <Button
           variant="secondary"
+          onPress={() => setShowRotateKeyConfirm(true)}
+          iconLeft={<KeyIcon size={16} color={tc.status.danger} />}
+          style={{ borderColor: tc.status.dangerBorder, backgroundColor: tc.status.dangerSurface }}
+          testID={TEST_IDS.SETTINGS.ROTATE_KEY_BUTTON}
+          accessibilityActions={[{ name: 'activate', label: 'Rotate Encryption Key' }]}
+          onAccessibilityAction={(e: any) => { if (e.nativeEvent.actionName === 'activate') setShowRotateKeyConfirm(true); }}
+        >
+          <RNText style={{ color: tc.status.danger, fontWeight: '600', fontSize: 14 }}>
+            Rotate Encryption Key
+          </RNText>
+        </Button>
+
+        <Button
+          variant="secondary"
           onPress={() => setShowLogoutConfirm(true)}
           iconLeft={<LogOutIcon size={16} color={tc.status.danger} />}
           style={{ borderColor: tc.status.dangerBorder, backgroundColor: tc.status.dangerSurface }}
           testID={TEST_IDS.SETTINGS.LOGOUT_BUTTON}
+          accessibilityActions={[{ name: 'activate', label: 'Log Out' }]}
+          onAccessibilityAction={(e: any) => { if (e.nativeEvent.actionName === 'activate') setShowLogoutConfirm(true); }}
         >
           <RNText style={{ color: tc.status.danger, fontWeight: '600', fontSize: 14 }}>
             Log Out
           </RNText>
         </Button>
       </View>
+
+      {/* Key rotation confirmation dialog */}
+      <Dialog
+        open={showRotateKeyConfirm}
+        onClose={() => setShowRotateKeyConfirm(false)}
+        title="Rotate Encryption Key?"
+        icon={<KeyIcon size={24} color={tc.status.danger} />}
+        size="sm"
+        testID={TEST_IDS.SETTINGS.ROTATE_KEY_DIALOG}
+        footer={
+          <HStack gap="sm" style={{ justifyContent: 'flex-end' }}>
+            <Button variant="tertiary" onPress={() => setShowRotateKeyConfirm(false)} testID={TEST_IDS.SETTINGS.ROTATE_KEY_CANCEL}>
+              Cancel
+            </Button>
+            <Button
+              variant="secondary"
+              onPress={handleRotateKey}
+              style={{ borderColor: tc.status.dangerBorder, backgroundColor: tc.status.dangerSurface }}
+              testID={TEST_IDS.SETTINGS.ROTATE_KEY_CONFIRM}
+            >
+              <RNText style={{ color: tc.status.danger, fontWeight: '600', fontSize: 14 }}>
+                {isRotatingKey ? 'Rotating...' : 'Rotate Key'}
+              </RNText>
+            </Button>
+          </HStack>
+        }
+      >
+        <View style={{ gap: 12 }}>
+          <RNText style={{ fontSize: 13, color: tc.text.secondary, lineHeight: 18 }} testID={TEST_IDS.SETTINGS.ROTATE_KEY_WARNING}>
+            This will regenerate your encryption keys and notify all connected friends. Messages sent with your old key will no longer be decryptable by new sessions.
+          </RNText>
+          <View style={{ backgroundColor: tc.status.dangerSurface, borderRadius: 8, padding: 12, borderWidth: 1, borderColor: tc.status.dangerBorder }}>
+            <RNText style={{ fontSize: 12, color: tc.status.danger, fontWeight: '600' }}>
+              Warning: This action cannot be undone. Your friends will need to re-establish encrypted sessions.
+            </RNText>
+          </View>
+        </View>
+      </Dialog>
+
+      {/* Key rotation success/error feedback */}
+      {rotateKeyResult && (
+        <Dialog
+          open={!!rotateKeyResult}
+          onClose={() => setRotateKeyResult(null)}
+          title="Key Rotation Complete"
+          icon={<KeyIcon size={24} color={tc.status.success} />}
+          size="sm"
+          testID={TEST_IDS.SETTINGS.ROTATE_KEY_SUCCESS}
+          footer={
+            <Button variant="primary" onPress={() => setRotateKeyResult(null)}>
+              Done
+            </Button>
+          }
+        >
+          <View style={{ gap: 8 }}>
+            <RNText style={{ fontSize: 13, color: tc.text.secondary, lineHeight: 18 }}>
+              Your encryption key has been rotated successfully. {rotateKeyResult.friendCount} friend{rotateKeyResult.friendCount !== 1 ? 's were' : ' was'} notified.
+            </RNText>
+          </View>
+        </Dialog>
+      )}
+
+      {rotateKeyError && (
+        <Dialog
+          open={!!rotateKeyError}
+          onClose={() => setRotateKeyError(null)}
+          title="Key Rotation Failed"
+          icon={<AlertTriangleIcon size={24} color={tc.status.danger} />}
+          size="sm"
+          footer={
+            <Button variant="primary" onPress={() => setRotateKeyError(null)}>
+              OK
+            </Button>
+          }
+        >
+          <RNText style={{ fontSize: 13, color: tc.text.secondary }}>
+            {rotateKeyError}
+          </RNText>
+        </Dialog>
+      )}
 
       {/* Logout confirmation dialog */}
       <Dialog
@@ -793,15 +1138,17 @@ function AccountSection() {
         title="Log Out?"
         icon={<LogOutIcon size={24} color={tc.status.danger} />}
         size="sm"
+        testID={TEST_IDS.COMMON.CONFIRM_DIALOG}
         footer={
           <HStack gap="sm" style={{ justifyContent: 'flex-end' }}>
-            <Button variant="tertiary" onPress={() => setShowLogoutConfirm(false)}>
+            <Button variant="tertiary" onPress={() => setShowLogoutConfirm(false)} testID={TEST_IDS.COMMON.CONFIRM_NO}>
               Cancel
             </Button>
             <Button
               variant="secondary"
               onPress={handleLogout}
               style={{ borderColor: tc.status.dangerBorder, backgroundColor: tc.status.dangerSurface }}
+              testID={TEST_IDS.COMMON.CONFIRM_YES}
             >
               <RNText style={{ color: tc.status.danger, fontWeight: '600', fontSize: 14 }}>
                 Log Out
@@ -1053,6 +1400,7 @@ function AppearanceSection() {
             value={activeTheme?.id ?? 'default'}
             onChange={(id) => setTheme(id === 'default' ? null : id)}
             placeholder="Select theme"
+            testID={TEST_IDS.SETTINGS.THEME_SELECTOR}
           />
           {activeTheme && (
             <View style={{ flexDirection: 'row', gap: 6, marginTop: 8 }}>
@@ -1077,12 +1425,20 @@ function AppearanceSection() {
       <View nativeID="sub-dark-mode">
         {showModeToggle && (
         <SettingRow label="Dark Mode" description="Switch between light and dark themes.">
-          <SoundToggle checked={mode === 'dark'} onChange={toggleMode} />
+          <SoundToggle
+            checked={mode === 'dark'}
+            onChange={toggleMode}
+            testID={TEST_IDS.SETTINGS.DARK_MODE_TOGGLE}
+            accessibilityActions={[{ name: 'activate', label: 'Toggle dark mode' }]}
+            onAccessibilityAction={(e: { nativeEvent: { actionName: string } }) => {
+              if (e.nativeEvent.actionName === 'activate') toggleMode();
+            }}
+          />
         </SettingRow>
         )}
       </View>
 
-      <View nativeID="sub-colors">
+      <View nativeID="sub-colors" testID={TEST_IDS.SETTINGS.ACCENT_COLOR} accessibilityValue={{ text: accentColor ?? '' }}>
         <SettingRow label="Accent Color" description="Choose a primary color for buttons, links, and highlights." vertical>
           <ColorPicker
             value={accentColor ?? theme.colors.accent.primary}
@@ -1113,6 +1469,7 @@ function TextSizeSettingRow({ value, onChange }: { value: string; onChange: (v: 
         value={value}
         onChange={(v) => onChange(v as TextSize)}
         placeholder="Select size"
+        testID={TEST_IDS.SETTINGS.FONT_SIZE}
       />
     </SettingRow>
   );
@@ -2842,7 +3199,7 @@ function NetworkSection() {
 
       <View nativeID="sub-relays">
       {/* Relay Servers */}
-      <View style={{ gap: 12 }}>
+      <View style={{ gap: 12 }} testID={TEST_IDS.SETTINGS.RELAY_STATUS}>
         <View>
           <RNText style={{ fontSize: 15, fontWeight: '600', color: tc.text.primary }}>
             Relay Servers
@@ -4410,7 +4767,13 @@ export function SettingsDialog({ open, onClose, onOpenMarketplace, initialSectio
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: isMobile ? 8 : 0 }}>
         <RNText style={sidebarTitleStyle}>Settings</RNText>
         {isMobile && (
-          <Pressable onPress={onClose} style={{ padding: 8 }} testID={TEST_IDS.SETTINGS.CLOSE_BUTTON}>
+          <Pressable
+            onPress={onClose}
+            style={{ padding: 8 }}
+            testID={TEST_IDS.SETTINGS.CLOSE_BUTTON}
+            accessibilityActions={[{ name: 'activate', label: 'Close' }]}
+            onAccessibilityAction={(e: any) => { if (e.nativeEvent.actionName === 'activate') onClose(); }}
+          >
             <XIcon size={20} color={tc.text.secondary} />
           </Pressable>
         )}
@@ -4428,6 +4791,8 @@ export function SettingsDialog({ open, onClose, onOpenMarketplace, initialSectio
             <Pressable
               onPress={() => handleSectionChange(item.id)}
               testID={NAV_TEST_IDS[item.id]}
+              accessibilityActions={[{ name: 'activate', label: item.label }]}
+              onAccessibilityAction={(e: any) => { if (e.nativeEvent.actionName === 'activate') handleSectionChange(item.id); }}
               style={({ pressed }) => ({
                 flexDirection: 'row',
                 alignItems: 'center',
@@ -4524,7 +4889,13 @@ export function SettingsDialog({ open, onClose, onOpenMarketplace, initialSectio
       {/* Mobile: back button + section title header */}
       {isMobile && (
         <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: tc.border.subtle }}>
-          <Pressable onPress={() => setMobileShowSidebar(true)} style={{ padding: 4, marginRight: 8 }}>
+          <Pressable
+            onPress={() => setMobileShowSidebar(true)}
+            style={{ padding: 4, marginRight: 8 }}
+            testID="settings.back.button"
+            accessibilityActions={[{ name: 'activate', label: 'Back' }]}
+            onAccessibilityAction={(e: any) => { if (e.nativeEvent.actionName === 'activate') setMobileShowSidebar(true); }}
+          >
             <ArrowLeftIcon size={20} color={tc.text.secondary} />
           </Pressable>
           <RNText style={{ fontSize: 16, fontWeight: '600', color: tc.text.primary }}>
@@ -4538,7 +4909,7 @@ export function SettingsDialog({ open, onClose, onOpenMarketplace, initialSectio
         contentContainerStyle={{ padding: isMobile ? 16 : 28 }}
         showsVerticalScrollIndicator={false}
       >
-        <Animated.View style={{ opacity: contentOpacity }}>
+        <Animated.View style={{ opacity: contentOpacity }} testID={SECTION_TEST_IDS[activeSection]}>
           {renderSection()}
         </Animated.View>
       </ScrollView>

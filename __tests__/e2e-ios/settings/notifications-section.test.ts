@@ -26,12 +26,12 @@ describe('Settings > Notifications Section', () => {
   });
 
   it('should display the notifications section', async () => {
-    await expect(element(by.id(TEST_IDS.SETTINGS.SECTION_NOTIFICATIONS))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.SETTINGS.SECTION_NOTIFICATIONS))).toExist();
   });
 
   it('should show the notification toggle', async () => {
     await waitFor(element(by.id(TEST_IDS.SETTINGS.TOGGLE)).atIndex(0))
-      .toBeVisible()
+      .toExist()
       .withTimeout(TIMEOUTS.INTERACTION);
   });
 

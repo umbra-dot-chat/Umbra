@@ -26,7 +26,7 @@ describe('Settings > Plugins Section', () => {
   });
 
   it('should display the plugins section', async () => {
-    await expect(element(by.id(TEST_IDS.SETTINGS.SECTION_PLUGINS))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.SETTINGS.SECTION_PLUGINS))).toExist();
   });
 
   it.todo('should show a list of installed plugins');

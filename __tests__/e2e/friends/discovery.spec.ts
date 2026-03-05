@@ -10,6 +10,7 @@
 
 import { test, expect } from '@playwright/test';
 import {
+  BASE_URL,
   WASM_LOAD_TIMEOUT,
   UI_SETTLE_TIMEOUT,
   RELAY_SETTLE_TIMEOUT,
@@ -30,12 +31,12 @@ test.describe('T3.9.1 — Username search', () => {
     browser,
   }) => {
     // ── User A: create identity with a claimed username ──
-    const ctxA = await browser.newContext();
+    const ctxA = await browser.newContext({ baseURL: BASE_URL });
     const pageA = await ctxA.newPage();
     await createIdentity(pageA, 'SearchableUser', { username: 'testuser391' });
 
     // ── User B: create identity, search for User A by username ──
-    const ctxB = await browser.newContext();
+    const ctxB = await browser.newContext({ baseURL: BASE_URL });
     const pageB = await ctxB.newPage();
     await createIdentity(pageB, 'SearcherUser');
 

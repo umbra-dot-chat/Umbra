@@ -100,6 +100,7 @@ pub mod identity;
 pub mod messaging;
 pub mod network;
 pub mod storage;
+pub mod sync;
 /// Platform-aware time utilities for native and WASM targets.
 pub mod time;
 

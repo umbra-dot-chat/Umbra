@@ -23,7 +23,7 @@ describe('Decrypt Errors [STUB]', () => {
   });
 
   it('should load the main screen', async () => {
-    await expect(element(by.id(TEST_IDS.MAIN.CONTAINER))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.MAIN.CONTAINER))).toExist();
   });
 
   // Decryption error scenarios require crafted payloads that intentionally

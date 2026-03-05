@@ -26,6 +26,7 @@ import React, {
   useContext,
   useEffect,
   useState,
+  useRef,
   useMemo,
 } from 'react';
 import { UmbraService } from '@umbra/service';
@@ -53,6 +54,10 @@ export interface UmbraContextValue {
   version: string;
   /** Granular init stage for loading screen progress */
   initStage: InitStage;
+  /** Whether the per-account database is loaded and identity hydrated — safe to read preferences */
+  preferencesReady: boolean;
+  /** Counter that increments on account switch — triggers preference contexts to re-read from the new account's DB */
+  didChanged: number;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -76,7 +81,19 @@ export function UmbraProvider({ children, config }: UmbraProviderProps) {
   const [error, setError] = useState<Error | null>(null);
   const [version, setVersion] = useState('');
   const [initStage, setInitStage] = useState<InitStage>('booting');
+  const [didChanged, setDidChanged] = useState(0);
+  const prevDidRef = useRef<string | null>(null);
   const { identity, recoveryPhrase, isHydrated } = useAuth();
+
+  // Track DID changes — increments didChanged counter so downstream preference
+  // contexts know to re-read from the new account's per-DID database.
+  useEffect(() => {
+    const currentDid = identity?.did ?? null;
+    if (prevDidRef.current !== null && currentDid !== prevDidRef.current) {
+      setDidChanged((c) => c + 1);
+    }
+    prevDidRef.current = currentDid;
+  }, [identity?.did]);
 
   useEffect(() => {
     let cancelled = false;
@@ -198,6 +215,8 @@ export function UmbraProvider({ children, config }: UmbraProviderProps) {
     hydrateIdentity();
   }, [isReady, isHydrated, identity, recoveryPhrase]);
 
+  const preferencesReady = initStage === 'hydrated';
+
   const value = useMemo<UmbraContextValue>(() => {
     let service: UmbraService | null = null;
     if (isReady) {
@@ -208,8 +227,8 @@ export function UmbraProvider({ children, config }: UmbraProviderProps) {
         // but React state hasn't re-synced yet. This is a transient condition.
       }
     }
-    return { isReady, isLoading, error, service, version, initStage };
-  }, [isReady, isLoading, error, version, initStage]);
+    return { isReady, isLoading, error, service, version, initStage, preferencesReady, didChanged };
+  }, [isReady, isLoading, error, version, initStage, preferencesReady, didChanged]);
 
   return (
     <UmbraContext.Provider value={value}>

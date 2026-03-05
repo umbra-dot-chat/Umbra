@@ -2,7 +2,7 @@
  * MessagingContext — Controls message display mode (bubble vs inline).
  *
  * Persists preferences via the WASM KV store (same pattern as ThemeContext).
- * Supports relay sync so preferences propagate across sessions.
+ * Re-reads from KV on account switch via preferencesReady/didChanged.
  */
 
 import React, {
@@ -12,13 +12,9 @@ import React, {
   useState,
   useCallback,
   useMemo,
-  useRef,
 } from 'react';
 import { getWasm } from '@umbra/wasm';
 import { useUmbra } from '@/contexts/UmbraContext';
-import { useAuth } from '@/contexts/AuthContext';
-import { syncMetadataViaRelay } from '@umbra/service';
-import type { MetadataEvent } from '@umbra/service';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -50,14 +46,10 @@ const KEY_DISPLAY_MODE = 'message_display_mode';
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function MessagingProvider({ children }: { children: React.ReactNode }) {
-  const { isReady, service } = useUmbra();
-  const { identity } = useAuth();
+  const { preferencesReady, didChanged } = useUmbra();
 
   const [displayMode, setDisplayModeState] = useState<MessageDisplayMode>('bubble');
   const [loaded, setLoaded] = useState(false);
-
-  // Track whether we've done initial restore so we don't clobber state
-  const initialRestoreRef = useRef(false);
 
   // ── Persistence helpers ──────────────────────────────────────────────
 
@@ -86,8 +78,7 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
   // ── Load saved state on mount ────────────────────────────────────────
 
   useEffect(() => {
-    if (!isReady || initialRestoreRef.current) return;
-    initialRestoreRef.current = true;
+    if (!preferencesReady) return;
 
     async function restorePreferences() {
       const savedMode = await kvGet(KEY_DISPLAY_MODE);
@@ -99,27 +90,7 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
     }
 
     restorePreferences();
-  }, [isReady, kvGet]);
-
-  // ── Relay sync: listen for incoming metadata updates ─────────────────
-
-  useEffect(() => {
-    if (!service) return;
-
-    const unsub = service.onMetadataEvent((event: MetadataEvent) => {
-      if (event.type === 'metadataReceived' && event.key === KEY_DISPLAY_MODE) {
-        const newMode = event.value;
-        if (newMode === 'bubble' || newMode === 'inline') {
-          console.log('[MessagingContext] Relay sync: display mode updated to', newMode);
-          setDisplayModeState(newMode);
-          // Also persist locally so it survives reload
-          kvSet(KEY_DISPLAY_MODE, newMode);
-        }
-      }
-    });
-
-    return unsub;
-  }, [service, kvSet]);
+  }, [preferencesReady, didChanged, kvGet]);
 
   // ── Public setters ───────────────────────────────────────────────────
 
@@ -127,20 +98,8 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
     (mode: MessageDisplayMode) => {
       setDisplayModeState(mode);
       kvSet(KEY_DISPLAY_MODE, mode);
-
-      // Sync to other sessions via relay
-      if (service && identity?.did) {
-        try {
-          const relayWs = service.getRelayWs();
-          if (relayWs) {
-            syncMetadataViaRelay(relayWs, identity.did, KEY_DISPLAY_MODE, mode);
-          }
-        } catch (err) {
-          console.warn('[MessagingContext] Failed to sync via relay:', err);
-        }
-      }
     },
-    [kvSet, service, identity],
+    [kvSet],
   );
 
   // ── Context value ────────────────────────────────────────────────────

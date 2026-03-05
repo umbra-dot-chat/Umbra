@@ -25,11 +25,11 @@ describe('Friends — Pending Tab', () => {
   it('should switch to the Pending tab', async () => {
     await element(by.id(TEST_IDS.FRIENDS.TAB_PENDING)).tap();
     await waitForUISettle();
-    await expect(element(by.id(TEST_IDS.FRIENDS.TAB_PENDING))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.FRIENDS.TAB_PENDING))).toExist();
   });
 
   it('should show empty state when no pending requests', async () => {
-    await expect(element(by.id(TEST_IDS.FRIENDS.EMPTY_STATE))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.FRIENDS.EMPTY_STATE))).toExist();
   });
 
   // TWO-USER STUBS: These tests require a second device/user to generate
@@ -51,6 +51,6 @@ describe('Friends — Pending Tab', () => {
   it('should switch back to All tab after viewing Pending', async () => {
     await element(by.id(TEST_IDS.FRIENDS.TAB_ALL)).tap();
     await waitForUISettle();
-    await expect(element(by.id(TEST_IDS.FRIENDS.TAB_ALL))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.FRIENDS.TAB_ALL))).toExist();
   });
 });

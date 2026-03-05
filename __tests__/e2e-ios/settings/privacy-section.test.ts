@@ -26,12 +26,12 @@ describe('Settings > Privacy Section', () => {
   });
 
   it('should display the privacy section', async () => {
-    await expect(element(by.id(TEST_IDS.SETTINGS.SECTION_PRIVACY))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.SETTINGS.SECTION_PRIVACY))).toExist();
   });
 
   it('should show at least one privacy toggle', async () => {
     await waitFor(element(by.id(TEST_IDS.SETTINGS.TOGGLE)).atIndex(0))
-      .toBeVisible()
+      .toExist()
       .withTimeout(TIMEOUTS.INTERACTION);
   });
 

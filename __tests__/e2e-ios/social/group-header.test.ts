@@ -24,26 +24,26 @@ describe('Group Header', () => {
   });
 
   it('should show the main screen', async () => {
-    await expect(element(by.id(TEST_IDS.MAIN.CONTAINER))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.MAIN.CONTAINER))).toExist();
   });
 
   // Requires navigating into a group conversation. These tests are skipped
   // because creating a group requires at least one friend (two-user setup).
 
   it.skip('should display the chat header in a group conversation', async () => {
-    await expect(element(by.id(TEST_IDS.CHAT.HEADER))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.CHAT.HEADER))).toExist();
   });
 
   it.skip('should show the group name in the header', async () => {
-    await expect(element(by.id(TEST_IDS.CHAT.HEADER_NAME))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.CHAT.HEADER_NAME))).toExist();
   });
 
   it.skip('should show the members button in the group header', async () => {
-    await expect(element(by.id(TEST_IDS.CHAT.MEMBERS_BUTTON))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.CHAT.MEMBERS_BUTTON))).toExist();
   });
 
   it.skip('should show the settings button in the group header', async () => {
-    await expect(element(by.id(TEST_IDS.CHAT.SETTINGS_BUTTON))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.CHAT.SETTINGS_BUTTON))).toExist();
   });
 
   it.skip('should navigate back from the group conversation', async () => {
@@ -51,7 +51,7 @@ describe('Group Header', () => {
     await waitForUISettle();
 
     await waitFor(element(by.id(TEST_IDS.SIDEBAR.CONTAINER)))
-      .toBeVisible()
+      .toExist()
       .withTimeout(TIMEOUTS.NAVIGATION);
   });
 

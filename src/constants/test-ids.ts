@@ -153,6 +153,7 @@ export const TEST_IDS = {
     TAB_BLOCKED: 'friends.tab.blocked',
     ADD_INPUT: 'friends.add.input',
     ADD_BUTTON: 'friends.add.button',
+    ADD_FEEDBACK: 'friends.add.feedback',
     CARD: 'friends.card',
     CARD_NAME: 'friends.card.name',
     CARD_STATUS: 'friends.card.status',
@@ -269,6 +270,13 @@ export const TEST_IDS = {
     LOGOUT_BUTTON: 'settings.account.logout',
     DELETE_BUTTON: 'settings.account.delete',
     IDENTITY_CARD: 'settings.account.identity.card',
+    // Key Rotation
+    ROTATE_KEY_BUTTON: 'settings.account.rotate.key',
+    ROTATE_KEY_CONFIRM: 'settings.account.rotate.key.confirm',
+    ROTATE_KEY_CANCEL: 'settings.account.rotate.key.cancel',
+    ROTATE_KEY_DIALOG: 'settings.account.rotate.key.dialog',
+    ROTATE_KEY_SUCCESS: 'settings.account.rotate.key.success',
+    ROTATE_KEY_WARNING: 'settings.account.rotate.key.warning',
     // Profile
     DISPLAY_NAME_INPUT: 'settings.profile.display.name',
     BIO_INPUT: 'settings.profile.bio',
@@ -276,6 +284,8 @@ export const TEST_IDS = {
     SAVE_PROFILE: 'settings.profile.save',
     // Appearance
     THEME_SELECTOR: 'settings.appearance.theme',
+    DARK_MODE_TOGGLE: 'settings.appearance.dark.mode',
+    ACCENT_COLOR: 'settings.appearance.accent.color',
     FONT_SIZE: 'settings.appearance.font.size',
     COMPACT_MODE: 'settings.appearance.compact',
     // Network
@@ -309,6 +319,28 @@ export const TEST_IDS = {
     SETTINGS_BUTTON: 'community.settings.button',
     HEADER: 'community.header',
     NAME: 'community.name',
+  },
+
+  // ── Sync ──────────────────────────────────────────────────────────────────
+  SYNC: {
+    // Settings subsection
+    SETTINGS_SECTION: 'sync.settings.section',
+    ENABLE_TOGGLE: 'sync.enable.toggle',
+    STATUS_INDICATOR: 'sync.status.indicator',
+    STATUS_LABEL: 'sync.status.label',
+    LAST_SYNCED: 'sync.last.synced',
+    SYNC_NOW_BUTTON: 'sync.now.button',
+    DELETE_BUTTON: 'sync.delete.button',
+    DELETE_CONFIRM: 'sync.delete.confirm',
+    // Create wallet sync opt-in
+    OPT_IN_CHECKBOX: 'sync.opt.in.checkbox',
+    OPT_IN_LABEL: 'sync.opt.in.label',
+    // Import wallet sync restore
+    RESTORE_CARD: 'sync.restore.card',
+    RESTORE_SUMMARY: 'sync.restore.summary',
+    RESTORE_BUTTON: 'sync.restore.button',
+    SKIP_BUTTON: 'sync.skip.button',
+    RESTORE_SUCCESS: 'sync.restore.success',
   },
 
   // ── Common ─────────────────────────────────────────────────────────────────

@@ -7,7 +7,7 @@
 
 import React, { useRef, useCallback } from 'react';
 import { View, TextInput, Platform, type ViewStyle } from 'react-native';
-import { Input, Button, Alert } from '@coexist/wisp-react-native';
+import { Input, Button, Alert, Text } from '@coexist/wisp-react-native';
 import { ClipboardIcon } from '@/components/ui';
 
 export interface SeedPhraseInputProps {
@@ -22,6 +22,17 @@ export interface SeedPhraseInputProps {
   /** Test ID for the paste button */
   pasteButtonTestID?: string;
 }
+
+// Pre-built icon components for each word number (avoids re-creation on render)
+const numberIcons = Array.from({ length: 24 }, (_, i) => {
+  const NumberIcon = ({ color }: { size?: number | string; color?: string }) => (
+    <Text size="xs" style={{ color, fontVariant: ['tabular-nums'], lineHeight: 20 }}>
+      {String(i + 1).padStart(2, '0')}.
+    </Text>
+  );
+  NumberIcon.displayName = `NumberIcon${i + 1}`;
+  return NumberIcon;
+});
 
 export function SeedPhraseInput({
   words,
@@ -87,7 +98,7 @@ export function SeedPhraseInput({
                 inputRefs.current[i] = ref;
               }}
               size="sm"
-              label={`${i + 1}`}
+              icon={numberIcons[i]}
               value={word}
               onChangeText={(v: string) => handleChangeText(i, v)}
               onSubmitEditing={() => handleSubmitEditing(i)}
@@ -96,6 +107,7 @@ export function SeedPhraseInput({
               autoCorrect={false}
               returnKeyType={i < 23 ? 'next' : 'done'}
               fullWidth
+              testID={testID ? `${testID}.word.${i}` : undefined}
             />
           </View>
         ))}

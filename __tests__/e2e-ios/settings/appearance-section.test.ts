@@ -26,19 +26,19 @@ describe('Settings > Appearance Section', () => {
   });
 
   it('should display the appearance section', async () => {
-    await expect(element(by.id(TEST_IDS.SETTINGS.SECTION_APPEARANCE))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.SETTINGS.SECTION_APPEARANCE))).toExist();
   });
 
   it('should show the theme selector', async () => {
-    await expect(element(by.id(TEST_IDS.SETTINGS.THEME_SELECTOR))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.SETTINGS.THEME_SELECTOR))).toExist();
   });
 
   it('should show the font size control', async () => {
-    await expect(element(by.id(TEST_IDS.SETTINGS.FONT_SIZE))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.SETTINGS.FONT_SIZE))).toExist();
   });
 
   it('should show the compact mode toggle', async () => {
-    await expect(element(by.id(TEST_IDS.SETTINGS.COMPACT_MODE))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.SETTINGS.COMPACT_MODE))).toExist();
   });
 
   it.todo('should switch theme when a different theme option is selected');

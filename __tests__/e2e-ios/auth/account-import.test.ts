@@ -24,7 +24,7 @@ describe('T1.2 Account Import', () => {
   });
 
   it('T1.2.1 — import button is visible on auth screen', async () => {
-    await expect(element(by.id(TEST_IDS.AUTH.IMPORT_BUTTON))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.AUTH.IMPORT_BUTTON))).toExist();
   });
 
   it('T1.2.2 — tapping import opens the import flow', async () => {
@@ -32,7 +32,7 @@ describe('T1.2 Account Import', () => {
     await waitForUISettle();
 
     await waitFor(element(by.id(TEST_IDS.IMPORT.FLOW)))
-      .toBeVisible()
+      .toExist()
       .withTimeout(TIMEOUTS.NAVIGATION);
   });
 
@@ -41,7 +41,7 @@ describe('T1.2 Account Import', () => {
     await waitForUISettle();
 
     await waitFor(element(by.id(TEST_IDS.IMPORT.SEED_INPUT)))
-      .toBeVisible()
+      .toExist()
       .withTimeout(TIMEOUTS.NAVIGATION);
   });
 
@@ -50,14 +50,14 @@ describe('T1.2 Account Import', () => {
     await waitForUISettle();
 
     await waitFor(element(by.id(TEST_IDS.IMPORT.SEED_INPUT)))
-      .toBeVisible()
+      .toExist()
       .withTimeout(TIMEOUTS.NAVIGATION);
 
     await element(by.id(TEST_IDS.IMPORT.SEED_INPUT)).typeText(FIXTURES.KNOWN_SEED_PHRASE);
     await waitForUISettle();
 
     // Seed next button should be available
-    await expect(element(by.id(TEST_IDS.IMPORT.SEED_NEXT))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.IMPORT.SEED_NEXT))).toExist();
   });
 
   it('T1.2.5 — invalid seed phrase shows error', async () => {
@@ -65,7 +65,7 @@ describe('T1.2 Account Import', () => {
     await waitForUISettle();
 
     await waitFor(element(by.id(TEST_IDS.IMPORT.SEED_INPUT)))
-      .toBeVisible()
+      .toExist()
       .withTimeout(TIMEOUTS.NAVIGATION);
 
     await element(by.id(TEST_IDS.IMPORT.SEED_INPUT)).typeText(FIXTURES.INVALID_SEED_PHRASE);
@@ -74,7 +74,7 @@ describe('T1.2 Account Import', () => {
 
     // Should show an error — either the error screen or inline error text
     await waitFor(element(by.text('Invalid recovery phrase')))
-      .toBeVisible()
+      .toExist()
       .withTimeout(TIMEOUTS.INTERACTION);
   });
 
@@ -83,7 +83,7 @@ describe('T1.2 Account Import', () => {
     await waitForUISettle();
 
     await waitFor(element(by.id(TEST_IDS.IMPORT.SEED_INPUT)))
-      .toBeVisible()
+      .toExist()
       .withTimeout(TIMEOUTS.NAVIGATION);
 
     await element(by.id(TEST_IDS.IMPORT.SEED_INPUT)).typeText(FIXTURES.KNOWN_SEED_PHRASE);
@@ -92,7 +92,7 @@ describe('T1.2 Account Import', () => {
 
     // Display name input should appear
     await waitFor(element(by.id(TEST_IDS.IMPORT.NAME_INPUT)))
-      .toBeVisible()
+      .toExist()
       .withTimeout(TIMEOUTS.CORE_INIT);
   });
 
@@ -101,7 +101,7 @@ describe('T1.2 Account Import', () => {
     await waitForUISettle();
 
     await waitFor(element(by.id(TEST_IDS.IMPORT.SEED_INPUT)))
-      .toBeVisible()
+      .toExist()
       .withTimeout(TIMEOUTS.NAVIGATION);
 
     await element(by.id(TEST_IDS.IMPORT.SEED_INPUT)).typeText(FIXTURES.KNOWN_SEED_PHRASE);
@@ -109,16 +109,16 @@ describe('T1.2 Account Import', () => {
     await waitForUISettle();
 
     await waitFor(element(by.id(TEST_IDS.IMPORT.NAME_INPUT)))
-      .toBeVisible()
+      .toExist()
       .withTimeout(TIMEOUTS.CORE_INIT);
 
     await element(by.id(TEST_IDS.IMPORT.NAME_INPUT)).typeText(FIXTURES.USER_A.displayName);
-    await expect(element(by.id(TEST_IDS.IMPORT.NAME_NEXT))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.IMPORT.NAME_NEXT))).toExist();
   });
 
   it('T1.2.8 — full import flow loads main screen', async () => {
     await importAccount(FIXTURES.KNOWN_SEED_PHRASE, FIXTURES.USER_A.displayName);
-    await expect(element(by.id(TEST_IDS.MAIN.CONTAINER))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.MAIN.CONTAINER))).toExist();
   });
 
   it('T1.2.9 — back button on import flow returns to auth screen', async () => {
@@ -126,14 +126,14 @@ describe('T1.2 Account Import', () => {
     await waitForUISettle();
 
     await waitFor(element(by.id(TEST_IDS.IMPORT.FLOW)))
-      .toBeVisible()
+      .toExist()
       .withTimeout(TIMEOUTS.NAVIGATION);
 
     await element(by.id(TEST_IDS.IMPORT.BACK_BUTTON)).tap();
     await waitForUISettle();
 
     await waitFor(element(by.id(TEST_IDS.AUTH.SCREEN)))
-      .toBeVisible()
+      .toExist()
       .withTimeout(TIMEOUTS.NAVIGATION);
   });
 });

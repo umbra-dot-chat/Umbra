@@ -7,7 +7,12 @@
  *
  * Uses setupFriendPair + navigateToDM from group-helpers.ts.
  *
- * Test IDs: T4.24.1–T4.24.6
+ * NETWORK VERIFICATION:
+ * - T4.24.5 uses HARD assertion for cross-user file delivery via relay
+ * - T4.24.8 uses HARD assertion for offline delivery after reconnect
+ * - All file card visibility checks use hard expect() assertions
+ *
+ * Test IDs: T4.24.1–T4.24.9
  */
 
 import { test, expect, type Page } from '@playwright/test';
@@ -231,18 +236,20 @@ test.describe('4.24 DM File Attachments', () => {
       setup.alice.getByText('download-me.txt').first(),
     ).toBeVisible({ timeout: 15_000 });
 
-    // Look for download button on Alice's own message
+    // HARD ASSERTION: Download button MUST be visible on the file card.
+    // If it's missing, the DmFileMessage component isn't rendering the
+    // download action, which breaks the file sharing user experience.
     const downloadBtn = setup.alice.locator('[aria-label="Download"], [aria-label="Download file"]').first();
-    const hasDownloadBtn = await downloadBtn.isVisible({ timeout: 5_000 }).catch(() => false);
+    await expect(downloadBtn).toBeVisible({ timeout: 10_000 });
 
-    if (hasDownloadBtn) {
-      const downloadPromise = setup.alice.waitForEvent('download', { timeout: 15_000 }).catch(() => null);
-      await downloadBtn.click();
-      const download = await downloadPromise;
-      if (download) {
-        expect(download.suggestedFilename()).toContain('download-me');
-      }
+    // Trigger download and verify the browser download event fires
+    const downloadPromise = setup.alice.waitForEvent('download', { timeout: 15_000 }).catch(() => null);
+    await downloadBtn.click();
+    const download = await downloadPromise;
+    if (download) {
+      expect(download.suggestedFilename()).toContain('download-me');
     }
+    // Note: download may be null in headless mode, but the button click itself verifies functionality
 
     await setup.ctx1.close();
     await setup.ctx2.close();
@@ -310,18 +317,13 @@ test.describe('4.24 DM File Attachments', () => {
     await navigateToDM(setup.bob, 'Alice4248');
     await setup.bob.waitForTimeout(RELAY_SETTLE_TIMEOUT);
 
-    // Bob should see the file message (delivered via offline relay queue)
-    const fileVisible = await setup.bob.getByText('offline-file.txt').first()
-      .isVisible({ timeout: 20_000 })
-      .catch(() => false);
-
-    // This test verifies the offline relay dispatch path works for file messages
-    // If the relay delivers offline messages, the file should be visible
-    if (fileVisible) {
-      await expect(
-        setup.bob.getByText('offline-file.txt').first(),
-      ).toBeVisible();
-    }
+    // HARD ASSERTION: Bob MUST see the file message after reconnecting.
+    // This verifies the offline relay queue delivers file messages correctly.
+    // If this fails, it indicates the relay doesn't queue file messages
+    // for offline recipients, or the file payload is lost during reconnect.
+    await expect(
+      setup.bob.getByText('offline-file.txt').first(),
+    ).toBeVisible({ timeout: 30_000 });
 
     await setup.ctx1.close();
     await setup.ctx2.close();

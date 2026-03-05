@@ -47,6 +47,8 @@ jest.mock('@umbra/wasm', () => ({
 jest.mock('@/contexts/UmbraContext', () => ({
   useUmbra: jest.fn(() => ({
     isReady: true,
+    preferencesReady: true,
+    didChanged: 0,
     service: mockService,
   })),
 }));
@@ -218,7 +220,7 @@ describe('T11.4.9-12 — Install / Uninstall Lifecycle', () => {
     expect(result.current.installedThemeIds.has('dracula')).toBe(true);
   });
 
-  it('T11.4.10 — installTheme persists via KV and relay syncs', async () => {
+  it('T11.4.10 — installTheme persists via KV', async () => {
     const { result } = await renderAndWait();
 
     act(() => {
@@ -232,13 +234,8 @@ describe('T11.4.9-12 — Install / Uninstall Lifecycle', () => {
       expect.any(String),
     );
 
-    // Verify relay sync was called
-    expect(mockSyncMetadataViaRelay).toHaveBeenCalledWith(
-      expect.anything(),
-      'did:key:z6MkTest',
-      'installed_themes',
-      expect.any(String),
-    );
+    // Note: relay sync is now handled by SyncContext (Phase 4), not ThemeContext.
+    // See sync-context.test.ts for sync upload tests.
   });
 
   it('T11.4.11 — uninstallTheme(id) removes from installed set', async () => {
@@ -326,7 +323,7 @@ describe('T11.4.13-17 — Set Theme', () => {
     expect(result.current.activeTheme).toBeNull();
   });
 
-  it('T11.4.17 — setTheme persists theme_id via KV and relay', async () => {
+  it('T11.4.17 — setTheme persists theme_id via KV', async () => {
     const { result } = await renderAndWait();
     jest.clearAllMocks();
 
@@ -339,12 +336,8 @@ describe('T11.4.13-17 — Set Theme', () => {
       'theme_id',
       'monokai',
     );
-    expect(mockSyncMetadataViaRelay).toHaveBeenCalledWith(
-      expect.anything(),
-      'did:key:z6MkTest',
-      'theme_id',
-      'monokai',
-    );
+
+    // Note: relay sync is now handled by SyncContext (Phase 4), not ThemeContext.
   });
 });
 
@@ -445,7 +438,7 @@ describe('T11.4.21-24 — Accent Color', () => {
     expect(lastCall.colors.accent.primary).toBe('#00ff00');
   });
 
-  it('T11.4.24 — setAccentColor persists via KV and relay syncs', async () => {
+  it('T11.4.24 — setAccentColor persists via KV', async () => {
     const { result } = await renderAndWait();
     jest.clearAllMocks();
 
@@ -458,12 +451,8 @@ describe('T11.4.21-24 — Accent Color', () => {
       'accent_color',
       '#123abc',
     );
-    expect(mockSyncMetadataViaRelay).toHaveBeenCalledWith(
-      expect.anything(),
-      'did:key:z6MkTest',
-      'accent_color',
-      '#123abc',
-    );
+
+    // Note: relay sync is now handled by SyncContext (Phase 4), not ThemeContext.
   });
 });
 
@@ -506,7 +495,7 @@ describe('T11.4.25-28 — Text Size', () => {
     expect(result.current.textSize).toBe('md');
   });
 
-  it('T11.4.28 — setTextSize persists via KV and relay syncs', async () => {
+  it('T11.4.28 — setTextSize persists via KV', async () => {
     const { result } = await renderAndWait();
     jest.clearAllMocks();
 
@@ -519,12 +508,8 @@ describe('T11.4.25-28 — Text Size', () => {
       'text_size',
       'lg',
     );
-    expect(mockSyncMetadataViaRelay).toHaveBeenCalledWith(
-      expect.anything(),
-      'did:key:z6MkTest',
-      'text_size',
-      'lg',
-    );
+
+    // Note: relay sync is now handled by SyncContext (Phase 4), not ThemeContext.
   });
 });
 
@@ -617,39 +602,32 @@ describe('T11.4.32-34 — KV Persistence', () => {
 });
 
 // ===========================================================================
-// T11.4.35-36 — Relay sync
+// T11.4.35-36 — KV Persistence (replaces deprecated relay sync tests)
 // ===========================================================================
 
-describe('T11.4.35-36 — Relay Sync', () => {
-  it('T11.4.35 — setTheme calls syncMetadataViaRelay with theme_id', async () => {
+describe('T11.4.35-36 — KV Persistence for Sync', () => {
+  it('T11.4.35 — setTheme persists theme_id to KV store for SyncContext', async () => {
     const { result } = await renderAndWait();
-    mockSyncMetadataViaRelay.mockClear();
+    jest.clearAllMocks();
 
     act(() => {
       result.current.setTheme('rose-pine');
     });
 
-    const themeCalls = mockSyncMetadataViaRelay.mock.calls.filter(
-      (c: any[]) => c[2] === 'theme_id',
-    );
-    expect(themeCalls.length).toBeGreaterThanOrEqual(1);
-    expect(themeCalls[themeCalls.length - 1][3]).toBe('rose-pine');
+    // Theme ID is written to KV; SyncContext (not ThemeContext) handles
+    // syncing to the relay via markDirty() → debounced upload.
+    expect(kvStore['__umbra_system__:theme_id']).toBe('rose-pine');
   });
 
-  it('T11.4.36 — setTextSize calls syncMetadataViaRelay with text_size', async () => {
+  it('T11.4.36 — setTextSize persists text_size to KV store for SyncContext', async () => {
     const { result } = await renderAndWait();
-    mockSyncMetadataViaRelay.mockClear();
+    jest.clearAllMocks();
 
     act(() => {
       result.current.setTextSize('sm');
     });
 
-    expect(mockSyncMetadataViaRelay).toHaveBeenCalledWith(
-      expect.anything(),
-      'did:key:z6MkTest',
-      'text_size',
-      'sm',
-    );
+    expect(kvStore['__umbra_system__:text_size']).toBe('sm');
   });
 });
 
@@ -726,7 +704,7 @@ describe('T11.4.39 — useAppTheme Outside Provider', () => {
 // ===========================================================================
 
 describe('T11.4.40 — Reset Theme Persistence', () => {
-  it('T11.4.40 — setTheme(null) persists empty theme_id and relay syncs', async () => {
+  it('T11.4.40 — setTheme(null) persists empty theme_id', async () => {
     const { result } = await renderAndWait();
 
     act(() => {
@@ -743,12 +721,8 @@ describe('T11.4.40 — Reset Theme Persistence', () => {
       'theme_id',
       '',
     );
-    expect(mockSyncMetadataViaRelay).toHaveBeenCalledWith(
-      expect.anything(),
-      'did:key:z6MkTest',
-      'theme_id',
-      '',
-    );
+
+    // Note: relay sync is now handled by SyncContext (Phase 4), not ThemeContext.
   });
 });
 

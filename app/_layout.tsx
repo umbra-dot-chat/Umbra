@@ -13,6 +13,7 @@ import { FontProvider } from '@/contexts/FontContext';
 import { ThemeProvider, useAppTheme } from '@/contexts/ThemeContext';
 import { SoundProvider } from '@/contexts/SoundContext';
 import { MessagingProvider } from '@/contexts/MessagingContext';
+import { SyncProvider } from '@/contexts/SyncContext';
 import { HelpPopoverHost } from '@/components/ui/HelpPopoverHost';
 import { PinLockScreen } from '@/components/auth/PinLockScreen';
 import { LoadingScreen } from '@/components/ui/LoadingScreen';
@@ -209,6 +210,7 @@ export default function RootLayout() {
                 <ThemeProvider>
                   <SoundProvider>
                   <MessagingProvider>
+                  <SyncProvider>
                   <PluginProvider>
                     <HelpProvider>
                       <DynamicStatusBar />
@@ -216,6 +218,7 @@ export default function RootLayout() {
                       <HelpPopoverHost />
                     </HelpProvider>
                   </PluginProvider>
+                  </SyncProvider>
                   </MessagingProvider>
                   </SoundProvider>
                 </ThemeProvider>

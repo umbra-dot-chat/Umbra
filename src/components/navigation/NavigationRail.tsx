@@ -240,6 +240,8 @@ export function NavigationRail({
               <Pressable
                 testID={TEST_IDS.NAV.AVATAR}
                 onPress={onAvatarPress}
+                accessibilityActions={[{ name: 'activate', label: 'Open account' }]}
+                onAccessibilityAction={(e: any) => { if (e.nativeEvent.actionName === 'activate') onAvatarPress?.(); }}
                 style={({ pressed }) => ({
                   width: ICON_SIZE,
                   height: ICON_SIZE,
@@ -397,6 +399,8 @@ function RailItem({ active, onPress, accentColor, theme, children, ringProgress,
         <Pressable
           testID={testID}
           onPress={onPress}
+          accessibilityActions={[{ name: 'activate', label: 'Activate' }]}
+          onAccessibilityAction={(e: any) => { if (e.nativeEvent.actionName === 'activate') onPress(); }}
           style={({ pressed }) => ({
             width: ICON_SIZE,
             height: ICON_SIZE,

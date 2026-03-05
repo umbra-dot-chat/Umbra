@@ -121,6 +121,20 @@ export function createTauriBackend(
       return call('account_restore_backup', json) as any;
     },
 
+    // ── Account Sync ───────────────────────────────────────────────
+    umbra_wasm_sync_create_blob: (json: string) => {
+      return call('sync_create_blob', json) as any;
+    },
+    umbra_wasm_sync_parse_blob: (json: string) => {
+      return call('sync_parse_blob', json) as any;
+    },
+    umbra_wasm_sync_apply_blob: (json: string) => {
+      return call('sync_apply_blob', json) as any;
+    },
+    umbra_wasm_sync_sign_challenge: (json: string) => {
+      return call('sync_sign_challenge', json) as any;
+    },
+
     // ── Discovery ──────────────────────────────────────────────────
     umbra_wasm_discovery_get_connection_info: () => {
       return invoke('get_connection_info').then(ensureJsonString) as any;

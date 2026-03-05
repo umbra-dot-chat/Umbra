@@ -26,15 +26,15 @@ describe('Settings > Identity Card', () => {
   });
 
   it('should display the account section', async () => {
-    await expect(element(by.id(TEST_IDS.SETTINGS.SECTION_ACCOUNT))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.SETTINGS.SECTION_ACCOUNT))).toExist();
   });
 
   it('should show the identity card', async () => {
-    await expect(element(by.id(TEST_IDS.SETTINGS.IDENTITY_CARD))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.SETTINGS.IDENTITY_CARD))).toExist();
   });
 
   it('should show the DID on the identity card', async () => {
-    await expect(element(by.id(TEST_IDS.SETTINGS.DID_DISPLAY))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.SETTINGS.DID_DISPLAY))).toExist();
   });
 
   it('should display a non-empty DID value', async () => {

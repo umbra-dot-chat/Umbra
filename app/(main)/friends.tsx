@@ -36,6 +36,7 @@ import { useSound } from '@/contexts/SoundContext';
 import { MobileBackButton } from '@/components/ui/MobileBackButton';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import { useNetwork } from '@/hooks/useNetwork';
+import { TEST_IDS } from '@/constants/test-ids';
 
 // ---------------------------------------------------------------------------
 // Search Platform Selector
@@ -319,12 +320,15 @@ export default function FriendsPage() {
   };
 
   const handleAddFriend = async (value: string) => {
-    if (value.trim().length < 8) {
+    const trimmed = value.trim();
+
+    // Client-side DID format validation
+    if (!trimmed.startsWith('did:key:z6Mk') || trimmed.length < 48) {
       setAddFriendFeedback({
         state: 'error',
         message: 'Please enter a valid DID (did:key:z6Mk...).',
       });
-      setTimeout(() => setAddFriendFeedback({ state: 'idle' }), 3000);
+      setTimeout(() => setAddFriendFeedback({ state: 'idle' }), 5000);
       return;
     }
 
@@ -360,7 +364,7 @@ export default function FriendsPage() {
       });
     }
 
-    setTimeout(() => setAddFriendFeedback({ state: 'idle' }), 3000);
+    setTimeout(() => setAddFriendFeedback({ state: 'idle' }), 5000);
   };
 
   // ------ Navigation to DM ------
@@ -503,7 +507,7 @@ export default function FriendsPage() {
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: theme.colors.background.canvas }}>
+    <View testID={TEST_IDS.FRIENDS.PAGE} style={{ flex: 1, backgroundColor: theme.colors.background.canvas }}>
       <Tabs value={activeTab} onChange={handleTabChange} style={{ flex: 1 }}>
         {/* Header bar with title + tabs */}
         <View
@@ -529,18 +533,21 @@ export default function FriendsPage() {
           <TabList style={{ marginBottom: -1, borderBottomWidth: 0 }}>
             <Tab
               value="all"
+              testID={TEST_IDS.FRIENDS.TAB_ALL}
               icon={<UsersIcon size={18} color={activeTab === 'all' ? theme.colors.text.primary : theme.colors.text.secondary} />}
             >
               {isMobile && activeTab !== 'all' ? null : 'All'}
             </Tab>
             <Tab
               value="online"
+              testID={TEST_IDS.FRIENDS.TAB_ONLINE}
               icon={<GlobeIcon size={18} color={activeTab === 'online' ? theme.colors.text.primary : theme.colors.text.secondary} />}
             >
               {isMobile && activeTab !== 'online' ? null : 'Online'}
             </Tab>
             <Tab
               value="pending"
+              testID={TEST_IDS.FRIENDS.TAB_PENDING}
               badge={incomingRequests.length > 0 ? incomingRequests.length : undefined}
               icon={<UserPlusIcon size={18} color={activeTab === 'pending' ? theme.colors.text.primary : theme.colors.text.secondary} />}
             >
@@ -548,6 +555,7 @@ export default function FriendsPage() {
             </Tab>
             <Tab
               value="blocked"
+              testID={TEST_IDS.FRIENDS.TAB_BLOCKED}
               icon={<BlockIcon size={18} color={activeTab === 'blocked' ? theme.colors.text.primary : theme.colors.text.secondary} />}
             >
               {isMobile && activeTab !== 'blocked' ? null : 'Blocked'}
@@ -567,7 +575,7 @@ export default function FriendsPage() {
 
         {/* ─── All Friends ─── */}
         <TabPanel value="all" style={{ flex: 1 }}>
-          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }}>
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }} keyboardShouldPersistTaps="handled">
             <ProfileCard style={{ marginBottom: 12 }} />
             <View style={{ marginBottom: 16 }}>
               {/* Platform selector */}
@@ -642,6 +650,9 @@ export default function FriendsPage() {
                       feedbackState={addFriendFeedback.state}
                       feedbackMessage={addFriendFeedback.message}
                       placeholder="did:key:z6Mk..."
+                      inputTestID={TEST_IDS.FRIENDS.ADD_INPUT}
+                      buttonTestID={TEST_IDS.FRIENDS.ADD_BUTTON}
+                      feedbackTestID={TEST_IDS.FRIENDS.ADD_FEEDBACK}
                     />
                   </View>
                 </View>
@@ -699,6 +710,7 @@ export default function FriendsPage() {
                   {addFriendFeedback.state !== 'idle' && addFriendFeedback.message && (
                     <Text
                       size="xs"
+                      testID={TEST_IDS.FRIENDS.ADD_FEEDBACK}
                       style={{
                         marginTop: 8,
                         color: addFriendFeedback.state === 'success'
@@ -754,7 +766,7 @@ export default function FriendsPage() {
 
         {/* ─── Pending ─── */}
         <TabPanel value="pending" style={{ flex: 1 }}>
-          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }}>
+          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }} keyboardShouldPersistTaps="handled">
             <View style={{ marginBottom: 16 }}>
               {/* Platform selector */}
               <View style={{ marginBottom: 10 }}>
@@ -825,6 +837,9 @@ export default function FriendsPage() {
                       feedbackState={addFriendFeedback.state}
                       feedbackMessage={addFriendFeedback.message}
                       placeholder="did:key:z6Mk..."
+                      inputTestID={TEST_IDS.FRIENDS.ADD_INPUT}
+                      buttonTestID={TEST_IDS.FRIENDS.ADD_BUTTON}
+                      feedbackTestID={TEST_IDS.FRIENDS.ADD_FEEDBACK}
                     />
                   </View>
                 </View>

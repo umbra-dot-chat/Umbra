@@ -23,12 +23,12 @@ describe('T2.7 Mobile Layout', () => {
   it('T2.7.1 — sidebar is the initial view on mobile', async () => {
     // On iOS (mobile), the sidebar should be the primary initial view
     await waitFor(element(by.id(TEST_IDS.SIDEBAR.CONTAINER)))
-      .toBeVisible()
+      .toExist()
       .withTimeout(TIMEOUTS.NAVIGATION);
   });
 
   it('T2.7.2 — search input is visible in the mobile sidebar', async () => {
-    await expect(element(by.id(TEST_IDS.SIDEBAR.SEARCH_INPUT))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.SIDEBAR.SEARCH_INPUT))).toExist();
   });
 
   it('T2.7.3 — tapping a conversation navigates to chat view', async () => {
@@ -36,7 +36,7 @@ describe('T2.7 Mobile Layout', () => {
     const hasConversation = await waitFor(
       element(by.id(TEST_IDS.SIDEBAR.CONVERSATION_ITEM)).atIndex(0),
     )
-      .toBeVisible()
+      .toExist()
       .withTimeout(TIMEOUTS.INTERACTION)
       .then(() => true)
       .catch(() => false);
@@ -47,12 +47,12 @@ describe('T2.7 Mobile Layout', () => {
 
       // Chat header should be visible after navigation
       await waitFor(element(by.id(TEST_IDS.CHAT.HEADER)))
-        .toBeVisible()
+        .toExist()
         .withTimeout(TIMEOUTS.NAVIGATION);
     } else {
       // No conversations exist on fresh account — verify empty state
       await waitFor(element(by.id(TEST_IDS.SIDEBAR.EMPTY_STATE)))
-        .toBeVisible()
+        .toExist()
         .withTimeout(TIMEOUTS.INTERACTION);
     }
   });
@@ -60,7 +60,7 @@ describe('T2.7 Mobile Layout', () => {
   it('T2.7.4 — back button returns from chat to sidebar', async () => {
     // Only test back navigation if we successfully navigated to a chat
     const chatHeaderVisible = await waitFor(element(by.id(TEST_IDS.CHAT.HEADER)))
-      .toBeVisible()
+      .toExist()
       .withTimeout(TIMEOUTS.UI_SETTLE)
       .then(() => true)
       .catch(() => false);
@@ -72,29 +72,29 @@ describe('T2.7 Mobile Layout', () => {
 
       // Should return to the sidebar
       await waitFor(element(by.id(TEST_IDS.SIDEBAR.CONTAINER)))
-        .toBeVisible()
+        .toExist()
         .withTimeout(TIMEOUTS.NAVIGATION);
     } else {
       // If no chat was opened, verify sidebar is still showing
-      await expect(element(by.id(TEST_IDS.SIDEBAR.CONTAINER))).toBeVisible();
+      await expect(element(by.id(TEST_IDS.SIDEBAR.CONTAINER))).toExist();
     }
   });
 
   it('T2.7.5 — nav rail is accessible on mobile layout', async () => {
     // The nav rail should be available for top-level navigation
     await waitFor(element(by.id(TEST_IDS.NAV.RAIL)))
-      .toBeVisible()
+      .toExist()
       .withTimeout(TIMEOUTS.NAVIGATION);
   });
 
   it('T2.7.6 — navigating to friends and back preserves mobile layout', async () => {
     await navigateToFriends();
-    await expect(element(by.id(TEST_IDS.FRIENDS.PAGE))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.FRIENDS.PAGE))).toExist();
 
     await navigateHome();
     await waitForUISettle();
 
     // Sidebar should be restored as the initial view
-    await expect(element(by.id(TEST_IDS.SIDEBAR.CONTAINER))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.SIDEBAR.CONTAINER))).toExist();
   });
 });

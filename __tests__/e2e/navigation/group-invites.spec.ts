@@ -9,6 +9,7 @@
 
 import { test, expect, type Page } from '@playwright/test';
 import {
+  BASE_URL,
   createIdentity,
   navigateToFriends,
   clickTab,
@@ -54,8 +55,8 @@ async function createGroupAndInvite(page: Page, groupName: string) {
 
 /** Spin up two isolated browser contexts and create identities. */
 async function setupPair(browser: import('@playwright/test').Browser, suffix: string) {
-  const ctx1 = await browser.newContext();
-  const ctx2 = await browser.newContext();
+  const ctx1 = await browser.newContext({ baseURL: BASE_URL });
+  const ctx2 = await browser.newContext({ baseURL: BASE_URL });
   const p1 = await ctx1.newPage();
   const p2 = await ctx2.newPage();
   await createIdentity(p1, `Alice${suffix}`);

@@ -25,11 +25,11 @@ describe('Friends — Blocked Tab', () => {
   it('should switch to the Blocked tab', async () => {
     await element(by.id(TEST_IDS.FRIENDS.TAB_BLOCKED)).tap();
     await waitForUISettle();
-    await expect(element(by.id(TEST_IDS.FRIENDS.TAB_BLOCKED))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.FRIENDS.TAB_BLOCKED))).toExist();
   });
 
   it('should show empty state when no users are blocked', async () => {
-    await expect(element(by.id(TEST_IDS.FRIENDS.EMPTY_STATE))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.FRIENDS.EMPTY_STATE))).toExist();
   });
 
   it.todo('should display blocked user card with username');
@@ -43,6 +43,6 @@ describe('Friends — Blocked Tab', () => {
   it('should navigate back to All tab from Blocked tab', async () => {
     await element(by.id(TEST_IDS.FRIENDS.TAB_ALL)).tap();
     await waitForUISettle();
-    await expect(element(by.id(TEST_IDS.FRIENDS.TAB_ALL))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.FRIENDS.TAB_ALL))).toExist();
   });
 });

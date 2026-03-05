@@ -15,7 +15,6 @@ import React, {
   useState,
   useCallback,
   useMemo,
-  useRef,
 } from 'react';
 import { Platform } from 'react-native';
 import { useTheme } from '@coexist/wisp-react-native';
@@ -23,8 +22,6 @@ import { getWasm } from '@umbra/wasm';
 import { useUmbra } from '@/contexts/UmbraContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useFonts, getFontFamily } from '@/contexts/FontContext';
-import { syncMetadataViaRelay } from '@umbra/service';
-import type { MetadataEvent } from '@umbra/service';
 import type { ThemePreset, DeepPartial } from '@/themes/types';
 import { THEME_REGISTRY, getThemeById } from '@/themes/registry';
 
@@ -112,7 +109,7 @@ function deepMerge<T extends Record<string, any>>(base: T, patch: DeepPartial<T>
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const { isReady, service } = useUmbra();
+  const { isReady, service, preferencesReady, didChanged } = useUmbra();
   const { identity } = useAuth();
   const { setOverrides, setMode, mode } = useTheme();
   const { activeFont } = useFonts();
@@ -123,9 +120,6 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [installedThemeIds, setInstalledThemeIds] = useState<Set<string>>(new Set());
   const [textSize, setTextSizeState] = useState<TextSize>('md');
   const [loaded, setLoaded] = useState(false);
-
-  // Track whether we've done initial restore so we don't clobber state
-  const initialRestoreRef = useRef(false);
 
   // ── Persistence helpers ──────────────────────────────────────────────
 
@@ -142,20 +136,6 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       console.warn('[ThemeContext] Failed to save:', key, err);
     }
   }, []);
-
-  /** Sync a key/value to other sessions via relay */
-  const relaySync = useCallback((key: string, value: string) => {
-    if (service && identity?.did) {
-      try {
-        const relayWs = service.getRelayWs();
-        if (relayWs) {
-          syncMetadataViaRelay(relayWs, identity.did, key, value);
-        }
-      } catch (err) {
-        console.warn('[ThemeContext] Failed to sync via relay:', err);
-      }
-    }
-  }, [service, identity]);
 
   const kvGet = useCallback(async (key: string): Promise<string | null> => {
     try {
@@ -220,11 +200,13 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
-  // ── Load saved state on mount ────────────────────────────────────────
+  // ── Load saved state on mount and on account switch ─────────────────
+  // Uses preferencesReady (true when DB + identity fully hydrated) and
+  // didChanged (increments on account switch) so preferences reload
+  // from the new account's per-DID database.
 
   useEffect(() => {
-    if (!isReady || initialRestoreRef.current) return;
-    initialRestoreRef.current = true;
+    if (!preferencesReady) return;
 
     async function restorePreferences() {
       // Load installed themes
@@ -266,7 +248,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     }
 
     restorePreferences();
-  }, [isReady, kvGet, applyOverrides, applyTextSize, activeFontFamily, setMode]);
+  }, [preferencesReady, didChanged, kvGet, applyOverrides, applyTextSize, activeFontFamily, setMode]);
 
   // ── Re-apply when font changes ───────────────────────────────────────
 
@@ -274,55 +256,6 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     if (!loaded) return;
     applyOverrides(activeTheme, accentColor, activeFontFamily);
   }, [activeFontFamily, loaded]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  // ── Relay sync: listen for incoming metadata updates ─────────────
-
-  useEffect(() => {
-    if (!service) return;
-
-    const unsub = service.onMetadataEvent((event: MetadataEvent) => {
-      if (event.type !== 'metadataReceived') return;
-
-      if (event.key === KEY_THEME_ID) {
-        const theme = event.value ? getThemeById(event.value) ?? null : null;
-        console.log('[ThemeContext] Relay sync: theme updated to', event.value || 'default');
-        setActiveTheme(theme);
-        applyOverrides(theme, accentColor, activeFontFamily);
-        kvSet(KEY_THEME_ID, event.value);
-        if (theme) setMode('dark');
-      } else if (event.key === KEY_ACCENT_COLOR) {
-        const accent = event.value || null;
-        console.log('[ThemeContext] Relay sync: accent color updated to', accent);
-        setAccentColorState(accent);
-        applyOverrides(activeTheme, accent, activeFontFamily);
-        kvSet(KEY_ACCENT_COLOR, event.value);
-      } else if (event.key === KEY_DARK_MODE) {
-        if (!activeTheme) {
-          const newMode = event.value === 'true' ? 'dark' : 'light';
-          console.log('[ThemeContext] Relay sync: mode updated to', newMode);
-          setMode(newMode);
-          kvSet(KEY_DARK_MODE, event.value);
-        }
-      } else if (event.key === KEY_INSTALLED_THEMES) {
-        try {
-          const ids: string[] = JSON.parse(event.value);
-          console.log('[ThemeContext] Relay sync: installed themes updated');
-          setInstalledThemeIds(new Set(ids));
-          kvSet(KEY_INSTALLED_THEMES, event.value);
-        } catch {}
-      } else if (event.key === KEY_TEXT_SIZE) {
-        const size = event.value as TextSize;
-        if (size === 'sm' || size === 'md' || size === 'lg') {
-          console.log('[ThemeContext] Relay sync: text size updated to', size);
-          setTextSizeState(size);
-          applyTextSize(size);
-          kvSet(KEY_TEXT_SIZE, event.value);
-        }
-      }
-    });
-
-    return unsub;
-  }, [service, kvSet, activeTheme, accentColor, activeFontFamily, applyOverrides, applyTextSize, setMode]);
 
   // ── Public setters ───────────────────────────────────────────────────
 
@@ -337,11 +270,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         // Persist + relay sync
         const value = JSON.stringify(Array.from(next));
         kvSet(KEY_INSTALLED_THEMES, value);
-        relaySync(KEY_INSTALLED_THEMES, value);
         return next;
       });
     },
-    [kvSet, relaySync],
+    [kvSet],
   );
 
   const uninstallTheme = useCallback(
@@ -351,7 +283,6 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         setActiveTheme(null);
         applyOverrides(null, accentColor, activeFontFamily);
         kvSet(KEY_THEME_ID, '');
-        relaySync(KEY_THEME_ID, '');
       }
 
       setInstalledThemeIds((prev) => {
@@ -360,11 +291,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         // Persist + relay sync
         const value = JSON.stringify(Array.from(next));
         kvSet(KEY_INSTALLED_THEMES, value);
-        relaySync(KEY_INSTALLED_THEMES, value);
         return next;
       });
     },
-    [activeTheme, accentColor, activeFontFamily, applyOverrides, kvSet, relaySync],
+    [activeTheme, accentColor, activeFontFamily, applyOverrides, kvSet],
   );
 
   const setTheme = useCallback(
@@ -381,18 +311,16 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       if (theme) {
         setAccentColorState(null);
         kvSet(KEY_ACCENT_COLOR, '');
-        relaySync(KEY_ACCENT_COLOR, '');
       }
 
       setActiveTheme(theme);
       applyOverrides(theme, null, activeFontFamily);
 
-      // Persist + relay sync
+      // Persist
       const themeId = theme ? theme.id : '';
       kvSet(KEY_THEME_ID, themeId);
-      relaySync(KEY_THEME_ID, themeId);
     },
-    [activeFontFamily, applyOverrides, kvSet, relaySync, installedThemeIds, installTheme],
+    [activeFontFamily, applyOverrides, kvSet, installedThemeIds, installTheme],
   );
 
   const setAccentColor = useCallback(
@@ -400,12 +328,11 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       setAccentColorState(color);
       applyOverrides(activeTheme, color, activeFontFamily);
 
-      // Persist + relay sync
+      // Persist
       const value = color ?? '';
       kvSet(KEY_ACCENT_COLOR, value);
-      relaySync(KEY_ACCENT_COLOR, value);
     },
-    [activeTheme, activeFontFamily, applyOverrides, kvSet, relaySync],
+    [activeTheme, activeFontFamily, applyOverrides, kvSet],
   );
 
   const setTextSize = useCallback(
@@ -413,9 +340,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       setTextSizeState(size);
       applyTextSize(size);
       kvSet(KEY_TEXT_SIZE, size);
-      relaySync(KEY_TEXT_SIZE, size);
     },
-    [applyTextSize, kvSet, relaySync],
+    [applyTextSize, kvSet],
   );
 
   // ── Persist mode changes ─────────────────────────────────────────────
@@ -425,8 +351,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     if (!loaded || activeTheme) return;
     const value = mode === 'dark' ? 'true' : 'false';
     kvSet(KEY_DARK_MODE, value);
-    relaySync(KEY_DARK_MODE, value);
-  }, [mode, loaded, activeTheme, kvSet, relaySync]);
+  }, [mode, loaded, activeTheme, kvSet]);
 
   // ── Context value ────────────────────────────────────────────────────
 

@@ -42,12 +42,17 @@
     "deploy:frontend": "./scripts/deploy.sh frontend",
     "deploy:relay": "./scripts/deploy.sh relay",
     "detox:build": "./scripts/build-mobile.sh ios-sim && npx expo prebuild --clean && LANG=en_US.UTF-8 npx expo run:ios --configuration Release --no-install",
+    "detox:build:debug": "./scripts/build-mobile.sh ios-sim && LANG=en_US.UTF-8 npx expo run:ios --configuration Debug --no-install",
     "detox:test": "detox test --configuration ios.release",
+    "detox:test:debug": "detox test --configuration ios.debug",
     "detox:test:auth": "detox test --configuration ios.release __tests__/e2e-ios/auth/",
     "detox:test:social": "detox test --configuration ios.release __tests__/e2e-ios/social/",
     "detox:test:community": "detox test --configuration ios.release __tests__/e2e-ios/community/",
     "detox:test:settings": "detox test --configuration ios.release __tests__/e2e-ios/settings/",
-    "detox:smoke": "detox test --configuration ios.release __tests__/e2e-ios/smoke.test.ts"
+    "detox:smoke": "detox test --configuration ios.release __tests__/e2e-ios/smoke.test.ts",
+    "test:tui": "cd packages/umbra-testing && cargo run --release",
+    "test:tui:build": "cd packages/umbra-testing && cargo build --release",
+    "test:tui:discover": "cd packages/umbra-testing && cargo run --release -- --discover"
   },
   "dependencies": {
     "@coexist/wisp-core": "file:../Wisp/packages/core",

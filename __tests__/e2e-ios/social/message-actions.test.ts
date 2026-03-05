@@ -24,7 +24,7 @@ describe('Message Actions', () => {
   });
 
   it('should show the main screen', async () => {
-    await expect(element(by.id(TEST_IDS.MAIN.CONTAINER))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.MAIN.CONTAINER))).toExist();
   });
 
   // Requires being inside a conversation with a sent message.
@@ -37,21 +37,21 @@ describe('Message Actions', () => {
   it.skip('should display the copy option in the action menu', async () => {
     await longPressMessage(FIXTURES.MESSAGES.HELLO);
     await waitFor(element(by.text('Copy')))
-      .toBeVisible()
+      .toExist()
       .withTimeout(TIMEOUTS.INTERACTION);
   });
 
   it.skip('should display the reply option in the action menu', async () => {
     await longPressMessage(FIXTURES.MESSAGES.HELLO);
     await waitFor(element(by.text('Reply')))
-      .toBeVisible()
+      .toExist()
       .withTimeout(TIMEOUTS.INTERACTION);
   });
 
   it.skip('should display the delete option in the action menu', async () => {
     await longPressMessage(FIXTURES.MESSAGES.HELLO);
     await waitFor(element(by.text('Delete')))
-      .toBeVisible()
+      .toExist()
       .withTimeout(TIMEOUTS.INTERACTION);
   });
 

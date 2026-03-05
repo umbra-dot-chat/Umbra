@@ -86,6 +86,19 @@ pub enum ClientMessage {
         to_did: String,
         payload: String,
     },
+
+    /// Push a sync delta to all other sessions of the same DID.
+    /// Used for real-time preference/friend/group sync between devices.
+    SyncPush {
+        section: String,
+        version: u64,
+        encrypted_data: String,
+    },
+
+    /// Request current sync section versions from the relay.
+    SyncFetch {
+        sections: Option<Vec<String>>,
+    },
 }
 
 // ── Relay → Client ────────────────────────────────────────────────────────────
@@ -167,6 +180,18 @@ pub enum ServerMessage {
         room_id: String,
         from_did: String,
         payload: String,
+    },
+
+    /// A sync delta pushed from another device using the same account.
+    SyncUpdate {
+        section: String,
+        version: u64,
+        encrypted_data: String,
+    },
+
+    /// Current sync section versions (response to SyncFetch).
+    SyncState {
+        versions: std::collections::HashMap<String, u64>,
     },
 }
 

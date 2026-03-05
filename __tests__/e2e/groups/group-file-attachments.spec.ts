@@ -11,7 +11,13 @@
  * After createGroup(), Alice is automatically navigated into the group chat.
  * T5.4.4 (cross-member delivery) requires relay delivery for Bob's invite.
  *
- * Test IDs: T5.4.1–T5.4.5
+ * NETWORK VERIFICATION:
+ * - T5.4.4 uses hard assertions for cross-member file delivery
+ *   (test.skip only when group setup itself fails, NOT for relay delivery)
+ * - T5.4.5 verifies download button visibility with hard assertion
+ * - All file card visibility checks use hard expect() assertions
+ *
+ * Test IDs: T5.4.1–T5.4.7
  */
 
 import { test, expect, type Page } from '@playwright/test';
@@ -191,18 +197,16 @@ test.describe('5.4 Group File Attachments', () => {
     await sendTestFile(setup.alice, 'team-notes.txt', 'Notes for the team', 'text/plain');
     await setup.alice.waitForTimeout(UI_SETTLE_TIMEOUT);
 
-    // Wait for relay delivery to Bob.
-    // Group messages are relayed through the production relay, which can be slow.
-    // Poll without reloading (stay in group chat) for up to ~30s.
+    // HARD ASSERTION: Wait for relay delivery to Bob.
+    // Group file messages MUST arrive via relay. If this fails, it indicates
+    // the group file transfer relay pipeline is broken.
     const messageArrived = await waitForRelayDelivery(
       setup.bob,
       () => setup.bob.getByText('team-notes.txt').first(),
-      { maxAttempts: 3, waitBetween: RELAY_SETTLE_TIMEOUT, reload: false },
+      { maxAttempts: 4, waitBetween: RELAY_SETTLE_TIMEOUT, reload: false },
     );
 
-    if (!messageArrived) {
-      test.skip(true, 'Relay did not deliver group file message to Bob in time');
-    }
+    expect(messageArrived).toBe(true);
 
     await setup.ctx1.close();
     await setup.ctx2.close();
@@ -220,32 +224,27 @@ test.describe('5.4 Group File Attachments', () => {
     await sendTestFile(setup.alice, 'download-test.txt', 'File content to download', 'text/plain');
     await setup.alice.waitForTimeout(UI_SETTLE_TIMEOUT);
 
-    // Wait for relay delivery to Bob
+    // HARD ASSERTION: Wait for relay delivery to Bob
     const messageArrived = await waitForRelayDelivery(
       setup.bob,
       () => setup.bob.getByText('download-test.txt').first(),
-      { maxAttempts: 3, waitBetween: RELAY_SETTLE_TIMEOUT, reload: false },
+      { maxAttempts: 4, waitBetween: RELAY_SETTLE_TIMEOUT, reload: false },
     );
 
-    if (!messageArrived) {
-      test.skip(true, 'Relay did not deliver group file message to Bob in time');
-    }
+    expect(messageArrived).toBe(true);
 
-    // Look for download button (DownloadIcon or similar)
+    // HARD ASSERTION: Download button MUST be visible on Bob's received file card.
     const downloadBtn = setup.bob.locator('[aria-label="Download"], [aria-label="Download file"]').first();
-    const hasDownloadBtn = await downloadBtn.isVisible({ timeout: 5_000 }).catch(() => false);
+    await expect(downloadBtn).toBeVisible({ timeout: 10_000 });
 
-    if (hasDownloadBtn) {
-      // Set up download listener
-      const downloadPromise = setup.bob.waitForEvent('download', { timeout: 15_000 }).catch(() => null);
-      await downloadBtn.click();
-      const download = await downloadPromise;
-      // Download was triggered (may be null if browser blocks it in headless mode)
-      if (download) {
-        expect(download.suggestedFilename()).toContain('download-test');
-      }
+    // Trigger download and verify
+    const downloadPromise = setup.bob.waitForEvent('download', { timeout: 15_000 }).catch(() => null);
+    await downloadBtn.click();
+    const download = await downloadPromise;
+    if (download) {
+      expect(download.suggestedFilename()).toContain('download-test');
     }
-    // If no explicit download button visible, the file card itself may be the trigger
+    // Note: download event may be null in headless mode, but the button click verifies functionality
 
     await setup.ctx1.close();
     await setup.ctx2.close();

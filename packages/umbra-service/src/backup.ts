@@ -1,11 +1,15 @@
 /**
  * Account backup and restore module
  *
- * Provides encrypted backup of account data (settings, friends, conversations,
- * groups, blocked users) to relay, and restoration from relay on account import.
+ * @deprecated The chunked relay backup system is superseded by the encrypted
+ * blob sync in `sync.ts`. For lightweight account data (friends, groups,
+ * preferences, blocked users), use `uploadSyncBlob()` / `applySyncBlob()`.
  *
- * Backup encryption uses a key derived deterministically from the BIP39 master
- * seed, so any device with the recovery phrase can decrypt the backup.
+ * This module is retained for backwards compatibility — existing relay
+ * sessions may still have `account_backup_manifest` / `account_backup_chunk`
+ * offline messages that need to be parsed and restored.
+ *
+ * New code should use the sync module instead.
  *
  * @packageDocumentation
  */
@@ -57,9 +61,9 @@ export interface BackupChunk {
 /**
  * Create an encrypted account backup and send it to the relay.
  *
- * The backup is encrypted with a key derived from the BIP39 master seed,
- * compressed, chunked into 64KB pieces, and sent to the user's own DID
- * on the relay for cross-device recovery.
+ * @deprecated Use `uploadSyncBlob()` from `@umbra/service` instead.
+ * The sync system replaces chunked backups with a single encrypted blob
+ * uploaded via REST.
  *
  * @param relayWs - Active WebSocket connection to the relay
  * @param ownDid - The user's own DID

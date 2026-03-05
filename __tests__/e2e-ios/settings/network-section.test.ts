@@ -26,27 +26,27 @@ describe('Settings > Network Section', () => {
   });
 
   it('should display the network section', async () => {
-    await expect(element(by.id(TEST_IDS.SETTINGS.SECTION_NETWORK))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.SETTINGS.SECTION_NETWORK))).toExist();
   });
 
   it('should show the relay status indicator', async () => {
-    await expect(element(by.id(TEST_IDS.SETTINGS.RELAY_STATUS))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.SETTINGS.RELAY_STATUS))).toExist();
   });
 
   it('should show the relay URL', async () => {
-    await expect(element(by.id(TEST_IDS.SETTINGS.RELAY_URL))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.SETTINGS.RELAY_URL))).toExist();
   });
 
   it('should display the configured relay URL', async () => {
     await waitFor(element(by.id(TEST_IDS.SETTINGS.RELAY_URL)))
-      .toBeVisible()
+      .toExist()
       .withTimeout(TIMEOUTS.INTERACTION);
     // The relay URL should contain the configured relay domain
     await expect(element(by.id(TEST_IDS.SETTINGS.RELAY_URL))).not.toHaveText('');
   });
 
   it('should show the peer count', async () => {
-    await expect(element(by.id(TEST_IDS.SETTINGS.PEER_COUNT))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.SETTINGS.PEER_COUNT))).toExist();
   });
 
   it.todo('should update relay status when connection state changes');

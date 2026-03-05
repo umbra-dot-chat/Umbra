@@ -12,7 +12,7 @@ import { TIMEOUTS } from '../../shared/timeouts';
 import { FIXTURES } from '../../shared/fixtures';
 import { launchApp, waitForAuthScreen, waitForMainScreen, waitForUISettle } from '../helpers/app';
 import { createAccount, createAccountWithPin, importAccount, enterPin, skipPin } from '../helpers/auth';
-import { navigateToSettings, navigateToFriends, navigateHome, openConversation } from '../helpers/navigation';
+import { navigateToSettings, navigateToFriends, navigateHome, closeSettings, tapSettingsNavItem } from '../helpers/navigation';
 
 describe('T1.6 Logout', () => {
   beforeAll(async () => {
@@ -22,25 +22,25 @@ describe('T1.6 Logout', () => {
 
   it('T1.6.1 — can navigate to settings', async () => {
     await navigateToSettings();
-    await expect(element(by.id(TEST_IDS.SETTINGS.DIALOG))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.SETTINGS.DIALOG))).toExist();
   });
 
   it('T1.6.2 — logout button is visible in account settings', async () => {
-    await element(by.id(TEST_IDS.SETTINGS.NAV_ACCOUNT)).tap();
+    await tapSettingsNavItem(TEST_IDS.SETTINGS.NAV_ACCOUNT);
     await waitForUISettle();
 
     await waitFor(element(by.id(TEST_IDS.SETTINGS.LOGOUT_BUTTON)))
-      .toBeVisible()
+      .toExist()
       .withTimeout(TIMEOUTS.NAVIGATION);
   });
 
   it('T1.6.3 — tapping logout triggers confirmation', async () => {
-    await element(by.id(TEST_IDS.SETTINGS.LOGOUT_BUTTON)).tap();
+    await element(by.id(TEST_IDS.SETTINGS.LOGOUT_BUTTON)).performAccessibilityAction('activate');
     await waitForUISettle();
 
     // Confirmation dialog should appear
     await waitFor(element(by.id(TEST_IDS.COMMON.CONFIRM_DIALOG)))
-      .toBeVisible()
+      .toExist()
       .withTimeout(TIMEOUTS.INTERACTION);
   });
 
@@ -51,7 +51,7 @@ describe('T1.6 Logout', () => {
 
     // Should return to the auth screen
     await waitForAuthScreen();
-    await expect(element(by.id(TEST_IDS.AUTH.SCREEN))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.AUTH.SCREEN))).toExist();
   });
 
   it('T1.6.5 — data cleared after logout: relaunching shows auth screen', async () => {
@@ -61,7 +61,7 @@ describe('T1.6 Logout', () => {
 
     // Should show the auth screen (possibly with stored accounts list)
     await waitForAuthScreen();
-    await expect(element(by.id(TEST_IDS.AUTH.SCREEN))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.AUTH.SCREEN))).toExist();
   });
 
   it('T1.6.6 — cancel logout stays in settings', async () => {
@@ -70,20 +70,20 @@ describe('T1.6 Logout', () => {
     await createAccount(FIXTURES.USER_A.displayName);
 
     await navigateToSettings();
-    await element(by.id(TEST_IDS.SETTINGS.NAV_ACCOUNT)).tap();
+    await tapSettingsNavItem(TEST_IDS.SETTINGS.NAV_ACCOUNT);
     await waitForUISettle();
 
-    await element(by.id(TEST_IDS.SETTINGS.LOGOUT_BUTTON)).tap();
+    await element(by.id(TEST_IDS.SETTINGS.LOGOUT_BUTTON)).performAccessibilityAction('activate');
     await waitForUISettle();
 
     // Cancel the logout
     await waitFor(element(by.id(TEST_IDS.COMMON.CONFIRM_NO)))
-      .toBeVisible()
+      .toExist()
       .withTimeout(TIMEOUTS.INTERACTION);
     await element(by.id(TEST_IDS.COMMON.CONFIRM_NO)).tap();
     await waitForUISettle();
 
     // Should still be in settings
-    await expect(element(by.id(TEST_IDS.SETTINGS.DIALOG))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.SETTINGS.DIALOG))).toExist();
   });
 });

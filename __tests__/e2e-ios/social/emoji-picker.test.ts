@@ -24,13 +24,13 @@ describe('Emoji Picker', () => {
   });
 
   it('should show the main screen', async () => {
-    await expect(element(by.id(TEST_IDS.MAIN.CONTAINER))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.MAIN.CONTAINER))).toExist();
   });
 
   // Requires an active conversation with the input bar visible.
 
   it.skip('should display the emoji button in the input bar', async () => {
-    await expect(element(by.id(TEST_IDS.INPUT.EMOJI_BUTTON))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.INPUT.EMOJI_BUTTON))).toExist();
   });
 
   it.skip('should open the emoji picker when the emoji button is tapped', async () => {

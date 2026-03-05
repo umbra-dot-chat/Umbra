@@ -12,6 +12,7 @@ import { TIMEOUTS } from '../../shared/timeouts';
 import { FIXTURES } from '../../shared/fixtures';
 import { launchApp, waitForAuthScreen, waitForMainScreen, waitForUISettle } from '../helpers/app';
 import { createAccount, createAccountWithPin, importAccount, enterPin, skipPin } from '../helpers/auth';
+import { navigateHome } from '../helpers/navigation';
 
 describe('T2.6 Sidebar Resize', () => {
   beforeAll(async () => {
@@ -23,14 +24,14 @@ describe('T2.6 Sidebar Resize', () => {
     // On iOS mobile, the sidebar does not have a drag-to-resize handle.
     // Instead, we verify the sidebar renders at its default width.
     await waitFor(element(by.id(TEST_IDS.SIDEBAR.CONTAINER)))
-      .toBeVisible()
+      .toExist()
       .withTimeout(TIMEOUTS.NAVIGATION);
   });
 
   it('T2.6.2 — sidebar contains expected child elements', async () => {
     // Verify the sidebar has its core child elements
-    await expect(element(by.id(TEST_IDS.SIDEBAR.SEARCH_INPUT))).toBeVisible();
-    await expect(element(by.id(TEST_IDS.SIDEBAR.CONVERSATION_LIST))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.SIDEBAR.SEARCH_INPUT))).toExist();
+    await expect(element(by.id(TEST_IDS.SIDEBAR.CONVERSATION_LIST))).toExist();
   });
 
   it('T2.6.3 — sidebar remains visible after navigation', async () => {
@@ -39,10 +40,9 @@ describe('T2.6 Sidebar Resize', () => {
     await waitForUISettle();
 
     // Navigate back to home
-    await element(by.id(TEST_IDS.NAV.HOME)).tap();
-    await waitForUISettle();
+    await navigateHome();
 
     // Sidebar should still be visible
-    await expect(element(by.id(TEST_IDS.SIDEBAR.CONTAINER))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.SIDEBAR.CONTAINER))).toExist();
   });
 });

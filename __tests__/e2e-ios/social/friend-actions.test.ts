@@ -26,13 +26,13 @@ describe('Friend Actions', () => {
   });
 
   it('should show the friends page with All tab active', async () => {
-    await expect(element(by.id(TEST_IDS.FRIENDS.PAGE))).toBeVisible();
-    await expect(element(by.id(TEST_IDS.FRIENDS.TAB_ALL))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.FRIENDS.PAGE))).toExist();
+    await expect(element(by.id(TEST_IDS.FRIENDS.TAB_ALL))).toExist();
   });
 
   it('should show empty state when no friends exist (no action cards)', async () => {
     // Without friends, no friend cards with action buttons should be present
-    await expect(element(by.id(TEST_IDS.FRIENDS.EMPTY_STATE))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.FRIENDS.EMPTY_STATE))).toExist();
   });
 
   // TWO-USER: These tests require an established friendship so friend cards

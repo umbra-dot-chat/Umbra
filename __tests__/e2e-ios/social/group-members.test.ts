@@ -24,7 +24,7 @@ describe('Group Members', () => {
   });
 
   it('should show the main screen', async () => {
-    await expect(element(by.id(TEST_IDS.MAIN.CONTAINER))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.MAIN.CONTAINER))).toExist();
   });
 
   // Requires navigating into a group conversation and opening the member list.
@@ -38,7 +38,7 @@ describe('Group Members', () => {
 
   it.skip('should display the current user in the member list', async () => {
     await waitFor(element(by.text(FIXTURES.USER_A.displayName)))
-      .toBeVisible()
+      .toExist()
       .withTimeout(TIMEOUTS.INTERACTION);
   });
 

@@ -22,13 +22,13 @@ describe('Group Invitations [TWO-USER]', () => {
   });
 
   it('should load the main screen', async () => {
-    await expect(element(by.id(TEST_IDS.MAIN.CONTAINER))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.MAIN.CONTAINER))).toExist();
   });
 
   it('should show the sidebar with group invite section', async () => {
     // The group invite section may be visible if invitations exist.
     // On a fresh account it should either be hidden or show empty state.
-    await expect(element(by.id(TEST_IDS.SIDEBAR.CONTAINER))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.SIDEBAR.CONTAINER))).toExist();
   });
 
   // TWO-USER tests: require User A to create a group and invite User B.

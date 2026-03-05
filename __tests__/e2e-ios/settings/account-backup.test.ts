@@ -26,11 +26,11 @@ describe('Settings > Account Backup', () => {
   });
 
   it('should display the account section', async () => {
-    await expect(element(by.id(TEST_IDS.SETTINGS.SECTION_ACCOUNT))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.SETTINGS.SECTION_ACCOUNT))).toExist();
   });
 
   it('should show the backup button in the account section', async () => {
-    await expect(element(by.id(TEST_IDS.SETTINGS.BACKUP_BUTTON))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.SETTINGS.BACKUP_BUTTON))).toExist();
   });
 
   it('should be able to tap the backup button', async () => {

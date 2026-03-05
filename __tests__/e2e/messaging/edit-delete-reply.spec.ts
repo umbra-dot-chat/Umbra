@@ -16,6 +16,7 @@
 
 import { test, expect, type Browser, type Page, type BrowserContext } from '@playwright/test';
 import {
+  BASE_URL,
   WASM_LOAD_TIMEOUT,
   RELAY_SETTLE_TIMEOUT,
   UI_SETTLE_TIMEOUT,
@@ -62,8 +63,8 @@ async function setupDMWithMessage(
   suffix: string,
 ): Promise<DMWithMessageResult> {
   // 1. Create two isolated browser contexts
-  const contextA = await browser.newContext();
-  const contextB = await browser.newContext();
+  const contextA = await browser.newContext({ baseURL: BASE_URL });
+  const contextB = await browser.newContext({ baseURL: BASE_URL });
   const pageA = await contextA.newPage();
   const pageB = await contextB.newPage();
 
@@ -921,9 +922,9 @@ test.describe('4.14 Forward', () => {
   test('T4.14.2 -- Select conversation — message forwarded', async ({ browser }) => {
     // For this test we need a third user so we have a second conversation
     // to forward to. We create Alice, Bob, and Charlie.
-    const contextA = await browser.newContext();
-    const contextB = await browser.newContext();
-    const contextC = await browser.newContext();
+    const contextA = await browser.newContext({ baseURL: BASE_URL });
+    const contextB = await browser.newContext({ baseURL: BASE_URL });
+    const contextC = await browser.newContext({ baseURL: BASE_URL });
     const pageA = await contextA.newPage();
     const pageB = await contextB.newPage();
     const pageC = await contextC.newPage();
@@ -1041,9 +1042,9 @@ test.describe('4.14 Forward', () => {
 
   test('T4.14.3 -- Forwarded message shows "Forwarded from [name]" label + original content', async ({ browser }) => {
     // Similar setup to T4.14.2 with three users
-    const contextA = await browser.newContext();
-    const contextB = await browser.newContext();
-    const contextC = await browser.newContext();
+    const contextA = await browser.newContext({ baseURL: BASE_URL });
+    const contextB = await browser.newContext({ baseURL: BASE_URL });
+    const contextC = await browser.newContext({ baseURL: BASE_URL });
     const pageA = await contextA.newPage();
     const pageB = await contextB.newPage();
     const pageC = await contextC.newPage();

@@ -38,7 +38,7 @@ export function SeedPhraseGrid({ words, showCopy = false }: SeedPhraseGridProps)
 
   return (
     <View>
-      <View style={gridStyle} testID={TEST_IDS.SEED.GRID}>
+      <View style={gridStyle} testID={TEST_IDS.SEED.GRID} accessibilityValue={{ text: words.join(' ') }}>
         {words.map((word, i) => (
           <View key={i} style={cellStyle}>
             <Card variant="outlined" radius="sm" padding={isMobile ? 'none' : 'sm'} style={isMobile ? cardStyleMobile : { width: '100%' }}>

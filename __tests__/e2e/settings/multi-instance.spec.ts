@@ -12,6 +12,7 @@
 
 import { test, expect, type Page, type BrowserContext } from '@playwright/test';
 import {
+  BASE_URL,
   WASM_LOAD_TIMEOUT,
   UI_SETTLE_TIMEOUT,
   createIdentity,
@@ -21,7 +22,7 @@ test.describe('Multi-Instance Detection', () => {
 
   test('T-MI.1: Opening second tab detects instance conflict via service API', async ({ browser }) => {
     // Create first context (tab 1)
-    const context1 = await browser.newContext();
+    const context1 = await browser.newContext({ baseURL: BASE_URL });
     const page1 = await context1.newPage();
     await createIdentity(page1, 'Tab1User');
 
@@ -39,7 +40,7 @@ test.describe('Multi-Instance Detection', () => {
     // Create second context (tab 2) — in the same browser
     // Note: BroadcastChannel only works within the same browser instance
     // In Playwright, different contexts are isolated, so this tests the API shape
-    const context2 = await browser.newContext();
+    const context2 = await browser.newContext({ baseURL: BASE_URL });
     const page2 = await context2.newPage();
     await createIdentity(page2, 'Tab2User');
 
@@ -59,7 +60,7 @@ test.describe('Multi-Instance Detection', () => {
   });
 
   test('T-MI.2: Instance coordinator reports primary status correctly', async ({ browser }) => {
-    const context = await browser.newContext();
+    const context = await browser.newContext({ baseURL: BASE_URL });
     const page = await context.newPage();
     await createIdentity(page, 'PrimaryUser');
 

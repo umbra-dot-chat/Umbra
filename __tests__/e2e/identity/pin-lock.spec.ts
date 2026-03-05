@@ -9,6 +9,7 @@
 
 import { test, expect, type BrowserContext, type Page } from '@playwright/test';
 import {
+  BASE_URL,
   WASM_LOAD_TIMEOUT,
   UI_SETTLE_TIMEOUT,
   createIdentity,
@@ -24,7 +25,7 @@ test.describe('1.3 PIN Lock', () => {
   let pinPage: Page;
 
   test.beforeAll(async ({ browser }) => {
-    pinContext = await browser.newContext();
+    pinContext = await browser.newContext({ baseURL: BASE_URL });
     pinPage = await pinContext.newPage();
 
     // Create an identity with a PIN

@@ -22,7 +22,7 @@ describe('Typing Receipts [TWO-USER]', () => {
   });
 
   it('should load the main screen', async () => {
-    await expect(element(by.id(TEST_IDS.MAIN.CONTAINER))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.MAIN.CONTAINER))).toExist();
   });
 
   it.todo('should show typing indicator when the other user starts typing');

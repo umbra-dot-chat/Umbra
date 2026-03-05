@@ -49,7 +49,7 @@ use crate::discovery::ConnectionInfo;
 use crate::friends::FriendRequest;
 use crate::identity::{Identity, ProfileUpdate, RecoveryPhrase};
 use crate::network::NetworkService;
-use crate::storage::{Database, FriendRequestRecord, GroupInviteRecord};
+use crate::storage::{Database, FriendRequestRecord};
 use base64::Engine as _;
 use sha2::{Digest, Sha256};
 
@@ -323,26 +323,33 @@ pub fn umbra_wasm_identity_rotate_encryption_key() -> Result<JsValue, JsValue> {
     let state = get_state()?;
     let mut state = state.write();
 
-    let identity = state
-        .identity
-        .as_mut()
-        .ok_or_else(|| JsValue::from_str("No identity loaded"))?;
+    // First, do the mutable identity operations
+    let (our_did, _new_pub_key, new_pub_hex, signature_hex) = {
+        let identity = state
+            .identity
+            .as_mut()
+            .ok_or_else(|| JsValue::from_str("No identity loaded"))?;
+
+        let our_did = identity.did_string();
+
+        // Generate new encryption key (random, not mnemonic-derived)
+        let new_pub_key = identity
+            .rotate_encryption_key()
+            .map_err(|e| JsValue::from_str(&format!("Key rotation failed: {}", e)))?;
+        let new_pub_hex = hex::encode(new_pub_key);
+
+        // Sign the new public key so recipients can verify authenticity
+        let signature = crate::crypto::sign(&identity.keypair().signing, &new_pub_key);
+        let signature_hex = hex::encode(signature.as_bytes());
+
+        (our_did, new_pub_key, new_pub_hex, signature_hex)
+    };
+
+    // Now get immutable database reference (mutable borrow on identity is released)
     let database = state
         .database
         .as_ref()
         .ok_or_else(|| JsValue::from_str("Database not initialized"))?;
-
-    let our_did = identity.did_string();
-
-    // Generate new encryption key (random, not mnemonic-derived)
-    let new_pub_key = identity
-        .rotate_encryption_key()
-        .map_err(|e| JsValue::from_str(&format!("Key rotation failed: {}", e)))?;
-    let new_pub_hex = hex::encode(new_pub_key);
-
-    // Sign the new public key so recipients can verify authenticity
-    let signature = crate::crypto::sign(&identity.keypair().signing, &new_pub_key);
-    let signature_hex = hex::encode(signature.as_bytes());
 
     // Build relay envelopes for all friends
     let friends = database
@@ -968,7 +975,7 @@ pub fn umbra_wasm_friends_update_encryption_key(json: &str) -> Result<JsValue, J
 
     let sig_bytes = hex::decode(signature_hex)
         .map_err(|e| JsValue::from_str(&format!("Invalid signature hex: {}", e)))?;
-    let signature = crate::crypto::Signature::from_bytes(&sig_bytes)
+    let signature = crate::crypto::Signature::from_slice(&sig_bytes)
         .map_err(|_| JsValue::from_str("Invalid signature format"))?;
 
     crate::crypto::verify(&sk, &new_key_bytes, &signature)
@@ -3965,6 +3972,202 @@ pub fn umbra_wasm_account_restore_backup(json: &str) -> Result<JsValue, JsValue>
             "groups": stats.groups,
             "blocked_users": stats.blocked_users,
         }
+    });
+
+    Ok(JsValue::from_str(&result.to_string()))
+}
+
+// ============================================================================
+// ACCOUNT SYNC — Encrypted blob creation, parsing, and challenge signing
+// ============================================================================
+
+/// Create an encrypted sync blob from the current database state.
+///
+/// Collects preferences, friends, groups, and blocked users, serialises to
+/// CBOR, compresses, and encrypts with AES-256-GCM using a key derived from
+/// the recovery seed.
+///
+/// Takes JSON: { "section_versions"?: { "preferences": N, "friends": N, ... } }
+/// Returns JSON: { "blob": "base64...", "sections": { "name": version } }
+#[wasm_bindgen]
+pub fn umbra_wasm_sync_create_blob(json: &str) -> Result<JsValue, JsValue> {
+    let state = get_state()?;
+    let state_r = state.read();
+
+    let database = state_r
+        .database
+        .as_ref()
+        .ok_or_else(|| JsValue::from_str("Database not initialized"))?;
+    let seed = state_r
+        .backup_seed
+        .as_ref()
+        .ok_or_else(|| JsValue::from_str("Seed not available — identity was not created or restored in this session"))?;
+
+    let data: serde_json::Value =
+        serde_json::from_str(json).map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    // Parse optional section versions
+    let section_versions: Option<std::collections::HashMap<String, u64>> =
+        data.get("section_versions")
+            .and_then(|sv| serde_json::from_value(sv.clone()).ok());
+
+    // 1. Create sync payload from database
+    let payload = crate::sync::create_sync_blob(database, section_versions.as_ref())
+        .map_err(|e| JsValue::from_str(&format!("Sync blob creation failed: {}", e)))?;
+
+    // Collect section versions for response
+    let sections: serde_json::Value = payload
+        .sections
+        .iter()
+        .map(|(name, section)| (name.clone(), serde_json::json!(section.v)))
+        .collect::<serde_json::Map<String, serde_json::Value>>()
+        .into();
+
+    // 2. Encrypt the payload
+    let blob = crate::sync::encrypt_sync_blob(&payload, seed)
+        .map_err(|e| JsValue::from_str(&format!("Sync blob encryption failed: {}", e)))?;
+
+    let result = serde_json::json!({
+        "blob": base64::engine::general_purpose::STANDARD.encode(&blob),
+        "sections": sections,
+        "size": blob.len(),
+    });
+
+    Ok(JsValue::from_str(&result.to_string()))
+}
+
+/// Parse a sync blob and return a summary without applying it.
+///
+/// Decrypts and inspects the blob to show what data it contains.
+///
+/// Takes JSON: { "blob": "base64..." }
+/// Returns JSON: { "v": 1, "updated_at": N, "sections": { "friends": { "v": N, "count": N } } }
+#[wasm_bindgen]
+pub fn umbra_wasm_sync_parse_blob(json: &str) -> Result<JsValue, JsValue> {
+    let state = get_state()?;
+    let state_r = state.read();
+
+    let seed = state_r
+        .backup_seed
+        .as_ref()
+        .ok_or_else(|| JsValue::from_str("Seed not available"))?;
+
+    let data: serde_json::Value =
+        serde_json::from_str(json).map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let blob_b64 = data["blob"]
+        .as_str()
+        .ok_or_else(|| JsValue::from_str("Missing blob field"))?;
+
+    let blob = base64::engine::general_purpose::STANDARD
+        .decode(blob_b64)
+        .map_err(|e| JsValue::from_str(&format!("Invalid base64: {}", e)))?;
+
+    let summary = crate::sync::parse_sync_blob_summary(&blob, seed)
+        .map_err(|e| JsValue::from_str(&format!("Sync blob parse failed: {}", e)))?;
+
+    let result = serde_json::to_value(&summary)
+        .map_err(|e| JsValue::from_str(&format!("Serialization failed: {}", e)))?;
+
+    Ok(JsValue::from_str(&result.to_string()))
+}
+
+/// Apply a sync blob — decrypt and import its contents into the database.
+///
+/// Takes JSON: { "blob": "base64..." }
+/// Returns JSON: { "imported": { "settings": N, "friends": N, "groups": N, "blocked_users": N } }
+#[wasm_bindgen]
+pub fn umbra_wasm_sync_apply_blob(json: &str) -> Result<JsValue, JsValue> {
+    let state = get_state()?;
+    let state_r = state.read();
+
+    let database = state_r
+        .database
+        .as_ref()
+        .ok_or_else(|| JsValue::from_str("Database not initialized"))?;
+    let seed = state_r
+        .backup_seed
+        .as_ref()
+        .ok_or_else(|| JsValue::from_str("Seed not available"))?;
+
+    let data: serde_json::Value =
+        serde_json::from_str(json).map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let blob_b64 = data["blob"]
+        .as_str()
+        .ok_or_else(|| JsValue::from_str("Missing blob field"))?;
+
+    let blob = base64::engine::general_purpose::STANDARD
+        .decode(blob_b64)
+        .map_err(|e| JsValue::from_str(&format!("Invalid base64: {}", e)))?;
+
+    // 1. Decrypt the sync blob
+    let payload = crate::sync::decrypt_sync_blob(&blob, seed)
+        .map_err(|e| JsValue::from_str(&format!("Sync blob decryption failed: {}", e)))?;
+
+    // 2. Reconstruct a backup-compatible JSON for import_database()
+    let import_json = serde_json::json!({
+        "version": 1,
+        "exported_at": payload.updated_at,
+        "settings": payload.sections.get("preferences").map(|s| &s.data).unwrap_or(&serde_json::json!([])),
+        "friends": payload.sections.get("friends").map(|s| &s.data).unwrap_or(&serde_json::json!([])),
+        "groups": payload.sections.get("groups").map(|s| &s.data).unwrap_or(&serde_json::json!([])),
+        "blocked_users": payload.sections.get("blocked").map(|s| &s.data).unwrap_or(&serde_json::json!([])),
+        "conversations": [],
+    });
+
+    let import_bytes = serde_json::to_vec(&import_json)
+        .map_err(|e| JsValue::from_str(&format!("Serialization failed: {}", e)))?;
+
+    // 3. Import into database using existing import_database()
+    let stats = database
+        .import_database(&import_bytes)
+        .map_err(|e| JsValue::from_str(&format!("Database import failed: {}", e)))?;
+
+    let result = serde_json::json!({
+        "imported": {
+            "settings": stats.settings,
+            "friends": stats.friends,
+            "groups": stats.groups,
+            "blocked_users": stats.blocked_users,
+        }
+    });
+
+    Ok(JsValue::from_str(&result.to_string()))
+}
+
+/// Sign a sync auth challenge nonce with the identity's Ed25519 key.
+///
+/// Used for the relay's challenge-response auth flow.
+///
+/// Takes JSON: { "nonce": "uuid-string" }
+/// Returns JSON: { "signature": "base64...", "public_key": "base64..." }
+#[wasm_bindgen]
+pub fn umbra_wasm_sync_sign_challenge(json: &str) -> Result<JsValue, JsValue> {
+    let state = get_state()?;
+    let state_r = state.read();
+
+    let identity = state_r
+        .identity
+        .as_ref()
+        .ok_or_else(|| JsValue::from_str("No identity loaded"))?;
+
+    let data: serde_json::Value =
+        serde_json::from_str(json).map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let nonce = data["nonce"]
+        .as_str()
+        .ok_or_else(|| JsValue::from_str("Missing nonce field"))?;
+
+    // Sign the nonce with Ed25519
+    let signature = crate::crypto::sign(&identity.keypair().signing, nonce.as_bytes());
+    let public_key = identity.keypair().signing.public_bytes();
+
+    let b64 = base64::engine::general_purpose::STANDARD;
+
+    let result = serde_json::json!({
+        "signature": base64::Engine::encode(&b64, signature.as_bytes()),
+        "public_key": base64::Engine::encode(&b64, &public_key),
     });
 
     Ok(JsValue::from_str(&result.to_string()))

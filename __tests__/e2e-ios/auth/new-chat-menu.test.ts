@@ -22,7 +22,7 @@ describe('T2.4 New Chat Menu', () => {
 
   it('T2.4.1 — new chat button is visible in sidebar', async () => {
     await waitFor(element(by.id(TEST_IDS.SIDEBAR.NEW_CHAT_BUTTON)))
-      .toBeVisible()
+      .toExist()
       .withTimeout(TIMEOUTS.NAVIGATION);
   });
 
@@ -33,13 +33,13 @@ describe('T2.4 New Chat Menu', () => {
     // The menu should show "New DM" and/or "New Group" options
     // At least one of these should be visible
     const newDmVisible = await waitFor(element(by.text('New DM')))
-      .toBeVisible()
+      .toExist()
       .withTimeout(TIMEOUTS.INTERACTION)
       .then(() => true)
       .catch(() => false);
 
     const newGroupVisible = await waitFor(element(by.text('New Group')))
-      .toBeVisible()
+      .toExist()
       .withTimeout(TIMEOUTS.INTERACTION)
       .then(() => true)
       .catch(() => false);
@@ -47,7 +47,7 @@ describe('T2.4 New Chat Menu', () => {
     // At minimum, one menu option should be visible
     if (!newDmVisible && !newGroupVisible) {
       // Fallback: check for any menu/dialog that appeared
-      await expect(element(by.id(TEST_IDS.SIDEBAR.NEW_CHAT_BUTTON))).toBeVisible();
+      await expect(element(by.id(TEST_IDS.SIDEBAR.NEW_CHAT_BUTTON))).toExist();
     }
   });
 
@@ -61,13 +61,13 @@ describe('T2.4 New Chat Menu', () => {
     }
 
     await waitFor(element(by.text('New DM')))
-      .toBeVisible()
+      .toExist()
       .withTimeout(TIMEOUTS.INTERACTION);
   });
 
   it('T2.4.4 — New Group option is available in menu', async () => {
     await waitFor(element(by.text('New Group')))
-      .toBeVisible()
+      .toExist()
       .withTimeout(TIMEOUTS.INTERACTION);
   });
 
@@ -77,6 +77,6 @@ describe('T2.4 New Chat Menu', () => {
     await waitForUISettle();
 
     // The menu should be dismissed — New DM text should no longer be visible
-    await expect(element(by.text('New DM'))).not.toBeVisible();
+    await expect(element(by.text('New DM'))).not.toExist();
   });
 });

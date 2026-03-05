@@ -583,10 +583,74 @@ const formatBytes = jest.fn((bytes) => {
 const initOpfsBridge = jest.fn(() => false); // false in test env (no OPFS)
 const isOpfsBridgeReady = jest.fn(() => false);
 
-// Metadata sync
+// Metadata sync (@deprecated)
 const syncMetadataViaRelay = jest.fn();
 
-// Account backup
+// Account sync
+const authenticateSync = jest.fn((relayUrl, did) =>
+  Promise.resolve({ token: 'mock-sync-token', expiresAt: Math.floor(Date.now() / 1000) + 3600 })
+);
+const uploadSyncBlob = jest.fn((relayUrl, did, token, sectionVersions) =>
+  Promise.resolve({
+    blob: 'bW9jay1ibG9i', // base64 "mock-blob"
+    sections: { preferences: 1, friends: 1, groups: 1, blocked: 1 },
+    size: 1024,
+  })
+);
+const downloadSyncBlob = jest.fn(() => Promise.resolve('bW9jay1ibG9i'));
+const getSyncBlobMeta = jest.fn((relayUrl, did, token) =>
+  Promise.resolve({
+    did,
+    size: 1024,
+    updatedAt: Math.floor(Date.now() / 1000),
+    expiresAt: Math.floor(Date.now() / 1000) + 7776000, // 90 days
+  })
+);
+const deleteSyncBlob = jest.fn(() => Promise.resolve(true));
+const createSyncBlob = jest.fn(() =>
+  Promise.resolve({
+    blob: 'bW9jay1ibG9i',
+    sections: { preferences: 1, friends: 1, groups: 1, blocked: 1 },
+    size: 1024,
+  })
+);
+const parseSyncBlob = jest.fn((blob) =>
+  Promise.resolve({
+    v: 1,
+    updatedAt: Math.floor(Date.now() / 1000),
+    sections: {
+      preferences: { v: 1, count: 5, updatedAt: Math.floor(Date.now() / 1000) },
+      friends: { v: 1, count: 3, updatedAt: Math.floor(Date.now() / 1000) },
+      groups: { v: 1, count: 2, updatedAt: Math.floor(Date.now() / 1000) },
+      blocked: { v: 1, count: 0, updatedAt: Math.floor(Date.now() / 1000) },
+    },
+  })
+);
+const applySyncBlob = jest.fn(() =>
+  Promise.resolve({
+    imported: { settings: 5, friends: 3, groups: 2, blockedUsers: 0 },
+  })
+);
+const createSyncDelta = jest.fn((section) =>
+  Promise.resolve({
+    section,
+    version: 1,
+    encryptedData: 'bW9jay1kZWx0YQ==',
+  })
+);
+const applySyncDelta = jest.fn((delta) =>
+  Promise.resolve({ applied: true, section: delta.section, version: delta.version })
+);
+const fullSyncUpload = jest.fn((relayUrl, did) =>
+  Promise.resolve({
+    auth: { token: 'mock-sync-token', expiresAt: Math.floor(Date.now() / 1000) + 3600 },
+    result: { blob: 'bW9jay1ibG9i', sections: { preferences: 1, friends: 1 }, size: 1024 },
+  })
+);
+const fullSyncCheck = jest.fn(() => Promise.resolve(null));
+const fullSyncRestore = jest.fn(() => Promise.resolve(null));
+
+// Account backup (@deprecated)
 const createAccountBackup = jest.fn(() =>
   Promise.resolve({ chunkCount: 3, totalSize: 150000 })
 );
@@ -621,9 +685,23 @@ module.exports = {
   // OPFS bridge
   initOpfsBridge,
   isOpfsBridgeReady,
-  // Metadata sync
+  // Metadata sync (@deprecated)
   syncMetadataViaRelay,
-  // Account backup
+  // Account sync
+  authenticateSync,
+  uploadSyncBlob,
+  downloadSyncBlob,
+  getSyncBlobMeta,
+  deleteSyncBlob,
+  createSyncBlob,
+  parseSyncBlob,
+  applySyncBlob,
+  createSyncDelta,
+  applySyncDelta,
+  fullSyncUpload,
+  fullSyncCheck,
+  fullSyncRestore,
+  // Account backup (@deprecated)
   createAccountBackup,
   restoreAccountBackup,
   parseBackupManifest,

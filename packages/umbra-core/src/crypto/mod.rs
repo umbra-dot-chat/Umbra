@@ -106,7 +106,8 @@ pub use encryption::{
 };
 pub use kdf::{
     compute_key_fingerprint, derive_backup_key, derive_channel_file_key, derive_file_key,
-    derive_keys_from_seed, derive_shared_secret, verify_key_fingerprint, DerivedKeys,
+    derive_keys_from_seed, derive_shared_secret, derive_sync_key, verify_key_fingerprint,
+    DerivedKeys,
 };
 pub use keys::{EncryptionKeyPair, KeyPair, PublicKey, SigningKeyPair};
 pub use signing::{sign, verify, Signature, SIGNATURE_SIZE};

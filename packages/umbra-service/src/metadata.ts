@@ -1,9 +1,11 @@
 /**
  * Account metadata sync module
  *
- * Provides functions for syncing account metadata (settings, preferences)
- * between sessions via relays. Uses the existing relay transport which
- * handles E2E encryption at the WASM layer.
+ * @deprecated This module is superseded by the encrypted blob sync system
+ * in `sync.ts`. Use `uploadSyncBlob()` / `downloadSyncBlob()` from
+ * `@umbra/service` instead. This module is retained only for backwards
+ * compatibility with older relay sessions that may still send
+ * `account_metadata` envelopes.
  *
  * @packageDocumentation
  */
@@ -13,35 +15,17 @@ import { wasm, parseWasm } from './helpers';
 /**
  * Send an account metadata update via relay to own DID.
  *
- * The relay treats `to_did: ownDid` like any other recipient — it queues
- * the message for that DID. Other sessions connecting with the same DID
- * will receive it via `offline_messages`. The payload is encrypted at the
- * relay transport level by the existing WASM encryption.
- *
- * @param relayWs - Active WebSocket connection to the relay
- * @param ownDid - Own DID (send to self for cross-session sync)
- * @param key - Metadata key
- * @param value - Metadata value
+ * @deprecated Use `uploadSyncBlob()` from `@umbra/service` instead.
+ * The new sync system uploads encrypted CBOR blobs via REST, replacing
+ * per-key metadata messages. This function is a no-op and will be
+ * removed in a future release.
  */
 export async function syncMetadataViaRelay(
-  relayWs: WebSocket,
-  ownDid: string,
-  key: string,
-  value: string,
+  _relayWs: WebSocket,
+  _ownDid: string,
+  _key: string,
+  _value: string,
 ): Promise<void> {
-  if (!relayWs || relayWs.readyState !== WebSocket.OPEN) {
-    console.warn('[metadata] Relay not connected, skipping metadata sync');
-    return;
-  }
-
-  // Build envelope in Rust
-  const json = JSON.stringify({ sender_did: ownDid, key, value });
-  const resultJson = wasm().umbra_wasm_build_metadata_envelope(json);
-  const rm = await parseWasm<{ toDid: string; payload: string }>(resultJson);
-
-  try {
-    relayWs.send(JSON.stringify({ type: 'send', to_did: rm.toDid, payload: rm.payload }));
-  } catch (err) {
-    console.warn('[metadata] Failed to send metadata via relay:', err);
-  }
+  // No-op: replaced by SyncContext + uploadSyncBlob()
+  console.warn('[metadata] syncMetadataViaRelay is deprecated. Use SyncContext / uploadSyncBlob() instead.');
 }

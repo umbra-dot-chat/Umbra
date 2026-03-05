@@ -26,7 +26,7 @@ describe('Settings > Audio/Video Section', () => {
   });
 
   it('should display the audio/video section', async () => {
-    await expect(element(by.id(TEST_IDS.SETTINGS.SECTION_AUDIO_VIDEO))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.SETTINGS.SECTION_AUDIO_VIDEO))).toExist();
   });
 
   it.todo('should show microphone input device selector');

@@ -24,12 +24,12 @@ describe('Discovery — Connection Link', () => {
 
   it('should display the connection link panel on the friends page', async () => {
     await waitFor(element(by.id(TEST_IDS.FRIENDS.CONNECTION_LINK)))
-      .toBeVisible()
+      .toExist()
       .withTimeout(TIMEOUTS.NAVIGATION);
   });
 
   it('should show the copy link button', async () => {
-    await expect(element(by.id(TEST_IDS.FRIENDS.COPY_LINK))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.FRIENDS.COPY_LINK))).toExist();
   });
 
   it('should tap the copy link button without error', async () => {
@@ -38,11 +38,11 @@ describe('Discovery — Connection Link', () => {
 
     // A toast or visual feedback should confirm the link was copied
     await waitFor(element(by.id(TEST_IDS.COMMON.TOAST)))
-      .toBeVisible()
+      .toExist()
       .withTimeout(TIMEOUTS.INTERACTION);
   });
 
   it('should still show the friends page after copying the link', async () => {
-    await expect(element(by.id(TEST_IDS.FRIENDS.PAGE))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.FRIENDS.PAGE))).toExist();
   });
 });

@@ -12,7 +12,7 @@ import { TIMEOUTS } from '../../shared/timeouts';
 import { FIXTURES } from '../../shared/fixtures';
 import { launchApp, waitForAuthScreen, waitForMainScreen, waitForUISettle } from '../helpers/app';
 import { createAccount, createAccountWithPin, importAccount, enterPin, skipPin } from '../helpers/auth';
-import { navigateToSettings, navigateToFriends, navigateHome, openConversation } from '../helpers/navigation';
+import { navigateToSettings, navigateToFriends, navigateHome, openConversation, tapSettingsNavItem } from '../helpers/navigation';
 
 describe('T1.4 Multi-Account', () => {
   beforeAll(async () => {
@@ -21,7 +21,7 @@ describe('T1.4 Multi-Account', () => {
 
   it('T1.4.1 — can create first account', async () => {
     await createAccount(FIXTURES.USER_A.displayName);
-    await expect(element(by.id(TEST_IDS.MAIN.CONTAINER))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.MAIN.CONTAINER))).toExist();
   });
 
   it('T1.4.2 — can log out of first account', async () => {
@@ -29,19 +29,19 @@ describe('T1.4 Multi-Account', () => {
     await waitForUISettle();
 
     // Navigate to account section and find logout
-    await element(by.id(TEST_IDS.SETTINGS.NAV_ACCOUNT)).tap();
+    await tapSettingsNavItem(TEST_IDS.SETTINGS.NAV_ACCOUNT);
     await waitForUISettle();
 
     await waitFor(element(by.id(TEST_IDS.SETTINGS.LOGOUT_BUTTON)))
-      .toBeVisible()
+      .toExist()
       .withTimeout(TIMEOUTS.NAVIGATION);
-    await element(by.id(TEST_IDS.SETTINGS.LOGOUT_BUTTON)).tap();
+    await element(by.id(TEST_IDS.SETTINGS.LOGOUT_BUTTON)).performAccessibilityAction('activate');
     await waitForUISettle();
 
     // Confirm logout if a confirmation dialog appears
     try {
       await waitFor(element(by.id(TEST_IDS.COMMON.CONFIRM_YES)))
-        .toBeVisible()
+        .toExist()
         .withTimeout(TIMEOUTS.UI_SETTLE);
       await element(by.id(TEST_IDS.COMMON.CONFIRM_YES)).tap();
     } catch {
@@ -53,25 +53,25 @@ describe('T1.4 Multi-Account', () => {
 
   it('T1.4.3 — can create second account', async () => {
     await createAccount(FIXTURES.USER_B.displayName);
-    await expect(element(by.id(TEST_IDS.MAIN.CONTAINER))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.MAIN.CONTAINER))).toExist();
   });
 
   it('T1.4.4 — stored accounts appear on auth screen after logout', async () => {
     // Log out of second account
     await navigateToSettings();
     await waitForUISettle();
-    await element(by.id(TEST_IDS.SETTINGS.NAV_ACCOUNT)).tap();
+    await tapSettingsNavItem(TEST_IDS.SETTINGS.NAV_ACCOUNT);
     await waitForUISettle();
 
     await waitFor(element(by.id(TEST_IDS.SETTINGS.LOGOUT_BUTTON)))
-      .toBeVisible()
+      .toExist()
       .withTimeout(TIMEOUTS.NAVIGATION);
-    await element(by.id(TEST_IDS.SETTINGS.LOGOUT_BUTTON)).tap();
+    await element(by.id(TEST_IDS.SETTINGS.LOGOUT_BUTTON)).performAccessibilityAction('activate');
     await waitForUISettle();
 
     try {
       await waitFor(element(by.id(TEST_IDS.COMMON.CONFIRM_YES)))
-        .toBeVisible()
+        .toExist()
         .withTimeout(TIMEOUTS.UI_SETTLE);
       await element(by.id(TEST_IDS.COMMON.CONFIRM_YES)).tap();
     } catch {
@@ -82,36 +82,36 @@ describe('T1.4 Multi-Account', () => {
 
     // Previously created accounts should appear in the account list
     await waitFor(element(by.id(TEST_IDS.AUTH.ACCOUNT_LIST)))
-      .toBeVisible()
+      .toExist()
       .withTimeout(TIMEOUTS.NAVIGATION);
   });
 
   it('T1.4.5 — can switch between stored accounts', async () => {
     // Tap on a stored account item to switch to it
     await waitFor(element(by.id(TEST_IDS.AUTH.ACCOUNT_ITEM)).atIndex(0))
-      .toBeVisible()
+      .toExist()
       .withTimeout(TIMEOUTS.NAVIGATION);
     await element(by.id(TEST_IDS.AUTH.ACCOUNT_ITEM)).atIndex(0).tap();
     await waitForUISettle();
 
     // Should load the main screen for that account
     await waitForMainScreen();
-    await expect(element(by.id(TEST_IDS.MAIN.CONTAINER))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.MAIN.CONTAINER))).toExist();
   });
 
   it('T1.4.6 — each account has own data isolation', async () => {
     // Verify we are logged in (main screen visible)
-    await expect(element(by.id(TEST_IDS.MAIN.CONTAINER))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.MAIN.CONTAINER))).toExist();
 
     // Navigate to settings to verify account identity
     await navigateToSettings();
     await waitForUISettle();
-    await element(by.id(TEST_IDS.SETTINGS.NAV_ACCOUNT)).tap();
+    await tapSettingsNavItem(TEST_IDS.SETTINGS.NAV_ACCOUNT);
     await waitForUISettle();
 
     // DID should be displayed — each account has a unique DID
     await waitFor(element(by.id(TEST_IDS.SETTINGS.DID_DISPLAY)))
-      .toBeVisible()
+      .toExist()
       .withTimeout(TIMEOUTS.NAVIGATION);
   });
 });

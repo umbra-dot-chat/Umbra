@@ -266,6 +266,18 @@ async fn handle_client_message(state: &RelayState, from_did: &str, msg: ClientMe
         } => {
             handle_call_signal(state, from_did, &room_id, &to_did, &payload);
         }
+
+        ClientMessage::SyncPush {
+            section,
+            version,
+            encrypted_data,
+        } => {
+            handle_sync_push(state, from_did, &section, version, &encrypted_data);
+        }
+
+        ClientMessage::SyncFetch { sections } => {
+            handle_sync_fetch(state, from_did, sections.as_deref());
+        }
     }
 }
 
@@ -969,4 +981,83 @@ pub async fn handle_federation_inbound(
             _ => {}
         }
     }
+}
+
+// ── Sync Handlers ────────────────────────────────────────────────────────────
+
+/// Handle SyncPush — broadcast a sync delta to all OTHER sessions of the same DID.
+/// This enables real-time preference/friend/group sync between devices using the
+/// same account.
+fn handle_sync_push(
+    state: &RelayState,
+    from_did: &str,
+    section: &str,
+    version: u64,
+    encrypted_data: &str,
+) {
+    tracing::debug!(
+        did = from_did,
+        section = section,
+        version = version,
+        "Sync push received"
+    );
+
+    // Broadcast SyncUpdate to all connected sessions of the same DID.
+    // The relay doesn't store deltas — it just forwards them in real-time.
+    // For persistence, clients use the REST blob endpoints.
+    //
+    // NOTE: Currently we only have one session per DID (online_clients is DID → single sender).
+    // When multi-device is implemented, this will broadcast to all sessions.
+    // For now, the push is a no-op locally but the federation can forward it.
+    //
+    // Future: change online_clients to DID → Vec<ClientSender> for multi-session support.
+
+    // If federation is enabled, broadcast to peers so other relays can deliver
+    // to sessions of the same DID connected there.
+    if let Some(ref fed) = state.federation {
+        if let Some(_peer_url) = fed.find_peer_for_did(from_did) {
+            // The DID is also connected on another relay — forward the delta
+            let _ = fed.send_to_peer(
+                &_peer_url,
+                crate::protocol::PeerMessage::ForwardMessage {
+                    from_did: from_did.to_string(),
+                    to_did: from_did.to_string(),
+                    payload: serde_json::to_string(&serde_json::json!({
+                        "type": "sync_update",
+                        "section": section,
+                        "version": version,
+                        "encrypted_data": encrypted_data,
+                    }))
+                    .unwrap_or_default(),
+                    timestamp: chrono::Utc::now().timestamp(),
+                },
+            );
+        }
+    }
+
+    state.send_to_client(
+        from_did,
+        ServerMessage::Ack {
+            id: format!("sync_push_{}_{}", section, version),
+        },
+    );
+}
+
+/// Handle SyncFetch — return current sync state. For now, acknowledge the request.
+/// Full sync state tracking will be added in Phase 4 when SyncContext handles it.
+fn handle_sync_fetch(
+    state: &RelayState,
+    from_did: &str,
+    _sections: Option<&[String]>,
+) {
+    tracing::debug!(did = from_did, "Sync fetch requested");
+
+    // For now, return empty versions since the relay doesn't track section versions.
+    // Clients use the REST GET /api/sync/:did endpoint for full blob retrieval.
+    state.send_to_client(
+        from_did,
+        ServerMessage::SyncState {
+            versions: std::collections::HashMap::new(),
+        },
+    );
 }

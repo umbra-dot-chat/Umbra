@@ -13,6 +13,7 @@
 
 import { test, expect, type Page, type BrowserContext } from '@playwright/test';
 import {
+  BASE_URL,
   WASM_LOAD_TIMEOUT,
   UI_SETTLE_TIMEOUT,
   createIdentity,
@@ -22,7 +23,7 @@ import {
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 async function setupUserWithIdentity(browser: any): Promise<{ context: BrowserContext; page: Page; did: string }> {
-  const context = await browser.newContext();
+  const context = await browser.newContext({ baseURL: BASE_URL });
   const page = await context.newPage();
   const { did } = await createIdentity(page, 'BackupUser');
   return { context, page, did };

@@ -83,6 +83,8 @@ export type {
   AccountBackupManifestPayload,
   AccountBackupChunkPayload,
   MetadataEvent,
+  SyncStatus,
+  SyncEvent,
 } from './types';
 
 // File chunking
@@ -127,10 +129,22 @@ export type {
   CleanupSuggestion, AutoCleanupRules,
 } from './storage-manager';
 
-// Metadata sync
+// Metadata sync (@deprecated — use sync module instead)
 export { syncMetadataViaRelay } from './metadata';
 
-// Account backup
+// Account sync
+export {
+  authenticateSync, uploadSyncBlob, downloadSyncBlob, getSyncBlobMeta,
+  deleteSyncBlob, createSyncBlob, parseSyncBlob, applySyncBlob,
+  createSyncDelta, applySyncDelta,
+  fullSyncUpload, fullSyncCheck, fullSyncRestore,
+} from './sync';
+export type {
+  SyncAuthResult, SyncSectionSummary, SyncBlobSummary, SyncCreateResult,
+  SyncImportResult, SyncBlobMeta, SyncDelta,
+} from './sync';
+
+// Account backup (@deprecated — use sync module for lightweight data)
 export {
   createAccountBackup, restoreAccountBackup,
   parseBackupManifest, parseBackupChunks, restoreFromChunks,

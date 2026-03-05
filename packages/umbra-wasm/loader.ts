@@ -56,6 +56,16 @@ export interface UmbraWasmModule {
   /** Restore an account from encrypted backup chunks */
   umbra_wasm_account_restore_backup(json: string): string;
 
+  // Account Sync
+  /** Create an encrypted sync blob from current database state */
+  umbra_wasm_sync_create_blob(json: string): string;
+  /** Parse a sync blob and return summary (sections, versions, counts) */
+  umbra_wasm_sync_parse_blob(json: string): string;
+  /** Decrypt and apply a sync blob into the database */
+  umbra_wasm_sync_apply_blob(json: string): string;
+  /** Sign a sync auth challenge nonce with Ed25519 */
+  umbra_wasm_sync_sign_challenge(json: string): string;
+
   // Discovery
   umbra_wasm_discovery_get_connection_info(): string;
   umbra_wasm_discovery_parse_connection_info(info: string): string;
@@ -727,6 +737,17 @@ function buildModule(wasmPkg: any): UmbraWasmModule {
       wasmPkg.umbra_wasm_account_create_backup(json),
     umbra_wasm_account_restore_backup: (json: string) =>
       wasmPkg.umbra_wasm_account_restore_backup(json),
+
+    // Account Sync
+    umbra_wasm_sync_create_blob: (json: string) =>
+      wasmPkg.umbra_wasm_sync_create_blob(json),
+    umbra_wasm_sync_parse_blob: (json: string) =>
+      wasmPkg.umbra_wasm_sync_parse_blob(json),
+    umbra_wasm_sync_apply_blob: (json: string) =>
+      wasmPkg.umbra_wasm_sync_apply_blob(json),
+    umbra_wasm_sync_sign_challenge: (json: string) =>
+      wasmPkg.umbra_wasm_sync_sign_challenge(json),
+
     umbra_wasm_friends_update_encryption_key: (json: string) =>
       wasmPkg.umbra_wasm_friends_update_encryption_key(json),
 

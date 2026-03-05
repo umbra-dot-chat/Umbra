@@ -3,16 +3,47 @@
  * Used by both Detox (iOS) and Playwright (web).
  */
 
+const ADJECTIVES = [
+  'Swift', 'Brave', 'Calm', 'Eager', 'Fierce',
+  'Happy', 'Jolly', 'Lucky', 'Noble', 'Quick',
+  'Quiet', 'Sharp', 'Witty', 'Bold', 'Clever',
+  'Gentle', 'Mighty', 'Proud', 'Steady', 'Wise',
+] as const;
+
+const ANIMALS = [
+  'Fox', 'Wolf', 'Bear', 'Hawk', 'Lynx',
+  'Otter', 'Raven', 'Owl', 'Panda', 'Tiger',
+  'Falcon', 'Badger', 'Heron', 'Crane', 'Elk',
+  'Cobra', 'Wren', 'Finch', 'Bison', 'Moose',
+] as const;
+
+/** Generate a unique display name like "SwiftFox42" */
+export function generateDisplayName(): string {
+  const adj = ADJECTIVES[Math.floor(Math.random() * ADJECTIVES.length)];
+  const animal = ANIMALS[Math.floor(Math.random() * ANIMALS.length)];
+  const num = Math.floor(Math.random() * 100);
+  return `${adj}${animal}${num}`;
+}
+
+/** Generate a random 5-digit PIN */
+export function generatePin(): string {
+  return String(10000 + Math.floor(Math.random() * 90000));
+}
+
+// Pre-generated names for each test run (stable within a run, unique across runs)
+const _userAName = generateDisplayName();
+const _userBName = generateDisplayName();
+
 export const FIXTURES = {
-  /** User A — primary test account */
+  /** User A — primary test account (unique name per test run) */
   USER_A: {
-    displayName: 'Alice Test',
+    displayName: _userAName,
     pin: '12345',
   },
 
   /** User B — second account for two-user flows */
   USER_B: {
-    displayName: 'Bob Test',
+    displayName: _userBName,
     pin: '67890',
   },
 
@@ -37,6 +68,12 @@ export const FIXTURES = {
     LONG: 'A'.repeat(500),
     EMOJI: 'Test with emoji: smile face',
     SPECIAL_CHARS: 'Special chars: <>&"\' @#$%',
+    /** DM conversation test messages */
+    DM_HELLO: 'Hey from User A in DM!',
+    DM_REPLY: 'Got your message User A!',
+    DM_SECOND: 'Sending a second message',
+    DM_EMOJI: 'DM emoji test hello world',
+    DM_LONG: 'B'.repeat(300),
   },
 
   /** Test group names */

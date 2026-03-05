@@ -19,6 +19,7 @@
 
 import { test, expect, type Browser, type Page } from '@playwright/test';
 import {
+  BASE_URL,
   WASM_LOAD_TIMEOUT,
   RELAY_SETTLE_TIMEOUT,
   UI_SETTLE_TIMEOUT,
@@ -56,8 +57,8 @@ async function setupDMConversation(
   browser: Browser,
   suffix: string,
 ): Promise<DMSetupResult> {
-  const contextA = await browser.newContext();
-  const contextB = await browser.newContext();
+  const contextA = await browser.newContext({ baseURL: BASE_URL });
+  const contextB = await browser.newContext({ baseURL: BASE_URL });
   const pageA = await contextA.newPage();
   const pageB = await contextB.newPage();
 

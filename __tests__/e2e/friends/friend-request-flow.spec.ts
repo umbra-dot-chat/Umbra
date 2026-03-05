@@ -10,6 +10,7 @@
 
 import { test, expect, type Browser, type Page } from '@playwright/test';
 import {
+  BASE_URL,
   WASM_LOAD_TIMEOUT,
   RELAY_SETTLE_TIMEOUT,
   UI_SETTLE_TIMEOUT,
@@ -26,8 +27,8 @@ import {
  * Returns pages, contexts, and identity info for both users.
  */
 async function setupTwoUsers(browser: Browser, suffix: string) {
-  const contextA = await browser.newContext();
-  const contextB = await browser.newContext();
+  const contextA = await browser.newContext({ baseURL: BASE_URL });
+  const contextB = await browser.newContext({ baseURL: BASE_URL });
   const pageA = await contextA.newPage();
   const pageB = await contextB.newPage();
 
@@ -60,7 +61,7 @@ test.describe('3.6 Friend Request Flow — Send Request', () => {
   test.setTimeout(180_000);
 
   test('T3.6.1 — Tab A: DID is available from createIdentity', async ({ browser }) => {
-    const contextA = await browser.newContext();
+    const contextA = await browser.newContext({ baseURL: BASE_URL });
     const pageA = await contextA.newPage();
 
     const userA = await createIdentity(pageA, 'AliceDID');

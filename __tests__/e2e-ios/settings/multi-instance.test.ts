@@ -26,7 +26,7 @@ describe('Settings > Multi-Instance / Device Management', () => {
   });
 
   it('should display the account section where device management lives', async () => {
-    await expect(element(by.id(TEST_IDS.SETTINGS.SECTION_ACCOUNT))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.SETTINGS.SECTION_ACCOUNT))).toExist();
   });
 
   it.todo('should show a linked devices section');

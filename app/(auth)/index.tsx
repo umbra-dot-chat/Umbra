@@ -234,6 +234,8 @@ function AuthContent({ inverted, onCreateWallet, onImportWallet, taglineIndex, t
                   onPress={onCreateWallet}
                   testID={TEST_IDS.AUTH.CREATE_BUTTON}
                   accessibilityLabel="Create new account"
+                  accessibilityActions={[{ name: 'activate', label: 'Create new account' }]}
+                  onAccessibilityAction={(e: any) => { if (e.nativeEvent.actionName === 'activate') onCreateWallet(); }}
                   iconLeft={<WalletIcon size={16} color={tc.text.primary} />}
                 >
                   Create New
@@ -246,6 +248,8 @@ function AuthContent({ inverted, onCreateWallet, onImportWallet, taglineIndex, t
                   onPress={onImportWallet}
                   testID={TEST_IDS.AUTH.IMPORT_BUTTON}
                   accessibilityLabel="Import existing account"
+                  accessibilityActions={[{ name: 'activate', label: 'Import existing account' }]}
+                  onAccessibilityAction={(e: any) => { if (e.nativeEvent.actionName === 'activate') onImportWallet(); }}
                   iconLeft={<DownloadIcon size={16} color={tc.text.primary} />}
                 >
                   Import
@@ -322,6 +326,8 @@ function AuthContent({ inverted, onCreateWallet, onImportWallet, taglineIndex, t
                   onPress={onCreateWallet}
                   testID={TEST_IDS.AUTH.CREATE_BUTTON}
                   accessibilityLabel="Create new account"
+                  accessibilityActions={[{ name: 'activate', label: 'Create new account' }]}
+                  onAccessibilityAction={(e: any) => { if (e.nativeEvent.actionName === 'activate') onCreateWallet(); }}
                   iconLeft={<WalletIcon size={18} color={btnIconColor} />}
                 >
                   Create New Account
@@ -402,6 +408,8 @@ function AuthContent({ inverted, onCreateWallet, onImportWallet, taglineIndex, t
                   onPress={onImportWallet}
                   testID={TEST_IDS.AUTH.IMPORT_BUTTON}
                   accessibilityLabel="Import existing account"
+                  accessibilityActions={[{ name: 'activate', label: 'Import existing account' }]}
+                  onAccessibilityAction={(e: any) => { if (e.nativeEvent.actionName === 'activate') onImportWallet(); }}
                   iconLeft={<DownloadIcon size={18} color={btnIconColor} />}
                 >
                   Import Existing Account
@@ -479,6 +487,8 @@ function NativeInvertedLayer({
         bottom: 0,
       }}
       pointerEvents="none"
+      accessibilityElementsHidden={true}
+      importantForAccessibility="no-hide-descendants"
       maskElement={
         <Svg
           width={dims.width}

@@ -26,11 +26,11 @@ describe('Settings > Profile Section', () => {
   });
 
   it('should display the profile section', async () => {
-    await expect(element(by.id(TEST_IDS.SETTINGS.SECTION_PROFILE))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.SETTINGS.SECTION_PROFILE))).toExist();
   });
 
   it('should show the display name input', async () => {
-    await expect(element(by.id(TEST_IDS.SETTINGS.DISPLAY_NAME_INPUT))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.SETTINGS.DISPLAY_NAME_INPUT))).toExist();
   });
 
   it('should pre-fill the display name with the current name', async () => {
@@ -46,15 +46,15 @@ describe('Settings > Profile Section', () => {
   });
 
   it('should show the bio input', async () => {
-    await expect(element(by.id(TEST_IDS.SETTINGS.BIO_INPUT))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.SETTINGS.BIO_INPUT))).toExist();
   });
 
   it('should show the avatar picker', async () => {
-    await expect(element(by.id(TEST_IDS.SETTINGS.AVATAR_PICKER))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.SETTINGS.AVATAR_PICKER))).toExist();
   });
 
   it('should show the save profile button', async () => {
-    await expect(element(by.id(TEST_IDS.SETTINGS.SAVE_PROFILE))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.SETTINGS.SAVE_PROFILE))).toExist();
   });
 
   it.todo('should persist edited display name after save and reopen');

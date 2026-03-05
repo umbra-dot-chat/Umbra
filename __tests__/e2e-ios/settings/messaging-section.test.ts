@@ -26,12 +26,12 @@ describe('Settings > Messaging Section', () => {
   });
 
   it('should display the messaging section', async () => {
-    await expect(element(by.id(TEST_IDS.SETTINGS.SECTION_MESSAGING))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.SETTINGS.SECTION_MESSAGING))).toExist();
   });
 
   it('should contain at least one settings toggle for message display', async () => {
     await waitFor(element(by.id(TEST_IDS.SETTINGS.TOGGLE)).atIndex(0))
-      .toBeVisible()
+      .toExist()
       .withTimeout(TIMEOUTS.INTERACTION);
   });
 

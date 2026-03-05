@@ -142,6 +142,9 @@ pub mod domain {
 
     /// Domain for account backup encryption key derivation
     pub const ACCOUNT_BACKUP: &[u8] = b"umbra-account-backup-v1";
+
+    /// Domain for account sync encryption key derivation
+    pub const ACCOUNT_SYNC: &[u8] = b"umbra-account-sync-v1";
 }
 
 /// Keys derived from a master seed
@@ -256,6 +259,21 @@ pub fn derive_backup_key(seed: &[u8; 32]) -> Result<[u8; 32]> {
         .map_err(|_| Error::KeyDerivationFailed("Failed to derive backup key".into()))?;
 
     Ok(backup_key)
+}
+
+/// Derive an encryption key for account sync blobs.
+///
+/// Used to encrypt sync snapshots before uploading to relay.
+/// The key is deterministically derived from the BIP39 seed, so it can be
+/// re-derived from the recovery phrase on any device.
+pub fn derive_sync_key(seed: &[u8; 32]) -> Result<[u8; 32]> {
+    let hkdf = Hkdf::<Sha256>::new(None, seed);
+
+    let mut sync_key = [0u8; 32];
+    hkdf.expand(domain::ACCOUNT_SYNC, &mut sync_key)
+        .map_err(|_| Error::KeyDerivationFailed("Failed to derive sync key".into()))?;
+
+    Ok(sync_key)
 }
 
 /// Derive a unique encryption key for a specific file.
@@ -667,5 +685,43 @@ mod tests {
         // Backup key should be independent from signing and encryption keys
         assert_ne!(backup_key, identity_keys.signing_key);
         assert_ne!(backup_key, identity_keys.encryption_key);
+    }
+
+    // ========================================================================
+    // Sync key tests
+    // ========================================================================
+
+    #[test]
+    fn test_sync_key_deterministic() {
+        let seed = [42u8; 32];
+
+        let key1 = derive_sync_key(&seed).unwrap();
+        let key2 = derive_sync_key(&seed).unwrap();
+
+        assert_eq!(key1, key2);
+    }
+
+    #[test]
+    fn test_sync_key_different_seeds() {
+        let seed1 = [1u8; 32];
+        let seed2 = [2u8; 32];
+
+        let key1 = derive_sync_key(&seed1).unwrap();
+        let key2 = derive_sync_key(&seed2).unwrap();
+
+        assert_ne!(key1, key2);
+    }
+
+    #[test]
+    fn test_sync_key_differs_from_other_keys() {
+        let seed = [42u8; 32];
+
+        let identity_keys = derive_keys_from_seed(&seed).unwrap();
+        let backup_key = derive_backup_key(&seed).unwrap();
+        let sync_key = derive_sync_key(&seed).unwrap();
+
+        assert_ne!(sync_key, identity_keys.signing_key);
+        assert_ne!(sync_key, identity_keys.encryption_key);
+        assert_ne!(sync_key, backup_key);
     }
 }

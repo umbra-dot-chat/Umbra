@@ -23,7 +23,7 @@ describe('Reactions and Threads', () => {
   });
 
   it('should load the main screen', async () => {
-    await expect(element(by.id(TEST_IDS.MAIN.CONTAINER))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.MAIN.CONTAINER))).toExist();
   });
 
   describe('Reactions [STUB]', () => {

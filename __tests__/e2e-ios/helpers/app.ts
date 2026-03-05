@@ -58,9 +58,55 @@ export async function waitForMainScreen() {
 
 /**
  * Wait for relay connection to be established.
+ *
+ * Navigates to Settings > Network, verifies the relay status indicator exists,
+ * then returns to the previous screen. This confirms the relay WebSocket is
+ * up and the app has connected, rather than relying on a blind sleep.
+ *
+ * Falls back to a timed wait if the relay status element is unavailable
+ * (e.g., the settings dialog can't be opened from the current state).
  */
 export async function waitForRelayConnection() {
-  await new Promise((resolve) => setTimeout(resolve, TIMEOUTS.RELAY_SETTLE));
+  try {
+    // Navigate to Settings > Network to check relay status
+    await element(by.id(TEST_IDS.NAV.SETTINGS)).performAccessibilityAction('activate');
+    await waitFor(element(by.id(TEST_IDS.SETTINGS.DIALOG)))
+      .toExist()
+      .withTimeout(TIMEOUTS.NAVIGATION);
+
+    await element(by.id(TEST_IDS.SETTINGS.NAV_NETWORK)).tap();
+    await waitFor(element(by.id(TEST_IDS.SETTINGS.SECTION_NETWORK)))
+      .toExist()
+      .withTimeout(TIMEOUTS.NAVIGATION);
+
+    // Wait for the relay status indicator — its presence confirms the
+    // relay connection is being tracked. The element only renders after
+    // the network hook initializes and reports relay state.
+    await waitFor(element(by.id(TEST_IDS.SETTINGS.RELAY_STATUS)))
+      .toExist()
+      .withTimeout(TIMEOUTS.NETWORK_CONNECT);
+
+    console.log('[waitForRelayConnection] Relay status indicator found — connection confirmed');
+
+    // Close settings and return
+    await element(by.id(TEST_IDS.SETTINGS.CLOSE_BUTTON)).performAccessibilityAction('activate');
+    await waitForUISettle();
+  } catch {
+    // Fallback: if navigation fails (e.g., settings already open or can't
+    // be reached from current state), use a timed wait.
+    console.warn('[waitForRelayConnection] Could not verify via settings — using timed fallback');
+    await new Promise((resolve) => setTimeout(resolve, TIMEOUTS.RELAY_SETTLE));
+  }
+}
+
+/**
+ * Assert relay connection is active while already in the Network settings section.
+ * Use this when you've already navigated to Settings > Network.
+ */
+export async function assertRelayConnected() {
+  await waitFor(element(by.id(TEST_IDS.SETTINGS.RELAY_STATUS)))
+    .toExist()
+    .withTimeout(TIMEOUTS.NETWORK_CONNECT);
 }
 
 /**

@@ -40,7 +40,8 @@ import {
 } from '@/components/ui';
 import UmbraService from '@umbra/service';
 import type { Identity } from '@umbra/service';
-import { enablePersistence } from '@umbra/wasm';
+import { enablePersistence, getWasm } from '@umbra/wasm';
+import { setPendingSyncOptIn } from '@/contexts/SyncContext';
 import { TEST_IDS } from '@/constants/test-ids';
 
 // ---------------------------------------------------------------------------
@@ -95,6 +96,9 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
   const [showDiscoveryOptIn, setShowDiscoveryOptIn] = useState(false);
   const [accountLinkedDuringCreation, setAccountLinkedDuringCreation] = useState(false);
 
+  // Sync opt-in state
+  const [syncOptIn, setSyncOptIn] = useState(true);
+
   const { currentStep, goNext, goBack, isFirstStep, reset } = useWalletFlow({
     totalSteps: 6,
   });
@@ -117,6 +121,7 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
       setUsernameLoading(false);
       setShowDiscoveryOptIn(false);
       setAccountLinkedDuringCreation(false);
+      setSyncOptIn(true);
       reset();
     }
   }, [open, reset]);
@@ -252,10 +257,24 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
       });
     }
 
+    // Signal sync opt-in via module-level flag so SyncContext picks it up
+    // after login, even if the KV write (async on RN native bridge) hasn't
+    // completed by the time SyncContext reads from the database.
+    if (syncOptIn) {
+      setPendingSyncOptIn(true);
+      // Also fire-and-forget the KV write so it persists for next app launch
+      try {
+        const w = getWasm();
+        if (w) {
+          (w as any).umbra_wasm_plugin_kv_set('__umbra_system__', '__sync_enabled__', 'true');
+        }
+      } catch { /* ignore */ }
+    }
+
     // Login — AuthGate will redirect to /(main) and unmount the auth
     // screen (including this overlay), so we don't need to manually close.
     login(identity);
-  }, [identity, login, chosenPin, setPin, rememberMe, setAuthRememberMe, seedPhrase, setRecoveryPhrase, addAccount]);
+  }, [identity, login, chosenPin, setPin, rememberMe, setAuthRememberMe, seedPhrase, setRecoveryPhrase, addAccount, syncOptIn]);
 
   // Called after discovery opt-in decision (or skip) to finish login
   const finishLogin = useCallback(() => {
@@ -579,6 +598,17 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
                 description="Stay logged in between sessions. Your identity will be stored locally."
                 testID={TEST_IDS.CREATE.REMEMBER_ME_CHECKBOX}
                 accessibilityLabel="Remember me checkbox"
+              />
+            </Presence>
+
+            <Presence visible animation="fadeIn" duration={700}>
+              <Checkbox
+                checked={syncOptIn}
+                onChange={setSyncOptIn}
+                label="Enable account sync"
+                description="Keep friends, groups, and preferences synced across devices. Encrypted with your recovery phrase."
+                accessibilityLabel="Enable account sync checkbox"
+                testID={TEST_IDS.SYNC.OPT_IN_CHECKBOX}
               />
             </Presence>
           </VStack>

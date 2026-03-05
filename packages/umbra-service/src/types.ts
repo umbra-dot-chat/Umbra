@@ -1558,3 +1558,22 @@ export type FileTransferEvent =
   | { type: 'transferPaused'; transferId: string }
   | { type: 'transferResumed'; transferId: string }
   | { type: 'transferCancelled'; transferId: string };
+
+// =============================================================================
+// ACCOUNT SYNC
+// =============================================================================
+
+/**
+ * Sync status for the SyncContext
+ */
+export type SyncStatus = 'idle' | 'syncing' | 'synced' | 'error' | 'disabled';
+
+/**
+ * Sync event types for real-time updates
+ */
+export type SyncEvent =
+  | { type: 'syncStarted' }
+  | { type: 'syncCompleted'; sections: Record<string, number> }
+  | { type: 'syncFailed'; error: string }
+  | { type: 'deltaReceived'; section: string; version: number }
+  | { type: 'deltaApplied'; section: string; version: number };

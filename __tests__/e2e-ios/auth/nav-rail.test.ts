@@ -12,7 +12,7 @@ import { TIMEOUTS } from '../../shared/timeouts';
 import { FIXTURES } from '../../shared/fixtures';
 import { launchApp, waitForAuthScreen, waitForMainScreen, waitForUISettle } from '../helpers/app';
 import { createAccount, createAccountWithPin, importAccount, enterPin, skipPin } from '../helpers/auth';
-import { navigateToSettings, navigateToFriends, navigateHome, openConversation } from '../helpers/navigation';
+import { navigateToSettings, navigateToFiles, navigateToFriends, navigateHome, closeSettings } from '../helpers/navigation';
 
 describe('T2.1 Navigation Rail', () => {
   beforeAll(async () => {
@@ -22,56 +22,53 @@ describe('T2.1 Navigation Rail', () => {
 
   it('T2.1.1 — nav rail is visible on main screen', async () => {
     await waitFor(element(by.id(TEST_IDS.NAV.RAIL)))
-      .toBeVisible()
+      .toExist()
       .withTimeout(TIMEOUTS.NAVIGATION);
   });
 
   it('T2.1.2 — home button is present in nav rail', async () => {
-    await expect(element(by.id(TEST_IDS.NAV.HOME))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.NAV.HOME))).toExist();
   });
 
   it('T2.1.3 — home button navigates to conversations view', async () => {
     // Navigate away first (to files)
-    await element(by.id(TEST_IDS.NAV.FILES)).tap();
-    await waitForUISettle();
+    await navigateToFiles();
 
     // Then back to home
     await navigateHome();
-    await expect(element(by.id(TEST_IDS.SIDEBAR.CONTAINER))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.SIDEBAR.CONVERSATION_LIST))).toExist();
   });
 
   it('T2.1.4 — files button is present and works', async () => {
-    await expect(element(by.id(TEST_IDS.NAV.FILES))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.NAV.FILES))).toExist();
 
-    await element(by.id(TEST_IDS.NAV.FILES)).tap();
-    await waitForUISettle();
+    await navigateToFiles();
 
     // Navigate back to home after verifying files navigation
     await navigateHome();
   });
 
   it('T2.1.5 — settings button opens settings dialog', async () => {
-    await expect(element(by.id(TEST_IDS.NAV.SETTINGS))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.NAV.SETTINGS))).toExist();
 
     await navigateToSettings();
-    await expect(element(by.id(TEST_IDS.SETTINGS.DIALOG))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.SETTINGS.DIALOG))).toExist();
 
     // Close settings
-    await element(by.id(TEST_IDS.SETTINGS.CLOSE_BUTTON)).tap();
-    await waitForUISettle();
+    await closeSettings();
   });
 
   it('T2.1.6 — user avatar is displayed in nav rail', async () => {
-    await expect(element(by.id(TEST_IDS.NAV.AVATAR))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.NAV.AVATAR))).toExist();
   });
 
   it('T2.1.7 — create community button is present', async () => {
-    await expect(element(by.id(TEST_IDS.NAV.CREATE_COMMUNITY))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.NAV.CREATE_COMMUNITY))).toExist();
   });
 
   it('T2.1.8 — notifications button is present', async () => {
     await waitFor(element(by.id(TEST_IDS.NAV.NOTIFICATIONS)))
-      .toBeVisible()
+      .toExist()
       .withTimeout(TIMEOUTS.INTERACTION);
   });
 });

@@ -35,6 +35,15 @@ import {
 } from '@/components/ui';
 import UmbraService from '@umbra/service';
 import type { Identity } from '@umbra/service';
+import {
+  authenticateSync,
+  downloadSyncBlob,
+  parseSyncBlob,
+  applySyncBlob,
+} from '@umbra/service';
+import type { SyncBlobSummary } from '@umbra/service';
+import { enablePersistence, getWasm } from '@umbra/wasm';
+import { getRelayHttpUrl } from '@/hooks/useNetwork';
 
 // ---------------------------------------------------------------------------
 // Step definitions
@@ -80,6 +89,13 @@ export function ImportWalletFlow({ open, onClose }: ImportWalletFlowProps) {
   const [error, setError] = useState<string | null>(null);
   const [phraseError, setPhraseError] = useState<string | null>(null);
 
+  // Sync restore state
+  const [syncSummary, setSyncSummary] = useState<SyncBlobSummary | null>(null);
+  const [syncBlob, setSyncBlob] = useState<string | null>(null);
+  const [syncCheckDone, setSyncCheckDone] = useState(false);
+  const [syncRestoring, setSyncRestoring] = useState(false);
+  const [syncRestored, setSyncRestored] = useState(false);
+
   const { currentStep, goNext, goBack, isFirstStep, reset, goToStep } = useWalletFlow({
     totalSteps: 4,
   });
@@ -94,6 +110,11 @@ export function ImportWalletFlow({ open, onClose }: ImportWalletFlowProps) {
       setIsLoading(false);
       setError(null);
       setPhraseError(null);
+      setSyncSummary(null);
+      setSyncBlob(null);
+      setSyncCheckDone(false);
+      setSyncRestoring(false);
+      setSyncRestored(false);
       reset();
     }
   }, [open, reset]);
@@ -148,6 +169,25 @@ export function ImportWalletFlow({ open, onClose }: ImportWalletFlowProps) {
       }
       const result = await UmbraService.instance.restoreIdentity(words, displayName.trim());
       setIdentity(result);
+
+      // Check relay for existing sync blob
+      try {
+        const relayUrl = getRelayHttpUrl();
+        if (relayUrl && result.did) {
+          // Enable persistence so the sync key derivation can access the seed
+          enablePersistence(result.did);
+          const auth = await authenticateSync(relayUrl, result.did);
+          const blob = await downloadSyncBlob(relayUrl, result.did, auth.token);
+          if (blob) {
+            const summary = await parseSyncBlob(blob);
+            setSyncSummary(summary);
+            setSyncBlob(blob);
+          }
+        }
+      } catch (syncErr) {
+        console.warn('[ImportWalletFlow] Sync check failed (non-fatal):', syncErr);
+      }
+      setSyncCheckDone(true);
     } catch (err: any) {
       setError(err.message ?? 'Failed to restore account');
     } finally {
@@ -327,6 +367,86 @@ export function ImportWalletFlow({ open, onClose }: ImportWalletFlowProps) {
                 </Card>
               </Presence>
             )}
+
+            {/* Sync restore prompt */}
+            {syncCheckDone && syncSummary && syncBlob && !syncRestored && (
+              <Presence visible animation="slideUp" duration={600}>
+                <Card variant="outlined" padding="md" style={{ width: '100%' }} testID={TEST_IDS.SYNC.RESTORE_CARD}>
+                  <VStack gap="sm">
+                    <Text size="sm" weight="semibold">
+                      Synced Data Found
+                    </Text>
+                    <Text size="xs" color="secondary">
+                      We found synced data from another device:
+                    </Text>
+                    <VStack gap="xs" testID={TEST_IDS.SYNC.RESTORE_SUMMARY}>
+                      {syncSummary.sections.friends && (
+                        <Text size="xs" color="muted">
+                          {syncSummary.sections.friends.count} friend{syncSummary.sections.friends.count !== 1 ? 's' : ''}
+                        </Text>
+                      )}
+                      {syncSummary.sections.groups && (
+                        <Text size="xs" color="muted">
+                          {syncSummary.sections.groups.count} group{syncSummary.sections.groups.count !== 1 ? 's' : ''}
+                        </Text>
+                      )}
+                      {syncSummary.sections.preferences && (
+                        <Text size="xs" color="muted">
+                          {syncSummary.sections.preferences.count} preference{syncSummary.sections.preferences.count !== 1 ? 's' : ''}
+                        </Text>
+                      )}
+                    </VStack>
+                    <HStack gap="sm">
+                      <Button
+                        variant="primary"
+                        size="sm"
+                        testID={TEST_IDS.SYNC.RESTORE_BUTTON}
+                        onPress={async () => {
+                          setSyncRestoring(true);
+                          try {
+                            await applySyncBlob(syncBlob);
+                            setSyncRestored(true);
+                            // Enable sync for this account
+                            try {
+                              const w = getWasm();
+                              if (w) {
+                                (w as any).umbra_wasm_plugin_kv_set('__umbra_system__', '__sync_enabled__', 'true');
+                              }
+                            } catch { /* ignore */ }
+                          } catch (e) {
+                            console.error('[ImportWalletFlow] Sync restore failed:', e);
+                          } finally {
+                            setSyncRestoring(false);
+                          }
+                        }}
+                        disabled={syncRestoring}
+                      >
+                        {syncRestoring ? 'Restoring...' : 'Restore'}
+                      </Button>
+                      <Button
+                        variant="tertiary"
+                        size="sm"
+                        testID={TEST_IDS.SYNC.SKIP_BUTTON}
+                        onPress={() => setSyncCheckDone(false)}
+                      >
+                        Skip
+                      </Button>
+                    </HStack>
+                  </VStack>
+                </Card>
+              </Presence>
+            )}
+
+            {syncRestored && (
+              <Presence visible animation="fadeIn" duration={400}>
+                <Card variant="outlined" padding="sm" style={{ width: '100%' }} testID={TEST_IDS.SYNC.RESTORE_SUCCESS}>
+                  <HStack gap="sm" style={{ alignItems: 'center', justifyContent: 'center' }}>
+                    <CheckCircleIcon size={16} color="#22c55e" />
+                    <Text size="sm" color="secondary">Synced data restored successfully</Text>
+                  </HStack>
+                </Card>
+              </Presence>
+            )}
           </VStack>
         );
 
@@ -366,6 +486,10 @@ export function ImportWalletFlow({ open, onClose }: ImportWalletFlowProps) {
               iconRight={<ArrowRightIcon size={16} color="#FFFFFF" />}
               testID={TEST_IDS.IMPORT.NAME_NEXT}
               accessibilityLabel="Continue to next step"
+              accessibilityActions={[{ name: 'activate', label: 'Continue' }]}
+              onAccessibilityAction={(e: { nativeEvent: { actionName: string } }) => {
+                if (e.nativeEvent.actionName === 'activate') goNext();
+              }}
             >
               Continue
             </Button>

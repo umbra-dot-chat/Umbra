@@ -16,6 +16,7 @@
 
 import { test, expect, type Browser, type Page, type BrowserContext } from '@playwright/test';
 import {
+  BASE_URL,
   WASM_LOAD_TIMEOUT,
   RELAY_SETTLE_TIMEOUT,
   UI_SETTLE_TIMEOUT,
@@ -62,8 +63,8 @@ async function setupDMWithMessage(
   suffix: string,
 ): Promise<DMWithMessageResult> {
   // 1. Create two isolated browser contexts
-  const contextA = await browser.newContext();
-  const contextB = await browser.newContext();
+  const contextA = await browser.newContext({ baseURL: BASE_URL });
+  const contextB = await browser.newContext({ baseURL: BASE_URL });
   const pageA = await contextA.newPage();
   const pageB = await contextB.newPage();
 

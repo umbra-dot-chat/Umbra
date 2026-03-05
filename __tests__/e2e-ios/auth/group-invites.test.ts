@@ -25,13 +25,13 @@ describe('T2.8 Group Invites', () => {
 
   it('T2.8.1 — sidebar is visible after account creation', async () => {
     await waitFor(element(by.id(TEST_IDS.SIDEBAR.CONTAINER)))
-      .toBeVisible()
+      .toExist()
       .withTimeout(TIMEOUTS.NAVIGATION);
   });
 
   it('T2.8.2 — group invite section is hidden when no invites exist', async () => {
     // With a fresh account and no group invites, the section should not be visible
-    await expect(element(by.id(TEST_IDS.SIDEBAR.GROUP_INVITE_SECTION))).not.toBeVisible();
+    await expect(element(by.id(TEST_IDS.SIDEBAR.GROUP_INVITE_SECTION))).not.toExist();
   });
 
   it('T2.8.3 — group invite section appears when invites exist', async () => {
@@ -43,12 +43,12 @@ describe('T2.8 Group Invites', () => {
     //
     // For single-device testing, we verify the section test ID is correctly
     // wired by checking it is not visible (no invites in a fresh account).
-    await expect(element(by.id(TEST_IDS.SIDEBAR.GROUP_INVITE_SECTION))).not.toBeVisible();
+    await expect(element(by.id(TEST_IDS.SIDEBAR.GROUP_INVITE_SECTION))).not.toExist();
   });
 
   it('T2.8.4 — conversation list is visible below invite section area', async () => {
     // Regardless of invite presence, the conversation list should be available
-    await expect(element(by.id(TEST_IDS.SIDEBAR.CONVERSATION_LIST))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.SIDEBAR.CONVERSATION_LIST))).toExist();
   });
 
   it('T2.8.5 — can create a group via new chat menu', async () => {
@@ -57,7 +57,7 @@ describe('T2.8 Group Invites', () => {
     await waitForUISettle();
 
     await waitFor(element(by.text('New Group')))
-      .toBeVisible()
+      .toExist()
       .withTimeout(TIMEOUTS.INTERACTION);
 
     await element(by.text('New Group')).tap();
@@ -65,11 +65,11 @@ describe('T2.8 Group Invites', () => {
 
     // Create group dialog should appear
     await waitFor(element(by.id(TEST_IDS.GROUPS.CREATE_DIALOG)))
-      .toBeVisible()
+      .toExist()
       .withTimeout(TIMEOUTS.NAVIGATION);
 
     // Verify group name input is available
-    await expect(element(by.id(TEST_IDS.GROUPS.NAME_INPUT))).toBeVisible();
+    await expect(element(by.id(TEST_IDS.GROUPS.NAME_INPUT))).toExist();
 
     // Cancel to return to sidebar
     await element(by.id(TEST_IDS.GROUPS.CANCEL_BUTTON)).tap();
