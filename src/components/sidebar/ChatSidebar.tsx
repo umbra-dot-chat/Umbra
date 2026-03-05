@@ -9,7 +9,7 @@ import {
   useTheme,
 } from '@coexist/wisp-react-native';
 import type { PendingGroupInvite } from '@umbra/service';
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useRef, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { NewChatMenu } from './NewChatMenu';
 import { SlotRenderer } from '@/components/plugins/SlotRenderer';
@@ -51,6 +51,28 @@ function ChatSidebarInner({
 }: ChatSidebarProps) {
   const { theme } = useTheme();
   const [menuOpen, setMenuOpen] = useState(false);
+
+  // Track unread counts to trigger shimmer on new messages
+  const prevUnreadsRef = useRef<Record<string, number>>({});
+  const [shimmerCounters, setShimmerCounters] = useState<Record<string, number>>({});
+
+  // Detect unread count increases and bump shimmer counter
+  const currentUnreads: Record<string, number> = {};
+  for (const c of conversations) {
+    currentUnreads[c.id] = c.unread;
+    const prev = prevUnreadsRef.current[c.id] ?? 0;
+    if (c.unread > prev && prev >= 0) {
+      // Will trigger shimmer for this conversation
+      const id = c.id;
+      if (!shimmerCounters[id] || shimmerCounters[id] < c.unread) {
+        // Use queueMicrotask to avoid setState during render
+        queueMicrotask(() => {
+          setShimmerCounters((sc) => ({ ...sc, [id]: (sc[id] ?? 0) + 1 }));
+        });
+      }
+    }
+  }
+  prevUnreadsRef.current = currentUnreads;
 
   const handleToggleMenu = useCallback(() => {
     setMenuOpen((prev) => !prev);
@@ -267,6 +289,7 @@ function ChatSidebarInner({
                   lastMessage={c.last}
                   timestamp={c.time}
                   unreadCount={c.unread}
+                  shimmer={shimmerCounters[c.id] ?? 0}
                   online={c.online}
                   pinned={c.pinned}
                   status={c.status as any}

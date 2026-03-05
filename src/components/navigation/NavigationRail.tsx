@@ -12,10 +12,10 @@
  * Similar to Discord's "guild sidebar" / server rail.
  */
 
-import React from 'react';
-import { Animated, Image, Pressable, ScrollView, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Animated, Image, Platform, Pressable, ScrollView, View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
-import { Text, Skeleton, useTheme, NotificationBadge } from '@coexist/wisp-react-native';
+import { Text, Skeleton, useTheme, NotificationBadge, GradientBorder } from '@coexist/wisp-react-native';
 import { UmbraIcon, FolderIcon, PlusIcon, SettingsIcon, BellIcon } from '@/components/ui';
 import type { Community } from '@umbra/service';
 import { useAnimatedToggle } from '@/hooks/useAnimatedToggle';
@@ -106,6 +106,18 @@ export function NavigationRail({
 }: NavigationRailProps) {
   const { theme } = useTheme();
 
+  // Track community IDs to detect newly added ones for bounce animation
+  const knownCommunityIdsRef = useRef<Set<string>>(new Set(communities.map((c) => c.id)));
+  const newCommunityIds = useRef<Set<string>>(new Set<string>()).current;
+
+  // Detect new community IDs
+  for (const c of communities) {
+    if (!knownCommunityIdsRef.current.has(c.id)) {
+      newCommunityIds.add(c.id);
+      knownCommunityIdsRef.current.add(c.id);
+    }
+  }
+
   return (
     <View
       testID={TEST_IDS.NAV.RAIL}
@@ -195,6 +207,8 @@ export function NavigationRail({
                   theme={theme}
                   iconUrl={community.iconUrl}
                   testID={TEST_IDS.NAV.COMMUNITY_ITEM}
+                  gradientBorder
+                  animateMount={newCommunityIds.has(community.id)}
                 >
                   <Image
                     source={defaultCommunityIcon}
@@ -320,35 +334,91 @@ interface RailItemProps {
   badgeCount?: number;
   /** Optional testID for E2E testing */
   testID?: string;
+  /** Show animated gradient border on hover/active */
+  gradientBorder?: boolean;
+  /** Animate mount with spring bounce */
+  animateMount?: boolean;
 }
 
-function RailItem({ active, onPress, accentColor, theme, children, ringProgress, iconUrl, badgeCount, testID }: RailItemProps) {
+function RailItem({ active, onPress, accentColor, theme, children, ringProgress, iconUrl, badgeCount, testID, gradientBorder, animateMount }: RailItemProps) {
   const showRing = ringProgress != null && ringProgress > 0 && ringProgress < 100;
   const { animatedValue: indicatorAnim, shouldRender: showIndicator } = useAnimatedToggle(active, { duration: 150 });
+  const [hovered, setHovered] = useState(false);
+
+  // Mount spring animation
+  const mountScale = useRef(new Animated.Value(animateMount ? 0.5 : 1)).current;
+  useEffect(() => {
+    if (animateMount) {
+      Animated.spring(mountScale, {
+        toValue: 1,
+        tension: 200,
+        friction: 12,
+        useNativeDriver: true,
+      }).start();
+    }
+  }, []);
+
+  const iconElement = (
+    <Pressable
+      testID={testID}
+      onPress={onPress}
+      onHoverIn={gradientBorder ? () => setHovered(true) : undefined}
+      onHoverOut={gradientBorder ? () => setHovered(false) : undefined}
+      accessibilityActions={[{ name: 'activate', label: 'Activate' }]}
+      onAccessibilityAction={(e: any) => { if (e.nativeEvent.actionName === 'activate') onPress(); }}
+      style={({ pressed }) => ({
+        width: ICON_SIZE,
+        height: ICON_SIZE,
+        borderRadius: active ? ICON_RADIUS : ICON_SIZE / 2,
+        backgroundColor: active
+          ? (accentColor ?? theme.colors.accent.primary)
+          : pressed
+            ? theme.colors.border.strong
+            : theme.colors.background.sunken,
+        alignItems: 'center',
+        justifyContent: 'center',
+        overflow: 'hidden',
+      })}
+    >
+      {iconUrl ? (
+        <Image
+          source={{ uri: iconUrl }}
+          style={{ width: ICON_SIZE, height: ICON_SIZE }}
+          resizeMode="cover"
+        />
+      ) : (
+        children
+      )}
+    </Pressable>
+  );
 
   return (
-    <View style={{ width: '100%', alignItems: 'center', marginBottom: 4, position: 'relative' }}>
+    <Animated.View style={[{ width: '100%', alignItems: 'center', marginBottom: 4, position: 'relative' }, animateMount ? { transform: [{ scale: mountScale }] } : undefined]}>
       {/* Active indicator pill on the left edge */}
       {showIndicator && (
         <Animated.View
-          style={{
-            position: 'absolute',
-            left: 0,
-            top: '50%',
-            marginTop: -16,
-            width: ACTIVE_INDICATOR_WIDTH,
-            height: 32,
-            borderTopRightRadius: ACTIVE_INDICATOR_WIDTH,
-            borderBottomRightRadius: ACTIVE_INDICATOR_WIDTH,
-            backgroundColor: theme.colors.text.primary,
-            opacity: indicatorAnim,
-            transform: [{
-              scaleY: indicatorAnim.interpolate({
-                inputRange: [0, 1],
-                outputRange: [0.5, 1],
-              }),
-            }],
-          }}
+          style={[
+            {
+              position: 'absolute',
+              left: 0,
+              top: '50%',
+              marginTop: -16,
+              width: ACTIVE_INDICATOR_WIDTH,
+              height: 32,
+              borderTopRightRadius: ACTIVE_INDICATOR_WIDTH,
+              borderBottomRightRadius: ACTIVE_INDICATOR_WIDTH,
+              opacity: indicatorAnim,
+              transform: [{
+                scaleY: indicatorAnim.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0.5, 1],
+                }),
+              }],
+            },
+            Platform.OS === 'web'
+              ? { background: 'linear-gradient(180deg, #8B5CF6, #EC4899, #3B82F6)' } as any
+              : { backgroundColor: theme.colors.text.primary },
+          ]}
         />
       )}
 
@@ -396,36 +466,20 @@ function RailItem({ active, onPress, accentColor, theme, children, ringProgress,
         size="sm"
         invisible={!badgeCount}
       >
-        <Pressable
-          testID={testID}
-          onPress={onPress}
-          accessibilityActions={[{ name: 'activate', label: 'Activate' }]}
-          onAccessibilityAction={(e: any) => { if (e.nativeEvent.actionName === 'activate') onPress(); }}
-          style={({ pressed }) => ({
-            width: ICON_SIZE,
-            height: ICON_SIZE,
-            borderRadius: active ? ICON_RADIUS : ICON_SIZE / 2,
-            backgroundColor: active
-              ? (accentColor ?? theme.colors.accent.primary)
-              : pressed
-                ? theme.colors.border.strong
-                : theme.colors.background.sunken,
-            alignItems: 'center',
-            justifyContent: 'center',
-            overflow: 'hidden',
-          })}
-        >
-          {iconUrl ? (
-            <Image
-              source={{ uri: iconUrl }}
-              style={{ width: ICON_SIZE, height: ICON_SIZE }}
-              resizeMode="cover"
-            />
-          ) : (
-            children
-          )}
-        </Pressable>
+        {gradientBorder ? (
+          <GradientBorder
+            visible={hovered || active}
+            animated={hovered || active}
+            radius={active ? ICON_RADIUS : ICON_SIZE / 2}
+            width={2}
+            speed={2000}
+          >
+            {iconElement}
+          </GradientBorder>
+        ) : (
+          iconElement
+        )}
       </NotificationBadge>
-    </View>
+    </Animated.View>
   );
 }

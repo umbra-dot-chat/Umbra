@@ -1,9 +1,9 @@
-import React, { useCallback, useEffect, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, Pressable, View } from 'react-native';
 import { TEST_IDS } from '@/constants/test-ids';
 import {
   Avatar, MessageInput, useTheme,
-  CombinedPicker, MentionAutocomplete,
+  CombinedPicker, MentionAutocomplete, GradientBorder,
 } from '@coexist/wisp-react-native';
 import type { EmojiItem } from '@coexist/wisp-core/types/EmojiPicker.types';
 import type { GifItem } from '@coexist/wisp-core/types/GifPicker.types';
@@ -61,6 +61,8 @@ export function ChatInput({
     () => friends.map((f) => f.displayName),
     [friends],
   );
+
+  const [inputFocused, setInputFocused] = useState(false);
 
   const {
     mentionOpen, mentionQuery, filteredUsers,
@@ -147,8 +149,17 @@ export function ChatInput({
       }
     };
 
+    const handleFocusIn = () => setInputFocused(true);
+    const handleFocusOut = () => setInputFocused(false);
+
     wrapper.addEventListener('keydown', handleKeyDown, true);
-    return () => wrapper.removeEventListener('keydown', handleKeyDown, true);
+    wrapper.addEventListener('focusin', handleFocusIn);
+    wrapper.addEventListener('focusout', handleFocusOut);
+    return () => {
+      wrapper.removeEventListener('keydown', handleKeyDown, true);
+      wrapper.removeEventListener('focusin', handleFocusIn);
+      wrapper.removeEventListener('focusout', handleFocusOut);
+    };
   }, []); // empty deps — listener attached once, reads current values via refs
 
   return (
@@ -198,36 +209,44 @@ export function ChatInput({
             />
           </View>
         )}
-        <MessageInput
-          testID={TEST_IDS.INPUT.TEXT_INPUT}
-          value={message}
-          onValueChange={handleValueChange}
-          onSelectionChange={handleSelectionChange}
-          onSubmit={(msg) => {
-            closeMention();
-            onMessageChange('');
-            onClearReply();
-            if (editing && onCancelEdit) onCancelEdit();
-            onSubmit(msg);
-          }}
-          placeholder={editing ? 'Edit message...' : 'Type a message...'}
-          variant="pill"
-          showAttachment={!editing}
-          onAttachmentClick={onAttachmentClick}
-          showEmoji
-          onEmojiClick={onToggleEmoji}
-          highlightMentions
-          mentionNames={mentionNames}
-          editing={editing ? {
-            text: editing.text,
-            onCancel: onCancelEdit || (() => {}),
-          } : undefined}
-          replyingTo={!editing && replyingTo ? {
-            sender: replyingTo.sender,
-            text: replyingTo.text,
-            onClear: onClearReply,
-          } : undefined}
-        />
+        <GradientBorder
+          visible={inputFocused}
+          animated={inputFocused}
+          radius={22}
+          width={2}
+          speed={3000}
+        >
+          <MessageInput
+            testID={TEST_IDS.INPUT.TEXT_INPUT}
+            value={message}
+            onValueChange={handleValueChange}
+            onSelectionChange={handleSelectionChange}
+            onSubmit={(msg) => {
+              closeMention();
+              onMessageChange('');
+              onClearReply();
+              if (editing && onCancelEdit) onCancelEdit();
+              onSubmit(msg);
+            }}
+            placeholder={editing ? 'Edit message...' : 'Type a message...'}
+            variant="pill"
+            showAttachment={!editing}
+            onAttachmentClick={onAttachmentClick}
+            showEmoji
+            onEmojiClick={onToggleEmoji}
+            highlightMentions
+            mentionNames={mentionNames}
+            editing={editing ? {
+              text: editing.text,
+              onCancel: onCancelEdit || (() => {}),
+            } : undefined}
+            replyingTo={!editing && replyingTo ? {
+              sender: replyingTo.sender,
+              text: replyingTo.text,
+              onClear: onClearReply,
+            } : undefined}
+          />
+        </GradientBorder>
       </View>
     </>
   );
