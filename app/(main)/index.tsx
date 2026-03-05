@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { KeyboardAvoidingView, Platform, View, Image } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Text, useTheme } from '@coexist/wisp-react-native';
+import { Text, GradientText, useTheme } from '@coexist/wisp-react-native';
 import { TEST_IDS } from '@/constants/test-ids';
 import { useHoverMessage } from '@/hooks/useHoverMessage';
 import { useRightPanel } from '@/hooks/useRightPanel';
@@ -61,9 +61,14 @@ function EmptyConversation() {
       <Text testID={TEST_IDS.MAIN.WELCOME_TEXT} size="display-sm" weight="bold" style={{ color: theme.colors.text.primary, marginBottom: 8 }}>
         Welcome to Umbra
       </Text>
-      <Text size="sm" style={{ color: theme.colors.text.muted, textAlign: 'center', maxWidth: 400, marginBottom: 16 }}>
+      <GradientText
+        colors={['#8B5CF6', '#EC4899', '#3B82F6', '#8B5CF6']}
+        animated
+        speed={4000}
+        style={{ fontSize: 14, textAlign: 'center', maxWidth: 400, marginBottom: 16 } as any}
+      >
         Add a friend to start chatting. Your messages are end-to-end encrypted and delivered peer-to-peer.
-      </Text>
+      </GradientText>
       <HelpIndicator
         id="chat-empty"
         title="Getting Started"
