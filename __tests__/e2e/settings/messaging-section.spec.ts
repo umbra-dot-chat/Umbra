@@ -16,7 +16,7 @@ import {
 } from '../helpers';
 
 test.describe('11.5 Settings — Messaging', () => {
-  test.setTimeout(90_000);
+  test.setTimeout(60_000);
 
   test('T11.5.1 — Display Style sub-section visible', async ({ page }) => {
     await createIdentity(page, 'MsgStyleUser');

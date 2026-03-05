@@ -66,7 +66,7 @@ async function setupPair(browser: import('@playwright/test').Browser, suffix: st
 }
 
 test.describe('2.8 Group Invites', () => {
-  test.setTimeout(120_000);
+  test.setTimeout(90_000);
 
   test('T2.8.1 — Group Invites section appears above conversations', async ({ browser }) => {
     const { ctx1, ctx2, p1, p2 } = await setupPair(browser, '281');

@@ -143,7 +143,7 @@ async function completeBlockFlow(page: Page, reason?: string): Promise<void> {
 // ─── T3.8.1: Remove Friend ─────────────────────────────────────────────────
 
 test.describe('3.8 Friend Actions — Remove Friend', () => {
-  test.setTimeout(180_000);
+  test.setTimeout(120_000);
 
   test('T3.8.1 — Remove friend — confirmation dialog, friend removed from list', async ({ browser }) => {
     const { contextA, contextB, pageA } =
@@ -190,7 +190,7 @@ test.describe('3.8 Friend Actions — Remove Friend', () => {
 // ─── T3.8.2: Block Friend ──────────────────────────────────────────────────
 
 test.describe('3.8 Friend Actions — Block Friend', () => {
-  test.setTimeout(180_000);
+  test.setTimeout(120_000);
 
   test('T3.8.2 — Block friend — moves to Blocked tab', async ({ browser }) => {
     const { contextA, contextB, pageA } =
@@ -233,7 +233,7 @@ test.describe('3.8 Friend Actions — Block Friend', () => {
 // ─── T3.8.3: Block with Reason ─────────────────────────────────────────────
 
 test.describe('3.8 Friend Actions — Block with Reason', () => {
-  test.setTimeout(180_000);
+  test.setTimeout(120_000);
 
   test('T3.8.3 — Block with reason — reason stored and displayed', async ({ browser }) => {
     const { contextA, contextB, pageA } =
@@ -267,7 +267,7 @@ test.describe('3.8 Friend Actions — Block with Reason', () => {
 // ─── T3.8.4: Unblock ───────────────────────────────────────────────────────
 
 test.describe('3.8 Friend Actions — Unblock', () => {
-  test.setTimeout(180_000);
+  test.setTimeout(120_000);
 
   test('T3.8.4 — Unblock — user removed from Blocked tab', async ({ browser }) => {
     const { contextA, contextB, pageA } =
@@ -306,7 +306,7 @@ test.describe('3.8 Friend Actions — Unblock', () => {
 // ─── T3.8.5: Message Button Navigation ──────────────────────────────────────
 
 test.describe('3.8 Friend Actions — Message Navigation', () => {
-  test.setTimeout(180_000);
+  test.setTimeout(120_000);
 
   test('T3.8.5 — Message button navigates to DM conversation', async ({ browser }) => {
     const { contextA, contextB, pageA } =

@@ -143,7 +143,7 @@ async function setupDMWithMessage(
 // ═══════════════════════════════════════════════════════════════════════════
 
 test.describe('4.16 Reactions', () => {
-  test.setTimeout(180_000);
+  test.setTimeout(120_000);
 
   // ─── T4.16.1: Click React on hover — emoji picker for reaction ────────
 
@@ -610,7 +610,7 @@ test.describe('4.16 Reactions', () => {
 // ═══════════════════════════════════════════════════════════════════════════
 
 test.describe('4.17 Threads', () => {
-  test.setTimeout(180_000);
+  test.setTimeout(120_000);
 
   // ─── T4.17.1: Click Thread — right panel opens with thread view ───────
 

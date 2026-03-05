@@ -24,7 +24,7 @@ import {
   waitForUISettle,
   waitForRelayConnection,
 } from '../helpers/app';
-import { createAccount, createAccountWithPin, importAccount, enterPin, skipPin } from '../helpers/auth';
+import { createAccount, createAccountWithPin, importAccount, enterPin, skipPin, activateElement } from '../helpers/auth';
 import { navigateToSettings, closeSettings } from '../helpers/navigation';
 
 describe('T1.1 Account Creation', () => {
@@ -46,7 +46,7 @@ describe('T1.1 Account Creation', () => {
   });
 
   it('T1.1.4 — tapping create navigates to display name step', async () => {
-    await element(by.id(TEST_IDS.AUTH.CREATE_BUTTON)).tap();
+    await activateElement(TEST_IDS.AUTH.CREATE_BUTTON);
     await waitForUISettle();
 
     await waitFor(element(by.id(TEST_IDS.CREATE.NAME_INPUT)))
@@ -59,7 +59,7 @@ describe('T1.1 Account Creation', () => {
     await launchApp({ newInstance: true, delete: true });
     await waitForAuthScreen();
 
-    await element(by.id(TEST_IDS.AUTH.CREATE_BUTTON)).tap();
+    await activateElement(TEST_IDS.AUTH.CREATE_BUTTON);
     await waitForUISettle();
 
     await waitFor(element(by.id(TEST_IDS.CREATE.NAME_INPUT)))
@@ -120,7 +120,7 @@ describe('T1.1 Account Creation', () => {
     await launchApp({ newInstance: true, delete: true });
     await waitForAuthScreen();
 
-    await element(by.id(TEST_IDS.AUTH.CREATE_BUTTON)).tap();
+    await activateElement(TEST_IDS.AUTH.CREATE_BUTTON);
     await waitForUISettle();
 
     // Step 0: Display name

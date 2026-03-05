@@ -20,7 +20,7 @@ async function clickNewChatButton(page: import('@playwright/test').Page) {
 }
 
 test.describe('2.4 New Chat Menu', () => {
-  test.setTimeout(120_000);
+  test.setTimeout(90_000);
 
   test('T2.4.1 — Click "+" shows dropdown with "New DM" and "New Group"', async ({
     page,

@@ -17,7 +17,7 @@ import {
 } from '../helpers';
 
 test.describe('11.10 Settings — Network', () => {
-  test.setTimeout(90_000);
+  test.setTimeout(60_000);
 
   test('T11.10.1 — Network section loads with description', async ({ page }) => {
     await createIdentity(page, 'NetDescUser');

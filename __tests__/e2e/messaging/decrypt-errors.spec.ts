@@ -120,7 +120,7 @@ async function rotateKeyViaService(
 // ─── Tests ────────────────────────────────────────────────────────────────
 
 test.describe('4.20 Decrypt Error Messages', () => {
-  test.setTimeout(180_000);
+  test.setTimeout(120_000);
 
   // ─── T-DE.1: messages with stale keys show categorized error ──────────
 

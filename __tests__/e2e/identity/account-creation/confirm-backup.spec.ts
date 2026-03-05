@@ -11,7 +11,7 @@ import { test, expect } from '@playwright/test';
 import { WASM_LOAD_TIMEOUT } from '../../helpers';
 
 test.describe('1.1 Account Creation — Confirm Backup', () => {
-  test.setTimeout(120_000);
+  test.setTimeout(90_000);
 
   /** Navigate to the confirm backup step. */
   async function goToConfirmBackup(page: import('@playwright/test').Page) {

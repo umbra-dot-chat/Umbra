@@ -21,10 +21,10 @@ export const BASE_URL = 'http://localhost:8081';
 export const WASM_LOAD_TIMEOUT = 30_000;
 
 /** Time for relay to deliver messages between two browser contexts. */
-export const RELAY_SETTLE_TIMEOUT = 12_000;
+export const RELAY_SETTLE_TIMEOUT = 5_000;
 
 /** Time for UI state updates to settle after an action. */
-export const UI_SETTLE_TIMEOUT = 3_000;
+export const UI_SETTLE_TIMEOUT = 2_000;
 
 // ─── App Readiness ───────────────────────────────────────────────────────────
 

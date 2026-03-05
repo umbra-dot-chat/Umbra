@@ -15,7 +15,7 @@ import {
 } from '../helpers';
 
 test.describe('11.12 Settings — Plugins', () => {
-  test.setTimeout(90_000);
+  test.setTimeout(60_000);
 
   test('T11.12.1 — Marketplace button visible', async ({ page }) => {
     await createIdentity(page, 'PluginMktUser');

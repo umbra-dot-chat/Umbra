@@ -24,7 +24,7 @@ async function openNewDmDialog(page: import('@playwright/test').Page) {
 }
 
 test.describe('2.5 New DM Dialog', () => {
-  test.setTimeout(120_000);
+  test.setTimeout(90_000);
 
   test('T2.5.1 — Friend picker shows all friends', async ({ page }) => {
     await createIdentity(page, 'DmPickerUser');

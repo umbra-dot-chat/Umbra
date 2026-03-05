@@ -8,17 +8,17 @@ export const TIMEOUTS = {
   /** Umbra core initialization (Rust FFI / WASM) */
   CORE_INIT: 30_000,
   /** Screen-to-screen navigation */
-  NAVIGATION: 15_000,
+  NAVIGATION: 10_000,
   /** Button taps, form inputs, animations */
-  INTERACTION: 10_000,
+  INTERACTION: 5_000,
   /** Relay connection establishment */
-  NETWORK_CONNECT: 20_000,
+  NETWORK_CONNECT: 15_000,
   /** Relay connection settlement after connect */
-  RELAY_SETTLE: 12_000,
+  RELAY_SETTLE: 5_000,
   /** Brief UI settle (animations, re-renders) */
-  UI_SETTLE: 3_000,
+  UI_SETTLE: 2_000,
   /** Two-user relay sync (message delivery) */
-  MESSAGE_DELIVERY: 15_000,
+  MESSAGE_DELIVERY: 10_000,
   /** File transfer completion */
   FILE_TRANSFER: 30_000,
 } as const;

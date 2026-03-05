@@ -17,7 +17,7 @@ import {
 } from '../helpers';
 
 test.describe('11.2 Settings — Account', () => {
-  test.setTimeout(90_000);
+  test.setTimeout(60_000);
 
   test('T11.2.1 — Shows display name with avatar', async ({ page }) => {
     await createIdentity(page, 'AcctDisplayUser');

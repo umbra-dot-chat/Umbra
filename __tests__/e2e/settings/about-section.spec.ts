@@ -16,7 +16,7 @@ import {
 } from '../helpers';
 
 test.describe('11.14 Settings — About', () => {
-  test.setTimeout(90_000);
+  test.setTimeout(60_000);
 
   test('T11.14.1 — App version displayed', async ({ page }) => {
     await createIdentity(page, 'AboutVerUser');

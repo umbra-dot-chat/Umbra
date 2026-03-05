@@ -11,7 +11,7 @@ import { test, expect } from '@playwright/test';
 import { WASM_LOAD_TIMEOUT, createIdentity } from '../../helpers';
 
 test.describe('1.1 Account Creation — Completion', () => {
-  test.setTimeout(120_000);
+  test.setTimeout(90_000);
 
   /** Navigate to the completion screen (skip PIN + username). */
   async function goToCompletion(page: import('@playwright/test').Page) {

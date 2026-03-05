@@ -15,7 +15,7 @@ import {
 } from '../helpers';
 
 test.describe('1.2 Account Import', () => {
-  test.setTimeout(120_000);
+  test.setTimeout(90_000);
 
   test('T1.2.1 — Import Account card navigates to import flow', async ({ page }) => {
     await page.goto('/');

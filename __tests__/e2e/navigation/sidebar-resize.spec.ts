@@ -47,7 +47,7 @@ async function dragResizeHandle(
 }
 
 test.describe('2.6 Sidebar Resize', () => {
-  test.setTimeout(120_000);
+  test.setTimeout(90_000);
 
   test('T2.6.1 — Drag resize handle between sidebar and content', async ({ page }) => {
     await createIdentity(page, 'ResizeDragUser');

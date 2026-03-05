@@ -20,7 +20,7 @@ import { waitForAuthScreen, waitForMainScreen, waitForUISettle } from './app';
  * action. `performAccessibilityAction('activate')` invokes it directly
  * without any visibility check.
  */
-async function activateElement(testID: string) {
+export async function activateElement(testID: string) {
   await element(by.id(testID)).performAccessibilityAction('activate');
 }
 

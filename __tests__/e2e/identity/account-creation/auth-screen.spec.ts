@@ -11,7 +11,7 @@ import { test, expect } from '@playwright/test';
 import { WASM_LOAD_TIMEOUT } from '../../helpers';
 
 test.describe('1.1 Account Creation — Auth Screen', () => {
-  test.setTimeout(120_000);
+  test.setTimeout(90_000);
 
   test('T1.1.1 — Fresh load shows auth screen with animated blob background', async ({
     page,

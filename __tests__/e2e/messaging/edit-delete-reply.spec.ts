@@ -141,7 +141,7 @@ async function setupDMWithMessage(
 // ─── 4.11 Edit Message ───────────────────────────────────────────────────────
 
 test.describe('4.11 Edit Message', () => {
-  test.setTimeout(180_000);
+  test.setTimeout(120_000);
 
   // ─── T4.11.1: Right-click own message > Edit ──────────────────────────
 
@@ -412,7 +412,7 @@ test.describe('4.11 Edit Message', () => {
 // ─── 4.12 Delete Message ─────────────────────────────────────────────────────
 
 test.describe('4.12 Delete Message', () => {
-  test.setTimeout(180_000);
+  test.setTimeout(120_000);
 
   // ─── T4.12.1: Right-click own message > Delete ────────────────────────
 
@@ -509,7 +509,7 @@ test.describe('4.12 Delete Message', () => {
 // ─── 4.13 Reply ──────────────────────────────────────────────────────────────
 
 test.describe('4.13 Reply', () => {
-  test.setTimeout(180_000);
+  test.setTimeout(120_000);
 
   // ─── T4.13.1: Click Reply — reply preview in input area ───────────────
 
@@ -879,7 +879,7 @@ test.describe('4.13 Reply', () => {
 // ─── 4.14 Forward ────────────────────────────────────────────────────────────
 
 test.describe('4.14 Forward', () => {
-  test.setTimeout(180_000);
+  test.setTimeout(120_000);
 
   // ─── T4.14.1: Right-click > Forward — conversation picker dialog ──────
 
@@ -1166,7 +1166,7 @@ test.describe('4.14 Forward', () => {
 // ─── 4.15 Pin Message ────────────────────────────────────────────────────────
 
 test.describe('4.15 Pin Message', () => {
-  test.setTimeout(180_000);
+  test.setTimeout(120_000);
 
   // ─── T4.15.1: Right-click > Pin — message pinned ─────────────────────
 

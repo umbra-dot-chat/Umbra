@@ -143,7 +143,7 @@ async function setupDMConversation(
 // ═══════════════════════════════════════════════════════════════════════════
 
 test.describe('4.7 Sticker Picker', () => {
-  test.setTimeout(180_000);
+  test.setTimeout(120_000);
 
   // ─── T4.7.1: Sticker picker accessible from input toolbar ──────────────
 
@@ -390,7 +390,7 @@ test.describe('4.7 Sticker Picker', () => {
 // ═══════════════════════════════════════════════════════════════════════════
 
 test.describe('4.8 @Mentions', () => {
-  test.setTimeout(180_000);
+  test.setTimeout(120_000);
 
   // ─── T4.8.1: Type "@" — mention autocomplete dropdown appears ─────────
 

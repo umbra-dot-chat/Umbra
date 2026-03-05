@@ -11,7 +11,7 @@ import { test, expect } from '@playwright/test';
 import { WASM_LOAD_TIMEOUT } from '../../helpers';
 
 test.describe('1.1 Account Creation — Recovery Phrase', () => {
-  test.setTimeout(120_000);
+  test.setTimeout(90_000);
 
   /** Navigate to the recovery phrase step. */
   async function goToRecoveryPhrase(page: import('@playwright/test').Page) {

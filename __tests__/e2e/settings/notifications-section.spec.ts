@@ -15,7 +15,7 @@ import {
 } from '../helpers';
 
 test.describe('11.6 Settings — Notifications', () => {
-  test.setTimeout(90_000);
+  test.setTimeout(60_000);
 
   test('T11.6.1 — Push Notifications toggle visible', async ({ page }) => {
     await createIdentity(page, 'NotifPushUser');

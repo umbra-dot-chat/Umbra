@@ -11,7 +11,7 @@ import { test, expect } from '@playwright/test';
 import { WASM_LOAD_TIMEOUT, enterPin } from '../../helpers';
 
 test.describe('1.1 Account Creation — Security PIN', () => {
-  test.setTimeout(120_000);
+  test.setTimeout(90_000);
 
   /** Navigate to the security PIN step. */
   async function goToPinStep(page: import('@playwright/test').Page) {

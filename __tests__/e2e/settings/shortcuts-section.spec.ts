@@ -14,7 +14,7 @@ import {
 } from '../helpers';
 
 test.describe('11.13 Settings — Shortcuts', () => {
-  test.setTimeout(90_000);
+  test.setTimeout(60_000);
 
   test('T11.13.1 — Shortcuts section displays heading and description', async ({
     page,

@@ -84,7 +84,7 @@ async function sendTestFile(
 // ─── Tests ──────────────────────────────────────────────────────────────────
 
 test.describe('4.24 DM File Attachments', () => {
-  test.setTimeout(240_000);
+  test.setTimeout(150_000);
 
   test('T4.24.1 — Attachment button visible in chat input', async ({ browser }) => {
     const setup = await setupFriendPair(browser, '4241');

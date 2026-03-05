@@ -17,7 +17,7 @@ import {
 } from '../helpers';
 
 test.describe('11.11 Settings — Data Management', () => {
-  test.setTimeout(90_000);
+  test.setTimeout(60_000);
 
   test('T11.11.1 — Data section loads with description', async ({ page }) => {
     await createIdentity(page, 'DataDescUser');

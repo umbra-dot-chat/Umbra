@@ -154,7 +154,7 @@ async function setupConversationWithMessages(
 // ─── T4.4.1: Bubble Mode ────────────────────────────────────────────────────
 
 test.describe('4.4 Message Display Modes — Bubble Mode', () => {
-  test.setTimeout(180_000);
+  test.setTimeout(120_000);
 
   test('T4.4.1 -- Bubble mode: colored bubbles with own messages right-aligned, others left-aligned', async ({
     browser,
@@ -232,7 +232,7 @@ test.describe('4.4 Message Display Modes — Bubble Mode', () => {
 // ─── T4.4.2: Inline Mode ────────────────────────────────────────────────────
 
 test.describe('4.4 Message Display Modes — Inline Mode', () => {
-  test.setTimeout(180_000);
+  test.setTimeout(120_000);
 
   test('T4.4.2 -- Inline mode: Slack/Discord style, all left-aligned, sender name + timestamp headers', async ({
     browser,
@@ -318,7 +318,7 @@ test.describe('4.4 Message Display Modes — Inline Mode', () => {
 // ─── T4.4.3: Settings Toggle ─────────────────────────────────────────────────
 
 test.describe('4.4 Message Display Modes — Settings Toggle', () => {
-  test.setTimeout(180_000);
+  test.setTimeout(120_000);
 
   test('T4.4.3 -- Settings > Messaging > Display Style: switch between Bubble and Inline', async ({
     browser,
@@ -387,7 +387,7 @@ test.describe('4.4 Message Display Modes — Settings Toggle', () => {
 // ─── T4.4.4: Mode Change Applies Immediately ────────────────────────────────
 
 test.describe('4.4 Message Display Modes — Immediate Apply', () => {
-  test.setTimeout(180_000);
+  test.setTimeout(120_000);
 
   test('T4.4.4 -- Mode change applies immediately to all conversations', async ({
     browser,
@@ -505,7 +505,7 @@ test.describe('4.4 Message Display Modes — Immediate Apply', () => {
 // ─── T4.4.5: Live Preview in Settings ────────────────────────────────────────
 
 test.describe('4.4 Message Display Modes — Live Preview', () => {
-  test.setTimeout(180_000);
+  test.setTimeout(120_000);
 
   test('T4.4.5 -- Live preview shown in settings for each mode', async ({
     browser,

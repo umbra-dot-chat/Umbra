@@ -108,7 +108,7 @@ async function setupDMConversation(
 // ─── T4.3.1: Real-Time Message Delivery ─────────────────────────────────────
 
 test.describe('4.3 Receiving Messages — Real-Time Delivery', () => {
-  test.setTimeout(180_000);
+  test.setTimeout(120_000);
 
   test('T4.3.1 — Tab A sends message — Tab B receives in real-time', async ({ browser }) => {
     const suffix = 'T431';
@@ -140,7 +140,7 @@ test.describe('4.3 Receiving Messages — Real-Time Delivery', () => {
 // ─── T4.3.2: Incoming Bubble Styling ─────────────────────────────────────────
 
 test.describe('4.3 Receiving Messages — Incoming Bubble Styling', () => {
-  test.setTimeout(180_000);
+  test.setTimeout(120_000);
 
   test('T4.3.2 — Incoming bubble: light gray, left-aligned (bubble mode)', async ({ browser }) => {
     const suffix = 'T432';
@@ -210,7 +210,7 @@ test.describe('4.3 Receiving Messages — Incoming Bubble Styling', () => {
 // ─── T4.3.3: Sender Name Above Incoming Message Group ───────────────────────
 
 test.describe('4.3 Receiving Messages — Sender Name', () => {
-  test.setTimeout(180_000);
+  test.setTimeout(120_000);
 
   test('T4.3.3 — Sender name shown above incoming message group', async ({ browser }) => {
     const suffix = 'T433';
@@ -279,7 +279,7 @@ test.describe('4.3 Receiving Messages — Sender Name', () => {
 // ─── T4.3.4: Timestamp on Incoming Messages ──────────────────────────────────
 
 test.describe('4.3 Receiving Messages — Timestamp', () => {
-  test.setTimeout(180_000);
+  test.setTimeout(120_000);
 
   test('T4.3.4 — Timestamp visible on incoming messages', async ({ browser }) => {
     const suffix = 'T434';
@@ -354,7 +354,7 @@ test.describe('4.3 Receiving Messages — Timestamp', () => {
 // ─── T4.3.5: Notification for Inactive Conversation ─────────────────────────
 
 test.describe('4.3 Receiving Messages — Notification Indicator', () => {
-  test.setTimeout(180_000);
+  test.setTimeout(120_000);
 
   test('T4.3.5 — Tab B incoming message notification if conversation not active', async ({ browser }) => {
     const suffix = 'T435';

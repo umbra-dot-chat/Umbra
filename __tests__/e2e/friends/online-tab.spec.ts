@@ -15,7 +15,7 @@ import {
 } from '../helpers';
 
 test.describe('3.3 Online Tab', () => {
-  test.setTimeout(120_000);
+  test.setTimeout(90_000);
 
   test('T3.3.1 — Online tab only shows online friends', async ({ page }) => {
     await createIdentity(page, 'OnlineTabUser');

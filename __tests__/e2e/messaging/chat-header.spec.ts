@@ -111,7 +111,7 @@ async function openDMConversation(
 // ─── 4.1 Chat Header (Two-User Tests) ──────────────────────────────────────
 
 test.describe('4.1 Chat Header', () => {
-  test.setTimeout(180_000);
+  test.setTimeout(120_000);
 
   test('T4.1.1 -- Shows recipient name and online status dot', async ({ browser }) => {
     const suffix = 'T411';

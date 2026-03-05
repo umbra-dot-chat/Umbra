@@ -19,7 +19,7 @@ import {
 } from '../helpers';
 
 test.describe('1.3 PIN Lock', () => {
-  test.setTimeout(120_000);
+  test.setTimeout(90_000);
 
   let pinContext: BrowserContext;
   let pinPage: Page;

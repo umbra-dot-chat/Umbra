@@ -17,7 +17,7 @@ import {
 } from '../helpers';
 
 test.describe('11.8 Settings — Privacy', () => {
-  test.setTimeout(90_000);
+  test.setTimeout(60_000);
 
   test('T11.8.1 — Privacy section loads with description', async ({ page }) => {
     await createIdentity(page, 'PrivacyDescUser');

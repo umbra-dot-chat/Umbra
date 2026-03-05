@@ -15,7 +15,7 @@ import {
 } from '../helpers';
 
 test.describe('1.7 Discovery Opt-In', () => {
-  test.setTimeout(120_000);
+  test.setTimeout(90_000);
 
   test('T1.7.1 — Discovery opt-in available during account creation', async ({
     page,

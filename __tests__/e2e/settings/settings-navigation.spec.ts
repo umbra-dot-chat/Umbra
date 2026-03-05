@@ -16,7 +16,7 @@ import {
 } from '../helpers';
 
 test.describe('11.1 Settings — Navigation', () => {
-  test.setTimeout(90_000);
+  test.setTimeout(60_000);
 
   test('T11.1.1 — Gear icon in nav rail opens settings overlay', async ({ page }) => {
     await createIdentity(page, 'SettingsNavUser');

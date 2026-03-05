@@ -16,7 +16,7 @@ function getSearchInput(page: import('@playwright/test').Page) {
 }
 
 test.describe('2.3 Sidebar Search', () => {
-  test.setTimeout(120_000);
+  test.setTimeout(90_000);
 
   test('T2.3.1 — Typing filters conversations by name', async ({ page }) => {
     await createIdentity(page, 'SearchNameUser');

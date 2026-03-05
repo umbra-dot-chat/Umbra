@@ -16,7 +16,7 @@ import {
 } from '../helpers';
 
 test.describe('11.9 Settings — Audio & Video', () => {
-  test.setTimeout(90_000);
+  test.setTimeout(60_000);
 
   test('T11.9.1 — Audio & Video section loads', async ({ page }) => {
     await createIdentity(page, 'AVDescUser');

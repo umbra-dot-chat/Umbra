@@ -108,7 +108,7 @@ async function setupDMConversation(
 // ─── T4.2.1: Type message in input — text appears ──────────────────────────
 
 test.describe('4.2 Sending Messages', () => {
-  test.setTimeout(180_000);
+  test.setTimeout(120_000);
 
   test('T4.2.1 — Type message in input — text appears', async ({ browser }) => {
     const { contextA, contextB, pageA } = await setupDMConversation(browser, '421');

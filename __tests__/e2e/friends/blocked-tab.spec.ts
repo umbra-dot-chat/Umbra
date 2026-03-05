@@ -15,7 +15,7 @@ import {
 } from '../helpers';
 
 test.describe('3.5 Blocked Tab', () => {
-  test.setTimeout(120_000);
+  test.setTimeout(90_000);
 
   test('T3.5.1 — Shows blocked list or empty state', async ({ page }) => {
     await createIdentity(page, 'BlockedTabUser');

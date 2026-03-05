@@ -149,7 +149,7 @@ async function setupDMWithMessages(
 // ─────────────────────────────────────────────────────────────────────────────
 
 test.describe('4.18 Text Effects', () => {
-  test.setTimeout(180_000);
+  test.setTimeout(120_000);
 
   // ─── T4.18.1: Send message with slam effect ───────────────────────────
 
@@ -348,7 +348,7 @@ test.describe('4.18 Text Effects', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 test.describe('4.19 Message Types', () => {
-  test.setTimeout(180_000);
+  test.setTimeout(120_000);
 
   // ─── T4.19.1: Text message renders with content ───────────────────────
 
@@ -733,7 +733,7 @@ test.describe('4.19 Message Types', () => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 test.describe('4.20 Message Grouping & Display', () => {
-  test.setTimeout(180_000);
+  test.setTimeout(120_000);
 
   // ─── T4.20.1: Consecutive messages from same sender grouped ───────────
 

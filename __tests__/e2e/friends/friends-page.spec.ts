@@ -15,7 +15,7 @@ import {
 } from '../helpers';
 
 test.describe('3.1 Friends Page Navigation', () => {
-  test.setTimeout(120_000);
+  test.setTimeout(90_000);
 
   test('T3.1.1 — Click "Friends" in sidebar — friends page loads', async ({ page }) => {
     await createIdentity(page, 'FriendsNavUser');
@@ -41,7 +41,7 @@ test.describe('3.1 Friends Page Navigation', () => {
 });
 
 test.describe('3.2 All Friends Tab', () => {
-  test.setTimeout(120_000);
+  test.setTimeout(90_000);
 
   test('T3.2.1 — Profile card at top with your DID info', async ({ page }) => {
     await createIdentity(page, 'ProfileCardUser');

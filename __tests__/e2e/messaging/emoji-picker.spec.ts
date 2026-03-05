@@ -126,7 +126,7 @@ async function openEmojiPicker(page: Page): Promise<void> {
 // ─── T4.6.1: Click emoji button — picker appears above input ────────────────
 
 test.describe('4.6 Emoji/GIF Picker', () => {
-  test.setTimeout(180_000);
+  test.setTimeout(120_000);
 
   test('T4.6.1 -- Click emoji button -- picker appears above input', async ({ browser }) => {
     const { contextA, contextB, pageA } = await setupDMConversation(browser, '461');

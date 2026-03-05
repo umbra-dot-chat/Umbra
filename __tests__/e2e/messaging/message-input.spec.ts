@@ -107,7 +107,7 @@ async function setupDMConversation(
 // ─── T4.5.1: Emoji button opens combined emoji/GIF picker ──────────────────
 
 test.describe('4.5 Message Input Features', () => {
-  test.setTimeout(180_000);
+  test.setTimeout(120_000);
 
   test('T4.5.1 — Emoji button opens combined emoji/GIF picker', async ({ browser }) => {
     const { contextA, contextB, pageA } = await setupDMConversation(browser, 'T451');

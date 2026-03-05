@@ -58,7 +58,7 @@ async function sendFriendRequest(page: Page, targetDid: string) {
 // ─── T3.6.1–T3.6.3: Send Friend Request ────────────────────────────────────
 
 test.describe('3.6 Friend Request Flow — Send Request', () => {
-  test.setTimeout(180_000);
+  test.setTimeout(120_000);
 
   test('T3.6.1 — Tab A: DID is available from createIdentity', async ({ browser }) => {
     const contextA = await browser.newContext({ baseURL: BASE_URL });
@@ -118,7 +118,7 @@ test.describe('3.6 Friend Request Flow — Send Request', () => {
 // ─── T3.6.4–T3.6.5: Accept Flow ────────────────────────────────────────────
 
 test.describe('3.6 Friend Request Flow — Accept', () => {
-  test.setTimeout(180_000);
+  test.setTimeout(120_000);
 
   test('T3.6.4 — Tab A: Pending tab shows incoming request from Tab B', async ({ browser }) => {
     const { contextA, contextB, pageA, pageB, userA, userB } =
@@ -183,7 +183,7 @@ test.describe('3.6 Friend Request Flow — Accept', () => {
 // ─── T3.6.6: Relay Sync ────────────────────────────────────────────────────
 
 test.describe('3.6 Friend Request Flow — Relay Sync', () => {
-  test.setTimeout(180_000);
+  test.setTimeout(120_000);
 
   test('T3.6.6 — Tab B: Friend also appears in All tab after relay sync', async ({ browser }) => {
     const { contextA, contextB, pageA, pageB, userA, userB } =
@@ -220,7 +220,7 @@ test.describe('3.6 Friend Request Flow — Relay Sync', () => {
 // ─── T3.6.7: DM Auto-Creation ──────────────────────────────────────────────
 
 test.describe('3.6 Friend Request Flow — DM Auto-Creation', () => {
-  test.setTimeout(180_000);
+  test.setTimeout(120_000);
 
   test('T3.6.7 — Both tabs: DM conversation auto-created in sidebar', async ({ browser }) => {
     const { contextA, contextB, pageA, pageB, userA, userB } =
@@ -269,7 +269,7 @@ test.describe('3.6 Friend Request Flow — DM Auto-Creation', () => {
 // ─── T3.6.8: Decline Flow ──────────────────────────────────────────────────
 
 test.describe('3.6 Friend Request Flow — Decline', () => {
-  test.setTimeout(180_000);
+  test.setTimeout(120_000);
 
   test('T3.6.8 — Tab A: Decline — request removed, no friendship created', async ({ browser }) => {
     const { contextA, contextB, pageA, pageB, userA, userB } =
@@ -319,7 +319,7 @@ test.describe('3.6 Friend Request Flow — Decline', () => {
 // ─── T3.6.9: Duplicate Request ──────────────────────────────────────────────
 
 test.describe('3.6 Friend Request Flow — Duplicate Request', () => {
-  test.setTimeout(180_000);
+  test.setTimeout(120_000);
 
   test('T3.6.9 — Duplicate request to same DID — appropriate error', async ({ browser }) => {
     const { contextA, contextB, pageA, pageB, userA, userB } =
@@ -360,7 +360,7 @@ test.describe('3.6 Friend Request Flow — Duplicate Request', () => {
 // ─── T3.6.10: Accept Acknowledgment via Relay ───────────────────────────────
 
 test.describe('3.6 Friend Request Flow — Accept Acknowledgment', () => {
-  test.setTimeout(180_000);
+  test.setTimeout(120_000);
 
   test('T3.6.10 — Accept acknowledgment sent via relay to requester', async ({ browser }) => {
     const { contextA, contextB, pageA, pageB, userA, userB } =

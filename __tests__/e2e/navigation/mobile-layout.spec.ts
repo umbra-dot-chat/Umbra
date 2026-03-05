@@ -35,7 +35,7 @@ async function swipeHorizontal(
 }
 
 test.describe('2.7 Mobile Layout', () => {
-  test.setTimeout(120_000);
+  test.setTimeout(90_000);
 
   test('T2.7.1 — On narrow viewport, sidebar fills screen, no content visible', async ({
     page,

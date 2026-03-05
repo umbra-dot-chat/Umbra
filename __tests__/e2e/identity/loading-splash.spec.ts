@@ -14,7 +14,7 @@ import {
 } from '../helpers';
 
 test.describe('1.5 Loading / Splash Screen', () => {
-  test.setTimeout(120_000);
+  test.setTimeout(90_000);
 
   test('T1.5.1 — Refresh with existing identity shows splash screen', async ({
     page,

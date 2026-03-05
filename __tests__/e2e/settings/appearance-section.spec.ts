@@ -17,7 +17,7 @@ import {
 } from '../helpers';
 
 test.describe('11.4 Settings — Appearance', () => {
-  test.setTimeout(90_000);
+  test.setTimeout(60_000);
 
   test('T11.4.1 — Theme dropdown visible in Theme sub-section', async ({ page }) => {
     await createIdentity(page, 'AppearThemeUser');

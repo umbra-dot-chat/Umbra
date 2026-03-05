@@ -111,7 +111,7 @@ async function setupDMConversation(
 // ─── T4.21.1: Tab A types — Tab B sees typing indicator ─────────────────
 
 test.describe('4.21 Typing Indicators — Remote Typing Visible', () => {
-  test.setTimeout(180_000);
+  test.setTimeout(120_000);
 
   test('T4.21.1 — Tab A types — Tab B sees "Alice is typing..."', async ({ browser }) => {
     const suffix = 'T4211';
@@ -170,7 +170,7 @@ test.describe('4.21 Typing Indicators — Remote Typing Visible', () => {
 // ─── T4.21.2: Stop typing — indicator disappears (~4s timeout) ──────────
 
 test.describe('4.21 Typing Indicators — Auto-Hide on Stop', () => {
-  test.setTimeout(180_000);
+  test.setTimeout(120_000);
 
   test('T4.21.2 — Stop typing — indicator disappears after ~4s timeout', async ({ browser }) => {
     const suffix = 'T4212';
@@ -233,7 +233,7 @@ test.describe('4.21 Typing Indicators — Auto-Hide on Stop', () => {
 // ─── T4.21.3: Group typing indicators ───────────────────────────────────
 
 test.describe('4.21 Typing Indicators — Group Typing', () => {
-  test.setTimeout(180_000);
+  test.setTimeout(120_000);
 
   // T4.21.3: In groups: "Alice is typing..." or "Alice and Bob are typing..."
   //
@@ -259,7 +259,7 @@ test.describe('4.21 Typing Indicators — Group Typing', () => {
 // ─── T4.22.1: Send message — clock icon (sending) ──────────────────────
 
 test.describe('4.22 Delivery Receipts — Sending Status', () => {
-  test.setTimeout(180_000);
+  test.setTimeout(120_000);
 
   test('T4.22.1 — Send message — initial status before relay ack', async ({ browser }) => {
     const suffix = 'T4221';
@@ -337,7 +337,7 @@ test.describe('4.22 Delivery Receipts — Sending Status', () => {
 // ─── T4.22.2: Relay confirms — single checkmark (sent) ─────────────────
 
 test.describe('4.22 Delivery Receipts — Sent Status', () => {
-  test.setTimeout(180_000);
+  test.setTimeout(120_000);
 
   test('T4.22.2 — Relay confirms — single checkmark (sent) icon appears', async ({ browser }) => {
     const suffix = 'T4222';
@@ -422,7 +422,7 @@ test.describe('4.22 Delivery Receipts — Sent Status', () => {
 // ─── T4.22.3: Recipient receives — double checkmark (delivered) ─────────
 
 test.describe('4.22 Delivery Receipts — Delivered Status', () => {
-  test.setTimeout(180_000);
+  test.setTimeout(120_000);
 
   test('T4.22.3 — Recipient receives — double checkmark (delivered) appears', async ({ browser }) => {
     const suffix = 'T4223';
@@ -500,7 +500,7 @@ test.describe('4.22 Delivery Receipts — Delivered Status', () => {
 // ─── T4.22.4: Recipient reads — blue double checkmark (read) ────────────
 
 test.describe('4.22 Delivery Receipts — Read Status', () => {
-  test.setTimeout(180_000);
+  test.setTimeout(120_000);
 
   test('T4.22.4 — Recipient reads — blue double checkmark (read) appears', async ({ browser }) => {
     const suffix = 'T4224';
@@ -596,7 +596,7 @@ test.describe('4.22 Delivery Receipts — Read Status', () => {
 // ─── T4.22.5: Read receipts respect privacy toggle ──────────────────────
 
 test.describe('4.22 Delivery Receipts — Privacy Toggle', () => {
-  test.setTimeout(180_000);
+  test.setTimeout(120_000);
 
   test('T4.22.5 — Read receipts disabled — no blue checks sent', async ({ browser }) => {
     const suffix = 'T4225';

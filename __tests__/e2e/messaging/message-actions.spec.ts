@@ -141,7 +141,7 @@ async function setupDMWithMessage(
 // ─── 4.9 Message Hover Actions ──────────────────────────────────────────────
 
 test.describe('4.9 Message Hover Actions', () => {
-  test.setTimeout(180_000);
+  test.setTimeout(120_000);
 
   // ─── T4.9.1: Hover over message — action bar appears ──────────────────
 
@@ -340,7 +340,7 @@ test.describe('4.9 Message Hover Actions', () => {
 // ─── 4.10 Context Menu (Right-Click) ────────────────────────────────────────
 
 test.describe('4.10 Context Menu', () => {
-  test.setTimeout(180_000);
+  test.setTimeout(120_000);
 
   // ─── T4.10.1: Right-click message — context menu appears ──────────────
 

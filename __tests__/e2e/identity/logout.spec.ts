@@ -18,7 +18,7 @@ import {
 } from '../helpers';
 
 test.describe('1.6 Logout', () => {
-  test.setTimeout(120_000);
+  test.setTimeout(90_000);
 
   test('T1.6.1 — Settings > Account > Danger Zone > Log Out button', async ({
     page,

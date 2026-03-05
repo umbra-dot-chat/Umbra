@@ -16,7 +16,7 @@ import {
 } from '../helpers';
 
 test.describe('11.7 Settings — Sounds', () => {
-  test.setTimeout(90_000);
+  test.setTimeout(60_000);
 
   test('T11.7.1 — Enable Sounds master toggle visible', async ({ page }) => {
     await createIdentity(page, 'SndToggleUser');

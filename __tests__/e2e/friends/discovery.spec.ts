@@ -8,7 +8,7 @@
  * Test IDs: T3.9.1-T3.9.12
  */
 
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
 import {
   BASE_URL,
   WASM_LOAD_TIMEOUT,
@@ -19,13 +19,14 @@ import {
   navigateToSettings,
   clickTab,
 } from '../helpers';
+import { generateDisplayName } from '../../shared/fixtures';
 
 // ---------------------------------------------------------------------------
 // T3.9.1 — Username search: find friends by registered username
 // ---------------------------------------------------------------------------
 
 test.describe('T3.9.1 — Username search', () => {
-  test.setTimeout(180_000); // Two-user test
+  test.setTimeout(120_000); // Two-user test
 
   test('T3.9.1 — Search by registered username finds the user', async ({
     browser,
@@ -78,81 +79,76 @@ test.describe('T3.9.1 — Username search', () => {
 test.describe('T3.9.2–T3.9.6 — Platform linking smoke tests', () => {
   test.setTimeout(120_000);
 
-  test('T3.9.2 — Discord: platform selector switches search input', async ({
-    page,
-  }) => {
-    await createIdentity(page, 'DiscordPlatUser');
-    await navigateToFriends(page);
+  let sharedPage: Page;
+  test.beforeAll(async ({ browser }) => {
+    const ctx = await browser.newContext({ baseURL: BASE_URL });
+    sharedPage = await ctx.newPage();
+    await createIdentity(sharedPage, generateDisplayName());
+  });
+  test.afterAll(async () => {
+    await sharedPage?.context().close();
+  });
+
+  test('T3.9.2 — Discord: platform selector switches search input', async () => {
+    await navigateToFriends(sharedPage);
 
     // Click Discord in the platform selector
-    await page.getByText('Discord').first().click();
-    await page.waitForTimeout(UI_SETTLE_TIMEOUT);
+    await sharedPage.getByText('Discord').first().click();
+    await sharedPage.waitForTimeout(UI_SETTLE_TIMEOUT);
 
     // The search input should now show "Search by Discord username..."
     await expect(
-      page.getByPlaceholder(/Search by Discord username/).first(),
+      sharedPage.getByPlaceholder(/Search by Discord username/).first(),
     ).toBeVisible({ timeout: 5_000 });
   });
 
-  test('T3.9.3 — GitHub: platform selector switches search input', async ({
-    page,
-  }) => {
-    await createIdentity(page, 'GitHubPlatUser');
-    await navigateToFriends(page);
+  test('T3.9.3 — GitHub: platform selector switches search input', async () => {
+    await navigateToFriends(sharedPage);
 
     // Click GitHub in the platform selector
-    await page.getByText('GitHub').first().click();
-    await page.waitForTimeout(UI_SETTLE_TIMEOUT);
+    await sharedPage.getByText('GitHub').first().click();
+    await sharedPage.waitForTimeout(UI_SETTLE_TIMEOUT);
 
     // The search input should now show "Search by GitHub username..."
     await expect(
-      page.getByPlaceholder(/Search by GitHub username/).first(),
+      sharedPage.getByPlaceholder(/Search by GitHub username/).first(),
     ).toBeVisible({ timeout: 5_000 });
   });
 
-  test('T3.9.4 — Steam: platform selector switches search input', async ({
-    page,
-  }) => {
-    await createIdentity(page, 'SteamPlatUser');
-    await navigateToFriends(page);
+  test('T3.9.4 — Steam: platform selector switches search input', async () => {
+    await navigateToFriends(sharedPage);
 
     // Click Steam in the platform selector
-    await page.getByText('Steam').first().click();
-    await page.waitForTimeout(UI_SETTLE_TIMEOUT);
+    await sharedPage.getByText('Steam').first().click();
+    await sharedPage.waitForTimeout(UI_SETTLE_TIMEOUT);
 
     // The search input should now show "Search by Steam username..."
     await expect(
-      page.getByPlaceholder(/Search by Steam username/).first(),
+      sharedPage.getByPlaceholder(/Search by Steam username/).first(),
     ).toBeVisible({ timeout: 5_000 });
   });
 
-  test('T3.9.5 — Bluesky: platform selector switches search input', async ({
-    page,
-  }) => {
-    await createIdentity(page, 'BlueskyPlatUser');
-    await navigateToFriends(page);
+  test('T3.9.5 — Bluesky: platform selector switches search input', async () => {
+    await navigateToFriends(sharedPage);
 
     // Click Bluesky in the platform selector
-    await page.getByText('Bluesky').first().click();
-    await page.waitForTimeout(UI_SETTLE_TIMEOUT);
+    await sharedPage.getByText('Bluesky').first().click();
+    await sharedPage.waitForTimeout(UI_SETTLE_TIMEOUT);
 
     // The search input should now show "Search by Bluesky username..."
     await expect(
-      page.getByPlaceholder(/Search by Bluesky username/).first(),
+      sharedPage.getByPlaceholder(/Search by Bluesky username/).first(),
     ).toBeVisible({ timeout: 5_000 });
   });
 
-  test('T3.9.6 — Xbox: not in current platform list (skipped)', async ({
-    page,
-  }) => {
+  test('T3.9.6 — Xbox: not in current platform list (skipped)', async () => {
     // Xbox is not included in the SEARCH_PLATFORM_OPTIONS on the Friends page.
     // The platform selector only has: Umbra, Discord, GitHub, Steam, Bluesky.
     // This test documents that Xbox is absent from the search UI.
-    await createIdentity(page, 'XboxPlatUser');
-    await navigateToFriends(page);
+    await navigateToFriends(sharedPage);
 
     // Xbox should NOT be visible in the platform selector
-    const xboxVisible = await page
+    const xboxVisible = await sharedPage
       .getByText('Xbox', { exact: true })
       .first()
       .isVisible({ timeout: 3_000 })
@@ -291,15 +287,22 @@ test.describe('T3.9.8 — Linked account verification badge', () => {
 test.describe('T3.9.9 — QR code display', () => {
   test.setTimeout(120_000);
 
-  test('T3.9.9 — QR code dialog opens with "My QR Code" title', async ({
-    page,
-  }) => {
-    await createIdentity(page, 'QRDisplayUser');
-    await navigateToFriends(page);
+  let sharedPage: Page;
+  test.beforeAll(async ({ browser }) => {
+    const ctx = await browser.newContext({ baseURL: BASE_URL });
+    sharedPage = await ctx.newPage();
+    await createIdentity(sharedPage, generateDisplayName());
+  });
+  test.afterAll(async () => {
+    await sharedPage?.context().close();
+  });
+
+  test('T3.9.9 — QR code dialog opens with "My QR Code" title', async () => {
+    await navigateToFriends(sharedPage);
 
     // The QR code icon is a Pressable in the header bar.
     // Click it via evaluate since it uses an SVG icon without accessible name.
-    await page.evaluate(() => {
+    await sharedPage.evaluate(() => {
       // QrCodeIcon renders an SVG with a specific path — find the parent pressable
       // The icon is inside a Pressable wrapping the QrCodeIcon component
       const svgs = document.querySelectorAll('svg');
@@ -328,25 +331,24 @@ test.describe('T3.9.9 — QR code display', () => {
       }
     });
 
-    await page.waitForTimeout(1_000);
+    await sharedPage.waitForTimeout(1_000);
 
     // The QRCardDialog should open with "My QR Code" title
     await expect(
-      page.getByText('My QR Code').first(),
+      sharedPage.getByText('My QR Code').first(),
     ).toBeVisible({ timeout: 5_000 });
 
     // The dialog should show "Scan this code to add me as a friend"
     await expect(
-      page.getByText('Scan this code to add me as a friend').first(),
+      sharedPage.getByText('Scan this code to add me as a friend').first(),
     ).toBeVisible({ timeout: 5_000 });
   });
 
-  test('T3.9.9b — QR dialog shows Share/Scan toggle', async ({ page }) => {
-    await createIdentity(page, 'QRToggleUser');
-    await navigateToFriends(page);
+  test('T3.9.9b — QR dialog shows Share/Scan toggle', async () => {
+    await navigateToFriends(sharedPage);
 
     // Open the QR dialog
-    await page.evaluate(() => {
+    await sharedPage.evaluate(() => {
       const svgs = document.querySelectorAll('svg');
       for (const svg of svgs) {
         const parent = svg.closest('[role="button"]');
@@ -368,14 +370,14 @@ test.describe('T3.9.9 — QR code display', () => {
       }
     });
 
-    await page.waitForTimeout(1_000);
+    await sharedPage.waitForTimeout(1_000);
 
     // Verify the Share/Scan segmented control is visible
     await expect(
-      page.getByText('Share', { exact: true }).first(),
+      sharedPage.getByText('Share', { exact: true }).first(),
     ).toBeVisible({ timeout: 5_000 });
     await expect(
-      page.getByText('Scan', { exact: true }).first(),
+      sharedPage.getByText('Scan', { exact: true }).first(),
     ).toBeVisible({ timeout: 5_000 });
   });
 });
@@ -570,23 +572,32 @@ test.describe('T3.9.12 — Batch lookup by usernames', () => {
 test.describe('Platform selector state management', () => {
   test.setTimeout(120_000);
 
-  test('Switching platforms resets the search input', async ({ page }) => {
-    await createIdentity(page, 'PlatSwitchUser');
-    await navigateToFriends(page);
+  let sharedPage: Page;
+  test.beforeAll(async ({ browser }) => {
+    const ctx = await browser.newContext({ baseURL: BASE_URL });
+    sharedPage = await ctx.newPage();
+    await createIdentity(sharedPage, generateDisplayName());
+  });
+  test.afterAll(async () => {
+    await sharedPage?.context().close();
+  });
+
+  test('Switching platforms resets the search input', async () => {
+    await navigateToFriends(sharedPage);
 
     // Start on Umbra — type something in username search
-    const usernameInput = page
+    const usernameInput = sharedPage
       .getByPlaceholder(/Search by username/)
       .first();
     await expect(usernameInput).toBeVisible({ timeout: 5_000 });
     await usernameInput.fill('somequery');
 
     // Switch to Discord
-    await page.getByText('Discord').first().click();
-    await page.waitForTimeout(UI_SETTLE_TIMEOUT);
+    await sharedPage.getByText('Discord').first().click();
+    await sharedPage.waitForTimeout(UI_SETTLE_TIMEOUT);
 
     // The Discord search input should be empty (state reset on platform switch)
-    const discordInput = page
+    const discordInput = sharedPage
       .getByPlaceholder(/Search by Discord username/)
       .first();
     await expect(discordInput).toBeVisible({ timeout: 5_000 });
@@ -594,10 +605,10 @@ test.describe('Platform selector state management', () => {
     expect(discordValue).toBe('');
 
     // Switch back to Umbra — input should be empty
-    await page.getByText('Umbra').first().click();
-    await page.waitForTimeout(UI_SETTLE_TIMEOUT);
+    await sharedPage.getByText('Umbra').first().click();
+    await sharedPage.waitForTimeout(UI_SETTLE_TIMEOUT);
 
-    const umbraInput = page
+    const umbraInput = sharedPage
       .getByPlaceholder(/Search by username/)
       .first();
     await expect(umbraInput).toBeVisible({ timeout: 5_000 });
@@ -605,9 +616,8 @@ test.describe('Platform selector state management', () => {
     expect(umbraValue).toBe('');
   });
 
-  test('All platform options cycle correctly', async ({ page }) => {
-    await createIdentity(page, 'PlatCycleUser');
-    await navigateToFriends(page);
+  test('All platform options cycle correctly', async () => {
+    await navigateToFriends(sharedPage);
 
     const platforms = [
       { name: 'Discord', placeholder: /Search by Discord username/ },
@@ -618,10 +628,10 @@ test.describe('Platform selector state management', () => {
     ];
 
     for (const { name, placeholder } of platforms) {
-      await page.getByText(name).first().click();
-      await page.waitForTimeout(UI_SETTLE_TIMEOUT);
+      await sharedPage.getByText(name).first().click();
+      await sharedPage.waitForTimeout(UI_SETTLE_TIMEOUT);
       await expect(
-        page.getByPlaceholder(placeholder).first(),
+        sharedPage.getByPlaceholder(placeholder).first(),
       ).toBeVisible({ timeout: 5_000 });
     }
   });

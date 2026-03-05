@@ -125,7 +125,7 @@ async function setupBothInGroup(
 // ─── Tests ──────────────────────────────────────────────────────────────────
 
 test.describe('5.4 Group File Attachments', () => {
-  test.setTimeout(300_000);
+  test.setTimeout(180_000);
 
   test('T5.4.1 — Attachment button visible in group chat input', async ({ browser }) => {
     const setup = await setupFriendPair(browser, '541');

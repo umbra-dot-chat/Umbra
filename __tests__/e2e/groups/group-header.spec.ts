@@ -17,7 +17,7 @@ import {
 } from './group-helpers';
 
 test.describe('5.4 Group Header', () => {
-  test.setTimeout(180_000);
+  test.setTimeout(120_000);
 
   let ctx1: BrowserContext;
   let ctx2: BrowserContext;

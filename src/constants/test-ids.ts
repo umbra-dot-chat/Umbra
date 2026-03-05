@@ -27,7 +27,7 @@ export const TEST_IDS = {
     IMPORT_PROFILE_BUTTON: 'create.import.profile.button',
     // Step 1: Recovery phrase
     SEED_PHRASE_GRID: 'create.seed.grid',
-    SEED_COPY_BUTTON: 'create.seed.copy',
+    SEED_COPY_BUTTON: 'seed.copy.button',
     SEED_NEXT: 'create.seed.next',
     // Step 2: Backup confirmation
     BACKUP_CHECKBOX: 'create.backup.checkbox',

@@ -15,7 +15,7 @@ import {
 } from '../helpers';
 
 test.describe('2.2 Sidebar (Conversations)', () => {
-  test.setTimeout(120_000);
+  test.setTimeout(90_000);
 
   test('T2.2.1 — Sidebar appears to right of nav rail with dark surface', async ({
     page,

@@ -132,7 +132,7 @@ async function rotateKeyViaService(
 
 test.describe('11.10 Key Rotation', () => {
   // DM setup (2 accounts + friendship + relay sync) takes ~2-3 minutes per test
-  test.setTimeout(300_000);
+  test.setTimeout(180_000);
 
   // ─── T-KR.1: rotateEncryptionKey returns new key and friend count ─────
 

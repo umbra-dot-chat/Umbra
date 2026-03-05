@@ -16,7 +16,7 @@ import {
 } from '../helpers';
 
 test.describe('11.3 Settings — Profile', () => {
-  test.setTimeout(90_000);
+  test.setTimeout(60_000);
 
   test('T11.3.1 — Avatar upload area with "Upload Photo" button', async ({ page }) => {
     await createIdentity(page, 'ProfAvatarUser');

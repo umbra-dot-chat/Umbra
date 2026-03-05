@@ -16,7 +16,7 @@ import {
 } from '../helpers';
 
 test.describe('3.4 Pending Tab', () => {
-  test.setTimeout(120_000);
+  test.setTimeout(90_000);
 
   test('T3.4.1 — "Add Friend" input available on Pending tab', async ({ page }) => {
     await createIdentity(page, 'PendingInputUser');

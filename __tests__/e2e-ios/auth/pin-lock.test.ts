@@ -12,7 +12,7 @@ import { TEST_IDS } from '../../shared/test-ids';
 import { TIMEOUTS } from '../../shared/timeouts';
 import { FIXTURES } from '../../shared/fixtures';
 import { launchApp, waitForAuthScreen, waitForMainScreen, waitForUISettle } from '../helpers/app';
-import { createAccount, createAccountWithPin, importAccount, enterPin, skipPin } from '../helpers/auth';
+import { createAccount, createAccountWithPin, importAccount, enterPin, skipPin, activateElement } from '../helpers/auth';
 
 describe('T1.3 PIN Lock', () => {
   describe('PIN setup during account creation', () => {
@@ -20,8 +20,8 @@ describe('T1.3 PIN Lock', () => {
       await launchApp({ newInstance: true, delete: true });
       await waitForAuthScreen();
 
-      // Navigate to PIN setup step manually
-      await element(by.id(TEST_IDS.AUTH.CREATE_BUTTON)).tap();
+      // Navigate to PIN setup step manually — use activateElement to bypass MaskedView overlay
+      await activateElement(TEST_IDS.AUTH.CREATE_BUTTON);
       await waitForUISettle();
 
       // Step 0: Display name

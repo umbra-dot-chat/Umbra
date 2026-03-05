@@ -33,7 +33,7 @@ const rail = (page: import('@playwright/test').Page) =>
   page.locator('div').filter({ has: page.locator(`path[d^="${UMBRA_PATH}"]`) }).first();
 
 test.describe('2.1 Navigation Rail', () => {
-  test.setTimeout(120_000);
+  test.setTimeout(90_000);
 
   test('T2.1.1 — Nav rail visible on left edge with icon buttons', async ({ page }) => {
     await createIdentity(page, 'NavRailUser');
