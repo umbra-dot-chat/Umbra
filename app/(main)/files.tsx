@@ -10,7 +10,7 @@
 
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { Platform, Pressable, ScrollView, View } from 'react-native';
-import { Text, Button, useTheme } from '@coexist/wisp-react-native';
+import { Text, Button, AnimatedCounter, useTheme } from '@coexist/wisp-react-native';
 import { useFileTransfer } from '@/hooks/useFileTransfer';
 import { useSharedFolders } from '@/hooks/useSharedFolders';
 import { useStorageManager } from '@/hooks/useStorageManager';
@@ -120,9 +120,17 @@ function ActiveTransfersSection() {
                   {transfer.filename}
                 </Text>
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 }}>
-                  <Text size="xs" style={{ color: theme.colors.text.muted }}>
-                    {progress}% &middot; {formatBytes(transfer.speedBps)}/s
-                  </Text>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
+                    <Text size="xs" style={{ color: theme.colors.text.muted }}>
+                      {progress}% &middot;{' '}
+                    </Text>
+                    <AnimatedCounter
+                      value={transfer.speedBps}
+                      duration={400}
+                      formatValue={(v) => `${formatBytes(Math.round(v))}/s`}
+                      style={{ fontSize: 11, color: theme.colors.text.muted }}
+                    />
+                  </View>
                   <View
                     style={{
                       paddingHorizontal: 6,
@@ -190,17 +198,29 @@ function ActiveTransfersSection() {
         })}
       </View>
 
-      {/* Speed summary */}
+      {/* Speed summary — odometer-style animated counter */}
       <View style={{ flexDirection: 'row', gap: 16, marginTop: 8 }}>
         {totalUploadSpeed > 0 && (
-          <Text size="xs" style={{ color: theme.colors.text.muted }}>
-            Upload: {formatBytes(totalUploadSpeed)}/s
-          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <Text size="xs" style={{ color: theme.colors.text.muted }}>Upload:</Text>
+            <AnimatedCounter
+              value={totalUploadSpeed}
+              duration={400}
+              formatValue={(v) => `${formatBytes(Math.round(v))}/s`}
+              style={{ fontSize: 11, color: theme.colors.text.muted }}
+            />
+          </View>
         )}
         {totalDownloadSpeed > 0 && (
-          <Text size="xs" style={{ color: theme.colors.text.muted }}>
-            Download: {formatBytes(totalDownloadSpeed)}/s
-          </Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <Text size="xs" style={{ color: theme.colors.text.muted }}>Download:</Text>
+            <AnimatedCounter
+              value={totalDownloadSpeed}
+              duration={400}
+              formatValue={(v) => `${formatBytes(Math.round(v))}/s`}
+              style={{ fontSize: 11, color: theme.colors.text.muted }}
+            />
+          </View>
         )}
       </View>
     </View>
@@ -613,19 +633,29 @@ function FolderDetailView({
         </Button>
       </View>
 
-      {/* Drag-and-drop overlay */}
+      {/* Drag-and-drop overlay — aurora gradient */}
       {isDragOver && (
         <View
           style={{
             borderRadius: 12,
             borderWidth: 2,
-            borderColor: theme.colors.accent.primary,
-            borderStyle: 'dashed' as any,
-            backgroundColor: theme.colors.accent.primary + '10',
+            borderColor: 'transparent',
             padding: 40,
             alignItems: 'center',
             justifyContent: 'center',
             marginBottom: 12,
+            overflow: 'hidden',
+            position: 'relative',
+            ...(Platform.OS === 'web' ? {
+              background: `linear-gradient(135deg, rgba(139,92,246,0.12), rgba(236,72,153,0.08), rgba(59,130,246,0.12))`,
+              border: '2px dashed',
+              borderImage: 'linear-gradient(135deg, #8B5CF6, #EC4899, #3B82F6) 1',
+              animation: 'wisp-aurora-drift 3s ease-in-out infinite alternate',
+            } as any : {
+              backgroundColor: theme.colors.accent.primary + '10',
+              borderColor: theme.colors.accent.primary,
+              borderStyle: 'dashed',
+            }),
           }}
         >
           <PlusIcon size={32} color={theme.colors.accent.primary} />

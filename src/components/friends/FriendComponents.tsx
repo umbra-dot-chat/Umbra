@@ -7,11 +7,11 @@
  * - Wisp Button for all actions and interactions
  */
 
-import React, { useState } from 'react';
-import { View } from 'react-native';
+import React, { useCallback, useRef, useState } from 'react';
+import { Animated, Platform, View } from 'react-native';
 import { TEST_IDS } from '@/constants/test-ids';
 import {
-  Text, Button, HStack, VStack, Avatar,
+  Text, Button, HStack, VStack, Avatar, Collapse,
   useTheme,
 } from '@coexist/wisp-react-native';
 import { ChevronDownIcon, ChevronRightIcon } from '@/components/ui';
@@ -132,50 +132,75 @@ export function FriendRequestItem({
 }: FriendRequestItemProps) {
   const { theme } = useTheme();
   const tc = theme.colors;
+  const glowOpacity = useRef(new Animated.Value(0)).current;
+
+  const handleAccept = useCallback(() => {
+    // Green glow burst
+    glowOpacity.setValue(0.4);
+    Animated.timing(glowOpacity, {
+      toValue: 0,
+      duration: 500,
+      useNativeDriver: false,
+    }).start();
+    onAccept?.();
+  }, [onAccept, glowOpacity]);
 
   return (
-    <HStack
-      testID={TEST_IDS.FRIENDS.CARD}
-      style={{
-        alignItems: 'center',
-        paddingVertical: 6,
-        paddingHorizontal: flat ? 4 : 12,
-        gap: 10,
-        borderRadius: 4,
-        marginHorizontal: flat ? 0 : 4,
-      }}
+    <Animated.View
+      style={[
+        {
+          borderRadius: 4,
+          marginHorizontal: flat ? 0 : 4,
+        },
+        Platform.OS === 'web' ? {
+          boxShadow: glowOpacity.interpolate({
+            inputRange: [0, 0.4],
+            outputRange: ['0 0 0px transparent', `0 0 12px ${tc.status.success}`],
+          }),
+        } as any : {},
+      ]}
     >
-      {avatar ?? <Avatar name={name} size="sm" />}
+      <HStack
+        testID={TEST_IDS.FRIENDS.CARD}
+        style={{
+          alignItems: 'center',
+          paddingVertical: 6,
+          paddingHorizontal: flat ? 4 : 12,
+          gap: 10,
+        }}
+      >
+        {avatar ?? <Avatar name={name} size="sm" />}
 
-      <VStack style={{ flex: 1, gap: 1 }}>
-        <Text testID={TEST_IDS.FRIENDS.CARD_NAME} size="sm" weight="medium">{name}</Text>
-        {username && (
-          <Text size="xs" style={{ color: tc.text.muted }} numberOfLines={1}>
-            {username}
-          </Text>
+        <VStack style={{ flex: 1, gap: 1 }}>
+          <Text testID={TEST_IDS.FRIENDS.CARD_NAME} size="sm" weight="medium">{name}</Text>
+          {username && (
+            <Text size="xs" style={{ color: tc.text.muted }} numberOfLines={1}>
+              {username}
+            </Text>
+          )}
+          {timestamp && (
+            <Text size="xs" style={{ color: tc.text.muted, marginTop: 1 }}>{timestamp}</Text>
+          )}
+        </VStack>
+
+        {type === 'incoming' && (
+          <HStack style={{ gap: 6 }}>
+            <Button testID={TEST_IDS.FRIENDS.CARD_ACCEPT} variant="success" size="xs" onPress={handleAccept}>
+              Accept
+            </Button>
+            <Button testID={TEST_IDS.FRIENDS.CARD_REJECT} variant="secondary" size="xs" onPress={onDecline}>
+              Decline
+            </Button>
+          </HStack>
         )}
-        {timestamp && (
-          <Text size="xs" style={{ color: tc.text.muted, marginTop: 1 }}>{timestamp}</Text>
+
+        {type === 'outgoing' && (
+          <Button variant="secondary" size="xs" onPress={onCancel}>
+            Cancel
+          </Button>
         )}
-      </VStack>
-
-      {type === 'incoming' && (
-        <HStack style={{ gap: 6 }}>
-          <Button testID={TEST_IDS.FRIENDS.CARD_ACCEPT} variant="success" size="xs" onPress={onAccept}>
-            Accept
-          </Button>
-          <Button testID={TEST_IDS.FRIENDS.CARD_REJECT} variant="secondary" size="xs" onPress={onDecline}>
-            Decline
-          </Button>
-        </HStack>
-      )}
-
-      {type === 'outgoing' && (
-        <Button variant="secondary" size="xs" onPress={onCancel}>
-          Cancel
-        </Button>
-      )}
-    </HStack>
+      </HStack>
+    </Animated.View>
   );
 }
 
@@ -203,9 +228,30 @@ export function FriendSection({
   const { theme } = useTheme();
   const tc = theme.colors;
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
+  const chevronRotation = useRef(new Animated.Value(defaultCollapsed ? 0 : 1)).current;
 
   const hasChildren = React.Children.count(children) > 0;
   const headerText = count !== undefined ? `${title} (${count})` : title;
+
+  const handleToggle = useCallback(() => {
+    const next = !collapsed;
+    setCollapsed(next);
+    Animated.spring(chevronRotation, {
+      toValue: next ? 0 : 1,
+      tension: 300,
+      friction: 20,
+      useNativeDriver: true,
+    }).start();
+  }, [collapsed, chevronRotation]);
+
+  const chevronStyle = {
+    transform: [{
+      rotate: chevronRotation.interpolate({
+        inputRange: [0, 1],
+        outputRange: ['0deg', '90deg'],
+      }),
+    }],
+  };
 
   return (
     <View style={{ marginBottom: 12 }}>
@@ -214,12 +260,12 @@ export function FriendSection({
         <Button
           variant="tertiary"
           size="xs"
-          onPress={() => setCollapsed(!collapsed)}
+          onPress={handleToggle}
           accessibilityLabel={`${headerText}, ${collapsed ? 'collapsed' : 'expanded'}`}
           iconLeft={
-            collapsed
-              ? <ChevronRightIcon size={12} color={tc.text.muted} />
-              : <ChevronDownIcon size={12} color={tc.text.muted} />
+            <Animated.View style={chevronStyle}>
+              <ChevronRightIcon size={12} color={tc.text.muted} />
+            </Animated.View>
           }
           style={{ justifyContent: 'flex-start', paddingHorizontal: 4, marginBottom: 2 }}
         >
@@ -230,18 +276,16 @@ export function FriendSection({
         {headerRight && <View style={{ marginLeft: 4 }}>{headerRight}</View>}
       </View>
 
-      {/* Body */}
-      {!collapsed && (
-        <>
-          {hasChildren ? (
-            <View>{children}</View>
-          ) : emptyMessage ? (
-            <Text size="sm" style={{ color: tc.text.muted, paddingVertical: 12, textAlign: 'center' }}>
-              {emptyMessage}
-            </Text>
-          ) : null}
-        </>
-      )}
+      {/* Body — animated collapse */}
+      <Collapse open={!collapsed}>
+        {hasChildren ? (
+          <View>{children}</View>
+        ) : emptyMessage ? (
+          <Text size="sm" style={{ color: tc.text.muted, paddingVertical: 12, textAlign: 'center' }}>
+            {emptyMessage}
+          </Text>
+        ) : null}
+      </Collapse>
     </View>
   );
 }

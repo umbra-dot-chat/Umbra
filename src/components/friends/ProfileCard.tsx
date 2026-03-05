@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from 'react';
-import { View, Pressable, Text as RNText, Image } from 'react-native';
+import { Platform, View, Pressable, Text as RNText, Image } from 'react-native';
 import type { ViewStyle } from 'react-native';
 import { Card, Separator, useTheme } from '@coexist/wisp-react-native';
 import { useAuth } from '@/contexts/AuthContext';
@@ -75,7 +75,15 @@ export function ProfileCard({ style }: ProfileCardProps) {
   });
 
   return (
-    <Card variant="outlined" padding="lg" style={{ width: '100%', ...style }}>
+    <Card variant="outlined" padding="lg" style={{
+      width: '100%',
+      ...(Platform.OS === 'web' ? {
+        backdropFilter: 'blur(16px)',
+        WebkitBackdropFilter: 'blur(16px)',
+        backgroundColor: tc.background.surface + 'CC',
+      } as any : {}),
+      ...style,
+    }}>
       <View style={{ gap: 10 }}>
         {/* Avatar + Name + Join Date row + Relay status top-right */}
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>

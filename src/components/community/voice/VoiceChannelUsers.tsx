@@ -9,8 +9,8 @@
  * green ring outline and a small audio-wave icon is shown next to their name.
  */
 
-import React from 'react';
-import { View } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { Animated, Easing, View } from 'react-native';
 import { Avatar, Text, useTheme } from '@coexist/wisp-react-native';
 import { AudioWaveIcon } from '@/components/ui';
 import type { CommunityMember } from '@umbra/service';
@@ -26,6 +26,61 @@ export interface VoiceChannelUsersProps {
   myDisplayName?: string;
   /** Set of DIDs currently speaking (audio above threshold). */
   speakingDids?: Set<string>;
+}
+
+/** Animated sound bars — replaces static AudioWaveIcon when speaking. */
+function SoundBars({ color, size = 12 }: { color: string; size?: number }) {
+  const bars = [
+    useRef(new Animated.Value(0.3)).current,
+    useRef(new Animated.Value(0.6)).current,
+    useRef(new Animated.Value(0.4)).current,
+    useRef(new Animated.Value(0.7)).current,
+  ];
+
+  useEffect(() => {
+    const animations = bars.map((bar, i) =>
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(bar, {
+            toValue: 0.3 + Math.random() * 0.7,
+            duration: 200 + i * 80,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: false,
+          }),
+          Animated.timing(bar, {
+            toValue: 0.2 + Math.random() * 0.3,
+            duration: 250 + i * 60,
+            easing: Easing.inOut(Easing.ease),
+            useNativeDriver: false,
+          }),
+        ]),
+      ),
+    );
+    animations.forEach((a) => a.start());
+    return () => animations.forEach((a) => a.stop());
+  }, []);
+
+  const barWidth = Math.max(2, size / 5);
+  const gap = 1;
+
+  return (
+    <View style={{ flexDirection: 'row', alignItems: 'flex-end', height: size, gap }}>
+      {bars.map((bar, i) => (
+        <Animated.View
+          key={i}
+          style={{
+            width: barWidth,
+            borderRadius: barWidth / 2,
+            backgroundColor: color,
+            height: bar.interpolate({
+              inputRange: [0, 1],
+              outputRange: [2, size],
+            }),
+          }}
+        />
+      ))}
+    </View>
+  );
 }
 
 export function VoiceChannelUsers({
@@ -115,9 +170,9 @@ export function VoiceChannelUsers({
             >
               {name}
             </Text>
-            {/* Speaking indicator icon */}
+            {/* Speaking indicator — animated sound bars */}
             {isSpeaking && (
-              <AudioWaveIcon size={12} color={speakingColor} />
+              <SoundBars size={12} color={speakingColor} />
             )}
           </View>
         );
