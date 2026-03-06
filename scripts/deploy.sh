@@ -285,6 +285,11 @@ server {
         try_files \$uri =404;
     }
 
+    # ── Download / marketing site (Next.js static export) ───────────
+    location /download {
+        try_files \$uri \$uri/ \$uri.html /download/index.html;
+    }
+
     # ── SPA fallback ──────────────────────────────────────────────────
     # Expo Router generates per-route HTML files (index.html, friends.html, etc.).
     # Try exact file first, then directory index, then SPA fallback.
@@ -306,8 +311,8 @@ deploy_frontend() {
     # Create the target directory if it doesn't exist
     run_ssh "$FRONTEND_SSH_HOST" "mkdir -p $FRONTEND_PATH"
 
-    # Sync the dist folder
-    run_rsync "$PROJECT_ROOT/dist/" "$SSH_USER@$FRONTEND_SSH_HOST:$FRONTEND_PATH/"
+    # Sync the dist folder (exclude subdirectories managed separately, e.g. /download)
+    rsync -avz --delete --exclude='/download' -e "$RSYNC_SSH" "$PROJECT_ROOT/dist/" "$SSH_USER@$FRONTEND_SSH_HOST:$FRONTEND_PATH/"
 
     # Generate and deploy nginx config for WASM MIME types + SPA routing
     log_info "Deploying nginx configuration (WASM support + SPA routing)..."
@@ -321,6 +326,10 @@ deploy_frontend() {
 
     # Enable site, validate config, and reload nginx
     run_ssh "$FRONTEND_SSH_HOST" "'ln -sf /etc/nginx/sites-available/$FRONTEND_HOST /etc/nginx/sites-enabled/$FRONTEND_HOST && nginx -t && systemctl reload nginx'"
+
+    # Re-apply SSL certificate (certbot modifies the nginx config in-place)
+    log_info "Re-applying SSL certificate via certbot..."
+    run_ssh "$FRONTEND_SSH_HOST" "'certbot --nginx -d $FRONTEND_HOST --non-interactive --agree-tos --redirect 2>&1 || true'"
 
     log_success "Frontend deployed to https://$FRONTEND_HOST"
 }

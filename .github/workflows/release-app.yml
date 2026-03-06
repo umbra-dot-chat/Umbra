@@ -244,9 +244,63 @@ jobs:
         env:
           EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
 
+  build-cli:
+    name: Build CLI ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-arm
+            os: macos-14
+            target: aarch64-apple-darwin
+            artifact: umbra-cli-macos-arm64
+          - platform: macos-intel
+            os: macos-14
+            target: x86_64-apple-darwin
+            artifact: umbra-cli-macos-x64
+          - platform: linux
+            os: ubuntu-latest
+            target: x86_64-unknown-linux-gnu
+            artifact: umbra-cli-linux-x64
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Install Linux dependencies
+        if: matrix.platform == 'linux'
+        run: sudo apt-get update && sudo apt-get install -y libssl-dev pkg-config
+
+      - name: Build CLI
+        run: cargo build --release --manifest-path packages/umbra-cli/Cargo.toml --target ${{ matrix.target }}
+
+      - name: Package CLI binary
+        run: |
+          mkdir -p cli-out
+          if [ "${{ matrix.platform }}" = "windows" ]; then
+            cp packages/umbra-cli/target/${{ matrix.target }}/release/umbra.exe cli-out/
+          else
+            cp packages/umbra-cli/target/${{ matrix.target }}/release/umbra cli-out/
+          fi
+          cd cli-out && tar czf ../${{ matrix.artifact }}.tar.gz *
+        shell: bash
+
+      - name: Upload CLI artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.artifact }}.tar.gz
+
   release:
     name: Create Release
-    needs: [build-web, build-desktop]
+    needs: [build-web, build-desktop, build-cli]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -278,6 +332,9 @@ jobs:
 
           # Flatten artifact directories — installer artifacts
           find artifacts -type f \( -name "*.dmg" -o -name "*.exe" -o -name "*.deb" -o -name "*.AppImage" \) -exec cp {} release/ \;
+
+          # CLI binaries
+          find artifacts -type f -name "umbra-cli-*.tar.gz" -exec cp {} release/ \;
 
           # Copy updater artifacts (.tar.gz for macOS/Linux, .nsis.zip for Windows)
           find artifacts -type f \( -name "*.tar.gz" -o -name "*.nsis.zip" \) ! -name "*.sig" -exec cp {} release/ \;
