@@ -2,6 +2,7 @@ import { BookOpenIcon, CheckIcon, PlusIcon, ShoppingBagIcon, UsersIcon, XIcon } 
 import {
   Avatar, AvatarGroup, Button,
   ConversationListItem,
+  GradientText,
   SearchInput,
   Sidebar, SidebarSection,
   Skeleton,
@@ -96,6 +97,7 @@ function ChatSidebarInner({
               fullWidth
               onSurface
               onClear={() => onSearchChange('')}
+              gradientBorder
             />
           </View>
         </SidebarSection>
@@ -203,7 +205,7 @@ function ChatSidebarInner({
                       variant="success"
                       size="xs"
                       fullWidth
-                      iconLeft={<CheckIcon size={12} color={theme.colors.text.inverse} />}
+                      iconLeft={<CheckIcon size={12} color={theme.colors.text.onAccent} />}
                       onPress={() => onAcceptInvite?.(invite.id)}
                     >
                       Accept
@@ -278,7 +280,7 @@ function ChatSidebarInner({
               </>
             ) : conversations.length === 0 ? (
               <View testID={TEST_IDS.SIDEBAR.EMPTY_STATE} style={{ alignItems: 'center', paddingVertical: 24 }}>
-                <Text size="sm" style={{ color: theme.colors.text.muted }}>No conversations yet</Text>
+                <GradientText animated speed={4000} style={{ fontSize: 13 }}>No conversations yet</GradientText>
               </View>
             ) : (
               conversations.map((c) => (

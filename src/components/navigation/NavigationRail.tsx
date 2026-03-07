@@ -29,6 +29,18 @@ const defaultCommunityIcon = require('@/assets/images/icon.png');
 // Constants
 // ---------------------------------------------------------------------------
 
+// Inject CSS keyframes for the indicator gradient animation (web only, once)
+const INDICATOR_KEYFRAMES_ID = 'umbra-indicator-gradient-keyframes';
+let indicatorKeyframesInjected = false;
+function injectIndicatorKeyframes(): void {
+  if (indicatorKeyframesInjected || typeof document === 'undefined') return;
+  indicatorKeyframesInjected = true;
+  const sheet = document.createElement('style');
+  sheet.id = INDICATOR_KEYFRAMES_ID;
+  sheet.textContent = `@keyframes umbra-indicator-gradient{0%{background-position:50% 0%}50%{background-position:50% 100%}100%{background-position:50% 0%}}`;
+  document.head.appendChild(sheet);
+}
+
 const RAIL_WIDTH = 64;
 const ICON_SIZE = 40;
 const ICON_RADIUS = 12;
@@ -142,7 +154,7 @@ export function NavigationRail({
       >
         <UmbraIcon
           size={22}
-          color={isHomeActive ? theme.colors.text.inverse : theme.colors.text.secondary}
+          color={isHomeActive ? theme.colors.text.onAccent : theme.colors.text.secondary}
         />
       </RailItem>
 
@@ -158,7 +170,7 @@ export function NavigationRail({
         >
           <FolderIcon
             size={22}
-            color={isFilesActive ? theme.colors.text.inverse : theme.colors.text.secondary}
+            color={isFilesActive ? theme.colors.text.onAccent : theme.colors.text.secondary}
           />
         </RailItem>
       )}
@@ -275,7 +287,7 @@ export function NavigationRail({
                     resizeMode="cover"
                   />
                 ) : (
-                  <Text size="sm" weight="bold" style={{ color: theme.colors.text.inverse }}>
+                  <Text size="sm" weight="bold" style={{ color: theme.colors.text.onAccent }}>
                     {(userDisplayName ?? '?').charAt(0).toUpperCase()}
                   </Text>
                 )}
@@ -345,6 +357,11 @@ function RailItem({ active, onPress, accentColor, theme, children, ringProgress,
   const { animatedValue: indicatorAnim, shouldRender: showIndicator } = useAnimatedToggle(active, { duration: 150 });
   const [hovered, setHovered] = useState(false);
 
+  // Inject CSS keyframes for the indicator gradient (web only)
+  useEffect(() => {
+    if (active && Platform.OS === 'web') injectIndicatorKeyframes();
+  }, [active]);
+
   // Mount spring animation
   const mountScale = useRef(new Animated.Value(animateMount ? 0.5 : 1)).current;
   useEffect(() => {
@@ -397,29 +414,41 @@ function RailItem({ active, onPress, accentColor, theme, children, ringProgress,
       {/* Active indicator pill on the left edge */}
       {showIndicator && (
         <Animated.View
-          style={[
-            {
-              position: 'absolute',
-              left: 0,
-              top: '50%',
-              marginTop: -16,
-              width: ACTIVE_INDICATOR_WIDTH,
-              height: 32,
-              borderTopRightRadius: ACTIVE_INDICATOR_WIDTH,
-              borderBottomRightRadius: ACTIVE_INDICATOR_WIDTH,
-              opacity: indicatorAnim,
-              transform: [{
-                scaleY: indicatorAnim.interpolate({
-                  inputRange: [0, 1],
-                  outputRange: [0.5, 1],
-                }),
-              }],
-            },
-            Platform.OS === 'web'
-              ? { background: 'linear-gradient(180deg, #8B5CF6, #EC4899, #3B82F6)' } as any
-              : { backgroundColor: theme.colors.text.primary },
-          ]}
-        />
+          style={{
+            position: 'absolute',
+            left: 0,
+            top: '50%',
+            marginTop: -16,
+            width: ACTIVE_INDICATOR_WIDTH,
+            height: 32,
+            borderTopRightRadius: ACTIVE_INDICATOR_WIDTH,
+            borderBottomRightRadius: ACTIVE_INDICATOR_WIDTH,
+            opacity: indicatorAnim,
+            transform: [{
+              scaleY: indicatorAnim.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0.5, 1],
+              }),
+            }],
+            overflow: 'hidden',
+          }}
+        >
+          <View
+            style={Platform.OS === 'web'
+              ? {
+                  width: '100%',
+                  height: '100%',
+                  backgroundImage: 'linear-gradient(180deg, #8B5CF6, #EC4899, #3B82F6, #8B5CF6)',
+                  backgroundSize: '100% 300%',
+                  animationName: 'umbra-indicator-gradient',
+                  animationDuration: '12000ms',
+                  animationTimingFunction: 'ease',
+                  animationIterationCount: 'infinite',
+                } as any
+              : { width: '100%', height: '100%', backgroundColor: theme.colors.text.primary }
+            }
+          />
+        </Animated.View>
       )}
 
       {/* Upload progress ring overlay */}

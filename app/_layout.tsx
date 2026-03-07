@@ -1,6 +1,6 @@
 import 'react-native-gesture-handler';
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
-import { View, useColorScheme } from 'react-native';
+import { View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Slot, useSegments, useRouter, useNavigationContainerRef } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -197,12 +197,9 @@ function AuthGate() {
 }
 
 export default function RootLayout() {
-  const systemColorScheme = useColorScheme();
-  const initialMode = systemColorScheme === 'dark' ? 'dark' : 'light';
-
   return (
     <SafeAreaProvider>
-      <WispProvider mode={initialMode}>
+      <WispProvider mode="light">
         <ToastProvider maxToasts={3}>
           <AuthProvider>
             <UmbraProviderWithSwitch>

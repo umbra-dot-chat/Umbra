@@ -1257,7 +1257,7 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
                     borderRadius: 6,
                   }}
                 >
-                  <RNText style={{ fontSize: 12, fontWeight: '600', color: theme.colors.text.inverse }}>
+                  <RNText style={{ fontSize: 12, fontWeight: '600', color: theme.colors.text.onAccent }}>
                     Claim Seat
                   </RNText>
                 </Pressable>

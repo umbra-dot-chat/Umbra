@@ -600,9 +600,15 @@ function MainLayoutInner() {
   const tauriTitleBarHeight = isTauriDesktop ? 28 : 0;
   const effectiveTopInset = Math.max(insets.top, tauriTitleBarHeight);
 
+  // When the install/update banner is visible it already accounts for the top
+  // inset, so the per-column safe area spacers should be skipped to avoid
+  // double spacing.
+  const [bannerVisible, setBannerVisible] = useState(false);
+  const showColumnInset = effectiveTopInset > 0 && !bannerVisible;
+
   return (
     <View style={{ flex: 1, backgroundColor: theme.colors.background.canvas }}>
-      <InstallBanner />
+      <InstallBanner topInset={effectiveTopInset} onVisibilityChange={setBannerVisible} />
       {/* Tauri overlay title bar: full-width drag region pinned to top */}
       {isTauriDesktop && (
         <div
@@ -720,8 +726,9 @@ function MainLayoutInner() {
         /* ─── Desktop: side-by-side layout ─── */
         <HStack gap={0} style={{ flex: 1 }}>
           <View style={{ flexDirection: 'column', width: 64 + sidebarWidth, flexShrink: 0 }}>
-            {/* Safe area header — spans rail + sidebar, same surface color */}
-            {effectiveTopInset > 0 && (
+            {/* Safe area header — spans rail + sidebar, same surface color.
+                Skipped when the update banner is visible (it handles the inset). */}
+            {showColumnInset && (
               <View style={{
                 height: effectiveTopInset,
                 backgroundColor: theme.colors.background.surface,
@@ -784,7 +791,7 @@ function MainLayoutInner() {
           </View>
           <ResizeHandle onResize={handleSidebarResize} />
           <View style={{ flex: 1 }}>
-            {effectiveTopInset > 0 && (
+            {showColumnInset && (
               <View style={{
                 height: effectiveTopInset,
                 backgroundColor: theme.colors.background.canvas,

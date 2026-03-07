@@ -299,7 +299,7 @@ export function AccountSwitcher({
                     <Text
                       size="sm"
                       weight="bold"
-                      style={{ color: tc.text.inverse }}
+                      style={{ color: tc.text.onAccent }}
                     >
                       {(account.displayName ?? '?').charAt(0).toUpperCase()}
                     </Text>
