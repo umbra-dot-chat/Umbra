@@ -37,6 +37,8 @@ export default function FriendsContent() {
         ]}
         testLinks={[
           { label: 'useFriends.test.ts', path: '__tests__/friends/useFriends.test.ts' },
+          { label: 'friend-request-flow.spec.ts', path: '__tests__/e2e/friends/friend-request-flow.spec.ts' },
+          { label: 'friend-actions.spec.ts', path: '__tests__/e2e/friends/friend-actions.spec.ts' },
           { label: 'key-rotation.spec.ts', path: '__tests__/e2e/settings/key-rotation.spec.ts' },
         ]}
       />
@@ -81,7 +83,9 @@ export default function FriendsContent() {
           { label: 'DiscoveryToggle.tsx', path: 'components/discovery/DiscoveryToggle.tsx' },
           { label: 'UsernameSettings.tsx', path: 'components/discovery/UsernameSettings.tsx' },
         ]}
-        testLinks={[]}
+        testLinks={[
+          { label: 'discovery.spec.ts', path: '__tests__/e2e/friends/discovery.spec.ts' },
+        ]}
       />
 
       <FeatureCard
@@ -142,6 +146,7 @@ export default function FriendsContent() {
         ]}
         testLinks={[
           { label: 'useFriends.test.ts', path: '__tests__/friends/useFriends.test.ts' },
+          { label: 'pending-tab.spec.ts', path: '__tests__/e2e/friends/pending-tab.spec.ts' },
         ]}
       />
 
@@ -198,6 +203,7 @@ export default function FriendsContent() {
         ]}
         testLinks={[
           { label: 'useFriends.test.ts', path: '__tests__/friends/useFriends.test.ts' },
+          { label: 'blocked-tab.spec.ts', path: '__tests__/e2e/friends/blocked-tab.spec.ts' },
         ]}
       />
 
@@ -238,11 +244,15 @@ export default function FriendsContent() {
         title="Test Coverage Details"
         accentColor="#22C55E"
         entries={[
-          { label: 'Total Tests', value: '53 tests across 1 file + 1 E2E spec' },
-          { label: 'useFriends.test.ts', value: '53 tests (includes key rotation)' },
-          { label: 'key-rotation E2E', value: '5 tests (Playwright)' },
-          { label: 'Mock Service', value: 'Full UmbraService mock' },
-          { label: 'Edge Cases', value: 'Timeout, rejection, offline, key rotation' },
+          { label: 'Unit Tests', value: '53 tests (useFriends.test.ts)' },
+          { label: 'E2E Playwright', value: '60 tests across 8 spec files' },
+          { label: 'friends-page.spec.ts', value: '9 tests (page navigation, layout)' },
+          { label: 'friend-request-flow.spec.ts', value: '10 tests (send, accept, decline)' },
+          { label: 'discovery.spec.ts', value: '17 tests (search, linked accounts)' },
+          { label: 'friend-validation.spec.ts', value: '4 tests (DID validation)' },
+          { label: 'pending/blocked/online tabs', value: '10 tests (tab UI, filtering)' },
+          { label: 'key-rotation.spec.ts', value: '5 tests (security key rotation)' },
+          { label: 'E2E iOS (Detox)', value: '80+ tests (friend flows on native iOS)' },
         ]}
       />
     </View>

@@ -216,7 +216,11 @@ export default function NetworkContent() {
         title="Test Coverage Details"
         accentColor="#22C55E"
         entries={[
-          { label: 'Total Tests', value: '25 tests across 1 file (useNetwork.test.ts)' },
+          { label: 'Unit Tests', value: '25 tests (useNetwork.test.ts)' },
+          { label: 'E2E Playwright', value: '5 tests (network-section.spec.ts)' },
+          { label: 'Sync Unit', value: '55 tests across 2 files (sync-context, sync-service)' },
+          { label: 'Sync E2E', value: '15 tests (sync-flow.spec.ts — relay sync flows)' },
+          { label: 'E2E iOS (Detox)', value: '95+ tests (two-device sync, relay connectivity)' },
         ]}
       />
     </View>

@@ -486,7 +486,9 @@ export default function CallingContent() {
         title="Test Coverage Details"
         accentColor="#22C55E"
         entries={[
-          { label: 'Status', value: '33 tests across 1 file (useCallSettings.test.ts)' },
+          { label: 'Unit Tests', value: '33 tests (useCallSettings.test.ts)' },
+          { label: 'E2E Playwright', value: '5 tests (audio-video-section.spec.ts)' },
+          { label: 'Covered Areas', value: 'Quality presets, codecs, noise suppression, device selection, video effects, filters' },
         ]}
       />
     </View>

@@ -191,7 +191,11 @@ export default function SecurityContent() {
         title="Test Coverage Details"
         accentColor="#22C55E"
         entries={[
-          { label: 'Total Tests', value: 'No Jest tests yet — Security features covered by identity tests indirectly' },
+          { label: 'Indirect Coverage', value: 'Crypto tested via identity + messaging tests' },
+          { label: 'auth-context.test.tsx', value: '54 tests (key derivation, PIN, auth flows)' },
+          { label: 'key-rotation.spec.ts', value: '5 E2E tests (Playwright — key rotation flow)' },
+          { label: 'edge-cases.test.ts', value: '31 tests (boundary conditions, error handling)' },
+          { label: 'decrypt-errors.spec.ts', value: '3 E2E tests (decryption error categories)' },
         ]}
       />
     </View>

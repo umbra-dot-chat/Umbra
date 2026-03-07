@@ -35,6 +35,9 @@ export default function GettingStartedContent() {
         ]}
         testLinks={[
           { label: 'umbra-context.test.tsx', path: '__tests__/identity/umbra-context.test.tsx' },
+          { label: 'auth-screen.spec.ts', path: '__tests__/e2e/identity/account-creation/auth-screen.spec.ts' },
+          { label: 'display-name.spec.ts', path: '__tests__/e2e/identity/account-creation/display-name.spec.ts' },
+          { label: 'completion.spec.ts', path: '__tests__/e2e/identity/account-creation/completion.spec.ts' },
         ]}
       />
 
@@ -59,7 +62,11 @@ export default function GettingStartedContent() {
           { label: 'kdf.rs', path: 'packages/umbra-core/src/crypto/kdf.rs' },
           { label: 'ImportWalletFlow.tsx', path: 'components/auth/ImportWalletFlow.tsx' },
         ]}
-        testLinks={[]}
+        testLinks={[
+          { label: 'recovery-phrase.spec.ts', path: '__tests__/e2e/identity/account-creation/recovery-phrase.spec.ts' },
+          { label: 'confirm-backup.spec.ts', path: '__tests__/e2e/identity/account-creation/confirm-backup.spec.ts' },
+          { label: 'account-import.spec.ts', path: '__tests__/e2e/identity/account-import.spec.ts' },
+        ]}
       />
 
       <FeatureCard
@@ -104,6 +111,8 @@ export default function GettingStartedContent() {
         ]}
         testLinks={[
           { label: 'auth-context.test.tsx', path: '__tests__/identity/auth-context.test.tsx' },
+          { label: 'pin-lock.spec.ts', path: '__tests__/e2e/identity/pin-lock.spec.ts' },
+          { label: 'security-pin.spec.ts', path: '__tests__/e2e/identity/account-creation/security-pin.spec.ts' },
         ]}
       />
 
@@ -145,6 +154,9 @@ export default function GettingStartedContent() {
         ]}
         testLinks={[
           { label: 'umbra-context.test.tsx', path: '__tests__/identity/umbra-context.test.tsx' },
+          { label: 'loading-splash.spec.ts', path: '__tests__/e2e/identity/loading-splash.spec.ts' },
+          { label: 'multi-account.spec.ts', path: '__tests__/e2e/identity/multi-account.spec.ts' },
+          { label: 'logout.spec.ts', path: '__tests__/e2e/identity/logout.spec.ts' },
         ]}
       />
 
@@ -184,10 +196,15 @@ export default function GettingStartedContent() {
         title="Test Coverage Details"
         accentColor="#22C55E"
         entries={[
-          { label: 'Total Tests', value: '65 tests across 2 files' },
-          { label: 'auth-context.test.tsx', value: '54 tests' },
-          { label: 'umbra-context.test.tsx', value: '11 tests' },
-          { label: 'Edge Cases', value: 'Invalid phrase, PIN lockout, recovery' },
+          { label: 'Unit Tests', value: '65 tests across 2 files' },
+          { label: 'auth-context.test.tsx', value: '54 tests (PIN, auth flows, multi-account)' },
+          { label: 'umbra-context.test.tsx', value: '11 tests (service init, loading)' },
+          { label: 'E2E Playwright', value: '83 tests across 13 spec files' },
+          { label: 'Account Creation', value: '35 tests (auth-screen, display-name, username, recovery-phrase, PIN, backup, completion)' },
+          { label: 'Account Import', value: '14 tests (restore from recovery phrase)' },
+          { label: 'PIN Lock', value: '14 tests (set, unlock, lockout)' },
+          { label: 'Multi-Account', value: '9 tests (add, switch accounts)' },
+          { label: 'E2E iOS (Detox)', value: '100+ tests across 17 files (full auth flow on native iOS)' },
         ]}
       />
     </View>

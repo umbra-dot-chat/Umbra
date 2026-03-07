@@ -38,6 +38,8 @@ export default function MessagingContent() {
         ]}
         testLinks={[
           { label: 'useMessages.test.ts', path: '__tests__/messaging/useMessages.test.ts' },
+          { label: 'sending-messages.spec.ts', path: '__tests__/e2e/messaging/sending-messages.spec.ts' },
+          { label: 'receiving-messages.spec.ts', path: '__tests__/e2e/messaging/receiving-messages.spec.ts' },
           { label: 'decrypt-errors.spec.ts', path: '__tests__/e2e/messaging/decrypt-errors.spec.ts' },
         ]}
       />
@@ -80,7 +82,9 @@ export default function MessagingContent() {
         sourceLinks={[
           { label: 'useMessages.ts', path: 'hooks/useMessages.ts' },
         ]}
-        testLinks={[]}
+        testLinks={[
+          { label: 'edit-delete-reply.spec.ts', path: '__tests__/e2e/messaging/edit-delete-reply.spec.ts' },
+        ]}
       />
 <FeatureCard
         icon={<TrashIcon size={16} color="#EF4444" />}
@@ -100,7 +104,9 @@ export default function MessagingContent() {
         sourceLinks={[
           { label: 'useMessages.ts', path: 'hooks/useMessages.ts' },
         ]}
-        testLinks={[]}
+        testLinks={[
+          { label: 'edit-delete-reply.spec.ts', path: '__tests__/e2e/messaging/edit-delete-reply.spec.ts' },
+        ]}
       />
 
       <FeatureCard
@@ -134,7 +140,9 @@ export default function MessagingContent() {
         sourceLinks={[
           { label: 'useMessages.ts', path: 'hooks/useMessages.ts' },
         ]}
-        testLinks={[]}
+        testLinks={[
+          { label: 'reactions-threads.spec.ts', path: '__tests__/e2e/messaging/reactions-threads.spec.ts' },
+        ]}
       />
 
       <FeatureCard
@@ -155,7 +163,9 @@ export default function MessagingContent() {
           { label: 'useMessages.ts', path: 'hooks/useMessages.ts' },
           { label: 'ChatArea.tsx', path: 'components/chat/ChatArea.tsx' },
         ]}
-        testLinks={[]}
+        testLinks={[
+          { label: 'reactions-threads.spec.ts', path: '__tests__/e2e/messaging/reactions-threads.spec.ts' },
+        ]}
       />
 
       <FeatureCard
@@ -189,7 +199,9 @@ export default function MessagingContent() {
           { label: 'ChatInput.tsx', path: 'components/chat/ChatInput.tsx' },
           { label: 'useMention.ts', path: 'hooks/useMention.ts' },
         ]}
-        testLinks={[]}
+        testLinks={[
+          { label: 'stickers-and-mentions.spec.ts', path: '__tests__/e2e/messaging/stickers-and-mentions.spec.ts' },
+        ]}
       />
 
       <FeatureCard
@@ -206,7 +218,10 @@ export default function MessagingContent() {
         sourceLinks={[
           { label: 'ChatInput.tsx', path: 'components/chat/ChatInput.tsx' },
         ]}
-        testLinks={[]}
+        testLinks={[
+          { label: 'emoji-picker.spec.ts', path: '__tests__/e2e/messaging/emoji-picker.spec.ts' },
+          { label: 'stickers-and-mentions.spec.ts', path: '__tests__/e2e/messaging/stickers-and-mentions.spec.ts' },
+        ]}
       />
 
       <FeatureCard
@@ -226,7 +241,12 @@ export default function MessagingContent() {
           { label: 'useFileTransfer.ts', path: 'hooks/useFileTransfer.ts' },
           { label: 'ChatInput.tsx', path: 'components/chat/ChatInput.tsx' },
         ]}
-        testLinks={[]}
+        testLinks={[
+          { label: 'file-attachments.spec.ts', path: '__tests__/e2e/messaging/file-attachments.spec.ts' },
+          { label: 'useFileTransfer.test.ts', path: '__tests__/files/useFileTransfer.test.ts' },
+          { label: 'useDmFiles.test.ts', path: '__tests__/files/useDmFiles.test.ts' },
+          { label: 'sendFileMessage.test.ts', path: '__tests__/files/sendFileMessage.test.ts' },
+        ]}
       />
 
       <FeatureCard
@@ -247,7 +267,11 @@ export default function MessagingContent() {
           { label: 'InlineMsgGroup.tsx', path: 'components/chat/InlineMsgGroup.tsx' },
           { label: 'ChatHeader.tsx', path: 'components/chat/ChatHeader.tsx' },
         ]}
-        testLinks={[]}
+        testLinks={[
+          { label: 'chat-header.spec.ts', path: '__tests__/e2e/messaging/chat-header.spec.ts' },
+          { label: 'display-modes.spec.ts', path: '__tests__/e2e/messaging/display-modes.spec.ts' },
+          { label: 'message-actions.spec.ts', path: '__tests__/e2e/messaging/message-actions.spec.ts' },
+        ]}
       />
 
       <TechSpec
@@ -303,11 +327,17 @@ export default function MessagingContent() {
         title="Test Coverage Details"
         accentColor="#22C55E"
         entries={[
-          { label: 'Total Tests', value: '75 tests across 3 files + 1 E2E spec' },
-          { label: 'useMessages', value: '56 tests (includes decrypt error categorization)' },
-          { label: 'useConversations', value: '12 tests' },
-          { label: 'messaging-context', value: '7 tests' },
-          { label: 'decrypt-errors E2E', value: '3 tests (Playwright)' },
+          { label: 'Unit Tests', value: '87 tests across 3 messaging files + 44 file tests' },
+          { label: 'useMessages.test.ts', value: '69 tests (send, edit, delete, reactions, threads)' },
+          { label: 'useConversations.test.ts', value: '12 tests (conversation state)' },
+          { label: 'messaging-context.test.tsx', value: '6 tests (context/state)' },
+          { label: 'File unit tests', value: '44 tests across 5 files (chunking, transfer, DM files)' },
+          { label: 'E2E Playwright', value: '158 tests across 15 spec files' },
+          { label: 'edit-delete-reply.spec.ts', value: '28 tests' },
+          { label: 'message-types.spec.ts', value: '19 tests' },
+          { label: 'reactions-threads.spec.ts', value: '18 tests' },
+          { label: 'emoji-picker.spec.ts', value: '15 tests' },
+          { label: 'E2E iOS (Detox)', value: '185+ tests (DM flows, two-device sync)' },
         ]}
       />
     </View>

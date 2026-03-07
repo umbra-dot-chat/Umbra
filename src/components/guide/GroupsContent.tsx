@@ -37,6 +37,7 @@ export default function GroupsContent() {
         ]}
         testLinks={[
           { label: 'useGroups.test.ts', path: '__tests__/groups/useGroups.test.ts' },
+          { label: 'create-group.spec.ts', path: '__tests__/e2e/groups/create-group.spec.ts' },
         ]}
       />
 
@@ -58,6 +59,7 @@ export default function GroupsContent() {
         ]}
         testLinks={[
           { label: 'useGroups.test.ts', path: '__tests__/groups/useGroups.test.ts' },
+          { label: 'group-messaging.spec.ts', path: '__tests__/e2e/groups/group-messaging.spec.ts' },
         ]}
       />
 
@@ -80,7 +82,10 @@ export default function GroupsContent() {
           { label: 'useGroups.ts', path: 'hooks/useGroups.ts' },
           { label: 'GroupMemberList.tsx', path: 'components/groups/GroupMemberList.tsx' },
         ]}
-        testLinks={[]}
+        testLinks={[
+          { label: 'group-members.spec.ts', path: '__tests__/e2e/groups/group-members.spec.ts' },
+          { label: 'group-invitations.spec.ts', path: '__tests__/e2e/groups/group-invitations.spec.ts' },
+        ]}
       />
 
       <FeatureCard
@@ -184,8 +189,14 @@ export default function GroupsContent() {
         title="Test Coverage Details"
         accentColor="#22C55E"
         entries={[
-          { label: 'Total Tests', value: '23 tests across 1 file' },
-          { label: 'useGroups.test.ts', value: '23 tests' },
+          { label: 'Unit Tests', value: '23 tests (useGroups.test.ts)' },
+          { label: 'E2E Playwright', value: '34 tests across 6 spec files' },
+          { label: 'create-group.spec.ts', value: '9 tests (dialog, creation flow)' },
+          { label: 'group-messaging.spec.ts', value: '5 tests (send in group)' },
+          { label: 'group-members.spec.ts', value: '5 tests (member management)' },
+          { label: 'group-invitations.spec.ts', value: '6 tests (invite workflow)' },
+          { label: 'group-file-attachments.spec.ts', value: '7 tests (file sharing)' },
+          { label: 'group-header.spec.ts', value: '2 tests (header UI)' },
         ]}
       />
     </View>

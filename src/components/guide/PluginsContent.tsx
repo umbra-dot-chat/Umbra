@@ -158,7 +158,8 @@ export default function PluginsContent() {
         title="Test Coverage Details"
         accentColor="#22C55E"
         entries={[
-          { label: 'Status', value: 'No Jest tests yet \u2014 Plugin system not yet covered by test suite' },
+          { label: 'Unit Tests', value: 'No Jest tests yet — plugin SDK not covered' },
+          { label: 'E2E Playwright', value: '2 tests (plugins-section.spec.ts — enable/disable)' },
         ]}
       />
     </View>

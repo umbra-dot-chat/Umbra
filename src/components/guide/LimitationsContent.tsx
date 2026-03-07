@@ -49,10 +49,10 @@ export default function LimitationsContent() {
           }}
         >
           Umbra is in active development with core messaging and calling features
-          stable and tested. The codebase includes 17 Jest test suites plus
-          Playwright E2E specs covering hooks, components, services, and
-          integration flows. See the test coverage breakdown for each section
-          in the sidebar.
+          stable and tested. The codebase includes 24 Jest unit test suites,
+          72 Playwright E2E specs, and 78 Detox iOS E2E test files — totaling
+          over 1,400 tests across three test frameworks. See the test coverage
+          breakdown for each section in the sidebar.
         </Text>
         <Pressable
           onPress={() => openLink('/tree/main/__tests__')}
@@ -164,14 +164,16 @@ export default function LimitationsContent() {
         title="Test Coverage by Area"
         accentColor="#0EA5E9"
         entries={[
-          { label: 'Security / Crypto', value: '95% (WASM + integration)' },
-          { label: 'Friends', value: '92% (hooks + flow)' },
-          { label: 'Messaging', value: '88% (6 test files)' },
-          { label: 'Identity', value: '85% (context + flow)' },
-          { label: 'Network', value: '82% (hooks + relay)' },
-          { label: 'Groups', value: '78% (hooks + flow)' },
-          { label: 'Calling', value: '75% (8 test files)' },
-          { label: 'Total Test Files', value: '45+' },
+          { label: 'Identity & Auth', value: '259+ tests (unit + E2E + iOS)' },
+          { label: 'Messaging', value: '472+ tests (unit + E2E + iOS)' },
+          { label: 'Settings', value: '464+ tests (unit + E2E + iOS)' },
+          { label: 'Navigation', value: '219+ tests (unit + E2E + iOS)' },
+          { label: 'Friends', value: '193+ tests (unit + E2E + iOS)' },
+          { label: 'Sync & Multi-Device', value: '165+ tests (unit + E2E + iOS)' },
+          { label: 'Groups', value: '57+ tests (unit + E2E)' },
+          { label: 'Files', value: '64+ tests (unit + E2E)' },
+          { label: 'Calling', value: '38+ tests (unit + E2E)' },
+          { label: 'Total Test Files', value: '196+ across 3 frameworks' },
         ]}
       />
 
@@ -183,9 +185,9 @@ export default function LimitationsContent() {
           { label: 'SFU Group Calls', value: 'Not implemented (7-50 peers)' },
           { label: 'Forward Secrecy', value: 'Static ECDH (no ratcheting yet)' },
           { label: 'Multi-Device Sync', value: 'Single device only' },
-          { label: 'Backup / Restore', value: 'Manual export only' },
           { label: 'Push Notifications', value: 'Not yet implemented' },
-          { label: 'Community Tests', value: 'Only permissions tested (8%)' },
+          { label: 'Community Tests', value: 'Only inline Rust permission tests' },
+          { label: 'Plugin Tests', value: 'No unit tests (2 E2E only)' },
         ]}
       />
     </View>

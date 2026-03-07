@@ -240,10 +240,18 @@ export default function DataManagementContent() {
         title="Test Coverage Details"
         accentColor="#22C55E"
         entries={[
-          { label: 'Total Tests', value: '76 tests across 2 files (auth-context.test.tsx, umbra-context.test.tsx)' },
-          { label: 'Backup Tests', value: '10 tests (useBackup.test.ts) + 4 E2E (account-backup.spec.ts)' },
-          { label: 'Instance Tests', value: '5 tests (useInstanceDetection.test.ts) + 2 E2E (multi-instance.spec.ts)' },
-          { label: 'Identity Card Tests', value: '8 tests (identityCardPdf.test.ts) + 3 E2E (identity-card.spec.ts)' },
+          { label: 'Unit Tests', value: '102 tests across 6 files' },
+          { label: 'auth-context.test.tsx', value: '54 tests (clear data, isolation)' },
+          { label: 'umbra-context.test.tsx', value: '11 tests (init, restore)' },
+          { label: 'useBackup.test.ts', value: '13 tests (backup/restore flow)' },
+          { label: 'useInstanceDetection.test.ts', value: '5 tests (multi-tab detection)' },
+          { label: 'identityCardPdf.test.ts', value: '8 tests (PDF generation)' },
+          { label: 'useStorageManager.test.ts', value: '11 tests (storage management)' },
+          { label: 'E2E Playwright', value: '14 tests across 4 spec files' },
+          { label: 'account-backup.spec.ts', value: '4 tests' },
+          { label: 'data-section.spec.ts', value: '5 tests (export/import)' },
+          { label: 'identity-card.spec.ts', value: '3 tests (PDF preview)' },
+          { label: 'multi-instance.spec.ts', value: '2 tests (tab detection)' },
         ]}
       />
     </View>
