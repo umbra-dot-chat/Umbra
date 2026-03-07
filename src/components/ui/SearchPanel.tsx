@@ -144,6 +144,7 @@ export function SearchPanel({ query, onQueryChange, onClose, conversationId, onR
       totalResults={results.length}
       onClose={onClose}
       onResultClick={handleResultClick}
+      gradientBorder
     />
   );
 }

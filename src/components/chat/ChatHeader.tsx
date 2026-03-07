@@ -23,9 +23,11 @@ export interface ChatHeaderProps {
   showFilesButton?: boolean;
   /** Mobile back navigation — returns to sidebar */
   onBack?: () => void;
+  /** Open group settings modal */
+  onGroupSettings?: () => void;
 }
 
-export function ChatHeader({ active, rightPanel, togglePanel, onShowProfile, onVoiceCall, onVideoCall, showCallButtons, showFilesButton, onBack }: ChatHeaderProps) {
+export function ChatHeader({ active, rightPanel, togglePanel, onShowProfile, onVoiceCall, onVideoCall, showCallButtons, showFilesButton, onBack, onGroupSettings }: ChatHeaderProps) {
   const { theme } = useTheme();
   const themeColors = theme.colors;
   const isMobile = useIsMobile();
@@ -78,11 +80,11 @@ export function ChatHeader({ active, rightPanel, togglePanel, onShowProfile, onV
         accessibilityLabel="Toggle members"
         iconLeft={<UsersIcon size={18} color={themeColors.text.secondary} />}
       />
-      {active?.group && (
+      {active?.group && onGroupSettings && (
         <Button
-          variant={rightPanel === 'settings' ? 'secondary' : 'tertiary'}
+          variant="tertiary"
           size="sm"
-          onPress={() => { togglePanel('settings'); setMobileMenuOpen(false); }}
+          onPress={() => { onGroupSettings(); setMobileMenuOpen(false); }}
           accessibilityLabel="Group settings"
           iconLeft={<SettingsIcon size={18} color={themeColors.text.secondary} />}
         />

@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { KeyboardAvoidingView, Platform, View, Image } from 'react-native';
+import { KeyboardAvoidingView, Platform, View, Image, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text, GradientText, useTheme } from '@coexist/wisp-react-native';
 import { TEST_IDS } from '@/constants/test-ids';
@@ -31,6 +31,7 @@ import { PendingAttachmentBar } from '@/components/chat/PendingAttachmentBar';
 import type { PendingAttachment } from '@/components/chat/PendingAttachmentBar';
 import { InputDialog } from '@/components/ui/InputDialog';
 import { ForwardDialog } from '@/components/chat/ForwardDialog';
+import { GroupSettingsDialog } from '@/components/groups/GroupSettingsDialog';
 import { useSettingsDialog } from '@/contexts/SettingsDialogContext';
 import { ResizeHandle } from '@/components/ui/ResizeHandle';
 import { useAllCustomEmoji } from '@/hooks/useAllCustomEmoji';
@@ -51,21 +52,24 @@ function EmptyConversation() {
   const { theme, mode } = useTheme();
   const isDark = mode === 'dark';
   const ghostSource = isDark ? ghostWhite : ghostBlack;
+  const { width } = useWindowDimensions();
+  const isCompact = width < 500;
+  const ghostSize = isCompact ? 160 : 275;
   return (
-    <View testID={TEST_IDS.MAIN.EMPTY_STATE} style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40 }}>
+    <View testID={TEST_IDS.MAIN.EMPTY_STATE} style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: isCompact ? 24 : 40 }}>
       <Image
         source={ghostSource}
-        style={{ width: 275, height: 275, marginBottom: 16 }}
+        style={{ width: ghostSize, height: ghostSize, marginBottom: 16 }}
         resizeMode="contain"
       />
-      <Text testID={TEST_IDS.MAIN.WELCOME_TEXT} size="display-sm" weight="bold" style={{ color: theme.colors.text.primary, marginBottom: 8 }}>
+      <Text testID={TEST_IDS.MAIN.WELCOME_TEXT} size={isCompact ? 'lg' : 'display-sm'} weight="bold" style={{ color: theme.colors.text.primary, marginBottom: 8 }}>
         Welcome to Umbra
       </Text>
       <GradientText
         colors={['#8B5CF6', '#EC4899', '#3B82F6', '#8B5CF6']}
         animated
-        speed={4000}
-        style={{ fontSize: 14, textAlign: 'center', maxWidth: 400, marginBottom: 16 } as any}
+        speed={10000}
+        style={{ fontSize: isCompact ? 13 : 14, textAlign: 'center', maxWidth: 400, marginBottom: 16 } as any}
       >
         Add a friend to start chatting. Your messages are end-to-end encrypted and delivered peer-to-peer.
       </GradientText>
@@ -195,12 +199,16 @@ export default function ChatPage() {
   // Edit mode state
   const [editingMessage, setEditingMessage] = useState<{ messageId: string; text: string } | null>(null);
 
+  // Group settings dialog state
+  const [groupSettingsOpen, setGroupSettingsOpen] = useState(false);
+
   // Forward dialog state
   const [forwardDialogOpen, setForwardDialogOpen] = useState(false);
   const [forwardMessageId, setForwardMessageId] = useState<string | null>(null);
 
   // Panel & search state
   const [searchQuery, setSearchQuery] = useState('');
+  const [scrollToMessageId, setScrollToMessageId] = useState<string | null>(null);
 
   // Custom hooks
   const { hoveredMessage, handleHoverIn, handleHoverOut } = useHoverMessage();
@@ -554,6 +562,7 @@ export default function ChatPage() {
           onVideoCall={handleVideoCall}
           showFilesButton={isDm && !!resolvedConversationId}
           onBack={clearActiveId}
+          onGroupSettings={activeConversation?.groupId ? () => setGroupSettingsOpen(true) : undefined}
         />
         <SlotRenderer slot="chat-header" props={{ conversationId: resolvedConversationId }} />
         {activeCall && activeCall.status !== 'incoming' && activeCall.conversationId === resolvedConversationId ? (
@@ -602,6 +611,8 @@ export default function ChatPage() {
           firstUnreadMessageId={firstUnreadMessageId}
           onFileDownload={handleFileDownload}
           activeUploads={activeUploadsMap}
+          scrollToMessageId={scrollToMessageId}
+          onScrollToComplete={() => setScrollToMessageId(null)}
         />
         <SlotRenderer slot="chat-toolbar" props={{ conversationId: resolvedConversationId }} />
         {pendingAttachment && (
@@ -653,13 +664,11 @@ export default function ChatPage() {
         onThreadReply={handleThreadReply}
         conversationId={resolvedConversationId}
         onSearchResultClick={(messageId) => {
-          // TODO: Scroll to the matched message in the chat view
-          console.log('[ChatPage] Search result clicked, message:', messageId);
+          setScrollToMessageId(messageId);
         }}
         onCreateFolder={isDm && resolvedConversationId ? handleCreateSharedFolder : undefined}
         onUploadFile={isDm && resolvedConversationId ? handleAttachment : undefined}
         panelContentWidth={panelContentWidth}
-        groupId={activeConversation?.groupId}
       />
       {/* Plugin right-panel slot removed — plugins use popup overlays instead */}
       <InputDialog
@@ -681,6 +690,12 @@ export default function ChatPage() {
           setForwardDialogOpen(false);
           setForwardMessageId(null);
         }}
+      />
+
+      <GroupSettingsDialog
+        open={groupSettingsOpen}
+        onClose={() => setGroupSettingsOpen(false)}
+        groupId={activeConversation?.groupId}
       />
     </View>
   );

@@ -188,11 +188,12 @@ export function ChatInput({
             onToggleEmoji();
           }}
           customEmojis={customEmojis}
-          relayUrl={relayUrl}
-          onGifSelect={(gif) => {
-            onGifSelect?.(gif);
-            onToggleEmoji();
-          }}
+          // GIFs disabled for now — omit relayUrl to hide the emoji/GIF tab bar
+          // relayUrl={relayUrl}
+          // onGifSelect={(gif) => {
+          //   onGifSelect?.(gif);
+          //   onToggleEmoji();
+          // }}
         />
       </AnimatedPresence>
       <View ref={inputWrapperRef} testID={TEST_IDS.INPUT.CONTAINER} style={{ padding: 12 }}>

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Platform, ScrollView, View, Pressable, Text as RNText } from 'react-native';
+import { Platform, ScrollView, View, Pressable, Text as RNText, Animated as RNAnimated } from 'react-native';
 import { TEST_IDS } from '@/constants/test-ids';
 import {
   Avatar, ChatBubble, Text, TypingIndicator, NewMessageDivider, useTheme,
@@ -60,6 +60,10 @@ export interface ChatAreaProps {
   onFileDownload?: (fileId: string, filename: string, mimeType: string) => Promise<void> | void;
   /** Active P2P uploads keyed by fileId — shows upload progress on sent file cards. */
   activeUploads?: Map<string, { progress: number }>;
+  /** When set, scroll to this message ID and briefly highlight it. */
+  scrollToMessageId?: string | null;
+  /** Called after the scroll-to animation completes (to reset the ID). */
+  onScrollToComplete?: () => void;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -298,6 +302,8 @@ export function ChatArea({
   firstUnreadMessageId,
   onFileDownload,
   activeUploads,
+  scrollToMessageId,
+  onScrollToComplete,
 }: ChatAreaProps) {
   const { theme } = useTheme();
   const themeColors = theme.colors;
@@ -355,6 +361,59 @@ export function ChatArea({
       scrollRef.current?.scrollToEnd({ animated: false });
     }
   }, []);
+
+  // ── Scroll-to-message + highlight ──
+  const messageRefs = useRef<Record<string, View | null>>({});
+  const [highlightedId, setHighlightedId] = useState<string | null>(null);
+  const highlightAnim = useRef(new RNAnimated.Value(0)).current;
+
+  useEffect(() => {
+    if (!scrollToMessageId) return;
+    const targetRef = messageRefs.current[scrollToMessageId];
+
+    const triggerHighlight = () => {
+      setHighlightedId(scrollToMessageId);
+      highlightAnim.setValue(1);
+      RNAnimated.timing(highlightAnim, {
+        toValue: 0,
+        duration: 2000,
+        useNativeDriver: false,
+      }).start(() => {
+        setHighlightedId(null);
+      });
+      onScrollToComplete?.();
+    };
+
+    if (Platform.OS === 'web') {
+      // On web, use DOM scrollIntoView for reliable behaviour
+      const node = targetRef as unknown as HTMLElement | null;
+      if (node && typeof node.scrollIntoView === 'function') {
+        node.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        triggerHighlight();
+      } else {
+        onScrollToComplete?.();
+      }
+    } else if (targetRef && scrollRef.current) {
+      targetRef.measureLayout(
+        scrollRef.current.getInnerViewRef() as any,
+        (_x: number, y: number) => {
+          scrollRef.current?.scrollTo({ y: Math.max(0, y - 80), animated: true });
+          triggerHighlight();
+        },
+        () => {
+          console.warn('[ChatArea] Could not find message to scroll to:', scrollToMessageId);
+          onScrollToComplete?.();
+        },
+      );
+    } else {
+      onScrollToComplete?.();
+    }
+  }, [scrollToMessageId]);
+
+  const highlightBg = highlightAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['transparent', themeColors.accent.primary + '22'],
+  });
 
   if (isLoading) {
     return <LoadingSkeleton />;
@@ -534,7 +593,16 @@ export function ChatArea({
             const threadCount = msg.threadReplyCount ?? 0;
 
             return (
-              <View key={msg.id}>
+              <RNAnimated.View
+                key={msg.id}
+                ref={(el: any) => { messageRefs.current[msg.id] = el; }}
+                style={highlightedId === msg.id ? {
+                  backgroundColor: highlightBg,
+                  borderRadius: 8,
+                  marginHorizontal: -4,
+                  paddingHorizontal: 4,
+                } : undefined}
+              >
                 <HoverBubble
                   id={msg.id}
                   align={inlineMode ? 'incoming' : (isOwn ? 'outgoing' : 'incoming')}
@@ -654,7 +722,7 @@ export function ChatArea({
                     </RNText>
                   </Pressable>
                 )}
-              </View>
+              </RNAnimated.View>
             );
           });
 
