@@ -31,7 +31,6 @@ import {
   KeyIcon,
   AlertTriangleIcon,
   LogOutIcon,
-  XIcon,
 } from '@/components/ui';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { useGroups } from '@/hooks/useGroups';
@@ -241,20 +240,6 @@ export function GroupSettingsPanel({ groupId, onClose }: GroupSettingsPanelProps
     container: {
       flex: 1,
     } as ViewStyle,
-    header: {
-      flexDirection: 'row' as const,
-      alignItems: 'center' as const,
-      justifyContent: 'space-between' as const,
-      paddingHorizontal: 16,
-      paddingVertical: 12,
-      borderBottomWidth: 1,
-      borderBottomColor: tc.border.subtle,
-    } as ViewStyle,
-    headerTitle: {
-      fontSize: 15,
-      fontWeight: '600' as const,
-      color: tc.text.primary,
-    } as TextStyle,
     content: {
       padding: 16,
     } as ViewStyle,
@@ -289,19 +274,6 @@ export function GroupSettingsPanel({ groupId, onClose }: GroupSettingsPanelProps
 
   return (
     <View style={styles.container}>
-      {/* ── Panel Header ── */}
-      <View style={styles.header}>
-        <HStack style={{ alignItems: 'center', gap: 8 }}>
-          <SettingsIcon size={16} color={tc.text.primary} />
-          <Text style={styles.headerTitle}>Group Settings</Text>
-        </HStack>
-        {onClose && (
-          <Pressable onPress={onClose} hitSlop={8} accessibilityLabel="Close settings">
-            <XIcon size={16} color={tc.text.secondary} />
-          </Pressable>
-        )}
-      </View>
-
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <VStack style={{ gap: 24, paddingBottom: 32 }}>
 
@@ -322,6 +294,7 @@ export function GroupSettingsPanel({ groupId, onClose }: GroupSettingsPanelProps
                     value={editName}
                     onChangeText={setEditName}
                     placeholder="Group name"
+                    gradientBorder
                   />
                 </SettingRow>
                 <SettingRow label="Description" vertical>
@@ -330,6 +303,7 @@ export function GroupSettingsPanel({ groupId, onClose }: GroupSettingsPanelProps
                     onChangeText={setEditDescription}
                     placeholder="What's this group about?"
                     numberOfLines={2}
+                    gradientBorder
                   />
                 </SettingRow>
                 <HStack style={{ gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>

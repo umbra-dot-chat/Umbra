@@ -833,6 +833,16 @@ function CommunityFilesSection() {
 // Section: Storage Usage
 // ---------------------------------------------------------------------------
 
+// Inject CSS keyframes for the storage bar gradient animation (web only, once)
+let storageBarKeyframesInjected = false;
+function injectStorageBarKeyframes(): void {
+  if (storageBarKeyframesInjected || Platform.OS !== 'web' || typeof document === 'undefined') return;
+  storageBarKeyframesInjected = true;
+  const style = document.createElement('style');
+  style.textContent = '@keyframes umbra-storage-bar-gradient{0%{background-position:0% 50%}100%{background-position:200% 50%}}';
+  document.head.appendChild(style);
+}
+
 function StorageSection() {
   const { theme } = useTheme();
   const {
@@ -847,6 +857,11 @@ function StorageSection() {
     formatBytes,
   } = useStorageManager();
   const [showRules, setShowRules] = useState(false);
+
+  // Inject CSS keyframes for animated gradient progress bar (web only)
+  useEffect(() => {
+    injectStorageBarKeyframes();
+  }, []);
 
   if (isLoading) {
     return (
@@ -906,18 +921,28 @@ function StorageSection() {
             borderRadius: 4,
             backgroundColor: theme.colors.border.subtle,
             marginBottom: 12,
+            overflow: 'hidden',
           }}
         >
           <View
             style={{
               height: 8,
               borderRadius: 4,
-              backgroundColor: usagePercent > 90
-                ? '#ef4444'
-                : usagePercent > 70
-                  ? '#f59e0b'
-                  : theme.colors.accent.primary,
               width: `${Math.min(usagePercent, 100)}%`,
+              ...(usagePercent > 90
+                ? { backgroundColor: '#ef4444' }
+                : usagePercent > 70
+                  ? { backgroundColor: '#f59e0b' }
+                  : Platform.OS === 'web'
+                    ? {
+                        backgroundImage: 'linear-gradient(90deg, #8B5CF6, #EC4899, #3B82F6, #8B5CF6)',
+                        backgroundSize: '200% 100%',
+                        animationName: 'umbra-storage-bar-gradient',
+                        animationDuration: '3000ms',
+                        animationTimingFunction: 'linear',
+                        animationIterationCount: 'infinite',
+                      } as any
+                    : { backgroundColor: '#8B5CF6' }),
             }}
           />
         </View>
@@ -974,7 +999,7 @@ function StorageSection() {
           onPress={() => setShowRules((prev) => !prev)}
           style={{ marginTop: 12, paddingVertical: 4 }}
         >
-          <Text size="xs" weight="medium" style={{ color: theme.colors.accent.primary }}>
+          <Text size="xs" weight="medium" style={{ color: theme.colors.text.secondary }}>
             {showRules ? 'Hide' : 'Show'} Auto-Cleanup Rules
           </Text>
         </Pressable>
