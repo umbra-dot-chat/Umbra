@@ -29,6 +29,7 @@
     "build:win": "./scripts/build-win.sh",
     "build:linux": "./scripts/build-linux.sh",
     "build:desktop:dev": "./scripts/build-desktop.sh --dev",
+    "build:desktop:dev-app": "./scripts/build-desktop.sh --dev-app",
     "build:desktop:debug": "./scripts/build-desktop.sh --debug",
     "build:desktop:clean": "./scripts/build-desktop.sh --clean",
     "test": "jest",

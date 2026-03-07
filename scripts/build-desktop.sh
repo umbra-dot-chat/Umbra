@@ -143,6 +143,38 @@ do_dev() {
     exec npx tauri dev
 }
 
+# ── Dev App build ────────────────────────────────────────────────────────
+
+do_dev_app() {
+    banner "Building Umbra Dev App"
+    check_prerequisites
+
+    info "This builds a standalone 'Umbra Dev' app that connects"
+    info "to your local Expo dev server (localhost:8081)."
+    info ""
+    info "After installing, run your dev server separately:"
+    info "  npx expo start --web --port 8081"
+    echo ""
+
+    cd "$ROOT_DIR"
+    npx tauri build --config src-tauri/tauri.dev.conf.json
+
+    echo ""
+    banner "Umbra Dev app built!"
+
+    local bundle_dir="$TAURI_DIR/target/release/bundle"
+    info "Output:"
+    if [ -d "$bundle_dir" ]; then
+        find "$bundle_dir" -maxdepth 2 \( -name "*.dmg" -o -name "*.app" -o -name "*.exe" -o -name "*.msi" -o -name "*.deb" -o -name "*.AppImage" -o -name "*.rpm" \) -exec ls -lh {} \; 2>/dev/null | while read -r line; do
+            echo "  $line"
+        done
+    fi
+    echo ""
+    info "Install the app, then start your Expo dev server."
+    info "The app will auto-connect when the server is ready."
+    echo ""
+}
+
 # ── Debug build (no bundle) ─────────────────────────────────────────────
 
 do_debug() {
@@ -223,6 +255,9 @@ main() {
         --dev|-d)
             do_dev
             ;;
+        --dev-app)
+            do_dev_app
+            ;;
         --debug)
             do_debug
             ;;
@@ -252,6 +287,7 @@ main() {
             echo ""
             echo "Options:"
             echo "  --dev, -d         Dev mode with hot-reload"
+            echo "  --dev-app         Build installable 'Umbra Dev' app (connects to local Expo server)"
             echo "  --debug           Debug build (no installer bundle)"
             echo "  --clean, -c       Clean build artifacts"
             echo "  --mac, -m         macOS Apple Silicon (.dmg + .app)"

@@ -26,10 +26,20 @@ pub fn run() {
             let handle = app.handle().clone();
             let handle2 = handle.clone();
 
+            let title = app.config().product_name.clone().unwrap_or_else(|| "Umbra".into());
+
             // Build the main window+webview manually so we can attach navigation handlers.
             // The window config was removed from tauri.conf.json to enable this.
-            let mut builder = tauri::WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
-                .title("Umbra")
+            // "Umbra Dev" builds load directly from the local Expo dev server so that
+            // hot-module-replacement works without a static-HTML redirect hop.
+            let url = if title == "Umbra Dev" {
+                WebviewUrl::External("http://localhost:8081".parse().unwrap())
+            } else {
+                WebviewUrl::default()
+            };
+
+            let mut builder = tauri::WebviewWindowBuilder::new(app, "main", url)
+                .title(&title)
                 .inner_size(1280.0, 800.0)
                 .resizable(true)
                 .fullscreen(false)
