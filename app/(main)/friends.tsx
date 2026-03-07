@@ -4,6 +4,8 @@ import {
   Tabs, TabList, Tab, TabPanel,
   Text,
   Button,
+  Card,
+  GradientBorder,
   useTheme,
   Avatar,
   Input,
@@ -21,7 +23,7 @@ import { UsersIcon, MessageIcon, MoreIcon, UserCheckIcon, QrCodeIcon, GlobeIcon,
 import { useFriends } from '@/hooks/useFriends';
 import { useConversations } from '@/hooks/useConversations';
 import { useActiveConversation } from '@/contexts/ActiveConversationContext';
-import { ProfileCard } from '@/components/friends/ProfileCard';
+
 import { HelpIndicator } from '@/components/ui/HelpIndicator';
 import { HelpText, HelpHighlight, HelpListItem } from '@/components/ui/HelpContent';
 import { FriendSuggestionCard } from '@/components/discovery/FriendSuggestionCard';
@@ -168,6 +170,8 @@ export default function FriendsPage() {
   const [usernameSearching, setUsernameSearching] = useState(false);
   const [usernameSearchError, setUsernameSearchError] = useState<string | null>(null);
   const usernameTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [showAllUsernameResults, setShowAllUsernameResults] = useState(false);
+  const [showAllPlatformResults, setShowAllPlatformResults] = useState(false);
 
   // Reset search state when switching platforms
   const handlePlatformChange = useCallback((platform: string) => {
@@ -176,10 +180,12 @@ export default function FriendsPage() {
     setPlatformResults([]);
     setPlatformSearchError(null);
     setPlatformSearching(false);
+    setShowAllPlatformResults(false);
     setUsernameQuery('');
     setUsernameResults([]);
     setUsernameSearchError(null);
     setUsernameSearching(false);
+    setShowAllUsernameResults(false);
     if (searchTimeoutRef.current) {
       clearTimeout(searchTimeoutRef.current);
     }
@@ -204,6 +210,7 @@ export default function FriendsPage() {
     }
 
     setPlatformSearching(true);
+    setShowAllPlatformResults(false);
     searchTimeoutRef.current = setTimeout(async () => {
       try {
         // searchPlatform is guaranteed not to be 'umbra' here (guarded in JSX)
@@ -249,6 +256,7 @@ export default function FriendsPage() {
     }
 
     setUsernameSearching(true);
+    setShowAllUsernameResults(false);
     usernameTimeoutRef.current = setTimeout(async () => {
       try {
         // Auto-detect: if query contains '#', try exact lookup first
@@ -541,7 +549,7 @@ export default function FriendsPage() {
         {/* ─── All Friends ─── */}
         <TabPanel value="all" style={{ flex: 1 }}>
           <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }} keyboardShouldPersistTaps="handled">
-            <ProfileCard style={{ marginBottom: 12 }} />
+
             <View style={{ marginBottom: 16 }}>
               {/* Platform selector */}
               <View style={{ marginBottom: 10 }}>
@@ -590,21 +598,32 @@ export default function FriendsPage() {
                     </Text>
                   )}
 
-                  {usernameResults.length > 0 && (
-                    <View style={{ gap: 8, marginTop: 10 }}>
-                      {usernameResults.map((result) => (
-                        <FriendSuggestionCard
-                          key={result.did}
-                          umbraDid={result.did}
-                          platform="umbra"
-                          platformUsername={result.username}
-                          onAddFriend={() => handleAddFromSearch(result.did)}
-                          onDismiss={() => setUsernameResults((prev) => prev.filter((r) => r.did !== result.did))}
-                          adding={addingDid === result.did}
-                        />
-                      ))}
-                    </View>
-                  )}
+                  {usernameResults.length > 0 && (() => {
+                    const visible = showAllUsernameResults ? usernameResults : usernameResults.slice(0, 5);
+                    const hasMore = usernameResults.length > 5 && !showAllUsernameResults;
+                    return (
+                      <GradientBorder radius={12} width={1} style={{ marginTop: 10 }}>
+                        <Card variant="filled" padding="sm" style={{ borderRadius: 12 }}>
+                          {visible.map((result) => (
+                            <FriendSuggestionCard
+                              key={result.did}
+                              umbraDid={result.did}
+                              platform="umbra"
+                              platformUsername={result.username}
+                              onAddFriend={() => handleAddFromSearch(result.did)}
+                              onDismiss={() => setUsernameResults((prev) => prev.filter((r) => r.did !== result.did))}
+                              adding={addingDid === result.did}
+                            />
+                          ))}
+                          {hasMore && (
+                            <Pressable onPress={() => setShowAllUsernameResults(true)} style={{ paddingVertical: 6, alignItems: 'center' }}>
+                              <Text size="xs" color="accent">Show all {usernameResults.length} results</Text>
+                            </Pressable>
+                          )}
+                        </Card>
+                      </GradientBorder>
+                    );
+                  })()}
 
                   {addFriendFeedback.state !== 'idle' && addFriendFeedback.message && (
                     <Text
@@ -658,21 +677,32 @@ export default function FriendsPage() {
                     </Text>
                   )}
 
-                  {platformResults.length > 0 && (
-                    <View style={{ gap: 8, marginTop: 10 }}>
-                      {platformResults.map((result) => (
-                        <FriendSuggestionCard
-                          key={result.did}
-                          umbraDid={result.did}
-                          platform={searchPlatform}
-                          platformUsername={result.username}
-                          onAddFriend={() => handleAddFromSearch(result.did)}
-                          onDismiss={() => setPlatformResults((prev) => prev.filter((r) => r.did !== result.did))}
-                          adding={addingDid === result.did}
-                        />
-                      ))}
-                    </View>
-                  )}
+                  {platformResults.length > 0 && (() => {
+                    const visible = showAllPlatformResults ? platformResults : platformResults.slice(0, 5);
+                    const hasMore = platformResults.length > 5 && !showAllPlatformResults;
+                    return (
+                      <GradientBorder radius={12} width={1} style={{ marginTop: 10 }}>
+                        <Card variant="filled" padding="sm" style={{ borderRadius: 12 }}>
+                          {visible.map((result) => (
+                            <FriendSuggestionCard
+                              key={result.did}
+                              umbraDid={result.did}
+                              platform={searchPlatform}
+                              platformUsername={result.username}
+                              onAddFriend={() => handleAddFromSearch(result.did)}
+                              onDismiss={() => setPlatformResults((prev) => prev.filter((r) => r.did !== result.did))}
+                              adding={addingDid === result.did}
+                            />
+                          ))}
+                          {hasMore && (
+                            <Pressable onPress={() => setShowAllPlatformResults(true)} style={{ paddingVertical: 6, alignItems: 'center' }}>
+                              <Text size="xs" color="accent">Show all {platformResults.length} results</Text>
+                            </Pressable>
+                          )}
+                        </Card>
+                      </GradientBorder>
+                    );
+                  })()}
 
                   {/* Feedback message for add actions */}
                   {addFriendFeedback.state !== 'idle' && addFriendFeedback.message && (
@@ -735,136 +765,6 @@ export default function FriendsPage() {
         {/* ─── Pending ─── */}
         <TabPanel value="pending" style={{ flex: 1 }}>
           <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }} keyboardShouldPersistTaps="handled">
-            <View style={{ marginBottom: 16 }}>
-              {/* Platform selector */}
-              <View style={{ marginBottom: 10 }}>
-                <Text size="xs" color="tertiary" style={{ marginBottom: 6 }}>Search on</Text>
-                <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                  <SegmentedControl
-                    options={SEARCH_PLATFORM_OPTIONS}
-                    value={searchPlatform}
-                    onChange={handlePlatformChange}
-                    size="sm"
-                  />
-                </ScrollView>
-              </View>
-
-              {/* Umbra: Username + DID search */}
-              {searchPlatform === 'umbra' && (
-                <View>
-                  <Input
-                    value={usernameQuery}
-                    onChangeText={handleUsernameSearch}
-                    placeholder="Search by username, tag, or DID"
-                    size="md"
-                    fullWidth
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    gradientBorder
-                  />
-
-                  {usernameSearching && (
-                    <View style={{ alignItems: 'center', paddingVertical: 12 }}>
-                      <Spinner size="sm" />
-                    </View>
-                  )}
-
-                  {usernameSearchError && (
-                    <Text size="xs" style={{ color: theme.colors.status.danger, marginTop: 8 }}>
-                      {usernameSearchError}
-                    </Text>
-                  )}
-
-                  {!usernameSearching && usernameQuery.length >= 2 && usernameResults.length === 0 && !usernameSearchError && !usernameQuery.trim().startsWith('did:') && (
-                    <Text size="sm" color="muted" style={{ textAlign: 'center', paddingVertical: 12 }}>
-                      No users found matching "{usernameQuery}"
-                    </Text>
-                  )}
-
-                  {usernameResults.length > 0 && (
-                    <View style={{ gap: 8, marginTop: 10 }}>
-                      {usernameResults.map((result) => (
-                        <FriendSuggestionCard
-                          key={result.did}
-                          umbraDid={result.did}
-                          platform="umbra"
-                          platformUsername={result.username}
-                          onAddFriend={() => handleAddFromSearch(result.did)}
-                          onDismiss={() => setUsernameResults((prev) => prev.filter((r) => r.did !== result.did))}
-                          adding={addingDid === result.did}
-                        />
-                      ))}
-                    </View>
-                  )}
-
-                  {addFriendFeedback.state !== 'idle' && addFriendFeedback.message && (
-                    <Text
-                      size="xs"
-                      style={{
-                        marginTop: 8,
-                        color: addFriendFeedback.state === 'success'
-                          ? theme.colors.status.success
-                          : addFriendFeedback.state === 'error'
-                            ? theme.colors.status.danger
-                            : theme.colors.text.muted,
-                      }}
-                    >
-                      {addFriendFeedback.message}
-                    </Text>
-                  )}
-                </View>
-              )}
-
-              {searchPlatform !== 'umbra' && (
-                <View>
-                  <Input
-                    value={platformQuery}
-                    onChangeText={handlePlatformSearch}
-                    placeholder={`Search by ${PLATFORM_LABELS[searchPlatform]} username...`}
-                    size="md"
-                    fullWidth
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    gradientBorder
-                  />
-
-                  {platformSearching && (
-                    <View style={{ alignItems: 'center', paddingVertical: 16 }}>
-                      <Spinner size="sm" />
-                    </View>
-                  )}
-
-                  {platformSearchError && (
-                    <Text size="xs" style={{ color: theme.colors.status.danger, marginTop: 8 }}>
-                      {platformSearchError}
-                    </Text>
-                  )}
-
-                  {!platformSearching && platformQuery.length >= 2 && platformResults.length === 0 && !platformSearchError && (
-                    <Text size="sm" color="muted" style={{ textAlign: 'center', paddingVertical: 16 }}>
-                      No Umbra users found with that {PLATFORM_LABELS[searchPlatform]} username
-                    </Text>
-                  )}
-
-                  {platformResults.length > 0 && (
-                    <View style={{ gap: 8, marginTop: 10 }}>
-                      {platformResults.map((result) => (
-                        <FriendSuggestionCard
-                          key={result.did}
-                          umbraDid={result.did}
-                          platform={searchPlatform}
-                          platformUsername={result.username}
-                          onAddFriend={() => handleAddFromSearch(result.did)}
-                          onDismiss={() => setPlatformResults((prev) => prev.filter((r) => r.did !== result.did))}
-                          adding={addingDid === result.did}
-                        />
-                      ))}
-                    </View>
-                  )}
-                </View>
-              )}
-            </View>
-
             <FriendSection
               title="Incoming"
               count={incomingRequests.length}

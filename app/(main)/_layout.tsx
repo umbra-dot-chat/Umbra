@@ -225,9 +225,9 @@ function MainLayoutInner() {
 
   // Build a DID → friend map for efficient lookups, enriched with relay presence
   const friendMap = useMemo(() => {
-    const map: Record<string, { displayName: string; online?: boolean }> = {};
+    const map: Record<string, { displayName: string; online?: boolean; avatar?: string }> = {};
     for (const f of friends) {
-      map[f.did] = { displayName: f.displayName, online: onlineDids.has(f.did) };
+      map[f.did] = { displayName: f.displayName, online: onlineDids.has(f.did), avatar: f.avatar };
     }
     return map;
   }, [friends, onlineDids]);
@@ -274,6 +274,7 @@ function MainLayoutInner() {
         time: formatRelativeTime(c.lastMessageAt),
         unread: c.unreadCount,
         online: friend?.online,
+        avatar: friend?.avatar,
       };
     });
   }, [conversations, friendMap, groupMap, lastMessages, onlineDids]);

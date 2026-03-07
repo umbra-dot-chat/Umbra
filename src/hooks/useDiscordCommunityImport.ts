@@ -31,11 +31,14 @@ import { mapDiscordToUmbra, validateImportStructure, getAvatarUrl, snowflakeToTi
 const RELAY_BASE_URL = process.env.EXPO_PUBLIC_RELAY_URL || 'https://relay.umbra.chat';
 
 /**
- * Open a URL in the system browser via Tauri shell plugin.
+ * Open a URL in the system browser.
+ *
+ * On Tauri, `window.open()` is intercepted by the Rust `on_new_window` handler
+ * which opens the URL in the default system browser via `tauri-plugin-shell`.
+ * This avoids needing the `@tauri-apps/plugin-shell` JS npm package.
  */
-async function tauriShellOpen(url: string): Promise<void> {
-  const { open } = await (new Function('m', 'return import(m)') as (m: string) => Promise<any>)('@tauri-apps/plugin-shell');
-  await open(url);
+function tauriShellOpen(url: string): void {
+  window.open(url, '_blank');
 }
 
 /**

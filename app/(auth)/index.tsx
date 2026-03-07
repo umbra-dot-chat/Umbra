@@ -720,8 +720,9 @@ export default function AuthScreen() {
       {!!pinDialogAccount && (
         <PinLockScreen
           onVerify={handlePinVerify}
-          subtitle={`Enter your PIN to sign in as ${pinDialogAccount.displayName}`}
+          subtitle="Enter your PIN to sign in"
           onBack={handlePinDialogClose}
+          accountName={pinDialogAccount.displayName}
         />
       )}
     </View>

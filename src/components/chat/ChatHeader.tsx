@@ -11,10 +11,10 @@ import { SearchIcon, PinIcon, UsersIcon, PhoneIcon, VideoIcon, FolderIcon, Arrow
 import { useIsMobile } from '@/hooks/useIsMobile';
 
 export interface ChatHeaderProps {
-  active: { name: string; online?: boolean; group?: string[]; memberCount?: number } | undefined;
+  active: { name: string; online?: boolean; group?: string[]; memberCount?: number; avatar?: string } | undefined;
   rightPanel: RightPanel;
   togglePanel: (panel: NonNullable<RightPanel>) => void;
-  onShowProfile: (name: string, event: any, status?: 'online' | 'idle' | 'offline') => void;
+  onShowProfile: (name: string, event: any, status?: 'online' | 'idle' | 'offline', avatar?: string) => void;
   onVoiceCall?: () => void;
   onVideoCall?: () => void;
   /** Whether to show call buttons */
@@ -153,8 +153,8 @@ export function ChatHeader({ active, rightPanel, togglePanel, onShowProfile, onV
                   ))}
                 </AvatarGroup>
               ) : (
-                <Pressable testID={TEST_IDS.CHAT.HEADER_AVATAR} onPress={(e) => onShowProfile(active.name, e, active.online ? 'online' : 'offline')}>
-                  <Avatar name={active.name} size="sm" status={active.online ? 'online' : undefined} />
+                <Pressable testID={TEST_IDS.CHAT.HEADER_AVATAR} onPress={(e) => onShowProfile(active.name, e, active.online ? 'online' : 'offline', active.avatar)}>
+                  <Avatar name={active.name} src={active.avatar} size="sm" status={active.online ? 'online' : undefined} />
                 </Pressable>
               )
             )}
@@ -268,9 +268,9 @@ export function ChatHeader({ active, rightPanel, togglePanel, onShowProfile, onV
             ) : (
               <Pressable
                 testID={TEST_IDS.CHAT.HEADER_AVATAR}
-                onPress={(e) => onShowProfile(active.name, e, active.online ? 'online' : 'offline')}
+                onPress={(e) => onShowProfile(active.name, e, active.online ? 'online' : 'offline', active.avatar)}
               >
-                <Avatar name={active.name} size="sm" status={active.online ? 'online' : undefined} />
+                <Avatar name={active.name} src={active.avatar} size="sm" status={active.online ? 'online' : undefined} />
               </Pressable>
             )
           )}

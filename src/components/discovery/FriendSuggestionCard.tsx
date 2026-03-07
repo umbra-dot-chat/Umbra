@@ -1,13 +1,11 @@
 /**
- * FriendSuggestionCard - Show discovered friends from other platforms
- *
- * Displays a friend suggestion with platform info and action buttons.
+ * FriendSuggestionCard - Compact single-row search result for adding friends.
  */
 
 import React from 'react';
 import { View, Pressable } from 'react-native';
 import type { ViewStyle } from 'react-native';
-import { HStack, VStack, Text, Button, Card, Avatar, Badge, useTheme } from '@coexist/wisp-react-native';
+import { Text, Button, Avatar, useTheme } from '@coexist/wisp-react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
 
 import type { DiscoveryPlatform as Platform, FriendSuggestion } from '@umbra/service';
@@ -53,41 +51,6 @@ function XCloseIcon({ size = 18, color }: { size?: number; color: string }) {
   );
 }
 
-function UsersIcon({ size = 12, color }: { size?: number; color: string }) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <Path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" />
-      <Circle cx={9} cy={7} r={4} />
-      <Path d="M22 21v-2a4 4 0 0 0-3-3.87" />
-      <Path d="M16 3.13a4 4 0 0 1 0 7.75" />
-    </Svg>
-  );
-}
-
-export interface FriendSuggestionCardProps {
-  /** The suggested friend's Umbra DID. */
-  umbraDid: string;
-  /** The suggested friend's Umbra username (if known). */
-  umbraUsername?: string;
-  /** The platform where they were found (includes 'umbra' for username search). */
-  platform: SearchablePlatform;
-  /** Their username on that platform. */
-  platformUsername: string;
-  /** Optional mutual servers/groups. */
-  mutualServers?: string[];
-  /** Called when user wants to add this friend. */
-  onAddFriend: () => void;
-  /** Called when user wants to dismiss this suggestion. */
-  onDismiss: () => void;
-  /** Whether the add friend action is in progress. */
-  adding?: boolean;
-  /** Custom style for the container. */
-  style?: ViewStyle;
-}
-
-/**
- * Get the icon component for a platform.
- */
 function UmbraIcon({ size = 16, color }: { size?: number; color: string }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
@@ -119,31 +82,7 @@ function PlatformIcon({
   }
 }
 
-/**
- * Get the display name for a platform.
- */
-function getPlatformName(platform: SearchablePlatform): string {
-  switch (platform) {
-    case 'discord':
-      return 'Discord';
-    case 'github':
-      return 'GitHub';
-    case 'steam':
-      return 'Steam';
-    case 'bluesky':
-      return 'Bluesky';
-    case 'xbox':
-      return 'Xbox';
-    case 'umbra':
-      return 'Umbra';
-    default:
-      return platform;
-  }
-}
-
-/**
- * Platform colors for branding.
- */
+/** Platform colors for branding. */
 const PLATFORM_COLORS: Record<SearchablePlatform, string> = {
   discord: '#5865F2',
   github: '#24292F',
@@ -152,6 +91,27 @@ const PLATFORM_COLORS: Record<SearchablePlatform, string> = {
   xbox: '#107C10',
   umbra: '#6366f1',
 };
+
+export interface FriendSuggestionCardProps {
+  /** The suggested friend's Umbra DID. */
+  umbraDid: string;
+  /** The suggested friend's Umbra username (if known). */
+  umbraUsername?: string;
+  /** The platform where they were found (includes 'umbra' for username search). */
+  platform: SearchablePlatform;
+  /** Their username on that platform. */
+  platformUsername: string;
+  /** Optional mutual servers/groups. */
+  mutualServers?: string[];
+  /** Called when user wants to add this friend. */
+  onAddFriend: () => void;
+  /** Called when user wants to dismiss this suggestion. */
+  onDismiss: () => void;
+  /** Whether the add friend action is in progress. */
+  adding?: boolean;
+  /** Custom style for the container. */
+  style?: ViewStyle;
+}
 
 export function FriendSuggestionCard({
   umbraDid,
@@ -165,97 +125,60 @@ export function FriendSuggestionCard({
   style,
 }: FriendSuggestionCardProps) {
   const { theme } = useTheme();
-
-  // Safe fallback colors
-  const textPrimary = theme?.colors?.text?.primary ?? '#1f2937';
   const textMuted = theme?.colors?.text?.muted ?? '#94a3b8';
-
-  const platformBadgeStyle: ViewStyle = {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: 6,
-    backgroundColor: `${PLATFORM_COLORS[platform]}20`,
-  };
+  const displayName = umbraUsername ?? platformUsername;
 
   return (
-    <Card variant="outlined" padding="md" style={style}>
-      <HStack gap="md" style={{ alignItems: 'flex-start' }}>
-        {/* Avatar */}
-        <Avatar
-          name={umbraUsername ?? platformUsername}
-          size="lg"
-        />
+    <View
+      style={[
+        {
+          flexDirection: 'row',
+          alignItems: 'center',
+          gap: 10,
+          paddingVertical: 6,
+          paddingHorizontal: 10,
+        },
+        style,
+      ]}
+    >
+      {/* Avatar */}
+      <Avatar name={displayName} size="sm" />
 
-        {/* Content */}
-        <VStack gap="sm" style={{ flex: 1 }}>
-          {/* Name and platform badge */}
-          <HStack gap="sm" style={{ alignItems: 'center', flexWrap: 'wrap' }}>
-            <Text size="md" weight="semibold">
-              {umbraUsername ?? platformUsername}
-            </Text>
+      {/* Name + platform badge */}
+      <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 0 }}>
+        <Text size="sm" weight="medium" numberOfLines={1} style={{ flexShrink: 1 }}>
+          {displayName}
+        </Text>
 
-            <View style={platformBadgeStyle}>
-              <PlatformIcon
-                platform={platform}
-                size={12}
-                color={PLATFORM_COLORS[platform]}
-              />
-              <Text
-                size="xs"
-                weight="medium"
-                style={{ color: PLATFORM_COLORS[platform] }}
-              >
-                {platformUsername}
-              </Text>
-            </View>
-          </HStack>
-
-          {/* Mutual servers/groups */}
-          {mutualServers && mutualServers.length > 0 && (
-            <HStack gap="xs" style={{ alignItems: 'center' }}>
-              <UsersIcon size={12} color={textMuted} />
-              <Text size="xs" color="muted">
-                {mutualServers.length} mutual server
-                {mutualServers.length > 1 ? 's' : ''}
-              </Text>
-            </HStack>
-          )}
-
-          {/* Discovery source */}
-          <Text size="xs" color="muted">
-            Found via {getPlatformName(platform)}
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, backgroundColor: `${PLATFORM_COLORS[platform]}18`, flexShrink: 0 }}>
+          <PlatformIcon platform={platform} size={10} color={PLATFORM_COLORS[platform]} />
+          <Text size="xs" weight="medium" style={{ color: PLATFORM_COLORS[platform] }}>
+            {platform !== 'umbra' ? platformUsername : 'Umbra'}
           </Text>
-        </VStack>
+        </View>
+      </View>
 
-        {/* Dismiss button */}
-        <Pressable
-          onPress={onDismiss}
-          style={({ pressed }) => ({
-            opacity: pressed ? 0.5 : 1,
-            padding: 4,
-          })}
-          accessibilityLabel="Dismiss suggestion"
-          accessibilityRole="button"
-        >
-          <XCloseIcon size={18} color={textMuted} />
-        </Pressable>
-      </HStack>
-
-      {/* Action button */}
+      {/* Add button */}
       <Button
         variant="secondary"
-        size="sm"
+        size="xs"
         onPress={onAddFriend}
         disabled={adding}
-        style={{ marginTop: 12 }}
-        iconLeft={<UserPlusIcon size={16} color={textPrimary} />}
+        iconLeft={<UserPlusIcon size={12} color={theme?.colors?.text?.primary ?? '#1f2937'} />}
       >
-        {adding ? 'Sending...' : 'Add Friend'}
+        {adding ? 'Sending...' : 'Add'}
       </Button>
-    </Card>
+
+      {/* Dismiss */}
+      <Pressable
+        onPress={onDismiss}
+        style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1, padding: 2 })}
+        accessibilityLabel="Dismiss"
+        accessibilityRole="button"
+      >
+        <XCloseIcon size={14} color={textMuted} />
+      </Pressable>
+    </View>
   );
 }
 

@@ -22,9 +22,27 @@ import { useUmbra } from '@/contexts/UmbraContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSound } from '@/contexts/SoundContext';
 import { useNetwork, pushPendingRelayAck } from '@/hooks/useNetwork';
+import { getWasm } from '@umbra/wasm';
 import type { Message, MessageEvent, FileMessagePayload } from '@umbra/service';
 
 const PAGE_SIZE = 50;
+
+/**
+ * Check if the user has opted out of sending read receipts.
+ * Reads the `privacy_read_receipts` key from the KV store.
+ * Returns `true` (enabled) by default if the key is absent or on error.
+ */
+async function isReadReceiptsEnabled(): Promise<boolean> {
+  try {
+    const wasm = getWasm();
+    if (!wasm) return true;
+    const result = await (wasm as any).umbra_wasm_plugin_kv_get('__umbra_system__', 'privacy_read_receipts');
+    const parsed = typeof result === 'string' ? JSON.parse(result) : result;
+    return parsed?.value !== 'false';
+  } catch {
+    return true;
+  }
+}
 
 export interface UseMessagesResult {
   /** Messages in chronological order */
@@ -329,9 +347,13 @@ export function useMessages(conversationId: string | null, groupId?: string | nu
   const markAsRead = useCallback(async () => {
     if (!service || !conversationId) return;
     try {
+      // Always mark locally so unread badges update
       await service.markAsRead(conversationId);
 
-      // Send read receipts for messages from other users
+      // Only send read receipts over relay if user hasn't opted out
+      const enabled = await isReadReceiptsEnabled();
+      if (!enabled) return;
+
       const relayWs = getRelayWs();
       if (relayWs) {
         const unreadFromOthers = messages.filter(

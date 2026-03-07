@@ -49,13 +49,15 @@ interface PinLockScreenProps {
   subtitle?: string;
   /** Show a back button. When pressed, calls `onBack`. */
   onBack?: () => void;
+  /** Account display name shown in the greeting */
+  accountName?: string;
 }
 
 // ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
-export function PinLockScreen({ onVerify, subtitle, onBack }: PinLockScreenProps) {
+export function PinLockScreen({ onVerify, subtitle, onBack, accountName }: PinLockScreenProps) {
   const { verifyPin } = useAuth();
   const { theme } = useTheme();
 
@@ -165,7 +167,7 @@ export function PinLockScreen({ onVerify, subtitle, onBack }: PinLockScreenProps
 
           <VStack gap="xs" style={{ alignItems: 'center' }}>
             <Text size="display-sm" weight="bold" testID={TEST_IDS.PIN.LOCK_TITLE}>
-              Welcome Back
+              {accountName ? `Welcome back, ${accountName}` : 'Welcome Back'}
             </Text>
             <Text size="sm" color="secondary" align="center" testID={TEST_IDS.PIN.LOCK_SUBTITLE}>
               {subtitle ?? 'Enter your PIN to unlock'}

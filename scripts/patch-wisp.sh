@@ -164,21 +164,22 @@ if (pkg.exports) {
 fs.writeFileSync('$RN_DEST/package.json', JSON.stringify(pkg, null, 2) + '\n');
 "
 
-# Add missing exports to the react-native main index.ts (only if component exists)
+# Add missing exports to the react-native main index.ts (only if not already exported)
 # This ensures compatibility between different versions of the Wisp repo.
-echo "" >> "$RN_DEST/src/index.ts"
-echo "// Re-exports added by patch-wisp.sh for deep import compatibility" >> "$RN_DEST/src/index.ts"
 
-# Check if E2EEKeyExchangeUI component exists before adding export
-if [ -d "$RN_DEST/src/components/e2ee-key-exchange-ui" ]; then
-  echo "export { E2EEKeyExchangeUI } from './components/e2ee-key-exchange-ui';" >> "$RN_DEST/src/index.ts"
-  echo "export type { E2EEKeyExchangeUIProps } from './components/e2ee-key-exchange-ui';" >> "$RN_DEST/src/index.ts"
-  echo "  Added E2EEKeyExchangeUI export"
-else
-  # Create stub component for CI compatibility when Wisp repo is behind
-  echo "  Creating E2EEKeyExchangeUI stub (component not in Wisp repo)"
-  mkdir -p "$RN_DEST/src/components/e2ee-key-exchange-ui"
-  cat > "$RN_DEST/src/components/e2ee-key-exchange-ui/index.ts" << 'STUBEOF'
+# E2EEKeyExchangeUI — add export only if not already in index.ts
+if ! grep -q "E2EEKeyExchangeUI" "$RN_DEST/src/index.ts" 2>/dev/null; then
+  if [ -d "$RN_DEST/src/components/e2ee-key-exchange-ui" ]; then
+    echo "" >> "$RN_DEST/src/index.ts"
+    echo "// Re-exports added by patch-wisp.sh for deep import compatibility" >> "$RN_DEST/src/index.ts"
+    echo "export { E2EEKeyExchangeUI } from './components/e2ee-key-exchange-ui';" >> "$RN_DEST/src/index.ts"
+    echo "export type { E2EEKeyExchangeUIProps } from './components/e2ee-key-exchange-ui';" >> "$RN_DEST/src/index.ts"
+    echo "  Added E2EEKeyExchangeUI export"
+  else
+    # Create stub component for CI compatibility when Wisp repo is behind
+    echo "  Creating E2EEKeyExchangeUI stub (component not in Wisp repo)"
+    mkdir -p "$RN_DEST/src/components/e2ee-key-exchange-ui"
+    cat > "$RN_DEST/src/components/e2ee-key-exchange-ui/index.ts" << 'STUBEOF'
 // Stub component for CI compatibility
 import React from 'react';
 import { View, Text } from 'react-native';
@@ -197,14 +198,22 @@ export function E2EEKeyExchangeUI(_props: E2EEKeyExchangeUIProps) {
   return React.createElement(View, null);
 }
 STUBEOF
-  echo "export { E2EEKeyExchangeUI } from './components/e2ee-key-exchange-ui';" >> "$RN_DEST/src/index.ts"
-  echo "export type { E2EEKeyExchangeUIProps } from './components/e2ee-key-exchange-ui';" >> "$RN_DEST/src/index.ts"
+    echo "" >> "$RN_DEST/src/index.ts"
+    echo "export { E2EEKeyExchangeUI } from './components/e2ee-key-exchange-ui';" >> "$RN_DEST/src/index.ts"
+    echo "export type { E2EEKeyExchangeUIProps } from './components/e2ee-key-exchange-ui';" >> "$RN_DEST/src/index.ts"
+  fi
+else
+  echo "  E2EEKeyExchangeUI already exported (skipped)"
 fi
 
-# SearchResult type is exported from message-search (should always exist)
-if [ -d "$RN_DEST/src/components/message-search" ]; then
-  echo "export type { SearchResult, SearchFilter, SearchFilterType } from './components/message-search';" >> "$RN_DEST/src/index.ts"
-  echo "  Added SearchResult type exports"
+# SearchResult type — add only if not already in index.ts
+if ! grep -q "SearchResult.*SearchFilter.*SearchFilterType" "$RN_DEST/src/index.ts" 2>/dev/null; then
+  if [ -d "$RN_DEST/src/components/message-search" ]; then
+    echo "export type { SearchResult, SearchFilter, SearchFilterType } from './components/message-search';" >> "$RN_DEST/src/index.ts"
+    echo "  Added SearchResult type exports"
+  fi
+else
+  echo "  SearchResult types already exported (skipped)"
 fi
 
 # ---------------------------------------------------------------------------

@@ -5,17 +5,19 @@ export interface ProfileMember {
   id: string;
   name: string;
   status: 'online' | 'idle' | 'offline';
+  avatar?: string;
 }
 
 export function useProfilePopover() {
   const [selectedMember, setSelectedMember] = useState<ProfileMember | null>(null);
   const [popoverAnchor, setPopoverAnchor] = useState<{ x: number; y: number } | null>(null);
 
-  const showProfile = useCallback((name: string, event?: any, status?: 'online' | 'idle' | 'offline') => {
+  const showProfile = useCallback((name: string, event?: any, status?: 'online' | 'idle' | 'offline', avatar?: string) => {
     setSelectedMember({
       id: name,
       name,
       status: status ?? 'offline',
+      avatar,
     });
     setPopoverAnchor({
       x: event?.nativeEvent?.pageX ?? event?.pageX ?? 0,

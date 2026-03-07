@@ -10,15 +10,17 @@
  * When `loading` is true, shows skeleton placeholders instead of community icons.
  *
  * Similar to Discord's "guild sidebar" / server rail.
+ *
+ * The active indicator is a single animated pill on the left edge that
+ * continuously slides between items using a spring animation.
  */
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Animated, Image, Platform, Pressable, ScrollView, View } from 'react-native';
 import Svg, { Circle } from 'react-native-svg';
-import { Text, Skeleton, useTheme, NotificationBadge, GradientBorder } from '@coexist/wisp-react-native';
+import { Text, Skeleton, useTheme, NotificationBadge } from '@coexist/wisp-react-native';
 import { UmbraIcon, FolderIcon, PlusIcon, SettingsIcon, BellIcon } from '@/components/ui';
 import type { Community } from '@umbra/service';
-import { useAnimatedToggle } from '@/hooks/useAnimatedToggle';
 import { TEST_IDS } from '@/constants/test-ids';
 
 // Default community icon — the colored Umbra ghost app icon
@@ -45,6 +47,7 @@ const RAIL_WIDTH = 64;
 const ICON_SIZE = 40;
 const ICON_RADIUS = 12;
 const ACTIVE_INDICATOR_WIDTH = 4;
+const INDICATOR_HEIGHT = 32;
 
 // ---------------------------------------------------------------------------
 // Props
@@ -118,6 +121,11 @@ export function NavigationRail({
 }: NavigationRailProps) {
   const { theme } = useTheme();
 
+  // Inject CSS keyframes once on web
+  useEffect(() => {
+    if (Platform.OS === 'web') injectIndicatorKeyframes();
+  }, []);
+
   // Track community IDs to detect newly added ones for bounce animation
   const knownCommunityIdsRef = useRef<Set<string>>(new Set(communities.map((c) => c.id)));
   const newCommunityIds = useRef<Set<string>>(new Set<string>()).current;
@@ -130,8 +138,138 @@ export function NavigationRail({
     }
   }
 
+  // ── Sliding indicator ──────────────────────────────────────────────────
+
+  const railRef = useRef<View>(null);
+  const itemRefs = useRef(new Map<string, View>()).current;
+
+  const activeKey = isHomeActive
+    ? 'home'
+    : isFilesActive
+      ? 'files'
+      : activeCommunityId ?? null;
+
+  const indicatorY = useRef(new Animated.Value(0)).current;
+  const indicatorOpacity = useRef(new Animated.Value(0)).current;
+  const indicatorScaleY = useRef(new Animated.Value(0.5)).current;
+  const hasAppearedRef = useRef(false);
+
+  const registerItemRef = useCallback((key: string, node: View | null) => {
+    if (node) itemRefs.set(key, node);
+    else itemRefs.delete(key);
+  }, []);
+
+  /** Measure an item's Y position relative to the rail (centers the indicator). */
+  const measureItem = useCallback((key: string, callback: (y: number) => void) => {
+    const itemNode = itemRefs.get(key);
+    const railNode = railRef.current;
+    if (!itemNode || !railNode) return;
+
+    if (Platform.OS === 'web') {
+      requestAnimationFrame(() => {
+        const railEl = railNode as unknown as HTMLElement;
+        const itemEl = itemNode as unknown as HTMLElement;
+        if (!railEl.getBoundingClientRect || !itemEl.getBoundingClientRect) return;
+        const railRect = railEl.getBoundingClientRect();
+        const itemRect = itemEl.getBoundingClientRect();
+        callback(itemRect.top - railRect.top + (itemRect.height - INDICATOR_HEIGHT) / 2);
+      });
+    } else {
+      (itemNode as any).measureLayout(
+        railNode,
+        (_x: number, y: number, _w: number, h: number) => {
+          callback(y + (h - INDICATOR_HEIGHT) / 2);
+        },
+        () => {},
+      );
+    }
+  }, []);
+
+  // Animate indicator when active key changes
+  useEffect(() => {
+    if (!activeKey) {
+      // Fade out
+      Animated.timing(indicatorOpacity, {
+        toValue: 0,
+        duration: 150,
+        useNativeDriver: true,
+      }).start(() => {
+        hasAppearedRef.current = false;
+        indicatorScaleY.setValue(0.5);
+      });
+      return;
+    }
+
+    // Small delay to ensure layout is ready after mount / re-render
+    const timer = setTimeout(() => {
+      measureItem(activeKey, (targetY) => {
+        if (!hasAppearedRef.current) {
+          // First appear — snap to position, then fade + scale in
+          indicatorY.setValue(targetY);
+          Animated.parallel([
+            Animated.timing(indicatorOpacity, {
+              toValue: 1,
+              duration: 150,
+              useNativeDriver: true,
+            }),
+            Animated.spring(indicatorScaleY, {
+              toValue: 1,
+              tension: 300,
+              friction: 20,
+              useNativeDriver: true,
+            }),
+          ]).start();
+          hasAppearedRef.current = true;
+        } else {
+          // Subsequent changes — slide to new position
+          Animated.spring(indicatorY, {
+            toValue: targetY,
+            tension: 300,
+            friction: 25,
+            useNativeDriver: true,
+          }).start();
+        }
+      });
+    }, 50);
+
+    return () => clearTimeout(timer);
+  }, [activeKey]);
+
+  // Re-measure on scroll so indicator tracks community items
+  const handleScroll = useCallback(
+    (e: any) => {
+      if (activeCommunityId) {
+        measureItem(activeCommunityId, (targetY) => {
+          indicatorY.setValue(targetY);
+        });
+      }
+    },
+    [activeCommunityId, measureItem],
+  );
+
+  // Gradient indicator fill style
+  const indicatorFillStyle =
+    Platform.OS === 'web'
+      ? ({
+          width: '100%',
+          height: '100%',
+          backgroundImage:
+            'linear-gradient(180deg, #8B5CF6, #EC4899, #3B82F6, #8B5CF6)',
+          backgroundSize: '100% 300%',
+          animationName: 'umbra-indicator-gradient',
+          animationDuration: '12000ms',
+          animationTimingFunction: 'ease',
+          animationIterationCount: 'infinite',
+        } as any)
+      : {
+          width: '100%',
+          height: '100%',
+          backgroundColor: theme.colors.text.primary,
+        };
+
   return (
     <View
+      ref={railRef}
       testID={TEST_IDS.NAV.RAIL}
       style={{
         width: RAIL_WIDTH,
@@ -141,10 +279,36 @@ export function NavigationRail({
         paddingTop: safeAreaTop + 20,
         alignItems: 'center',
         flexShrink: 0,
+        overflow: 'hidden',
       }}
     >
+      {/* ── Sliding indicator (single element) ── */}
+      <Animated.View
+        pointerEvents="none"
+        style={{
+          position: 'absolute',
+          left: 0,
+          top: 0,
+          width: ACTIVE_INDICATOR_WIDTH,
+          height: INDICATOR_HEIGHT,
+          borderTopRightRadius: ACTIVE_INDICATOR_WIDTH,
+          borderBottomRightRadius: ACTIVE_INDICATOR_WIDTH,
+          opacity: indicatorOpacity,
+          transform: [
+            { translateY: indicatorY },
+            { scaleY: indicatorScaleY },
+          ],
+          zIndex: 10,
+          overflow: 'hidden',
+        }}
+      >
+        <View style={indicatorFillStyle} />
+      </Animated.View>
+
       {/* Home button */}
       <RailItem
+        itemKey="home"
+        registerRef={registerItemRef}
         active={isHomeActive}
         onPress={onHomePress}
         accentColor={theme.colors.accent.primary}
@@ -161,6 +325,8 @@ export function NavigationRail({
       {/* Files button — between Home and Communities */}
       {onFilesPress && (
         <RailItem
+          itemKey="files"
+          registerRef={registerItemRef}
           active={!!isFilesActive}
           onPress={onFilesPress}
           accentColor={theme.colors.accent.primary}
@@ -191,6 +357,8 @@ export function NavigationRail({
         style={{ flex: 1, width: '100%' }}
         contentContainerStyle={{ alignItems: 'center', paddingBottom: 8 }}
         showsVerticalScrollIndicator={false}
+        onScroll={handleScroll}
+        scrollEventThrottle={16}
       >
         {loading ? (
           /* Skeleton placeholders while loading */
@@ -213,13 +381,14 @@ export function NavigationRail({
               return (
                 <RailItem
                   key={community.id}
+                  itemKey={community.id}
+                  registerRef={registerItemRef}
                   active={isActive}
                   onPress={() => onCommunityPress(community.id)}
                   accentColor={community.accentColor}
                   theme={theme}
                   iconUrl={community.iconUrl}
                   testID={TEST_IDS.NAV.COMMUNITY_ITEM}
-                  gradientBorder
                   animateMount={newCommunityIds.has(community.id)}
                 >
                   <Image
@@ -235,6 +404,8 @@ export function NavigationRail({
 
         {/* Create community button — always visible */}
         <RailItem
+          itemKey="_create"
+          registerRef={registerItemRef}
           active={false}
           onPress={onCreateCommunity}
           theme={theme}
@@ -298,6 +469,8 @@ export function NavigationRail({
           {/* Notification bell — between avatar and settings */}
           {onNotificationsPress && (
             <RailItem
+              itemKey="_notifications"
+              registerRef={registerItemRef}
               active={false}
               onPress={onNotificationsPress}
               theme={theme}
@@ -312,6 +485,8 @@ export function NavigationRail({
           )}
 
           <RailItem
+            itemKey="_settings"
+            registerRef={registerItemRef}
             active={false}
             onPress={onOpenSettings}
             theme={theme}
@@ -329,10 +504,14 @@ export function NavigationRail({
 }
 
 // ---------------------------------------------------------------------------
-// Rail Item — individual icon button with active indicator
+// Rail Item — individual icon button (indicator is now at the parent level)
 // ---------------------------------------------------------------------------
 
 interface RailItemProps {
+  /** Unique key for ref registration (used by sliding indicator). */
+  itemKey: string;
+  /** Callback to register this item's ref with the parent. */
+  registerRef: (key: string, node: View | null) => void;
   active: boolean;
   onPress: () => void;
   accentColor?: string;
@@ -346,21 +525,12 @@ interface RailItemProps {
   badgeCount?: number;
   /** Optional testID for E2E testing */
   testID?: string;
-  /** Show animated gradient border on hover/active */
-  gradientBorder?: boolean;
   /** Animate mount with spring bounce */
   animateMount?: boolean;
 }
 
-function RailItem({ active, onPress, accentColor, theme, children, ringProgress, iconUrl, badgeCount, testID, gradientBorder, animateMount }: RailItemProps) {
+function RailItem({ itemKey, registerRef, active, onPress, accentColor, theme, children, ringProgress, iconUrl, badgeCount, testID, animateMount }: RailItemProps) {
   const showRing = ringProgress != null && ringProgress > 0 && ringProgress < 100;
-  const { animatedValue: indicatorAnim, shouldRender: showIndicator } = useAnimatedToggle(active, { duration: 150 });
-  const [hovered, setHovered] = useState(false);
-
-  // Inject CSS keyframes for the indicator gradient (web only)
-  useEffect(() => {
-    if (active && Platform.OS === 'web') injectIndicatorKeyframes();
-  }, [active]);
 
   // Mount spring animation
   const mountScale = useRef(new Animated.Value(animateMount ? 0.5 : 1)).current;
@@ -379,8 +549,6 @@ function RailItem({ active, onPress, accentColor, theme, children, ringProgress,
     <Pressable
       testID={testID}
       onPress={onPress}
-      onHoverIn={gradientBorder ? () => setHovered(true) : undefined}
-      onHoverOut={gradientBorder ? () => setHovered(false) : undefined}
       accessibilityActions={[{ name: 'activate', label: 'Activate' }]}
       onAccessibilityAction={(e: any) => { if (e.nativeEvent.actionName === 'activate') onPress(); }}
       style={({ pressed }) => ({
@@ -410,47 +578,13 @@ function RailItem({ active, onPress, accentColor, theme, children, ringProgress,
   );
 
   return (
-    <Animated.View style={[{ width: '100%', alignItems: 'center', marginBottom: 4, position: 'relative' }, animateMount ? { transform: [{ scale: mountScale }] } : undefined]}>
-      {/* Active indicator pill on the left edge */}
-      {showIndicator && (
-        <Animated.View
-          style={{
-            position: 'absolute',
-            left: 0,
-            top: '50%',
-            marginTop: -16,
-            width: ACTIVE_INDICATOR_WIDTH,
-            height: 32,
-            borderTopRightRadius: ACTIVE_INDICATOR_WIDTH,
-            borderBottomRightRadius: ACTIVE_INDICATOR_WIDTH,
-            opacity: indicatorAnim,
-            transform: [{
-              scaleY: indicatorAnim.interpolate({
-                inputRange: [0, 1],
-                outputRange: [0.5, 1],
-              }),
-            }],
-            overflow: 'hidden',
-          }}
-        >
-          <View
-            style={Platform.OS === 'web'
-              ? {
-                  width: '100%',
-                  height: '100%',
-                  backgroundImage: 'linear-gradient(180deg, #8B5CF6, #EC4899, #3B82F6, #8B5CF6)',
-                  backgroundSize: '100% 300%',
-                  animationName: 'umbra-indicator-gradient',
-                  animationDuration: '12000ms',
-                  animationTimingFunction: 'ease',
-                  animationIterationCount: 'infinite',
-                } as any
-              : { width: '100%', height: '100%', backgroundColor: theme.colors.text.primary }
-            }
-          />
-        </Animated.View>
-      )}
-
+    <Animated.View
+      ref={(node) => registerRef(itemKey, node)}
+      style={[
+        { width: '100%', alignItems: 'center', marginBottom: 4, position: 'relative' as const },
+        animateMount ? { transform: [{ scale: mountScale }] } : undefined,
+      ]}
+    >
       {/* Upload progress ring overlay */}
       {showRing && (
         <View
@@ -495,19 +629,7 @@ function RailItem({ active, onPress, accentColor, theme, children, ringProgress,
         size="sm"
         invisible={!badgeCount}
       >
-        {gradientBorder ? (
-          <GradientBorder
-            visible={hovered || active}
-            animated={hovered || active}
-            radius={active ? ICON_RADIUS : ICON_SIZE / 2}
-            width={2}
-            speed={2000}
-          >
-            {iconElement}
-          </GradientBorder>
-        ) : (
-          iconElement
-        )}
+        {iconElement}
       </NotificationBadge>
     </Animated.View>
   );

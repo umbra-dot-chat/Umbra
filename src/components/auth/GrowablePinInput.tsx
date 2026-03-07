@@ -8,7 +8,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { View, TextInput, Pressable, Animated, Platform, type ViewStyle, type TextStyle } from 'react-native';
-import { Text, useTheme } from '@coexist/wisp-react-native';
+import { Text, useTheme, GradientBorder } from '@coexist/wisp-react-native';
 import { TEST_IDS } from '@/constants/test-ids';
 
 // Gradient colors for filled PIN dots
@@ -186,29 +186,55 @@ export function GrowablePinInput({
         style={{ flexDirection: 'row', gap, alignItems: 'center' }}
         testID={TEST_IDS.PIN.INPUT}
       >
-        {chars.map((char, i) => (
-          <View key={i} style={cellStyle(i)} testID={`${TEST_IDS.PIN.CELL}.${i}`}>
-            {char ? (
-              mask ? (
-                <AnimatedDot
-                  style={gradientDotWebStyle ?? dotStyle}
-                />
-              ) : (
-                <Text style={charStyle}>{char}</Text>
-              )
-            ) : null}
-          </View>
-        ))}
+        {chars.map((char, i) => {
+          const isActive = i === activeIndex && !disabled;
+          const cell = (
+            <View
+              key={i}
+              style={[cellStyle(i), isActive && { borderColor: 'transparent' }]}
+              testID={`${TEST_IDS.PIN.CELL}.${i}`}
+            >
+              {char ? (
+                mask ? (
+                  <AnimatedDot
+                    style={gradientDotWebStyle ?? dotStyle}
+                  />
+                ) : (
+                  <Text style={charStyle}>{char}</Text>
+                )
+              ) : null}
+            </View>
+          );
+
+          if (isActive) {
+            return (
+              <GradientBorder
+                key={i}
+                radius={radius}
+                width={2}
+                colors={PIN_GRADIENT_COLORS}
+                animated
+                speed={2000}
+              >
+                {cell}
+              </GradientBorder>
+            );
+          }
+
+          return cell;
+        })}
       </Pressable>
     </View>
   );
 }
 
-/** Dot that springs into view when entering a PIN digit. */
+/** Dot that springs into view and pulses with a gradient glow. */
 function AnimatedDot({ style }: { style: ViewStyle }) {
   const scale = useRef(new Animated.Value(0)).current;
+  const pulse = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
+    // Entry spring
     scale.setValue(1.3);
     Animated.spring(scale, {
       toValue: 1,
@@ -216,10 +242,30 @@ function AnimatedDot({ style }: { style: ViewStyle }) {
       friction: 10,
       useNativeDriver: true,
     }).start();
+
+    // Continuous subtle pulse
+    const loop = Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulse, {
+          toValue: 1.15,
+          duration: 800,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulse, {
+          toValue: 1,
+          duration: 800,
+          useNativeDriver: true,
+        }),
+      ]),
+    );
+    loop.start();
+    return () => loop.stop();
   }, []);
 
+  const animatedScale = Animated.multiply(scale, pulse);
+
   return (
-    <Animated.View style={[style, { transform: [{ scale }] }]} />
+    <Animated.View style={[style, { transform: [{ scale: animatedScale }] }]} />
   );
 }
 

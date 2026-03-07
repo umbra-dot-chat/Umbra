@@ -91,7 +91,7 @@ import { useMessaging } from '@/contexts/MessagingContext';
 import type { MessageDisplayMode } from '@/contexts/MessagingContext';
 import { SlotRenderer } from '@/components/plugins/SlotRenderer';
 import { ShortcutRegistry } from '@/services/ShortcutRegistry';
-import { clearDatabaseExport, getSqlDatabase } from '@umbra/wasm';
+import { clearDatabaseExport, getSqlDatabase, getWasm } from '@umbra/wasm';
 import * as ExpoClipboard from 'expo-clipboard';
 import { useStorageManager } from '@/hooks/useStorageManager';
 import { useAppUpdate } from '@/hooks/useAppUpdate';
@@ -1716,13 +1716,42 @@ function SoundsSection() {
   );
 }
 
+const KV_NS = '__umbra_system__';
+const KV_READ_RECEIPTS = 'privacy_read_receipts';
+
 function PrivacySection() {
   const { theme } = useTheme();
   const tc = theme.colors;
   const { identity, hasPin, setPin, verifyPin } = useAuth();
+  const { preferencesReady } = useUmbra();
   const [readReceipts, setReadReceipts] = useState(true);
   const [typingIndicators, setTypingIndicators] = useState(true);
   const [showOnline, setShowOnline] = useState(true);
+
+  // ── Persist read receipts preference via KV store ─────────────────
+  useEffect(() => {
+    if (!preferencesReady) return;
+    (async () => {
+      try {
+        const wasm = getWasm();
+        if (!wasm) return;
+        const result = await (wasm as any).umbra_wasm_plugin_kv_get(KV_NS, KV_READ_RECEIPTS);
+        const parsed = typeof result === 'string' ? JSON.parse(result) : result;
+        if (parsed?.value === 'false') setReadReceipts(false);
+      } catch { /* first run — default true */ }
+    })();
+  }, [preferencesReady]);
+
+  const handleReadReceiptsToggle = useCallback(() => {
+    setReadReceipts((prev) => {
+      const next = !prev;
+      try {
+        const wasm = getWasm();
+        if (wasm) (wasm as any).umbra_wasm_plugin_kv_set(KV_NS, KV_READ_RECEIPTS, String(next));
+      } catch { /* best effort */ }
+      return next;
+    });
+  }, []);
 
   // PIN setup / removal dialog state
   const [showPinDialog, setShowPinDialog] = useState(false);
@@ -1820,7 +1849,7 @@ function PrivacySection() {
                 </HelpIndicator>
               }
             >
-              <SoundToggle checked={readReceipts} onChange={() => setReadReceipts((p) => !p)} />
+              <SoundToggle checked={readReceipts} onChange={handleReadReceiptsToggle} />
             </SettingRow>
 
             <SettingRow label="Typing Indicators" description="Show when you are typing a message to others.">

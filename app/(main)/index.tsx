@@ -280,8 +280,11 @@ export default function ChatPage() {
       online: activeConversation.friendDid
         ? onlineDids.has(activeConversation.friendDid)
         : undefined,
+      avatar: activeConversation.friendDid
+        ? friendAvatars[activeConversation.friendDid]
+        : undefined,
     };
-  }, [activeConversation, groups, friendNames, onlineDids, activeMemberCount]);
+  }, [activeConversation, groups, friendNames, friendAvatars, onlineDids, activeMemberCount]);
 
   // Handle sending a message (or editing)
   const handleSubmit = useCallback(async (msg: string) => {
@@ -653,7 +656,7 @@ export default function ChatPage() {
         visiblePanel={visiblePanel}
         togglePanel={togglePanel}
         onMemberClick={(member, event) => {
-          showProfile(member.name, event, member.status === 'online' ? 'online' : 'offline');
+          showProfile(member.name, event, member.status === 'online' ? 'online' : 'offline', member.avatar);
         }}
         searchQuery={searchQuery}
         onSearchQueryChange={setSearchQuery}

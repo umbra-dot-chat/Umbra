@@ -148,6 +148,7 @@ do_dev() {
 do_dev_app() {
     banner "Building Umbra Dev App"
     check_prerequisites
+    sync_wisp
 
     info "This builds a standalone 'Umbra Dev' app that connects"
     info "to your local Expo dev server (localhost:8081)."

@@ -586,6 +586,17 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
                   try {
                     await service.joinCommunity(localCommunityId, event.memberDid, event.memberNickname);
                   } catch { /* may already exist — AlreadyMember is expected */ }
+
+                  // Fan-out: if we're the community owner, re-broadcast this event
+                  // to all other members. New joiners only know the owner, so other
+                  // existing members won't learn about the new member without this.
+                  try {
+                    const community = await service.getCommunity(localCommunityId);
+                    const myDid = _lastRelayDid;
+                    if (myDid && community.ownerDid === myDid && ws.readyState === WebSocket.OPEN) {
+                      await service.broadcastCommunityEvent(localCommunityId, event, myDid, ws);
+                    }
+                  } catch { /* best-effort fan-out */ }
                 }
               }
             } catch { /* best-effort — fall through to dispatch with original IDs */ }
@@ -707,6 +718,14 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
                   if ('communityId' in offlineEvent) (offlineEvent as any).communityId = localId;
                   if (offlineEvent.type === 'memberJoined') {
                     try { await service.joinCommunity(localId, offlineEvent.memberDid, offlineEvent.memberNickname); } catch { /* already exists */ }
+                    // Fan-out: owner re-broadcasts to all other members (see online handler)
+                    try {
+                      const community = await service.getCommunity(localId);
+                      const myDid = _lastRelayDid;
+                      if (myDid && community.ownerDid === myDid && ws.readyState === WebSocket.OPEN) {
+                        await service.broadcastCommunityEvent(localId, offlineEvent, myDid, ws);
+                      }
+                    } catch { /* best-effort fan-out */ }
                   }
                   // Persist offline community messages to local DB so they appear after navigation
                   if (offlineEvent.type === 'communityMessageSent' && offlineEvent.content && offlineEvent.channelId) {

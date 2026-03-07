@@ -624,8 +624,8 @@ export function CommunitySettingsDialog({
         if (!res.ok) throw new Error('Failed to start Discord auth');
         const data = await res.json();
 
-        const { open } = await (new Function('m', 'return import(m)') as (m: string) => Promise<any>)('@tauri-apps/plugin-shell');
-        await open(data.redirect_url);
+        // Tauri's on_new_window handler intercepts window.open() and opens in system browser
+        window.open(data.redirect_url, '_blank');
 
         // Poll for result
         const pollUrl = `${RELAY}/community/import/discord/result/${encodeURIComponent(data.state)}`;
@@ -810,8 +810,8 @@ export function CommunitySettingsDialog({
         if (!res.ok) throw new Error('Failed to start OAuth');
         const data = await res.json();
 
-        const { open } = await (new Function('m', 'return import(m)') as (m: string) => Promise<any>)('@tauri-apps/plugin-shell');
-        await open(data.redirect_url);
+        // Tauri's on_new_window handler intercepts window.open() and opens in system browser
+        window.open(data.redirect_url, '_blank');
 
         const pollUrl = `${RELAY}/community/import/discord/result/${encodeURIComponent(data.state)}`;
         for (let i = 0; i < 60; i++) {

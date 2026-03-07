@@ -30,13 +30,29 @@ pub fn run() {
 
             // Build the main window+webview manually so we can attach navigation handlers.
             // The window config was removed from tauri.conf.json to enable this.
-            // "Umbra Dev" builds load directly from the local Expo dev server so that
-            // hot-module-replacement works without a static-HTML redirect hop.
+            //
+            // In dev/debug builds we load directly from the Expo dev server via an
+            // External URL. This is critical for hot-module-replacement — if we used
+            // WebviewUrl::default() (tauri:// asset protocol), the page origin would
+            // be tauri://localhost and Metro's HMR WebSocket would fail to connect
+            // (it derives the ws:// URL from the page origin).
+            //
+            // "Umbra Dev" release builds also use the External URL so the installed
+            // app can connect to a separately-running Expo dev server.
             let url = if title == "Umbra Dev" {
                 WebviewUrl::External("http://localhost:8081".parse().unwrap())
+            } else if cfg!(debug_assertions) {
+                // Debug build — load directly from Metro for HMR support.
+                // Override the port with UMBRA_DEV_PORT if needed.
+                let dev_port = std::env::var("UMBRA_DEV_PORT").unwrap_or_else(|_| "8081".into());
+                let dev_url = format!("http://localhost:{}", dev_port);
+                tracing::info!("Dev mode: loading frontend from {}", dev_url);
+                WebviewUrl::External(dev_url.parse().unwrap())
             } else {
                 WebviewUrl::default()
             };
+
+            let is_dev = cfg!(debug_assertions) || title == "Umbra Dev";
 
             let mut builder = tauri::WebviewWindowBuilder::new(app, "main", url)
                 .title(&title)
@@ -44,7 +60,8 @@ pub fn run() {
                 .resizable(true)
                 .fullscreen(false)
                 .decorations(true)
-                .theme(Some(tauri::Theme::Dark));
+                .theme(Some(tauri::Theme::Dark))
+                .devtools(is_dev);
 
             #[cfg(target_os = "macos")]
             {

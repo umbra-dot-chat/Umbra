@@ -183,7 +183,7 @@ function AuthGate() {
   return (
     <View style={{ flex: 1 }}>
       <Slot />
-      {showPinLock && <PinLockScreen />}
+      {showPinLock && <PinLockScreen accountName={identity?.displayName} />}
       {(showLoading || isSwitching) && (
         <LoadingScreen
           steps={isSwitching ? [

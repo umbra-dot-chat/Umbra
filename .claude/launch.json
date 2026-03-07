@@ -4,8 +4,14 @@
     {
       "name": "expo-dev",
       "runtimeExecutable": "npx",
-      "runtimeArgs": ["expo", "start", "--web", "--port", "8082"],
-      "port": 8082
+      "runtimeArgs": ["expo", "start", "--port", "8083", "--web"],
+      "port": 8083
+    },
+    {
+      "name": "umbra-site",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev", "--prefix", "/Users/infamousvague/Development/UmbraMarketing/site"],
+      "port": 3000
     }
   ]
 }

@@ -482,7 +482,7 @@ impl FriendsService {
                 did: record.did,
                 display_name: record.display_name,
                 status: record.status,
-                avatar: None,
+                avatar: record.avatar,
                 encryption_public_key: encryption_key,
                 signing_public_key: signing_key,
                 added_at: record.created_at,
@@ -615,13 +615,14 @@ impl FriendsService {
         // Create the friend
         let friend = Friend::from_public_identity(&request.from);
 
-        // Store friend in database
-        self.database.add_friend(
+        // Store friend in database (including avatar from their profile)
+        self.database.add_friend_with_avatar(
             &friend.did,
             &friend.display_name,
             &friend.signing_public_key,
             &friend.encryption_public_key,
             friend.status.as_deref(),
+            friend.avatar.as_deref(),
         )?;
 
         // Update request status
@@ -691,13 +692,14 @@ impl FriendsService {
             // Create the friend
             let friend = Friend::from_public_identity(responder);
 
-            // Store friend in database
-            self.database.add_friend(
+            // Store friend in database (including avatar from their profile)
+            self.database.add_friend_with_avatar(
                 &friend.did,
                 &friend.display_name,
                 &friend.signing_public_key,
                 &friend.encryption_public_key,
                 friend.status.as_deref(),
+                friend.avatar.as_deref(),
             )?;
 
             // Update request status

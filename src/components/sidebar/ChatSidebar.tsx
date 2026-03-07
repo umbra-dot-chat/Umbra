@@ -19,7 +19,7 @@ import { TEST_IDS } from '@/constants/test-ids';
 export interface ChatSidebarProps {
   search: string;
   onSearchChange: (s: string) => void;
-  conversations: { id: string; name: string; last: string; time: string; unread: number; online?: boolean; pinned?: boolean; status?: string; group?: string[]; isGroup?: boolean }[];
+  conversations: { id: string; name: string; last: string; time: string; unread: number; online?: boolean; pinned?: boolean; status?: string; group?: string[]; isGroup?: boolean; avatar?: string }[];
   activeId: string | null;
   onSelectConversation: (id: string) => void;
   onFriendsPress: () => void;
@@ -305,7 +305,7 @@ function ChatSidebarInner({
                         ))}
                       </AvatarGroup>
                     ) : (
-                      <Avatar name={c.name} size="md" onSurface status={c.online ? 'online' : undefined} />
+                      <Avatar name={c.name} src={c.avatar} size="md" onSurface />
                     )
                   }
                 />

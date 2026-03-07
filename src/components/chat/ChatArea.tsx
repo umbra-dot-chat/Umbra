@@ -42,7 +42,7 @@ export interface ChatAreaProps {
   onHoverOut: () => void;
   onReplyTo: (reply: { sender: string; text: string }) => void;
   onOpenThread: (msg: { id: string; sender: string; content: string; timestamp: string }) => void;
-  onShowProfile: (name: string, event: any, status?: 'online' | 'idle' | 'offline') => void;
+  onShowProfile: (name: string, event: any, status?: 'online' | 'idle' | 'offline', avatar?: string) => void;
   // Extended handlers
   onToggleReaction?: (messageId: string, emoji: string) => void;
   onEditMessage?: (messageId: string) => void;
@@ -740,7 +740,7 @@ export function ChatArea({
                 status={isOutgoing ? (firstMsg.status as string) : undefined}
                 senderColor={isGroupChat ? memberColor(senderDid) : undefined}
                 themeColors={themeColors}
-                onAvatarPress={(e: any) => onShowProfile(senderName, e)}
+                onAvatarPress={(e: any) => onShowProfile(senderName, e, undefined, getSenderAvatar(senderDid))}
               >
                 {renderMessages(true)}
               </InlineMsgGroup>
@@ -762,7 +762,7 @@ export function ChatArea({
               status={isOutgoing ? (firstMsg.status as string) : undefined}
               senderColor={isGroupChat && !isOutgoing ? memberColor(senderDid) : undefined}
               themeColors={themeColors}
-              onAvatarPress={(e: any) => onShowProfile(senderName, e)}
+              onAvatarPress={(e: any) => onShowProfile(senderName, e, undefined, getSenderAvatar(senderDid))}
             >
               {renderMessages(false)}
             </MsgGroup>
