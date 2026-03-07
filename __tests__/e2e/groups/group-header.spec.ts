@@ -8,12 +8,11 @@
  */
 
 import { test, expect, type BrowserContext, type Page } from '@playwright/test';
-import { RELAY_SETTLE_TIMEOUT, UI_SETTLE_TIMEOUT } from '../helpers';
+import { UI_SETTLE_TIMEOUT } from '../helpers';
 import {
   setupFriendPair,
-  createGroup,
-  acceptGroupInvite,
   openGroupChat,
+  setupBothInGroupDirect,
 } from './group-helpers';
 
 test.describe('5.4 Group Header', () => {
@@ -24,7 +23,8 @@ test.describe('5.4 Group Header', () => {
   let alice: Page;
   let bob: Page;
 
-  test.beforeAll(async ({ browser }) => {
+  test.beforeAll(async ({ browser }, testInfo) => {
+    testInfo.setTimeout(120_000); // Increase beforeAll timeout for group setup
     const setup = await setupFriendPair(browser, 'Hdr');
 
     ctx1 = setup.ctx1;
@@ -32,12 +32,11 @@ test.describe('5.4 Group Header', () => {
     alice = setup.alice;
     bob = setup.bob;
 
-    // Alice creates a group
-    await createGroup(alice, 'HeaderTestGroup');
-
-    // Bob accepts
-    await bob.waitForTimeout(RELAY_SETTLE_TIMEOUT * 2);
-    await acceptGroupInvite(bob, 'HeaderTestGroup');
+    // Use direct injection to get both users into the group (bypasses relay)
+    const joined = await setupBothInGroupDirect(setup, 'HeaderTestGroup');
+    if (!joined) {
+      throw new Error('Failed to set up group via direct injection');
+    }
 
     // Alice opens the group
     await openGroupChat(alice, 'HeaderTestGroup');

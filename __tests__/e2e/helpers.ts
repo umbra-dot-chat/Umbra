@@ -113,21 +113,48 @@ export async function createIdentity(
     timeout: WASM_LOAD_TIMEOUT,
   });
 
-  // Extract the seed phrase from the grid cells.
-  // Each cell in the SeedPhraseGrid renders as "N. word" (e.g. "1. abandon").
-  // We strip the numbered prefix to get just the words.
+  // Extract the seed phrase from the grid.
+  // The SeedPhraseGrid uses a text scramble animation that shows random characters
+  // before decoding to the actual BIP39 word. We must wait until ALL 24 words have
+  // fully decoded (only lowercase a-z letters) before extracting.
   let seedPhrase = '';
   try {
-    await page.waitForTimeout(1_000);
+    // Wait for all 24 word cards to have fully decoded text (lowercase letters only).
+    // BIP39 mnemonic words are always lowercase ASCII — the text scramble shows
+    // random/unicode characters during decode, so we check for [a-z]+ to confirm completion.
+    await page.waitForFunction(
+      () => {
+        const grid = document.querySelector('[data-testid="seed.grid"]');
+        if (!grid) return false;
+        const cells = grid.children;
+        let wordCount = 0;
+        for (let i = 0; i < cells.length; i++) {
+          const text = cells[i].textContent?.trim() ?? '';
+          // Match "N. word" where word is lowercase letters only (fully decoded)
+          if (/^\d+\.\s*[a-z]+$/.test(text)) wordCount++;
+        }
+        return wordCount >= 24;
+      },
+      { timeout: 15_000 },
+    );
+
     seedPhrase = await page.evaluate(() => {
       const grid = document.querySelector('[data-testid="seed.grid"]');
       if (!grid) return '';
+
+      // Primary: read from aria-valuetext (set immediately, no animation dependency)
+      const valueText = grid.getAttribute('aria-valuetext');
+      if (valueText && valueText.split(' ').filter((w: string) => w.length > 0).length >= 24) {
+        return valueText;
+      }
+
+      // Fallback: read from fully decoded children text content
       const cells = grid.children;
       const words: string[] = [];
       for (let i = 0; i < cells.length; i++) {
         const text = cells[i].textContent?.trim() ?? '';
-        const match = text.match(/^\d+\.\s*(.+)$/);
-        if (match) words.push(match[1].trim());
+        const match = text.match(/^\d+\.\s*([a-z]+)$/);
+        if (match) words.push(match[1]);
       }
       return words.join(' ');
     });

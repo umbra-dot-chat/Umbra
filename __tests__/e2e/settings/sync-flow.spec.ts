@@ -160,15 +160,42 @@ async function createIdentityWithSyncDisabled(
   });
   let seedPhrase = '';
   try {
-    await page.waitForTimeout(1_000);
+    // Wait for all 24 word cards to fully decode (text scramble animation).
+    // BIP39 words are lowercase ASCII — check for [a-z]+ to confirm decode is complete.
+    await page.waitForFunction(
+      () => {
+        const grid = document.querySelector('[data-testid="seed.grid"]');
+        if (!grid) return false;
+        const cells = grid.children;
+        let wordCount = 0;
+        for (let i = 0; i < cells.length; i++) {
+          const text = cells[i].textContent?.trim() ?? '';
+          if (/^\d+\.\s*[a-z]+$/.test(text)) wordCount++;
+        }
+        return wordCount >= 24;
+      },
+      { timeout: 15_000 },
+    );
+
     seedPhrase = await page.evaluate(() => {
-      const cells = document.querySelectorAll('[data-testid^="seed-word-"]');
-      if (cells.length > 0) {
-        return Array.from(cells)
-          .map((el) => el.textContent?.trim() ?? '')
-          .join(' ');
+      const grid = document.querySelector('[data-testid="seed.grid"]');
+      if (!grid) return '';
+
+      // Primary: read from aria-valuetext (set immediately, no animation dependency)
+      const valueText = grid.getAttribute('aria-valuetext');
+      if (valueText && valueText.split(' ').filter((w: string) => w.length > 0).length >= 24) {
+        return valueText;
       }
-      return '';
+
+      // Fallback: read from fully decoded children text
+      const cells = grid.children;
+      const words: string[] = [];
+      for (let i = 0; i < cells.length; i++) {
+        const text = cells[i].textContent?.trim() ?? '';
+        const match = text.match(/^\d+\.\s*([a-z]+)$/);
+        if (match) words.push(match[1]);
+      }
+      return words.join(' ');
     });
   } catch {
     // best-effort extraction

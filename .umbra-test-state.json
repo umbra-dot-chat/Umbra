@@ -1,22 +1,77 @@
 {
   "last_selection": [
-    "detox/two-device/friend-two-device-a.test.ts",
-    "detox/two-device/file-attachments.test.ts",
-    "detox/two-device/friend-two-device-b.test.ts",
-    "detox/two-device/dm-conversation-device-b.test.ts",
-    "detox/social/dm-conversation-device-b.test.ts",
-    "detox/two-device/recovery-sync-device-a.test.ts",
-    "detox/two-device/message-types.test.ts",
-    "detox/two-device/recovery-sync-device-b.test.ts",
-    "detox/two-device/dm-conversation-device-a.test.ts",
-    "detox/social/dm-conversation-device-a.test.ts",
-    "detox/two-device/sending-messages.test.ts",
-    "detox/two-device/edit-delete-reply.test.ts",
-    "detox/social/dm-counterpart-device-b.test.ts",
-    "detox/social/friend-two-device-b.test.ts",
-    "detox/social/friend-two-device-a.test.ts",
-    "detox/two-device/receiving-messages.test.ts",
-    "detox/two-device/dm-counterpart-device-b.test.ts"
+    "playwright/settings/messaging-section.spec.ts",
+    "playwright/groups/group-file-attachments.spec.ts",
+    "playwright/friends/online-tab.spec.ts",
+    "playwright/navigation/sidebar.spec.ts",
+    "playwright/settings/profile-section.spec.ts",
+    "playwright/groups/group-invitations.spec.ts",
+    "playwright/messaging/sending-messages.spec.ts",
+    "playwright/settings/account-backup.spec.ts",
+    "playwright/identity/account-creation/confirm-backup.spec.ts",
+    "playwright/messaging/display-modes.spec.ts",
+    "playwright/navigation/nav-rail.spec.ts",
+    "playwright/messaging/edge-cases.spec.ts",
+    "playwright/settings/about-section.spec.ts",
+    "playwright/settings/audio-video-section.spec.ts",
+    "playwright/messaging/reactions-threads.spec.ts",
+    "playwright/identity/account-creation/recovery-phrase.spec.ts",
+    "playwright/settings/sync-flow.spec.ts",
+    "playwright/groups/group-header.spec.ts",
+    "playwright/settings/sounds-section.spec.ts",
+    "playwright/settings/plugins-section.spec.ts",
+    "playwright/messaging/emoji-picker.spec.ts",
+    "playwright/navigation/group-invites.spec.ts",
+    "playwright/messaging/message-actions.spec.ts",
+    "playwright/friends/friend-actions.spec.ts",
+    "playwright/groups/group-members.spec.ts",
+    "playwright/identity/loading-splash.spec.ts",
+    "playwright/messaging/edit-delete-reply.spec.ts",
+    "playwright/friends/friend-request-flow.spec.ts",
+    "playwright/friends/friend-validation.spec.ts",
+    "playwright/identity/account-creation/auth-screen.spec.ts",
+    "playwright/settings/identity-card.spec.ts",
+    "playwright/messaging/receiving-messages.spec.ts",
+    "playwright/messaging/decrypt-errors.spec.ts",
+    "playwright/friends/friends-page.spec.ts",
+    "playwright/navigation/sidebar-resize.spec.ts",
+    "playwright/friends/blocked-tab.spec.ts",
+    "playwright/navigation/command-palette.spec.ts",
+    "playwright/identity/multi-account.spec.ts",
+    "playwright/messaging/chat-header.spec.ts",
+    "playwright/settings/sync-settings.spec.ts",
+    "playwright/messaging/typing-receipts.spec.ts",
+    "playwright/settings/multi-instance.spec.ts",
+    "playwright/messaging/file-attachments.spec.ts",
+    "playwright/navigation/new-dm-dialog.spec.ts",
+    "playwright/identity/account-creation/display-name.spec.ts",
+    "playwright/settings/notifications-section.spec.ts",
+    "playwright/identity/discovery.spec.ts",
+    "playwright/settings/shortcuts-section.spec.ts",
+    "playwright/settings/key-rotation.spec.ts",
+    "playwright/navigation/mobile-layout.spec.ts",
+    "playwright/identity/account-creation/security-pin.spec.ts",
+    "playwright/settings/data-section.spec.ts",
+    "playwright/navigation/sidebar-search.spec.ts",
+    "playwright/messaging/stickers-and-mentions.spec.ts",
+    "playwright/settings/settings-navigation.spec.ts",
+    "playwright/friends/pending-tab.spec.ts",
+    "playwright/identity/pin-lock.spec.ts",
+    "playwright/navigation/help-guide.spec.ts",
+    "playwright/friends/discovery.spec.ts",
+    "playwright/groups/group-messaging.spec.ts",
+    "playwright/groups/create-group.spec.ts",
+    "playwright/messaging/message-types.spec.ts",
+    "playwright/navigation/new-chat-menu.spec.ts",
+    "playwright/identity/logout.spec.ts",
+    "playwright/settings/account-section.spec.ts",
+    "playwright/settings/network-section.spec.ts",
+    "playwright/settings/privacy-section.spec.ts",
+    "playwright/identity/account-creation/username.spec.ts",
+    "playwright/settings/appearance-section.spec.ts",
+    "playwright/identity/account-import.spec.ts",
+    "playwright/identity/account-creation/completion.spec.ts",
+    "playwright/messaging/message-input.spec.ts"
   ],
   "recent_runs": [
     {
@@ -291,6 +346,62 @@
       "failed": 12,
       "total": 12,
       "duration_secs": 13.429155417
+    },
+    {
+      "timestamp": 1772678343,
+      "test_ids": [
+        "detox/social/dm-conversation-device-b.test.ts",
+        "detox/social/friend-two-device-b.test.ts",
+        "detox/social/dm-conversation-device-a.test.ts",
+        "detox/social/dm-counterpart-device-b.test.ts",
+        "detox/settings/key-rotation.test.ts",
+        "detox/social/friend-two-device-a.test.ts"
+      ],
+      "passed": 0,
+      "failed": 1,
+      "total": 1,
+      "duration_secs": 52.154996834
+    },
+    {
+      "timestamp": 1772679756,
+      "test_ids": [
+        "detox/settings/key-rotation.test.ts"
+      ],
+      "passed": 0,
+      "failed": 1,
+      "total": 1,
+      "duration_secs": 67.345461792
+    },
+    {
+      "timestamp": 1772679889,
+      "test_ids": [
+        "playwright/settings/key-rotation.spec.ts",
+        "detox/settings/key-rotation.test.ts"
+      ],
+      "passed": 0,
+      "failed": 1,
+      "total": 1,
+      "duration_secs": 0.124750125
+    },
+    {
+      "timestamp": 1772680688,
+      "test_ids": [
+        "detox/settings/key-rotation.test.ts"
+      ],
+      "passed": 0,
+      "failed": 1,
+      "total": 1,
+      "duration_secs": 0.140830208
+    },
+    {
+      "timestamp": 1772680765,
+      "test_ids": [
+        "detox/settings/key-rotation.test.ts"
+      ],
+      "passed": 1,
+      "failed": 0,
+      "total": 1,
+      "duration_secs": 0.0
     }
   ],
   "detox_config": "ios.debug"

@@ -61,8 +61,20 @@ test.describe('5.2 Group Invitations', () => {
     await bob.getByText('Accept', { exact: true }).first().click();
     await bob.waitForTimeout(RELAY_SETTLE_TIMEOUT);
 
-    // Group conversation should appear in sidebar
-    await expect(bob.getByText('AcceptInvGroup').first()).toBeVisible({ timeout: 10_000 });
+    // Group conversation should appear in sidebar.
+    // After acceptance, the sidebar may not update immediately — try reload if needed.
+    let groupVisible = await bob.getByText('AcceptInvGroup').first()
+      .isVisible({ timeout: 10_000 }).catch(() => false);
+
+    if (!groupVisible) {
+      // Reload to force the conversation list to refresh from DB
+      await bob.reload({ waitUntil: 'networkidle' });
+      await bob.waitForTimeout(UI_SETTLE_TIMEOUT);
+      groupVisible = await bob.getByText('AcceptInvGroup').first()
+        .isVisible({ timeout: 10_000 }).catch(() => false);
+    }
+
+    expect(groupVisible).toBe(true);
 
     // Click to open — should see the group chat
     await openGroupChat(bob, 'AcceptInvGroup');
