@@ -252,6 +252,7 @@ export function JoinCommunityModal({
           autoFocus
           editable={!isJoining}
           onSubmitEditing={canJoin ? handleJoin : undefined}
+          gradientBorder
         />
 
         {error && (

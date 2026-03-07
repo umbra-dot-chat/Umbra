@@ -132,6 +132,7 @@ export function InputDialog({
           autoFocus
           onSubmitEditing={canSubmit ? handleSubmit : undefined}
           maxLength={maxLength}
+          gradientBorder
         />
         {error && (
           <Text size="xs" style={{ color: theme.colors.status.danger }}>

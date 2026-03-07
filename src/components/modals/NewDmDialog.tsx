@@ -93,6 +93,7 @@ export function NewDmDialog({ open, onClose, onSelectFriend }: NewDmDialogProps)
           size="sm"
           fullWidth
           onClear={() => setSearch('')}
+          gradientBorder
         />
 
         <View

@@ -102,6 +102,7 @@ export function ForwardDialog({ open, onClose, onSelectConversation }: ForwardDi
           size="sm"
           fullWidth
           onClear={() => setSearch('')}
+          gradientBorder
         />
 
         <View

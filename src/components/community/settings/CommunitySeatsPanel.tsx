@@ -374,6 +374,7 @@ export function CommunitySeatsPanel({
         value={searchQuery}
         onChangeText={setSearchQuery}
         placeholder="Search by username, role, or platform..."
+        gradientBorder
       />
 
       {/* Filtered count when searching */}

@@ -307,6 +307,7 @@ export function ImportWalletFlow({ open, onClose }: ImportWalletFlowProps) {
               autoFocus
               testID={TEST_IDS.IMPORT.NAME_INPUT}
               accessibilityLabel="Display name"
+              gradientBorder
             />
           </VStack>
         );

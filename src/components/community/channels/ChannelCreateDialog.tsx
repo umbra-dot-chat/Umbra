@@ -325,6 +325,7 @@ export function ChannelCreateDialog({
             autoFocus
             onSubmitEditing={canSubmit ? handleSubmit : undefined}
             maxLength={100}
+            gradientBorder
           />
         </View>
 

@@ -215,6 +215,7 @@ export function QRCardDialog({
                   fullWidth
                   autoCapitalize="none"
                   autoCorrect={false}
+                  gradientBorder
                 />
                 <Button
                   variant="primary"

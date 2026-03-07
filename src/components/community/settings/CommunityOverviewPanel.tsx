@@ -79,6 +79,7 @@ export function CommunityOverviewPanel({ name, description, onSave }: CommunityO
           value={editName}
           onChangeText={setEditName}
           placeholder="Community name"
+          gradientBorder
         />
       </View>
 
@@ -92,6 +93,7 @@ export function CommunityOverviewPanel({ name, description, onSave }: CommunityO
           onChangeText={setEditDescription}
           placeholder="What's this community about?"
           numberOfLines={4}
+          gradientBorder
         />
       </View>
 

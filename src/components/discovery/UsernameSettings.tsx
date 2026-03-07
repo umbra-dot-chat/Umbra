@@ -255,6 +255,7 @@ export function UsernameSettings({ did, style }: UsernameSettingsProps) {
               autoFocus
               autoCapitalize="none"
               autoCorrect={false}
+              gradientBorder
             />
 
             <Text size="xs" color="muted">

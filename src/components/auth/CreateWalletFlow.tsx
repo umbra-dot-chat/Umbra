@@ -343,6 +343,7 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
               autoFocus
               testID={TEST_IDS.CREATE.NAME_INPUT}
               accessibilityLabel="Display name input"
+              gradientBorder
             />
 
             <Separator spacing="lg" />
@@ -504,6 +505,7 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
                   autoCorrect={false}
                   testID={TEST_IDS.CREATE.USERNAME_INPUT}
                   accessibilityLabel="Username input"
+                  gradientBorder
                 />
 
                 <Text size="xs" color="muted">

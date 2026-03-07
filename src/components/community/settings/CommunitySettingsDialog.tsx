@@ -1526,13 +1526,13 @@ export function CommunitySettingsDialog({
                 >
                   <Icon
                     size={18}
-                    color={isActive ? tc.text.inverse : isDanger ? tc.status.danger : tc.text.secondary}
+                    color={isActive ? tc.text.onAccent : isDanger ? tc.status.danger : tc.text.secondary}
                   />
                   <RNText
                     style={{
                       fontSize: 14,
                       fontWeight: isActive ? '600' : '400',
-                      color: isActive ? tc.text.inverse : isDanger ? tc.status.danger : tc.text.secondary,
+                      color: isActive ? tc.text.onAccent : isDanger ? tc.status.danger : tc.text.secondary,
                     }}
                   >
                     {item.label}

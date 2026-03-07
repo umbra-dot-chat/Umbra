@@ -165,6 +165,7 @@ export function CreateGroupDialog({ open, onClose, onCreated }: CreateGroupDialo
               placeholder="Enter group name..."
               style={{ width: '100%' }}
               testID={TEST_IDS.GROUPS.NAME_INPUT}
+              gradientBorder
             />
           </VStack>
 
@@ -177,6 +178,7 @@ export function CreateGroupDialog({ open, onClose, onCreated }: CreateGroupDialo
               numberOfLines={2}
               style={{ width: '100%' }}
               testID={TEST_IDS.GROUPS.DESCRIPTION_INPUT}
+              gradientBorder
             />
           </VStack>
 
