@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import { Animated, Easing, View, Pressable, ScrollView, Text as RNText, Platform, Image, Linking, Modal, SafeAreaView, useWindowDimensions } from 'react-native';
+import { Animated, Easing, View, Pressable, ScrollView, Text as RNText, Platform, Image, Linking, Modal, SafeAreaView, useWindowDimensions, StyleSheet } from 'react-native';
 import type { ViewStyle, TextStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -21,6 +21,8 @@ import {
   Tag,
   Slider,
   SegmentedControl,
+  Progress,
+  GradientText,
   useTheme,
 } from '@coexist/wisp-react-native';
 import { defaultRadii } from '@coexist/wisp-core/theme/create-theme';
@@ -90,6 +92,8 @@ import type { MessageDisplayMode } from '@/contexts/MessagingContext';
 import { SlotRenderer } from '@/components/plugins/SlotRenderer';
 import { ShortcutRegistry } from '@/services/ShortcutRegistry';
 import { clearDatabaseExport, getSqlDatabase } from '@umbra/wasm';
+import * as ExpoClipboard from 'expo-clipboard';
+import { useStorageManager } from '@/hooks/useStorageManager';
 import { useAppUpdate } from '@/hooks/useAppUpdate';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import { AllPlatformsDialog } from '@/components/modals/AllPlatformsDialog';
@@ -501,9 +505,9 @@ function SectionHeader({ title, description }: { title: string; description: str
       <RNText style={{ fontSize: 18, fontWeight: '700', color: tc.text.primary }}>
         {title}
       </RNText>
-      <RNText style={{ fontSize: 13, color: tc.text.secondary, marginTop: 4 }}>
+      <GradientText animated speed={10000} style={{ fontSize: 13, marginTop: 4 }}>
         {description}
-      </RNText>
+      </GradientText>
     </View>
   );
 }
@@ -730,10 +734,14 @@ function AccountSection() {
   const [rotateKeyError, setRotateKeyError] = useState<string | null>(null);
   const [isRotatingKey, setIsRotatingKey] = useState(false);
 
-  const handleCopyDid = useCallback(() => {
+  const handleCopyDid = useCallback(async () => {
     if (!identity) return;
     try {
-      navigator.clipboard.writeText(identity.did);
+      if (Platform.OS === 'web') {
+        await navigator.clipboard.writeText(identity.did);
+      } else {
+        await ExpoClipboard.setStringAsync(identity.did);
+      }
       setDidCopied(true);
       setTimeout(() => setDidCopied(false), 2000);
     } catch {
@@ -824,7 +832,7 @@ function AccountSection() {
                       style={{ width: 48, height: 48 }}
                     />
                   ) : (
-                    <RNText style={{ fontSize: 20, fontWeight: '700', color: tc.text.inverse }}>
+                    <RNText style={{ fontSize: 20, fontWeight: '700', color: tc.text.onAccent }}>
                       {identity.displayName.charAt(0).toUpperCase()}
                     </RNText>
                   )}
@@ -1326,6 +1334,7 @@ function ProfileSection() {
             size="md"
             fullWidth
             testID={TEST_IDS.SETTINGS.DISPLAY_NAME_INPUT}
+            gradientBorder
           />
         </SettingRow>
       </View>
@@ -2439,7 +2448,7 @@ function AudioVideoSection() {
                         justifyContent: 'center',
                         alignItems: 'center',
                       }}>
-                        <CheckIcon size={9} color={tc.text.inverse} />
+                        <CheckIcon size={9} color={tc.text.onAccent} />
                       </View>
                     )}
                   </Pressable>
@@ -2460,6 +2469,7 @@ function AudioVideoSection() {
                   if (url) setBackgroundPresetId(null);
                 }}
                 size="sm"
+                gradientBorder
               />
             </View>
           </View>
@@ -2547,7 +2557,7 @@ function AudioVideoSection() {
                         <RNText style={{
                           fontSize: 10,
                           fontWeight: '600',
-                          color: isActive ? tc.text.inverse : tc.text.secondary,
+                          color: isActive ? tc.text.onAccent : tc.text.secondary,
                         }}>
                           {preset.label}
                         </RNText>
@@ -3097,29 +3107,41 @@ function NetworkSection() {
     fetchInfo();
   }, [service]);
 
-  const handleCopyPeerId = useCallback(() => {
+  const handleCopyPeerId = useCallback(async () => {
     const id = connectionInfo?.peerId || '';
     if (!id) return;
     try {
-      navigator.clipboard.writeText(id);
+      if (Platform.OS === 'web') {
+        await navigator.clipboard.writeText(id);
+      } else {
+        await ExpoClipboard.setStringAsync(id);
+      }
       setPeerIdCopied(true);
       setTimeout(() => setPeerIdCopied(false), 2000);
     } catch { /* ignore */ }
   }, [connectionInfo]);
 
-  const handleCopyOffer = useCallback(() => {
+  const handleCopyOffer = useCallback(async () => {
     if (!offerData) return;
     try {
-      navigator.clipboard.writeText(offerData);
+      if (Platform.OS === 'web') {
+        await navigator.clipboard.writeText(offerData);
+      } else {
+        await ExpoClipboard.setStringAsync(offerData);
+      }
       setOfferCopied(true);
       setTimeout(() => setOfferCopied(false), 2000);
     } catch { /* ignore */ }
   }, [offerData]);
 
-  const handleCopyAnswer = useCallback(() => {
+  const handleCopyAnswer = useCallback(async () => {
     if (!answerData) return;
     try {
-      navigator.clipboard.writeText(answerData);
+      if (Platform.OS === 'web') {
+        await navigator.clipboard.writeText(answerData);
+      } else {
+        await ExpoClipboard.setStringAsync(answerData);
+      }
       setAnswerCopied(true);
       setTimeout(() => setAnswerCopied(false), 2000);
     } catch { /* ignore */ }
@@ -3348,6 +3370,7 @@ function NetworkSection() {
               placeholder="wss://relay.example.com/ws"
               size="sm"
               fullWidth
+              gradientBorder
             />
           </View>
           <Button
@@ -3547,6 +3570,7 @@ function NetworkSection() {
               placeholder="Paste the connection data here..."
               numberOfLines={3}
               fullWidth
+              gradientBorder
             />
             <Button
               size="sm"
@@ -3633,6 +3657,7 @@ function DataManagementSection() {
   const { service } = useUmbra();
   const { theme } = useTheme();
   const tc = theme.colors;
+  const { storageUsage, isLoading: storageLoading, formatBytes: fmtBytes } = useStorageManager();
   const [showClearMessagesConfirm, setShowClearMessagesConfirm] = useState(false);
   const [showClearAllConfirm, setShowClearAllConfirm] = useState(false);
   const [clearStatus, setClearStatus] = useState<string | null>(null);
@@ -3740,6 +3765,50 @@ function DataManagementSection() {
               {identity && (
                 <RNText style={{ fontSize: 11, color: tc.text.muted, fontFamily: 'monospace', marginTop: 4 }}>
                   DID: {identity.did.slice(0, 24)}...
+                </RNText>
+              )}
+
+              {/* Storage usage bar */}
+              {storageUsage && storageUsage.total > 0 && (
+                <View style={{ marginTop: 12, gap: 6 }}>
+                  <Progress
+                    value={storageUsage.total}
+                    max={storageUsage.total * 2}
+                    label="Storage Used"
+                    showValue
+                    formatValue={() => fmtBytes(storageUsage.total)}
+                    size="md"
+                    thickness="md"
+                    gradient
+                    glowEdge
+                  />
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 2 }}>
+                    {storageUsage.byContext.community > 0 && (
+                      <RNText style={{ fontSize: 11, color: tc.text.muted }}>
+                        Communities: {fmtBytes(storageUsage.byContext.community)}
+                      </RNText>
+                    )}
+                    {storageUsage.byContext.dm > 0 && (
+                      <RNText style={{ fontSize: 11, color: tc.text.muted }}>
+                        DMs: {fmtBytes(storageUsage.byContext.dm)}
+                      </RNText>
+                    )}
+                    {storageUsage.byContext.sharedFolders > 0 && (
+                      <RNText style={{ fontSize: 11, color: tc.text.muted }}>
+                        Shared Folders: {fmtBytes(storageUsage.byContext.sharedFolders)}
+                      </RNText>
+                    )}
+                    {storageUsage.byContext.cache > 0 && (
+                      <RNText style={{ fontSize: 11, color: tc.text.muted }}>
+                        Cache: {fmtBytes(storageUsage.byContext.cache)}
+                      </RNText>
+                    )}
+                  </View>
+                </View>
+              )}
+              {storageLoading && (
+                <RNText style={{ fontSize: 11, color: tc.text.muted, marginTop: 8 }}>
+                  Loading storage info...
                 </RNText>
               )}
             </View>
@@ -3939,7 +4008,7 @@ function PluginsSection({ onOpenMarketplace }: { onOpenMarketplace?: () => void 
             size="sm"
             variant="primary"
             onPress={onOpenMarketplace}
-            iconLeft={<DownloadIcon size={14} color={tc.text.inverse} />}
+            iconLeft={<DownloadIcon size={14} color={tc.text.onAccent} />}
           >
             Marketplace
           </Button>
@@ -4428,7 +4497,7 @@ function MessageDisplayPreview({
                     style={{
                       fontSize: 10,
                       color: msg.isOwn
-                        ? (tc.text.inverse || '#fff')
+                        ? (tc.text.onAccent || '#fff')
                         : tc.text.primary,
                     }}
                   >
@@ -4704,14 +4773,19 @@ export function SettingsDialog({ open, onClose, onOpenMarketplace, initialSectio
       flexDirection: 'row',
       borderRadius: 16,
       overflow: 'hidden',
-      backgroundColor: isDark ? tc.background.raised : tc.background.canvas,
-      borderWidth: isDark ? 1 : 0,
-      borderColor: isDark ? tc.border.subtle : 'transparent',
+      // Glassmorphism: translucent background with blur
+      backgroundColor: isDark ? 'rgba(30, 30, 34, 0.94)' : 'rgba(255, 255, 255, 0.92)',
+      borderWidth: 1,
+      borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.6)',
       shadowColor: '#000',
-      shadowOffset: { width: 0, height: 12 },
-      shadowOpacity: isDark ? 0.6 : 0.25,
-      shadowRadius: 32,
+      shadowOffset: { width: 0, height: 16 },
+      shadowOpacity: isDark ? 0.7 : 0.2,
+      shadowRadius: 48,
       elevation: 12,
+      ...(Platform.OS === 'web' ? {
+        backdropFilter: 'blur(16px) saturate(1.3)',
+        WebkitBackdropFilter: 'blur(16px) saturate(1.3)',
+      } as any : {}),
     }),
     [tc, isDark, isMobile, insets],
   );
@@ -4728,9 +4802,12 @@ export function SettingsDialog({ open, onClose, onOpenMarketplace, initialSectio
       width: 180,
       flexGrow: 0,
       flexShrink: 0,
-      backgroundColor: isDark ? tc.background.surface : tc.background.sunken,
+      // Glass sidebar: subtle tint to differentiate from content
+      backgroundColor: isDark
+        ? 'rgba(255, 255, 255, 0.04)'
+        : 'rgba(0, 0, 0, 0.03)',
       borderRightWidth: 1,
-      borderRightColor: tc.border.subtle,
+      borderRightColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
       paddingVertical: 16,
       paddingHorizontal: 10,
     }),
@@ -4822,22 +4899,26 @@ export function SettingsDialog({ open, onClose, onOpenMarketplace, initialSectio
                 paddingHorizontal: 10,
                 borderRadius: 8,
                 backgroundColor: isActive
-                  ? tc.accent.primary
+                  ? (isDark ? 'rgba(255,255,255,0.1)' : 'rgba(255,255,255,0.6)')
                   : pressed
-                    ? tc.accent.highlight
+                    ? (isDark ? 'rgba(255,255,255,0.06)' : 'rgba(255,255,255,0.4)')
                     : 'transparent',
+                borderWidth: isActive ? 1 : 0,
+                borderColor: isActive
+                  ? (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.5)')
+                  : 'transparent',
                 marginBottom: 2,
               })}
             >
               <Icon
                 size={18}
-                color={isActive ? tc.text.inverse : tc.text.secondary}
+                color={isActive ? tc.text.primary : tc.text.secondary}
               />
               <RNText
                 style={{
                   fontSize: 14,
                   fontWeight: isActive ? '600' : '400',
-                  color: isActive ? tc.text.inverse : tc.text.secondary,
+                  color: isActive ? tc.text.primary : tc.text.secondary,
                 }}
               >
                 {item.label}
@@ -4846,7 +4927,7 @@ export function SettingsDialog({ open, onClose, onOpenMarketplace, initialSectio
 
             {/* Sub-items: show when section is active and has subcategories */}
             {isActive && hasSubs && (
-              <View style={{ marginLeft: 20, marginBottom: 4 }}>
+              <View style={{ marginTop: 4, marginBottom: 4 }}>
                 {subs.map((sub) => {
                   const isSubActive = activeSubsection === sub.id;
                   return (
@@ -4863,8 +4944,8 @@ export function SettingsDialog({ open, onClose, onOpenMarketplace, initialSectio
                           width: 2,
                           borderRadius: 1,
                           backgroundColor: isSubActive
-                            ? tc.accent.primary
-                            : 'rgba(255,255,255,0.18)',
+                            ? tc.text.primary
+                            : tc.border.strong,
                         }}
                       />
                       <Pressable
@@ -4876,9 +4957,9 @@ export function SettingsDialog({ open, onClose, onOpenMarketplace, initialSectio
                           borderTopRightRadius: 4,
                           borderBottomRightRadius: 4,
                           backgroundColor: isSubActive
-                            ? 'rgba(255,255,255,0.06)'
+                            ? (isDark ? 'rgba(255,255,255,0.08)' : 'rgba(255,255,255,0.5)')
                             : pressed
-                              ? 'rgba(255,255,255,0.04)'
+                              ? (isDark ? 'rgba(255,255,255,0.04)' : 'rgba(255,255,255,0.3)')
                               : 'transparent',
                         })}
                       >
@@ -4887,7 +4968,7 @@ export function SettingsDialog({ open, onClose, onOpenMarketplace, initialSectio
                             fontSize: 13,
                             fontWeight: isSubActive ? '600' : '400',
                             color: isSubActive
-                              ? tc.accent.primary
+                              ? tc.text.primary
                               : tc.text.secondary,
                           }}
                         >
@@ -4943,12 +5024,32 @@ export function SettingsDialog({ open, onClose, onOpenMarketplace, initialSectio
       backdrop={isMobile ? undefined : 'dim'}
       center={!isMobile}
       onBackdropPress={isMobile ? undefined : onClose}
-      animationType="fade"
+      animationType={!isMobile && Platform.OS === 'web' ? 'none' : 'fade'}
       useModal={!isMobile}
+      style={!isMobile && Platform.OS === 'web' ? {
+        backgroundColor: 'rgba(0, 0, 0, 0.3)',
+        backdropFilter: 'blur(2px)',
+        WebkitBackdropFilter: 'blur(2px)',
+      } as any : undefined}
     >
 
       <HelpPopoverHost />
       <View style={modalStyle} testID={TEST_IDS.SETTINGS.DIALOG}>
+        {/* Glass inner highlight — top edge shine */}
+        {!isMobile && Platform.OS === 'web' && (
+          <View
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              height: 1,
+              backgroundColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.8)',
+              zIndex: 10,
+            }}
+            pointerEvents="none"
+          />
+        )}
         {isMobile ? (
           // Mobile: both views always mounted, slide via translateX
           <View style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>

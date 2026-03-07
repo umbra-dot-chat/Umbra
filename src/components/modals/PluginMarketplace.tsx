@@ -236,7 +236,7 @@ function ListingCard({
               </RNText>
             </View>
           ) : (
-            <Button size="xs" variant="primary" onPress={(e) => { e?.stopPropagation?.(); onInstall(); }} disabled={installing} iconLeft={installing ? undefined : <DownloadIcon size={12} color={tc.text.inverse} />}>
+            <Button size="xs" variant="primary" onPress={(e) => { e?.stopPropagation?.(); onInstall(); }} disabled={installing} iconLeft={installing ? undefined : <DownloadIcon size={12} color={tc.text.onAccent} />}>
               {installing ? 'Installing...' : 'Install'}
             </Button>
           )}
@@ -387,12 +387,12 @@ function PluginDetailView({
             <Button size="sm" variant={plugin.state === 'enabled' ? 'secondary' : 'primary'} onPress={onToggle} style={{ flex: 1 }}>
               {plugin.state === 'enabled' ? 'Disable' : 'Enable'}
             </Button>
-            <Button size="sm" variant="destructive" onPress={onUninstall} iconLeft={<TrashIcon size={14} color={tc.text.inverse} />}>
+            <Button size="sm" variant="destructive" onPress={onUninstall} iconLeft={<TrashIcon size={14} color={tc.text.onAccent} />}>
               Uninstall
             </Button>
           </>
         ) : (
-          <Button size="sm" variant="primary" onPress={onInstall} disabled={installing} iconLeft={<DownloadIcon size={14} color={tc.text.inverse} />} style={{ flex: 1 }}>
+          <Button size="sm" variant="primary" onPress={onInstall} disabled={installing} iconLeft={<DownloadIcon size={14} color={tc.text.onAccent} />} style={{ flex: 1 }}>
             {installing ? 'Installing...' : 'Install Plugin'}
           </Button>
         )}
@@ -561,7 +561,7 @@ function FontCard({ font, isInstalled, isActive, isLoading, onInstall, onActivat
             Use Font
           </Button>
         ) : (
-          <Button size="xs" variant="primary" onPress={onInstall} disabled={isLoading} iconLeft={isLoading ? undefined : <DownloadIcon size={12} color={tc.text.inverse} />}>
+          <Button size="xs" variant="primary" onPress={onInstall} disabled={isLoading} iconLeft={isLoading ? undefined : <DownloadIcon size={12} color={tc.text.onAccent} />}>
             {isLoading ? 'Loading...' : 'Install'}
           </Button>
         )}
@@ -639,7 +639,7 @@ function FontsContent() {
 
       {/* Search */}
       <View style={{ marginBottom: 12 }}>
-        <SearchInput value={search} onValueChange={setSearch} placeholder="Search fonts..." size="sm" fullWidth onClear={() => setSearch('')} />
+        <SearchInput value={search} onValueChange={setSearch} placeholder="Search fonts..." size="sm" fullWidth onClear={() => setSearch('')} gradientBorder />
       </View>
 
       {/* Category filter */}
@@ -657,7 +657,7 @@ function FontsContent() {
           >
             <RNText style={{
               fontSize: 12, fontWeight: categoryFilter === cat ? '600' : '400',
-              color: categoryFilter === cat ? tc.text.inverse : tc.text.secondary,
+              color: categoryFilter === cat ? tc.text.onAccent : tc.text.secondary,
               textTransform: 'capitalize',
             }}>
               {cat === 'all' ? 'All' : cat}
@@ -821,7 +821,7 @@ function ThemeCard({
               size="xs"
               variant="primary"
               onPress={onInstall}
-              iconLeft={<DownloadIcon size={12} color={tc.text.inverse} />}
+              iconLeft={<DownloadIcon size={12} color={tc.text.onAccent} />}
             >
               Install
             </Button>
@@ -948,7 +948,7 @@ function ThemesContent() {
               style={{
                 fontSize: 13,
                 fontWeight: tab === t ? '600' : '400',
-                color: tab === t ? tc.text.inverse : tc.text.secondary,
+                color: tab === t ? tc.text.onAccent : tc.text.secondary,
               }}
             >
               {t === 'browse' ? 'Browse' : `Installed (${installedThemeIds.size})`}
@@ -968,6 +968,7 @@ function ThemesContent() {
               size="sm"
               fullWidth
               onClear={() => setSearch('')}
+              gradientBorder
             />
           </View>
 
@@ -1252,7 +1253,7 @@ export function PluginMarketplace({ open, onClose }: PluginMarketplaceProps) {
                       testID={tab === 'browse' ? TEST_IDS.PLUGINS.TAB_BROWSE : TEST_IDS.PLUGINS.TAB_INSTALLED}
                       style={{ paddingHorizontal: 14, paddingVertical: 7, borderRadius: 6, backgroundColor: pluginTab === tab ? tc.accent.primary : 'transparent' }}
                     >
-                      <RNText style={{ fontSize: 13, fontWeight: pluginTab === tab ? '600' : '400', color: pluginTab === tab ? tc.text.inverse : tc.text.secondary }}>
+                      <RNText style={{ fontSize: 13, fontWeight: pluginTab === tab ? '600' : '400', color: pluginTab === tab ? tc.text.onAccent : tc.text.secondary }}>
                         {tab === 'browse' ? 'Browse' : `Installed (${allPlugins.length})`}
                       </RNText>
                     </Pressable>
@@ -1262,16 +1263,16 @@ export function PluginMarketplace({ open, onClose }: PluginMarketplaceProps) {
                 {pluginTab === 'browse' ? (
                   <View style={{ flex: 1 }}>
                     <View style={{ paddingHorizontal: 20, paddingTop: 12, gap: 10 }}>
-                      <SearchInput value={search} onValueChange={setSearch} placeholder="Search plugins..." size="md" fullWidth onClear={() => setSearch('')} testID={TEST_IDS.PLUGINS.SEARCH_INPUT} />
+                      <SearchInput value={search} onValueChange={setSearch} placeholder="Search plugins..." size="md" fullWidth onClear={() => setSearch('')} testID={TEST_IDS.PLUGINS.SEARCH_INPUT} gradientBorder />
                       {categories.length > 0 && (
                         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                           <View style={{ flexDirection: 'row', gap: 6 }}>
                             <Pressable onPress={() => setSelectedCategory(null)} style={{ paddingHorizontal: 10, paddingVertical: 5, borderRadius: 14, backgroundColor: !selectedCategory ? tc.accent.primary : (isDark ? tc.background.raised : tc.background.sunken), borderWidth: !selectedCategory ? 0 : (isDark ? 0 : 1), borderColor: tc.border.subtle }}>
-                              <RNText style={{ fontSize: 12, fontWeight: !selectedCategory ? '600' : '400', color: !selectedCategory ? tc.text.inverse : tc.text.secondary }}>All</RNText>
+                              <RNText style={{ fontSize: 12, fontWeight: !selectedCategory ? '600' : '400', color: !selectedCategory ? tc.text.onAccent : tc.text.secondary }}>All</RNText>
                             </Pressable>
                             {categories.map((cat) => (
                               <Pressable key={cat} onPress={() => setSelectedCategory(selectedCategory === cat ? null : cat)} style={{ paddingHorizontal: 10, paddingVertical: 5, borderRadius: 14, backgroundColor: selectedCategory === cat ? tc.accent.primary : (isDark ? tc.background.raised : tc.background.sunken), borderWidth: selectedCategory === cat ? 0 : (isDark ? 0 : 1), borderColor: tc.border.subtle }}>
-                                <RNText style={{ fontSize: 12, fontWeight: selectedCategory === cat ? '600' : '400', color: selectedCategory === cat ? tc.text.inverse : tc.text.secondary }}>{cat}</RNText>
+                                <RNText style={{ fontSize: 12, fontWeight: selectedCategory === cat ? '600' : '400', color: selectedCategory === cat ? tc.text.onAccent : tc.text.secondary }}>{cat}</RNText>
                               </Pressable>
                             ))}
                           </View>
@@ -1336,7 +1337,7 @@ export function PluginMarketplace({ open, onClose }: PluginMarketplaceProps) {
                       <RNText style={{ fontSize: 12, color: tc.text.muted }}>Enter a URL to a local plugin bundle for development and testing.</RNText>
                       <View style={{ flexDirection: 'row', gap: 8 }}>
                         <View style={{ flex: 1 }}>
-                          <Input value={devUrl} onChangeText={setDevUrl} placeholder="http://localhost:3099/bundle.js" size="sm" fullWidth />
+                          <Input value={devUrl} onChangeText={setDevUrl} placeholder="http://localhost:3099/bundle.js" size="sm" fullWidth gradientBorder />
                         </View>
                         <Button size="sm" variant="secondary" onPress={handleLoadDevPlugin} disabled={!devUrl.trim() || devLoading}>
                           {devLoading ? 'Loading...' : 'Load'}
@@ -1385,7 +1386,7 @@ export function PluginMarketplace({ open, onClose }: PluginMarketplaceProps) {
           >
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
               <View style={{ width: 28, height: 28, borderRadius: 7, backgroundColor: '#F59E0B', alignItems: 'center', justifyContent: 'center' }}>
-                <ShoppingBagIcon size={14} color={tc.text.inverse} />
+                <ShoppingBagIcon size={14} color={tc.text.onAccent} />
               </View>
               <RNText style={{ fontSize: 16, fontWeight: '700', color: tc.text.primary }}>Marketplace</RNText>
             </View>
@@ -1437,13 +1438,13 @@ export function PluginMarketplace({ open, onClose }: PluginMarketplaceProps) {
                       justifyContent: 'center',
                     }}
                   >
-                    <Icon size={11} color={isActive ? tc.text.inverse : tc.text.secondary} />
+                    <Icon size={11} color={isActive ? tc.text.onAccent : tc.text.secondary} />
                   </View>
                   <RNText
                     style={{
                       fontSize: 12,
                       fontWeight: isActive ? '600' : '400',
-                      color: isActive ? tc.text.inverse : tc.text.secondary,
+                      color: isActive ? tc.text.onAccent : tc.text.secondary,
                     }}
                     numberOfLines={1}
                   >
@@ -1466,33 +1467,50 @@ export function PluginMarketplace({ open, onClose }: PluginMarketplaceProps) {
   // ── Desktop layout (unchanged) ──────────────────────────────────────────
 
   return (
-    <Overlay open={open} backdrop="dim" center onBackdropPress={handleClose} animationType="fade">
+    <Overlay
+      open={open}
+      backdrop="dim"
+      center
+      onBackdropPress={handleClose}
+      animationType={Platform.OS === 'web' ? 'none' : 'fade'}
+      style={Platform.OS === 'web' ? {
+        backgroundColor: 'rgba(0, 0, 0, 0.3)',
+        backdropFilter: 'blur(2px)',
+        WebkitBackdropFilter: 'blur(2px)',
+      } as any : undefined}
+    >
       <View
         testID={TEST_IDS.PLUGINS.MARKETPLACE}
         style={{
           width: 860, maxWidth: '95%', height: 600, maxHeight: '90%',
           flexDirection: 'row', borderRadius: 16, overflow: 'hidden',
-          backgroundColor: isDark ? tc.background.raised : tc.background.canvas,
+          backgroundColor: isDark ? 'rgba(30, 30, 34, 0.94)' : 'rgba(255, 255, 255, 0.92)',
           borderWidth: 1,
-          borderColor: tc.border.subtle,
-          shadowColor: '#000', shadowOffset: { width: 0, height: 12 },
-          shadowOpacity: isDark ? 0.6 : 0.25, shadowRadius: 32, elevation: 12,
+          borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.6)',
+          shadowColor: '#000', shadowOffset: { width: 0, height: 16 },
+          shadowOpacity: isDark ? 0.7 : 0.2, shadowRadius: 48, elevation: 12,
+          ...(Platform.OS === 'web' ? {
+            backdropFilter: 'blur(16px) saturate(1.3)',
+            WebkitBackdropFilter: 'blur(16px) saturate(1.3)',
+          } as any : {}),
         }}
       >
         {/* ── Left Sidebar ── */}
         <View
           style={{
             width: 210,
-            backgroundColor: isDark ? tc.background.surface : tc.background.sunken,
+            backgroundColor: isDark
+              ? 'rgba(255, 255, 255, 0.04)'
+              : 'rgba(0, 0, 0, 0.03)',
             borderRightWidth: 1,
-            borderRightColor: tc.border.subtle,
+            borderRightColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
             paddingVertical: 16, paddingHorizontal: 10,
           }}
         >
           {/* Title */}
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 8, marginBottom: 16 }}>
             <View style={{ width: 30, height: 30, borderRadius: 8, backgroundColor: '#F59E0B', alignItems: 'center', justifyContent: 'center' }}>
-              <ShoppingBagIcon size={16} color={tc.text.inverse} />
+              <ShoppingBagIcon size={16} color={tc.text.onAccent} />
             </View>
             <RNText style={{ fontSize: 15, fontWeight: '700', color: tc.text.primary }}>Marketplace</RNText>
           </View>
@@ -1514,14 +1532,14 @@ export function PluginMarketplace({ open, onClose }: PluginMarketplaceProps) {
                   })}
                 >
                   <View style={{ width: 24, height: 24, borderRadius: 6, backgroundColor: isActive ? sec.color : tc.accent.highlight, alignItems: 'center', justifyContent: 'center' }}>
-                    <Icon size={13} color={isActive ? tc.text.inverse : tc.text.secondary} />
+                    <Icon size={13} color={isActive ? tc.text.onAccent : tc.text.secondary} />
                   </View>
-                  <RNText style={{ fontSize: 13, fontWeight: isActive ? '600' : '400', color: isActive ? tc.text.inverse : tc.text.secondary, flex: 1 }} numberOfLines={1}>
+                  <RNText style={{ fontSize: 13, fontWeight: isActive ? '600' : '400', color: isActive ? tc.text.onAccent : tc.text.secondary, flex: 1 }} numberOfLines={1}>
                     {sec.label}
                   </RNText>
                   {sec.id === 'plugins' && allPlugins.length > 0 && (
                     <View style={{ paddingHorizontal: 6, paddingVertical: 1, borderRadius: 8, backgroundColor: isActive ? 'rgba(255,255,255,0.2)' : tc.accent.highlight }}>
-                      <RNText style={{ fontSize: 10, fontWeight: '600', color: isActive ? tc.text.inverse : tc.text.muted }}>{allPlugins.length}</RNText>
+                      <RNText style={{ fontSize: 10, fontWeight: '600', color: isActive ? tc.text.onAccent : tc.text.muted }}>{allPlugins.length}</RNText>
                     </View>
                   )}
                 </Pressable>
@@ -1548,7 +1566,7 @@ export function PluginMarketplace({ open, onClose }: PluginMarketplaceProps) {
           >
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
               <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: activeSectionInfo.color, alignItems: 'center', justifyContent: 'center' }}>
-                <activeSectionInfo.icon size={18} color={tc.text.inverse} />
+                <activeSectionInfo.icon size={18} color={tc.text.onAccent} />
               </View>
               <RNText style={{ fontSize: 18, fontWeight: '700', color: tc.text.primary }}>{activeSectionInfo.label}</RNText>
             </View>

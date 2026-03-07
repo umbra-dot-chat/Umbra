@@ -121,14 +121,18 @@ export function GuideDialog({ open, onClose }: GuideDialogProps) {
             flexDirection: 'row',
             borderRadius: 16,
             overflow: 'hidden',
-            backgroundColor: isDark ? tc.background.raised : tc.background.canvas,
-            borderWidth: isDark ? 1 : 0,
-            borderColor: isDark ? tc.border.subtle : 'transparent',
+            backgroundColor: isDark ? 'rgba(30, 30, 34, 0.94)' : 'rgba(255, 255, 255, 0.92)',
+            borderWidth: 1,
+            borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.6)',
             shadowColor: '#000',
-            shadowOffset: { width: 0, height: 12 },
-            shadowOpacity: isDark ? 0.6 : 0.25,
-            shadowRadius: 32,
+            shadowOffset: { width: 0, height: 16 },
+            shadowOpacity: isDark ? 0.7 : 0.2,
+            shadowRadius: 48,
             elevation: 12,
+            ...(Platform.OS === 'web' ? {
+              backdropFilter: 'blur(16px) saturate(1.3)',
+              WebkitBackdropFilter: 'blur(16px) saturate(1.3)',
+            } as any : {}),
           },
     [tc, isDark, isMobile, windowWidth, windowHeight],
   );
@@ -136,9 +140,11 @@ export function GuideDialog({ open, onClose }: GuideDialogProps) {
   const sidebarStyle = useMemo<ViewStyle>(
     () => ({
       width: 210,
-      backgroundColor: isDark ? tc.background.surface : tc.background.sunken,
+      backgroundColor: isDark
+        ? 'rgba(255, 255, 255, 0.04)'
+        : 'rgba(0, 0, 0, 0.03)',
       borderRightWidth: 1,
-      borderRightColor: tc.border.subtle,
+      borderRightColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
       paddingVertical: 16,
       paddingHorizontal: 10,
     }),
@@ -209,7 +215,7 @@ export function GuideDialog({ open, onClose }: GuideDialogProps) {
                   justifyContent: 'center',
                 }}
               >
-                <BookOpenIcon size={14} color={tc.text.inverse} />
+                <BookOpenIcon size={14} color={tc.text.onAccent} />
               </View>
               <RNText style={{ fontSize: 16, fontWeight: '700', color: tc.text.primary }}>
                 User Guide
@@ -268,13 +274,13 @@ export function GuideDialog({ open, onClose }: GuideDialogProps) {
                       justifyContent: 'center',
                     }}
                   >
-                    <Icon size={11} color={isActive ? tc.text.inverse : tc.text.secondary} />
+                    <Icon size={11} color={isActive ? tc.text.onAccent : tc.text.secondary} />
                   </View>
                   <RNText
                     style={{
                       fontSize: 12,
                       fontWeight: isActive ? '600' : '400',
-                      color: isActive ? tc.text.inverse : tc.text.secondary,
+                      color: isActive ? tc.text.onAccent : tc.text.secondary,
                     }}
                     numberOfLines={1}
                   >
@@ -303,7 +309,7 @@ export function GuideDialog({ open, onClose }: GuideDialogProps) {
                   justifyContent: 'center',
                 }}
               >
-                <activeInfo.icon size={16} color={tc.text.inverse} />
+                <activeInfo.icon size={16} color={tc.text.onAccent} />
               </View>
               <RNText style={{ fontSize: 17, fontWeight: '700', color: tc.text.primary }}>
                 {activeInfo.label}
@@ -319,7 +325,18 @@ export function GuideDialog({ open, onClose }: GuideDialogProps) {
   // -- Desktop layout (unchanged) ------------------------------------------
 
   return (
-    <Overlay open={open} backdrop="dim" center onBackdropPress={onClose} animationType="fade">
+    <Overlay
+      open={open}
+      backdrop="dim"
+      center
+      onBackdropPress={onClose}
+      animationType={Platform.OS === 'web' ? 'none' : 'fade'}
+      style={Platform.OS === 'web' ? {
+        backgroundColor: 'rgba(0, 0, 0, 0.3)',
+        backdropFilter: 'blur(2px)',
+        WebkitBackdropFilter: 'blur(2px)',
+      } as any : undefined}
+    >
       <View style={modalStyle}>
         {/* ── Left: Chapter Navigation ── */}
         <View style={sidebarStyle}>
@@ -335,7 +352,7 @@ export function GuideDialog({ open, onClose }: GuideDialogProps) {
                 justifyContent: 'center',
               }}
             >
-              <BookOpenIcon size={16} color={tc.text.inverse} />
+              <BookOpenIcon size={16} color={tc.text.onAccent} />
             </View>
             <RNText style={{ fontSize: 15, fontWeight: '700', color: tc.text.primary }}>User Guide</RNText>
           </View>
@@ -375,13 +392,13 @@ export function GuideDialog({ open, onClose }: GuideDialogProps) {
                       justifyContent: 'center',
                     }}
                   >
-                    <Icon size={13} color={isActive ? tc.text.inverse : tc.text.secondary} />
+                    <Icon size={13} color={isActive ? tc.text.onAccent : tc.text.secondary} />
                   </View>
                   <RNText
                     style={{
                       fontSize: 13,
                       fontWeight: isActive ? '600' : '400',
-                      color: isActive ? tc.text.inverse : tc.text.secondary,
+                      color: isActive ? tc.text.onAccent : tc.text.secondary,
                       flex: 1,
                     }}
                     numberOfLines={1}
@@ -424,7 +441,7 @@ export function GuideDialog({ open, onClose }: GuideDialogProps) {
                   justifyContent: 'center',
                 }}
               >
-                <activeInfo.icon size={18} color={tc.text.inverse} />
+                <activeInfo.icon size={18} color={tc.text.onAccent} />
               </View>
               <RNText style={{ fontSize: 18, fontWeight: '700', color: tc.text.primary }}>
                 {activeInfo.label}
