@@ -145,21 +145,31 @@ export function FriendRequestItem({
     onAccept?.();
   }, [onAccept, glowOpacity]);
 
+  // On web, Animated string interpolation cannot handle 'transparent' → hex color.
+  // Use a simple opacity-driven approach: a static green boxShadow + animated opacity wrapper.
+  const glowStyle = Platform.OS === 'web'
+    ? { boxShadow: `0 0 12px ${tc.status.success}` } as any
+    : {};
+
   return (
-    <Animated.View
-      style={[
-        {
-          borderRadius: 4,
-          marginHorizontal: flat ? 0 : 4,
-        },
-        Platform.OS === 'web' ? {
-          boxShadow: glowOpacity.interpolate({
-            inputRange: [0, 0.4],
-            outputRange: ['0 0 0px transparent', `0 0 12px ${tc.status.success}`],
-          }),
-        } as any : {},
-      ]}
-    >
+    <View style={{ borderRadius: 4, marginHorizontal: flat ? 0 : 4, position: 'relative' as const }}>
+      {/* Glow layer — fades in/out via glowOpacity */}
+      {Platform.OS === 'web' && (
+        <Animated.View
+          pointerEvents="none"
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            borderRadius: 4,
+            opacity: glowOpacity,
+            ...glowStyle,
+          }}
+        />
+      )}
+
       <HStack
         testID={TEST_IDS.FRIENDS.CARD}
         style={{
@@ -200,7 +210,7 @@ export function FriendRequestItem({
           </Button>
         )}
       </HStack>
-    </Animated.View>
+    </View>
   );
 }
 

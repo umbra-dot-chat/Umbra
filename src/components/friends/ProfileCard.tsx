@@ -104,7 +104,7 @@ export function ProfileCard({ style }: ProfileCardProps) {
                 style={{ width: 40, height: 40 }}
               />
             ) : (
-              <RNText style={{ fontSize: 17, fontWeight: '700', color: tc.text.inverse }}>
+              <RNText style={{ fontSize: 17, fontWeight: '700', color: tc.text.onAccent }}>
                 {identity.displayName.charAt(0).toUpperCase()}
               </RNText>
             )}

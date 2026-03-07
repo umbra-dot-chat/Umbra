@@ -9,7 +9,6 @@ import {
   Input,
   SegmentedControl,
   Spinner,
-  AddFriendInput,
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator,
 } from '@coexist/wisp-react-native';
 import {
@@ -129,7 +128,6 @@ export default function FriendsPage() {
     setActiveTab(tab);
     playSound('tab_switch');
   }, [playSound]);
-  const [addFriendValue, setAddFriendValue] = useState('');
   const [addFriendFeedback, setAddFriendFeedback] = useState<{
     state: 'idle' | 'loading' | 'success' | 'error';
     message?: string;
@@ -221,13 +219,27 @@ export default function FriendsPage() {
     }, 400);
   }, [searchPlatform]);
 
-  // Debounced username search (for Umbra platform)
+  // Debounced username search (for Umbra platform) — also detects DID input
   const handleUsernameSearch = useCallback((query: string) => {
     setUsernameQuery(query);
     setUsernameSearchError(null);
 
     if (usernameTimeoutRef.current) {
       clearTimeout(usernameTimeoutRef.current);
+    }
+
+    const trimmed = query.trim();
+
+    // Auto-detect DID: if user pastes a did:key:... string, show it directly as a result
+    if (trimmed.startsWith('did:key:')) {
+      setUsernameSearching(false);
+      if (trimmed.startsWith('did:key:z6Mk') && trimmed.length >= 48) {
+        setUsernameResults([{ did: trimmed, username: trimmed.slice(0, 24) + '...' }]);
+      } else {
+        setUsernameResults([]);
+        setUsernameSearchError('Please enter a valid DID (did:key:z6Mk...)');
+      }
+      return;
     }
 
     if (query.length < 2) {
@@ -317,54 +329,6 @@ export default function FriendsPage() {
 
   const handleUnblock = async (did: string) => {
     await unblockUser(did);
-  };
-
-  const handleAddFriend = async (value: string) => {
-    const trimmed = value.trim();
-
-    // Client-side DID format validation
-    if (!trimmed.startsWith('did:key:z6Mk') || trimmed.length < 48) {
-      setAddFriendFeedback({
-        state: 'error',
-        message: 'Please enter a valid DID (did:key:z6Mk...).',
-      });
-      setTimeout(() => setAddFriendFeedback({ state: 'idle' }), 5000);
-      return;
-    }
-
-    setAddFriendFeedback({ state: 'loading' });
-
-    try {
-      const result = await sendRequest(value.trim());
-      if (result) {
-        setAddFriendFeedback({
-          state: 'success',
-          message: `Friend request sent!`,
-        });
-        setAddFriendValue('');
-      } else {
-        setAddFriendFeedback({
-          state: 'error',
-          message: 'Failed to send friend request.',
-        });
-      }
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      let userMessage = 'Failed to send friend request.';
-      if (msg.includes('No identity loaded')) {
-        userMessage = 'Identity not loaded. Please log out and log back in.';
-      } else if (msg.includes('Database not initialized')) {
-        userMessage = 'App not fully initialized. Please refresh and try again.';
-      } else if (msg.length > 0 && msg.length < 120) {
-        userMessage = msg;
-      }
-      setAddFriendFeedback({
-        state: 'error',
-        message: userMessage,
-      });
-    }
-
-    setTimeout(() => setAddFriendFeedback({ state: 'idle' }), 5000);
   };
 
   // ------ Navigation to DM ------
@@ -515,7 +479,8 @@ export default function FriendsPage() {
             flexDirection: 'row',
             alignItems: 'center',
             paddingHorizontal: 20,
-            paddingVertical: 4,
+            paddingTop: 4,
+            paddingBottom: 0,
             borderBottomWidth: 1,
             borderBottomColor: theme.colors.border.subtle,
           }}
@@ -530,7 +495,7 @@ export default function FriendsPage() {
             )}
           </View>
 
-          <TabList style={{ marginBottom: -1, borderBottomWidth: 0 }}>
+          <TabList indicatorGradient style={{ borderBottomWidth: 0 }}>
             <Tab
               value="all"
               testID={TEST_IDS.FRIENDS.TAB_ALL}
@@ -591,21 +556,22 @@ export default function FriendsPage() {
                 </ScrollView>
               </View>
 
-              {/* Umbra: Username search + DID input */}
+              {/* Umbra: Username + DID search */}
               {searchPlatform === 'umbra' && (
                 <View>
-                  {/* Username search */}
                   <Input
                     value={usernameQuery}
                     onChangeText={handleUsernameSearch}
-                    placeholder="Search by username (e.g., Matt or Matt#01283)"
+                    placeholder="Search by username, tag, or DID"
                     size="md"
                     fullWidth
                     autoCapitalize="none"
                     autoCorrect={false}
+                    gradientBorder
+                    testID={TEST_IDS.FRIENDS.ADD_INPUT}
                   />
 
-                  {/* Username search results */}
+                  {/* Search results / feedback */}
                   {usernameSearching && (
                     <View style={{ alignItems: 'center', paddingVertical: 12 }}>
                       <Spinner size="sm" />
@@ -618,7 +584,7 @@ export default function FriendsPage() {
                     </Text>
                   )}
 
-                  {!usernameSearching && usernameQuery.length >= 2 && usernameResults.length === 0 && !usernameSearchError && (
+                  {!usernameSearching && usernameQuery.length >= 2 && usernameResults.length === 0 && !usernameSearchError && !usernameQuery.trim().startsWith('did:') && (
                     <Text size="sm" color="muted" style={{ textAlign: 'center', paddingVertical: 12 }}>
                       No users found matching "{usernameQuery}"
                     </Text>
@@ -640,21 +606,22 @@ export default function FriendsPage() {
                     </View>
                   )}
 
-                  {/* DID-based add friend (fallback) */}
-                  <View style={{ marginTop: 12 }}>
-                    <Text size="xs" color="tertiary" style={{ marginBottom: 6 }}>Or add by DID</Text>
-                    <AddFriendInput
-                      value={addFriendValue}
-                      onValueChange={setAddFriendValue}
-                      onSubmit={handleAddFriend}
-                      feedbackState={addFriendFeedback.state}
-                      feedbackMessage={addFriendFeedback.message}
-                      placeholder="did:key:z6Mk..."
-                      inputTestID={TEST_IDS.FRIENDS.ADD_INPUT}
-                      buttonTestID={TEST_IDS.FRIENDS.ADD_BUTTON}
-                      feedbackTestID={TEST_IDS.FRIENDS.ADD_FEEDBACK}
-                    />
-                  </View>
+                  {addFriendFeedback.state !== 'idle' && addFriendFeedback.message && (
+                    <Text
+                      size="xs"
+                      testID={TEST_IDS.FRIENDS.ADD_FEEDBACK}
+                      style={{
+                        marginTop: 8,
+                        color: addFriendFeedback.state === 'success'
+                          ? theme.colors.status.success
+                          : addFriendFeedback.state === 'error'
+                            ? theme.colors.status.danger
+                            : theme.colors.text.muted,
+                      }}
+                    >
+                      {addFriendFeedback.message}
+                    </Text>
+                  )}
                 </View>
               )}
 
@@ -669,6 +636,7 @@ export default function FriendsPage() {
                     fullWidth
                     autoCapitalize="none"
                     autoCorrect={false}
+                    gradientBorder
                   />
 
                   {/* Search results */}
@@ -781,17 +749,18 @@ export default function FriendsPage() {
                 </ScrollView>
               </View>
 
-              {/* Umbra: Username search + DID input */}
+              {/* Umbra: Username + DID search */}
               {searchPlatform === 'umbra' && (
                 <View>
                   <Input
                     value={usernameQuery}
                     onChangeText={handleUsernameSearch}
-                    placeholder="Search by username (e.g., Matt or Matt#01283)"
+                    placeholder="Search by username, tag, or DID"
                     size="md"
                     fullWidth
                     autoCapitalize="none"
                     autoCorrect={false}
+                    gradientBorder
                   />
 
                   {usernameSearching && (
@@ -806,7 +775,7 @@ export default function FriendsPage() {
                     </Text>
                   )}
 
-                  {!usernameSearching && usernameQuery.length >= 2 && usernameResults.length === 0 && !usernameSearchError && (
+                  {!usernameSearching && usernameQuery.length >= 2 && usernameResults.length === 0 && !usernameSearchError && !usernameQuery.trim().startsWith('did:') && (
                     <Text size="sm" color="muted" style={{ textAlign: 'center', paddingVertical: 12 }}>
                       No users found matching "{usernameQuery}"
                     </Text>
@@ -828,20 +797,21 @@ export default function FriendsPage() {
                     </View>
                   )}
 
-                  <View style={{ marginTop: 12 }}>
-                    <Text size="xs" color="tertiary" style={{ marginBottom: 6 }}>Or add by DID</Text>
-                    <AddFriendInput
-                      value={addFriendValue}
-                      onValueChange={setAddFriendValue}
-                      onSubmit={handleAddFriend}
-                      feedbackState={addFriendFeedback.state}
-                      feedbackMessage={addFriendFeedback.message}
-                      placeholder="did:key:z6Mk..."
-                      inputTestID={TEST_IDS.FRIENDS.ADD_INPUT}
-                      buttonTestID={TEST_IDS.FRIENDS.ADD_BUTTON}
-                      feedbackTestID={TEST_IDS.FRIENDS.ADD_FEEDBACK}
-                    />
-                  </View>
+                  {addFriendFeedback.state !== 'idle' && addFriendFeedback.message && (
+                    <Text
+                      size="xs"
+                      style={{
+                        marginTop: 8,
+                        color: addFriendFeedback.state === 'success'
+                          ? theme.colors.status.success
+                          : addFriendFeedback.state === 'error'
+                            ? theme.colors.status.danger
+                            : theme.colors.text.muted,
+                      }}
+                    >
+                      {addFriendFeedback.message}
+                    </Text>
+                  )}
                 </View>
               )}
 
@@ -855,6 +825,7 @@ export default function FriendsPage() {
                     fullWidth
                     autoCapitalize="none"
                     autoCorrect={false}
+                    gradientBorder
                   />
 
                   {platformSearching && (
@@ -970,7 +941,7 @@ export default function FriendsPage() {
           setQrCardOpen(false);
           const parsed = parseScannedQR(data);
           if (parsed?.type === 'did') {
-            handleAddFriend(parsed.value);
+            handleAddFromSearch(parsed.value);
           }
         }}
       />
