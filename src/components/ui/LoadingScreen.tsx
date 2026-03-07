@@ -366,7 +366,7 @@ function LoadingContent({
             style={[{
               height: '100%',
               borderRadius: 1.5,
-              backgroundColor: barFillColor,
+              backgroundColor: (Platform.OS === 'web' && !inverted) ? undefined : barFillColor,
               width: progressAnim.interpolate({
                 inputRange: [0, 1],
                 outputRange: ['0%', '100%'],

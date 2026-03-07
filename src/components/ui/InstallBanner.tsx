@@ -10,7 +10,7 @@
  * Uses AnimatedPresence for a smooth slide-down entrance/exit.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Platform, View, Pressable, Text as RNText, Linking } from 'react-native';
 import { useTheme } from '@coexist/wisp-react-native';
 import { useAppUpdate } from '@/hooks/useAppUpdate';
@@ -24,7 +24,7 @@ import {
   ChevronDownIcon,
 } from '@/components/ui';
 
-export function InstallBanner() {
+export function InstallBanner({ topInset = 0, onVisibilityChange }: { topInset?: number; onVisibilityChange?: (visible: boolean) => void }) {
   const { theme } = useTheme();
   const tc = theme.colors;
   const update = useAppUpdate();
@@ -50,7 +50,8 @@ export function InstallBanner() {
         <View
           style={{
             backgroundColor: tc.status.danger,
-            paddingVertical: 8,
+            paddingTop: 8 + topInset,
+            paddingBottom: 8,
             paddingHorizontal: 16,
             flexDirection: 'row',
             alignItems: 'center',
@@ -58,7 +59,7 @@ export function InstallBanner() {
             gap: 12,
           }}
         >
-          <RNText style={{ color: tc.text.inverse, fontSize: 13, fontWeight: '600' }}>
+          <RNText style={{ color: tc.text.onAccent, fontSize: 13, fontWeight: '600' }}>
             Update failed{errorMsg ? `: ${errorMsg}` : ''}
           </RNText>
           <Pressable
@@ -70,7 +71,7 @@ export function InstallBanner() {
               borderRadius: 6,
             })}
           >
-            <RNText style={{ color: tc.text.inverse, fontSize: 12, fontWeight: '600' }}>
+            <RNText style={{ color: tc.text.onAccent, fontSize: 12, fontWeight: '600' }}>
               Retry
             </RNText>
           </Pressable>
@@ -82,7 +83,7 @@ export function InstallBanner() {
               borderRadius: 4,
             }}
           >
-            <XIcon size={14} color={tc.text.inverse} />
+            <XIcon size={14} color={tc.text.onAccent} />
           </Pressable>
         </View>
       );
@@ -95,7 +96,8 @@ export function InstallBanner() {
         <View
           style={{
             backgroundColor: tc.accent.primary,
-            paddingVertical: 8,
+            paddingTop: 8 + topInset,
+            paddingBottom: 8,
             paddingHorizontal: 16,
             flexDirection: 'row',
             alignItems: 'center',
@@ -103,8 +105,8 @@ export function InstallBanner() {
             gap: 12,
           }}
         >
-          <DownloadIcon size={16} color={tc.text.inverse} />
-          <RNText style={{ color: tc.text.inverse, fontSize: 13, fontWeight: '500' }}>
+          <DownloadIcon size={16} color={tc.text.onAccent} />
+          <RNText style={{ color: tc.text.onAccent, fontSize: 13, fontWeight: '500' }}>
             Downloading v{update.latestVersion}...
           </RNText>
           {/* Progress bar */}
@@ -121,12 +123,12 @@ export function InstallBanner() {
               style={{
                 width: `${progress}%` as any,
                 height: '100%',
-                backgroundColor: tc.text.inverse,
+                backgroundColor: tc.text.onAccent,
                 borderRadius: 3,
               }}
             />
           </View>
-          <RNText style={{ color: tc.text.inverse, fontSize: 12, opacity: 0.8 }}>
+          <RNText style={{ color: tc.text.onAccent, fontSize: 12, opacity: 0.8 }}>
             {progress}%
           </RNText>
         </View>
@@ -139,7 +141,8 @@ export function InstallBanner() {
         <View
           style={{
             backgroundColor: tc.status.success,
-            paddingVertical: 8,
+            paddingTop: 8 + topInset,
+            paddingBottom: 8,
             paddingHorizontal: 16,
             flexDirection: 'row',
             alignItems: 'center',
@@ -147,7 +150,7 @@ export function InstallBanner() {
             gap: 12,
           }}
         >
-          <RNText style={{ color: tc.text.inverse, fontSize: 13, fontWeight: '600' }}>
+          <RNText style={{ color: tc.text.onAccent, fontSize: 13, fontWeight: '600' }}>
             Update ready!
           </RNText>
           <Pressable
@@ -159,7 +162,7 @@ export function InstallBanner() {
               borderRadius: 6,
             }}
           >
-            <RNText style={{ color: tc.text.inverse, fontSize: 12, fontWeight: '600' }}>
+            <RNText style={{ color: tc.text.onAccent, fontSize: 12, fontWeight: '600' }}>
               Restart Now
             </RNText>
           </Pressable>
@@ -172,7 +175,7 @@ export function InstallBanner() {
               borderRadius: 6,
             }}
           >
-            <RNText style={{ color: tc.text.inverse, fontSize: 12 }}>Later</RNText>
+            <RNText style={{ color: tc.text.onAccent, fontSize: 12 }}>Later</RNText>
           </Pressable>
         </View>
       );
@@ -184,7 +187,8 @@ export function InstallBanner() {
         <View
           style={{
             backgroundColor: tc.accent.primary,
-            paddingVertical: 8,
+            paddingTop: 8 + topInset,
+            paddingBottom: 8,
             paddingHorizontal: 16,
             flexDirection: 'row',
             alignItems: 'center',
@@ -192,7 +196,7 @@ export function InstallBanner() {
             gap: 12,
           }}
         >
-          <RNText style={{ color: tc.text.inverse, fontSize: 13, fontWeight: '500' }}>
+          <RNText style={{ color: tc.text.onAccent, fontSize: 13, fontWeight: '500' }}>
             Umbra v{update.latestVersion} available
           </RNText>
           <Pressable
@@ -204,7 +208,7 @@ export function InstallBanner() {
               borderRadius: 6,
             })}
           >
-            <RNText style={{ color: tc.text.inverse, fontSize: 12, fontWeight: '600' }}>
+            <RNText style={{ color: tc.text.onAccent, fontSize: 12, fontWeight: '600' }}>
               Update & Restart
             </RNText>
           </Pressable>
@@ -213,10 +217,10 @@ export function InstallBanner() {
               onPress={() => Linking.openURL(update.releaseUrl!)}
               style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
             >
-              <RNText style={{ color: tc.text.inverse, fontSize: 12, opacity: 0.8 }}>
+              <RNText style={{ color: tc.text.onAccent, fontSize: 12, opacity: 0.8 }}>
                 Release Notes
               </RNText>
-              <ExternalLinkIcon size={12} color={tc.text.inverse} />
+              <ExternalLinkIcon size={12} color={tc.text.onAccent} />
             </Pressable>
           )}
           <Pressable
@@ -227,7 +231,7 @@ export function InstallBanner() {
               borderRadius: 4,
             }}
           >
-            <XIcon size={14} color={tc.text.inverse} />
+            <XIcon size={14} color={tc.text.onAccent} />
           </Pressable>
         </View>
       );
@@ -249,7 +253,7 @@ export function InstallBanner() {
               gap: 12,
             }}
           >
-            <RNText style={{ color: tc.text.inverse, fontSize: 13, fontWeight: '600' }}>
+            <RNText style={{ color: tc.text.onAccent, fontSize: 13, fontWeight: '600' }}>
               Update failed
             </RNText>
             <Pressable
@@ -261,7 +265,7 @@ export function InstallBanner() {
                 borderRadius: 6,
               })}
             >
-              <RNText style={{ color: tc.text.inverse, fontSize: 12, fontWeight: '600' }}>
+              <RNText style={{ color: tc.text.onAccent, fontSize: 12, fontWeight: '600' }}>
                 Retry
               </RNText>
             </Pressable>
@@ -269,7 +273,7 @@ export function InstallBanner() {
               onPress={update.dismiss}
               style={{ marginLeft: 4, padding: 2, borderRadius: 4 }}
             >
-              <XIcon size={14} color={tc.text.inverse} />
+              <XIcon size={14} color={tc.text.onAccent} />
             </Pressable>
           </View>
         );
@@ -290,8 +294,8 @@ export function InstallBanner() {
               gap: 12,
             }}
           >
-            <DownloadIcon size={16} color={tc.text.inverse} />
-            <RNText style={{ color: tc.text.inverse, fontSize: 13, fontWeight: '500' }}>
+            <DownloadIcon size={16} color={tc.text.onAccent} />
+            <RNText style={{ color: tc.text.onAccent, fontSize: 13, fontWeight: '500' }}>
               {update.webUpdate.statusText || `Updating to v${update.latestVersion}...`}
             </RNText>
             <View
@@ -307,12 +311,12 @@ export function InstallBanner() {
                 style={{
                   width: `${progress}%` as any,
                   height: '100%',
-                  backgroundColor: tc.text.inverse,
+                  backgroundColor: tc.text.onAccent,
                   borderRadius: 3,
                 }}
               />
             </View>
-            <RNText style={{ color: tc.text.inverse, fontSize: 12, opacity: 0.8 }}>
+            <RNText style={{ color: tc.text.onAccent, fontSize: 12, opacity: 0.8 }}>
               {progress}%
             </RNText>
           </View>
@@ -333,7 +337,7 @@ export function InstallBanner() {
               gap: 12,
             }}
           >
-            <RNText style={{ color: tc.text.inverse, fontSize: 13, fontWeight: '600' }}>
+            <RNText style={{ color: tc.text.onAccent, fontSize: 13, fontWeight: '600' }}>
               Update ready!
             </RNText>
             <Pressable
@@ -345,7 +349,7 @@ export function InstallBanner() {
                 borderRadius: 6,
               })}
             >
-              <RNText style={{ color: tc.text.inverse, fontSize: 12, fontWeight: '600' }}>
+              <RNText style={{ color: tc.text.onAccent, fontSize: 12, fontWeight: '600' }}>
                 Reload Now
               </RNText>
             </Pressable>
@@ -358,7 +362,7 @@ export function InstallBanner() {
                 borderRadius: 6,
               }}
             >
-              <RNText style={{ color: tc.text.inverse, fontSize: 12 }}>Later</RNText>
+              <RNText style={{ color: tc.text.onAccent, fontSize: 12 }}>Later</RNText>
             </Pressable>
           </View>
         );
@@ -378,7 +382,7 @@ export function InstallBanner() {
               gap: 12,
             }}
           >
-            <RNText style={{ color: tc.text.inverse, fontSize: 13, fontWeight: '500' }}>
+            <RNText style={{ color: tc.text.onAccent, fontSize: 13, fontWeight: '500' }}>
               Umbra v{update.latestVersion} available
             </RNText>
             <Pressable
@@ -390,7 +394,7 @@ export function InstallBanner() {
                 borderRadius: 6,
               })}
             >
-              <RNText style={{ color: tc.text.inverse, fontSize: 12, fontWeight: '600' }}>
+              <RNText style={{ color: tc.text.onAccent, fontSize: 12, fontWeight: '600' }}>
                 Update Now
               </RNText>
             </Pressable>
@@ -399,17 +403,17 @@ export function InstallBanner() {
                 onPress={() => Linking.openURL(update.releaseUrl!)}
                 style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
               >
-                <RNText style={{ color: tc.text.inverse, fontSize: 12, opacity: 0.8 }}>
+                <RNText style={{ color: tc.text.onAccent, fontSize: 12, opacity: 0.8 }}>
                   Release Notes
                 </RNText>
-                <ExternalLinkIcon size={12} color={tc.text.inverse} />
+                <ExternalLinkIcon size={12} color={tc.text.onAccent} />
               </Pressable>
             )}
             <Pressable
               onPress={update.dismiss}
               style={{ marginLeft: 4, padding: 2, borderRadius: 4 }}
             >
-              <XIcon size={14} color={tc.text.inverse} />
+              <XIcon size={14} color={tc.text.onAccent} />
             </Pressable>
           </View>
         );
@@ -427,7 +431,8 @@ export function InstallBanner() {
         <View
           style={{
             backgroundColor: tc.accent.primary,
-            paddingVertical: 8,
+            paddingTop: 8 + topInset,
+            paddingBottom: 8,
             paddingHorizontal: 16,
             flexDirection: 'row',
             alignItems: 'center',
@@ -435,8 +440,8 @@ export function InstallBanner() {
             gap: 12,
           }}
         >
-          <DownloadIcon size={16} color={tc.text.inverse} />
-          <RNText style={{ color: tc.text.inverse, fontSize: 13, fontWeight: '500' }}>
+          <DownloadIcon size={16} color={tc.text.onAccent} />
+          <RNText style={{ color: tc.text.onAccent, fontSize: 13, fontWeight: '500' }}>
             Umbra is available as a native app!
           </RNText>
 
@@ -454,7 +459,7 @@ export function InstallBanner() {
                 borderRadius: 6,
               })}
             >
-              <RNText style={{ color: tc.text.inverse, fontSize: 12, fontWeight: '600' }}>
+              <RNText style={{ color: tc.text.onAccent, fontSize: 12, fontWeight: '600' }}>
                 {primaryLabel}
               </RNText>
             </Pressable>
@@ -470,10 +475,10 @@ export function InstallBanner() {
               opacity: pressed ? 0.7 : 0.9,
             })}
           >
-            <RNText style={{ color: tc.text.inverse, fontSize: 12, opacity: 0.9 }}>
+            <RNText style={{ color: tc.text.onAccent, fontSize: 12, opacity: 0.9 }}>
               More platforms
             </RNText>
-            <ChevronDownIcon size={12} color={tc.text.inverse} />
+            <ChevronDownIcon size={12} color={tc.text.onAccent} />
           </Pressable>
 
           {/* Dismiss */}
@@ -485,7 +490,7 @@ export function InstallBanner() {
               borderRadius: 4,
             }}
           >
-            <XIcon size={14} color={tc.text.inverse} />
+            <XIcon size={14} color={tc.text.onAccent} />
           </Pressable>
         </View>
       );
@@ -497,7 +502,8 @@ export function InstallBanner() {
         <View
           style={{
             backgroundColor: tc.accent.primary,
-            paddingVertical: 8,
+            paddingTop: 8 + topInset,
+            paddingBottom: 8,
             paddingHorizontal: 16,
             flexDirection: 'row',
             alignItems: 'center',
@@ -505,7 +511,7 @@ export function InstallBanner() {
             gap: 12,
           }}
         >
-          <RNText style={{ color: tc.text.inverse, fontSize: 13, fontWeight: '500' }}>
+          <RNText style={{ color: tc.text.onAccent, fontSize: 13, fontWeight: '500' }}>
             Umbra v{update.latestVersion} is available!
           </RNText>
           {update.releaseUrl && (
@@ -518,7 +524,7 @@ export function InstallBanner() {
                 borderRadius: 6,
               })}
             >
-              <RNText style={{ color: tc.text.inverse, fontSize: 12, fontWeight: '600' }}>
+              <RNText style={{ color: tc.text.onAccent, fontSize: 12, fontWeight: '600' }}>
                 View Release
               </RNText>
             </Pressable>
@@ -531,16 +537,24 @@ export function InstallBanner() {
               borderRadius: 4,
             }}
           >
-            <XIcon size={14} color={tc.text.inverse} />
+            <XIcon size={14} color={tc.text.onAccent} />
           </Pressable>
         </View>
       );
     }
   }
 
+  // Report visibility changes to parent
+  const isVisible = !!bannerContent;
+  const callbackRef = useRef(onVisibilityChange);
+  callbackRef.current = onVisibilityChange;
+  useEffect(() => {
+    callbackRef.current?.(isVisible);
+  }, [isVisible]);
+
   return (
     <>
-      <AnimatedPresence visible={!!bannerContent} preset="slideDown" slideDistance={20}>
+      <AnimatedPresence visible={isVisible} preset="slideDown" slideDistance={20}>
         {bannerContent}
       </AnimatedPresence>
 

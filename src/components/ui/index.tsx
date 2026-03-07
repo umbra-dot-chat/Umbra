@@ -1,5 +1,6 @@
 import React from 'react';
-import Svg, { Circle, Ellipse, Line, Path, Polyline, Rect } from 'react-native-svg';
+import { Platform } from 'react-native';
+import Svg, { Circle, Defs, Ellipse, Line, LinearGradient as SvgLinearGradient, Path, Polyline, Rect, Stop } from 'react-native-svg';
 
 export function UsersIcon({ size = 18, color }: { size?: number; color?: string }) {
   return (
@@ -203,10 +204,96 @@ export function FileTextIcon({ size = 16, color }: { size?: number; color?: stri
   );
 }
 
-export function FolderIcon({ size = 18, color }: { size?: number; color?: string }) {
+// CSS keyframe injection for animated stroke gradients (web only, once)
+const STROKE_GRADIENT_ANIM = 'umbra-stroke-gradient';
+let strokeGradientCssInjected = false;
+function injectStrokeGradientCSS(): void {
+  if (strokeGradientCssInjected || Platform.OS !== 'web' || typeof document === 'undefined') return;
+  strokeGradientCssInjected = true;
+  const style = document.createElement('style');
+  style.textContent = `@keyframes ${STROKE_GRADIENT_ANIM}{0%{--sg-x1:0;--sg-y1:0;--sg-x2:24;--sg-y2:24}50%{--sg-x1:24;--sg-y1:0;--sg-x2:0;--sg-y2:24}100%{--sg-x1:0;--sg-y1:0;--sg-x2:24;--sg-y2:24}}`;
+  document.head.appendChild(style);
+}
+// Track running RAF for stroke gradient animation
+let strokeGradientRafId: number | null = null;
+let strokeGradientRefCount = 0;
+function startStrokeGradientAnimation(): void {
+  strokeGradientRefCount++;
+  if (strokeGradientRafId !== null) return;
+  const start = performance.now();
+  const speed = 1500;
+  const tick = (now: number) => {
+    const t = ((now - start) % speed) / speed;
+    // Rotate gradient angle over time
+    const angle = t * Math.PI * 2;
+    const x1 = 12 + Math.cos(angle) * 14;
+    const y1 = 12 + Math.sin(angle) * 14;
+    const x2 = 12 - Math.cos(angle) * 14;
+    const y2 = 12 - Math.sin(angle) * 14;
+    const el = document.getElementById('umbra-stroke-grad');
+    if (el) {
+      el.setAttribute('x1', `${x1}`);
+      el.setAttribute('y1', `${y1}`);
+      el.setAttribute('x2', `${x2}`);
+      el.setAttribute('y2', `${y2}`);
+    }
+    strokeGradientRafId = requestAnimationFrame(tick);
+  };
+  strokeGradientRafId = requestAnimationFrame(tick);
+}
+function stopStrokeGradientAnimation(): void {
+  strokeGradientRefCount--;
+  if (strokeGradientRefCount <= 0) {
+    strokeGradientRefCount = 0;
+    if (strokeGradientRafId !== null) {
+      cancelAnimationFrame(strokeGradientRafId);
+      strokeGradientRafId = null;
+    }
+  }
+}
+
+export function FolderIcon({ size = 18, color, gradient }: { size?: number; color?: string; gradient?: boolean }) {
+  // Animated gradient stroke: inject a shared SVG gradient and animate it via RAF
+  React.useEffect(() => {
+    if (!gradient || Platform.OS !== 'web') return;
+    // Inject a shared SVG with gradient defs (once)
+    if (!document.getElementById('umbra-stroke-grad-svg')) {
+      const ns = 'http://www.w3.org/2000/svg';
+      const svg = document.createElementNS(ns, 'svg');
+      svg.setAttribute('width', '0');
+      svg.setAttribute('height', '0');
+      svg.setAttribute('style', 'position:absolute;pointer-events:none');
+      svg.id = 'umbra-stroke-grad-svg';
+      const defs = document.createElementNS(ns, 'defs');
+      const lg = document.createElementNS(ns, 'linearGradient');
+      lg.id = 'umbra-stroke-grad';
+      lg.setAttribute('gradientUnits', 'userSpaceOnUse');
+      lg.setAttribute('x1', '0');
+      lg.setAttribute('y1', '0');
+      lg.setAttribute('x2', '24');
+      lg.setAttribute('y2', '24');
+      const colors = ['#8B5CF6', '#EC4899', '#3B82F6', '#8B5CF6'];
+      colors.forEach((c, i) => {
+        const stop = document.createElementNS(ns, 'stop');
+        stop.setAttribute('offset', `${(i / (colors.length - 1)) * 100}%`);
+        stop.setAttribute('stop-color', c);
+        lg.appendChild(stop);
+      });
+      defs.appendChild(lg);
+      svg.appendChild(defs);
+      document.body.appendChild(svg);
+    }
+    startStrokeGradientAnimation();
+    return () => stopStrokeGradientAnimation();
+  }, [gradient]);
+
+  const strokeColor = gradient && Platform.OS === 'web'
+    ? 'url(#umbra-stroke-grad)'
+    : (color ?? 'currentColor');
+
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color ?? 'currentColor'} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <Path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" />
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z" stroke={strokeColor} />
     </Svg>
   );
 }
@@ -886,4 +973,8 @@ export function ShareIcon({ size = 16, color }: { size?: number; color?: string 
     </Svg>
   );
 }
+
+// Re-export GradientIcon wrapper
+export { GradientIcon } from './GradientIcon';
+export type { GradientIconProps } from './GradientIcon';
 

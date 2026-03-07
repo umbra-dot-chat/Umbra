@@ -258,9 +258,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
         } catch {}
       }
 
-      // Restore mode preference (only if no custom theme)
-      if (!theme && savedMode) {
-        setMode(savedMode === 'true' ? 'dark' : 'light');
+      // Restore mode preference (only if no custom theme).
+      // New accounts (no saved preference) default to light mode.
+      if (!theme) {
+        setMode(savedMode ? (savedMode === 'true' ? 'dark' : 'light') : 'light');
       }
 
       // Apply everything
