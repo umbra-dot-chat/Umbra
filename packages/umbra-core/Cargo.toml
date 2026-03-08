@@ -1,6 +1,6 @@
 [package]
 name = "umbra-core"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 license = "MIT"
 description = "Cross-platform P2P messaging core library for Umbra"

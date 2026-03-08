@@ -6076,6 +6076,26 @@ impl Database {
             }
         }
 
+        // ── Plugin KV (system preferences) ────────────────────────────────
+        let mut plugin_kv = Vec::new();
+        {
+            let mut stmt = conn
+                .prepare("SELECT plugin_id, key, value FROM plugin_kv WHERE plugin_id = '__umbra_system__' ORDER BY key")
+                .map_err(|e| Error::DatabaseError(format!("export plugin_kv: {}", e)))?;
+            let rows = stmt
+                .query_map([], |row| {
+                    Ok(serde_json::json!({
+                        "plugin_id": row.get::<_, String>(0)?,
+                        "key": row.get::<_, String>(1)?,
+                        "value": row.get::<_, String>(2)?,
+                    }))
+                })
+                .map_err(|e| Error::DatabaseError(format!("export plugin_kv: {}", e)))?;
+            for row in rows {
+                plugin_kv.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?);
+            }
+        }
+
         // ── Assemble ──────────────────────────────────────────────────────
         let export = serde_json::json!({
             "version": 1,
@@ -6085,6 +6105,7 @@ impl Database {
             "conversations": conversations,
             "groups": groups,
             "blocked_users": blocked_users,
+            "plugin_kv": plugin_kv,
         });
 
         serde_json::to_vec(&export)
@@ -6209,6 +6230,24 @@ impl Database {
                     )
                     .map_err(|e| Error::DatabaseError(format!("import blocked user: {}", e)))?;
                     stats.blocked_users += 1;
+                }
+            }
+        }
+
+        // ── Plugin KV (system preferences) ───────────────────────────────
+        if let Some(kv_items) = export.get("plugin_kv").and_then(|v| v.as_array()) {
+            for item in kv_items {
+                let plugin_id = item.get("plugin_id").and_then(|v| v.as_str()).unwrap_or_default();
+                let key = item.get("key").and_then(|v| v.as_str()).unwrap_or_default();
+                let value = item.get("value").and_then(|v| v.as_str()).unwrap_or_default();
+
+                if !key.is_empty() {
+                    conn.execute(
+                        "INSERT OR REPLACE INTO plugin_kv (plugin_id, key, value, updated_at) VALUES (?, ?, ?, ?)",
+                        params![plugin_id, key, value, now],
+                    )
+                    .map_err(|e| Error::DatabaseError(format!("import plugin_kv: {}", e)))?;
+                    stats.settings += 1;
                 }
             }
         }

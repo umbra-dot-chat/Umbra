@@ -652,12 +652,14 @@ async function doInitWasm(did?: string): Promise<UmbraWasmModule> {
     // code paths that never execute on mobile. new Function() defers parsing
     // to runtime, and this code path only runs on web where import() works.
     const dynamicImport = new Function('url', 'return import(url)');
-    wasmPkg = await dynamicImport('/umbra_core.js');
+    const wasmVersion = '0.1.1';
+    wasmPkg = await dynamicImport(`/umbra_core.js?v=${wasmVersion}`);
 
     // Initialize the WASM binary with an explicit URL to avoid import.meta.url
     // issues. The wasm-bindgen init function accepts a URL/string path.
+    // Cache-bust with a version param so browser doesn't serve stale WASM.
     if (typeof wasmPkg.default === 'function') {
-      await wasmPkg.default('/umbra_core_bg.wasm');
+      await wasmPkg.default(`/umbra_core_bg.wasm?v=${wasmVersion}`);
     }
   } catch (err) {
     const msg =
@@ -687,10 +689,61 @@ async function doInitWasm(did?: string): Promise<UmbraWasmModule> {
   console.log('[umbra-wasm] Initializing database...');
   await wasm.umbra_wasm_init_database();
 
+  // Step 6: Migrate old localStorage plugin_kv entries to SQLite
+  migrateLocalStorageKV(wasm);
+
   wasmModule = wasm;
   console.log(`[umbra-wasm] Ready! Version: ${wasm.umbra_wasm_version()}`);
 
   return wasm;
+}
+
+/**
+ * One-time migration: move any `plugin_kv:*` entries left in localStorage
+ * (from the old JS-stub era) into the real SQLite-backed WASM KV store.
+ * After migration, the localStorage entries are removed.
+ */
+function migrateLocalStorageKV(wasm: UmbraWasmModule): void {
+  try {
+    if (typeof localStorage === 'undefined') return;
+
+    const prefix = 'plugin_kv:';
+    const toMigrate: { pluginId: string; key: string; value: string }[] = [];
+
+    for (let i = 0; i < localStorage.length; i++) {
+      const lsKey = localStorage.key(i);
+      if (!lsKey || !lsKey.startsWith(prefix)) continue;
+
+      // Format: plugin_kv:{pluginId}:{key}
+      const rest = lsKey.slice(prefix.length);
+      const colonIdx = rest.indexOf(':');
+      if (colonIdx < 0) continue;
+
+      const pluginId = rest.slice(0, colonIdx);
+      const key = rest.slice(colonIdx + 1);
+      const value = localStorage.getItem(lsKey);
+      if (value !== null) {
+        toMigrate.push({ pluginId, key, value });
+      }
+    }
+
+    if (toMigrate.length === 0) return;
+
+    console.log(`[umbra-wasm] Migrating ${toMigrate.length} plugin_kv entries from localStorage to SQLite...`);
+
+    for (const { pluginId, key, value } of toMigrate) {
+      try {
+        (wasm as any).umbra_wasm_plugin_kv_set(pluginId, key, value);
+        localStorage.removeItem(`${prefix}${pluginId}:${key}`);
+      } catch (err) {
+        console.warn(`[umbra-wasm] Failed to migrate plugin_kv:${pluginId}:${key}:`, err);
+      }
+    }
+
+    console.log('[umbra-wasm] Migration complete.');
+  } catch (err) {
+    console.warn('[umbra-wasm] localStorage migration failed:', err);
+  }
 }
 
 /**
@@ -1243,41 +1296,15 @@ function buildModule(wasmPkg: any): UmbraWasmModule {
     umbra_wasm_dht_stop_providing: (json: string) =>
       wasmPkg.umbra_wasm_dht_stop_providing(json),
 
-    // ── Plugin KV Storage (JS stub — persists via localStorage) ──────
-    umbra_wasm_plugin_kv_get: (pluginId: string, key: string): string => {
-      try {
-        const storeKey = `plugin_kv:${pluginId}:${key}`;
-        const value = localStorage.getItem(storeKey);
-        return JSON.stringify(value !== null ? { value } : { value: null });
-      } catch { return JSON.stringify({ value: null }); }
-    },
-    umbra_wasm_plugin_kv_set: (pluginId: string, key: string, value: string): string => {
-      try {
-        const storeKey = `plugin_kv:${pluginId}:${key}`;
-        localStorage.setItem(storeKey, value);
-        return JSON.stringify({ ok: true });
-      } catch (e: any) { return JSON.stringify({ error: e.message }); }
-    },
-    umbra_wasm_plugin_kv_delete: (pluginId: string, key: string): string => {
-      try {
-        const storeKey = `plugin_kv:${pluginId}:${key}`;
-        localStorage.removeItem(storeKey);
-        return JSON.stringify({ ok: true });
-      } catch (e: any) { return JSON.stringify({ error: e.message }); }
-    },
-    umbra_wasm_plugin_kv_list: (pluginId: string, prefix: string): string => {
-      try {
-        const storePrefix = `plugin_kv:${pluginId}:${prefix}`;
-        const keys: string[] = [];
-        for (let i = 0; i < localStorage.length; i++) {
-          const k = localStorage.key(i);
-          if (k && k.startsWith(storePrefix)) {
-            keys.push(k.replace(`plugin_kv:${pluginId}:`, ''));
-          }
-        }
-        return JSON.stringify({ keys });
-      } catch { return JSON.stringify({ keys: [] }); }
-    },
+    // ── Plugin KV Storage (real WASM — persists in SQLite plugin_kv table) ──
+    umbra_wasm_plugin_kv_get: (pluginId: string, key: string) =>
+      wasmPkg.umbra_wasm_plugin_kv_get(pluginId, key),
+    umbra_wasm_plugin_kv_set: (pluginId: string, key: string, value: string) =>
+      wasmPkg.umbra_wasm_plugin_kv_set(pluginId, key, value),
+    umbra_wasm_plugin_kv_delete: (pluginId: string, key: string) =>
+      wasmPkg.umbra_wasm_plugin_kv_delete(pluginId, key),
+    umbra_wasm_plugin_kv_list: (pluginId: string, prefix: string) =>
+      wasmPkg.umbra_wasm_plugin_kv_list(pluginId, prefix),
 
     // ── Plugin Bundle Storage (JS stub — persists via localStorage) ──
     umbra_wasm_plugin_bundle_save: (pluginId: string, manifest: string, bundle: string): string => {

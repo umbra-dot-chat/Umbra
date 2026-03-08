@@ -26,6 +26,8 @@ export interface PublicIdentity {
   status?: string;
   /** Avatar (base64 or IPFS CID) */
   avatar?: string;
+  /** Banner/header image (base64 or IPFS CID) */
+  banner?: string;
   /** Public keys */
   publicKeys: PublicKeys;
   /** When created (Unix timestamp) */
@@ -44,6 +46,8 @@ export interface Identity {
   status?: string;
   /** Avatar */
   avatar?: string;
+  /** Banner/header image */
+  banner?: string;
   /** When created (Unix timestamp) */
   createdAt: number;
 }
@@ -54,7 +58,8 @@ export interface Identity {
 export type ProfileUpdate =
   | { type: 'displayName'; value: string }
   | { type: 'status'; value: string | null }
-  | { type: 'avatar'; value: string | null };
+  | { type: 'avatar'; value: string | null }
+  | { type: 'banner'; value: string | null };
 
 /**
  * Result of creating an identity

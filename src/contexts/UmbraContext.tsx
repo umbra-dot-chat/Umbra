@@ -28,6 +28,7 @@ import React, {
   useState,
   useRef,
   useMemo,
+  useCallback,
 } from 'react';
 import { UmbraService } from '@umbra/service';
 import type { InitConfig } from '@umbra/service';
@@ -58,6 +59,10 @@ export interface UmbraContextValue {
   preferencesReady: boolean;
   /** Counter that increments on account switch — triggers preference contexts to re-read from the new account's DB */
   didChanged: number;
+  /** Counter that increments when remote sync applies preferences — triggers contexts to re-read from KV */
+  syncVersion: number;
+  /** Increment syncVersion to signal that preferences were updated by a sync restore */
+  bumpSyncVersion: () => void;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -82,6 +87,8 @@ export function UmbraProvider({ children, config }: UmbraProviderProps) {
   const [version, setVersion] = useState('');
   const [initStage, setInitStage] = useState<InitStage>('booting');
   const [didChanged, setDidChanged] = useState(0);
+  const [syncVersion, setSyncVersion] = useState(0);
+  const bumpSyncVersion = useCallback(() => setSyncVersion((c) => c + 1), []);
   const prevDidRef = useRef<string | null>(null);
   const { identity, recoveryPhrase, isHydrated } = useAuth();
 
@@ -227,8 +234,8 @@ export function UmbraProvider({ children, config }: UmbraProviderProps) {
         // but React state hasn't re-synced yet. This is a transient condition.
       }
     }
-    return { isReady, isLoading, error, service, version, initStage, preferencesReady, didChanged };
-  }, [isReady, isLoading, error, version, initStage, preferencesReady, didChanged]);
+    return { isReady, isLoading, error, service, version, initStage, preferencesReady, didChanged, syncVersion, bumpSyncVersion };
+  }, [isReady, isLoading, error, version, initStage, preferencesReady, didChanged, syncVersion, bumpSyncVersion]);
 
   return (
     <UmbraContext.Provider value={value}>

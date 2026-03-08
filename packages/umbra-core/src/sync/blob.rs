@@ -83,9 +83,17 @@ pub fn create_sync_blob(
     let export: serde_json::Value = serde_json::from_slice(&export_bytes)
         .map_err(|e| Error::DatabaseError(format!("Failed to parse export: {}", e)))?;
 
-    let preferences = export.get("settings")
+    let settings = export.get("settings")
         .cloned()
         .unwrap_or(serde_json::json!([]));
+    let plugin_kv = export.get("plugin_kv")
+        .cloned()
+        .unwrap_or(serde_json::json!([]));
+    // Combine legacy settings + plugin_kv into the preferences section
+    let preferences = serde_json::json!({
+        "settings": settings,
+        "plugin_kv": plugin_kv,
+    });
     let friends = export.get("friends")
         .cloned()
         .unwrap_or(serde_json::json!([]));

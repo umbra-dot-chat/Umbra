@@ -46,7 +46,7 @@ const KEY_DISPLAY_MODE = 'message_display_mode';
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function MessagingProvider({ children }: { children: React.ReactNode }) {
-  const { preferencesReady, didChanged } = useUmbra();
+  const { preferencesReady, didChanged, syncVersion } = useUmbra();
 
   const [displayMode, setDisplayModeState] = useState<MessageDisplayMode>('bubble');
   const [loaded, setLoaded] = useState(false);
@@ -90,7 +90,7 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
     }
 
     restorePreferences();
-  }, [preferencesReady, didChanged, kvGet]);
+  }, [preferencesReady, didChanged, syncVersion, kvGet]);
 
   // ── Public setters ───────────────────────────────────────────────────
 

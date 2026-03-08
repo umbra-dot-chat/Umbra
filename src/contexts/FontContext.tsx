@@ -229,7 +229,7 @@ const FONT_STATE_KEY = 'active_font';
 const INSTALLED_FONTS_KEY = 'installed_fonts';
 
 export function FontProvider({ children }: { children: React.ReactNode }) {
-  const { isReady, preferencesReady, didChanged } = useUmbra();
+  const { isReady, preferencesReady, didChanged, syncVersion } = useUmbra();
   const [activeFont, setActiveFontState] = useState<FontEntry>(SYSTEM_FONT);
   const [installedFontIds, setInstalledFontIds] = useState<Set<string>>(new Set(['system']));
   const [loadingFontId, setLoadingFontId] = useState<string | null>(null);
@@ -345,7 +345,7 @@ export function FontProvider({ children }: { children: React.ReactNode }) {
     }
 
     restoreFontState();
-  }, [preferencesReady, didChanged, loadFontState, applyFont]);
+  }, [preferencesReady, didChanged, syncVersion, loadFontState, applyFont]);
 
   // ── Fetch Google Fonts catalog ─────────────────────────────────────
 

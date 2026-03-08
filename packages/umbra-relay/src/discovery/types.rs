@@ -323,29 +323,47 @@ pub fn validate_username_name(name: &str) -> Result<(), String> {
     Ok(())
 }
 
-/// Request to register a username.
+/// Request to register a username (with Ed25519 signature for DID ownership proof).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RegisterUsernameRequest {
     /// The user's Umbra DID.
     pub did: String,
     /// Desired name portion (will be validated).
     pub name: String,
+    /// Base64-encoded Ed25519 signature over the canonical payload.
+    pub signature: Option<String>,
+    /// Base64-encoded Ed25519 public key (must match DID).
+    pub public_key: Option<String>,
+    /// Unix timestamp (seconds) — included in the signed payload for replay protection.
+    pub timestamp: Option<i64>,
 }
 
-/// Request to change username (same as register, re-assigns tag).
+/// Request to change username (with Ed25519 signature).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ChangeUsernameRequest {
     /// The user's Umbra DID.
     pub did: String,
     /// New desired name portion.
     pub name: String,
+    /// Base64-encoded Ed25519 signature over the canonical payload.
+    pub signature: Option<String>,
+    /// Base64-encoded Ed25519 public key (must match DID).
+    pub public_key: Option<String>,
+    /// Unix timestamp (seconds).
+    pub timestamp: Option<i64>,
 }
 
-/// Request to release (delete) a username.
+/// Request to release (delete) a username (with Ed25519 signature).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ReleaseUsernameRequest {
     /// The user's Umbra DID.
     pub did: String,
+    /// Base64-encoded Ed25519 signature over the canonical payload.
+    pub signature: Option<String>,
+    /// Base64-encoded Ed25519 public key (must match DID).
+    pub public_key: Option<String>,
+    /// Unix timestamp (seconds).
+    pub timestamp: Option<i64>,
 }
 
 /// Response from username operations.

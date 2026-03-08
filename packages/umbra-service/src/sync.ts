@@ -230,7 +230,8 @@ export async function downloadSyncBlob(
   const baseUrl = relayUrl.replace(/\/+$/, '');
   const res = await fetch(`${baseUrl}/api/sync/${encodeURIComponent(did)}`, {
     method: 'GET',
-    headers: { Authorization: `Bearer ${token}` },
+    headers: { Authorization: `Bearer ${token}`, 'Cache-Control': 'no-cache' },
+    cache: 'no-store',
   });
 
   if (res.status === 404) {
@@ -272,7 +273,8 @@ export async function getSyncBlobMeta(
   const baseUrl = relayUrl.replace(/\/+$/, '');
   const res = await fetch(`${baseUrl}/api/sync/${encodeURIComponent(did)}/meta`, {
     method: 'GET',
-    headers: { Authorization: `Bearer ${token}` },
+    headers: { Authorization: `Bearer ${token}`, 'Cache-Control': 'no-cache' },
+    cache: 'no-store',
   });
 
   if (res.status === 404) {
@@ -379,7 +381,7 @@ export async function parseSyncBlob(blob: string): Promise<SyncBlobSummary> {
  * @returns Import statistics
  */
 export async function applySyncBlob(blob: string): Promise<SyncImportResult> {
-  return parseWasm<SyncImportResult>(
+  return await parseWasm<SyncImportResult>(
     wasm().umbra_wasm_sync_apply_blob(JSON.stringify({ blob })),
   );
 }

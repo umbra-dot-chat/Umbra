@@ -70,6 +70,8 @@ export interface ThemeContextValue {
   motionPreferences: MotionPreferences;
   /** Update motion preferences (partial merge). */
   setMotionPreferences: (prefs: Partial<MotionPreferences>) => void;
+  /** Toggle dark/light mode (persists + triggers sync). Use this for user-initiated toggles. */
+  switchMode: () => void;
 }
 
 const ThemeCtx = createContext<ThemeContextValue | null>(null);
@@ -116,7 +118,7 @@ function deepMerge<T extends Record<string, any>>(base: T, patch: DeepPartial<T>
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
-  const { isReady, service, preferencesReady, didChanged } = useUmbra();
+  const { isReady, service, preferencesReady, didChanged, syncVersion } = useUmbra();
   const { identity } = useAuth();
   const { setOverrides, setMode, mode } = useTheme();
   const { activeFont } = useFonts();
@@ -270,7 +272,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     }
 
     restorePreferences();
-  }, [preferencesReady, didChanged, kvGet, applyOverrides, applyTextSize, activeFontFamily, setMode]);
+  }, [preferencesReady, didChanged, syncVersion, kvGet, applyOverrides, applyTextSize, activeFontFamily, setMode]);
 
   // ── Re-apply when font changes ───────────────────────────────────────
 
@@ -382,14 +384,21 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   );
 
   // ── Persist mode changes ─────────────────────────────────────────────
-  // When user toggles mode (only available when no custom theme), persist it
-
+  // Persist mode to KV whenever it changes (from any source).
+  // markSyncDirty is NOT called here — only switchMode() triggers sync,
+  // to avoid feedback loops when restoring from sync.
   useEffect(() => {
     if (!loaded || activeTheme) return;
-    const value = mode === 'dark' ? 'true' : 'false';
-    kvSet(KEY_DARK_MODE, value);
-    markSyncDirty('preferences');
+    kvSet(KEY_DARK_MODE, mode === 'dark' ? 'true' : 'false');
   }, [mode, loaded, activeTheme, kvSet]);
+
+  // ── User-initiated mode toggle ────────────────────────────────────────
+  const switchMode = useCallback(() => {
+    const newMode = mode === 'dark' ? 'light' : 'dark';
+    setMode(newMode);
+    kvSet(KEY_DARK_MODE, newMode === 'dark' ? 'true' : 'false');
+    markSyncDirty('preferences');
+  }, [mode, setMode, kvSet]);
 
   // ── Context value ────────────────────────────────────────────────────
 
@@ -409,8 +418,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       setTextSize,
       motionPreferences: motionPrefs,
       setMotionPreferences,
+      switchMode,
     }),
-    [activeTheme, installedThemeIds, installTheme, uninstallTheme, setTheme, accentColor, setAccentColor, loaded, textSize, setTextSize, motionPrefs, setMotionPreferences],
+    [activeTheme, installedThemeIds, installTheme, uninstallTheme, setTheme, accentColor, setAccentColor, loaded, textSize, setTextSize, motionPrefs, setMotionPreferences, switchMode],
   );
 
   return (

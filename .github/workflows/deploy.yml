@@ -156,20 +156,20 @@ jobs:
               echo 'DISCORD_BOT_TOKEN=$DISCORD_BOT_TOKEN' >> $RELAY_PATH/.env"
           fi
 
+          # Persist relay env vars to .env so they survive container restarts
+          ssh $SSH_OPTS $SSH_USER@$HOST "cd $RELAY_PATH && \
+            grep -v '^RELAY_REGION=\|^RELAY_LOCATION=\|^RELAY_ID=\|^RELAY_PUBLIC_URL=\|^RELAY_PEERS=' .env 2>/dev/null > .env.tmp || true && \
+            echo 'RELAY_REGION=$RELAY_REGION' >> .env.tmp && \
+            echo 'RELAY_LOCATION=$RELAY_LOCATION' >> .env.tmp && \
+            echo 'RELAY_ID=$RELAY_ID' >> .env.tmp && \
+            echo 'RELAY_PUBLIC_URL=$RELAY_PUBLIC_URL' >> .env.tmp && \
+            echo 'RELAY_PEERS=$RELAY_PEERS' >> .env.tmp && \
+            mv .env.tmp .env"
+
           # Build and restart relay
           ssh $SSH_OPTS $SSH_USER@$HOST "cd $RELAY_PATH && \
-            RELAY_REGION='$RELAY_REGION' \
-            RELAY_LOCATION='$RELAY_LOCATION' \
-            RELAY_ID='$RELAY_ID' \
-            RELAY_PUBLIC_URL='$RELAY_PUBLIC_URL' \
-            RELAY_PEERS='$RELAY_PEERS' \
             docker compose build && \
             docker compose down || true && \
-            RELAY_REGION='$RELAY_REGION' \
-            RELAY_LOCATION='$RELAY_LOCATION' \
-            RELAY_ID='$RELAY_ID' \
-            RELAY_PUBLIC_URL='$RELAY_PUBLIC_URL' \
-            RELAY_PEERS='$RELAY_PEERS' \
             docker compose up -d"
 
           # Start bridge bot if DISCORD_BOT_TOKEN is available

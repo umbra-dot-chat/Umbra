@@ -96,7 +96,7 @@ function defaultCategoryEnabled(): Record<SoundCategory, boolean> {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function SoundProvider({ children }: { children: React.ReactNode }) {
-  const { preferencesReady, didChanged } = useUmbra();
+  const { preferencesReady, didChanged, syncVersion } = useUmbra();
 
   // Singleton engine (created once, never destroyed)
   const engineRef = useRef<SoundEngine>(new SoundEngine());
@@ -223,7 +223,7 @@ export function SoundProvider({ children }: { children: React.ReactNode }) {
     }
 
     restorePreferences();
-  }, [preferencesReady, didChanged, kvGet]);
+  }, [preferencesReady, didChanged, syncVersion, kvGet]);
 
   // ── Resume AudioContext on first user interaction ──────────────────
 

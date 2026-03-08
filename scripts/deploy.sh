@@ -409,21 +409,22 @@ deploy_relay_to_host() {
         -e "$local_rsync_ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=5" \
         "$staging_dir/" "$SSH_USER@$ssh_target:$path/"
 
+    # ── Persist relay env vars so they survive container restarts ───
+    log_info "Writing relay environment to .env..."
+    eval "$local_ssh_cmd -o ServerAliveInterval=30 -o ServerAliveCountMax=5 $SSH_USER@$ssh_target 'cd $path && \
+        grep -v \"^RELAY_REGION=\|^RELAY_LOCATION=\|^RELAY_ID=\|^RELAY_PUBLIC_URL=\|^RELAY_PEERS=\" .env 2>/dev/null > .env.tmp || true && \
+        echo \"RELAY_REGION=$region\" >> .env.tmp && \
+        echo \"RELAY_LOCATION=$location\" >> .env.tmp && \
+        echo \"RELAY_ID=$relay_id\" >> .env.tmp && \
+        echo \"RELAY_PUBLIC_URL=$public_url\" >> .env.tmp && \
+        echo \"RELAY_PEERS=$peers\" >> .env.tmp && \
+        mv .env.tmp .env'"
+
     # ── Build and restart on the server ────────────────────────────
     log_info "Building and starting relay on server..."
     eval "$local_ssh_cmd -o ServerAliveInterval=30 -o ServerAliveCountMax=5 $SSH_USER@$ssh_target 'cd $path && \
-        RELAY_REGION=\"$region\" \
-        RELAY_LOCATION=\"$location\" \
-        RELAY_ID=\"$relay_id\" \
-        RELAY_PUBLIC_URL=\"$public_url\" \
-        RELAY_PEERS=\"$peers\" \
         docker compose build && \
         docker compose down || true && \
-        RELAY_REGION=\"$region\" \
-        RELAY_LOCATION=\"$location\" \
-        RELAY_ID=\"$relay_id\" \
-        RELAY_PUBLIC_URL=\"$public_url\" \
-        RELAY_PEERS=\"$peers\" \
         docker compose up -d'"
 
     # Start bridge bot if DISCORD_BOT_TOKEN is configured in .env

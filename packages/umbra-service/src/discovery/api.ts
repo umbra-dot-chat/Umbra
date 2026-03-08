@@ -18,6 +18,8 @@ import type {
   UsernameSearchResult,
 } from './types';
 
+import { wasm } from '../helpers';
+
 /**
  * Default relay URL (can be overridden).
  */
@@ -385,6 +387,38 @@ export async function batchCreateHashes(
   return hashes;
 }
 
+// ── Username Signing ────────────────────────────────────────────────────────
+
+/**
+ * Sign a username payload for authenticated username operations.
+ *
+ * Uses the `umbra_wasm_sync_sign_challenge` pattern: pass a canonical payload
+ * string as the "nonce", get back a base64 signature + base64 public_key.
+ *
+ * @param did - The user's DID
+ * @param name - The name portion (or 'release' for release operations)
+ * @returns Signature fields to include in the request body
+ */
+async function signUsernamePayload(
+  did: string,
+  name: string
+): Promise<{ signature: string; public_key: string; timestamp: number }> {
+  const timestamp = Math.floor(Date.now() / 1000);
+  const payload = `umbra:username:${did}:${name}:${timestamp}`;
+
+  // Reuse sync_sign_challenge — it signs any string as a "nonce"
+  const resultJson = wasm().umbra_wasm_sync_sign_challenge(
+    JSON.stringify({ nonce: payload })
+  );
+  const result = JSON.parse(resultJson);
+
+  return {
+    signature: result.signature,    // base64 Ed25519
+    public_key: result.public_key,  // base64 Ed25519
+    timestamp,
+  };
+}
+
 // ── Username API ────────────────────────────────────────────────────────────
 
 /**
@@ -401,13 +435,20 @@ export async function registerUsername(
   did: string,
   name: string
 ): Promise<UsernameResponse> {
+  const sig = await signUsernamePayload(did, name);
   const response = await fetch(`${_relayUrl}/discovery/username/register`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
     },
-    body: JSON.stringify({ did, name }),
+    body: JSON.stringify({
+      did,
+      name,
+      signature: sig.signature,
+      public_key: sig.public_key,
+      timestamp: sig.timestamp,
+    }),
   });
 
   if (!response.ok) {
@@ -416,7 +457,16 @@ export async function registerUsername(
   }
 
   const data = await response.json();
-  return snakeToCamel<UsernameResponse>(data);
+  const result = snakeToCamel<UsernameResponse>(data);
+
+  // Persist full username to KV for sync blob inclusion
+  if (result.username) {
+    try {
+      wasm().umbra_wasm_plugin_kv_set('__umbra_system__', '__username__', result.username);
+    } catch { /* best-effort */ }
+  }
+
+  return result;
 }
 
 /**
@@ -515,13 +565,20 @@ export async function changeUsername(
   did: string,
   name: string
 ): Promise<UsernameResponse> {
+  const sig = await signUsernamePayload(did, name);
   const response = await fetch(`${_relayUrl}/discovery/username/change`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
     },
-    body: JSON.stringify({ did, name }),
+    body: JSON.stringify({
+      did,
+      name,
+      signature: sig.signature,
+      public_key: sig.public_key,
+      timestamp: sig.timestamp,
+    }),
   });
 
   if (!response.ok) {
@@ -530,7 +587,16 @@ export async function changeUsername(
   }
 
   const data = await response.json();
-  return snakeToCamel<UsernameResponse>(data);
+  const result = snakeToCamel<UsernameResponse>(data);
+
+  // Persist full username to KV for sync blob inclusion
+  if (result.username) {
+    try {
+      wasm().umbra_wasm_plugin_kv_set('__umbra_system__', '__username__', result.username);
+    } catch { /* best-effort */ }
+  }
+
+  return result;
 }
 
 /**
@@ -540,13 +606,19 @@ export async function changeUsername(
  * @returns Whether the release was successful
  */
 export async function releaseUsername(did: string): Promise<boolean> {
+  const sig = await signUsernamePayload(did, 'release');
   const response = await fetch(`${_relayUrl}/discovery/username/release`, {
     method: 'DELETE',
     headers: {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
     },
-    body: JSON.stringify({ did }),
+    body: JSON.stringify({
+      did,
+      signature: sig.signature,
+      public_key: sig.public_key,
+      timestamp: sig.timestamp,
+    }),
   });
 
   if (!response.ok) {
@@ -555,5 +627,14 @@ export async function releaseUsername(did: string): Promise<boolean> {
   }
 
   const data = await response.json();
-  return data.success === true;
+  const success = data.success === true;
+
+  // Clear username from KV on successful release
+  if (success) {
+    try {
+      wasm().umbra_wasm_plugin_kv_delete('__umbra_system__', '__username__');
+    } catch { /* best-effort */ }
+  }
+
+  return success;
 }

@@ -29,6 +29,8 @@ import {
   applySyncBlob,
   deleteSyncBlob,
   getSyncBlobMeta,
+  getUsername as apiGetUsername,
+  registerUsername as apiRegisterUsername,
 } from '@umbra/service';
 import type {
   SyncAuthResult,
@@ -44,6 +46,7 @@ import {
   subscribeRelayState,
   registerSyncUpdateCallback,
   unregisterSyncUpdateCallback,
+  sendSyncPush,
 } from '@/hooks/useNetwork';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -145,8 +148,8 @@ function kvSet(key: string, value: string): void {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function SyncProvider({ children }: { children: React.ReactNode }) {
-  const { preferencesReady, didChanged } = useUmbra();
-  const { identity } = useAuth();
+  const { preferencesReady, didChanged, bumpSyncVersion } = useUmbra();
+  const { identity, setIdentity } = useAuth();
 
   // State
   const [syncEnabled, setSyncEnabledState] = useState(false);
@@ -160,6 +163,10 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
   const isSyncingRef = useRef(false);
   const mountedRef = useRef(true);
   const sectionVersionsRef = useRef<Record<string, number>>({});
+  // Keep a stable ref to the latest identity to avoid recreating restoreFromRemote
+  // every time identity changes (which would re-register sync callbacks).
+  const identityRef = useRef(identity);
+  identityRef.current = identity;
 
   // Cleanup on unmount
   useEffect(() => {
@@ -266,6 +273,9 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       // Update section versions for next upload
       sectionVersionsRef.current = result.sections;
 
+      // Notify other sessions via WebSocket so they pick up the new blob
+      sendSyncPush(result.sections);
+
       if (mountedRef.current) {
         const now = Date.now();
         setLastSyncedAt(now);
@@ -363,14 +373,81 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
   }, [identity?.did, relayHttpUrl, ensureAuth]);
 
   const restoreFromRemote = useCallback(async (): Promise<SyncImportResult | null> => {
-    if (!identity?.did || !relayHttpUrl) return null;
+    const id = identityRef.current;
+    if (!id?.did || !relayHttpUrl) return null;
     try {
       const auth = await ensureAuth();
-      const blob = await downloadSyncBlob(relayHttpUrl, identity.did, auth.token);
+      const blob = await downloadSyncBlob(relayHttpUrl, id.did, auth.token);
       if (!blob) return null;
 
       const result = await applySyncBlob(blob);
-      console.log('[SyncContext] Restored from remote:', result);
+      // Signal preference contexts to re-read from KV
+      bumpSyncVersion();
+
+      // Sync display name if it changed
+      try {
+        const syncedName = await kvGet('__display_name__');
+        const currentId = identityRef.current;
+        if (syncedName && currentId && syncedName !== currentId.displayName) {
+          const w = getWasm();
+          if (w) {
+            await w.umbra_wasm_identity_update_profile(JSON.stringify({ display_name: syncedName }));
+          }
+          setIdentity({ ...currentId, displayName: syncedName });
+          console.log(`[SyncContext] Display name synced: "${syncedName}"`);
+        }
+      } catch { /* ignore — display name sync is best-effort */ }
+
+      // Sync avatar if it changed
+      try {
+        const syncedAvatar = await kvGet('__avatar__');
+        const currentId = identityRef.current;
+        if (syncedAvatar !== null && currentId && syncedAvatar !== (currentId.avatar ?? '')) {
+          const avatarValue = syncedAvatar || null; // empty string → clear
+          const w = getWasm();
+          if (w) {
+            await w.umbra_wasm_identity_update_profile(JSON.stringify({ avatar: avatarValue }));
+          }
+          setIdentity({ ...currentId, avatar: avatarValue ?? undefined });
+          console.log(`[SyncContext] Avatar synced`);
+        }
+      } catch { /* ignore — avatar sync is best-effort */ }
+
+      // Sync banner if it changed
+      try {
+        const syncedBanner = await kvGet('__banner__');
+        const currentId = identityRef.current;
+        if (syncedBanner !== null && currentId && syncedBanner !== (currentId.banner ?? '')) {
+          const bannerValue = syncedBanner || null; // empty string → clear
+          const w = getWasm();
+          if (w) {
+            await w.umbra_wasm_identity_update_profile(JSON.stringify({ banner: bannerValue }));
+          }
+          setIdentity({ ...currentId, banner: bannerValue ?? undefined });
+          console.log(`[SyncContext] Banner synced`);
+        }
+      } catch { /* ignore — banner sync is best-effort */ }
+
+      // Restore username if synced in the blob
+      try {
+        const syncedUsername = await kvGet('__username__');
+        const currentId = identityRef.current;
+        if (syncedUsername && currentId?.did) {
+          // Check if the relay already has this username for this DID
+          const current = await apiGetUsername(currentId.did);
+          if (!current.username || current.username !== syncedUsername) {
+            // Extract the name portion (before #) and re-register
+            const namePart = syncedUsername.split('#')[0];
+            if (namePart) {
+              await apiRegisterUsername(currentId.did, namePart);
+              console.log(`[SyncContext] Username reclaimed from sync: "${syncedUsername}"`);
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('[SyncContext] Username restore best-effort failed:', e);
+      }
+
       return result;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -380,7 +457,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       }
       return null;
     }
-  }, [identity?.did, relayHttpUrl, ensureAuth]);
+  }, [relayHttpUrl, ensureAuth, bumpSyncVersion, setIdentity]);
 
   // ── Register module-level dirty callback ────────────────────────────
   // This allows preference contexts (ThemeContext, FontContext, SoundContext)
@@ -412,21 +489,54 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
   }, [syncEnabled, relayHttpUrl, identity?.did, doSyncUpload]);
 
   // ── Listen for incoming sync deltas via relay WS ──────────────────────
+  // Debounce incoming sync_update messages: the relay sends one per section
+  // (blocked, friends, groups, preferences), but we only need to download
+  // and apply the blob once.
+  const syncUpdateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (!syncEnabled || !preferencesReady) return;
 
-    const handleSyncUpdate = (data: { section: string; version: number; encryptedData: string }) => {
-      console.log(`[SyncContext] Received sync delta: ${data.section} v${data.version}`);
-      // Apply the delta — for now, re-download full blob on any update
-      // (true delta apply will be added when WASM supports partial apply)
-      restoreFromRemote().catch((err) => {
-        console.error('[SyncContext] Failed to apply incoming sync update:', err);
-      });
+    const handleSyncUpdate = (_data: { section: string; version: number; encryptedData: string }) => {
+      // Debounce: coalesce rapid-fire section updates into a single restore
+      if (syncUpdateTimerRef.current) {
+        clearTimeout(syncUpdateTimerRef.current);
+      }
+      syncUpdateTimerRef.current = setTimeout(() => {
+        syncUpdateTimerRef.current = null;
+        restoreFromRemote().catch((err) => {
+          console.error('[SyncContext] Failed to apply incoming sync update:', err);
+        });
+      }, 300);
     };
 
     registerSyncUpdateCallback(handleSyncUpdate);
-    return () => unregisterSyncUpdateCallback(handleSyncUpdate);
+    return () => {
+      unregisterSyncUpdateCallback(handleSyncUpdate);
+      if (syncUpdateTimerRef.current) {
+        clearTimeout(syncUpdateTimerRef.current);
+        syncUpdateTimerRef.current = null;
+      }
+    };
   }, [syncEnabled, preferencesReady, restoreFromRemote]);
+
+  // ── Sync on load: download latest blob from relay on every launch ──
+  // Ensures devices that were offline catch up on changes from other devices
+  // without requiring the user to manually click "Sync Now".
+  const didInitialSyncRef = useRef(false);
+  useEffect(() => {
+    if (!syncEnabled || !preferencesReady || !relayHttpUrl || !identity?.did) return;
+    if (didInitialSyncRef.current) return;
+    didInitialSyncRef.current = true;
+
+    // Small delay to ensure preference contexts are mounted
+    const timer = setTimeout(() => {
+      restoreFromRemote().catch((err) => {
+        console.error('[SyncContext] Initial sync-on-load failed:', err);
+      });
+    }, 1_500);
+
+    return () => clearTimeout(timer);
+  }, [syncEnabled, preferencesReady, relayHttpUrl, identity?.did, restoreFromRemote]);
 
   // ── Context value ─────────────────────────────────────────────────────
   const value = useMemo<SyncContextValue>(() => ({

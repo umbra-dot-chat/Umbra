@@ -105,7 +105,7 @@ import { PRIMARY_RELAY_URL, DEFAULT_RELAY_SERVERS } from '@/config';
 import { TEST_IDS } from '@/constants/test-ids';
 import { LinkedAccountsPanel, FriendDiscoveryPanel } from '@/components/discovery';
 import { IdentityCardDialog } from '@/components/modals/IdentityCardDialog';
-import { useSync } from '@/contexts/SyncContext';
+import { useSync, markSyncDirty } from '@/contexts/SyncContext';
 
 // Cast icons for Wisp Input compatibility (accepts strokeWidth prop)
 type InputIcon = React.ComponentType<{ size?: number | string; color?: string; strokeWidth?: number }>;
@@ -113,10 +113,74 @@ const UserInputIcon = UserIcon as InputIcon;
 const AtSignInputIcon = AtSignIcon as InputIcon;
 
 // ---------------------------------------------------------------------------
+// Image compression
+// ---------------------------------------------------------------------------
+
+/** Max base64 sizes matching umbra-core limits */
+const MAX_AVATAR_BASE64 = 2 * 1024 * 1024; // 2 MB
+const MAX_BANNER_BASE64 = 4 * 1024 * 1024; // 4 MB
+
+/**
+ * Compress an image file to fit within a base64 size budget.
+ * Uses canvas to resize and convert to JPEG.
+ */
+function compressImage(
+  file: File,
+  maxBase64Bytes: number,
+  maxWidth: number,
+  maxHeight: number,
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new window.Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      // Scale down to fit within max dimensions while preserving aspect ratio
+      let { width, height } = img;
+      if (width > maxWidth || height > maxHeight) {
+        const ratio = Math.min(maxWidth / width, maxHeight / height);
+        width = Math.round(width * ratio);
+        height = Math.round(height * ratio);
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) { reject(new Error('Canvas not supported')); return; }
+      ctx.drawImage(img, 0, 0, width, height);
+
+      // Try decreasing quality until we fit the budget
+      for (let q = 0.85; q >= 0.1; q -= 0.1) {
+        const dataUrl = canvas.toDataURL('image/jpeg', q);
+        if (dataUrl.length <= maxBase64Bytes) {
+          resolve(dataUrl);
+          return;
+        }
+      }
+      // Final attempt: further halve dimensions
+      const smallCanvas = document.createElement('canvas');
+      smallCanvas.width = Math.round(width / 2);
+      smallCanvas.height = Math.round(height / 2);
+      const sctx = smallCanvas.getContext('2d');
+      if (!sctx) { reject(new Error('Canvas not supported')); return; }
+      sctx.drawImage(canvas, 0, 0, smallCanvas.width, smallCanvas.height);
+      const finalUrl = smallCanvas.toDataURL('image/jpeg', 0.7);
+      if (finalUrl.length <= maxBase64Bytes) {
+        resolve(finalUrl);
+      } else {
+        reject(new Error('Image is too large even after compression. Please use a smaller image.'));
+      }
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Failed to load image')); };
+    img.src = url;
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-export type SettingsSection = 'account' | 'profile' | 'appearance' | 'messaging' | 'notifications' | 'sounds' | 'privacy' | 'audio-video' | 'network' | 'data' | 'plugins' | 'keyboard-shortcuts' | 'about';
+export type SettingsSection = 'account' | 'appearance' | 'messaging' | 'notifications' | 'sounds' | 'privacy' | 'audio-video' | 'network' | 'data' | 'plugins' | 'keyboard-shortcuts' | 'about';
 
 export interface SettingsDialogProps {
   open: boolean;
@@ -133,7 +197,6 @@ interface NavItem {
 
 const NAV_ITEMS: NavItem[] = [
   { id: 'account', label: 'Account', icon: WalletIcon },
-  { id: 'profile', label: 'Profile', icon: UserIcon },
   { id: 'appearance', label: 'Appearance', icon: PaletteIcon },
   { id: 'messaging', label: 'Messaging', icon: MessageIcon },
   { id: 'notifications', label: 'Notifications', icon: BellIcon },
@@ -149,7 +212,6 @@ const NAV_ITEMS: NavItem[] = [
 
 const NAV_TEST_IDS: Record<SettingsSection, string> = {
   'account': TEST_IDS.SETTINGS.NAV_ACCOUNT,
-  'profile': TEST_IDS.SETTINGS.NAV_PROFILE,
   'appearance': TEST_IDS.SETTINGS.NAV_APPEARANCE,
   'messaging': TEST_IDS.SETTINGS.NAV_MESSAGING,
   'notifications': TEST_IDS.SETTINGS.NAV_NOTIFICATIONS,
@@ -165,7 +227,6 @@ const NAV_TEST_IDS: Record<SettingsSection, string> = {
 
 const SECTION_TEST_IDS: Record<SettingsSection, string> = {
   'account': TEST_IDS.SETTINGS.SECTION_ACCOUNT,
-  'profile': TEST_IDS.SETTINGS.SECTION_PROFILE,
   'appearance': TEST_IDS.SETTINGS.SECTION_APPEARANCE,
   'messaging': TEST_IDS.SETTINGS.SECTION_MESSAGING,
   'notifications': TEST_IDS.SETTINGS.SECTION_NOTIFICATIONS,
@@ -183,6 +244,7 @@ interface SubNavItem { id: string; label: string; }
 
 const SUBCATEGORIES: Partial<Record<SettingsSection, SubNavItem[]>> = {
   account: [
+    { id: 'profile', label: 'Profile' },
     { id: 'identity', label: 'Identity' },
     { id: 'sharing', label: 'Sharing' },
     { id: 'sync', label: 'Sync' },
@@ -534,6 +596,7 @@ function SoundToggle({ checked, onChange, ...rest }: React.ComponentProps<typeof
 // ---------------------------------------------------------------------------
 
 function AccountSyncSubsection() {
+  const { identity } = useAuth();
   const { theme } = useTheme();
   const tc = theme.colors;
   const {
@@ -547,11 +610,23 @@ function AccountSyncSubsection() {
   const handleSyncNow = useCallback(async () => {
     setIsSyncing(true);
     try {
+      // Cascade: ensure current identity state is in KV before syncing
+      if (identity) {
+        try {
+          const w = getWasm();
+          if (w) {
+            if (identity.displayName) {
+              (w as any).umbra_wasm_plugin_kv_set('__umbra_system__', '__display_name__', identity.displayName);
+            }
+          }
+        } catch { /* ignore */ }
+        markSyncDirty('preferences');
+      }
       await triggerSync();
     } finally {
       setIsSyncing(false);
     }
-  }, [triggerSync]);
+  }, [triggerSync, identity]);
 
   const handleDelete = useCallback(async () => {
     setIsDeleting(true);
@@ -722,7 +797,8 @@ function AccountSyncSubsection() {
 // ---------------------------------------------------------------------------
 
 function AccountSection() {
-  const { identity, logout } = useAuth();
+  const { identity, setIdentity, addAccount, recoveryPhrase, pin, rememberMe, logout } = useAuth();
+  const { service } = useUmbra();
   const router = useRouter();
   const { theme, mode } = useTheme();
   const tc = theme.colors;
@@ -734,6 +810,185 @@ function AccountSection() {
   const [rotateKeyResult, setRotateKeyResult] = useState<{ newEncryptionKey: string; friendCount: number } | null>(null);
   const [rotateKeyError, setRotateKeyError] = useState<string | null>(null);
   const [isRotatingKey, setIsRotatingKey] = useState(false);
+
+  // ── Profile editing state ─────────────────────────────────────────────
+  const [displayName, setDisplayName] = useState(identity?.displayName ?? '');
+  const [status, setStatus] = useState(identity?.status ?? 'online');
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(identity?.avatar ?? null);
+  const [pendingAvatar, setPendingAvatar] = useState<string | null>(null);
+  const [bannerPreview, setBannerPreview] = useState<string | null>(identity?.banner ?? null);
+  const [pendingBanner, setPendingBanner] = useState<string | null>(null);
+  const [bannerRemoved, setBannerRemoved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [avatarError, setAvatarError] = useState<string | null>(null);
+  const [bannerError, setBannerError] = useState<string | null>(null);
+
+  const hasProfileChanges =
+    displayName !== (identity?.displayName ?? '') ||
+    status !== (identity?.status ?? 'online') ||
+    pendingAvatar !== null ||
+    pendingBanner !== null ||
+    bannerRemoved;
+
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const bannerInputRef = useRef<HTMLInputElement | null>(null);
+
+  const handleAvatarPick = useCallback(() => {
+    if (Platform.OS !== 'web') return;
+    if (!fileInputRef.current) {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/*';
+      input.style.display = 'none';
+      input.addEventListener('change', async () => {
+        const file = input.files?.[0];
+        if (!file) return;
+        setAvatarError(null);
+        try {
+          const compressed = await compressImage(file, MAX_AVATAR_BASE64, 512, 512);
+          setAvatarPreview(compressed);
+          setPendingAvatar(compressed);
+        } catch (err) {
+          setAvatarError(err instanceof Error ? err.message : 'Image too large');
+        }
+      });
+      document.body.appendChild(input);
+      fileInputRef.current = input;
+    }
+    fileInputRef.current.value = '';
+    fileInputRef.current.click();
+  }, []);
+
+  const handleBannerPick = useCallback(() => {
+    if (Platform.OS !== 'web') return;
+    if (!bannerInputRef.current) {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/*';
+      input.style.display = 'none';
+      input.addEventListener('change', async () => {
+        const file = input.files?.[0];
+        if (!file) return;
+        setBannerError(null);
+        try {
+          const compressed = await compressImage(file, MAX_BANNER_BASE64, 1200, 400);
+          setBannerPreview(compressed);
+          setPendingBanner(compressed);
+        } catch (err) {
+          setBannerError(err instanceof Error ? err.message : 'Image too large');
+        }
+      });
+      document.body.appendChild(input);
+      bannerInputRef.current = input;
+    }
+    bannerInputRef.current.value = '';
+    bannerInputRef.current.click();
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (fileInputRef.current) {
+        document.body.removeChild(fileInputRef.current);
+        fileInputRef.current = null;
+      }
+      if (bannerInputRef.current) {
+        document.body.removeChild(bannerInputRef.current);
+        bannerInputRef.current = null;
+      }
+    };
+  }, []);
+
+  const handleProfileSave = useCallback(async () => {
+    if (!service || !identity) return;
+    setSaving(true);
+    setSaved(false);
+    try {
+      if (displayName !== identity.displayName) {
+        await service.updateProfile({ type: 'displayName', value: displayName });
+        try {
+          const w = getWasm();
+          if (w) {
+            (w as any).umbra_wasm_plugin_kv_set('__umbra_system__', '__display_name__', displayName);
+          }
+        } catch { /* ignore */ }
+        markSyncDirty('preferences');
+      }
+      if (status !== (identity.status ?? 'online')) {
+        await service.updateProfile({ type: 'status', value: status });
+      }
+      if (pendingAvatar !== null) {
+        await service.updateProfile({ type: 'avatar', value: pendingAvatar });
+        try {
+          const w = getWasm();
+          if (w) {
+            (w as any).umbra_wasm_plugin_kv_set('__umbra_system__', '__avatar__', pendingAvatar);
+          }
+        } catch { /* ignore */ }
+        markSyncDirty('preferences');
+      }
+      if (pendingBanner !== null) {
+        await service.updateProfile({ type: 'banner', value: pendingBanner });
+        try {
+          const w = getWasm();
+          if (w) {
+            (w as any).umbra_wasm_plugin_kv_set('__umbra_system__', '__banner__', pendingBanner);
+          }
+        } catch { /* ignore */ }
+        markSyncDirty('preferences');
+      } else if (bannerRemoved) {
+        await service.updateProfile({ type: 'banner', value: null });
+        try {
+          const w = getWasm();
+          if (w) {
+            (w as any).umbra_wasm_plugin_kv_set('__umbra_system__', '__banner__', '');
+          }
+        } catch { /* ignore */ }
+        markSyncDirty('preferences');
+      }
+      const updatedIdentity = {
+        ...identity,
+        displayName,
+        status,
+        ...(pendingAvatar !== null ? { avatar: pendingAvatar } : {}),
+        ...(pendingBanner !== null ? { banner: pendingBanner } : bannerRemoved ? { banner: undefined } : {}),
+      };
+      setIdentity(updatedIdentity);
+
+      if (recoveryPhrase) {
+        addAccount({
+          did: identity.did,
+          displayName: updatedIdentity.displayName,
+          avatar: updatedIdentity.avatar,
+          recoveryPhrase,
+          pin: pin ?? undefined,
+          rememberMe,
+          addedAt: identity.createdAt ?? Date.now(),
+        });
+      }
+
+      setPendingAvatar(null);
+      setPendingBanner(null);
+      setBannerRemoved(false);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (err) {
+      console.error('[AccountSection] Failed to save profile:', err);
+    } finally {
+      setSaving(false);
+    }
+  }, [service, identity, displayName, status, pendingAvatar, pendingBanner, bannerRemoved, setIdentity, addAccount, recoveryPhrase, pin, rememberMe]);
+
+  // ── Auto-save profile changes with debounce ──────────────────────────
+  const autoSaveRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (!hasProfileChanges) return;
+    if (autoSaveRef.current) clearTimeout(autoSaveRef.current);
+    autoSaveRef.current = setTimeout(() => {
+      handleProfileSave();
+    }, 800);
+    return () => { if (autoSaveRef.current) clearTimeout(autoSaveRef.current); };
+  }, [hasProfileChanges, handleProfileSave]);
 
   const handleCopyDid = useCallback(async () => {
     if (!identity) return;
@@ -808,9 +1063,139 @@ function AccountSection() {
     <View style={{ gap: 24 }}>
       <SectionHeader
         title="Account"
-        description="Your identity and connection details."
+        description="Your identity, profile, and connection details."
       />
 
+      {/* ── Profile subsection ─────────────────────────────────────────── */}
+      <View nativeID="sub-profile" style={{ gap: 16 }}>
+        <SettingRow label="Banner" description="A wide header image for your profile." vertical>
+          <Pressable onPress={handleBannerPick}>
+            <View
+              style={{
+                width: '100%',
+                height: 120,
+                borderRadius: 12,
+                backgroundColor: tc.background.surface,
+                alignItems: 'center',
+                justifyContent: 'center',
+                overflow: 'hidden',
+                borderWidth: 2,
+                borderColor: tc.border.subtle,
+                borderStyle: 'dashed',
+              }}
+            >
+              {bannerPreview ? (
+                <Image
+                  source={{ uri: bannerPreview }}
+                  style={{ width: '100%', height: 120, borderRadius: 10 }}
+                  resizeMode="cover"
+                />
+              ) : (
+                <RNText style={{ color: tc.text.muted, fontSize: 13 }}>
+                  Click to upload a banner image
+                </RNText>
+              )}
+            </View>
+          </Pressable>
+          {bannerPreview && (
+            <HStack gap="sm" style={{ marginTop: 4 }}>
+              <Button variant="tertiary" size="sm" onPress={handleBannerPick}>
+                Change Banner
+              </Button>
+              <Button
+                variant="tertiary"
+                size="sm"
+                onPress={() => {
+                  setBannerPreview(null);
+                  setPendingBanner(null);
+                  setBannerRemoved(true);
+                }}
+              >
+                Remove Banner
+              </Button>
+            </HStack>
+          )}
+          {bannerError && (
+            <HStack gap="xs" style={{ alignItems: 'center', marginTop: 4 }}>
+              <AlertTriangleIcon size={14} color={tc.status.danger} />
+              <RNText style={{ color: tc.status.danger, fontSize: 12 }}>{bannerError}</RNText>
+            </HStack>
+          )}
+        </SettingRow>
+
+        <SettingRow label="Avatar" description="Your profile picture. Click to upload a new image." vertical>
+          <HStack gap="md" style={{ alignItems: 'center' }}>
+            <Pressable onPress={handleAvatarPick}>
+              <View
+                style={{
+                  width: 64,
+                  height: 64,
+                  borderRadius: 32,
+                  backgroundColor: tc.background.surface,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  overflow: 'hidden',
+                  borderWidth: 2,
+                  borderColor: tc.border.subtle,
+                }}
+              >
+                {avatarPreview ? (
+                  <Image
+                    source={{ uri: avatarPreview }}
+                    style={{ width: 64, height: 64, borderRadius: 32 }}
+                  />
+                ) : (
+                  <UserIcon size={28} color={tc.text.muted} />
+                )}
+              </View>
+            </Pressable>
+            <Button variant="tertiary" size="sm" onPress={handleAvatarPick}>
+              Upload Photo
+            </Button>
+          </HStack>
+          {avatarError && (
+            <HStack gap="xs" style={{ alignItems: 'center', marginTop: 4 }}>
+              <AlertTriangleIcon size={14} color={tc.status.danger} />
+              <RNText style={{ color: tc.status.danger, fontSize: 12 }}>{avatarError}</RNText>
+            </HStack>
+          )}
+        </SettingRow>
+
+        <SettingRow label="Display Name" description="How others see you in conversations." vertical>
+          <Input
+            value={displayName}
+            onChangeText={setDisplayName}
+            placeholder="Your display name"
+            icon={UserInputIcon}
+            size="md"
+            fullWidth
+            testID={TEST_IDS.SETTINGS.DISPLAY_NAME_INPUT}
+            gradientBorder
+          />
+        </SettingRow>
+
+        <SettingRow label="Status" description="Set your availability status." vertical>
+          <Select
+            options={STATUS_OPTIONS}
+            value={status}
+            onChange={setStatus}
+            placeholder="Select status"
+            size="md"
+            fullWidth
+          />
+        </SettingRow>
+
+        {(saving || saved) && (
+          <HStack gap="xs" style={{ justifyContent: 'flex-end', alignItems: 'center' }}>
+            {saved ? <CheckIcon size={14} color={tc.status.success} /> : null}
+            <RNText style={{ color: saved ? tc.status.success : tc.text.muted, fontSize: 12 }}>
+              {saving ? 'Saving...' : 'Saved'}
+            </RNText>
+          </HStack>
+        )}
+      </View>
+
+      {/* ── Identity subsection ────────────────────────────────────────── */}
       <View nativeID="sub-identity">
           {/* Identity info card */}
           <Card variant="outlined" padding="lg" style={{ width: '100%' }}>
@@ -1178,205 +1563,9 @@ function AccountSection() {
   );
 }
 
-function ProfileSection() {
-  const { identity, setIdentity, addAccount, recoveryPhrase, pin, rememberMe } = useAuth();
-  const { service } = useUmbra();
-  const { theme } = useTheme();
-  const tc = theme.colors;
-
-  const [displayName, setDisplayName] = useState(identity?.displayName ?? '');
-  const [status, setStatus] = useState(identity?.status ?? 'online');
-  const [avatarPreview, setAvatarPreview] = useState<string | null>(identity?.avatar ?? null);
-  const [pendingAvatar, setPendingAvatar] = useState<string | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
-
-  // Track whether the user has changed anything
-  const hasChanges =
-    displayName !== (identity?.displayName ?? '') ||
-    status !== (identity?.status ?? 'online') ||
-    pendingAvatar !== null;
-
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-
-  const handleAvatarPick = useCallback(() => {
-    if (Platform.OS !== 'web') return;
-    // Create a hidden file input and trigger it
-    if (!fileInputRef.current) {
-      const input = document.createElement('input');
-      input.type = 'file';
-      input.accept = 'image/*';
-      input.style.display = 'none';
-      input.addEventListener('change', () => {
-        const file = input.files?.[0];
-        if (!file) return;
-        const reader = new FileReader();
-        reader.onload = () => {
-          const base64 = reader.result as string;
-          setAvatarPreview(base64);
-          setPendingAvatar(base64);
-        };
-        reader.readAsDataURL(file);
-      });
-      document.body.appendChild(input);
-      fileInputRef.current = input;
-    }
-    fileInputRef.current.value = '';
-    fileInputRef.current.click();
-  }, []);
-
-  // Cleanup hidden file input on unmount
-  useEffect(() => {
-    return () => {
-      if (fileInputRef.current) {
-        document.body.removeChild(fileInputRef.current);
-        fileInputRef.current = null;
-      }
-    };
-  }, []);
-
-  const handleSave = useCallback(async () => {
-    if (!service || !identity) return;
-    setSaving(true);
-    setSaved(false);
-    try {
-      // Update display name if changed
-      if (displayName !== identity.displayName) {
-        await service.updateProfile({ type: 'displayName', value: displayName });
-      }
-      // Update status if changed
-      if (status !== (identity.status ?? 'online')) {
-        await service.updateProfile({ type: 'status', value: status });
-      }
-      // Update avatar if changed
-      if (pendingAvatar !== null) {
-        await service.updateProfile({ type: 'avatar', value: pendingAvatar });
-      }
-      // Update identity in AuthContext so the rest of the app reflects changes
-      const updatedIdentity = {
-        ...identity,
-        displayName,
-        status,
-        ...(pendingAvatar !== null ? { avatar: pendingAvatar } : {}),
-      };
-      setIdentity(updatedIdentity);
-
-      // Keep stored account in sync for account switcher
-      if (recoveryPhrase) {
-        addAccount({
-          did: identity.did,
-          displayName: updatedIdentity.displayName,
-          avatar: updatedIdentity.avatar,
-          recoveryPhrase,
-          pin: pin ?? undefined,
-          rememberMe,
-          addedAt: identity.createdAt ?? Date.now(),
-        });
-      }
-
-      setPendingAvatar(null);
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2000);
-    } catch (err) {
-      console.error('[ProfileSection] Failed to save profile:', err);
-    } finally {
-      setSaving(false);
-    }
-  }, [service, identity, displayName, status, pendingAvatar, setIdentity, addAccount, recoveryPhrase, pin, rememberMe]);
-
-  return (
-    <View style={{ gap: 20 }}>
-      <SectionHeader
-        title="Profile"
-        description="Manage your public profile information visible to other users."
-      />
-
-      <View nativeID="sub-avatar">
-        <SettingRow label="Avatar" description="Your profile picture. Click to upload a new image." vertical>
-          <HStack gap="md" style={{ alignItems: 'center' }}>
-            <Pressable onPress={handleAvatarPick}>
-              <View
-                style={{
-                  width: 64,
-                  height: 64,
-                  borderRadius: 32,
-                  backgroundColor: tc.background.surface,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  overflow: 'hidden',
-                  borderWidth: 2,
-                  borderColor: tc.border.subtle,
-                }}
-              >
-                {avatarPreview ? (
-                  <Image
-                    source={{ uri: avatarPreview }}
-                    style={{ width: 64, height: 64, borderRadius: 32 }}
-                  />
-                ) : (
-                  <UserIcon size={28} color={tc.text.muted} />
-                )}
-              </View>
-            </Pressable>
-            <Button variant="tertiary" size="sm" onPress={handleAvatarPick}>
-              Upload Photo
-            </Button>
-          </HStack>
-        </SettingRow>
-      </View>
-
-      <View nativeID="sub-display-name">
-        <SettingRow label="Display Name" description="How others see you in conversations." vertical>
-          <Input
-            value={displayName}
-            onChangeText={setDisplayName}
-            placeholder="Your display name"
-            icon={UserInputIcon}
-            size="md"
-            fullWidth
-            testID={TEST_IDS.SETTINGS.DISPLAY_NAME_INPUT}
-            gradientBorder
-          />
-        </SettingRow>
-      </View>
-
-      <View nativeID="sub-status">
-        <SettingRow label="Status" description="Set your availability status." vertical>
-          <Select
-            options={STATUS_OPTIONS}
-            value={status}
-            onChange={setStatus}
-            placeholder="Select status"
-            size="md"
-            fullWidth
-          />
-        </SettingRow>
-      </View>
-
-      {hasChanges && (
-        <HStack gap="sm" style={{ justifyContent: 'flex-end' }}>
-          <Button
-            variant="secondary"
-            size="sm"
-            onPress={handleSave}
-            disabled={saving}
-          >
-            <HStack gap="xs" style={{ alignItems: 'center' }}>
-              {saved ? <CheckIcon size={14} color={tc.text.primary} /> : null}
-              <RNText style={{ color: tc.text.primary, fontWeight: '600', fontSize: 14 }}>
-                {saving ? 'Saving...' : saved ? 'Saved' : 'Save Changes'}
-              </RNText>
-            </HStack>
-          </Button>
-        </HStack>
-      )}
-    </View>
-  );
-}
-
 function AppearanceSection() {
-  const { mode, toggleMode, theme } = useTheme();
-  const { activeTheme, themes, installedThemeIds, setTheme, accentColor, setAccentColor, showModeToggle, textSize, setTextSize, motionPreferences, setMotionPreferences } = useAppTheme();
+  const { mode, theme } = useTheme();
+  const { activeTheme, themes, installedThemeIds, setTheme, accentColor, setAccentColor, showModeToggle, textSize, setTextSize, motionPreferences, setMotionPreferences, switchMode } = useAppTheme();
   const tc = theme.colors;
 
   // Build theme dropdown options (only installed themes)
@@ -1437,11 +1626,11 @@ function AppearanceSection() {
         <SettingRow label="Dark Mode" description="Switch between light and dark themes.">
           <SoundToggle
             checked={mode === 'dark'}
-            onChange={toggleMode}
+            onChange={switchMode}
             testID={TEST_IDS.SETTINGS.DARK_MODE_TOGGLE}
             accessibilityActions={[{ name: 'activate', label: 'Toggle dark mode' }]}
             onAccessibilityAction={(e: { nativeEvent: { actionName: string } }) => {
-              if (e.nativeEvent.actionName === 'activate') toggleMode();
+              if (e.nativeEvent.actionName === 'activate') switchMode();
             }}
           />
         </SettingRow>
@@ -4863,8 +5052,6 @@ export function SettingsDialog({ open, onClose, onOpenMarketplace, initialSectio
     switch (activeSection) {
       case 'account':
         return <AccountSection />;
-      case 'profile':
-        return <ProfileSection />;
       case 'appearance':
         return <AppearanceSection />;
       case 'messaging':

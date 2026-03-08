@@ -21,6 +21,8 @@ use super::types::{
     UsernameLookupQuery, UsernameResponse, UsernameSearchQuery, UsernameSearchResultItem,
 };
 
+use crate::sync::auth::verify_username_signature;
+
 /// Type alias for the discovery state.
 pub type DiscoveryState = (DiscoveryStore, DiscoveryConfig);
 
@@ -260,6 +262,26 @@ pub async fn register_username(
             .into_response();
     }
 
+    // Verify Ed25519 signature (required)
+    match (&request.signature, &request.public_key, request.timestamp) {
+        (Some(sig), Some(pk), Some(ts)) => {
+            if let Err(e) = verify_username_signature(&request.did, &request.name, sig, pk, ts) {
+                return (
+                    StatusCode::UNAUTHORIZED,
+                    Json(serde_json::json!({ "error": format!("Signature verification failed: {}", e) })),
+                )
+                    .into_response();
+            }
+        }
+        _ => {
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(serde_json::json!({ "error": "Missing signature fields (signature, public_key, timestamp required)" })),
+            )
+                .into_response();
+        }
+    }
+
     match store.register_username(&request.did, &request.name) {
         Ok(entry) => (
             StatusCode::OK,
@@ -376,6 +398,26 @@ pub async fn change_username(
             .into_response();
     }
 
+    // Verify Ed25519 signature (required)
+    match (&request.signature, &request.public_key, request.timestamp) {
+        (Some(sig), Some(pk), Some(ts)) => {
+            if let Err(e) = verify_username_signature(&request.did, &request.name, sig, pk, ts) {
+                return (
+                    StatusCode::UNAUTHORIZED,
+                    Json(serde_json::json!({ "error": format!("Signature verification failed: {}", e) })),
+                )
+                    .into_response();
+            }
+        }
+        _ => {
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(serde_json::json!({ "error": "Missing signature fields (signature, public_key, timestamp required)" })),
+            )
+                .into_response();
+        }
+    }
+
     // register_username already handles releasing the old one
     match store.register_username(&request.did, &request.name) {
         Ok(entry) => Json(UsernameResponse {
@@ -402,10 +444,30 @@ pub async fn release_username(
     State((store, _config)): State<DiscoveryState>,
     Json(request): Json<ReleaseUsernameRequest>,
 ) -> impl IntoResponse {
+    // Verify Ed25519 signature (required) — for release, name = "release"
+    match (&request.signature, &request.public_key, request.timestamp) {
+        (Some(sig), Some(pk), Some(ts)) => {
+            if let Err(e) = verify_username_signature(&request.did, "release", sig, pk, ts) {
+                return (
+                    StatusCode::UNAUTHORIZED,
+                    Json(serde_json::json!({ "error": format!("Signature verification failed: {}", e) })),
+                )
+                    .into_response();
+            }
+        }
+        _ => {
+            return (
+                StatusCode::UNAUTHORIZED,
+                Json(serde_json::json!({ "error": "Missing signature fields (signature, public_key, timestamp required)" })),
+            )
+                .into_response();
+        }
+    }
+
     if store.release_username(&request.did) {
-        Json(serde_json::json!({ "success": true }))
+        Json(serde_json::json!({ "success": true })).into_response()
     } else {
-        Json(serde_json::json!({ "success": false, "error": "No username found" }))
+        Json(serde_json::json!({ "success": false, "error": "No username found" })).into_response()
     }
 }
 

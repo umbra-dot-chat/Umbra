@@ -4711,6 +4711,19 @@ impl Database {
             })
         }).collect();
 
+        // Plugin KV (system preferences stored under __umbra_system__ namespace)
+        let kv_rows = self.query(
+            "SELECT plugin_id, key, value FROM plugin_kv WHERE plugin_id = '__umbra_system__' ORDER BY key",
+            json!([]),
+        ).unwrap_or_default();
+        let plugin_kv: Vec<serde_json::Value> = kv_rows.iter().map(|row| {
+            json!({
+                "plugin_id": row.get("plugin_id").and_then(|v| v.as_str()).unwrap_or_default(),
+                "key": row.get("key").and_then(|v| v.as_str()).unwrap_or_default(),
+                "value": row.get("value").and_then(|v| v.as_str()).unwrap_or_default(),
+            })
+        }).collect();
+
         let export = json!({
             "version": 1,
             "exported_at": now,
@@ -4719,6 +4732,7 @@ impl Database {
             "conversations": conversations,
             "groups": groups,
             "blocked_users": blocked_users,
+            "plugin_kv": plugin_kv,
         });
 
         serde_json::to_vec(&export)
@@ -4830,6 +4844,23 @@ impl Database {
                         json!([did, blocked_at, reason]),
                     ).map_err(|e| Error::DatabaseError(format!("import blocked user: {}", e)))?;
                     stats.blocked_users += 1;
+                }
+            }
+        }
+
+        // Plugin KV (system preferences)
+        if let Some(kv_items) = export.get("plugin_kv").and_then(|v| v.as_array()) {
+            for item in kv_items {
+                let plugin_id = item.get("plugin_id").and_then(|v| v.as_str()).unwrap_or_default();
+                let key = item.get("key").and_then(|v| v.as_str()).unwrap_or_default();
+                let value = item.get("value").and_then(|v| v.as_str()).unwrap_or_default();
+
+                if !key.is_empty() {
+                    self.exec(
+                        "INSERT OR REPLACE INTO plugin_kv (plugin_id, key, value, updated_at) VALUES (?, ?, ?, ?)",
+                        json!([plugin_id, key, value, now]),
+                    ).map_err(|e| Error::DatabaseError(format!("import plugin_kv: {}", e)))?;
+                    stats.settings += 1;
                 }
             }
         }

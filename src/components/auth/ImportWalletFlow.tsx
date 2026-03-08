@@ -172,6 +172,14 @@ export function ImportWalletFlow({ open, onClose }: ImportWalletFlowProps) {
       const result = await UmbraService.instance.restoreIdentity(words, displayName.trim());
       setIdentity(result);
 
+      // Persist display name to KV so it flows into sync blob
+      try {
+        const w = getWasm();
+        if (w) {
+          (w as any).umbra_wasm_plugin_kv_set('__umbra_system__', '__display_name__', displayName.trim());
+        }
+      } catch { /* ignore */ }
+
       // Check relay for existing sync blob.
       // Derive HTTP URL from config constants since the WebSocket relay
       // connection may not be established yet during the auth flow.
@@ -422,6 +430,22 @@ export function ImportWalletFlow({ open, onClose }: ImportWalletFlowProps) {
                           try {
                             await applySyncBlob(syncBlob);
                             setSyncRestored(true);
+
+                            // Restore synced display name if available
+                            try {
+                              const w = getWasm();
+                              if (w) {
+                                const nameResult = await (w as any).umbra_wasm_plugin_kv_get('__umbra_system__', '__display_name__');
+                                const parsed = typeof nameResult === 'string' ? JSON.parse(nameResult) : nameResult;
+                                const syncedName = parsed?.value;
+                                if (syncedName && identity) {
+                                  await w.umbra_wasm_identity_update_profile(JSON.stringify({ display_name: syncedName }));
+                                  setDisplayName(syncedName);
+                                  setIdentity({ ...identity, displayName: syncedName });
+                                }
+                              }
+                            } catch { /* ignore — name falls back to user-entered value */ }
+
                             // Enable sync for this account — both KV write and module flag
                             // so SyncContext picks it up regardless of timing.
                             setPendingSyncOptIn(true);

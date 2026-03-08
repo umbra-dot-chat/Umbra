@@ -101,6 +101,36 @@ export function unregisterSyncUpdateCallback(cb: SyncUpdateCallback): void {
 }
 
 /**
+ * Send a SyncPush message via WebSocket to notify other sessions of the same DID
+ * that a new sync blob has been uploaded. The relay will broadcast a `sync_update`
+ * to all other connected sessions of the same DID.
+ */
+export function sendSyncPush(sections: Record<string, number>): void {
+  if (!_relayWs || _relayWs.readyState !== WebSocket.OPEN) {
+    console.warn('[sendSyncPush] WS not open, cannot notify other sessions. ws:', !!_relayWs, 'readyState:', _relayWs?.readyState);
+    return;
+  }
+  const entries = Object.entries(sections);
+  if (entries.length === 0) {
+    console.warn('[sendSyncPush] No sections to push');
+    return;
+  }
+  try {
+    for (const [section, version] of entries) {
+      const msg = JSON.stringify({
+        type: 'sync_push',
+        section,
+        version,
+        encrypted_data: '',
+      });
+      _relayWs.send(msg);
+    }
+  } catch (err) {
+    console.error('[sendSyncPush] Failed to send:', err);
+  }
+}
+
+/**
  * Get the relay HTTP URL derived from the active WebSocket URL.
  * Converts `wss://host/ws` → `https://host`.
  */
@@ -802,6 +832,7 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
       case 'error': console.error('[useNetwork] Relay error:', msg.message); break;
       case 'sync_update': {
         // Real-time sync delta from another session of the same DID
+        // Forward sync_update to registered callbacks (SyncContext)
         for (const cb of _syncUpdateCallbacks) {
           try {
             cb({

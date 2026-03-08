@@ -29,7 +29,13 @@
 //! │  │  Optional avatar image.                                        │   │
 //! │  │  • Currently: base64-encoded image data                        │   │
 //! │  │  • Future: IPFS CID for decentralized storage                  │   │
-//! │  │  • Max size: 256KB (encoded)                                   │   │
+//! │  │  • Max size: 2MB (encoded)                                     │   │
+//! │  │                                                                 │   │
+//! │  │  banner: Option<String>                                        │   │
+//! │  │  ──────────────────────                                         │   │
+//! │  │  Optional banner/header image.                                 │   │
+//! │  │  • Currently: base64-encoded image data                        │   │
+//! │  │  • Max size: 4MB (encoded)                                     │   │
 //! │  │                                                                 │   │
 //! │  └─────────────────────────────────────────────────────────────────┘   │
 //! │                                                                         │
@@ -42,6 +48,7 @@
 //! │  │  • DisplayName(String) - Change display name                   │   │
 //! │  │  • Status(Option<String>) - Set or clear status               │   │
 //! │  │  • Avatar(Option<String>) - Set or clear avatar               │   │
+//! │  │  • Banner(Option<String>) - Set or clear banner               │   │
 //! │  │                                                                 │   │
 //! │  │  Updates are validated before application.                     │   │
 //! │  │                                                                 │   │
@@ -61,7 +68,10 @@ pub const MAX_DISPLAY_NAME_LENGTH: usize = 64;
 pub const MAX_STATUS_LENGTH: usize = 256;
 
 /// Maximum size for avatar data (base64 encoded)
-pub const MAX_AVATAR_SIZE: usize = 256 * 1024; // 256KB
+pub const MAX_AVATAR_SIZE: usize = 2 * 1024 * 1024; // 2MB
+
+/// Maximum size for banner data (base64 encoded)
+pub const MAX_BANNER_SIZE: usize = 4 * 1024 * 1024; // 4MB
 
 /// User profile information
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -74,6 +84,10 @@ pub struct Profile {
 
     /// Optional avatar (base64 or IPFS CID)
     pub avatar: Option<String>,
+
+    /// Optional banner/header image (base64 or IPFS CID)
+    #[serde(default)]
+    pub banner: Option<String>,
 }
 
 impl Profile {
@@ -83,6 +97,7 @@ impl Profile {
             display_name,
             status: None,
             avatar: None,
+            banner: None,
         }
     }
 
@@ -154,6 +169,16 @@ impl Profile {
             }
         }
 
+        // Banner validation
+        if let Some(ref banner) = self.banner {
+            if banner.len() > MAX_BANNER_SIZE {
+                return Err(Error::ProfileUpdateFailed(format!(
+                    "Banner too large: max {} bytes",
+                    MAX_BANNER_SIZE
+                )));
+            }
+        }
+
         Ok(())
     }
 
@@ -196,6 +221,17 @@ impl Profile {
                 }
                 self.avatar = avatar;
             }
+            ProfileUpdate::Banner(banner) => {
+                if let Some(ref b) = banner {
+                    if b.len() > MAX_BANNER_SIZE {
+                        return Err(Error::ProfileUpdateFailed(format!(
+                            "Banner too large: max {} bytes",
+                            MAX_BANNER_SIZE
+                        )));
+                    }
+                }
+                self.banner = banner;
+            }
         }
         Ok(())
     }
@@ -212,6 +248,9 @@ pub enum ProfileUpdate {
 
     /// Update the avatar (None to clear)
     Avatar(Option<String>),
+
+    /// Update the banner (None to clear)
+    Banner(Option<String>),
 }
 
 // ============================================================================
@@ -228,6 +267,7 @@ mod tests {
         assert_eq!(profile.display_name, "Alice");
         assert!(profile.status.is_none());
         assert!(profile.avatar.is_none());
+        assert!(profile.banner.is_none());
     }
 
     #[test]

@@ -253,6 +253,7 @@ pub fn umbra_wasm_identity_get_profile() -> Result<JsValue, JsValue> {
                 "display_name": profile.display_name,
                 "status": profile.status,
                 "avatar": profile.avatar,
+                "banner": profile.banner,
                 "signing_key": hex::encode(&identity.keypair().signing.public_bytes()),
                 "encryption_key": hex::encode(&identity.keypair().encryption.public_bytes()),
             });
@@ -264,7 +265,7 @@ pub fn umbra_wasm_identity_get_profile() -> Result<JsValue, JsValue> {
 
 /// Update identity profile
 ///
-/// Accepts JSON with optional fields: display_name, status, avatar
+/// Accepts JSON with optional fields: display_name, status, avatar, banner
 #[wasm_bindgen]
 pub fn umbra_wasm_identity_update_profile(json: &str) -> Result<(), JsValue> {
     let updates: serde_json::Value = serde_json::from_str(json)
@@ -305,6 +306,17 @@ pub fn umbra_wasm_identity_update_profile(json: &str) -> Result<(), JsValue> {
         identity
             .profile_mut()
             .apply_update(ProfileUpdate::Avatar(avatar_val))
+            .map_err(|e| JsValue::from_str(&e.to_string()))?;
+    }
+    if let Some(banner) = updates.get("banner") {
+        let banner_val = if banner.is_null() {
+            None
+        } else {
+            banner.as_str().map(|s| s.to_string())
+        };
+        identity
+            .profile_mut()
+            .apply_update(ProfileUpdate::Banner(banner_val))
             .map_err(|e| JsValue::from_str(&e.to_string()))?;
     }
 
@@ -4106,10 +4118,28 @@ pub fn umbra_wasm_sync_apply_blob(json: &str) -> Result<JsValue, JsValue> {
         .map_err(|e| JsValue::from_str(&format!("Sync blob decryption failed: {}", e)))?;
 
     // 2. Reconstruct a backup-compatible JSON for import_database()
+    // The preferences section may contain either:
+    //   - Old format: a flat array of {key, value} objects (legacy settings)
+    //   - New format: { "settings": [...], "plugin_kv": [...] }
+    let prefs_data = payload.sections.get("preferences").map(|s| &s.data);
+    let (legacy_settings, plugin_kv) = match prefs_data {
+        Some(data) if data.is_object() => {
+            // New format — preferences is { settings: [...], plugin_kv: [...] }
+            let settings = data.get("settings").cloned().unwrap_or(serde_json::json!([]));
+            let kv = data.get("plugin_kv").cloned().unwrap_or(serde_json::json!([]));
+            (settings, kv)
+        }
+        Some(data) if data.is_array() => {
+            // Old format — preferences is just a flat array of settings
+            (data.clone(), serde_json::json!([]))
+        }
+        _ => (serde_json::json!([]), serde_json::json!([])),
+    };
     let import_json = serde_json::json!({
         "version": 1,
         "exported_at": payload.updated_at,
-        "settings": payload.sections.get("preferences").map(|s| &s.data).unwrap_or(&serde_json::json!([])),
+        "settings": legacy_settings,
+        "plugin_kv": plugin_kv,
         "friends": payload.sections.get("friends").map(|s| &s.data).unwrap_or(&serde_json::json!([])),
         "groups": payload.sections.get("groups").map(|s| &s.data).unwrap_or(&serde_json::json!([])),
         "blocked_users": payload.sections.get("blocked").map(|s| &s.data).unwrap_or(&serde_json::json!([])),
