@@ -23,6 +23,7 @@ import {
   SegmentedControl,
   Progress,
   GradientText,
+  AuraBurst,
   useTheme,
 } from '@coexist/wisp-react-native';
 import { defaultRadii } from '@coexist/wisp-core/theme/create-theme';
@@ -5063,46 +5064,48 @@ export function SettingsDialog({ open, onClose, onOpenMarketplace, initialSectio
     >
 
       <HelpPopoverHost />
-      <View style={modalStyle} testID={TEST_IDS.SETTINGS.DIALOG}>
-        {/* Glass inner highlight — top edge shine */}
-        {!isMobile && Platform.OS === 'web' && (
-          <View
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              height: 1,
-              backgroundColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.8)',
-              zIndex: 10,
-            }}
-            pointerEvents="none"
-          />
-        )}
-        {isMobile ? (
-          // Mobile: both views always mounted, slide via translateX
-          <View style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
-            <Animated.View style={{
-              position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-              transform: [{ translateX: mobileSidebarX }],
-            }}>
+      <AuraBurst active={open && !isMobile} radius={16}>
+        <View style={modalStyle} testID={TEST_IDS.SETTINGS.DIALOG}>
+          {/* Glass inner highlight — top edge shine */}
+          {!isMobile && Platform.OS === 'web' && (
+            <View
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                right: 0,
+                height: 1,
+                backgroundColor: isDark ? 'rgba(255,255,255,0.15)' : 'rgba(255,255,255,0.8)',
+                zIndex: 10,
+              }}
+              pointerEvents="none"
+            />
+          )}
+          {isMobile ? (
+            // Mobile: both views always mounted, slide via translateX
+            <View style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+              <Animated.View style={{
+                position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+                transform: [{ translateX: mobileSidebarX }],
+              }}>
+                {sidebarContent}
+              </Animated.View>
+              <Animated.View style={{
+                position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+                transform: [{ translateX: mobileContentX }],
+              }}>
+                {contentArea}
+              </Animated.View>
+            </View>
+          ) : (
+            // Desktop: side-by-side
+            <>
               {sidebarContent}
-            </Animated.View>
-            <Animated.View style={{
-              position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
-              transform: [{ translateX: mobileContentX }],
-            }}>
               {contentArea}
-            </Animated.View>
-          </View>
-        ) : (
-          // Desktop: side-by-side
-          <>
-            {sidebarContent}
-            {contentArea}
-          </>
-        )}
-      </View>
+            </>
+          )}
+        </View>
+      </AuraBurst>
     </Overlay>
   );
 }
