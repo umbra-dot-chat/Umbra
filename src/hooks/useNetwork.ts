@@ -58,11 +58,13 @@ import {
   restoreFromChunks,
 } from '@umbra/service';
 import { PRIMARY_RELAY_URL, DEFAULT_RELAY_SERVERS, NETWORK_CONFIG } from '@/config';
+import { dbg } from '@/utils/debug';
 
 // Module-level singletons to prevent duplicate auto-starts and relay
 // connections when multiple components call useNetwork(). Unlike useRef,
 // these are shared across all hook instances.
 let _hasAutoStarted = false;
+let _autoStartDeferTimer: ReturnType<typeof setTimeout> | null = null;
 let _relayWs: WebSocket | null = null;
 let _relayConnectPromise: Promise<void> | null = null;
 
@@ -257,6 +259,41 @@ function _notifyPresence() {
   }
 }
 
+// ── Module-level discovery subscription ─────────────────────────────
+// Only ONE onDiscoveryEvent listener across all useNetwork() instances.
+// Previously each of 15+ hook instances subscribed independently,
+// causing 21+ discovery listeners and massive memory pressure.
+type DiscoveryListener = (status: NetworkStatus) => void;
+const _discoveryListeners = new Set<DiscoveryListener>();
+let _discoveryUnsubscribe: (() => void) | null = null;
+let _discoveryService: any = null; // Track which service we're subscribed to
+let _networkStatus: NetworkStatus = { isRunning: false, peerCount: 0, listenAddresses: [] };
+
+function _subscribeDiscovery(service: any, fetchStatus: () => Promise<void>) {
+  // Already subscribed to this service instance
+  if (_discoveryService === service && _discoveryUnsubscribe) return;
+
+  // Clean up old subscription
+  if (_discoveryUnsubscribe) {
+    _discoveryUnsubscribe();
+    _discoveryUnsubscribe = null;
+  }
+
+  _discoveryService = service;
+  _discoveryUnsubscribe = service.onDiscoveryEvent((event: DiscoveryEvent) => {
+    if (event.type === 'networkStatus') {
+      _networkStatus = {
+        ..._networkStatus,
+        isRunning: event.connected,
+        peerCount: event.peerCount,
+      };
+      for (const l of _discoveryListeners) l(_networkStatus);
+    } else {
+      fetchStatus();
+    }
+  });
+}
+
 // ── Reconnect Manager Functions ──────────────────────────────────────
 
 function _clearReconnectTimer(): void {
@@ -418,12 +455,30 @@ export interface UseNetworkResult {
 // between connectRelay() and the reconnect manager.
 // Uses _lastService and _lastRelayDid instead of hook-scoped service/identity.
 
+const SRC = 'useNetwork';
+
+// ── Serial message queue ─────────────────────────────────────────────
+// Relay messages (especially friend_response + chat_message) must be
+// processed sequentially. Without this, `await` gaps in WASM calls
+// allow a chat_message to start processing before the preceding
+// friend_response has finished adding the friend & conversation,
+// causing OOM / corrupted state.
+let _msgQueuePromise: Promise<void> = Promise.resolve();
+
+function _enqueueRelayMessage(ws: WebSocket, event: MessageEvent): void {
+  _msgQueuePromise = _msgQueuePromise.then(
+    () => _handleRelayMessage(ws, event),
+    () => _handleRelayMessage(ws, event), // continue after errors too
+  );
+}
+
 async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<void> {
   const service = _lastService;
   if (!service) return;
 
   try {
     const msg = JSON.parse(event.data);
+    if (__DEV__) dbg.debug('network', `relay msg: ${msg.type}`, undefined, SRC);
     console.log('[useNetwork] Relay message:', msg.type);
 
     switch (msg.type) {
@@ -661,10 +716,16 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
 
       case 'offline_messages': {
         const messages = msg.messages || [];
+        if (__DEV__) dbg.info('network', `offline_messages: ${messages.length}`, undefined, SRC);
         console.log('[useNetwork] Received', messages.length, 'offline messages');
+        console.log('[BREADCRUMB] offline_messages START, count=' + messages.length);
         const _backupEnvelopes: any[] = [];
 
+        let msgIdx = 0;
         for (const offlineMsg of messages) {
+          msgIdx++;
+          console.log(`[BREADCRUMB] processing offline msg ${msgIdx}/${messages.length}, envelope=${offlineMsg?.payload?.slice?.(0, 60) || '?'}`);
+
           try {
             const envelope = JSON.parse(offlineMsg.payload) as RelayEnvelope;
 
@@ -849,6 +910,7 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
       default: console.log('[useNetwork] Unknown relay message type:', msg.type);
     }
   } catch (err) {
+    if (__DEV__) dbg.error('network', 'Failed to parse relay message', err, SRC);
     console.error('[useNetwork] Failed to parse relay message:', err);
   }
 }
@@ -856,9 +918,9 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
 // ── Reconnect scheduler & executor ────────────────────────────────────
 
 _scheduleReconnect = function(): void {
-  if (_intentionalDisconnect) { console.log('[Reconnect] Skipping — intentional disconnect'); return; }
-  if (_relayConnectPromise) { console.log('[Reconnect] Skipping — connection already in progress'); return; }
-  if (!_lastRelayDid || !_lastService) { console.log('[Reconnect] Skipping — no DID or service available'); return; }
+  if (_intentionalDisconnect) { if (__DEV__) dbg.debug('network', 'reconnect SKIP — intentional disconnect', undefined, SRC); return; }
+  if (_relayConnectPromise) { if (__DEV__) dbg.debug('network', 'reconnect SKIP — already connecting', undefined, SRC); return; }
+  if (!_lastRelayDid || !_lastService) { if (__DEV__) dbg.debug('network', 'reconnect SKIP — no DID/service', undefined, SRC); return; }
 
   const maxPerServer = NETWORK_CONFIG.maxReconnectAttempts;
   const totalServers = DEFAULT_RELAY_SERVERS.length;
@@ -872,6 +934,7 @@ _scheduleReconnect = function(): void {
   _currentServerIndex = Math.floor(_reconnectAttempt / maxPerServer) % totalServers;
   const serverUrl = DEFAULT_RELAY_SERVERS[_currentServerIndex];
   const delay = _computeBackoffDelay(_reconnectAttempt % maxPerServer);
+  if (__DEV__) dbg.info('network', `reconnect attempt ${_reconnectAttempt + 1}/${totalMaxAttempts} → ${serverUrl} in ${delay}ms`, undefined, SRC);
   console.log(`[Reconnect] Attempt ${_reconnectAttempt + 1}/${totalMaxAttempts} to ${serverUrl} in ${delay}ms`);
 
   _clearReconnectTimer();
@@ -912,7 +975,7 @@ _attemptReconnect = async function(serverUrl: string): Promise<void> {
       _startKeepAlive();
     };
 
-    ws.onmessage = (event) => _handleRelayMessage(ws, event);
+    ws.onmessage = (event) => _enqueueRelayMessage(ws, event);
 
     ws.onerror = (event) => {
       console.error('[Reconnect] WebSocket error:', event);
@@ -986,24 +1049,22 @@ export function useNetwork(): UseNetworkResult {
     }
   }, [isReady, service, fetchStatus]);
 
-  // Subscribe to discovery events for status updates
+  // Subscribe to module-level discovery events (single service-level listener
+  // shared across all useNetwork() instances). This replaces the per-instance
+  // onDiscoveryEvent subscription that was creating 21+ listeners.
   useEffect(() => {
     if (!service) return;
 
-    const unsubscribe = service.onDiscoveryEvent((event: DiscoveryEvent) => {
-      if (event.type === 'networkStatus') {
-        setStatus((prev: NetworkStatus) => ({
-          ...prev,
-          isRunning: event.connected,
-          peerCount: event.peerCount,
-        }));
-      } else {
-        // Refresh on peer online/offline events
-        fetchStatus();
-      }
-    });
+    // Ensure the single service-level subscription exists
+    _subscribeDiscovery(service, fetchStatus);
 
-    return unsubscribe;
+    // Sync current state on mount
+    setStatus(_networkStatus);
+
+    // Subscribe to module-level notifications
+    const listener: DiscoveryListener = (s) => setStatus(s);
+    _discoveryListeners.add(listener);
+    return () => { _discoveryListeners.delete(listener); };
   }, [service, fetchStatus]);
 
   // Subscribe to module-level relay state changes so ALL useNetwork()
@@ -1121,6 +1182,7 @@ export function useNetwork(): UseNetworkResult {
 
   const connectRelay = useCallback(async (url: string) => {
     if (!service) return;
+    if (__DEV__) dbg.info('network', `connectRelay START → ${url}`, undefined, SRC);
 
     // If already connected or connecting, skip — but ensure the current
     // service instance has the WS reference (critical after account switch,
@@ -1205,10 +1267,12 @@ export function useNetwork(): UseNetworkResult {
         ws.onopen = () => {
           // Send the register message
           if (registerMessage) {
+            if (__DEV__) dbg.info('network', 'relay WS OPEN, sending register', undefined, SRC);
             console.log('[useNetwork] Sending register message to relay');
             ws.send(registerMessage);
             _registeredRelayDid = identity?.did ?? null;
           } else {
+            if (__DEV__) dbg.warn('network', 'relay WS OPEN but no register message!', undefined, SRC);
             console.warn('[useNetwork] No register message available — relay may not know our DID');
           }
           // Notify ALL useNetwork() instances via shared state
@@ -1220,15 +1284,17 @@ export function useNetwork(): UseNetworkResult {
           console.log('[useNetwork] Relay WebSocket connected to', url);
         };
 
-        ws.onmessage = (event) => _handleRelayMessage(ws, event);
+        ws.onmessage = (event) => _enqueueRelayMessage(ws, event);
 
         ws.onerror = (event) => {
+          if (__DEV__) dbg.error('network', `relay WS ERROR, readyState=${ws.readyState}`, event, SRC);
           console.error('[useNetwork] Relay WebSocket error:', event);
           console.error('[useNetwork] WebSocket readyState:', ws.readyState);
           setError(new Error('Relay connection error'));
         };
 
         ws.onclose = (event) => {
+          if (__DEV__) dbg.warn('network', `relay WS CLOSED code=${event.code} clean=${event.wasClean}`, { reason: event.reason }, SRC);
           console.log('[useNetwork] Relay WebSocket closed — code:', event.code, 'reason:', event.reason, 'clean:', event.wasClean);
           // Only clear state if this is still the active WebSocket
           if (_relayWs === ws) {
@@ -1272,8 +1338,21 @@ export function useNetwork(): UseNetworkResult {
     // Wait for backend identity hydration to complete before connecting
     if (initStage !== 'hydrated') return;
     _hasAutoStarted = true;
+    if (__DEV__) dbg.info('lifecycle', 'autoStart TRIGGERED (initStage=hydrated) — deferring 1.5s to reduce peak memory', undefined, SRC);
+
+    // Defer P2P + relay startup by 1.5s to let the initial React render
+    // storm settle. The WASM module + sql.js + React bundle already consume
+    // significant memory; starting libp2p WebRTC at the same time pushes
+    // browsers over the OOM threshold.
+    const deferTimer = setTimeout(() => {
+      autoStart();
+    }, 1500);
+    // Cleanup if the component unmounts during the defer period
+    // (stored in a ref below)
+    _autoStartDeferTimer = deferTimer;
 
     async function autoStart() {
+      const endTimer = __DEV__ ? dbg.time('autoStart') : null;
       // Start the P2P network and relay connection in parallel.
       // The relay doesn't depend on the P2P swarm, so there's no
       // reason to block the relay WebSocket on libp2p startup.
@@ -1283,10 +1362,13 @@ export function useNetwork(): UseNetworkResult {
       tasks.push(
         (async () => {
           try {
+            if (__DEV__) dbg.info('network', 'P2P startNetwork START', undefined, SRC);
             console.log('[useNetwork] Auto-starting network...');
             await service!.startNetwork();
+            if (__DEV__) dbg.info('network', 'P2P startNetwork DONE', undefined, SRC);
             console.log('[useNetwork] Network started');
           } catch (err) {
+            if (__DEV__) dbg.error('network', 'P2P startNetwork FAILED', err, SRC);
             console.error('[useNetwork] Auto-start network failed:', err);
           }
         })()
@@ -1296,11 +1378,14 @@ export function useNetwork(): UseNetworkResult {
       if (NETWORK_CONFIG.autoConnectRelay) {
         tasks.push(
           (async () => {
+            if (__DEV__) dbg.info('network', `auto-connecting relay → ${PRIMARY_RELAY_URL}`, undefined, SRC);
             console.log('[useNetwork] Auto-connecting to relay:', PRIMARY_RELAY_URL);
             try {
               await connectRelay(PRIMARY_RELAY_URL);
+              if (__DEV__) dbg.info('network', 'relay auto-connect DONE', undefined, SRC);
               console.log('[useNetwork] Relay connected successfully');
             } catch (err) {
+              if (__DEV__) dbg.error('network', 'relay auto-connect FAILED', err, SRC);
               console.error('[useNetwork] Auto-connect to relay failed:', err);
             }
           })()
@@ -1308,9 +1393,8 @@ export function useNetwork(): UseNetworkResult {
       }
 
       await Promise.all(tasks);
+      endTimer?.();
     }
-
-    autoStart();
   }, [isReady, service, identity, initStage, connectRelay]);
 
   // ── AppState listener + account-switch relay sync ─────────────────────
