@@ -35,6 +35,7 @@ import React, {
 import { getWasm } from '@umbra/wasm';
 import { useUmbra } from '@/contexts/UmbraContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { dbg } from '@/utils/debug';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Expose React globally for plugin bundles.
@@ -123,12 +124,14 @@ export interface PluginContextValue {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const PluginContext = createContext<PluginContextValue | null>(null);
+const SRC = 'PluginProvider';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Provider
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function PluginProvider({ children }: { children: React.ReactNode }) {
+  if (__DEV__) dbg.trackRender(SRC);
   const { isReady, service } = useUmbra();
   const { identity } = useAuth();
   const [isLoading, setIsLoading] = useState(true);
@@ -355,12 +358,14 @@ export function PluginProvider({ children }: { children: React.ReactNode }) {
     let cancelled = false;
 
     async function loadInstalled() {
+      if (__DEV__) dbg.info('plugins', 'loadInstalled START', undefined, SRC);
       try {
         const wasm = getWasm();
         if (!wasm) return;
 
         const installer = new PluginInstaller(wasm as any);
         const manifests = await installer.getInstalled();
+        if (__DEV__) dbg.info('plugins', `Found ${manifests.length} installed plugins`, undefined, SRC);
 
         for (const manifest of manifests) {
           if (cancelled) break;
@@ -383,13 +388,15 @@ export function PluginProvider({ children }: { children: React.ReactNode }) {
               }
             }
           } catch (err) {
+            if (__DEV__) dbg.error('plugins', `Failed to load plugin "${manifest.id}"`, err, SRC);
             console.error(`Failed to load plugin "${manifest.id}":`, err);
           }
         }
       } catch (err) {
+        if (__DEV__) dbg.error('plugins', 'loadInstalled FAILED', err, SRC);
         console.error('Failed to load installed plugins:', err);
       } finally {
-        if (!cancelled) setIsLoading(false);
+        if (!cancelled) { setIsLoading(false); if (__DEV__) dbg.info('plugins', 'loadInstalled DONE', undefined, SRC); }
       }
     }
 

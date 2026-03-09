@@ -34,6 +34,7 @@ import { UmbraService } from '@umbra/service';
 import type { InitConfig } from '@umbra/service';
 import { getWasm, enablePersistence } from '@umbra/wasm';
 import { useAuth } from '@/contexts/AuthContext';
+import { dbg } from '@/utils/debug';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -80,7 +81,10 @@ interface UmbraProviderProps {
   config?: InitConfig;
 }
 
+const SRC = 'UmbraProvider';
+
 export function UmbraProvider({ children, config }: UmbraProviderProps) {
+  if (__DEV__) dbg.trackRender(SRC);
   const [isLoading, setIsLoading] = useState(true);
   const [isReady, setIsReady] = useState(false);
   const [error, setError] = useState<Error | null>(null);
@@ -90,7 +94,14 @@ export function UmbraProvider({ children, config }: UmbraProviderProps) {
   const [syncVersion, setSyncVersion] = useState(0);
   const bumpSyncVersion = useCallback(() => setSyncVersion((c) => c + 1), []);
   const prevDidRef = useRef<string | null>(null);
+  const hydrationDoneRef = useRef(false);
   const { identity, recoveryPhrase, isHydrated } = useAuth();
+  // Refs so the hydration effect can access current values without depending on
+  // the full object references (which change on display name / avatar updates).
+  const identityRef = useRef(identity);
+  identityRef.current = identity;
+  const phraseRef = useRef(recoveryPhrase);
+  phraseRef.current = recoveryPhrase;
 
   // Track DID changes — increments didChanged counter so downstream preference
   // contexts know to re-read from the new account's per-DID database.
@@ -98,6 +109,8 @@ export function UmbraProvider({ children, config }: UmbraProviderProps) {
     const currentDid = identity?.did ?? null;
     if (prevDidRef.current !== null && currentDid !== prevDidRef.current) {
       setDidChanged((c) => c + 1);
+      // Reset hydration guard so the new account gets hydrated
+      hydrationDoneRef.current = false;
     }
     prevDidRef.current = currentDid;
   }, [identity?.did]);
@@ -106,6 +119,7 @@ export function UmbraProvider({ children, config }: UmbraProviderProps) {
     let cancelled = false;
 
     async function init() {
+      const endTimer = __DEV__ ? dbg.time('UmbraService.initialize') : null;
       try {
         // If we have a persisted identity with a DID, pass it to the
         // initialization so the database can be restored from IndexedDB
@@ -115,11 +129,15 @@ export function UmbraProvider({ children, config }: UmbraProviderProps) {
           ...(persistedDid ? { did: persistedDid } : {}),
         };
 
+        if (__DEV__) dbg.info('lifecycle', 'UmbraService.initialize START', { persistedDid: persistedDid?.slice(0, 20), hasConfig: !!config }, SRC);
+
         if (persistedDid) {
           setInitStage('loading-db');
+          if (__DEV__) dbg.info('lifecycle', 'initStage → loading-db', undefined, SRC);
         }
 
         await UmbraService.initialize(initConfig);
+        if (__DEV__) dbg.info('lifecycle', 'UmbraService.initialize COMPLETE', undefined, SRC);
 
         // Yield to let the native bridge (Expo Modules / TurboModule) finish
         // any pending async work before downstream contexts start firing
@@ -129,13 +147,16 @@ export function UmbraProvider({ children, config }: UmbraProviderProps) {
         await new Promise((r) => setTimeout(r, 0));
 
         if (!cancelled) {
-          setVersion(UmbraService.getVersion());
+          const v = UmbraService.getVersion();
+          setVersion(v);
           setIsReady(true);
           setIsLoading(false);
           setInitStage('ready');
+          if (__DEV__) { dbg.info('lifecycle', 'initStage → ready', { version: v }, SRC); endTimer?.(); }
         }
       } catch (err) {
         if (!cancelled) {
+          if (__DEV__) { dbg.error('lifecycle', 'UmbraService.initialize FAILED', err, SRC); endTimer?.(); }
           console.error('[UmbraProvider] Initialization failed:', err);
           setError(err instanceof Error ? err : new Error(String(err)));
           setIsLoading(false);
@@ -158,69 +179,105 @@ export function UmbraProvider({ children, config }: UmbraProviderProps) {
   // fail with "No identity loaded" after a page refresh.
   //
   // On Tauri, identity_set works via IPC to configure the backend.
+  // Hydration: restore the backend identity from AuthContext.
+  // Depends on identity?.did (not the full identity object) so that cosmetic
+  // updates (display name, avatar, banner from sync) don't re-trigger a full
+  // hydration cycle. The effect reads identity/phrase from refs instead.
   useEffect(() => {
-    if (!isReady || !isHydrated || !identity) return;
+    const currentDid = identity?.did;
+    if (!isReady || !isHydrated || !currentDid) {
+      if (__DEV__) dbg.debug('lifecycle', 'hydrateIdentity SKIP', { isReady, isHydrated, hasDid: !!currentDid }, SRC);
+      return;
+    }
 
-    const currentIdentity = identity;
-    const currentPhrase = recoveryPhrase;
+    // Guard: don't re-hydrate if already done for this DID
+    if (hydrationDoneRef.current) {
+      if (__DEV__) dbg.debug('lifecycle', 'hydrateIdentity SKIP (already hydrated)', undefined, SRC);
+      return;
+    }
+
     setInitStage('hydrating');
+    if (__DEV__) dbg.info('lifecycle', 'initStage → hydrating', undefined, SRC);
 
     async function hydrateIdentity() {
+      const endTimer = __DEV__ ? dbg.time('hydrateIdentity') : null;
+      // Read current values from refs (stable across renders)
+      const currentIdentity = identityRef.current;
+      const currentPhrase = phraseRef.current;
+
       try {
         const w = getWasm();
         if (!w) {
+          if (__DEV__) dbg.warn('lifecycle', 'hydrateIdentity: no WASM module', undefined, SRC);
           setInitStage('hydrated');
+          hydrationDoneRef.current = true;
           return;
         }
 
         setInitStage('restoring-identity');
+        if (__DEV__) dbg.info('lifecycle', 'initStage → restoring-identity', undefined, SRC);
 
         // Check if backend already has an identity loaded
-        let currentDid: string | null = null;
+        let backendDid: string | null = null;
         try {
-          currentDid = await w.umbra_wasm_identity_get_did();
+          backendDid = await w.umbra_wasm_identity_get_did();
+          if (__DEV__) dbg.info('service', 'umbra_wasm_identity_get_did', { backendDid: backendDid?.slice(0, 20) }, SRC);
         } catch {
-          // No identity loaded — expected on fresh restart
+          if (__DEV__) dbg.info('lifecycle', 'No identity loaded in backend (expected on fresh restart)', undefined, SRC);
         }
 
-        if (!currentDid) {
+        if (!backendDid) {
           // Try restoring via recovery phrase first (required for WASM)
           if (currentPhrase && currentPhrase.length === 24) {
             try {
+              if (__DEV__) dbg.info('service', 'restoreIdentity via recovery phrase START', undefined, SRC);
               const svc = UmbraService.instance;
-              await svc.restoreIdentity(currentPhrase, currentIdentity.displayName);
+              await svc.restoreIdentity(currentPhrase, currentIdentity?.displayName ?? '');
+              if (__DEV__) dbg.info('service', 'restoreIdentity via recovery phrase SUCCESS', undefined, SRC);
               console.log('[UmbraProvider] Restored WASM identity via recovery phrase');
             } catch (restoreErr) {
+              if (__DEV__) dbg.warn('service', 'restoreIdentity FAILED, falling back', restoreErr, SRC);
               console.warn('[UmbraProvider] restoreIdentity failed:', restoreErr);
               // Fall back to identity_set (works on Tauri)
               if (typeof w.umbra_wasm_identity_set === 'function') {
                 await w.umbra_wasm_identity_set(JSON.stringify({
-                  did: currentIdentity.did,
-                  display_name: currentIdentity.displayName,
+                  did: currentDid,
+                  display_name: currentIdentity?.displayName ?? '',
                 }));
+                if (__DEV__) dbg.info('service', 'identity_set fallback SUCCESS', undefined, SRC);
                 console.log('[UmbraProvider] Fell back to identity_set');
               }
             }
           } else if (typeof w.umbra_wasm_identity_set === 'function') {
             // No recovery phrase — use identity_set (Tauri path)
+            if (__DEV__) dbg.info('service', 'identity_set (no recovery phrase) START', undefined, SRC);
             await w.umbra_wasm_identity_set(JSON.stringify({
-              did: currentIdentity.did,
-              display_name: currentIdentity.displayName,
+              did: currentDid,
+              display_name: currentIdentity?.displayName ?? '',
             }));
+            if (__DEV__) dbg.info('service', 'identity_set SUCCESS', undefined, SRC);
             console.log('[UmbraProvider] Restored backend identity via identity_set');
           }
+        } else {
+          if (__DEV__) dbg.info('lifecycle', 'Backend already has identity loaded, skipping restore', undefined, SRC);
         }
 
         setInitStage('loading-data');
+        if (__DEV__) dbg.info('lifecycle', 'initStage → loading-data', undefined, SRC);
       } catch (err) {
+        if (__DEV__) dbg.error('lifecycle', 'hydrateIdentity FAILED', err, SRC);
         console.warn('[UmbraProvider] Failed to restore backend identity:', err);
       }
 
+      hydrationDoneRef.current = true;
       setInitStage('hydrated');
+      if (__DEV__) dbg.info('lifecycle', 'initStage → hydrated', undefined, SRC);
+      endTimer?.();
     }
 
     hydrateIdentity();
-  }, [isReady, isHydrated, identity, recoveryPhrase]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isReady, isHydrated, identity?.did]);
 
   const preferencesReady = initStage === 'hydrated';
 

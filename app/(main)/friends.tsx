@@ -38,7 +38,6 @@ import { useSound } from '@/contexts/SoundContext';
 import { MobileBackButton } from '@/components/ui/MobileBackButton';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import { useNetwork } from '@/hooks/useNetwork';
-import { useAutoAddGhost } from '@/hooks/useAutoAddGhost';
 import { TEST_IDS } from '@/constants/test-ids';
 
 // ---------------------------------------------------------------------------
@@ -125,9 +124,6 @@ export default function FriendsPage() {
   const { conversations } = useConversations();
   const { setActiveId } = useActiveConversation();
   const { onlineDids } = useNetwork();
-
-  // Auto-add Ghost AI agent on first launch
-  useAutoAddGhost();
 
   // AI Agent banner dismissal
   const [agentBannerDismissed, setAgentBannerDismissed] = useState(() => {

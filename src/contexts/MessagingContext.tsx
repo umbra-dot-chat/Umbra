@@ -15,6 +15,7 @@ import React, {
 } from 'react';
 import { getWasm } from '@umbra/wasm';
 import { useUmbra } from '@/contexts/UmbraContext';
+import { dbg } from '@/utils/debug';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -40,12 +41,14 @@ const MessagingCtx = createContext<MessagingContextValue | null>(null);
 
 const KV_NAMESPACE = '__umbra_system__';
 const KEY_DISPLAY_MODE = 'message_display_mode';
+const SRC = 'MessagingProvider';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Provider
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function MessagingProvider({ children }: { children: React.ReactNode }) {
+  if (__DEV__) dbg.trackRender(SRC);
   const { preferencesReady, didChanged, syncVersion } = useUmbra();
 
   const [displayMode, setDisplayModeState] = useState<MessageDisplayMode>('bubble');
@@ -57,8 +60,10 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
     try {
       const wasm = getWasm();
       if (!wasm) return;
+      if (__DEV__) dbg.debug('state', `kvSet ${key}=${value}`, undefined, SRC);
       (wasm as any).umbra_wasm_plugin_kv_set(KV_NAMESPACE, key, value);
     } catch (err) {
+      if (__DEV__) dbg.error('state', `kvSet FAILED: ${key}`, err, SRC);
       console.warn('[MessagingContext] Failed to save:', key, err);
     }
   }, []);
@@ -69,6 +74,7 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
       if (!wasm) return null;
       const result = await (wasm as any).umbra_wasm_plugin_kv_get(KV_NAMESPACE, key);
       const parsed = typeof result === 'string' ? JSON.parse(result) : result;
+      if (__DEV__) dbg.debug('state', `kvGet ${key}=${parsed.value}`, undefined, SRC);
       return parsed.value ?? null;
     } catch {
       return null;
@@ -81,12 +87,14 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
     if (!preferencesReady) return;
 
     async function restorePreferences() {
+      if (__DEV__) dbg.info('lifecycle', 'restorePreferences START', { didChanged, syncVersion }, SRC);
       const savedMode = await kvGet(KEY_DISPLAY_MODE);
       if (savedMode === 'bubble' || savedMode === 'inline') {
         setDisplayModeState(savedMode);
       }
 
       setLoaded(true);
+      if (__DEV__) dbg.info('lifecycle', 'restorePreferences DONE', { displayMode: savedMode }, SRC);
     }
 
     restorePreferences();

@@ -24,6 +24,7 @@ import { useSound } from '@/contexts/SoundContext';
 import { useNetwork, pushPendingRelayAck } from '@/hooks/useNetwork';
 import { getWasm } from '@umbra/wasm';
 import type { Message, MessageEvent, FileMessagePayload } from '@umbra/service';
+import { dbg } from '@/utils/debug';
 
 const PAGE_SIZE = 50;
 
@@ -91,7 +92,10 @@ export interface UseMessagesResult {
   clearUnreadMarker: () => void;
 }
 
+const SRC = 'useMessages';
+
 export function useMessages(conversationId: string | null, groupId?: string | null): UseMessagesResult {
+  if (__DEV__) dbg.trackRender(SRC);
   const { service, isReady } = useUmbra();
   const { identity } = useAuth();
   const { playSound } = useSound();
@@ -103,6 +107,7 @@ export function useMessages(conversationId: string | null, groupId?: string | nu
   const [hasMore, setHasMore] = useState(true);
   const [pinnedMessages, setPinnedMessages] = useState<Message[]>([]);
   const offsetRef = useRef(0);
+  const eventCountRef = useRef(0);
 
   // Track the first new message received after the initial fetch so we can
   // render a "New messages" divider in the chat area.
@@ -117,20 +122,25 @@ export function useMessages(conversationId: string | null, groupId?: string | nu
       return;
     }
 
+    if (__DEV__) dbg.info('messages', `getMessages START`, { conversationId: conversationId.slice(0, 12) }, SRC);
     try {
       setIsLoading(true);
       initialLoadDoneRef.current = false;
       setFirstUnreadMessageId(null);
+      const endTimer = __DEV__ ? dbg.time(`getMessages(${conversationId.slice(0, 8)})`) : null;
       const result = await service.getMessages(conversationId, {
         limit: PAGE_SIZE,
         offset: 0,
       });
+      if (__DEV__) endTimer?.();
+      if (__DEV__) dbg.info('messages', `getMessages DONE`, { count: result.length, conversationId: conversationId.slice(0, 12) }, SRC);
       setMessages(result);
       offsetRef.current = result.length;
       setHasMore(result.length >= PAGE_SIZE);
       setError(null);
       initialLoadDoneRef.current = true;
     } catch (err) {
+      if (__DEV__) dbg.error('messages', `getMessages FAILED`, { conversationId: conversationId.slice(0, 12), error: err }, SRC);
       setError(err instanceof Error ? err : new Error(String(err)));
     } finally {
       setIsLoading(false);
@@ -166,7 +176,14 @@ export function useMessages(conversationId: string | null, groupId?: string | nu
   useEffect(() => {
     if (!service || !conversationId) return;
 
+    if (__DEV__) dbg.info('messages', 'subscribing to onMessageEvent', { conversationId: conversationId?.slice(0, 12) }, SRC);
     const unsubscribe = service.onMessageEvent((event: MessageEvent) => {
+      const evtNum = ++eventCountRef.current;
+      if (__DEV__) dbg.debug('messages', `onMessageEvent #${evtNum}`, {
+        type: event.type,
+        conversationId: (event as any).conversationId?.slice(0, 12),
+        messageId: (event as any).messageId?.slice(0, 12),
+      }, SRC);
       if (event.type === 'messageSent' || event.type === 'messageReceived') {
         const msg = event.message;
         // Don't add thread replies to the main chat — they belong in the thread panel
@@ -236,6 +253,7 @@ export function useMessages(conversationId: string | null, groupId?: string | nu
         );
       } else if (event.type === 'reactionAdded' || event.type === 'reactionRemoved') {
         // Refresh messages to get updated reactions
+        if (__DEV__) dbg.debug('messages', 'reaction event → full fetchMessages()', undefined, SRC);
         fetchMessages();
       } else if (event.type === 'messagePinned' || event.type === 'messageUnpinned') {
         setMessages((prev) =>

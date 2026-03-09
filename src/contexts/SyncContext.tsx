@@ -41,6 +41,7 @@ import type {
 } from '@umbra/service';
 import { useUmbra } from '@/contexts/UmbraContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { dbg } from '@/utils/debug';
 import {
   getRelayHttpUrl,
   subscribeRelayState,
@@ -58,6 +59,7 @@ const KEY_SYNC_ENABLED = '__sync_enabled__';
 const KEY_LAST_SYNCED = '__sync_last_synced__';
 const DEBOUNCE_MS = 5_000;
 const TOKEN_REFRESH_BUFFER_MS = 60_000;
+const SRC = 'SyncProvider';
 
 // Module-level flag for sync opt-in during account creation.
 // The KV write from CreateWalletFlow may not complete before SyncContext reads
@@ -148,6 +150,7 @@ function kvSet(key: string, value: string): void {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function SyncProvider({ children }: { children: React.ReactNode }) {
+  if (__DEV__) dbg.trackRender(SRC);
   const { preferencesReady, didChanged, bumpSyncVersion } = useUmbra();
   const { identity, setIdentity } = useAuth();
 
@@ -184,6 +187,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     if (!preferencesReady) return;
 
     async function restoreSyncState() {
+      if (__DEV__) dbg.info('sync', 'restoreSyncState START', undefined, SRC);
       const saved = await kvGet(KEY_SYNC_ENABLED);
       // Also check the module-level pending flag (set by CreateWalletFlow before
       // login). On RN, the async native bridge may not have completed the KV write
@@ -254,6 +258,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     if (!identity?.did || !relayHttpUrl || !syncEnabled || isSyncingRef.current) return;
 
     isSyncingRef.current = true;
+    if (__DEV__) dbg.info('sync', 'doSyncUpload START', undefined, SRC);
     if (mountedRef.current) {
       setSyncStatus('syncing');
       setSyncError(null);
@@ -281,10 +286,12 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
         setLastSyncedAt(now);
         setSyncStatus('synced');
         kvSet(KEY_LAST_SYNCED, String(now));
+        if (__DEV__) dbg.info('sync', `doSyncUpload DONE (${result.size} bytes)`, undefined, SRC);
         console.log(`[SyncContext] Upload complete (${result.size} bytes)`);
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
+      if (__DEV__) dbg.error('sync', 'doSyncUpload FAILED', err, SRC);
       console.error('[SyncContext] Sync upload failed:', msg);
       if (mountedRef.current) {
         setSyncStatus('error');
@@ -375,58 +382,58 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
   const restoreFromRemote = useCallback(async (): Promise<SyncImportResult | null> => {
     const id = identityRef.current;
     if (!id?.did || !relayHttpUrl) return null;
+    if (__DEV__) dbg.info('sync', 'restoreFromRemote START', undefined, SRC);
     try {
       const auth = await ensureAuth();
       const blob = await downloadSyncBlob(relayHttpUrl, id.did, auth.token);
-      if (!blob) return null;
+      if (!blob) { if (__DEV__) dbg.info('sync', 'restoreFromRemote: no blob', undefined, SRC); return null; }
 
       const result = await applySyncBlob(blob);
       // Signal preference contexts to re-read from KV
       bumpSyncVersion();
 
-      // Sync display name if it changed
+      // Sync display name, avatar, and banner from the blob.
+      // Collect all changes and apply as a SINGLE setIdentity call to avoid
+      // cascading re-renders (each setIdentity triggers context propagation).
       try {
-        const syncedName = await kvGet('__display_name__');
         const currentId = identityRef.current;
-        if (syncedName && currentId && syncedName !== currentId.displayName) {
-          const w = getWasm();
-          if (w) {
-            await w.umbra_wasm_identity_update_profile(JSON.stringify({ display_name: syncedName }));
-          }
-          setIdentity({ ...currentId, displayName: syncedName });
-          console.log(`[SyncContext] Display name synced: "${syncedName}"`);
-        }
-      } catch { /* ignore — display name sync is best-effort */ }
+        if (currentId) {
+          const [syncedName, syncedAvatar, syncedBanner] = await Promise.all([
+            kvGet('__display_name__').catch(() => null),
+            kvGet('__avatar__').catch(() => null),
+            kvGet('__banner__').catch(() => null),
+          ]);
 
-      // Sync avatar if it changed
-      try {
-        const syncedAvatar = await kvGet('__avatar__');
-        const currentId = identityRef.current;
-        if (syncedAvatar !== null && currentId && syncedAvatar !== (currentId.avatar ?? '')) {
-          const avatarValue = syncedAvatar || null; // empty string → clear
-          const w = getWasm();
-          if (w) {
-            await w.umbra_wasm_identity_update_profile(JSON.stringify({ avatar: avatarValue }));
-          }
-          setIdentity({ ...currentId, avatar: avatarValue ?? undefined });
-          console.log(`[SyncContext] Avatar synced`);
-        }
-      } catch { /* ignore — avatar sync is best-effort */ }
+          const updates: Record<string, unknown> = {};
+          const profileUpdates: Record<string, unknown> = {};
 
-      // Sync banner if it changed
-      try {
-        const syncedBanner = await kvGet('__banner__');
-        const currentId = identityRef.current;
-        if (syncedBanner !== null && currentId && syncedBanner !== (currentId.banner ?? '')) {
-          const bannerValue = syncedBanner || null; // empty string → clear
-          const w = getWasm();
-          if (w) {
-            await w.umbra_wasm_identity_update_profile(JSON.stringify({ banner: bannerValue }));
+          if (syncedName && syncedName !== currentId.displayName) {
+            updates.displayName = syncedName;
+            profileUpdates.display_name = syncedName;
           }
-          setIdentity({ ...currentId, banner: bannerValue ?? undefined });
-          console.log(`[SyncContext] Banner synced`);
+          if (syncedAvatar !== null && syncedAvatar !== (currentId.avatar ?? '')) {
+            const avatarValue = syncedAvatar || null;
+            updates.avatar = avatarValue ?? undefined;
+            profileUpdates.avatar = avatarValue;
+          }
+          if (syncedBanner !== null && syncedBanner !== (currentId.banner ?? '')) {
+            const bannerValue = syncedBanner || null;
+            updates.banner = bannerValue ?? undefined;
+            profileUpdates.banner = bannerValue;
+          }
+
+          if (Object.keys(profileUpdates).length > 0) {
+            const w = getWasm();
+            if (w) {
+              await w.umbra_wasm_identity_update_profile(JSON.stringify(profileUpdates));
+            }
+            // Single setIdentity call instead of 3 separate ones
+            setIdentity({ ...currentId, ...updates });
+            if (__DEV__) dbg.info('sync', 'identity profile synced', updates, SRC);
+            console.log('[SyncContext] Profile synced:', Object.keys(updates).join(', '));
+          }
         }
-      } catch { /* ignore — banner sync is best-effort */ }
+      } catch { /* ignore — profile sync is best-effort */ }
 
       // Restore username if synced in the blob
       try {
@@ -448,9 +455,11 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
         console.warn('[SyncContext] Username restore best-effort failed:', e);
       }
 
+      if (__DEV__) dbg.info('sync', 'restoreFromRemote DONE', { imported: result.imported }, SRC);
       return result;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
+      if (__DEV__) dbg.error('sync', 'restoreFromRemote FAILED', err, SRC);
       console.error('[SyncContext] Restore from remote failed:', msg);
       if (mountedRef.current) {
         setSyncError(msg);
