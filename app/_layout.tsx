@@ -14,12 +14,21 @@ import { ThemeProvider, useAppTheme } from '@/contexts/ThemeContext';
 import { SoundProvider } from '@/contexts/SoundContext';
 import { MessagingProvider } from '@/contexts/MessagingContext';
 import { SyncProvider } from '@/contexts/SyncContext';
+import { ConversationsProvider } from '@/contexts/ConversationsContext';
 import { HelpPopoverHost } from '@/components/ui/HelpPopoverHost';
 import { PinLockScreen } from '@/components/auth/PinLockScreen';
 import { LoadingScreen } from '@/components/ui/LoadingScreen';
 import type { LoadingStep } from '@/components/ui/LoadingScreen';
 import { usePendingInvite } from '@/hooks/usePendingInvite';
 import * as Linking from 'expo-linking';
+import { dbg, initCrashGuard, markBootSuccess } from '@/utils/debug';
+
+// ── Debug infrastructure init ──────────────────────────────────────────────
+const { isSafeMode: __safeMode, crashCount: __crashCount } = initCrashGuard();
+if (__crashCount > 1) {
+  console.warn(`[CrashGuard] Crash count: ${__crashCount}/3`);
+}
+dbg.startLongTaskDetection();
 
 /** Dynamic iOS status bar: light text on dark themes, dark text on light themes. */
 function DynamicStatusBar() {
@@ -33,7 +42,10 @@ function UmbraProviderWithSwitch({ children }: { children: React.ReactNode }) {
   return <UmbraProvider key={switchGeneration}>{children}</UmbraProvider>;
 }
 
+const AUTH_GATE_SRC = 'AuthGate';
+
 function AuthGate() {
+  if (__DEV__) dbg.trackRender(AUTH_GATE_SRC);
   const { isAuthenticated, hasPin, isPinVerified, identity, isHydrated: authHydrated, isSwitching } = useAuth();
   const { isReady, isLoading, initStage } = useUmbra();
   const { preferencesLoaded } = useAppTheme();
@@ -60,8 +72,10 @@ function AuthGate() {
   useEffect(() => {
     if (!navReady) return;
     if (!isAuthenticated && !inAuthGroup) {
+      if (__DEV__) dbg.info('lifecycle', 'navigate → /(auth)', undefined, AUTH_GATE_SRC);
       router.replace('/(auth)');
     } else if (isAuthenticated && inAuthGroup) {
+      if (__DEV__) dbg.info('lifecycle', 'navigate → /(main)', undefined, AUTH_GATE_SRC);
       router.replace('/(main)');
     }
   }, [isAuthenticated, inAuthGroup, navReady]);
@@ -178,7 +192,9 @@ function AuthGate() {
 
   const handleLoadingComplete = useCallback(() => {
     setLoadingDismissed(true);
-  }, []);
+    if (__DEV__) dbg.info('lifecycle', 'Loading screen dismissed — app ready', { initStage }, AUTH_GATE_SRC);
+    markBootSuccess();
+  }, [initStage]);
 
   return (
     <View style={{ flex: 1 }}>
@@ -209,11 +225,13 @@ export default function RootLayout() {
                   <MessagingProvider>
                   <SyncProvider>
                   <PluginProvider>
+                  <ConversationsProvider>
                     <HelpProvider>
                       <DynamicStatusBar />
                       <AuthGate />
                       <HelpPopoverHost />
                     </HelpProvider>
+                  </ConversationsProvider>
                   </PluginProvider>
                   </SyncProvider>
                   </MessagingProvider>
