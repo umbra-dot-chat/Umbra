@@ -64,6 +64,7 @@ Commands:
     relay           Deploy only the primary relay to relay.umbra.chat
     relay-seoul     Deploy only the Seoul relay to seoul.relay.umbra.chat
     relays          Deploy all relay servers (primary + Seoul)
+    ghost           Build and deploy Ghost AI bot to GPU server
 
 Options:
     --skip-build    Skip the build step (use existing dist/)
@@ -76,6 +77,8 @@ Examples:
     $0 relay --skip-build   # Deploy primary relay without rebuilding
     $0 relay-seoul          # Deploy Seoul relay only
     $0 relays               # Deploy all relays
+    $0 ghost                # Build and deploy Ghost AI bot
+    $0 ghost --skip-build   # Deploy Ghost without rebuilding
     $0 --dry-run            # Preview deployment steps
 
 Configuration:
@@ -483,6 +486,73 @@ deploy_all_relays() {
 }
 
 # -----------------------------------------------------------------------------
+# Ghost AI Bot
+# -----------------------------------------------------------------------------
+
+build_ghost() {
+    log_info "Building Ghost AI bot..."
+    cd "$PROJECT_ROOT/packages/umbra-ghost-ai"
+    npm run build
+    if [[ -d "dist" ]]; then
+        log_success "Ghost AI build complete: packages/umbra-ghost-ai/dist/"
+    else
+        log_error "Ghost AI build failed - dist/ not created"
+        exit 1
+    fi
+    cd "$PROJECT_ROOT"
+}
+
+deploy_ghost() {
+    if [[ -z "$GHOST_HOST" || "$GHOST_HOST" == "your_"* ]]; then
+        log_error "GHOST_HOST not configured in .deploy-credentials"
+        exit 1
+    fi
+
+    local ghost_ssh_cmd="$SSH_CMD"
+    local ghost_rsync_ssh="$RSYNC_SSH"
+
+    # Use Ghost-specific password if set
+    if [[ -n "$GHOST_PASSWORD" ]]; then
+        export SSHPASS="$GHOST_PASSWORD"
+        ghost_ssh_cmd="sshpass -e ssh -o StrictHostKeyChecking=no"
+        ghost_rsync_ssh="sshpass -e ssh -o StrictHostKeyChecking=no"
+    fi
+
+    local ghost_path="${GHOST_PATH:-/opt/ghost-ai}"
+    local ghost_service="${GHOST_SERVICE:-ghost-en}"
+
+    log_info "Deploying Ghost AI to $GHOST_HOST ($ghost_path)..."
+
+    if [[ "$DRY_RUN" == "true" ]]; then
+        log_info "[DRY RUN] Would sync dist/ to $SSH_USER@$GHOST_HOST:$ghost_path/dist/"
+        return
+    fi
+
+    # Sync dist folder
+    log_info "Uploading Ghost AI dist..."
+    rsync -avz --delete \
+        -e "$ghost_rsync_ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=5" \
+        "$PROJECT_ROOT/packages/umbra-ghost-ai/dist/" \
+        "$SSH_USER@$GHOST_HOST:$ghost_path/dist/"
+
+    # Restart the systemd service
+    log_info "Restarting $ghost_service service..."
+    eval "$ghost_ssh_cmd -o ServerAliveInterval=30 $SSH_USER@$GHOST_HOST 'systemctl restart $ghost_service'"
+
+    # Verify it started
+    sleep 2
+    local status
+    status=$(eval "$ghost_ssh_cmd -o ServerAliveInterval=30 $SSH_USER@$GHOST_HOST 'systemctl is-active $ghost_service'")
+    if [[ "$status" == "active" ]]; then
+        log_success "Ghost AI deployed and running on $GHOST_HOST"
+    else
+        log_error "Ghost AI service failed to start!"
+        eval "$ghost_ssh_cmd -o ServerAliveInterval=30 $SSH_USER@$GHOST_HOST 'journalctl -u $ghost_service --no-pager -n 20'"
+        exit 1
+    fi
+}
+
+# -----------------------------------------------------------------------------
 # Main
 # -----------------------------------------------------------------------------
 
@@ -494,7 +564,7 @@ main() {
     # Parse arguments
     while [[ $# -gt 0 ]]; do
         case $1 in
-            frontend|relay|relay-seoul|relays|all)
+            frontend|relay|relay-seoul|relays|ghost|all)
                 command="$1"
                 shift
                 ;;
@@ -550,6 +620,14 @@ main() {
             ;;
         relays)
             deploy_all_relays
+            ;;
+        ghost)
+            if [[ "$SKIP_BUILD" != "true" ]]; then
+                build_ghost
+            else
+                log_info "Skipping Ghost AI build (--skip-build)"
+            fi
+            deploy_ghost
             ;;
         all)
             if [[ "$SKIP_BUILD" != "true" ]]; then
