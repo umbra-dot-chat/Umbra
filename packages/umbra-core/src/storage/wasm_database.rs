@@ -4669,13 +4669,13 @@ impl Database {
 
         // Conversations
         let conv_rows = self.query(
-            "SELECT id, participant_did, created_at, last_message_at FROM conversations ORDER BY last_message_at DESC",
+            "SELECT id, friend_did, created_at, last_message_at FROM conversations ORDER BY last_message_at DESC",
             json!([]),
         ).unwrap_or_default();
         let conversations: Vec<serde_json::Value> = conv_rows.iter().map(|row| {
             json!({
                 "id": row.get("id").and_then(|v| v.as_str()).unwrap_or_default(),
-                "participant_did": row.get("participant_did").and_then(|v| v.as_str()).unwrap_or_default(),
+                "friend_did": row.get("friend_did").and_then(|v| v.as_str()).unwrap_or_default(),
                 "created_at": row.get("created_at").and_then(|v| v.as_i64()).unwrap_or(now),
                 "last_message_at": row.get("last_message_at").and_then(|v| v.as_i64()).unwrap_or(now),
             })
@@ -4796,14 +4796,14 @@ impl Database {
         if let Some(convs) = export.get("conversations").and_then(|v| v.as_array()) {
             for c in convs {
                 let id = c.get("id").and_then(|v| v.as_str()).unwrap_or_default();
-                let participant_did = c.get("participant_did").and_then(|v| v.as_str()).unwrap_or_default();
+                let friend_did = c.get("friend_did").and_then(|v| v.as_str()).unwrap_or_default();
                 let created_at = c.get("created_at").and_then(|v| v.as_i64()).unwrap_or(now);
                 let last_message_at = c.get("last_message_at").and_then(|v| v.as_i64()).unwrap_or(now);
 
                 if !id.is_empty() {
                     self.exec(
-                        "INSERT OR REPLACE INTO conversations (id, participant_did, created_at, last_message_at) VALUES (?, ?, ?, ?)",
-                        json!([id, participant_did, created_at, last_message_at]),
+                        "INSERT OR REPLACE INTO conversations (id, friend_did, created_at, last_message_at) VALUES (?, ?, ?, ?)",
+                        json!([id, friend_did, created_at, last_message_at]),
                     ).map_err(|e| Error::DatabaseError(format!("import conversation: {}", e)))?;
                     stats.conversations += 1;
                 }

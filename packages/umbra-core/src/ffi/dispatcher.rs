@@ -16,6 +16,7 @@ use base64::Engine as _;
 use sha2::{Digest, Sha256};
 
 use super::state::get_state;
+use super::dispatch_sync;
 use crate::community::CommunityService;
 
 pub type DResult = Result<String, (i32, String)>;
@@ -706,6 +707,12 @@ pub fn dispatch(method: &str, args: &str) -> DResult {
         "mark_files_for_reencryption" => dispatch_stubs::mark_files_for_reencryption(args),
         "get_files_needing_reencryption" => dispatch_stubs::get_files_needing_reencryption(args),
         "clear_reencryption_flag" => dispatch_stubs::clear_reencryption_flag(args),
+
+        // ── Sync ────────────────────────────────────────────────
+        "sync_create_blob" => dispatch_sync::sync_create_blob(args),
+        "sync_parse_blob" => dispatch_sync::sync_parse_blob(args),
+        "sync_apply_blob" => dispatch_sync::sync_apply_blob(args),
+        "sync_sign_challenge" => dispatch_sync::sync_sign_challenge(args),
 
         _ => Err(err(404, format!("Unknown method: {}", method))),
     }

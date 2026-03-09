@@ -30,6 +30,7 @@
     "node_modules",
     "packages/umbra-core",
     "packages/umbra-relay",
-    "packages/umbra-bridge-bot"
+    "packages/umbra-bridge-bot",
+    "packages/umbra-ghost-ai"
   ]
 }

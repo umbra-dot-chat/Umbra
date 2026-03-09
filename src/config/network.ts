@@ -161,6 +161,37 @@ export async function resolveTurnCredentials(): Promise<{ username: string; cred
 /**
  * Network configuration defaults
  */
+// ─── AI Agents ──────────────────────────────────────────────────────────────
+
+export interface AIAgentConfig {
+  /** The agent's DID (set after first bot run) */
+  did: string;
+  /** Display name */
+  displayName: string;
+  /** Short description */
+  description: string;
+  /** Language code */
+  language: 'en' | 'ko';
+  /** Which relay server the agent connects to */
+  relay: string;
+}
+
+/**
+ * AI agent bots available on the Umbra network.
+ * Ghost auto-accepts friend requests and provides LLM-powered conversations.
+ */
+export const AI_AGENTS: AIAgentConfig[] = [
+  {
+    did: 'did:key:z6MkmFhZBw9EuMdeFWW62g1CSzkuZVoiDm95eLGLybpyB2wg',
+    displayName: 'Ghost',
+    description: 'Your multilingual AI companion on Umbra',
+    language: 'en',
+    relay: 'wss://relay.umbra.chat/ws',
+  },
+];
+
+// ─── Network Configuration ──────────────────────────────────────────────────
+
 export const NETWORK_CONFIG = {
   /** Enable DHT-based peer discovery */
   enableDht: false,

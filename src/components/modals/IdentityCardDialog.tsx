@@ -8,7 +8,7 @@
  * Web only: uses jsPDF for PDF generation and iframe for preview.
  */
 
-import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { View, Platform, Text as RNText } from 'react-native';
 import {
   Dialog,
@@ -48,7 +48,6 @@ export function IdentityCardDialog({ open, onClose }: IdentityCardDialogProps) {
 
   const [includePhrase, setIncludePhrase] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const prevUrlRef = useRef<string | null>(null);
 
   const cardData: IdentityCardData | null = useMemo(() => {
     if (!identity) return null;
@@ -67,38 +66,19 @@ export function IdentityCardDialog({ open, onClose }: IdentityCardDialogProps) {
 
     let cancelled = false;
 
-    if (prevUrlRef.current) {
-      URL.revokeObjectURL(prevUrlRef.current);
-    }
-
     getIdentityCardPreviewUrl(cardData)
       .then((url) => {
-        if (!cancelled) {
-          setPreviewUrl(url);
-          prevUrlRef.current = url;
-        }
+        if (!cancelled) setPreviewUrl(url);
       })
       .catch(() => {
         if (!cancelled) setPreviewUrl(null);
       });
 
-    return () => {
-      cancelled = true;
-      if (prevUrlRef.current) {
-        URL.revokeObjectURL(prevUrlRef.current);
-        prevUrlRef.current = null;
-      }
-    };
+    return () => { cancelled = true; };
   }, [open, cardData]);
 
   useEffect(() => {
-    if (!open) {
-      setPreviewUrl(null);
-      if (prevUrlRef.current) {
-        URL.revokeObjectURL(prevUrlRef.current);
-        prevUrlRef.current = null;
-      }
-    }
+    if (!open) setPreviewUrl(null);
   }, [open]);
 
   const handleDownload = useCallback(async () => {

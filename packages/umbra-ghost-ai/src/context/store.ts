@@ -1,0 +1,192 @@
+/**
+ * SQLite-backed context store for Ghost.
+ *
+ * Stores conversation history, friend data, and reminders.
+ */
+
+import Database from 'better-sqlite3';
+import { join } from 'path';
+import { existsSync, mkdirSync } from 'fs';
+import type { Logger } from '../config.js';
+
+export interface StoredMessage {
+  id: string;
+  conversationId: string;
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: number;
+}
+
+export interface StoredFriend {
+  did: string;
+  displayName: string;
+  encryptionKey: string;
+  signingKey: string;
+  conversationId: string;
+  addedAt: number;
+}
+
+export interface StoredReminder {
+  id: string;
+  userDid: string;
+  conversationId: string;
+  message: string;
+  fireAt: number;
+  fired: number;
+}
+
+export class ContextStore {
+  private db: Database.Database;
+  private log: Logger;
+
+  constructor(dataDir: string, log: Logger) {
+    this.log = log;
+
+    if (!existsSync(dataDir)) {
+      mkdirSync(dataDir, { recursive: true });
+    }
+
+    const dbPath = join(dataDir, 'ghost.db');
+    this.db = new Database(dbPath);
+    this.db.pragma('journal_mode = WAL');
+    this.db.pragma('foreign_keys = ON');
+    this.initSchema();
+
+    log.info(`Database opened: ${dbPath}`);
+  }
+
+  private initSchema(): void {
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS friends (
+        did TEXT PRIMARY KEY,
+        display_name TEXT NOT NULL,
+        encryption_key TEXT NOT NULL,
+        signing_key TEXT NOT NULL,
+        conversation_id TEXT NOT NULL,
+        added_at INTEGER NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS messages (
+        id TEXT PRIMARY KEY,
+        conversation_id TEXT NOT NULL,
+        role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+        content TEXT NOT NULL,
+        timestamp INTEGER NOT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_messages_conv ON messages(conversation_id, timestamp DESC);
+
+      CREATE TABLE IF NOT EXISTS reminders (
+        id TEXT PRIMARY KEY,
+        user_did TEXT NOT NULL,
+        conversation_id TEXT NOT NULL,
+        message TEXT NOT NULL,
+        fire_at INTEGER NOT NULL,
+        fired INTEGER NOT NULL DEFAULT 0
+      );
+      CREATE INDEX IF NOT EXISTS idx_reminders_fire ON reminders(fired, fire_at);
+    `);
+  }
+
+  // ─── Friends ───────────────────────────────────────────────────────────
+
+  saveFriend(friend: StoredFriend): void {
+    this.db.prepare(`
+      INSERT OR REPLACE INTO friends (did, display_name, encryption_key, signing_key, conversation_id, added_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(friend.did, friend.displayName, friend.encryptionKey, friend.signingKey, friend.conversationId, friend.addedAt);
+  }
+
+  getFriend(did: string): StoredFriend | null {
+    const row = this.db.prepare('SELECT * FROM friends WHERE did = ?').get(did) as any;
+    if (!row) return null;
+    return {
+      did: row.did,
+      displayName: row.display_name,
+      encryptionKey: row.encryption_key,
+      signingKey: row.signing_key,
+      conversationId: row.conversation_id,
+      addedAt: row.added_at,
+    };
+  }
+
+  getFriendByConversation(conversationId: string): StoredFriend | null {
+    const row = this.db.prepare('SELECT * FROM friends WHERE conversation_id = ?').get(conversationId) as any;
+    if (!row) return null;
+    return {
+      did: row.did,
+      displayName: row.display_name,
+      encryptionKey: row.encryption_key,
+      signingKey: row.signing_key,
+      conversationId: row.conversation_id,
+      addedAt: row.added_at,
+    };
+  }
+
+  getAllFriends(): StoredFriend[] {
+    const rows = this.db.prepare('SELECT * FROM friends ORDER BY added_at DESC').all() as any[];
+    return rows.map((row) => ({
+      did: row.did,
+      displayName: row.display_name,
+      encryptionKey: row.encryption_key,
+      signingKey: row.signing_key,
+      conversationId: row.conversation_id,
+      addedAt: row.added_at,
+    }));
+  }
+
+  // ─── Messages ──────────────────────────────────────────────────────────
+
+  saveMessage(msg: StoredMessage): void {
+    this.db.prepare(`
+      INSERT OR REPLACE INTO messages (id, conversation_id, role, content, timestamp)
+      VALUES (?, ?, ?, ?, ?)
+    `).run(msg.id, msg.conversationId, msg.role, msg.content, msg.timestamp);
+  }
+
+  getRecentMessages(conversationId: string, limit: number = 20): StoredMessage[] {
+    const rows = this.db.prepare(
+      'SELECT * FROM messages WHERE conversation_id = ? ORDER BY timestamp DESC LIMIT ?'
+    ).all(conversationId, limit) as any[];
+
+    return rows.reverse().map((row) => ({
+      id: row.id,
+      conversationId: row.conversation_id,
+      role: row.role,
+      content: row.content,
+      timestamp: row.timestamp,
+    }));
+  }
+
+  // ─── Reminders ─────────────────────────────────────────────────────────
+
+  saveReminder(reminder: StoredReminder): void {
+    this.db.prepare(`
+      INSERT INTO reminders (id, user_did, conversation_id, message, fire_at, fired)
+      VALUES (?, ?, ?, ?, ?, 0)
+    `).run(reminder.id, reminder.userDid, reminder.conversationId, reminder.message, reminder.fireAt);
+  }
+
+  getDueReminders(): StoredReminder[] {
+    const now = Date.now();
+    const rows = this.db.prepare(
+      'SELECT * FROM reminders WHERE fired = 0 AND fire_at <= ?'
+    ).all(now) as any[];
+
+    return rows.map((row) => ({
+      id: row.id,
+      userDid: row.user_did,
+      conversationId: row.conversation_id,
+      message: row.message,
+      fireAt: row.fire_at,
+      fired: row.fired,
+    }));
+  }
+
+  markReminderFired(id: string): void {
+    this.db.prepare('UPDATE reminders SET fired = 1 WHERE id = ?').run(id);
+  }
+
+  close(): void {
+    this.db.close();
+  }
+}

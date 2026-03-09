@@ -6010,7 +6010,7 @@ impl Database {
         {
             let mut stmt = conn
                 .prepare(
-                    "SELECT id, participant_did, created_at, last_message_at
+                    "SELECT id, friend_did, created_at, last_message_at
                      FROM conversations ORDER BY last_message_at DESC",
                 )
                 .map_err(|e| Error::DatabaseError(format!("export conversations: {}", e)))?;
@@ -6018,9 +6018,9 @@ impl Database {
                 .query_map([], |row| {
                     Ok(serde_json::json!({
                         "id": row.get::<_, String>(0)?,
-                        "participant_did": row.get::<_, String>(1)?,
+                        "friend_did": row.get::<_, Option<String>>(1)?,
                         "created_at": row.get::<_, i64>(2)?,
-                        "last_message_at": row.get::<_, i64>(3)?,
+                        "last_message_at": row.get::<_, Option<i64>>(3)?,
                     }))
                 })
                 .map_err(|e| Error::DatabaseError(format!("export conversations: {}", e)))?;
@@ -6176,15 +6176,15 @@ impl Database {
         if let Some(convs) = export.get("conversations").and_then(|v| v.as_array()) {
             for c in convs {
                 let id = c.get("id").and_then(|v| v.as_str()).unwrap_or_default();
-                let participant_did = c.get("participant_did").and_then(|v| v.as_str()).unwrap_or_default();
+                let friend_did = c.get("friend_did").and_then(|v| v.as_str()).unwrap_or_default();
                 let created_at = c.get("created_at").and_then(|v| v.as_i64()).unwrap_or(now);
                 let last_message_at = c.get("last_message_at").and_then(|v| v.as_i64()).unwrap_or(now);
 
                 if !id.is_empty() {
                     conn.execute(
-                        "INSERT OR REPLACE INTO conversations (id, participant_did, created_at, last_message_at)
+                        "INSERT OR REPLACE INTO conversations (id, friend_did, created_at, last_message_at)
                          VALUES (?, ?, ?, ?)",
-                        params![id, participant_did, created_at, last_message_at],
+                        params![id, friend_did, created_at, last_message_at],
                     )
                     .map_err(|e| Error::DatabaseError(format!("import conversation: {}", e)))?;
                     stats.conversations += 1;

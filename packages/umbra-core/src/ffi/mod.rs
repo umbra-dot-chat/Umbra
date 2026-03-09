@@ -76,6 +76,9 @@ mod dispatch_secure_store;
 mod dispatch_groups;
 
 #[cfg(feature = "ffi")]
+mod dispatch_sync;
+
+#[cfg(feature = "ffi")]
 mod dispatch_stubs;
 
 #[cfg(feature = "ffi")]

@@ -302,10 +302,12 @@ export async function downloadIdentityCardPDF(data: IdentityCardData): Promise<v
 }
 
 /**
- * Generate the PDF and return a Blob URL for preview.
+ * Generate the PDF and return a URL for preview.
+ *
+ * Uses a data-URI instead of a blob URL so the iframe works inside
+ * Tauri's WKWebView (which blocks blob: origins).
  */
 export async function getIdentityCardPreviewUrl(data: IdentityCardData): Promise<string> {
   const doc = await generateIdentityCardPDF(data);
-  const blob = doc.output('blob');
-  return URL.createObjectURL(blob);
+  return doc.output('datauristring');
 }

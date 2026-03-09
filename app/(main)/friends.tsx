@@ -18,6 +18,7 @@ import {
   FriendRequestItem,
   FriendSection,
 } from '@/components/friends/FriendComponents';
+import { AIAgentBanner } from '@/components/friends/AIAgentBanner';
 import { useRouter } from 'expo-router';
 import { UsersIcon, MessageIcon, MoreIcon, UserCheckIcon, QrCodeIcon, GlobeIcon, UserPlusIcon, BlockIcon } from '@/components/ui';
 import { useFriends } from '@/hooks/useFriends';
@@ -37,6 +38,7 @@ import { useSound } from '@/contexts/SoundContext';
 import { MobileBackButton } from '@/components/ui/MobileBackButton';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import { useNetwork } from '@/hooks/useNetwork';
+import { useAutoAddGhost } from '@/hooks/useAutoAddGhost';
 import { TEST_IDS } from '@/constants/test-ids';
 
 // ---------------------------------------------------------------------------
@@ -123,6 +125,28 @@ export default function FriendsPage() {
   const { conversations } = useConversations();
   const { setActiveId } = useActiveConversation();
   const { onlineDids } = useNetwork();
+
+  // Auto-add Ghost AI agent on first launch
+  useAutoAddGhost();
+
+  // AI Agent banner dismissal
+  const [agentBannerDismissed, setAgentBannerDismissed] = useState(() => {
+    try {
+      if (typeof localStorage !== 'undefined') {
+        return localStorage.getItem('ghost_banner_dismissed') === '1';
+      }
+    } catch {}
+    return false;
+  });
+
+  const handleDismissAgentBanner = useCallback(() => {
+    setAgentBannerDismissed(true);
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem('ghost_banner_dismissed', '1');
+      }
+    } catch {}
+  }, []);
 
   const [activeTab, setActiveTab] = useState('all');
   const [qrCardOpen, setQrCardOpen] = useState(false);
@@ -316,6 +340,13 @@ export default function FriendsPage() {
   // Group friends by status (enriched with relay presence data)
   const onlineFriends = friends.filter((f) => onlineDids.has(f.did));
   const offlineFriends = friends.filter((f) => !onlineDids.has(f.did));
+
+  // Sets for AI Agent banner
+  const friendDids = useMemo(() => new Set(friends.map((f) => f.did)), [friends]);
+  const pendingOutgoingDids = useMemo(
+    () => new Set(outgoingRequests.map((r) => r.toDid)),
+    [outgoingRequests],
+  );
 
   const iconColor = theme.colors.text.secondary;
 
@@ -549,6 +580,18 @@ export default function FriendsPage() {
         {/* ─── All Friends ─── */}
         <TabPanel value="all" style={{ flex: 1 }}>
           <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }} keyboardShouldPersistTaps="handled">
+
+            {/* AI Agent Banner */}
+            {!agentBannerDismissed && (
+              <AIAgentBanner
+                friendDids={friendDids}
+                pendingDids={pendingOutgoingDids}
+                onAddAgent={handleAddFromSearch}
+                onMessageAgent={handleMessageFriend}
+                addingDid={addingDid}
+                onDismiss={handleDismissAgentBanner}
+              />
+            )}
 
             <View style={{ marginBottom: 16 }}>
               {/* Platform selector */}
