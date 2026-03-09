@@ -7,6 +7,10 @@
 import { wasm, parseWasm } from './helpers';
 import type { RelayStatus, RelaySession, RelayAcceptResult, RelayEvent } from './types';
 
+// Debug bridge
+const _dbg = (): any => (globalThis as any).__umbra_logger_instance;
+const SRC = 'svc:relay';
+
 /**
  * Connect to a relay server
  *
@@ -19,8 +23,11 @@ import type { RelayStatus, RelaySession, RelayAcceptResult, RelayEvent } from '.
 export async function connectRelay(
   relayUrl: string
 ): Promise<RelayStatus & { registerMessage: string }> {
+  _dbg()?.info('network', `connectRelay START → ${relayUrl}`, undefined, SRC);
   const resultJson = await wasm().umbra_wasm_relay_connect(relayUrl);
-  return await parseWasm<RelayStatus & { registerMessage: string }>(resultJson);
+  const result = await parseWasm<RelayStatus & { registerMessage: string }>(resultJson);
+  _dbg()?.info('network', 'connectRelay DONE', undefined, SRC);
+  return result;
 }
 
 /**
@@ -96,6 +103,7 @@ export async function relaySend(
  * @returns The fetch_offline message to send via WebSocket
  */
 export async function relayFetchOffline(): Promise<string> {
+  _dbg()?.debug('network', 'relayFetchOffline', undefined, SRC);
   return wasm().umbra_wasm_relay_fetch_offline();
 }
 

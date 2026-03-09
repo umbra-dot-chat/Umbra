@@ -22,6 +22,10 @@
 
 import { saveDatabaseExport, loadDatabaseExport } from './indexed-db';
 
+// Debug bridge
+const _dbg = (): any => (globalThis as any).__umbra_logger_instance;
+const SQL_SRC = 'sql-bridge';
+
 // sql.js types — we keep these lightweight to avoid a hard dep on @types/sql.js
 interface SqlJsDatabase {
   run(sql: string, params?: any[]): void;
@@ -187,6 +191,7 @@ const bridge = {
     const params = JSON.parse(paramsJson);
     db.run(sql, params);
     const rowsModified = db.getRowsModified();
+    _dbg()?.trace('service', `sql EXECUTE: ${sql.slice(0, 60)}… → ${rowsModified} rows`, undefined, SQL_SRC);
 
     // Persist after every write
     scheduleSave();
@@ -215,6 +220,7 @@ const bridge = {
     }
     stmt.free();
 
+    _dbg()?.trace('service', `sql QUERY: ${sql.slice(0, 60)}… → ${results.length} rows`, undefined, SQL_SRC);
     return JSON.stringify(results);
   },
 

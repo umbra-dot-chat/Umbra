@@ -12,6 +12,10 @@ import type {
   BlockedUser,
 } from './types';
 
+// Debug bridge
+const _dbg = (): any => (globalThis as any).__umbra_logger_instance;
+const SRC = 'svc:friends';
+
 /**
  * Send a friend request
  *

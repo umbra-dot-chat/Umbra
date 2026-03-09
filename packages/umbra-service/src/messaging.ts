@@ -14,6 +14,10 @@ import type {
   ChatMessagePayload,
 } from './types';
 
+// Debug bridge — accesses app-layer logger singleton if available
+const _dbg = (): any => (globalThis as any).__umbra_logger_instance;
+const SRC = 'svc:messaging';
+
 /**
  * Payload for sending a file as a message.
  */
@@ -48,8 +52,11 @@ function categorizeDecryptError(err: unknown): string {
  * Get all conversations
  */
 export async function getConversations(): Promise<Conversation[]> {
+  _dbg()?.debug('conversations', 'getConversations START', undefined, SRC);
   const resultJson = wasm().umbra_wasm_messaging_get_conversations();
-  return await parseWasm<Conversation[]>(resultJson);
+  const result = await parseWasm<Conversation[]>(resultJson);
+  _dbg()?.debug('conversations', `getConversations DONE → ${result.length} conversations`, undefined, SRC);
+  return result;
 }
 
 /**
@@ -84,6 +91,7 @@ export async function sendMessage(
   text: string,
   relayWs?: WebSocket | null
 ): Promise<Message> {
+  _dbg()?.info('messages', `sendMessage cid=${conversationId.slice(0, 8)}… len=${text.length}`, undefined, SRC);
   const resultJson = wasm().umbra_wasm_messaging_send(conversationId, text);
   const raw = await parseWasm<{
     id: string;
@@ -173,6 +181,7 @@ export async function getMessages(
   const limit = options?.limit ?? 50;
   const offset = options?.offset ?? 0;
 
+  _dbg()?.debug('messages', `getMessages START cid=${conversationId.slice(0, 8)}… limit=${limit} offset=${offset}`, undefined, SRC);
   const resultJson = wasm().umbra_wasm_messaging_get_messages(
     conversationId,
     limit,
@@ -458,6 +467,7 @@ export async function sendTypingIndicator(
  * @param payload - The chat message payload from the relay envelope
  */
 export async function storeIncomingMessage(payload: ChatMessagePayload): Promise<void> {
+  _dbg()?.info('messages', `storeIncoming mid=${payload.messageId?.slice(0, 8)}… cid=${payload.conversationId?.slice(0, 8)}… from=${payload.senderDid?.slice(0, 16)}…`, undefined, SRC);
   const data: Record<string, unknown> = {
     message_id: payload.messageId,
     conversation_id: payload.conversationId,

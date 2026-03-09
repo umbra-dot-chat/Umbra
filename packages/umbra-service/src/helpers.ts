@@ -8,6 +8,9 @@ import { getWasm } from '@umbra/wasm';
 import type { UmbraWasmModule } from '@umbra/wasm';
 import { ErrorCode, UmbraError } from './errors';
 
+// Debug bridge
+const _dbg = (): any => (globalThis as any).__umbra_logger_instance;
+
 /**
  * Convert snake_case keys to camelCase recursively.
  *
@@ -74,6 +77,7 @@ export function wasm(): UmbraWasmModule {
 export async function parseWasm<T>(jsonOrJsValue: string | Promise<string> | { toString(): string }): Promise<T> {
   const resolved = await jsonOrJsValue;
   const str = typeof resolved === 'string' ? resolved : resolved.toString();
+  _dbg()?.trace('service', `parseWasm: ${str.length} chars`, undefined, 'helpers');
   const raw = JSON.parse(str);
   return snakeToCamel(raw) as T;
 }

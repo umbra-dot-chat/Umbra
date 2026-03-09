@@ -17,6 +17,11 @@ import type { UmbraEvent } from '@umbra/wasm';
 
 import { ErrorCode, UmbraError } from './errors';
 import { snakeToCamel } from './helpers';
+
+// Debug bridge — accesses app-layer logger singleton if available
+const _dbg = (): any => (globalThis as any).__umbra_logger_instance;
+const SRC = 'UmbraService';
+
 import type {
   InitConfig,
   Identity,
@@ -130,13 +135,17 @@ export class UmbraService {
    */
   static async initialize(config?: InitConfig): Promise<void> {
     if (this._initialized && this._instance) {
-      // Already initialized — safe to return (handles HMR re-renders)
+      _dbg()?.debug('lifecycle', 'UmbraService.initialize SKIP (already initialized)', undefined, SRC);
       return;
     }
+
+    _dbg()?.info('lifecycle', 'UmbraService.initialize START', { hasDid: !!config?.did }, SRC);
+    const initTimer = _dbg()?.time?.('UmbraService.initialize');
 
     // Load and initialize the WASM module (includes sql.js + DB schema init)
     // Pass DID for IndexedDB persistence when available
     const wasmModule = await initUmbraWasm(config?.did);
+    _dbg()?.info('lifecycle', 'WASM module loaded, connecting event bridge', undefined, SRC);
 
     const instance = new UmbraService();
 
@@ -149,6 +158,7 @@ export class UmbraService {
     this._instance = instance;
     this._initialized = true;
 
+    initTimer?.();
     console.log(
       '[UmbraService] Initialized — WASM version:',
       wasmModule.umbra_wasm_version()
@@ -514,19 +524,23 @@ export class UmbraService {
 
   onMessageEvent(callback: (event: MessageEvent) => void): () => void {
     this._messageListeners.push(callback);
+    _dbg()?.debug('messages', `onMessageEvent: subscribed (${this._messageListeners.length} total)`, undefined, SRC);
     return () => {
       const index = this._messageListeners.indexOf(callback);
       if (index !== -1) {
         this._messageListeners.splice(index, 1);
+        _dbg()?.debug('messages', `onMessageEvent: unsubscribed (${this._messageListeners.length} remaining)`, undefined, SRC);
       }
     };
   }
 
   dispatchMessageEvent(event: MessageEvent): void {
+    _dbg()?.info('messages', `dispatchMessageEvent: ${event.type} to ${this._messageListeners.length} listeners`, undefined, SRC);
     for (const listener of this._messageListeners) {
       try {
         listener(event);
       } catch (err) {
+        _dbg()?.error('messages', `dispatchMessageEvent listener threw`, { err: String(err) }, SRC);
         console.error('[UmbraService] Message listener error:', err);
       }
     }
@@ -1621,22 +1635,27 @@ export class UmbraService {
   private _dispatchEvent(event: UmbraEvent): void {
     const { domain, data } = event;
     if (!data || typeof data !== 'object') {
+      _dbg()?.warn('network', `_dispatchEvent: ignoring event with missing/invalid data`, { domain }, SRC);
       console.warn('[UmbraService] Ignoring event with missing/invalid data:', JSON.stringify(event));
       return;
     }
     const camelData = snakeToCamel(data) as Record<string, unknown>;
+    _dbg()?.debug('network', `_dispatchEvent: ${domain}.${camelData.type}`, { listenerCounts: { message: this._messageListeners.length, friend: this._friendListeners.length, discovery: this._discoveryListeners.length, relay: this._relayListeners.length } }, SRC);
 
     switch (domain) {
       case 'message': {
         // Rust now emits structured content ({ type, text }) and status directly.
         if (!camelData || !camelData.type) {
+          _dbg()?.warn('messages', `_dispatchEvent: message event with no type`, { data: JSON.stringify(data).slice(0, 100) }, SRC);
           console.warn('[UmbraService] Ignoring message event with no type:', JSON.stringify(data));
           break;
         }
+        _dbg()?.info('messages', `_dispatchEvent → message.${camelData.type} to ${this._messageListeners.length} listeners`, undefined, SRC);
         for (const listener of this._messageListeners) {
           try {
             listener(camelData as unknown as MessageEvent);
           } catch (err) {
+            _dbg()?.error('messages', `message listener threw`, { err: String(err) }, SRC);
             console.error('[UmbraService] Message listener error:', err);
           }
         }
@@ -1644,6 +1663,7 @@ export class UmbraService {
       }
 
       case 'friend':
+        _dbg()?.info('friends', `_dispatchEvent → friend.${camelData.type} to ${this._friendListeners.length} listeners`, undefined, SRC);
         for (const listener of this._friendListeners) {
           try {
             listener(camelData as unknown as FriendEvent);
@@ -1655,6 +1675,7 @@ export class UmbraService {
 
       case 'discovery':
       case 'network':
+        _dbg()?.info('network', `_dispatchEvent → ${domain}.${camelData.type} to ${this._discoveryListeners.length} listeners`, undefined, SRC);
         for (const listener of this._discoveryListeners) {
           try {
             listener(camelData as unknown as DiscoveryEvent);

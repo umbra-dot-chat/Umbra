@@ -8,6 +8,10 @@ import { wasm, parseWasm } from './helpers';
 import { ErrorCode, UmbraError } from './errors';
 import type { Identity, PublicIdentity, CreateIdentityResult, ProfileUpdate } from './types';
 
+// Debug bridge
+const _dbg = (): any => (globalThis as any).__umbra_logger_instance;
+const SRC = 'svc:identity';
+
 /**
  * Create a new identity
  *
@@ -22,6 +26,7 @@ import type { Identity, PublicIdentity, CreateIdentityResult, ProfileUpdate } fr
  * @returns Identity and recovery phrase
  */
 export async function createIdentity(displayName: string): Promise<CreateIdentityResult> {
+  _dbg()?.info('auth', `createIdentity START name="${displayName}"`, undefined, SRC);
   const resultJson = wasm().umbra_wasm_identity_create(displayName);
   const result = await parseWasm<{ did: string; recoveryPhrase: string }>(resultJson);
 
@@ -59,6 +64,7 @@ export async function restoreIdentity(
   recoveryPhrase: string[],
   displayName: string
 ): Promise<Identity> {
+  _dbg()?.info('auth', `restoreIdentity START words=${recoveryPhrase.length} name="${displayName}"`, undefined, SRC);
   if (recoveryPhrase.length !== 24) {
     throw new UmbraError(
       ErrorCode.InvalidRecoveryPhrase,
@@ -82,9 +88,14 @@ export async function restoreIdentity(
  * @returns Identity if one exists, null otherwise
  */
 export async function loadIdentity(): Promise<Identity | null> {
+  _dbg()?.debug('auth', 'loadIdentity START', undefined, SRC);
   try {
     const did = await wasm().umbra_wasm_identity_get_did();
-    if (!did) return null;
+    if (!did) {
+      _dbg()?.debug('auth', 'loadIdentity → no DID found', undefined, SRC);
+      return null;
+    }
+    _dbg()?.debug('auth', `loadIdentity → DID found: ${did.slice(0, 20)}…`, undefined, SRC);
 
     const profileJson = wasm().umbra_wasm_identity_get_profile();
     const profile = await parseWasm<{

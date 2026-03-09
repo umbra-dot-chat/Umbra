@@ -392,6 +392,10 @@ let initPromise: Promise<UmbraWasmModule> | null = null;
 // "a global default trace dispatcher has already been set".
 let wasmInitCalled = false;
 
+// Debug bridge — accesses app-layer logger singleton if available
+const _dbg = (): any => (globalThis as any).__umbra_logger_instance;
+const LDR_SRC = 'wasm:loader';
+
 // ─────────────────────────────────────────────────────────────────────────
 // Platform Detection
 // ─────────────────────────────────────────────────────────────────────────
@@ -443,17 +447,25 @@ export function isReactNative(): boolean {
  * @returns The initialized module interface
  */
 export async function initUmbraWasm(did?: string): Promise<UmbraWasmModule> {
-  if (wasmModule) return wasmModule;
+  if (wasmModule) {
+    _dbg()?.debug('lifecycle', 'initUmbraWasm SKIP (already loaded)', undefined, LDR_SRC);
+    return wasmModule;
+  }
+
+  _dbg()?.info('lifecycle', `initUmbraWasm START (did=${did ? did.slice(0, 16) + '…' : 'none'})`, undefined, LDR_SRC);
+  const timer = _dbg()?.time?.('initUmbraWasm');
 
   if (!initPromise) {
     initPromise = doInit(did).catch((err) => {
-      // Clear the cached promise so subsequent attempts can retry
+      _dbg()?.error('lifecycle', `initUmbraWasm FAILED: ${err}`, undefined, LDR_SRC);
       initPromise = null;
       throw err;
     });
   }
 
-  return initPromise;
+  const result = await initPromise;
+  timer?.();
+  return result;
 }
 
 /**
@@ -605,6 +617,7 @@ async function doInitReactNative(_did?: string): Promise<UmbraWasmModule> {
  * Loads sql.js for in-memory SQLite, then the wasm-bindgen WASM binary.
  */
 async function doInitWasm(did?: string): Promise<UmbraWasmModule> {
+  _dbg()?.info('lifecycle', 'doInitWasm START (web browser path)', { did: did?.slice(0, 16) }, LDR_SRC);
   console.log('[umbra-wasm] Initializing...');
 
   // Step 1: Initialize sql.js bridge (must happen before WASM DB init)
