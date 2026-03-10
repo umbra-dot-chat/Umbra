@@ -203,6 +203,14 @@ export class CallManager {
       if (event.streams[0]) {
         this.remoteStream = event.streams[0];
         this.onRemoteStream?.(event.streams[0]);
+      } else {
+        // Some WebRTC implementations (e.g. @roamhq/wrtc) may deliver
+        // tracks without an associated stream. Wrap the track in a new
+        // MediaStream so the client can still play audio/video.
+        const stream = this.remoteStream ?? new MediaStream();
+        stream.addTrack(event.track);
+        this.remoteStream = stream;
+        this.onRemoteStream?.(stream);
       }
     };
 
