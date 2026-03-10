@@ -200,15 +200,15 @@ export class GhostBot {
 
       // ── Call signaling ──────────────────────────────────────────────
       case 'call_offer':
-        this.callHandler?.handleCallOffer(payload, fromDid);
+        this.callHandler?.handleCallOffer(payload);
         break;
 
       case 'call_answer':
-        this.callHandler?.handleCallAnswer(payload);
+        // Ghost doesn't initiate calls, but handle for completeness
         break;
 
       case 'call_ice_candidate':
-        this.callHandler?.handleIceCandidate(payload);
+        this.callHandler?.handleCallIceCandidate(payload);
         break;
 
       case 'call_end':
@@ -369,32 +369,9 @@ export class GhostBot {
           enabled: true,
           calls: this.callHandler.getActiveCalls(),
         }));
-      } else if (url.startsWith('/calls/') && req.method === 'GET') {
-        // ── Single call stats ────────────────────────────────────────
-        const callId = url.slice(7);
-        const stats = this.callHandler?.getCallStats(callId);
-        if (stats) {
-          res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify(stats));
-        } else {
-          res.writeHead(404, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ error: 'Call not found' }));
-        }
       } else if (url === '/media' && req.method === 'GET') {
-        // ── Media status endpoint ────────────────────────────────────
-        if (!this.mediaManager) {
-          res.writeHead(200, { 'Content-Type': 'application/json' });
-          res.end(JSON.stringify({ ready: false }));
-          return;
-        }
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({
-          ready: this.mediaManager.isReady(),
-          progress: this.mediaManager.getDownloadProgress(),
-          audio: this.mediaManager.listAudioTracks(),
-          video: this.mediaManager.listVideoFiles(),
-          files: this.mediaManager.listFiles(),
-        }));
+        res.end(JSON.stringify(this.mediaManager?.getAllMedia() ?? { audio: [], video: [], files: [] }));
       } else if (url === '/webhook/git' && req.method === 'POST') {
         // Git webhook — trigger codebase re-indexing
         this.log.info('Git webhook received — re-indexing codebase...');
