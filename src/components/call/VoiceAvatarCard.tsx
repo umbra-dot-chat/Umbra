@@ -31,6 +31,7 @@ export function VoiceAvatarCard({ participant, isSpeaking, avatar }: VoiceAvatar
   return (
     <SpeakerBorder active={isSpeaking} borderRadius={16}>
       <View
+        accessibilityLabel={`${participant.displayName}${isSpeaking ? ', speaking' : ''}${participant.isMuted ? ', muted' : ''}`}
         style={{
           alignItems: 'center',
           justifyContent: 'center',
@@ -64,6 +65,7 @@ export function VoiceAvatarCard({ participant, isSpeaking, avatar }: VoiceAvatar
         {/* Mute indicator badge */}
         {participant.isMuted && (
           <View
+            accessibilityLabel="Muted"
             style={{
               position: 'absolute',
               bottom: 32,
