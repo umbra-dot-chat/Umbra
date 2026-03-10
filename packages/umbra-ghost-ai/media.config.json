@@ -1,6 +1,12 @@
 {
   "audio": [
     {
+      "id": "lofi-study",
+      "name": "Lofi Study",
+      "url": "https://cdn.pixabay.com/download/audio/2024/11/04/audio_4956b4edd1.mp3",
+      "format": "mp3"
+    },
+    {
       "id": "jazz-cafe",
       "name": "Jazz Café",
       "url": "https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3",
@@ -10,12 +16,6 @@
       "id": "classical-piano",
       "name": "Classical Piano",
       "url": "https://cdn.pixabay.com/download/audio/2022/01/18/audio_d0a13f69d2.mp3",
-      "format": "mp3"
-    },
-    {
-      "id": "lofi-study",
-      "name": "Lofi Study",
-      "url": "https://cdn.pixabay.com/download/audio/2024/11/04/audio_4956b4edd1.mp3",
       "format": "mp3"
     }
   ],
