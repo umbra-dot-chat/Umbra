@@ -9,6 +9,9 @@ import { readFileSync } from 'fs';
 import { AudioSource, resolveFfmpegPath } from '../media/audio-source.js';
 import { VideoSource, parseResolution } from '../media/video-source.js';
 import { MediaManager, type MediaFile } from '../media/manager.js';
+import { RawMediaCapture } from '../media/capture.js';
+import { DegradationDetector } from '../media/degradation-detector.js';
+import { AudioTestSignal, VideoTestSignal } from '../media/test-signal.js';
 import { decryptMessage, encryptMessage, uuid, type GhostIdentity } from '../crypto.js';
 import type { RelayClient } from '../relay.js';
 import type { ContextStore, StoredFriend } from '../context/store.js';
@@ -62,9 +65,17 @@ interface ActiveCall {
   videoSource: VideoSource | null;
   videoSender: any | null; // RTCRtpSender
   startedAt: number;
+  lastActivityAt: number; // Updated on stats/metadata activity for watchdog
   statsInterval: ReturnType<typeof setInterval> | null;
   metadataInterval: ReturnType<typeof setInterval> | null;
+  disconnectTimer: ReturnType<typeof setTimeout> | null;
+  cleanedUp: boolean; // Guard against double-cleanup
   stats: CallStats;
+  // Diagnostic tools
+  capture: RawMediaCapture | null;
+  degradation: DegradationDetector | null;
+  audioTestSignal: AudioTestSignal | null;
+  videoTestSignal: VideoTestSignal | null;
 }
 
 interface CallStats {
@@ -89,6 +100,11 @@ export interface ActiveCallInfo {
   stats: CallStats;
 }
 
+const MAX_CONCURRENT_CALLS = 3;
+const STALE_CALL_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes without activity
+const WATCHDOG_INTERVAL_MS = 30_000; // Check every 30s
+const PENDING_ICE_TIMEOUT_MS = 60_000; // Drop orphan ICE candidates after 60s
+
 // ── CallHandler ──────────────────────────────────────────────────────────────
 
 export class CallHandler {
@@ -102,7 +118,8 @@ export class CallHandler {
   private wrtc: any = null;
   private ffmpegPath: string;
   private activeCalls = new Map<string, ActiveCall>();
-  private pendingIceCandidates = new Map<string, any[]>();
+  private pendingIceCandidates = new Map<string, { candidates: any[]; createdAt: number }>();
+  private watchdogInterval: ReturnType<typeof setInterval> | null = null;
 
   constructor(
     config: GhostConfig,
@@ -128,6 +145,7 @@ export class CallHandler {
       // ESM dynamic import of CJS module puts exports under .default
       this.wrtc = mod.default || mod;
       this.log.info('[CALL] WebRTC module loaded (@roamhq/wrtc)');
+      this.startWatchdog();
       return true;
     } catch (err) {
       this.log.error('[CALL] Failed to load @roamhq/wrtc — calls disabled:', err);
@@ -183,7 +201,7 @@ export class CallHandler {
     // Decrypt if encrypted
     const decrypted: CallOfferPayload = this.decryptSignalPayload(payload);
     const { callId, senderDid, callType } = decrypted;
-    this.log.info(`[CALL] Incoming ${callType} call: ${callId} from ${senderDid?.slice(0, 24)}...`);
+    this.log.info(`[CALL] Incoming ${callType} call: ${callId} from ${senderDid?.slice(0, 24)}... (active: ${this.activeCalls.size}/${MAX_CONCURRENT_CALLS})`);
     this.log.debug(`[CALL] Offer keys: ${Object.keys(decrypted).join(', ')}, sdp length: ${decrypted.sdp?.length}, sdp starts: ${JSON.stringify(decrypted.sdp?.slice(0, 30))}`);
 
     if (!this.wrtc) {
@@ -195,6 +213,17 @@ export class CallHandler {
     if (!friend) {
       this.log.warn(`[CALL] Rejecting call from unknown DID: ${senderDid?.slice(0, 24)}...`);
       this.sendCallEnd(senderDid, callId, 'rejected');
+      return;
+    }
+
+    // Concurrency cap — reject if already at max
+    if (this.activeCalls.size >= MAX_CONCURRENT_CALLS) {
+      this.log.warn(`[CALL] Rejecting call — at capacity (${this.activeCalls.size}/${MAX_CONCURRENT_CALLS})`);
+      this.sendCallEnd(senderDid, callId, 'busy');
+      this.sendChatNotification(
+        friend,
+        `Sorry, I'm currently at capacity with ${this.activeCalls.size} active calls. Please try again in a few minutes!`,
+      );
       return;
     }
 
@@ -228,10 +257,11 @@ export class CallHandler {
     if (!call) {
       // Call not created yet (likely in ring delay) — queue the candidate
       if (!this.pendingIceCandidates.has(payload.callId)) {
-        this.pendingIceCandidates.set(payload.callId, []);
+        this.pendingIceCandidates.set(payload.callId, { candidates: [], createdAt: Date.now() });
       }
-      this.pendingIceCandidates.get(payload.callId)!.push(payload);
-      this.log.debug(`[CALL] Queued ICE candidate for pending call ${payload.callId} (${this.pendingIceCandidates.get(payload.callId)!.length} queued)`);
+      const pending = this.pendingIceCandidates.get(payload.callId)!;
+      pending.candidates.push(payload);
+      this.log.debug(`[CALL] Queued ICE candidate for pending call ${payload.callId} (${pending.candidates.length} queued)`);
       return;
     }
 
@@ -297,6 +327,7 @@ export class CallHandler {
 
     const peer = new RTCPeerConnection({ iceServers });
 
+    const now = Date.now();
     const call: ActiveCall = {
       callId: offer.callId,
       peerDid: offer.senderDid,
@@ -307,15 +338,48 @@ export class CallHandler {
       audioSource: null,
       videoSource: null,
       videoSender: null,
-      startedAt: Date.now(),
+      startedAt: now,
+      lastActivityAt: now,
       statsInterval: null,
       metadataInterval: null,
+      disconnectTimer: null,
+      cleanedUp: false,
       stats: {
         audioBitrate: 0, videoBitrate: 0, packetLoss: 0, jitter: 0,
         roundTripTime: 0, bytesSent: 0, bytesReceived: 0,
-        lastStatsAt: Date.now(), prevBytesSent: 0,
+        lastStatsAt: now, prevBytesSent: 0,
       },
+      capture: null,
+      degradation: null,
+      audioTestSignal: null,
+      videoTestSignal: null,
     };
+
+    // Initialize diagnostic tools based on config
+    if (this.config.diagDegradation) {
+      call.degradation = new DegradationDetector(this.log);
+      call.degradation.start({
+        videoTargetIntervalMs: offer.callType === 'video' ? (1000 / this.config.maxVideoFps) : undefined,
+        onDegradation: (event) => {
+          // Send degradation event to client via data channel
+          if (call.dataChannel?.readyState === 'open') {
+            try {
+              call.dataChannel.send(JSON.stringify({
+                ...event,
+                type: 'degradation-event',
+                mediaType: event.type,
+              }));
+            } catch { /* ignore */ }
+          }
+        },
+      });
+    }
+
+    if (this.config.diagRawCapture) {
+      call.capture = new RawMediaCapture(this.config.mediaCacheDir, offer.callId, this.log);
+      const videoRes = offer.callType === 'video' ? { width: this.config.maxVideoWidth, height: this.config.maxVideoHeight } : undefined;
+      call.capture.start(videoRes?.width, videoRes?.height);
+    }
 
     this.activeCalls.set(offer.callId, call);
 
@@ -335,32 +399,31 @@ export class CallHandler {
       }
     };
 
-    let disconnectTimer: ReturnType<typeof setTimeout> | null = null;
-
     peer.onconnectionstatechange = () => {
       const state = peer.connectionState;
       this.log.info(`[CALL] Connection state: ${state} for ${offer.callId}`);
 
       // Clear any pending disconnect timer on state change
-      if (disconnectTimer) {
-        clearTimeout(disconnectTimer);
-        disconnectTimer = null;
+      if (call.disconnectTimer) {
+        clearTimeout(call.disconnectTimer);
+        call.disconnectTimer = null;
       }
 
-      if (state === 'failed') {
-        this.log.warn(`[CALL] Connection failed for ${offer.callId}`);
+      if (state === 'failed' || state === 'closed') {
+        this.log.warn(`[CALL] Connection ${state} for ${offer.callId} — cleaning up`);
         this.cleanupCall(call);
       } else if (state === 'disconnected') {
         // "disconnected" is temporary — give it 30s to recover before cleaning up
         this.log.info(`[CALL] Connection temporarily disconnected for ${offer.callId}, waiting 30s...`);
-        disconnectTimer = setTimeout(() => {
-          if (peer.connectionState === 'disconnected' || peer.connectionState === 'failed') {
-            this.log.warn(`[CALL] Connection did not recover for ${offer.callId}, cleaning up`);
+        call.disconnectTimer = setTimeout(() => {
+          if (peer.connectionState !== 'connected') {
+            this.log.warn(`[CALL] Connection did not recover for ${offer.callId} (state: ${peer.connectionState}), cleaning up`);
             this.cleanupCall(call);
           }
         }, 30_000);
       } else if (state === 'connected') {
         this.log.info(`[CALL] Connection established for ${offer.callId}`);
+        call.lastActivityAt = Date.now();
       }
     };
 
@@ -398,6 +461,53 @@ export class CallHandler {
     call.dataChannel.onopen = () => {
       this.log.debug(`[CALL] Data channel opened for ${offer.callId}`);
     };
+    call.dataChannel.onmessage = (event: { data: string }) => {
+      try {
+        const msg = JSON.parse(event.data);
+        if (msg.type === 'diagnostic-config' && msg.settings) {
+          this.log.info(`[CALL] Received diagnostic config:`, msg.settings);
+          // Update live config flags
+          this.config.diagFrameTiming = msg.settings.frameTimingAlerts ?? this.config.diagFrameTiming;
+          this.config.diagRingBufferLog = msg.settings.ringBufferLogging ?? this.config.diagRingBufferLog;
+          this.config.diagRawCapture = msg.settings.rawMediaCapture ?? this.config.diagRawCapture;
+          this.config.diagCodecLog = msg.settings.codecNegotiationLog ?? this.config.diagCodecLog;
+          this.config.diagDegradation = msg.settings.degradationDetection ?? this.config.diagDegradation;
+          this.config.diagRefSignal = msg.settings.referenceSignalMode ?? this.config.diagRefSignal;
+
+          // Handle reference signal mode toggle during call
+          if (msg.settings.referenceSignalMode === true && !call.audioTestSignal) {
+            this.log.info(`[CALL] Enabling reference signal mode (440Hz)`);
+            call.audioSource?.pause();
+            call.videoSource?.pause();
+            // Start 440Hz test signal on the audio source's underlying RTCAudioSource
+            // Note: we use the wrtc nonstandard API directly
+            const { nonstandard } = this.wrtc;
+            const testAudioSrc = new nonstandard.RTCAudioSource();
+            const testTrack = testAudioSrc.createTrack();
+            call.audioTestSignal = new AudioTestSignal(testAudioSrc);
+            call.audioTestSignal.start();
+          } else if (msg.settings.referenceSignalMode === false && call.audioTestSignal) {
+            this.log.info(`[CALL] Disabling reference signal mode`);
+            call.audioTestSignal.stop();
+            call.audioTestSignal = null;
+            call.audioSource?.resume();
+            call.videoSource?.resume();
+          }
+
+          // Handle raw capture toggle during call
+          if (msg.settings.rawMediaCapture === true && !call.capture) {
+            call.capture = new RawMediaCapture(this.config.mediaCacheDir, call.callId, this.log);
+            const videoRes = call.callType === 'video' ? call.videoSource?.resolution : undefined;
+            call.capture.start(videoRes?.width, videoRes?.height);
+          } else if (msg.settings.rawMediaCapture === false && call.capture?.isCapturing) {
+            call.capture.finalize();
+            call.capture = null;
+          }
+        }
+      } catch {
+        // Ignore non-JSON messages
+      }
+    };
 
     // The client's CallManager.createOffer() returns JSON.stringify({sdp, type}),
     // so offer.sdp may be a JSON string rather than the raw SDP.
@@ -418,6 +528,9 @@ export class CallHandler {
     }
 
     // Set remote offer and create answer
+    if (this.config.diagCodecLog) {
+      this.log.info(`[CODEC] Remote offer codecs:`, this.parseCodecInfo(rawSdp));
+    }
     await peer.setRemoteDescription(new this.wrtc.RTCSessionDescription({
       type: offer.sdpType || 'offer',
       sdp: rawSdp,
@@ -427,6 +540,10 @@ export class CallHandler {
 
     // Prefer high quality codecs
     answer.sdp = this.preferHighQualityCodecs(answer.sdp);
+
+    if (this.config.diagCodecLog) {
+      this.log.info(`[CODEC] Local answer codecs:`, this.parseCodecInfo(answer.sdp));
+    }
 
     await peer.setLocalDescription(answer);
 
@@ -445,10 +562,10 @@ export class CallHandler {
     this.sendCallState(friend.did, offer.callId, 'connected');
 
     // Flush any ICE candidates that arrived during ring delay
-    const pendingCandidates = this.pendingIceCandidates.get(offer.callId);
-    if (pendingCandidates && pendingCandidates.length > 0) {
-      this.log.info(`[CALL] Flushing ${pendingCandidates.length} queued ICE candidates for ${offer.callId}`);
-      for (const candidate of pendingCandidates) {
+    const pending = this.pendingIceCandidates.get(offer.callId);
+    if (pending && pending.candidates.length > 0) {
+      this.log.info(`[CALL] Flushing ${pending.candidates.length} queued ICE candidates for ${offer.callId}`);
+      for (const candidate of pending.candidates) {
         await this.addIceCandidateToCall(call, candidate);
       }
     }
@@ -491,11 +608,20 @@ export class CallHandler {
     // Pick a random video to start with
     const firstVideo = this.mediaManager.getRandomVideoFile();
     if (firstVideo) {
-      // Use video's native resolution, or default to 4K
+      // Cap resolution and FPS to stay within software encoding budget.
+      // @roamhq/wrtc uses CPU-only VP8/H264 encoding — at 1080p@30fps the
+      // encoding alone saturates 6 Broadwell cores, causing frame queuing,
+      // garbled output, and freezes. 720p@24fps keeps raw throughput at ~37MB/s
+      // (down from 93MB/s at 1080p@30fps) giving comfortable CPU headroom.
+      const maxW = this.config.maxVideoWidth;
+      const maxH = this.config.maxVideoHeight;
+      const maxFps = this.config.maxVideoFps;
       const res = firstVideo.resolution ? parseResolution(firstVideo.resolution) : null;
-      const width = res?.width ?? 3840;
-      const height = res?.height ?? 2160;
-      const fps = 30;
+      const nativeW = res?.width ?? maxW;
+      const nativeH = res?.height ?? maxH;
+      const width = Math.min(nativeW, maxW);
+      const height = Math.min(nativeH, maxH);
+      const fps = maxFps;
 
       this.log.info(`[CALL] Starting video: ${firstVideo.name} (${width}x${height}@${fps}fps)`);
 
@@ -510,8 +636,9 @@ export class CallHandler {
           if (next && call.videoSource) {
             const nextRes = next.resolution ? parseResolution(next.resolution) : null;
             call.videoSource.switchVideo(next.path, {
-              width: nextRes?.width ?? width,
-              height: nextRes?.height ?? height,
+              width: Math.min(nextRes?.width ?? maxW, maxW),
+              height: Math.min(nextRes?.height ?? maxH, maxH),
+              fps: maxFps,
             });
           }
         },
@@ -570,6 +697,24 @@ export class CallHandler {
     return '🔊 Video removed. Audio-only call.';
   }
 
+  // ── SDP diagnostics ─────────────────────────────────────────────────────
+
+  private parseCodecInfo(sdp: string): { audio: string[]; video: string[] } {
+    const audio: string[] = [];
+    const video: string[] = [];
+    for (const line of sdp.split('\r\n')) {
+      if (line.startsWith('a=rtpmap:')) {
+        const match = line.match(/a=rtpmap:\d+ (.+)/);
+        if (match) {
+          const codec = match[1];
+          if (codec.includes('/90000')) video.push(codec);
+          else audio.push(codec);
+        }
+      }
+    }
+    return { audio, video };
+  }
+
   // ── SDP manipulation ──────────────────────────────────────────────────────
 
   private preferHighQualityCodecs(sdp: string): string {
@@ -585,6 +730,37 @@ export class CallHandler {
         },
       );
     }
+
+    // Prefer H264 over VP8 — better hardware acceleration on most devices.
+    // Move H264 payload types to the front of the m=video line.
+    const lines = sdp.split('\r\n');
+    const h264PayloadTypes: string[] = [];
+    for (const line of lines) {
+      const match = line.match(/^a=rtpmap:(\d+)\s+H264\//i);
+      if (match) h264PayloadTypes.push(match[1]);
+    }
+
+    if (h264PayloadTypes.length > 0) {
+      for (let i = 0; i < lines.length; i++) {
+        if (lines[i].startsWith('m=video ')) {
+          const parts = lines[i].split(' ');
+          // parts: m=video <port> <proto> <payload types...>
+          if (parts.length > 3) {
+            const header = parts.slice(0, 3);
+            const payloads = parts.slice(3);
+            // Move H264 payloads to front, keep others in order
+            const reordered = [
+              ...h264PayloadTypes.filter(pt => payloads.includes(pt)),
+              ...payloads.filter(pt => !h264PayloadTypes.includes(pt)),
+            ];
+            lines[i] = [...header, ...reordered].join(' ');
+          }
+          break;
+        }
+      }
+      sdp = lines.join('\r\n');
+    }
+
     return sdp;
   }
 
@@ -623,6 +799,7 @@ export class CallHandler {
         call.stats.bytesSent = totalBytesSent;
         call.stats.bytesReceived = totalBytesReceived;
         call.stats.lastStatsAt = now;
+        call.lastActivityAt = now; // Touch for watchdog
       } catch {
         // Stats may fail during teardown
       }
@@ -644,16 +821,49 @@ export class CallHandler {
           audio: call.audioSource ? {
             playing: call.audioSource.isPlaying,
             file: call.audioSource.currentFile,
+            bufferMs: call.audioSource.bufferMs,
+            underruns: call.audioSource.underrunCount,
+            framesDelivered: call.audioSource.framesDelivered,
           } : null,
           video: call.videoSource ? {
             playing: call.videoSource.isPlaying,
             file: call.videoSource.currentFile,
+            width: call.videoSource.resolution.width,
+            height: call.videoSource.resolution.height,
+            fps: call.videoSource.targetFps,
+            bufferedFrames: call.videoSource.bufferedFrames,
+            bufferHealth: Math.round(call.videoSource.bufferHealth * 100) / 100,
+            droppedFrames: call.videoSource.droppedFrames,
+            framesDelivered: call.videoSource.framesDelivered,
           } : null,
           stats: {
             bitrate: call.stats.audioBitrate,
             packetLoss: call.stats.packetLoss,
             rtt: call.stats.roundTripTime,
           },
+          diagnostics: this.config.diagFrameTiming ? {
+            video: call.videoSource ? {
+              timingAlerts: call.videoSource.timingAlerts,
+              avgIntervalMs: Math.round(call.videoSource.avgIntervalMs * 100) / 100,
+            } : null,
+            audio: call.audioSource ? {
+              timingAlerts: call.audioSource.timingAlerts,
+              avgIntervalMs: Math.round(call.audioSource.avgIntervalMs * 100) / 100,
+              ringBuffer: this.config.diagRingBufferLog
+                ? call.audioSource.ringBufferState
+                : undefined,
+              underrunCount: call.audioSource.underrunCount,
+            } : null,
+            degradation: call.degradation ? {
+              eventCount: call.degradation.degradationCount,
+            } : undefined,
+            capture: call.capture?.isCapturing ? call.capture.stats : undefined,
+            refSignal: call.audioTestSignal ? {
+              framesDelivered: call.audioTestSignal.framesDelivered,
+            } : undefined,
+          } : undefined,
+          // Server timestamp for latency calculation
+          serverTime: Date.now(),
         };
         call.dataChannel.send(JSON.stringify(metadata));
       } catch {
@@ -812,11 +1022,14 @@ export class CallHandler {
     if (!call?.videoSource) return 'No active video call.';
 
     const res = video.resolution ? parseResolution(video.resolution) : null;
+    const maxW = this.config.maxVideoWidth;
+    const maxH = this.config.maxVideoHeight;
     call.videoSource.switchVideo(video.path, {
-      width: res?.width,
-      height: res?.height,
+      width: Math.min(res?.width ?? maxW, maxW),
+      height: Math.min(res?.height ?? maxH, maxH),
+      fps: this.config.maxVideoFps,
     });
-    return `📹 Now playing: ${video.name}`;
+    return `📹 Now playing: ${video.name} (${Math.min(res?.width ?? maxW, maxW)}x${Math.min(res?.height ?? maxH, maxH)})`;
   }
 
   private cmdNextVideo(senderDid: string): string {
@@ -827,11 +1040,14 @@ export class CallHandler {
     if (!call?.videoSource) return 'No active video call.';
 
     const res = next.resolution ? parseResolution(next.resolution) : null;
+    const maxW = this.config.maxVideoWidth;
+    const maxH = this.config.maxVideoHeight;
     call.videoSource.switchVideo(next.path, {
-      width: res?.width,
-      height: res?.height,
+      width: Math.min(res?.width ?? maxW, maxW),
+      height: Math.min(res?.height ?? maxH, maxH),
+      fps: this.config.maxVideoFps,
     });
-    return `📹 Now playing: ${next.name}`;
+    return `📹 Now playing: ${next.name} (${Math.min(res?.width ?? maxW, maxW)}x${Math.min(res?.height ?? maxH, maxH)})`;
   }
 
   private async cmdUpgrade(senderDid: string): Promise<string> {
@@ -1023,17 +1239,99 @@ export class CallHandler {
   }
 
   private cleanupCall(call: ActiveCall): void {
+    // Guard against double-cleanup (e.g., disconnect timer fires after explicit end)
+    if (call.cleanedUp) {
+      this.log.debug(`[CALL] Skipping duplicate cleanup for ${call.callId}`);
+      return;
+    }
+    call.cleanedUp = true;
+
+    // Clear disconnect timer if pending
+    if (call.disconnectTimer) {
+      clearTimeout(call.disconnectTimer);
+      call.disconnectTimer = null;
+    }
+
     call.audioSource?.stop();
     call.videoSource?.stop();
+    call.audioTestSignal?.stop();
+    call.videoTestSignal?.stop();
 
-    if (call.statsInterval) clearInterval(call.statsInterval);
-    if (call.metadataInterval) clearInterval(call.metadataInterval);
+    if (call.statsInterval) { clearInterval(call.statsInterval); call.statsInterval = null; }
+    if (call.metadataInterval) { clearInterval(call.metadataInterval); call.metadataInterval = null; }
+
+    // Close data channel
+    if (call.dataChannel) {
+      try { call.dataChannel.close(); } catch { /* ignore */ }
+      call.dataChannel = null;
+    }
+
+    // Finalize diagnostic tools
+    if (call.capture?.isCapturing) {
+      const result = call.capture.finalize();
+      this.log.info(`[CALL] Media capture finalized: audio=${result.audioPath}, video=${result.videoPath}, duration=${result.durationMs}ms`);
+    }
+    if (call.degradation) {
+      const diag = call.degradation.diagnostics;
+      if (diag.events.length > 0) {
+        this.log.info(`[CALL] Degradation summary: ${diag.events.length} events in ${diag.elapsedMs}ms`);
+      }
+      call.degradation.stop();
+    }
 
     try { call.peer.close(); } catch { /* ignore */ }
 
     this.activeCalls.delete(call.callId);
     this.pendingIceCandidates.delete(call.callId);
-    this.log.info(`[CALL] Cleaned up call: ${call.callId}`);
+    const duration = Math.round((Date.now() - call.startedAt) / 1000);
+    this.log.info(`[CALL] Cleaned up call: ${call.callId} (duration: ${duration}s, remaining: ${this.activeCalls.size})`);
+  }
+
+  // ── Watchdog ──────────────────────────────────────────────────────────────
+
+  private startWatchdog(): void {
+    this.watchdogInterval = setInterval(() => {
+      const now = Date.now();
+
+      // Check for stale calls
+      for (const call of this.activeCalls.values()) {
+        const idleMs = now - call.lastActivityAt;
+        const peerState = call.peer?.connectionState;
+
+        // Force-cleanup calls where the peer is in a terminal state
+        if (peerState === 'closed' || peerState === 'failed') {
+          this.log.warn(`[WATCHDOG] Call ${call.callId} peer is ${peerState} — forcing cleanup`);
+          this.cleanupCall(call);
+          continue;
+        }
+
+        // Force-cleanup calls with no activity for STALE_CALL_TIMEOUT_MS
+        if (idleMs > STALE_CALL_TIMEOUT_MS) {
+          this.log.warn(`[WATCHDOG] Call ${call.callId} stale (idle ${Math.round(idleMs / 1000)}s) — forcing cleanup`);
+          this.sendCallEnd(call.peerDid, call.callId, 'timeout');
+          this.cleanupCall(call);
+        }
+      }
+
+      // Clean orphaned pending ICE candidates
+      for (const [callId, pending] of this.pendingIceCandidates) {
+        if (now - pending.createdAt > PENDING_ICE_TIMEOUT_MS) {
+          this.log.debug(`[WATCHDOG] Dropping ${pending.candidates.length} orphaned ICE candidates for ${callId}`);
+          this.pendingIceCandidates.delete(callId);
+        }
+      }
+
+      if (this.activeCalls.size > 0) {
+        this.log.debug(`[WATCHDOG] Active calls: ${this.activeCalls.size}, pending ICE queues: ${this.pendingIceCandidates.size}`);
+      }
+    }, WATCHDOG_INTERVAL_MS);
+  }
+
+  private stopWatchdog(): void {
+    if (this.watchdogInterval) {
+      clearInterval(this.watchdogInterval);
+      this.watchdogInterval = null;
+    }
   }
 
   // ── Public API ────────────────────────────────────────────────────────────
@@ -1043,6 +1341,8 @@ export class CallHandler {
       this.sendCallEnd(call.peerDid, call.callId, 'shutdown');
       this.cleanupCall(call);
     }
+    this.pendingIceCandidates.clear();
+    this.stopWatchdog();
   }
 
   getActiveCalls(): ActiveCallInfo[] {

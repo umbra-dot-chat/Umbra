@@ -57,6 +57,26 @@ export interface GhostConfig {
   callStatsIntervalMs: number;
   /** Interval for data channel metadata broadcast (ms) */
   metadataBroadcastMs: number;
+  /** Max video width for WebRTC encoding (capped to stay within CPU budget) */
+  maxVideoWidth: number;
+  /** Max video height for WebRTC encoding */
+  maxVideoHeight: number;
+  /** Max video FPS for WebRTC encoding */
+  maxVideoFps: number;
+
+  // ── Diagnostics ──────────────────────────────────────────────────────
+  /** Enable frame timing alerts (lightweight) */
+  diagFrameTiming: boolean;
+  /** Enable audio ring buffer state logging (lightweight) */
+  diagRingBufferLog: boolean;
+  /** Enable raw PCM/I420 capture to disk (heavy I/O) */
+  diagRawCapture: boolean;
+  /** Enable codec negotiation logging (lightweight) */
+  diagCodecLog: boolean;
+  /** Enable degradation detection + auto-capture (lightweight) */
+  diagDegradation: boolean;
+  /** Enable 440Hz reference signal mode (test mode) */
+  diagRefSignal: boolean;
 }
 
 const LOG_LEVELS = { debug: 0, info: 1, warn: 2, error: 3 } as const;
@@ -80,8 +100,19 @@ export function loadConfig(opts: Record<string, string | undefined>): GhostConfi
     mediaConfigPath: opts.mediaConfig || process.env.MEDIA_CONFIG || './media.config.json',
     mediaCacheDir: opts.mediaCacheDir || process.env.MEDIA_CACHE_DIR || join(dataDir, 'media'),
     iceServers: DEFAULT_ICE_SERVERS,
-    callStatsIntervalMs: 2000,
-    metadataBroadcastMs: 2000,
+    callStatsIntervalMs: 1000,
+    metadataBroadcastMs: 1000,
+    maxVideoWidth: parseInt(process.env.MAX_VIDEO_WIDTH || '1280', 10),
+    maxVideoHeight: parseInt(process.env.MAX_VIDEO_HEIGHT || '720', 10),
+    maxVideoFps: parseInt(process.env.MAX_VIDEO_FPS || '24', 10),
+
+    // Diagnostic defaults (lightweight ones on by default)
+    diagFrameTiming: (process.env.GHOST_DIAG_FRAME_TIMING || 'true') === 'true',
+    diagRingBufferLog: (process.env.GHOST_DIAG_RING_BUFFER || 'true') === 'true',
+    diagRawCapture: (process.env.GHOST_DIAG_RAW_CAPTURE || 'false') === 'true',
+    diagCodecLog: (process.env.GHOST_DIAG_CODEC_LOG || 'true') === 'true',
+    diagDegradation: (process.env.GHOST_DIAG_DEGRADATION || 'true') === 'true',
+    diagRefSignal: (process.env.GHOST_DIAG_REF_SIGNAL || 'false') === 'true',
   };
 }
 

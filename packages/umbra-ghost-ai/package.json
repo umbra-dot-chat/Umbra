@@ -8,7 +8,9 @@
     "dev": "tsx src/index.ts",
     "build": "tsc",
     "start": "node dist/index.js",
-    "start:en": "node dist/index.js --language en --relay wss://relay.umbra.chat/ws --model llama3.1"
+    "start:en": "node dist/index.js --language en --relay wss://relay.umbra.chat/ws --model llama3.1",
+    "test-call": "tsx src/test-call.ts",
+    "loopback-test": "tsx src/loopback-test.ts"
   },
   "dependencies": {
     "@noble/ciphers": "^1.2.0",
