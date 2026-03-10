@@ -61,7 +61,7 @@ export function SidebarCallPanel({
             backgroundColor: colors.background.sunken,
             alignItems: 'center',
             justifyContent: 'center',
-            borderRadius: 6,
+            borderRadius: 8,
           }}>
             <Avatar name={activeCall.remoteDisplayName} size="sm" />
           </View>
@@ -85,7 +85,7 @@ export function SidebarCallPanel({
         alignItems: 'center',
         gap: 8,
         marginTop: 4,
-        paddingHorizontal: 2,
+        paddingHorizontal: 4,
         height: 24,
       }}>
         <Avatar name={activeCall.remoteDisplayName} size="xs" />
