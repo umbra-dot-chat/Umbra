@@ -4,9 +4,9 @@
  * composition of JustifiedVideoGrid, CallControlsOverlay, and VoiceAvatarCard.
  */
 
-import React, { useState, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { View, Pressable, Platform, useWindowDimensions } from 'react-native';
-import { Text, useTheme } from '@coexist/wisp-react-native';
+import { Text, SegmentedControl, VideoTile, useTheme } from '@coexist/wisp-react-native';
 import { SlotRenderer } from '@/components/plugins/SlotRenderer';
 import { CallStatsOverlay, type GhostMetadata } from '@/components/call/CallStatsOverlay';
 import { JustifiedVideoGrid } from '@/components/call/JustifiedVideoGrid';
@@ -27,6 +27,7 @@ interface ActiveCallPanelProps {
   callStats: CallStats | null;
   ghostMetadata: GhostMetadata | null;
   isScreenSharing: boolean;
+  screenShareStream: MediaStream | null;
   onToggleMute: () => void;
   onToggleCamera: () => void;
   onToggleScreenShare: () => void;
@@ -45,6 +46,7 @@ export function ActiveCallPanel({
   callStats,
   ghostMetadata,
   isScreenSharing,
+  screenShareStream,
   onToggleMute,
   onToggleCamera,
   onToggleScreenShare,
@@ -69,6 +71,21 @@ export function ActiveCallPanel({
 
   const hasVideo = activeCall.callType === 'video';
 
+  // Screen share tab state
+  const anyScreenSharing = isScreenSharing ||
+    participantList.some((p) => p.isScreenSharing);
+  const [screenTab, setScreenTab] = useState<string>('screen');
+
+  // Default to "screen" tab when screen sharing starts
+  useEffect(() => {
+    if (anyScreenSharing) setScreenTab('screen');
+  }, [anyScreenSharing]);
+
+  const screenTabOptions = useMemo(() => [
+    { value: 'screen', label: 'Screen' },
+    { value: 'participants', label: 'Participants' },
+  ], []);
+
   return (
     <View
       style={{
@@ -83,14 +100,41 @@ export function ActiveCallPanel({
 
       {/* Main call area */}
       <View style={{ flex: 1, position: 'relative' }}>
+        {/* Screen share tab bar */}
+        {anyScreenSharing && hasVideo && (
+          <View style={{ paddingHorizontal: 12, paddingTop: 8, zIndex: 20 }}>
+            <SegmentedControl
+              options={screenTabOptions}
+              value={screenTab}
+              onChange={setScreenTab}
+              size="sm"
+            />
+          </View>
+        )}
+
         {hasVideo ? (
-          <JustifiedVideoGrid
-            participants={participantList}
-            selfViewVisible={activeCall.selfViewVisible}
-            localDid={localDid}
-            activeSpeakerDid={activeSpeakerDid}
-            speakingDids={speakingDids}
-          />
+          anyScreenSharing && screenTab === 'screen' && screenShareStream ? (
+            /* Screen share view: full-width tile with the shared screen */
+            <View style={{ flex: 1, padding: 8 }}>
+              <VideoTile
+                stream={screenShareStream}
+                displayName="Screen Share"
+                isMuted={false}
+                isCameraOff={false}
+                isSpeaking={false}
+                size="full"
+                style={{ flex: 1, borderRadius: 12 }}
+              />
+            </View>
+          ) : (
+            <JustifiedVideoGrid
+              participants={participantList}
+              selfViewVisible={activeCall.selfViewVisible}
+              localDid={localDid}
+              activeSpeakerDid={activeSpeakerDid}
+              speakingDids={speakingDids}
+            />
+          )
         ) : (
           /* Voice-only: render avatar cards in a simple flex grid */
           <View
