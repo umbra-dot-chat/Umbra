@@ -12,6 +12,12 @@
       "runtimeExecutable": "npm",
       "runtimeArgs": ["run", "dev", "--prefix", "/Users/infamousvague/Development/UmbraMarketing/site"],
       "port": 3000
+    },
+    {
+      "name": "mockup-server",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["serve", "-l", "3333", "--no-clipboard", "-s", "/Users/mattmattmattmatt/Development/Umbra/.claude/worktrees/flamboyant-liskov"],
+      "port": 3333
     }
   ]
 }

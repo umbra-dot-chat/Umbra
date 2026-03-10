@@ -35,6 +35,13 @@ export interface StoredReminder {
   fired: number;
 }
 
+export interface StoredTutorState {
+  userDid: string;
+  language: string;
+  score: number;
+  updatedAt: number;
+}
+
 export class ContextStore {
   private db: Database.Database;
   private log: Logger;
@@ -84,6 +91,13 @@ export class ContextStore {
         fired INTEGER NOT NULL DEFAULT 0
       );
       CREATE INDEX IF NOT EXISTS idx_reminders_fire ON reminders(fired, fire_at);
+
+      CREATE TABLE IF NOT EXISTS user_tutor_state (
+        user_did TEXT PRIMARY KEY,
+        language TEXT NOT NULL,
+        score REAL NOT NULL DEFAULT 0,
+        updated_at INTEGER NOT NULL
+      );
     `);
   }
 
@@ -184,6 +198,30 @@ export class ContextStore {
 
   markReminderFired(id: string): void {
     this.db.prepare('UPDATE reminders SET fired = 1 WHERE id = ?').run(id);
+  }
+
+  // ─── Tutor State ─────────────────────────────────────────────────────
+
+  setUserTutorState(state: StoredTutorState): void {
+    this.db.prepare(`
+      INSERT OR REPLACE INTO user_tutor_state (user_did, language, score, updated_at)
+      VALUES (?, ?, ?, ?)
+    `).run(state.userDid, state.language, state.score, state.updatedAt);
+  }
+
+  getUserTutorState(userDid: string): StoredTutorState | null {
+    const row = this.db.prepare('SELECT * FROM user_tutor_state WHERE user_did = ?').get(userDid) as any;
+    if (!row) return null;
+    return {
+      userDid: row.user_did,
+      language: row.language,
+      score: row.score,
+      updatedAt: row.updated_at,
+    };
+  }
+
+  clearUserTutorState(userDid: string): void {
+    this.db.prepare('DELETE FROM user_tutor_state WHERE user_did = ?').run(userDid);
   }
 
   close(): void {

@@ -1,0 +1,15 @@
+{
+  "id": "com.umbra.language-tutor",
+  "name": "Language Tutor",
+  "version": "1.0.0",
+  "description": "Learn languages naturally by chatting with Ghost. Activates language mixing and inline vocabulary annotations.",
+  "author": { "name": "Umbra Team", "url": "https://umbra.chat" },
+  "platforms": ["web", "desktop", "mobile"],
+  "permissions": ["messages:read", "messages:write", "storage:kv", "commands", "notifications", "friends:read", "conversations:read"],
+  "slots": [
+    { "slot": "chat-header", "component": "TutorStatusBanner", "priority": 30 },
+    { "slot": "message-decorator", "component": "MessageDecorator", "priority": 40 }
+  ],
+  "entryPoint": "dist/bundle.js",
+  "storage": { "kv": true }
+}

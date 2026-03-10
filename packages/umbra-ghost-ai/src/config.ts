@@ -2,6 +2,9 @@
  * Ghost configuration — loaded from CLI args + environment variables.
  */
 
+import { join } from 'path';
+
+
 export interface IceServer {
   urls: string | string[];
   username?: string;
@@ -11,6 +14,12 @@ export interface IceServer {
 export const DEFAULT_ICE_SERVERS: IceServer[] = [
   { urls: 'stun:stun.l.google.com:19302' },
   { urls: 'stun:stun1.l.google.com:19302' },
+  {
+    urls: [
+      'turn:turn.umbra.chat:3478?transport=udp',
+      'turn:turn.umbra.chat:3478?transport=tcp',
+    ],
+  },
 ];
 
 export interface GhostConfig {
@@ -32,39 +41,44 @@ export interface GhostConfig {
   httpPort: number;
   /** Log level */
   logLevel: 'debug' | 'info' | 'warn' | 'error';
+
+  // ── Call handling ────────────────────────────────────────────────────
   /** Enable call handling */
   callEnabled: boolean;
   /** Fake ring delay before answering (ms) */
   callRingDelayMs: number;
   /** Path to media config JSON */
   mediaConfigPath: string;
-  /** Directory to cache downloaded media */
+  /** Directory for cached media files */
   mediaCacheDir: string;
   /** ICE servers for WebRTC */
   iceServers: IceServer[];
-  /** How often to collect WebRTC stats (ms) */
+  /** Interval for WebRTC stats collection (ms) */
   callStatsIntervalMs: number;
-  /** How often to broadcast metadata via data channel (ms) */
+  /** Interval for data channel metadata broadcast (ms) */
   metadataBroadcastMs: number;
 }
 
 const LOG_LEVELS = { debug: 0, info: 1, warn: 2, error: 3 } as const;
 
 export function loadConfig(opts: Record<string, string | undefined>): GhostConfig {
+  const dataDir = opts.dataDir || process.env.DATA_DIR || './data';
   return {
     relayUrl: opts.relay || process.env.RELAY_URL || 'wss://relay.umbra.chat/ws',
     ollamaUrl: opts.ollama || process.env.OLLAMA_URL || 'http://localhost:11434',
     model: opts.model || process.env.MODEL || 'llama3.1',
     embedModel: opts.embedModel || process.env.EMBED_MODEL || 'nomic-embed-text',
     language: (opts.language || process.env.LANGUAGE || 'en') as 'en' | 'ko',
-    dataDir: opts.dataDir || process.env.DATA_DIR || './data',
+    dataDir,
     codebasePath: opts.codebasePath || process.env.CODEBASE_PATH || '../Umbra',
     httpPort: parseInt(opts.httpPort || process.env.HTTP_PORT || '3333', 10),
     logLevel: (opts.logLevel || process.env.LOG_LEVEL || 'info') as GhostConfig['logLevel'],
+
+    // Call defaults
     callEnabled: (opts.callEnabled || process.env.CALL_ENABLED || 'true') === 'true',
     callRingDelayMs: parseInt(opts.callRingDelay || process.env.CALL_RING_DELAY || '2500', 10),
-    mediaConfigPath: opts.mediaConfig || process.env.MEDIA_CONFIG || 'media.config.json',
-    mediaCacheDir: opts.mediaCacheDir || process.env.MEDIA_CACHE_DIR || '',
+    mediaConfigPath: opts.mediaConfig || process.env.MEDIA_CONFIG || './media.config.json',
+    mediaCacheDir: opts.mediaCacheDir || process.env.MEDIA_CACHE_DIR || join(dataDir, 'media'),
     iceServers: DEFAULT_ICE_SERVERS,
     callStatsIntervalMs: 2000,
     metadataBroadcastMs: 2000,

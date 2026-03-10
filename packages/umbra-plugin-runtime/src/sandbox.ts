@@ -14,6 +14,8 @@ import type {
   PluginSQLStore,
   PluginCommand,
   PluginShortcut,
+  SlashCommand,
+  TextTransform,
   PluginMessage,
   PluginFriend,
   PluginConversation,
@@ -88,6 +90,12 @@ export interface ServiceBridge {
 
   // Shortcuts
   registerShortcut(pluginId: string, shortcut: PluginShortcut): () => void;
+
+  // Slash commands
+  registerSlashCommand(pluginId: string, cmd: SlashCommand): () => void;
+
+  // Text transforms
+  registerTextTransform(pluginId: string, transform: TextTransform): () => void;
 }
 
 // =============================================================================
@@ -252,6 +260,22 @@ export function createSandboxedAPI(
     registerShortcut: (shortcut) => {
       requirePermission('shortcuts', 'registerShortcut');
       const unsub = bridge.registerShortcut(pluginId, shortcut);
+      subscriptions.push(unsub);
+      return unsub;
+    },
+
+    // ── Slash commands ───────────────────────────────────────────────
+    registerSlashCommand: (cmd) => {
+      requirePermission('commands', 'registerSlashCommand');
+      const unsub = bridge.registerSlashCommand(pluginId, cmd);
+      subscriptions.push(unsub);
+      return unsub;
+    },
+
+    // ── Text transforms ─────────────────────────────────────────────
+    registerTextTransform: (transform) => {
+      requirePermission('messages:read', 'registerTextTransform');
+      const unsub = bridge.registerTextTransform(pluginId, transform);
       subscriptions.push(unsub);
       return unsub;
     },

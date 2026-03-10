@@ -37,6 +37,7 @@ import type {
   FriendResponsePayload,
   FriendAcceptAckPayload,
   ChatMessagePayload,
+  ChatMessageUpdatePayload,
   TypingIndicatorPayload,
   GroupInvitePayload,
   GroupInviteResponsePayload,
@@ -580,6 +581,22 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
               service.sendDeliveryReceipt(chatPayload.messageId, chatPayload.conversationId, chatPayload.senderDid, 'delivered', ws).catch((err: any) => console.warn('[useNetwork] Failed to send delivery receipt:', err));
             } catch (err) { console.warn('[useNetwork] Failed to store incoming chat message:', err); }
 
+          } else if (envelope.envelope === 'chat_message_update' && envelope.version === 1) {
+            // Streaming/progressive update — decrypt and update existing message in-place
+            const updatePayload = envelope.payload as ChatMessageUpdatePayload;
+            try {
+              // Reuse decryptIncomingMessage with the same payload shape
+              const decryptedText = await service.decryptIncomingMessage(updatePayload as ChatMessagePayload);
+              if (decryptedText) {
+                // Dispatch content update (NOT messageEdited — avoids "(edited)" label)
+                service.dispatchMessageEvent({
+                  type: 'messageContentUpdated',
+                  messageId: updatePayload.messageId,
+                  newText: decryptedText,
+                });
+              }
+            } catch (err) { console.warn('[useNetwork] Failed to process chat_message_update:', err); }
+
           } else if (envelope.envelope === 'group_invite' && envelope.version === 1) {
             const invitePayload = envelope.payload as GroupInvitePayload;
             try {
@@ -757,6 +774,14 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
                 } else if (chatPayload.threadId) { service.dispatchMessageEvent({ type: 'threadReplyReceived', message: { id: chatPayload.messageId, conversationId: chatPayload.conversationId, senderDid: chatPayload.senderDid, content: { type: 'text', text: decryptedText }, timestamp: chatPayload.timestamp, read: false, delivered: true, status: 'delivered', threadId: chatPayload.threadId }, parentId: chatPayload.threadId });
                 } else { service.dispatchMessageEvent({ type: 'messageReceived', message: { id: chatPayload.messageId, conversationId: chatPayload.conversationId, senderDid: chatPayload.senderDid, content: { type: 'text', text: decryptedText }, timestamp: chatPayload.timestamp, read: false, delivered: true, status: 'delivered' } }); await maybeRegisterIncomingFile(service, chatPayload.conversationId, chatPayload.senderDid, decryptedText); }
               } catch (err) { console.warn('[useNetwork] Failed to store offline chat message:', err); }
+            } else if (envelope.envelope === 'chat_message_update' && envelope.version === 1) {
+              const updatePayload = envelope.payload as ChatMessageUpdatePayload;
+              try {
+                const decryptedText = await service.decryptIncomingMessage(updatePayload as ChatMessagePayload);
+                if (decryptedText) {
+                  service.dispatchMessageEvent({ type: 'messageContentUpdated', messageId: updatePayload.messageId, newText: decryptedText });
+                }
+              } catch (err) { console.warn('[useNetwork] Failed to process offline chat_message_update:', err); }
             } else if (envelope.envelope === 'group_invite' && envelope.version === 1) {
               const invitePayload = envelope.payload as GroupInvitePayload;
               try { await service.storeGroupInvite(invitePayload); service.dispatchGroupEvent({ type: 'inviteReceived', invite: { id: invitePayload.inviteId, groupId: invitePayload.groupId, groupName: invitePayload.groupName, description: invitePayload.description, inviterDid: invitePayload.inviterDid, inviterName: invitePayload.inviterName, encryptedGroupKey: invitePayload.encryptedGroupKey, nonce: invitePayload.nonce, membersJson: invitePayload.membersJson, status: 'pending', createdAt: invitePayload.timestamp } }); } catch (err) { console.warn('[useNetwork] Failed to store offline group invite:', err); }

@@ -1,5 +1,9 @@
 /**
  * Message handler — receives encrypted messages, processes with LLM, sends encrypted responses.
+ *
+ * Supports streaming: if the LLM provider implements `chatStream`, Ghost sends
+ * an initial placeholder message then progressively updates it via
+ * `chat_message_update` envelopes.
  */
 
 import { decryptMessage, encryptMessage, uuid, type GhostIdentity } from '../crypto.js';
@@ -20,6 +24,11 @@ export interface IncomingMessage {
   timestamp: number;
   threadId?: string;
 }
+
+// Regex patterns for tutor score tags
+const TUTOR_TAG_REGEX = /\[TUTOR-\w+-([\d.]+)\]/;
+const TUTOR_TAG_FALLBACK = /TUTOR[- ]\w+[- ]([\d.]+)/i;
+const TUTOR_TAG_STRIP = /\[TUTOR-\w+-[\d.]+\]\s*/g;
 
 export async function handleMessage(
   msg: IncomingMessage,
@@ -71,6 +80,34 @@ export async function handleMessage(
   // Send typing indicator
   sendTypingIndicator(identity, relay, friend);
 
+  // Detect /tutor commands (sent by the Language Tutor plugin)
+  const tutorCmdMatch = plaintext.match(/^\/tutor\s+(.+)$/i);
+  if (tutorCmdMatch) {
+    const tutorArg = tutorCmdMatch[1].trim().toLowerCase();
+
+    if (tutorArg === 'stop' || tutorArg === 'off') {
+      store.clearUserTutorState(msg.senderDid);
+      log.info(`Tutor mode deactivated for ${friend.displayName}`);
+      const confirmText = `Language tutor mode deactivated. Back to normal chatting! 👋`;
+      await sendResponse(confirmText, identity, relay, store, friend, log);
+      return;
+    }
+
+    // Treat the argument as a language name
+    const existingState = store.getUserTutorState(msg.senderDid);
+    const prevScore = existingState?.score ?? 0;
+    store.setUserTutorState({
+      userDid: msg.senderDid,
+      language: tutorArg,
+      score: prevScore,
+      updatedAt: Date.now(),
+    });
+    log.info(`Tutor mode activated for ${friend.displayName}: ${tutorArg} (score: ${prevScore})`);
+    // Replace the raw /tutor command with a natural prompt for the LLM
+    plaintext = `I'd like to practice ${tutorArg}. Let's start chatting!`;
+  }
+
+
   // Detect /ghost commands (call control, file sending, etc.)
   const ghostCmdMatch = plaintext.match(/^\/ghost\s+(.+)$/i);
   if (ghostCmdMatch && callHandler) {
@@ -97,11 +134,16 @@ export async function handleMessage(
   const history = store.getRecentMessages(msg.conversationId, 20);
   const messages: ChatMessage[] = [];
 
-  // System prompt
-  let systemContent = getSystemPrompt(language);
+  // System prompt — pass tutor config so the language section is replaced (not overridden)
+  const tutorState = store.getUserTutorState(msg.senderDid);
+  let systemContent = getSystemPrompt(
+    language,
+    tutorState ? { language: tutorState.language, score: tutorState.score } : null,
+  );
   if (codebaseContext) {
     systemContent += '\n\n## Relevant Codebase Context\n' + codebaseContext;
   }
+
   messages.push({ role: 'system', content: systemContent });
 
   // Conversation history
@@ -114,11 +156,159 @@ export async function handleMessage(
     messages.push({ role: 'user', content: plaintext });
   }
 
-  // Call LLM
-  const responseText = await llm.chat(messages);
+  // ── Generate response (streaming or non-streaming) ──────────────────────
 
-  // Send response
-  await sendResponse(responseText, identity, relay, store, friend, log);
+  let responseText: string;
+
+  if (llm.chatStream) {
+    // Streaming mode: send an initial placeholder, then progressively update
+    const responseMessageId = uuid();
+    const initialText = '...';
+
+    // Send initial placeholder message
+    sendEncryptedMessage(responseMessageId, initialText, identity, relay, friend);
+
+    // Stream LLM response with throttled updates
+    responseText = await llm.chatStream(messages, (accumulated) => {
+      sendMessageUpdate(responseMessageId, accumulated, identity, relay, friend);
+    });
+
+    // Parse and strip tutor score from the final response
+    if (tutorState) {
+      parseTutorScore(responseText, tutorState, store, friend, log);
+    }
+    const cleanedResponse = tutorState
+      ? responseText.replace(TUTOR_TAG_STRIP, '')
+      : responseText;
+
+    // Send final update with clean text
+    sendMessageUpdate(responseMessageId, cleanedResponse, identity, relay, friend);
+
+    // Save the clean final version to context store
+    store.saveMessage({
+      id: responseMessageId,
+      conversationId: friend.conversationId,
+      role: 'assistant',
+      content: cleanedResponse,
+      timestamp: Date.now(),
+    });
+
+    log.info(`Streamed reply to ${friend.displayName}: "${cleanedResponse.slice(0, 100)}${cleanedResponse.length > 100 ? '...' : ''}"`);
+  } else {
+    // Non-streaming mode: generate complete response then send
+    responseText = await llm.chat(messages);
+
+    // Parse and strip tutor score
+    if (tutorState) {
+      parseTutorScore(responseText, tutorState, store, friend, log);
+    }
+    const cleanedResponse = tutorState
+      ? responseText.replace(TUTOR_TAG_STRIP, '')
+      : responseText;
+
+    await sendResponse(cleanedResponse, identity, relay, store, friend, log);
+  }
+}
+
+// ── Tutor score parsing ───────────────────────────────────────────────────────
+
+function parseTutorScore(
+  responseText: string,
+  tutorState: { userDid: string; language: string; score: number; updatedAt: number },
+  store: ContextStore,
+  friend: StoredFriend,
+  log: Logger,
+): void {
+  let scoreMatch = responseText.match(TUTOR_TAG_REGEX);
+  // Fallback: try a looser pattern if the LLM didn't format perfectly
+  if (!scoreMatch) {
+    scoreMatch = responseText.match(TUTOR_TAG_FALLBACK);
+  }
+
+  if (scoreMatch) {
+    const newScore = parseFloat(scoreMatch[1]);
+    if (!isNaN(newScore) && newScore !== tutorState.score) {
+      const clampedScore = Math.min(100, Math.max(0, newScore));
+      store.setUserTutorState({
+        ...tutorState,
+        score: clampedScore,
+        updatedAt: Date.now(),
+      });
+      log.info(`Tutor score updated for ${friend.displayName}: ${tutorState.score} → ${clampedScore}`);
+    }
+  }
+}
+
+// ── Message sending helpers ───────────────────────────────────────────────────
+
+/**
+ * Send an encrypted chat_message (initial message).
+ */
+function sendEncryptedMessage(
+  messageId: string,
+  text: string,
+  identity: GhostIdentity,
+  relay: RelayClient,
+  friend: StoredFriend,
+): void {
+  const timestamp = Date.now();
+  const { ciphertext, nonce } = encryptMessage(
+    text,
+    identity.encryptionPrivateKey,
+    friend.encryptionKey,
+    identity.did,
+    friend.did,
+    timestamp,
+    friend.conversationId,
+  );
+
+  relay.sendEnvelope(friend.did, {
+    envelope: 'chat_message',
+    version: 1,
+    payload: {
+      messageId,
+      conversationId: friend.conversationId,
+      senderDid: identity.did,
+      contentEncrypted: ciphertext,
+      nonce,
+      timestamp,
+    },
+  });
+}
+
+/**
+ * Send an encrypted chat_message_update (streaming content update).
+ */
+function sendMessageUpdate(
+  messageId: string,
+  text: string,
+  identity: GhostIdentity,
+  relay: RelayClient,
+  friend: StoredFriend,
+): void {
+  const timestamp = Date.now();
+  const { ciphertext, nonce } = encryptMessage(
+    text,
+    identity.encryptionPrivateKey,
+    friend.encryptionKey,
+    identity.did,
+    friend.did,
+    timestamp,
+    friend.conversationId,
+  );
+
+  relay.sendEnvelope(friend.did, {
+    envelope: 'chat_message_update',
+    version: 1,
+    payload: {
+      messageId,
+      conversationId: friend.conversationId,
+      senderDid: identity.did,
+      contentEncrypted: ciphertext,
+      nonce,
+      timestamp,
+    },
+  });
 }
 
 async function sendResponse(

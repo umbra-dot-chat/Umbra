@@ -36,8 +36,11 @@ export class OllamaProvider implements LLMProvider {
           options: {
             temperature: 0.7,
             top_p: 0.9,
-            num_predict: 1024,
+            num_predict: 512,
+            num_ctx: 4096,
+            num_batch: 512,
           },
+          keep_alive: -1,
         }),
       });
 
@@ -53,6 +56,126 @@ export class OllamaProvider implements LLMProvider {
       return data.message.content;
     } catch (err) {
       this.log.error('Ollama chat failed:', err);
+      return "Sorry, I'm having trouble thinking right now. Try again in a moment! 🤔";
+    }
+  }
+
+  /**
+   * Stream a chat completion from Ollama. Calls `onChunk` with the accumulated
+   * response text at throttled intervals (~300ms) so the caller can send
+   * progressive updates without flooding the relay.
+   */
+  async chatStream(
+    messages: ChatMessage[],
+    onChunk: (accumulated: string) => void,
+  ): Promise<string> {
+    const startTime = Date.now();
+    this.log.debug(`Calling Ollama chat stream (model: ${this.model}, messages: ${messages.length})`);
+
+    try {
+      const res = await fetch(`${this.baseUrl}/api/chat`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          model: this.model,
+          messages,
+          stream: true,
+          options: {
+            temperature: 0.7,
+            top_p: 0.9,
+            num_predict: 512,
+            num_ctx: 4096,
+            num_batch: 512,
+          },
+          keep_alive: -1,
+        }),
+      });
+
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(`Ollama chat stream error ${res.status}: ${text}`);
+      }
+
+      let accumulated = '';
+      let lastEmitTime = 0;
+      const THROTTLE_MS = 300;
+
+      // Ollama streams NDJSON: each line is a JSON object with { message: { content: "token" }, done: bool }
+      const body = res.body;
+      if (!body) throw new Error('No response body for stream');
+
+      const reader = (body as any).getReader
+        ? (body as any).getReader()
+        : null;
+
+      if (reader) {
+        // Web-style ReadableStream (Node 18+ fetch)
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { value, done } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          // Keep the last potentially incomplete line in the buffer
+          buffer = lines.pop() ?? '';
+
+          for (const line of lines) {
+            if (!line.trim()) continue;
+            try {
+              const parsed = JSON.parse(line);
+              if (parsed.message?.content) {
+                accumulated += parsed.message.content;
+                const now = Date.now();
+                if (now - lastEmitTime >= THROTTLE_MS) {
+                  onChunk(accumulated);
+                  lastEmitTime = now;
+                }
+              }
+            } catch {
+              // Skip malformed lines
+            }
+          }
+        }
+
+        // Process any remaining buffer
+        if (buffer.trim()) {
+          try {
+            const parsed = JSON.parse(buffer);
+            if (parsed.message?.content) {
+              accumulated += parsed.message.content;
+            }
+          } catch {
+            // ignore
+          }
+        }
+      } else {
+        // Fallback: read as text (shouldn't happen but be safe)
+        const text = await res.text();
+        for (const line of text.split('\n')) {
+          if (!line.trim()) continue;
+          try {
+            const parsed = JSON.parse(line);
+            if (parsed.message?.content) {
+              accumulated += parsed.message.content;
+            }
+          } catch {
+            // skip
+          }
+        }
+      }
+
+      // Final emit
+      onChunk(accumulated);
+
+      const elapsed = Date.now() - startTime;
+      this.log.debug(`Ollama stream complete in ${elapsed}ms (${accumulated.length} chars)`);
+
+      return accumulated;
+    } catch (err) {
+      this.log.error('Ollama chat stream failed:', err);
       return "Sorry, I'm having trouble thinking right now. Try again in a moment! 🤔";
     }
   }

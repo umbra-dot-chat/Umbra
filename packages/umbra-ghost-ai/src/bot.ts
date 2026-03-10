@@ -37,10 +37,10 @@ export class GhostBot {
   private store!: ContextStore;
   private indexer!: CodebaseIndexer;
   private knowledgeDb!: Database.Database;
-  private reminderInterval: ReturnType<typeof setInterval> | null = null;
-  private httpServer: ReturnType<typeof createServer> | null = null;
   private callHandler: CallHandler | null = null;
   private mediaManager: MediaManager | null = null;
+  private reminderInterval: ReturnType<typeof setInterval> | null = null;
+  private httpServer: ReturnType<typeof createServer> | null = null;
   private running = false;
 
   constructor(config: GhostConfig) {
@@ -124,19 +124,20 @@ export class GhostBot {
       checkReminders(this.identity, this.relay, this.store, this.config.language, this.log);
     }, 30000);
 
-    // 9. Start HTTP health endpoint
-    this.startHealthServer();
-
-    // 10. Initialize call handler
+    // 9. Initialize call handling
     if (this.config.callEnabled) {
       await this.initializeCallHandler();
     }
+
+    // 10. Start HTTP health endpoint
+    this.startHealthServer();
 
     this.running = true;
     this.log.info(`Ghost is running! 👻`);
     this.log.info(`Language: ${this.config.language}`);
     this.log.info(`Relay: ${this.config.relayUrl}`);
     this.log.info(`Model: ${this.config.model}`);
+    this.log.info(`Calls: ${this.callHandler ? 'enabled' : 'disabled'}`);
     this.log.info('Waiting for messages...\n');
   }
 
@@ -152,6 +153,11 @@ export class GhostBot {
     this.knowledgeDb?.close();
     this.httpServer?.close();
     this.log.info('Ghost stopped');
+  }
+
+  /** Expose the call handler for message.ts to route /ghost commands. */
+  getCallHandler(): CallHandler | null {
+    return this.callHandler;
   }
 
   // ─── Message Routing ─────────────────────────────────────────────────
@@ -192,32 +198,25 @@ export class GhostBot {
         this.handleChatMessageEnvelope(payload, fromDid);
         break;
 
+      // ── Call signaling ──────────────────────────────────────────────
       case 'call_offer':
-        if (this.callHandler?.enabled) {
-          this.callHandler.handleCallOffer(payload);
-        }
+        this.callHandler?.handleCallOffer(payload, fromDid);
         break;
 
       case 'call_answer':
-        // Ghost doesn't initiate calls, but handle for completeness
+        this.callHandler?.handleCallAnswer(payload);
         break;
 
       case 'call_ice_candidate':
-        if (this.callHandler?.enabled) {
-          this.callHandler.handleCallIceCandidate(payload);
-        }
+        this.callHandler?.handleIceCandidate(payload);
         break;
 
       case 'call_end':
-        if (this.callHandler?.enabled) {
-          this.callHandler.handleCallEnd(payload);
-        }
+        this.callHandler?.handleCallEnd(payload);
         break;
 
       case 'call_state':
-        if (this.callHandler?.enabled) {
-          this.callHandler.handleCallState(payload);
-        }
+        this.callHandler?.handleCallState(payload);
         break;
 
       case 'typing_indicator':
@@ -341,7 +340,9 @@ export class GhostBot {
 
   private startHealthServer(): void {
     this.httpServer = createServer((req, res) => {
-      if (req.url === '/health' && req.method === 'GET') {
+      const url = req.url || '';
+
+      if (url === '/health' && req.method === 'GET') {
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({
           status: 'ok',
@@ -352,17 +353,49 @@ export class GhostBot {
           relayConnected: this.relay?.connected ?? false,
           model: this.config.model,
           friends: this.store?.getAllFriends().length ?? 0,
-          callsEnabled: this.callHandler?.enabled ?? false,
-          activeCalls: this.callHandler?.getCallCount() ?? 0,
+          callsEnabled: !!this.callHandler,
+          activeCalls: this.callHandler?.getActiveCalls().length ?? 0,
           uptime: process.uptime(),
         }));
-      } else if (req.url === '/calls' && req.method === 'GET') {
+      } else if (url === '/calls' && req.method === 'GET') {
+        // ── Call status endpoint ──────────────────────────────────────
+        if (!this.callHandler) {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ enabled: false, calls: [] }));
+          return;
+        }
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify(this.callHandler?.getActiveCalls() ?? []));
-      } else if (req.url === '/media' && req.method === 'GET') {
+        res.end(JSON.stringify({
+          enabled: true,
+          calls: this.callHandler.getActiveCalls(),
+        }));
+      } else if (url.startsWith('/calls/') && req.method === 'GET') {
+        // ── Single call stats ────────────────────────────────────────
+        const callId = url.slice(7);
+        const stats = this.callHandler?.getCallStats(callId);
+        if (stats) {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify(stats));
+        } else {
+          res.writeHead(404, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ error: 'Call not found' }));
+        }
+      } else if (url === '/media' && req.method === 'GET') {
+        // ── Media status endpoint ────────────────────────────────────
+        if (!this.mediaManager) {
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ ready: false }));
+          return;
+        }
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify(this.mediaManager?.getAllMedia() ?? { audio: [], video: [], files: [] }));
-      } else if (req.url === '/webhook/git' && req.method === 'POST') {
+        res.end(JSON.stringify({
+          ready: this.mediaManager.isReady(),
+          progress: this.mediaManager.getDownloadProgress(),
+          audio: this.mediaManager.listAudioTracks(),
+          video: this.mediaManager.listVideoFiles(),
+          files: this.mediaManager.listFiles(),
+        }));
+      } else if (url === '/webhook/git' && req.method === 'POST') {
         // Git webhook — trigger codebase re-indexing
         this.log.info('Git webhook received — re-indexing codebase...');
         this.reindexCodebase();

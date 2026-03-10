@@ -1,0 +1,20 @@
+{
+  "name": "@umbra/plugin-language-tutor",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Language Tutor plugin for Umbra — learn languages by chatting with Ghost",
+  "main": "dist/bundle.js",
+  "scripts": {
+    "dev": "node build.mjs --watch",
+    "build": "node build.mjs"
+  },
+  "dependencies": {},
+  "peerDependencies": {
+    "react": ">=18.0.0"
+  },
+  "devDependencies": {
+    "@umbra/plugin-sdk": "workspace:*",
+    "esbuild": "^0.20.0",
+    "typescript": "^5.0.0"
+  }
+}

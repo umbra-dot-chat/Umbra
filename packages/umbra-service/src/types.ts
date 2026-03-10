@@ -375,6 +375,7 @@ export type MessageEvent =
   | { type: 'threadReplyReceived'; message: Message; parentId: string }
   | { type: 'messageStatusChanged'; messageId: string; status: MessageStatus }
   | { type: 'messageEdited'; messageId: string; newText: string; editedAt: number }
+  | { type: 'messageContentUpdated'; messageId: string; newText: string }
   | { type: 'messageDeleted'; messageId: string; deletedAt: number }
   | { type: 'reactionAdded'; messageId: string; emoji: string; userDid: string }
   | { type: 'reactionRemoved'; messageId: string; emoji: string; userDid: string }
@@ -468,6 +469,7 @@ export type RelayEnvelope =
   | { envelope: 'friend_response'; version: 1; payload: FriendResponsePayload }
   | { envelope: 'friend_accept_ack'; version: 1; payload: FriendAcceptAckPayload }
   | { envelope: 'chat_message'; version: 1; payload: ChatMessagePayload }
+  | { envelope: 'chat_message_update'; version: 1; payload: ChatMessageUpdatePayload }
   | { envelope: 'group_invite'; version: 1; payload: GroupInvitePayload }
   | { envelope: 'group_invite_accept'; version: 1; payload: GroupInviteResponsePayload }
   | { envelope: 'group_invite_decline'; version: 1; payload: GroupInviteResponsePayload }
@@ -611,6 +613,25 @@ export interface ChatMessagePayload {
   timestamp: number;
   /** Thread parent ID (present when this is a thread reply) */
   threadId?: string;
+}
+
+/**
+ * Payload for chat message update envelope (streaming / progressive response)
+ * Same shape as ChatMessagePayload but used for in-place content updates.
+ */
+export interface ChatMessageUpdatePayload {
+  /** ID of the message to update */
+  messageId: string;
+  /** Conversation ID */
+  conversationId: string;
+  /** Sender's DID */
+  senderDid: string;
+  /** Base64-encoded encrypted updated content */
+  contentEncrypted: string;
+  /** Hex-encoded 12-byte nonce */
+  nonce: string;
+  /** Unix timestamp */
+  timestamp: number;
 }
 
 /**

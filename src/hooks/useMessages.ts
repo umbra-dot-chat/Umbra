@@ -235,6 +235,15 @@ export function useMessages(conversationId: string | null, groupId?: string | nu
               : m
           )
         );
+      } else if (event.type === 'messageContentUpdated') {
+        // Streaming/progressive content update — does NOT set edited flag
+        setMessages((prev) =>
+          prev.map((m) =>
+            m.id === event.messageId
+              ? { ...m, content: { type: 'text' as const, text: event.newText } }
+              : m
+          )
+        );
       } else if (event.type === 'messageDeleted') {
         setMessages((prev) =>
           prev.map((m) =>

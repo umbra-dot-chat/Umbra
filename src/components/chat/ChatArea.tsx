@@ -10,6 +10,7 @@ import { MsgGroup } from './MsgGroup';
 import { InlineMsgGroup } from './InlineMsgGroup';
 import { DmFileMessage } from '@/components/chat/DmFileMessage';
 import { SlotRenderer } from '@/components/plugins/SlotRenderer';
+import { usePlugins } from '@/contexts/PluginContext';
 import { useMessaging } from '@/contexts/MessagingContext';
 import { parseMessageContent, buildEmojiMap, isEmojiOnlyMessage, type EmojiMap } from '@/utils/parseMessageContent';
 import type { Message, CommunityEmoji } from '@umbra/service';
@@ -308,6 +309,7 @@ export function ChatArea({
   const { theme } = useTheme();
   const themeColors = theme.colors;
   const { displayMode } = useMessaging();
+  const { applyTextTransforms } = usePlugins();
 
   // ── Download state ──
   const [downloadingFileId, setDownloadingFileId] = useState<string | null>(null);
@@ -555,7 +557,9 @@ export function ChatArea({
         // Shared per-message renderer (used by both layouts)
         const renderMessages = (inlineMode: boolean) =>
           group.map((msg) => {
-            const text = getMessageText(msg);
+            const rawText = getMessageText(msg);
+            // Apply plugin text transforms (e.g., strip [TUTOR-*] tags, {{}} markup)
+            const text = applyTextTransforms(rawText, { senderDid: msg.senderDid, conversationId: msg.conversationId });
             const name = getSenderName(msg.senderDid);
             const time = formatTime(msg.timestamp);
             const isOwn = msg.senderDid === myDid;

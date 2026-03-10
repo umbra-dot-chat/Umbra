@@ -7,10 +7,14 @@ import {
 } from '@coexist/wisp-react-native';
 import type { EmojiItem } from '@coexist/wisp-core/types/EmojiPicker.types';
 import type { GifItem } from '@coexist/wisp-core/types/GifPicker.types';
+import type { SlashCommand } from '@umbra/plugin-sdk';
+import type { SlashDropdownItem } from '@/hooks/useSlashCommand';
 import { useFriends } from '@/hooks/useFriends';
 import { useNetwork } from '@/hooks/useNetwork';
 import { useMention } from '@/hooks/useMention';
+import { useSlashCommand } from '@/hooks/useSlashCommand';
 import { AnimatedPresence } from '@/components/ui/AnimatedPresence';
+import { SlashCommandAutocomplete } from '@/components/chat/SlashCommandAutocomplete';
 
 export interface ChatInputProps {
   message: string;
@@ -26,6 +30,8 @@ export interface ChatInputProps {
   onCancelEdit?: () => void;
   /** Called when the attachment button is clicked */
   onAttachmentClick?: () => void;
+  /** Plugin-registered slash commands for autocomplete */
+  slashCommands?: SlashCommand[];
   /** Custom community emoji for the picker */
   customEmojis?: EmojiItem[];
   /** Relay URL for GIF picker proxy */
@@ -38,6 +44,7 @@ export function ChatInput({
   message, onMessageChange, emojiOpen, onToggleEmoji,
   replyingTo, onClearReply, onSubmit,
   editing, onCancelEdit, onAttachmentClick,
+  slashCommands: slashCommandsProp,
   customEmojis, relayUrl, onGifSelect,
 }: ChatInputProps) {
   const { theme } = useTheme();
@@ -71,12 +78,20 @@ export function ChatInput({
     handleKeyPress, insertMention, closeMention,
   } = useMention({ users: mentionUsers });
 
+  const {
+    slashOpen, dropdownItems,
+    activeIndex: slashActiveIndex, setActiveIndex: setSlashActiveIndex,
+    handleTextChange: handleSlashTextChange,
+    insertCommand, selectItem, closeSlash,
+  } = useSlashCommand({ commands: slashCommandsProp ?? [] });
+
   const handleValueChange = useCallback(
     (text: string) => {
       onMessageChange(text);
       handleTextChange(text);
+      handleSlashTextChange(text);
     },
-    [onMessageChange, handleTextChange],
+    [onMessageChange, handleTextChange, handleSlashTextChange],
   );
 
   const handleMentionSelect = useCallback(
@@ -85,6 +100,14 @@ export function ChatInput({
       onMessageChange(newText);
     },
     [insertMention, message, onMessageChange],
+  );
+
+  const handleSlashSelect = useCallback(
+    (item: SlashDropdownItem) => {
+      const newText = selectItem(item);
+      onMessageChange(newText);
+    },
+    [selectItem, onMessageChange],
   );
 
   // Refs for DOM keydown handler (web only) — prevents arrow/enter/escape
@@ -102,6 +125,14 @@ export function ChatInput({
   const closeMentionRef = useRef(closeMention);
   const setActiveIndexRef = useRef(setActiveIndex);
 
+  // Slash command refs
+  const slashOpenRef = useRef(slashOpen);
+  const dropdownItemsRef = useRef(dropdownItems);
+  const slashActiveIndexRef = useRef(slashActiveIndex);
+  const setSlashActiveIndexRef = useRef(setSlashActiveIndex);
+  const selectItemRef = useRef(selectItem);
+  const closeSlashRef = useRef(closeSlash);
+
   mentionOpenRef.current = mentionOpen;
   messageRef.current = message;
   filteredUsersRef.current = filteredUsers;
@@ -111,6 +142,13 @@ export function ChatInput({
   closeMentionRef.current = closeMention;
   setActiveIndexRef.current = setActiveIndex;
 
+  slashOpenRef.current = slashOpen;
+  dropdownItemsRef.current = dropdownItems;
+  slashActiveIndexRef.current = slashActiveIndex;
+  setSlashActiveIndexRef.current = setSlashActiveIndex;
+  selectItemRef.current = selectItem;
+  closeSlashRef.current = closeSlash;
+
   useEffect(() => {
     if (Platform.OS !== 'web') return;
 
@@ -118,6 +156,41 @@ export function ChatInput({
     if (!wrapper) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Slash command keyboard handling (takes priority when open)
+      if (slashOpenRef.current) {
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          e.stopPropagation();
+          const len = dropdownItemsRef.current.length;
+          if (len > 0) {
+            setSlashActiveIndexRef.current((slashActiveIndexRef.current + 1) % len);
+          }
+          return;
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          e.stopPropagation();
+          const len = dropdownItemsRef.current.length;
+          if (len > 0) {
+            setSlashActiveIndexRef.current((slashActiveIndexRef.current - 1 + len) % len);
+          }
+          return;
+        } else if (e.key === 'Enter' || e.key === 'Tab') {
+          e.preventDefault();
+          e.stopPropagation();
+          const selected = dropdownItemsRef.current[slashActiveIndexRef.current];
+          if (selected) {
+            onMessageChangeRef.current(selected.insertText);
+          }
+          closeSlashRef.current();
+          return;
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          e.stopPropagation();
+          closeSlashRef.current();
+          return;
+        }
+      }
+
       if (!mentionOpenRef.current) return;
 
       if (e.key === 'ArrowDown') {
@@ -197,6 +270,18 @@ export function ChatInput({
         />
       </AnimatedPresence>
       <View ref={inputWrapperRef} testID={TEST_IDS.INPUT.CONTAINER} style={{ padding: 12 }}>
+        {/* Slash command autocomplete dropdown */}
+        {slashOpen && dropdownItems.length > 0 && (
+          <View style={{ position: 'absolute', bottom: 64, left: 12, right: 12, zIndex: 16 }}>
+            <SlashCommandAutocomplete
+              items={dropdownItems}
+              activeIndex={slashActiveIndex}
+              onActiveIndexChange={setSlashActiveIndex}
+              onSelect={handleSlashSelect}
+              open={slashOpen}
+            />
+          </View>
+        )}
         {/* Mention autocomplete dropdown */}
         {mentionOpen && (
           <View style={{ position: 'absolute', bottom: 64, left: 12, right: 12, zIndex: 15 }}>
@@ -224,6 +309,7 @@ export function ChatInput({
             onSelectionChange={handleSelectionChange}
             onSubmit={(msg) => {
               closeMention();
+              closeSlash();
               onMessageChange('');
               onClearReply();
               if (editing && onCancelEdit) onCancelEdit();
