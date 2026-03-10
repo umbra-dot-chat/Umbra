@@ -102,7 +102,7 @@ export function ActiveCallPanel({
       <View style={{ flex: 1, position: 'relative' }}>
         {/* Screen share tab bar */}
         {anyScreenSharing && hasVideo && (
-          <View style={{ paddingHorizontal: 12, paddingTop: 8, zIndex: 20 }}>
+          <View style={{ paddingHorizontal: 12, paddingTop: 8, zIndex: 20 }} accessibilityRole="tablist" accessibilityLabel="Screen share view">
             <SegmentedControl
               options={screenTabOptions}
               value={screenTab}

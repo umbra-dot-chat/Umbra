@@ -125,7 +125,7 @@ export function CallControlsOverlay({
   // On mobile, render without animation wrapper
   if (isMobile) {
     return (
-      <View style={wrapperStyle}>
+      <View style={wrapperStyle} accessibilityRole="toolbar" accessibilityLabel="Call controls">
         <View style={pillStyle}>
           <CallControls
             isMuted={isMuted}
@@ -149,6 +149,8 @@ export function CallControlsOverlay({
     <Animated.View
       style={[wrapperStyle, { opacity }]}
       pointerEvents={pointerEvents}
+      accessibilityRole="toolbar"
+      accessibilityLabel="Call controls"
     >
       <View style={pillStyle}>
         <CallControls
