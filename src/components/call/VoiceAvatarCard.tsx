@@ -68,11 +68,11 @@ export function VoiceAvatarCard({ participant, isSpeaking, avatar }: VoiceAvatar
             accessibilityLabel="Muted"
             style={{
               position: 'absolute',
-              bottom: 32,
+              bottom: 40,
               right: 32,
               width: 22,
               height: 22,
-              borderRadius: 11,
+              borderRadius: 9999,
               backgroundColor: theme.colors.status.danger,
               alignItems: 'center',
               justifyContent: 'center',
