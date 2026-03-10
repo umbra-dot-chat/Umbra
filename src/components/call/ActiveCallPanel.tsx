@@ -42,7 +42,7 @@ export function ActiveCallPanel({
   const [showStats, setShowStats] = useState(statsOverlay || __DEV__);
 
   return (
-    <View style={{ flex: 1, position: 'relative' }}>
+    <View style={{ flex: 2, position: 'relative', overflow: 'hidden', zIndex: 10 }}>
       <SlotRenderer slot="voice-call-header" />
       <WispActiveCallPanel
         localStream={activeCall.localStream}
