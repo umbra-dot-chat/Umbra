@@ -16,29 +16,26 @@ import { View, Animated, Platform } from 'react-native';
 import { useTheme } from '@coexist/wisp-react-native';
 import { useAppTheme } from '@/contexts/ThemeContext';
 
-// Brand gradient colors
-const BRAND_VIOLET = '#8B5CF6';
-const BRAND_PINK = '#EC4899';
-const BRAND_BLUE = '#3B82F6';
-
 const BORDER_WIDTH = 3;
 const ANIMATION_DURATION = 3000;
 
 // ── CSS injection (web only) ─────────────────────────────────────────────────
 
 const KEYFRAMES_ID = 'umbra-speaker-glow';
-let keyframesInjected = false;
 
-function injectSpeakerKeyframes(): void {
-  if (keyframesInjected || typeof document === 'undefined') return;
-  keyframesInjected = true;
+function injectSpeakerKeyframes(violet: string, pink: string, blue: string): void {
+  if (typeof document === 'undefined') return;
+  // Remove existing keyframes if present (theme may have changed)
+  const existing = document.getElementById(KEYFRAMES_ID);
+  if (existing) existing.remove();
+
   const style = document.createElement('style');
   style.id = KEYFRAMES_ID;
   style.textContent = [
     '@keyframes speakerGlow {',
-    `  0%, 100% { box-shadow: 0 0 8px 2px ${BRAND_VIOLET}; border-color: ${BRAND_VIOLET}; }`,
-    `  33% { box-shadow: 0 0 8px 2px ${BRAND_PINK}; border-color: ${BRAND_PINK}; }`,
-    `  66% { box-shadow: 0 0 8px 2px ${BRAND_BLUE}; border-color: ${BRAND_BLUE}; }`,
+    `  0%, 100% { box-shadow: 0 0 8px 2px ${violet}; border-color: ${violet}; }`,
+    `  33% { box-shadow: 0 0 8px 2px ${pink}; border-color: ${pink}; }`,
+    `  66% { box-shadow: 0 0 8px 2px ${blue}; border-color: ${blue}; }`,
     '}',
   ].join('\n');
   document.head.appendChild(style);
@@ -56,16 +53,22 @@ interface SpeakerBorderProps {
 
 export function SpeakerBorder({ active, children, borderRadius = 12 }: SpeakerBorderProps) {
   const { theme } = useTheme();
+  const colors = theme.colors;
   const { motionPreferences } = useAppTheme();
   const animValue = useRef(new Animated.Value(0)).current;
+
+  // Theme-aware brand gradient colors
+  const brandViolet = colors.data.violet;
+  const brandPink = colors.brand.primary;
+  const brandBlue = colors.data.blue;
 
   const animationsEnabled =
     motionPreferences.enableAnimations && !motionPreferences.reduceMotion;
 
-  // Inject CSS keyframes on web
+  // Inject CSS keyframes on web (re-inject when theme colors change)
   useEffect(() => {
-    if (Platform.OS === 'web') injectSpeakerKeyframes();
-  }, []);
+    if (Platform.OS === 'web') injectSpeakerKeyframes(brandViolet, brandPink, brandBlue);
+  }, [brandViolet, brandPink, brandBlue]);
 
   // Native: cycle animated value 0 -> 1 looping
   useEffect(() => {
@@ -101,7 +104,7 @@ export function SpeakerBorder({ active, children, borderRadius = 12 }: SpeakerBo
       <View
         style={{
           borderWidth: BORDER_WIDTH,
-          borderColor: theme.colors.accent.primary,
+          borderColor: colors.accent.primary,
           borderRadius,
         }}
       >
@@ -117,7 +120,7 @@ export function SpeakerBorder({ active, children, borderRadius = 12 }: SpeakerBo
         style={
           {
             borderWidth: BORDER_WIDTH,
-            borderColor: BRAND_VIOLET,
+            borderColor: brandViolet,
             borderRadius,
             animationName: 'speakerGlow',
             animationDuration: `${ANIMATION_DURATION}ms`,
@@ -134,7 +137,7 @@ export function SpeakerBorder({ active, children, borderRadius = 12 }: SpeakerBo
   // Native: interpolated border color
   const borderColor = animValue.interpolate({
     inputRange: [0, 0.33, 0.66, 1],
-    outputRange: [BRAND_VIOLET, BRAND_PINK, BRAND_BLUE, BRAND_VIOLET],
+    outputRange: [brandViolet, brandPink, brandBlue, brandViolet],
   });
 
   return (
