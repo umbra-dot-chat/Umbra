@@ -327,8 +327,8 @@ function ChatSidebarInner({
           </ScrollView>
         </SidebarSection>
 
-        {/* Active call footer panel */}
-        {activeCall && activeCall.status === 'connected' && onReturnToCall && onToggleMute && onToggleCamera && onEndCall && (
+        {/* Active call footer panel — only shown when navigated away from the call conversation */}
+        {activeCall && activeCall.status === 'connected' && activeCall.conversationId !== activeId && onReturnToCall && onToggleMute && onToggleCamera && onEndCall && (
           <SidebarCallPanel
             activeCall={activeCall}
             onReturnToCall={onReturnToCall}
