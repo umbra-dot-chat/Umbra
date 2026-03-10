@@ -35,10 +35,10 @@ export function VoiceAvatarCard({ participant, isSpeaking, avatar }: VoiceAvatar
         style={{
           alignItems: 'center',
           justifyContent: 'center',
-          padding: 16,
+          padding: 24,
           borderRadius: 13, // inner radius = outer 16 - border 3
           backgroundColor: theme.colors.background.surface,
-          minWidth: 120,
+          minWidth: 160,
           position: 'relative',
         }}
       >
@@ -46,7 +46,7 @@ export function VoiceAvatarCard({ participant, isSpeaking, avatar }: VoiceAvatar
         <Avatar
           name={participant.displayName}
           src={avatar}
-          size="lg"
+          size="xl"
         />
 
         {/* Display name */}
