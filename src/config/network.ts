@@ -182,7 +182,7 @@ export interface AIAgentConfig {
  */
 export const AI_AGENTS: AIAgentConfig[] = [
   {
-    did: 'did:key:z6MkmFhZBw9EuMdeFWW62g1CSzkuZVoiDm95eLGLybpyB2wg',
+    did: 'did:key:z6MkhSo7UBSqfsnF6dM2iw5qbPbKoKBHQ6XnAGGMo7XV5Fyd',
     displayName: 'Ghost',
     description: 'Your multilingual AI companion on Umbra',
     language: 'en',
