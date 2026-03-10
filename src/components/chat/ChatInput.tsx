@@ -17,7 +17,7 @@ import { SlashCommandMenu } from './SlashCommandMenu';
 import { AnimatedPresence } from '@/components/ui/AnimatedPresence';
 import { getSystemCommands, GHOST_COMMANDS, isGhostBot } from '@/services/SlashCommandRegistry';
 import { useAppTheme } from '@/contexts/ThemeContext';
-import { durations, opacity } from '@coexist/wisp-core/tokens';
+import { opacity } from '@coexist/wisp-core/tokens';
 
 // ---------------------------------------------------------------------------
 // Ghost text helper — computes the inline completion suggestion
@@ -566,7 +566,7 @@ export function ChatInput({
           animated={inputFocused}
           radius={22}
           width={2}
-          speed={durations.normal}
+          speed={3000}
         >
           <View ref={ghostContainerRef} style={{ position: 'relative' }}>
             <MessageInput
@@ -627,7 +627,7 @@ export function ChatInput({
                 {motionPreferences.enableAnimations ? (
                   <GradientText
                     animated
-                    speed={durations.slow}
+                    speed={4000}
                     style={{
                       fontSize,
                       fontFamily,
