@@ -80,3 +80,4 @@ packages/umbra-relay/.env
 # Rebuild with: npm run build:mobile:ios
 modules/expo-umbra-core/android/src/main/jniLibs/
 packages/umbra-relay/releases/
+.claude/worktrees/
