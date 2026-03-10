@@ -6,8 +6,9 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import { View, Pressable } from 'react-native';
 import type { LayoutChangeEvent, ViewStyle } from 'react-native';
-import { VideoTile, useTheme } from '@coexist/wisp-react-native';
+import { VideoTile, Text, useTheme } from '@coexist/wisp-react-native';
 import type { CallParticipant } from '@/types/call';
+import { useFullscreen } from '@/hooks/useFullscreen';
 
 // ─── Props ──────────────────────────────────────────────────────────────────
 
@@ -77,6 +78,7 @@ export function JustifiedVideoGrid({
 }: JustifiedVideoGridProps) {
   const { theme } = useTheme();
   const [containerSize, setContainerSize] = useState({ w: 0, h: 0 });
+  const { fullscreenDid, enterFullscreen, exitFullscreen } = useFullscreen();
 
   const handleLayout = useCallback((e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;
@@ -126,67 +128,112 @@ export function JustifiedVideoGrid({
     padding: gap,
   };
 
+  // Find the fullscreen participant (if set)
+  const fullscreenParticipant = fullscreenDid
+    ? tiles.find((t) => t.did === fullscreenDid)
+    : null;
+
   return (
     <View style={containerStyle} onLayout={handleLayout}>
-      {layout && containerSize.w > 0 && (
-        <View style={gridStyle}>
-          {tiles.map((participant, idx) => {
-            const isLocal = participant.did === localDid;
-            const isSpeaking = speakingDids.has(participant.did);
+      {/* Fullscreen mode: single tile fills the container */}
+      {fullscreenParticipant ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`${fullscreenParticipant.displayName} video fullscreen, press escape to exit`}
+          onLongPress={exitFullscreen}
+          delayLongPress={500}
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            zIndex: 10,
+          }}
+        >
+          <VideoTile
+            stream={fullscreenParticipant.stream}
+            displayName={fullscreenParticipant.displayName}
+            isMuted={fullscreenParticipant.isMuted}
+            isCameraOff={fullscreenParticipant.isCameraOff}
+            isSpeaking={speakingDids.has(fullscreenParticipant.did)}
+            mirror={fullscreenParticipant.did === localDid}
+            size="full"
+            style={{ flex: 1 }}
+          />
+          <View
+            style={{
+              position: 'absolute',
+              top: 8,
+              right: 8,
+              backgroundColor: theme.colors.background.overlay,
+              borderRadius: 4,
+              paddingHorizontal: 8,
+              paddingVertical: 4,
+            }}
+          >
+            <Text size="xs" style={{ color: theme.colors.text.inverse }}>
+              Press Esc to exit
+            </Text>
+          </View>
+        </Pressable>
+      ) : (
+        /* Normal grid mode */
+        layout && containerSize.w > 0 && (
+          <View style={gridStyle}>
+            {tiles.map((participant) => {
+              const isLocal = participant.did === localDid;
+              const isSpeaking = speakingDids.has(participant.did);
 
-            // Adaptive widths for 1v1
-            let tileWidth = layout.tileW;
-            let tileHeight = layout.tileH;
-            if (isAdaptive1v1) {
-              tileWidth = (containerSize.w - gap * 3) / 2;
-              tileHeight = tileWidth / aspectRatio;
-            } else if (is1v1Asymmetric) {
-              const isOff = participant.isCameraOff;
-              tileWidth = isOff
-                ? (containerSize.w - gap * 3) * 0.25
-                : (containerSize.w - gap * 3) * 0.75;
-              tileHeight = tileWidth / aspectRatio;
-            }
+              // Adaptive widths for 1v1
+              let tileWidth = layout.tileW;
+              let tileHeight = layout.tileH;
+              if (isAdaptive1v1) {
+                tileWidth = (containerSize.w - gap * 3) / 2;
+                tileHeight = tileWidth / aspectRatio;
+              } else if (is1v1Asymmetric) {
+                const isOff = participant.isCameraOff;
+                tileWidth = isOff
+                  ? (containerSize.w - gap * 3) * 0.25
+                  : (containerSize.w - gap * 3) * 0.75;
+                tileHeight = tileWidth / aspectRatio;
+              }
 
-            const tileStyle: ViewStyle = {
-              width: tileWidth,
-              height: tileHeight,
-              borderRadius: 12,
-              overflow: 'hidden',
-              borderWidth: isSpeaking ? 2 : 0,
-              borderColor: isSpeaking
-                ? theme.colors.accent.primary
-                : 'transparent',
-            };
+              const tileStyle: ViewStyle = {
+                width: tileWidth,
+                height: tileHeight,
+                borderRadius: 12,
+                overflow: 'hidden',
+                borderWidth: isSpeaking ? 2 : 0,
+                borderColor: isSpeaking
+                  ? theme.colors.accent.primary
+                  : 'transparent',
+              };
 
-            return (
-              <Pressable
-                key={participant.did}
-                accessibilityRole="button"
-                accessibilityLabel={`${participant.displayName} video tile`}
-                onPress={() => {
-                  // Double-press handled via onLongPress as a simpler
-                  // cross-platform substitute; actual double-tap via
-                  // onTileDoubleClick is wired below
-                }}
-                onLongPress={() => onTileDoubleClick?.(participant.did)}
-                delayLongPress={500}
-                style={tileStyle}
-              >
-                <VideoTile
-                  stream={participant.stream}
-                  displayName={participant.displayName}
-                  isMuted={participant.isMuted}
-                  isCameraOff={participant.isCameraOff}
-                  isSpeaking={isSpeaking}
-                  mirror={isLocal}
-                  size="full"
-                  style={{ flex: 1 }}
-                />
-              </Pressable>
-            );
-          })}
-        </View>
+              return (
+                <Pressable
+                  key={participant.did}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${participant.displayName} video tile`}
+                  onLongPress={() => enterFullscreen(participant.did)}
+                  delayLongPress={500}
+                  style={tileStyle}
+                >
+                  <VideoTile
+                    stream={participant.stream}
+                    displayName={participant.displayName}
+                    isMuted={participant.isMuted}
+                    isCameraOff={participant.isCameraOff}
+                    isSpeaking={isSpeaking}
+                    mirror={isLocal}
+                    size="full"
+                    style={{ flex: 1 }}
+                  />
+                </Pressable>
+              );
+            })}
+          </View>
+        )
       )}
     </View>
   );
