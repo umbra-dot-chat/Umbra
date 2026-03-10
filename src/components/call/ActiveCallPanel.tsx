@@ -6,7 +6,7 @@
  */
 
 import React, { useState } from 'react';
-import { View, TouchableOpacity, Text, StyleSheet, Platform } from 'react-native';
+import { View, TouchableOpacity, Text, StyleSheet, Platform, useWindowDimensions } from 'react-native';
 import { ActiveCallPanel as WispActiveCallPanel } from '@coexist/wisp-react-native';
 import { SlotRenderer } from '@/components/plugins/SlotRenderer';
 import { CallStatsOverlay, type GhostMetadata } from '@/components/call/CallStatsOverlay';
@@ -38,11 +38,13 @@ export function ActiveCallPanel({
   onSwitchCamera,
   onSettings,
 }: ActiveCallPanelProps) {
+  const { height: windowHeight } = useWindowDimensions();
+  const maxCallHeight = Math.round(windowHeight * 0.55);
   const { statsOverlay } = useDeveloperSettings();
   const [showStats, setShowStats] = useState(statsOverlay || __DEV__);
 
   return (
-    <View style={{ flex: 2, position: 'relative', overflow: 'hidden', zIndex: 10 }}>
+    <View style={{ maxHeight: maxCallHeight, overflow: 'hidden', position: 'relative', zIndex: 10 }}>
       <SlotRenderer slot="voice-call-header" />
       <WispActiveCallPanel
         localStream={activeCall.localStream}

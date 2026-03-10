@@ -471,7 +471,7 @@ export function ChatArea({
     <ScrollView
       ref={scrollRef}
       testID={TEST_IDS.CHAT_AREA.MESSAGE_LIST}
-      style={{ flex: 1, overflow: 'hidden' }}
+      style={{ flex: 1 }}
       contentContainerStyle={{ padding: 16, gap: 8 }}
       onScroll={handleScroll}
       scrollEventThrottle={100}
