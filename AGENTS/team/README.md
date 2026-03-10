@@ -10,6 +10,7 @@ User → tech-lead (orchestrator)
          ├── mobile-engineer      (iOS/Android)
          ├── backend-engineer     (Rust core/relay/CLI)
          ├── ghost-ai-engineer    (Node.js WebRTC bot)
+         ├── ux-designer          (UI/UX consistency + workflows)
          ├── qa-automated         (test suites)
          ├── qa-manual            (preview verification)
          └── devops-engineer      (deploy + servers)
@@ -31,6 +32,9 @@ Owns Rust infrastructure. umbra-core (crypto, networking, storage), umbra-relay 
 
 ### ghost-ai-engineer
 Owns the Ghost AI bot. WebRTC calls, FFmpeg media pipeline, @roamhq/wrtc, audio/video processing, ring buffers, backpressure, loopback testing. Primary files: `packages/umbra-ghost-ai/`.
+
+### ux-designer
+UI/UX specialist. Audits screens for consistent whitespace, correct Wisp component usage, color contrast (WCAG AA), interaction patterns, and user workflow logic. Makes small targeted visual fixes (<20 lines) or writes detailed specs for frontend-engineer to implement. Runs spacing, color, and responsive audits via preview tools.
 
 ### qa-automated
 Runs test suites. Jest unit tests, Playwright E2E, Detox mobile, Ghost AI real-pipeline loopback tests, TypeScript type-checking. Reports structured pass/fail results. Never fixes bugs.

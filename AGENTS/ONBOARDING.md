@@ -112,6 +112,7 @@ tech-lead (orchestrator)
   ├── mobile-engineer      → iOS/Android (native modules, Detox)
   ├── backend-engineer     → Rust (core, relay, CLI, WASM)
   ├── ghost-ai-engineer    → Node.js WebRTC bot (FFmpeg, wrtc)
+  ├── ux-designer          → UI/UX consistency, spacing, contrast, workflows
   ├── qa-automated         → test suites (Jest, Playwright, loopback)
   ├── qa-manual            → preview verification (snapshot, inspect, console)
   └── devops-engineer      → deployment (rsync, SSH, monitoring)

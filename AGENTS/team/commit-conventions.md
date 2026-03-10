@@ -36,6 +36,7 @@ Body explaining WHY, not just WHAT. One sentence is fine.
 | mobile-engineer | `mobile`, `ios`, `android`, `detox`, `native-module` |
 | backend-engineer | `core`, `relay`, `cli`, `wasm`, `testing`, `crypto` |
 | ghost-ai-engineer | `ghost-ai`, `media`, `webrtc`, `audio`, `video` |
+| ux-designer | `ux`, `a11y`, `spacing`, `contrast` |
 | devops-engineer | `deploy`, `infra`, `ci`, `server` |
 
 ## Examples
@@ -60,6 +61,11 @@ refactor(wasm): optimize WASM bundle size with wee_alloc
 fix(ghost-ai): add backpressure to audio ring buffer
 feat(media): support VP9 codec negotiation
 test(webrtc): add real-pipeline loopback test for 1080p
+
+# UX Designer
+fix(ux): normalize settings row spacing to 16px gap
+fix(contrast): use text.secondary for muted labels on surface
+refactor(ux): swap raw buttons for SegmentedControl in call panel
 
 # DevOps
 chore(deploy): update Ghost AI deploy script for new server

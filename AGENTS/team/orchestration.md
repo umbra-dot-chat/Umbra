@@ -23,8 +23,10 @@ Read key files to understand current state
 | Mobile only (native modules, platform) | → `mobile-engineer` |
 | Rust only (crypto, relay, CLI) | → `backend-engineer` |
 | Ghost AI only (WebRTC, media, bot) | → `ghost-ai-engineer` |
+| UI/UX review (spacing, contrast, workflows) | → `ux-designer` |
 | Deploy required | → developer first, then `devops-engineer` |
 | Bug fix from QA | → relevant developer with bug report context |
+| UX fix from ux-designer | → `frontend-engineer` (or `mobile-engineer`) with UX spec |
 | Cross-cutting | → see `cross-cutting-tasks.md` |
 
 ### Step 3: Spawn Subagent
@@ -81,13 +83,21 @@ After the developer subagent completes:
    Report structured pass/fail per AGENTS/team/qa-workflow.md."
    ```
 
-3. **If either QA fails → write bug report → re-spawn developer**:
+3. **If UI changed → spawn `ux-designer`** (can run in parallel with qa-manual):
+   ```
+   "Review the UI changes for spacing consistency, correct Wisp component usage,
+   color contrast, and workflow logic. Files modified: [list].
+   Read AGENTS/domain/expo-frontend.md for the design system reference.
+   Report findings per AGENTS/team/qa-workflow.md."
+   ```
+
+4. **If any QA or UX review fails → write bug report → re-spawn developer**:
    Use `AGENTS/team/bug-report-template.md` format. Include:
    - What failed and why
    - Prior fix attempts (if any)
    - Iteration number
 
-### Step 5: Completion
+### Step 6: Completion
 
 When both QA agents pass:
 1. Summarize completed work to the user

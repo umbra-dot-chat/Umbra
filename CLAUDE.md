@@ -26,6 +26,7 @@ You have specialized subagents in `.claude/agents/`. **Use them for all non-triv
 - **iOS/Android platform work** → spawn `mobile-engineer`
 - **Rust (core, relay, CLI, WASM)** → spawn `backend-engineer`
 - **Ghost AI bot (WebRTC, FFmpeg)** → spawn `ghost-ai-engineer`
+- **UI/UX review (spacing, contrast, workflows)** → spawn `ux-designer`
 - **After any dev completes** → spawn `qa-automated` then `qa-manual`
 - **Deployment needed** → spawn `devops-engineer`
 
@@ -35,8 +36,9 @@ You have specialized subagents in `.claude/agents/`. **Use them for all non-triv
 2. **Spawn** the right developer subagent with task + file paths + verification criteria
 3. **Spawn `qa-automated`** to run tests on the developer's changes
 4. **Spawn `qa-manual`** to verify UI with preview tools
-5. If QA fails → write a bug report → re-spawn the developer → repeat 3-5
-6. If deploy needed → spawn `devops-engineer`
+5. **Spawn `ux-designer`** for UI changes (spacing, contrast, workflow review)
+6. If QA or UX fails → write a bug report → re-spawn the developer → repeat 3-6
+7. If deploy needed → spawn `devops-engineer`
 
 Read `AGENTS/team/orchestration.md` for full routing details and `AGENTS/team/qa-workflow.md` for the QA pipeline.
 
