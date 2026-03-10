@@ -68,7 +68,7 @@ export function VoiceAvatarCard({ participant, isSpeaking, avatar }: VoiceAvatar
             accessibilityLabel="Muted"
             style={{
               position: 'absolute',
-              bottom: 40,
+              bottom: 48,
               right: 32,
               width: 22,
               height: 22,
