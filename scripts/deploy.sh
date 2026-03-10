@@ -530,10 +530,25 @@ deploy_ghost() {
 
     # Sync dist folder
     log_info "Uploading Ghost AI dist..."
-    rsync -avz --delete \
-        -e "$ghost_rsync_ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=5" \
-        "$PROJECT_ROOT/packages/umbra-ghost-ai/dist/" \
-        "$SSH_USER@$GHOST_HOST:$ghost_path/dist/"
+    eval rsync -avz --delete \
+        -e "'$ghost_rsync_ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=5'" \
+        "'$PROJECT_ROOT/packages/umbra-ghost-ai/dist/'" \
+        "'$SSH_USER@$GHOST_HOST:$ghost_path/dist/'"
+
+    # Sync package.json and media config
+    log_info "Uploading package.json and media config..."
+    eval rsync -avz \
+        -e "'$ghost_rsync_ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=5'" \
+        "'$PROJECT_ROOT/packages/umbra-ghost-ai/package.json'" \
+        "'$SSH_USER@$GHOST_HOST:$ghost_path/package.json'"
+    eval rsync -avz \
+        -e "'$ghost_rsync_ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=5'" \
+        "'$PROJECT_ROOT/packages/umbra-ghost-ai/media.config.json'" \
+        "'$SSH_USER@$GHOST_HOST:$ghost_path/media.config.json'"
+
+    # Install dependencies on server
+    log_info "Installing dependencies on server..."
+    eval "$ghost_ssh_cmd -o ServerAliveInterval=30 $SSH_USER@$GHOST_HOST 'cd $ghost_path && npm install --production 2>&1 | tail -5'"
 
     # Restart the systemd service
     log_info "Restarting $ghost_service service..."

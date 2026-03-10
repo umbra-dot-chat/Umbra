@@ -199,25 +199,34 @@ export class GhostBot {
         break;
 
       // ── Call signaling ──────────────────────────────────────────────
-      case 'call_offer':
-        this.callHandler?.handleCallOffer(payload);
+      // Client double-stringifies call payloads, so payload may be a JSON string
+      case 'call_offer': {
+        const parsed = typeof payload === 'string' ? JSON.parse(payload) : payload;
+        this.callHandler?.handleCallOffer(parsed);
         break;
+      }
 
       case 'call_answer':
         // Ghost doesn't initiate calls, but handle for completeness
         break;
 
-      case 'call_ice_candidate':
-        this.callHandler?.handleCallIceCandidate(payload);
+      case 'call_ice_candidate': {
+        const parsed = typeof payload === 'string' ? JSON.parse(payload) : payload;
+        this.callHandler?.handleCallIceCandidate(parsed);
         break;
+      }
 
-      case 'call_end':
-        this.callHandler?.handleCallEnd(payload);
+      case 'call_end': {
+        const parsed = typeof payload === 'string' ? JSON.parse(payload) : payload;
+        this.callHandler?.handleCallEnd(parsed);
         break;
+      }
 
-      case 'call_state':
-        this.callHandler?.handleCallState(payload);
+      case 'call_state': {
+        const parsed = typeof payload === 'string' ? JSON.parse(payload) : payload;
+        this.callHandler?.handleCallState(parsed);
         break;
+      }
 
       case 'typing_indicator':
       case 'message_status':

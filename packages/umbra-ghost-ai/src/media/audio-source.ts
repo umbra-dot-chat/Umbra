@@ -12,6 +12,7 @@
  */
 
 import { spawn, type ChildProcess } from 'child_process';
+import { createRequire } from 'module';
 import type { Logger } from '../config.js';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -216,10 +217,16 @@ export class AudioSource {
     if (this.paused) {
       frame = this.silenceFrame;
     } else if (this.pcmBuffer.length >= BYTES_PER_FRAME) {
-      // Extract one frame from the PCM buffer
-      const frameBytes = this.pcmBuffer.subarray(0, BYTES_PER_FRAME);
+      // Extract one frame — must copy into own ArrayBuffer because wrtc
+      // checks samples.buffer.byteLength, not the TypedArray view length.
+      frame = new Int16Array(SAMPLES_PER_FRAME);
+      const srcView = new Int16Array(
+        this.pcmBuffer.buffer,
+        this.pcmBuffer.byteOffset,
+        SAMPLES_PER_FRAME,
+      );
+      frame.set(srcView);
       this.pcmBuffer = this.pcmBuffer.subarray(BYTES_PER_FRAME);
-      frame = new Int16Array(frameBytes.buffer, frameBytes.byteOffset, SAMPLES_PER_FRAME);
 
       // Apply crossfade if active
       if (this.fadeInActive && this.fadeFrameIndex < CROSSFADE_FRAMES) {
@@ -306,7 +313,10 @@ export class AudioSource {
  */
 export function resolveFfmpegPath(): string {
   try {
-    const ffmpegStatic = require('ffmpeg-static') as string;
+    // ffmpeg-static is a CJS module that exports a path string.
+    // In ESM context, use createRequire to load it.
+    const req = createRequire(import.meta.url);
+    const ffmpegStatic = req('ffmpeg-static') as string;
     return ffmpegStatic;
   } catch {
     return 'ffmpeg';

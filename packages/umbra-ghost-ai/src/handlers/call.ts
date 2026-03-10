@@ -9,7 +9,7 @@ import { readFileSync } from 'fs';
 import { AudioSource, resolveFfmpegPath } from '../media/audio-source.js';
 import { VideoSource, parseResolution } from '../media/video-source.js';
 import { MediaManager, type MediaFile } from '../media/manager.js';
-import { encryptMessage, uuid, type GhostIdentity } from '../crypto.js';
+import { decryptMessage, encryptMessage, uuid, type GhostIdentity } from '../crypto.js';
 import type { RelayClient } from '../relay.js';
 import type { ContextStore, StoredFriend } from '../context/store.js';
 import type { GhostConfig, IceServer, Logger } from '../config.js';
@@ -19,9 +19,10 @@ import type { GhostConfig, IceServer, Logger } from '../config.js';
 interface CallOfferPayload {
   callId: string;
   sdp: string;
-  type: 'offer';
+  sdpType: 'offer';
   callType: 'voice' | 'video';
-  callerDid: string;
+  senderDid: string;
+  senderDisplayName?: string;
   conversationId: string;
 }
 
@@ -122,7 +123,9 @@ export class CallHandler {
   /** Load the wrtc module. Returns false if unavailable. */
   async initialize(): Promise<boolean> {
     try {
-      this.wrtc = await (import('@roamhq/wrtc' as string) as Promise<any>);
+      const mod = await (import('@roamhq/wrtc' as string) as Promise<any>);
+      // ESM dynamic import of CJS module puts exports under .default
+      this.wrtc = mod.default || mod;
       this.log.info('[CALL] WebRTC module loaded (@roamhq/wrtc)');
       return true;
     } catch (err) {
@@ -135,38 +138,90 @@ export class CallHandler {
     return this.wrtc !== null;
   }
 
+  /**
+   * Decrypt an encrypted call signal payload.
+   * The client encrypts signals using the same X25519+HKDF+AES-GCM protocol
+   * as chat messages, but uses callId as the HKDF salt instead of conversationId.
+   */
+  private decryptSignalPayload(payload: any): any {
+    if (!payload.encrypted || !payload.nonce || !payload.senderDid) {
+      this.log.debug(`[CALL] Signal not encrypted (keys: ${Object.keys(payload).join(', ')})`);
+      return payload; // Not encrypted
+    }
+    this.log.debug(`[CALL] Decrypting encrypted signal from ${payload.senderDid?.slice(0, 24)}...`);
+
+    const friend = this.store.getFriend(payload.senderDid);
+    if (!friend) {
+      this.log.warn(`[CALL] Cannot decrypt signal — unknown sender: ${payload.senderDid?.slice(0, 24)}...`);
+      return payload;
+    }
+
+    try {
+      const plaintext = decryptMessage(
+        payload.encrypted,
+        payload.nonce,
+        this.identity.encryptionPrivateKey,
+        friend.encryptionKey,
+        payload.senderDid,
+        this.identity.did,
+        payload.timestamp,
+        payload.callId || '', // callId used as HKDF salt (same as context in WASM)
+      );
+      const decrypted = JSON.parse(plaintext);
+      this.log.debug(`[CALL] Decrypted signal from ${friend.displayName}`);
+      return decrypted;
+    } catch (err) {
+      this.log.error(`[CALL] Failed to decrypt signal:`, err);
+      return payload; // Fall through with original (will likely fail later)
+    }
+  }
+
   // ── Signaling handlers ────────────────────────────────────────────────────
 
-  async handleCallOffer(payload: CallOfferPayload): Promise<void> {
-    const { callId, callerDid, callType } = payload;
-    this.log.info(`[CALL] Incoming ${callType} call: ${callId} from ${callerDid.slice(0, 24)}...`);
+  async handleCallOffer(payload: any): Promise<void> {
+    // Decrypt if encrypted
+    const decrypted: CallOfferPayload = this.decryptSignalPayload(payload);
+    const { callId, senderDid, callType } = decrypted;
+    this.log.info(`[CALL] Incoming ${callType} call: ${callId} from ${senderDid?.slice(0, 24)}...`);
+    this.log.debug(`[CALL] Offer keys: ${Object.keys(decrypted).join(', ')}, sdp length: ${decrypted.sdp?.length}, sdp starts: ${JSON.stringify(decrypted.sdp?.slice(0, 30))}`);
 
-    const friend = this.store.getFriend(callerDid);
-    if (!friend) {
-      this.log.warn(`[CALL] Rejecting call from unknown DID: ${callerDid.slice(0, 24)}...`);
-      this.sendCallEnd(callerDid, callId, 'rejected');
+    if (!this.wrtc) {
+      this.log.warn(`[CALL] Cannot answer — WebRTC not loaded`);
       return;
     }
 
+    const friend = this.store.getFriend(senderDid);
+    if (!friend) {
+      this.log.warn(`[CALL] Rejecting call from unknown DID: ${senderDid?.slice(0, 24)}...`);
+      this.sendCallEnd(senderDid, callId, 'rejected');
+      return;
+    }
+
+    // Send chat message that Ghost is about to join
+    this.sendChatNotification(friend, `📞 ${callType === 'video' ? 'Video' : 'Voice'} call received — joining in a moment...`);
+
     // Send ringing state
-    this.sendCallState(callerDid, callId, 'ringing');
-    this.sendChatNotification(friend, `📞 Incoming ${callType} call...`);
+    this.sendCallState(senderDid, callId, 'ringing');
 
     // Fake ring delay
     await new Promise((r) => setTimeout(r, this.config.callRingDelayMs));
 
     // Create and answer the call
     try {
-      await this.createCallFromOffer(payload, friend);
+      await this.createCallFromOffer(decrypted, friend);
       this.sendChatNotification(friend, `✅ Call connected! Use /ghost help for call commands.`);
     } catch (err) {
       this.log.error(`[CALL] Failed to answer call ${callId}:`, err);
-      this.sendCallEnd(callerDid, callId, 'error');
+      // Clean up any partially created call to prevent crash from orphaned audio/video sources
+      const call = this.activeCalls.get(callId);
+      if (call) this.cleanupCall(call);
+      this.sendCallEnd(senderDid, callId, 'error');
       this.sendChatNotification(friend, `❌ Failed to connect call.`);
     }
   }
 
-  handleCallIceCandidate(payload: CallIceCandidatePayload): void {
+  handleCallIceCandidate(rawPayload: any): void {
+    const payload: CallIceCandidatePayload = this.decryptSignalPayload(rawPayload);
     const call = this.activeCalls.get(payload.callId);
     if (!call) return;
 
@@ -181,7 +236,8 @@ export class CallHandler {
     }
   }
 
-  handleCallEnd(payload: CallEndPayload): void {
+  handleCallEnd(rawPayload: any): void {
+    const payload: CallEndPayload = this.decryptSignalPayload(rawPayload);
     const call = this.activeCalls.get(payload.callId);
     if (!call) return;
 
@@ -194,7 +250,8 @@ export class CallHandler {
     }
   }
 
-  handleCallState(payload: CallStatePayload): void {
+  handleCallState(rawPayload: any): void {
+    const payload: CallStatePayload = this.decryptSignalPayload(rawPayload);
     this.log.debug(`[CALL] Remote state: ${payload.callId} → ${payload.state}`);
   }
 
@@ -204,17 +261,27 @@ export class CallHandler {
     const { RTCPeerConnection, nonstandard } = this.wrtc;
     const { RTCAudioSource, RTCVideoSource } = nonstandard;
 
-    const peer = new RTCPeerConnection({
-      iceServers: this.config.iceServers.map((s: IceServer) => ({
+    // Filter ICE servers: TURN servers require credentials, skip ones without
+    const iceServers = this.config.iceServers
+      .filter((s: IceServer) => {
+        const urls = Array.isArray(s.urls) ? s.urls : [s.urls];
+        const hasTurn = urls.some(u => u.startsWith('turn:') || u.startsWith('turns:'));
+        if (hasTurn && !s.username) {
+          this.log.debug('[CALL] Skipping TURN server without credentials');
+          return false;
+        }
+        return true;
+      })
+      .map((s: IceServer) => ({
         urls: s.urls,
-        username: s.username,
-        credential: s.credential,
-      })),
-    });
+        ...(s.username ? { username: s.username, credential: s.credential } : {}),
+      }));
+
+    const peer = new RTCPeerConnection({ iceServers });
 
     const call: ActiveCall = {
       callId: offer.callId,
-      peerDid: offer.callerDid,
+      peerDid: offer.senderDid,
       conversationId: offer.conversationId,
       callType: offer.callType,
       peer,
@@ -258,26 +325,13 @@ export class CallHandler {
       }
     };
 
-    // Create audio track
+    // Create audio track (add to peer BEFORE SDP exchange, but don't start playing yet)
     const audioSrc = new RTCAudioSource();
     const audioTrack = audioSrc.createTrack();
     call.audioSource = new AudioSource(audioSrc, this.ffmpegPath, this.log);
-
     peer.addTrack(audioTrack);
 
-    // Start playing first available audio
-    const firstAudio = this.mediaManager.getAudioTrack();
-    if (firstAudio) {
-      call.audioSource.start(firstAudio.path, {
-        loop: true,
-        onTrackEnded: () => {
-          const next = this.mediaManager.getNextAudioTrack();
-          if (next && call.audioSource) call.audioSource.switchTrack(next.path);
-        },
-      });
-    }
-
-    // Create video track if video call
+    // Create video track if video call (add to peer BEFORE SDP exchange)
     if (offer.callType === 'video') {
       this.createVideoTrack(call);
     }
@@ -288,10 +342,28 @@ export class CallHandler {
       this.log.debug(`[CALL] Data channel opened for ${offer.callId}`);
     };
 
+    // The client's CallManager.createOffer() returns JSON.stringify({sdp, type}),
+    // so offer.sdp may be a JSON string rather than the raw SDP.
+    let rawSdp = offer.sdp;
+    if (rawSdp && rawSdp.startsWith('{')) {
+      try {
+        const parsed = JSON.parse(rawSdp);
+        rawSdp = parsed.sdp || rawSdp;
+        this.log.debug(`[CALL] Parsed JSON-wrapped SDP, actual length: ${rawSdp.length}`);
+      } catch {
+        // Not JSON, use as-is
+      }
+    }
+
+    if (!rawSdp || !rawSdp.startsWith('v=')) {
+      this.log.error(`[CALL] Invalid SDP (length=${rawSdp?.length}, starts=${JSON.stringify(rawSdp?.slice(0, 30))})`);
+      throw new Error('Invalid SDP: does not start with v=');
+    }
+
     // Set remote offer and create answer
     await peer.setRemoteDescription(new this.wrtc.RTCSessionDescription({
-      type: 'offer',
-      sdp: offer.sdp,
+      type: offer.sdpType || 'offer',
+      sdp: rawSdp,
     }));
 
     const answer = await peer.createAnswer();
@@ -313,6 +385,18 @@ export class CallHandler {
     });
 
     this.sendCallState(friend.did, offer.callId, 'connected');
+
+    // NOW start audio playback (after successful SDP exchange)
+    const firstAudio = this.mediaManager.getAudioTrack();
+    if (firstAudio) {
+      call.audioSource.start(firstAudio.path, {
+        loop: true,
+        onTrackEnded: () => {
+          const next = this.mediaManager.getNextAudioTrack();
+          if (next && call.audioSource) call.audioSource.switchTrack(next.path);
+        },
+      });
+    }
 
     // Start stats and metadata
     this.startStatsCollection(call);
@@ -374,9 +458,9 @@ export class CallHandler {
         payload: {
           callId: call.callId,
           sdp: call.peer.localDescription.sdp,
-          type: 'offer',
+          sdpType: 'offer',
           callType: 'video',
-          callerDid: this.identity.did,
+          senderDid: this.identity.did,
           conversationId: call.conversationId,
         },
       });
