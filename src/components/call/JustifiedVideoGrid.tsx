@@ -162,13 +162,15 @@ export function JustifiedVideoGrid({
             return (
               <Pressable
                 key={participant.did}
+                accessibilityRole="button"
+                accessibilityLabel={`${participant.displayName} video tile`}
                 onPress={() => {
                   // Double-press handled via onLongPress as a simpler
                   // cross-platform substitute; actual double-tap via
                   // onTileDoubleClick is wired below
                 }}
                 onLongPress={() => onTileDoubleClick?.(participant.did)}
-                delayLongPress={300}
+                delayLongPress={500}
                 style={tileStyle}
               >
                 <VideoTile
