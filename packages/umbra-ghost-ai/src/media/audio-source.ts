@@ -46,7 +46,6 @@ const CROSSFADE_FRAMES = CROSSFADE_MS / FRAME_DURATION_MS; // 50 frames
 
 export class AudioSource {
   private source: RTCAudioSource;
-  private track: MediaStreamTrack;
   private log: Logger;
   private ffmpegPath: string;
 
@@ -71,15 +70,9 @@ export class AudioSource {
 
   constructor(audioSource: RTCAudioSource, ffmpegPath: string, log: Logger) {
     this.source = audioSource;
-    this.track = audioSource.createTrack();
     this.ffmpegPath = ffmpegPath;
     this.log = log;
     this.silenceFrame = new Int16Array(SAMPLES_PER_FRAME);
-  }
-
-  /** Get the WebRTC MediaStreamTrack to add to RTCPeerConnection. */
-  getTrack(): MediaStreamTrack {
-    return this.track;
   }
 
   /**
@@ -163,9 +156,16 @@ export class AudioSource {
 
   // ── Decoding ────────────────────────────────────────────────────────────
 
-  private startDecoding(filePath: string): void {
+  private startDecoding(filePath: string, loop = false): void {
     // FFmpeg: decode any audio format → raw s16le PCM at 48kHz mono
-    this.ffmpegProcess = spawn(this.ffmpegPath, [
+    const args: string[] = [];
+
+    // Seamless looping via FFmpeg (avoids restart gap)
+    if (loop || this.looping) {
+      args.push('-stream_loop', '-1');
+    }
+
+    args.push(
       '-i', filePath,
       '-f', 's16le',           // Raw signed 16-bit little-endian
       '-acodec', 'pcm_s16le',
@@ -173,7 +173,9 @@ export class AudioSource {
       '-ac', String(CHANNELS),
       '-v', 'error',           // Suppress non-error output
       'pipe:1',                // Output to stdout
-    ]);
+    );
+
+    this.ffmpegProcess = spawn(this.ffmpegPath, args);
 
     this.ffmpegProcess.stdout?.on('data', (chunk: Buffer) => {
       this.pcmBuffer = Buffer.concat([this.pcmBuffer, chunk]);

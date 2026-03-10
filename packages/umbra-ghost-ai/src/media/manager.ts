@@ -3,7 +3,7 @@
  * and manages audio/video playlists and file assets.
  */
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, statSync } from 'fs';
 import { join, resolve, basename } from 'path';
 import { get as httpsGet } from 'https';
 import { get as httpGet } from 'http';
@@ -161,6 +161,14 @@ export class MediaManager {
     return this.videoFiles[0] ?? null;
   }
 
+  /** Get a random video file (for call start). */
+  getRandomVideoFile(): MediaFile | null {
+    if (this.videoFiles.length === 0) return null;
+    const idx = Math.floor(Math.random() * this.videoFiles.length);
+    this.videoIndex = idx;
+    return this.videoFiles[idx];
+  }
+
   getNextVideoFile(): MediaFile | null {
     if (this.videoFiles.length === 0) return null;
     this.videoIndex = (this.videoIndex + 1) % this.videoFiles.length;
@@ -199,8 +207,13 @@ export class MediaManager {
   private async ensureDownloaded(url: string, subdir: string, filename: string): Promise<string | null> {
     const filePath = join(this.cacheDir, subdir, filename);
     if (existsSync(filePath)) {
-      this.log.debug(`[MEDIA] Already cached: ${filename}`);
-      return filePath;
+      // Check file isn't empty (could be a partial/failed download)
+      const stat = statSync(filePath);
+      if (stat.size > 0) {
+        this.log.debug(`[MEDIA] Already cached: ${filename} (${(stat.size / 1024).toFixed(0)}KB)`);
+        return filePath;
+      }
+      this.log.warn(`[MEDIA] Empty file found, re-downloading: ${filename}`);
     }
 
     this.log.info(`[MEDIA] Downloading: ${filename} from ${url}`);

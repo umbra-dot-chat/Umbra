@@ -13,59 +13,40 @@
       "format": "mp3"
     },
     {
-      "id": "ambient-chill",
-      "name": "Ambient Chill",
-      "url": "https://cdn.pixabay.com/download/audio/2022/10/25/audio_946bc498db.mp3",
-      "format": "mp3"
-    },
-    {
       "id": "lofi-study",
       "name": "Lofi Study",
       "url": "https://cdn.pixabay.com/download/audio/2024/11/04/audio_4956b4edd1.mp3",
-      "format": "mp3"
-    },
-    {
-      "id": "acoustic-guitar",
-      "name": "Acoustic Guitar",
-      "url": "https://cdn.pixabay.com/download/audio/2023/09/04/audio_8fdfbf41ba.mp3",
       "format": "mp3"
     }
   ],
   "video": [
     {
-      "id": "big-buck-bunny",
-      "name": "Big Buck Bunny (4K)",
-      "url": "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/2160/Big_Buck_Bunny_2160_10s_1MB.mp4",
+      "id": "tears-of-steel-4k",
+      "name": "Tears of Steel (4K)",
+      "url": "http://ftp.nluug.nl/pub/graphics/blender/demo/movies/ToS/tearsofsteel_4k.mov",
       "format": "mp4",
       "resolution": "3840x2160"
     },
     {
-      "id": "jellyfish",
-      "name": "Jellyfish (4K)",
-      "url": "https://test-videos.co.uk/vids/jellyfish/mp4/h264/2160/Jellyfish_2160_10s_1MB.mp4",
+      "id": "bbb",
+      "name": "Big Buck Bunny",
+      "url": "http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4",
       "format": "mp4",
-      "resolution": "3840x2160"
+      "resolution": "1280x720"
     },
     {
-      "id": "sintel-trailer",
-      "name": "Sintel Trailer (4K)",
-      "url": "https://test-videos.co.uk/vids/sintel/mp4/h264/2160/Sintel_2160_10s_1MB.mp4",
+      "id": "sintel",
+      "name": "Sintel",
+      "url": "http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4",
       "format": "mp4",
-      "resolution": "3840x2160"
+      "resolution": "1280x546"
     },
     {
-      "id": "countdown",
-      "name": "Countdown Timer",
-      "url": "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/1080/Big_Buck_Bunny_1080_10s_1MB.mp4",
+      "id": "elephants-dream",
+      "name": "Elephant's Dream",
+      "url": "http://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4",
       "format": "mp4",
-      "resolution": "1920x1080"
-    },
-    {
-      "id": "nature-forest",
-      "name": "Nature Forest (1080p)",
-      "url": "https://test-videos.co.uk/vids/jellyfish/mp4/h264/1080/Jellyfish_1080_10s_1MB.mp4",
-      "format": "mp4",
-      "resolution": "1920x1080"
+      "resolution": "1280x720"
     }
   ],
   "files": [

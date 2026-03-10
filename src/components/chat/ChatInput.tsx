@@ -7,14 +7,15 @@ import {
 } from '@coexist/wisp-react-native';
 import type { EmojiItem } from '@coexist/wisp-core/types/EmojiPicker.types';
 import type { GifItem } from '@coexist/wisp-core/types/GifPicker.types';
-import type { SlashCommand } from '@umbra/plugin-sdk';
-import type { SlashDropdownItem } from '@/hooks/useSlashCommand';
 import { useFriends } from '@/hooks/useFriends';
 import { useNetwork } from '@/hooks/useNetwork';
 import { useMention } from '@/hooks/useMention';
 import { useSlashCommand } from '@/hooks/useSlashCommand';
+import type { SlashCommandDef } from '@/hooks/useSlashCommand';
+import { usePlugins } from '@/contexts/PluginContext';
+import { SlashCommandMenu } from './SlashCommandMenu';
 import { AnimatedPresence } from '@/components/ui/AnimatedPresence';
-import { SlashCommandAutocomplete } from '@/components/chat/SlashCommandAutocomplete';
+import { getSystemCommands, GHOST_COMMANDS, isGhostBot } from '@/services/SlashCommandRegistry';
 
 export interface ChatInputProps {
   message: string;
@@ -30,26 +31,29 @@ export interface ChatInputProps {
   onCancelEdit?: () => void;
   /** Called when the attachment button is clicked */
   onAttachmentClick?: () => void;
-  /** Plugin-registered slash commands for autocomplete */
-  slashCommands?: SlashCommand[];
   /** Custom community emoji for the picker */
   customEmojis?: EmojiItem[];
   /** Relay URL for GIF picker proxy */
   relayUrl?: string;
   /** Called when a GIF is selected */
   onGifSelect?: (gif: GifItem) => void;
+  /** DID of the friend in this conversation (for bot detection) */
+  friendDid?: string | null;
+  /** Callback to clear chat messages */
+  onClearChat?: () => void;
 }
 
 export function ChatInput({
   message, onMessageChange, emojiOpen, onToggleEmoji,
   replyingTo, onClearReply, onSubmit,
   editing, onCancelEdit, onAttachmentClick,
-  slashCommands: slashCommandsProp,
   customEmojis, relayUrl, onGifSelect,
+  friendDid, onClearChat,
 }: ChatInputProps) {
   const { theme } = useTheme();
   const { friends } = useFriends();
   const { onlineDids } = useNetwork();
+  const { pluginSlashCommands } = usePlugins();
 
   // Build mention users from the real friends list, enriched with relay presence
   const mentionUsers = useMemo(
@@ -78,12 +82,44 @@ export function ChatInput({
     handleKeyPress, insertMention, closeMention,
   } = useMention({ users: mentionUsers });
 
+  // ── Slash commands ──────────────────────────────────────────────────────
+
+  // Build the combined slash command list
+  const allSlashCommands = useMemo(() => {
+    const commands: SlashCommandDef[] = [];
+
+    // System commands (always available)
+    commands.push(...getSystemCommands({
+      onClear: onClearChat,
+      onHelp: () => {
+        // Show help — for now just log, can wire to a modal later
+        console.log('[System] Help requested');
+      },
+    }));
+
+    // Ghost commands (when chatting with a Ghost bot)
+    if (isGhostBot(friendDid)) {
+      commands.push(...GHOST_COMMANDS);
+    }
+
+    // Plugin slash commands
+    commands.push(...pluginSlashCommands);
+
+    return commands;
+  }, [friendDid, pluginSlashCommands, onClearChat]);
+
   const {
-    slashOpen, dropdownItems,
-    activeIndex: slashActiveIndex, setActiveIndex: setSlashActiveIndex,
+    slashOpen,
+    slashQuery,
+    filteredCommands,
+    activeIndex: slashActiveIndex,
+    setActiveIndex: setSlashActiveIndex,
     handleTextChange: handleSlashTextChange,
-    insertCommand, selectItem, closeSlash,
-  } = useSlashCommand({ commands: slashCommandsProp ?? [] });
+    selectCommand,
+    closeSlash,
+  } = useSlashCommand({ commands: allSlashCommands });
+
+  // ── Value change handler ────────────────────────────────────────────────
 
   const handleValueChange = useCallback(
     (text: string) => {
@@ -103,51 +139,53 @@ export function ChatInput({
   );
 
   const handleSlashSelect = useCallback(
-    (item: SlashDropdownItem) => {
-      const newText = selectItem(item);
-      onMessageChange(newText);
+    (cmd: SlashCommandDef) => {
+      const { newText, shouldSend } = selectCommand(cmd, message);
+      if (shouldSend) {
+        // Clear and submit
+        onMessageChange('');
+        onClearReply();
+        onSubmit(newText);
+      } else {
+        onMessageChange(newText);
+      }
     },
-    [selectItem, onMessageChange],
+    [selectCommand, message, onMessageChange, onClearReply, onSubmit],
   );
 
-  // Refs for DOM keydown handler (web only) — prevents arrow/enter/escape
-  // from moving the cursor or submitting while the mention dropdown is open.
-  // We store ALL values/callbacks in refs so the useEffect has zero deps that
-  // change, which means the listener is attached exactly once and never torn
-  // down / re-attached mid-interaction.
+  // ── Refs for DOM keydown handler (web only) ─────────────────────────────
   const inputWrapperRef = useRef<View>(null);
   const mentionOpenRef = useRef(mentionOpen);
+  const slashOpenRef = useRef(slashOpen);
   const messageRef = useRef(message);
   const filteredUsersRef = useRef(filteredUsers);
+  const filteredCommandsRef = useRef(filteredCommands);
   const activeIndexRef = useRef(activeIndex);
+  const slashActiveIndexRef = useRef(slashActiveIndex);
   const insertMentionRef = useRef(insertMention);
   const onMessageChangeRef = useRef(onMessageChange);
   const closeMentionRef = useRef(closeMention);
-  const setActiveIndexRef = useRef(setActiveIndex);
-
-  // Slash command refs
-  const slashOpenRef = useRef(slashOpen);
-  const dropdownItemsRef = useRef(dropdownItems);
-  const slashActiveIndexRef = useRef(slashActiveIndex);
-  const setSlashActiveIndexRef = useRef(setSlashActiveIndex);
-  const selectItemRef = useRef(selectItem);
   const closeSlashRef = useRef(closeSlash);
+  const setActiveIndexRef = useRef(setActiveIndex);
+  const setSlashActiveIndexRef = useRef(setSlashActiveIndex);
+  const handleSlashSelectRef = useRef(handleSlashSelect);
+  const onSubmitRef = useRef(onSubmit);
 
   mentionOpenRef.current = mentionOpen;
+  slashOpenRef.current = slashOpen;
   messageRef.current = message;
   filteredUsersRef.current = filteredUsers;
+  filteredCommandsRef.current = filteredCommands;
   activeIndexRef.current = activeIndex;
+  slashActiveIndexRef.current = slashActiveIndex;
   insertMentionRef.current = insertMention;
   onMessageChangeRef.current = onMessageChange;
   closeMentionRef.current = closeMention;
-  setActiveIndexRef.current = setActiveIndex;
-
-  slashOpenRef.current = slashOpen;
-  dropdownItemsRef.current = dropdownItems;
-  slashActiveIndexRef.current = slashActiveIndex;
-  setSlashActiveIndexRef.current = setSlashActiveIndex;
-  selectItemRef.current = selectItem;
   closeSlashRef.current = closeSlash;
+  setActiveIndexRef.current = setActiveIndex;
+  setSlashActiveIndexRef.current = setSlashActiveIndex;
+  handleSlashSelectRef.current = handleSlashSelect;
+  onSubmitRef.current = onSubmit;
 
   useEffect(() => {
     if (Platform.OS !== 'web') return;
@@ -156,69 +194,72 @@ export function ChatInput({
     if (!wrapper) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Slash command keyboard handling (takes priority when open)
-      if (slashOpenRef.current) {
+      // Slash command menu takes priority when open
+      if (slashOpenRef.current && filteredCommandsRef.current.length > 0) {
         if (e.key === 'ArrowDown') {
           e.preventDefault();
           e.stopPropagation();
-          const len = dropdownItemsRef.current.length;
-          if (len > 0) {
-            setSlashActiveIndexRef.current((slashActiveIndexRef.current + 1) % len);
-          }
-          return;
+          const len = filteredCommandsRef.current.length;
+          setSlashActiveIndexRef.current((prev: number) => (prev + 1) % len);
         } else if (e.key === 'ArrowUp') {
           e.preventDefault();
           e.stopPropagation();
-          const len = dropdownItemsRef.current.length;
-          if (len > 0) {
-            setSlashActiveIndexRef.current((slashActiveIndexRef.current - 1 + len) % len);
-          }
-          return;
-        } else if (e.key === 'Enter' || e.key === 'Tab') {
+          const len = filteredCommandsRef.current.length;
+          setSlashActiveIndexRef.current((prev: number) => (prev - 1 + len) % len);
+        } else if (e.key === 'Enter') {
           e.preventDefault();
           e.stopPropagation();
-          const selected = dropdownItemsRef.current[slashActiveIndexRef.current];
+          const selected = filteredCommandsRef.current[slashActiveIndexRef.current];
           if (selected) {
-            onMessageChangeRef.current(selected.insertText);
+            handleSlashSelectRef.current(selected);
           }
-          closeSlashRef.current();
-          return;
         } else if (e.key === 'Escape') {
           e.preventDefault();
           e.stopPropagation();
           closeSlashRef.current();
-          return;
+        } else if (e.key === 'Tab') {
+          e.preventDefault();
+          e.stopPropagation();
+          // Tab = select the highlighted command and fill it in without sending
+          const selected = filteredCommandsRef.current[slashActiveIndexRef.current];
+          if (selected) {
+            const fullCommand = `/${selected.command} `;
+            onMessageChangeRef.current(fullCommand);
+            closeSlashRef.current();
+          }
         }
+        return;
       }
 
-      if (!mentionOpenRef.current) return;
-
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        e.stopPropagation();
-        const len = filteredUsersRef.current.length;
-        if (len > 0) {
-          setActiveIndexRef.current((activeIndexRef.current + 1) % len);
+      // Mention menu
+      if (mentionOpenRef.current) {
+        if (e.key === 'ArrowDown') {
+          e.preventDefault();
+          e.stopPropagation();
+          const len = filteredUsersRef.current.length;
+          if (len > 0) {
+            setActiveIndexRef.current((activeIndexRef.current + 1) % len);
+          }
+        } else if (e.key === 'ArrowUp') {
+          e.preventDefault();
+          e.stopPropagation();
+          const len = filteredUsersRef.current.length;
+          if (len > 0) {
+            setActiveIndexRef.current((activeIndexRef.current - 1 + len) % len);
+          }
+        } else if (e.key === 'Enter') {
+          e.preventDefault();
+          e.stopPropagation();
+          const selected = filteredUsersRef.current[activeIndexRef.current];
+          if (selected) {
+            const result = insertMentionRef.current(selected, messageRef.current);
+            onMessageChangeRef.current(result);
+          }
+        } else if (e.key === 'Escape') {
+          e.preventDefault();
+          e.stopPropagation();
+          closeMentionRef.current();
         }
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        e.stopPropagation();
-        const len = filteredUsersRef.current.length;
-        if (len > 0) {
-          setActiveIndexRef.current((activeIndexRef.current - 1 + len) % len);
-        }
-      } else if (e.key === 'Enter') {
-        e.preventDefault();
-        e.stopPropagation();
-        const selected = filteredUsersRef.current[activeIndexRef.current];
-        if (selected) {
-          const result = insertMentionRef.current(selected, messageRef.current);
-          onMessageChangeRef.current(result);
-        }
-      } else if (e.key === 'Escape') {
-        e.preventDefault();
-        e.stopPropagation();
-        closeMentionRef.current();
       }
     };
 
@@ -270,11 +311,12 @@ export function ChatInput({
         />
       </AnimatedPresence>
       <View ref={inputWrapperRef} testID={TEST_IDS.INPUT.CONTAINER} style={{ padding: 12 }}>
-        {/* Slash command autocomplete dropdown */}
-        {slashOpen && dropdownItems.length > 0 && (
+        {/* Slash command autocomplete menu */}
+        {slashOpen && filteredCommands.length > 0 && !mentionOpen && (
           <View style={{ position: 'absolute', bottom: 64, left: 12, right: 12, zIndex: 16 }}>
-            <SlashCommandAutocomplete
-              items={dropdownItems}
+            <SlashCommandMenu
+              commands={filteredCommands}
+              query={slashQuery}
               activeIndex={slashActiveIndex}
               onActiveIndexChange={setSlashActiveIndex}
               onSelect={handleSlashSelect}

@@ -6,12 +6,14 @@
  * resolution and frame rate, then feeds them to RTCVideoSource.
  *
  * Supports:
- * - Looping playback with brief crossfade
+ * - Seamless looping via FFmpeg's -stream_loop
+ * - GPU-accelerated decoding via NVDEC (h264_cuvid)
+ * - Large frame buffer with pre-buffering for smooth playback
  * - Track switching
  * - Pause/resume (sends last frame repeatedly when paused)
  */
 
-import { spawn, type ChildProcess } from 'child_process';
+import { spawn, execSync, type ChildProcess } from 'child_process';
 import type { Logger } from '../config.js';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -30,15 +32,19 @@ interface RTCVideoFrame {
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
-const DEFAULT_WIDTH = 1920;
-const DEFAULT_HEIGHT = 1080;
+const DEFAULT_WIDTH = 3840;
+const DEFAULT_HEIGHT = 2160;
 const DEFAULT_FPS = 30;
+
+// Buffer 3 seconds of video to absorb decode/network hiccups
+const DEFAULT_MAX_BUFFERED_FRAMES = 90;
+// Wait for 1 second of frames before starting feed
+const PRE_BUFFER_FRAMES = 30;
 
 // ── VideoSource ───────────────────────────────────────────────────────────────
 
 export class VideoSource {
   private source: RTCVideoSource;
-  private track: MediaStreamTrack;
   private log: Logger;
   private ffmpegPath: string;
 
@@ -47,10 +53,11 @@ export class VideoSource {
   private feedInterval: ReturnType<typeof setInterval> | null = null;
   private paused = false;
   private stopped = false;
+  private preBuffering = false;
 
   // Frame buffer — stores decoded I420 frames
   private frameBuffer: Buffer[] = [];
-  private maxBufferedFrames = 10;
+  private maxBufferedFrames = DEFAULT_MAX_BUFFERED_FRAMES;
   private lastFrame: Buffer | null = null;
 
   // Video dimensions and timing
@@ -63,6 +70,9 @@ export class VideoSource {
   private looping = true;
   private onTrackEnded: (() => void) | null = null;
 
+  // GPU decode availability (cached)
+  private static gpuAvailable: boolean | null = null;
+
   // Frame size in bytes for I420 (Y plane + U plane + V plane)
   private get frameSize(): number {
     return this.width * this.height * 3 / 2;
@@ -70,14 +80,8 @@ export class VideoSource {
 
   constructor(videoSource: RTCVideoSource, ffmpegPath: string, log: Logger) {
     this.source = videoSource;
-    this.track = videoSource.createTrack();
     this.ffmpegPath = ffmpegPath;
     this.log = log;
-  }
-
-  /** Get the WebRTC MediaStreamTrack to add to RTCPeerConnection. */
-  getTrack(): MediaStreamTrack {
-    return this.track;
   }
 
   /**
@@ -107,11 +111,13 @@ export class VideoSource {
     this.paused = false;
     this.frameBuffer = [];
     this.lastFrame = null;
+    this.preBuffering = true;
 
     this.startDecoding(filePath);
-    this.startFeeding();
+    // Don't start feeding yet — wait for pre-buffer to fill
+    // The decode handler will call startFeeding() once we have enough frames
 
-    this.log.debug(`[VIDEO] Started playback: ${filePath} (${this.width}x${this.height} @ ${this.fps}fps)`);
+    this.log.info(`[VIDEO] Started playback: ${filePath} (${this.width}x${this.height} @ ${this.fps}fps, loop=${this.looping})`);
   }
 
   /** Switch to a different video file. */
@@ -130,10 +136,12 @@ export class VideoSource {
     if (options?.fps) {
       this.fps = options.fps;
       this.frameIntervalMs = 1000 / this.fps;
-      this.startFeeding();
     }
 
+    // Restart with pre-buffering
+    this.preBuffering = true;
     this.startDecoding(filePath);
+
     this.log.debug(`[VIDEO] Switched to: ${filePath}`);
   }
 
@@ -174,10 +182,44 @@ export class VideoSource {
     return this.currentFilePath;
   }
 
+  // ── GPU detection ─────────────────────────────────────────────────────────
+
+  private checkGpuAvailable(): boolean {
+    if (VideoSource.gpuAvailable !== null) return VideoSource.gpuAvailable;
+
+    try {
+      execSync(`${this.ffmpegPath} -hwaccel cuda -f lavfi -i nullsrc=s=64x64:d=0.1 -c:v h264_nvenc -f null - 2>/dev/null`, {
+        timeout: 5000,
+        stdio: 'pipe',
+      });
+      VideoSource.gpuAvailable = true;
+      this.log.info('[VIDEO] NVIDIA GPU acceleration available');
+    } catch {
+      VideoSource.gpuAvailable = false;
+      this.log.info('[VIDEO] GPU acceleration not available, using CPU decode');
+    }
+    return VideoSource.gpuAvailable;
+  }
+
   // ── Decoding ────────────────────────────────────────────────────────────
 
   private startDecoding(filePath: string): void {
-    this.ffmpegProcess = spawn(this.ffmpegPath, [
+    const useGpu = this.checkGpuAvailable();
+
+    const args: string[] = [];
+
+    // GPU-accelerated decoding with NVDEC
+    if (useGpu) {
+      args.push('-hwaccel', 'cuda', '-hwaccel_output_format', 'cuda');
+    }
+
+    // Seamless looping: let FFmpeg loop the file infinitely
+    // This avoids the gap from restarting FFmpeg on each loop
+    if (this.looping) {
+      args.push('-stream_loop', '-1');
+    }
+
+    args.push(
       '-i', filePath,
       '-f', 'rawvideo',
       '-pix_fmt', 'yuv420p',       // I420 format — required by wrtc
@@ -185,7 +227,9 @@ export class VideoSource {
       '-r', String(this.fps),
       '-v', 'error',
       'pipe:1',
-    ]);
+    );
+
+    this.ffmpegProcess = spawn(this.ffmpegPath, args);
 
     let partialBuffer = Buffer.alloc(0);
 
@@ -199,9 +243,17 @@ export class VideoSource {
         if (this.frameBuffer.length < this.maxBufferedFrames) {
           this.frameBuffer.push(Buffer.from(frame));
         } else {
+          // Buffer full — drop oldest frame
           this.frameBuffer.shift();
           this.frameBuffer.push(Buffer.from(frame));
         }
+      }
+
+      // Start feeding once we have enough frames pre-buffered
+      if (this.preBuffering && this.frameBuffer.length >= PRE_BUFFER_FRAMES) {
+        this.preBuffering = false;
+        this.startFeeding();
+        this.log.debug(`[VIDEO] Pre-buffer filled (${this.frameBuffer.length} frames), starting feed`);
       }
     });
 
@@ -246,16 +298,13 @@ export class VideoSource {
       frameData = this.frameBuffer.shift()!;
       this.lastFrame = frameData;
     } else if (this.ffmpegProcess === null || this.ffmpegProcess.exitCode !== null) {
-      // FFmpeg done and buffer empty — video ended
-      if (this.looping && this.currentFilePath) {
-        this.log.debug('[VIDEO] Video ended, looping...');
-        this.startDecoding(this.currentFilePath);
-      } else {
+      // FFmpeg done and buffer empty — video ended (non-looping mode)
+      if (!this.looping) {
         this.onTrackEnded?.();
       }
       frameData = this.lastFrame;
     } else {
-      // Buffer underrun — send last frame
+      // Buffer underrun — send last frame to avoid gap
       frameData = this.lastFrame;
     }
 

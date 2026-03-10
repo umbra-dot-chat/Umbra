@@ -102,6 +102,7 @@ export class CallHandler {
   private wrtc: any = null;
   private ffmpegPath: string;
   private activeCalls = new Map<string, ActiveCall>();
+  private pendingIceCandidates = new Map<string, any[]>();
 
   constructor(
     config: GhostConfig,
@@ -223,14 +224,28 @@ export class CallHandler {
   async handleCallIceCandidate(rawPayload: any): Promise<void> {
     const payload: CallIceCandidatePayload = this.decryptSignalPayload(rawPayload);
     const call = this.activeCalls.get(payload.callId);
-    if (!call) return;
 
+    if (!call) {
+      // Call not created yet (likely in ring delay) — queue the candidate
+      if (!this.pendingIceCandidates.has(payload.callId)) {
+        this.pendingIceCandidates.set(payload.callId, []);
+      }
+      this.pendingIceCandidates.get(payload.callId)!.push(payload);
+      this.log.debug(`[CALL] Queued ICE candidate for pending call ${payload.callId} (${this.pendingIceCandidates.get(payload.callId)!.length} queued)`);
+      return;
+    }
+
+    await this.addIceCandidateToCall(call, payload);
+  }
+
+  private async addIceCandidateToCall(call: ActiveCall, payload: CallIceCandidatePayload): Promise<void> {
     try {
       await call.peer.addIceCandidate(new this.wrtc.RTCIceCandidate({
         candidate: payload.candidate,
         sdpMid: payload.sdpMid,
         sdpMLineIndex: payload.sdpMLineIndex,
       }));
+      this.log.debug(`[CALL] Added ICE candidate for ${call.callId}`);
     } catch (err: any) {
       // Ignore errors from closed peer connections (race with call end)
       if (!err?.message?.includes('closed')) {
@@ -324,7 +339,7 @@ export class CallHandler {
 
     peer.onconnectionstatechange = () => {
       const state = peer.connectionState;
-      this.log.debug(`[CALL] Connection state: ${state}`);
+      this.log.info(`[CALL] Connection state: ${state} for ${offer.callId}`);
 
       // Clear any pending disconnect timer on state change
       if (disconnectTimer) {
@@ -347,6 +362,18 @@ export class CallHandler {
       } else if (state === 'connected') {
         this.log.info(`[CALL] Connection established for ${offer.callId}`);
       }
+    };
+
+    peer.oniceconnectionstatechange = () => {
+      this.log.info(`[CALL] ICE connection state: ${peer.iceConnectionState} for ${offer.callId}`);
+    };
+
+    peer.onicegatheringstatechange = () => {
+      this.log.info(`[CALL] ICE gathering state: ${peer.iceGatheringState} for ${offer.callId}`);
+    };
+
+    peer.onsignalingstatechange = () => {
+      this.log.debug(`[CALL] Signaling state: ${peer.signalingState} for ${offer.callId}`);
     };
 
     // Create a MediaStream so the client's ontrack handler receives
@@ -417,6 +444,16 @@ export class CallHandler {
 
     this.sendCallState(friend.did, offer.callId, 'connected');
 
+    // Flush any ICE candidates that arrived during ring delay
+    const pendingCandidates = this.pendingIceCandidates.get(offer.callId);
+    if (pendingCandidates && pendingCandidates.length > 0) {
+      this.log.info(`[CALL] Flushing ${pendingCandidates.length} queued ICE candidates for ${offer.callId}`);
+      for (const candidate of pendingCandidates) {
+        await this.addIceCandidateToCall(call, candidate);
+      }
+    }
+    this.pendingIceCandidates.delete(offer.callId);
+
     // NOW start audio playback (after successful SDP exchange)
     const firstAudio = this.mediaManager.getAudioTrack();
     if (firstAudio) {
@@ -451,25 +488,30 @@ export class CallHandler {
       call.videoSender = call.peer.addTrack(videoTrack);
     }
 
-    const firstVideo = this.mediaManager.getVideoFile();
+    // Pick a random video to start with
+    const firstVideo = this.mediaManager.getRandomVideoFile();
     if (firstVideo) {
-      // Cap output resolution — source files may be 4K but encoding is CPU-bound.
-      // 6-core A16 GPU server: 1080p@30fps is comfortable.
-      const MAX_WIDTH = 1920;
-      const MAX_HEIGHT = 1080;
-      const MAX_FPS = 30;
+      // Use video's native resolution, or default to 4K
+      const res = firstVideo.resolution ? parseResolution(firstVideo.resolution) : null;
+      const width = res?.width ?? 3840;
+      const height = res?.height ?? 2160;
+      const fps = 30;
+
+      this.log.info(`[CALL] Starting video: ${firstVideo.name} (${width}x${height}@${fps}fps)`);
 
       call.videoSource.start(firstVideo.path, {
-        width: MAX_WIDTH,
-        height: MAX_HEIGHT,
-        fps: MAX_FPS,
+        width,
+        height,
+        fps,
         loop: true,
         onTrackEnded: () => {
+          // In non-loop mode, switch to next video when current ends
           const next = this.mediaManager.getNextVideoFile();
           if (next && call.videoSource) {
+            const nextRes = next.resolution ? parseResolution(next.resolution) : null;
             call.videoSource.switchVideo(next.path, {
-              width: MAX_WIDTH,
-              height: MAX_HEIGHT,
+              width: nextRes?.width ?? width,
+              height: nextRes?.height ?? height,
             });
           }
         },
@@ -990,6 +1032,7 @@ export class CallHandler {
     try { call.peer.close(); } catch { /* ignore */ }
 
     this.activeCalls.delete(call.callId);
+    this.pendingIceCandidates.delete(call.callId);
     this.log.info(`[CALL] Cleaned up call: ${call.callId}`);
   }
 

@@ -64,9 +64,8 @@ import type {
   PluginManifest,
   PluginAPI,
   PluginCommand,
+  PluginSlashCommand,
   PluginShortcut,
-  SlashCommand,
-  TextTransform,
   PluginMessage,
   PluginFriend,
   PluginConversation,
@@ -75,6 +74,7 @@ import type {
   ConversationEventPayload,
   VoiceParticipantEvent,
 } from '@umbra/plugin-sdk';
+import type { SlashCommandDef } from '@/hooks/useSlashCommand';
 
 import { VoiceStreamBridge } from '@/services/VoiceStreamBridge';
 import { ShortcutRegistry } from '@/services/ShortcutRegistry';
@@ -119,10 +119,8 @@ export interface PluginContextValue {
   enabledCount: number;
   /** Plugin-registered commands */
   pluginCommands: PluginCommand[];
-  /** Plugin-registered slash commands for chat input */
-  slashCommands: SlashCommand[];
-  /** Apply all registered text transforms to message text before rendering */
-  applyTextTransforms(text: string, message: { senderDid?: string; conversationId?: string }): string;
+  /** Plugin-registered slash commands (for chat input autocomplete) */
+  pluginSlashCommands: SlashCommandDef[];
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -143,15 +141,14 @@ export function PluginProvider({ children }: { children: React.ReactNode }) {
   const [isLoading, setIsLoading] = useState(true);
   const [enabledCount, setEnabledCount] = useState(0);
   const [pluginCommands, setPluginCommands] = useState<PluginCommand[]>([]);
-  const [slashCommands, setSlashCommands] = useState<SlashCommand[]>([]);
+  const [pluginSlashCommands, setPluginSlashCommands] = useState<SlashCommandDef[]>([]);
 
   // Stable references
   const registryRef = useRef(new PluginRegistry());
   const loaderRef = useRef(new PluginLoader());
   const marketplaceRef = useRef(new MarketplaceClient(undefined, BUNDLED_REGISTRY));
   const commandsRef = useRef<Map<string, PluginCommand[]>>(new Map());
-  const slashCommandsRef = useRef<Map<string, SlashCommand[]>>(new Map());
-  const textTransformsRef = useRef<Map<string, TextTransform[]>>(new Map());
+  const slashCommandsRef = useRef<Map<string, SlashCommandDef[]>>(new Map());
 
   const registry = registryRef.current;
   const loader = loaderRef.current;
@@ -179,15 +176,13 @@ export function PluginProvider({ children }: { children: React.ReactNode }) {
 
       onMessage: (cb: (event: MessageEventPayload) => void) => {
         return service.onMessageEvent((event: any) => {
-          // messageReceived/threadReplyReceived nest data under .message
-          const msg = event.message;
           cb({
             type: event.type,
-            messageId: event.messageId ?? msg?.id,
-            conversationId: event.conversationId ?? msg?.conversationId,
-            senderDid: event.senderDid ?? msg?.senderDid,
-            text: event.text ?? msg?.content?.text ?? event.newText,
-            timestamp: event.timestamp ?? msg?.timestamp,
+            messageId: event.messageId ?? event.id,
+            conversationId: event.conversationId,
+            senderDid: event.senderDid,
+            text: event.text ?? event.content?.text,
+            timestamp: event.timestamp,
           });
         });
       },
@@ -273,6 +268,32 @@ export function PluginProvider({ children }: { children: React.ReactNode }) {
         };
       },
 
+      registerSlashCommand: (pluginId: string, cmd: PluginSlashCommand) => {
+        const existing = slashCommandsRef.current.get(pluginId) ?? [];
+        const slashDef: SlashCommandDef = {
+          id: `${pluginId}:${cmd.id}`,
+          command: cmd.command,
+          label: cmd.label,
+          description: cmd.description,
+          icon: cmd.icon,
+          category: pluginId.split('.').pop() ?? pluginId,
+          sendAsMessage: cmd.sendAsMessage,
+          onExecute: cmd.onSelect,
+          args: cmd.args,
+        };
+        existing.push(slashDef);
+        slashCommandsRef.current.set(pluginId, existing);
+        updateSlashCommands();
+        return () => {
+          const defs = slashCommandsRef.current.get(pluginId) ?? [];
+          slashCommandsRef.current.set(
+            pluginId,
+            defs.filter((d) => d.id !== slashDef.id)
+          );
+          updateSlashCommands();
+        };
+      },
+
       // ── Voice ────────────────────────────────────────────────────────
       isInVoiceCall: () => VoiceStreamBridge.isActive(),
       getVoiceParticipants: () => VoiceStreamBridge.getParticipants(),
@@ -291,36 +312,6 @@ export function PluginProvider({ children }: { children: React.ReactNode }) {
       registerShortcut: (pluginId: string, shortcut: PluginShortcut) => {
         return ShortcutRegistry.register(pluginId, shortcut);
       },
-
-      // ── Slash commands ────────────────────────────────────────────────
-      registerSlashCommand: (pluginId: string, cmd: SlashCommand) => {
-        const existing = slashCommandsRef.current.get(pluginId) ?? [];
-        existing.push(cmd);
-        slashCommandsRef.current.set(pluginId, existing);
-        updateSlashCommands();
-        return () => {
-          const cmds = slashCommandsRef.current.get(pluginId) ?? [];
-          slashCommandsRef.current.set(
-            pluginId,
-            cmds.filter((c) => c.id !== cmd.id)
-          );
-          updateSlashCommands();
-        };
-      },
-
-      // ── Text transforms ──────────────────────────────────────────────
-      registerTextTransform: (pluginId: string, transform: TextTransform) => {
-        const existing = textTransformsRef.current.get(pluginId) ?? [];
-        existing.push(transform);
-        textTransformsRef.current.set(pluginId, existing);
-        return () => {
-          const transforms = textTransformsRef.current.get(pluginId) ?? [];
-          textTransformsRef.current.set(
-            pluginId,
-            transforms.filter((t) => t.id !== transform.id)
-          );
-        };
-      },
     };
   }, [service, identity]);
 
@@ -333,11 +324,11 @@ export function PluginProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const updateSlashCommands = useCallback(() => {
-    const all: SlashCommand[] = [];
-    for (const cmds of slashCommandsRef.current.values()) {
-      all.push(...cmds);
+    const all: SlashCommandDef[] = [];
+    for (const defs of slashCommandsRef.current.values()) {
+      all.push(...defs);
     }
-    setSlashCommands(all);
+    setPluginSlashCommands(all);
   }, []);
 
   // ── Plugin state persistence helpers ──────────────────────────────────
@@ -512,10 +503,12 @@ export function PluginProvider({ children }: { children: React.ReactNode }) {
       // Clear commands
       commandsRef.current.delete(id);
       updateCommands();
+      slashCommandsRef.current.delete(id);
+      updateSlashCommands();
 
       loader.invalidateCache(id);
     },
-    [registry, loader, updateCommands, removePluginState]
+    [registry, loader, updateCommands, updateSlashCommands, removePluginState]
   );
 
   const enablePlugin = useCallback(
@@ -537,9 +530,8 @@ export function PluginProvider({ children }: { children: React.ReactNode }) {
       await registry.disable(id);
       await savePluginState(id, 'disabled');
       commandsRef.current.delete(id);
-      slashCommandsRef.current.delete(id);
-      textTransformsRef.current.delete(id);
       updateCommands();
+      slashCommandsRef.current.delete(id);
       updateSlashCommands();
     },
     [registry, updateCommands, updateSlashCommands, savePluginState]
@@ -552,29 +544,6 @@ export function PluginProvider({ children }: { children: React.ReactNode }) {
     // Re-evaluate when enabledCount changes (after enable/disable)
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [registry, enabledCount]
-  );
-
-  const applyTextTransforms = useCallback(
-    (text: string, message: { senderDid?: string; conversationId?: string }): string => {
-      // Collect all transforms from all plugins, sort by priority
-      const allTransforms: TextTransform[] = [];
-      for (const transforms of textTransformsRef.current.values()) {
-        allTransforms.push(...transforms);
-      }
-      if (allTransforms.length === 0) return text;
-
-      allTransforms.sort((a, b) => (a.priority ?? 100) - (b.priority ?? 100));
-      let result = text;
-      for (const t of allTransforms) {
-        try {
-          result = t.transform(result, message);
-        } catch {
-          // Ignore transform errors
-        }
-      }
-      return result;
-    },
-    []
   );
 
   // ── Context value ──────────────────────────────────────────────────────
@@ -591,8 +560,7 @@ export function PluginProvider({ children }: { children: React.ReactNode }) {
       getSlotComponents,
       enabledCount,
       pluginCommands,
-      slashCommands,
-      applyTextTransforms,
+      pluginSlashCommands,
     }),
     [
       isLoading,
@@ -605,8 +573,7 @@ export function PluginProvider({ children }: { children: React.ReactNode }) {
       getSlotComponents,
       enabledCount,
       pluginCommands,
-      slashCommands,
-      applyTextTransforms,
+      pluginSlashCommands,
     ]
   );
 

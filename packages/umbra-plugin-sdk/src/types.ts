@@ -206,6 +206,8 @@ export interface PluginAPI {
   // ── Commands ───────────────────────────────────────────────────────────────
   /** Register a command palette entry. Requires `commands`. Returns unregister fn. */
   registerCommand(cmd: PluginCommand): () => void;
+  /** Register a slash command shown in chat input autocomplete. Requires `commands`. Returns unregister fn. */
+  registerSlashCommand(cmd: PluginSlashCommand): () => void;
 
   // ── Voice (requires voice:read) ──────────────────────────────────────────
   /** Whether the user is currently in a voice call or voice channel. */
@@ -230,14 +232,6 @@ export interface PluginAPI {
   // ── Shortcuts (requires shortcuts) ───────────────────────────────────────
   /** Register a keyboard shortcut. Returns unregister fn. */
   registerShortcut(shortcut: PluginShortcut): () => void;
-
-  // ── Slash commands (requires commands) ─────────────────────────────────
-  /** Register a slash command for the chat input. Requires `commands`. Returns unregister fn. */
-  registerSlashCommand(cmd: SlashCommand): () => void;
-
-  // ── Text transforms ─────────────────────────────────────────────────────
-  /** Register a text transform to pre-process message text before rendering. Requires `messages:read`. Returns unregister fn. */
-  registerTextTransform(transform: TextTransform): () => void;
 }
 
 // =============================================================================
@@ -298,6 +292,26 @@ export interface PluginCommand {
   onSelect: () => void;
 }
 
+/** Slash command registration — shown inline as the user types "/" in chat */
+export interface PluginSlashCommand {
+  /** Unique command ID */
+  id: string;
+  /** The text typed after "/", e.g. "tutor spanish" */
+  command: string;
+  /** Display label in the autocomplete menu */
+  label: string;
+  /** Short description of what it does */
+  description?: string;
+  /** Emoji icon */
+  icon?: string;
+  /** If true, selecting fills "/<command>" in input and sends it as a message */
+  sendAsMessage?: boolean;
+  /** Called when selected (for local-only commands). Ignored if sendAsMessage is true. */
+  onSelect?: () => void;
+  /** Usage hint for commands with arguments, e.g. "<language>" */
+  args?: string;
+}
+
 // ── Event payload types (subset of full service events) ──────────────────────
 
 export interface MessageEventPayload {
@@ -337,41 +351,4 @@ export interface PluginShortcut {
   onTrigger: () => void;
   /** Category for grouping in settings UI */
   category?: string;
-}
-
-// ── Slash command types ─────────────────────────────────────────────────────
-
-/** Slash command suggestion shown in autocomplete dropdown */
-export interface SlashCommandSuggestion {
-  label: string;
-  description?: string;
-}
-
-/** Slash command — triggered by typing /command in chat input */
-export interface SlashCommand {
-  id: string;
-  /** The command trigger (without leading slash), e.g. "tutor" */
-  command: string;
-  /** Display label shown in the autocomplete dropdown */
-  label: string;
-  description?: string;
-  icon?: string;
-  /** Called when the user executes the command. Receives text after `/command `. */
-  onExecute: (args: string) => void;
-  /** Return argument suggestions based on the current partial input. */
-  getSuggestions?: (partialArgs: string) => SlashCommandSuggestion[];
-}
-
-// ── Text transform types ────────────────────────────────────────────────────
-
-/**
- * A text transform that plugins register to pre-process message text
- * before it is rendered by `parseMessageContent()`.
- */
-export interface TextTransform {
-  id: string;
-  /** Lower priority runs first (default 100) */
-  priority?: number;
-  /** Transform function — receives raw text, returns modified text */
-  transform: (text: string, message: { senderDid?: string; conversationId?: string }) => string;
 }

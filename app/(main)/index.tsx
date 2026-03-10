@@ -13,7 +13,6 @@ import { useGroups } from '@/hooks/useGroups';
 import { useTyping } from '@/hooks/useTyping';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUmbra } from '@/contexts/UmbraContext';
-import { usePlugins } from '@/contexts/PluginContext';
 import { useActiveConversation } from '@/contexts/ActiveConversationContext';
 import { ChatHeader } from '@/components/chat/ChatHeader';
 import { ChatArea } from '@/components/chat/ChatArea';
@@ -102,7 +101,6 @@ function EmptyConversation() {
 export default function ChatPage() {
   const { identity } = useAuth();
   const { service } = useUmbra();
-  const { slashCommands } = usePlugins();
   const myDid = identity?.did ?? '';
   const insets = Platform.OS !== 'web' ? useSafeAreaInsets() : { top: 0, bottom: 0 };
 
@@ -638,7 +636,6 @@ export default function ChatPage() {
           editing={editingMessage}
           onCancelEdit={handleCancelEdit}
           onAttachmentClick={handleAttachment}
-          slashCommands={slashCommands}
           customEmojis={customEmojiItems.length > 0 ? customEmojiItems : undefined}
           relayUrl={process.env.EXPO_PUBLIC_RELAY_URL || 'https://relay.umbra.chat'}
           onGifSelect={(gif) => {
@@ -646,6 +643,7 @@ export default function ChatPage() {
               sendMessage(`gif::${gif.url}`);
             }
           }}
+          friendDid={friendDid}
         />
         {/* Safe area spacing below the input */}
         {insets.bottom > 0 && (
