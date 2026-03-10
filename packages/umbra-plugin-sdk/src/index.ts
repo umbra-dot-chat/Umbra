@@ -30,6 +30,8 @@ export type {
   PluginSQLStore,
   PluginCommand,
   PluginSlashCommand,
+  SlashCommandSuggestion,
+  TextTransform,
   PluginShortcut,
   MessageEventPayload,
   FriendEventPayload,

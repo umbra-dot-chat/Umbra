@@ -111,8 +111,9 @@ export async function activate(pluginApi: PluginAPI): Promise<void> {
         const langName = arg.charAt(0).toUpperCase() + arg.slice(1);
         return `\u{1F4DA} Language Tutor activated: ${langName}`;
       }
-      // Strip [TUTOR-lang-score] tags ({{annotations}} are rendered natively by the parser)
-      return text.replace(/\[TUTOR-\w+-[\d.]+\]\s*/g, '');
+      // Strip [TUTOR-*] tags in any format Ghost uses:
+      //   [TUTOR-spanish-3.5]  or  [TUTOR-spanish-SCORE: +2]
+      return text.replace(/\[TUTOR-[^\]]+\]\s*/g, '');
     },
   });
   cleanups.push(unregTransform);
@@ -122,8 +123,9 @@ export async function activate(pluginApi: PluginAPI): Promise<void> {
     if (!api) return;
     if (!event.text) return;
 
-    // Parse [TUTOR-lang-score] tags from Ghost responses (hyphens avoid emoji conversion)
-    const scoreMatch = event.text.match(/\[TUTOR-(\w+)-([\d.]+)\]/);
+    // Parse [TUTOR-lang-score] tags from Ghost in either format:
+    //   [TUTOR-spanish-3.5]  or  [TUTOR-spanish-SCORE: +2]
+    const scoreMatch = event.text.match(/\[TUTOR-(\w+)-(?:SCORE:\s*[+]?)?([\d.]+)\]/);
     if (scoreMatch) {
       const tagLang = scoreMatch[1]; // e.g. "spanish"
       const newScore = parseFloat(scoreMatch[2]);

@@ -247,6 +247,7 @@ export const TEST_IDS = {
     NAV_PLUGINS: 'settings.nav.plugins',
     NAV_SHORTCUTS: 'settings.nav.shortcuts',
     NAV_ABOUT: 'settings.nav.about',
+    NAV_DEVELOPER: 'settings.nav.developer',
     // Sections
     SECTION_ACCOUNT: 'settings.section.account',
     SECTION_PROFILE: 'settings.section.profile',
@@ -261,6 +262,7 @@ export const TEST_IDS = {
     SECTION_PLUGINS: 'settings.section.plugins',
     SECTION_SHORTCUTS: 'settings.section.shortcuts',
     SECTION_ABOUT: 'settings.section.about',
+    SECTION_DEVELOPER: 'settings.section.developer',
     // Common controls
     TOGGLE: 'settings.toggle',
     DROPDOWN: 'settings.dropdown',

@@ -116,6 +116,9 @@ export class CallManager {
   private _isScreenSharing = false;
   private e2eeWorker: Worker | null = null;
 
+  // Data channel reference for sending messages to remote peer
+  private remoteDataChannel: RTCDataChannel | null = null;
+
   // TURN credential secret (shared with coturn)
   private turnSecret: string | null = null;
 
@@ -124,6 +127,7 @@ export class CallManager {
   onIceCandidate: ((candidate: RTCIceCandidateInit) => void) | null = null;
   onConnectionStateChange: ((state: RTCPeerConnectionState) => void) | null = null;
   onStatsUpdate: ((stats: CallStats) => void) | null = null;
+  onDataChannelMessage: ((data: any) => void) | null = null;
 
   /**
    * Set the TURN shared secret for credential generation.
@@ -204,6 +208,20 @@ export class CallManager {
 
     pc.onconnectionstatechange = () => {
       this.onConnectionStateChange?.(pc.connectionState);
+    };
+
+    // Listen for incoming data channels (e.g., ghost-metadata from bot)
+    pc.ondatachannel = (event) => {
+      const channel = event.channel;
+      this.remoteDataChannel = channel;
+      channel.onmessage = (msg) => {
+        try {
+          const data = JSON.parse(msg.data);
+          this.onDataChannelMessage?.(data);
+        } catch {
+          // Ignore non-JSON messages
+        }
+      };
     };
 
     this.pc = pc;
@@ -287,6 +305,8 @@ export class CallManager {
     const mungedOffer = { ...offer, sdp };
     await pc.setLocalDescription(mungedOffer as RTCSessionDescriptionInit);
 
+    this.logCodecNegotiation('local-offer', sdp);
+
     return JSON.stringify({
       sdp,
       type: offer.type,
@@ -322,6 +342,7 @@ export class CallManager {
     }
 
     const offer = JSON.parse(offerSdp);
+    this.logCodecNegotiation('remote-offer', offer.sdp);
     await pc.setRemoteDescription(new RTCSessionDescription({
       sdp: offer.sdp,
       type: offer.type,
@@ -344,6 +365,8 @@ export class CallManager {
     const mungedAnswer = { ...answer, sdp: answerSdpStr };
     await pc.setLocalDescription(mungedAnswer as RTCSessionDescriptionInit);
 
+    this.logCodecNegotiation('local-answer', answerSdpStr);
+
     return JSON.stringify({
       sdp: answerSdpStr,
       type: answer.type,
@@ -357,6 +380,7 @@ export class CallManager {
     if (!this.pc) throw new Error('No peer connection');
 
     const answer = JSON.parse(answerSdp);
+    this.logCodecNegotiation('remote-answer', answer.sdp);
     await this.pc.setRemoteDescription(new RTCSessionDescription({
       sdp: answer.sdp,
       type: answer.type,
@@ -367,6 +391,42 @@ export class CallManager {
       await this.pc.addIceCandidate(new RTCIceCandidate(candidate));
     }
     this.pendingCandidates = [];
+  }
+
+  /**
+   * Extract codec order from SDP m= lines for diagnostic logging.
+   */
+  private static parseCodecInfo(sdp: string): { audio: string[]; video: string[] } {
+    const audio: string[] = [];
+    const video: string[] = [];
+    const lines = sdp.split('\r\n');
+    for (const line of lines) {
+      if (line.startsWith('a=rtpmap:')) {
+        const match = line.match(/a=rtpmap:\d+ (.+)/);
+        if (match) {
+          // Determine if audio or video based on preceding m= line
+          const codec = match[1];
+          if (codec.includes('/90000')) video.push(codec);
+          else audio.push(codec);
+        }
+      }
+    }
+    return { audio, video };
+  }
+
+  /**
+   * Log codec negotiation details and send via data channel.
+   */
+  private logCodecNegotiation(label: string, sdp: string): void {
+    const info = CallManager.parseCodecInfo(sdp);
+    console.debug(`[CODEC] ${label}:`, info);
+    this.sendDataChannelMessage({
+      type: 'codec-negotiation',
+      label,
+      audio: info.audio,
+      video: info.video,
+      timestamp: Date.now(),
+    });
   }
 
   /**
@@ -678,6 +738,19 @@ export class CallManager {
    */
   getRemoteStream(): MediaStream | null {
     return this.remoteStream;
+  }
+
+  /**
+   * Send a JSON message to the remote peer via the data channel.
+   */
+  sendDataChannelMessage(data: Record<string, unknown>): void {
+    if (this.remoteDataChannel && this.remoteDataChannel.readyState === 'open') {
+      try {
+        this.remoteDataChannel.send(JSON.stringify(data));
+      } catch {
+        // Ignore send errors
+      }
+    }
   }
 
   /**
@@ -1055,6 +1128,7 @@ export class CallManager {
     }
 
     this.remoteStream = null;
+    this.remoteDataChannel = null;
 
     if (this.pc) {
       this.pc.close();

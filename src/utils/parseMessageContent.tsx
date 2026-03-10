@@ -133,7 +133,8 @@ type InlineToken =
   | { type: 'spoiler'; children: InlineToken[] }
   | { type: 'link'; text: string; url: string }
   | { type: 'emoji'; name: string }
-  | { type: 'unicode_shortcode'; emoji: string; name: string };
+  | { type: 'unicode_shortcode'; emoji: string; name: string }
+  | { type: 'annotation'; word: string; translation: string; pronunciation: string };
 
 // ---------------------------------------------------------------------------
 // Inline parser — turns a text string into inline tokens
@@ -156,7 +157,42 @@ type InlineToken =
 const INLINE_RE =
   /`([^`]+)`|\|\|(.+?)\|\||\*\*(.+?)\*\*|__(.+?)__(?!_)|~~(.+?)~~|\*(.+?)\*|\[([^\]]+)\]\(([^)]+)\)|:([a-zA-Z0-9_-]{2,32}):/gs;
 
+/** Regex for {{word|translation|pronunciation}} annotations */
+const ANNOTATION_RE = /\{\{([^|{}]+)\|([^|{}]+)\|([^}]*)\}\}/g;
+
 function parseInline(text: string, emojiMap: EmojiMap): InlineToken[] {
+  // First pass: split on annotation patterns {{word|translation|pronunciation}}
+  const segments: InlineToken[] = [];
+  let annLastIndex = 0;
+  let annMatch: RegExpExecArray | null;
+  ANNOTATION_RE.lastIndex = 0;
+
+  while ((annMatch = ANNOTATION_RE.exec(text)) !== null) {
+    // Parse the text before this annotation with standard inline rules
+    if (annMatch.index > annLastIndex) {
+      segments.push(...parseInlineStandard(text.slice(annLastIndex, annMatch.index), emojiMap));
+    }
+    segments.push({
+      type: 'annotation',
+      word: annMatch[1],
+      translation: annMatch[2],
+      pronunciation: annMatch[3],
+    });
+    annLastIndex = annMatch.index + annMatch[0].length;
+  }
+
+  // Parse remaining text after last annotation
+  if (annLastIndex < text.length) {
+    segments.push(...parseInlineStandard(text.slice(annLastIndex), emojiMap));
+  } else if (annLastIndex === 0) {
+    // No annotations at all — parse normally
+    return parseInlineStandard(text, emojiMap);
+  }
+
+  return segments;
+}
+
+function parseInlineStandard(text: string, emojiMap: EmojiMap): InlineToken[] {
   const tokens: InlineToken[] = [];
   let lastIndex = 0;
   let match: RegExpExecArray | null;
@@ -210,6 +246,42 @@ function parseInline(text: string, emojiMap: EmojiMap): InlineToken[] {
   }
 
   return tokens;
+}
+
+// ---------------------------------------------------------------------------
+// Annotation chip — tappable word with translation tooltip
+// ---------------------------------------------------------------------------
+
+function AnnotationChip({
+  word,
+  translation,
+  pronunciation,
+}: {
+  word: string;
+  translation: string;
+  pronunciation: string;
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <Pressable onPress={() => setExpanded((v) => !v)} style={{ flexDirection: 'row', alignItems: 'baseline' }}>
+      <Text
+        style={{
+          color: '#bb86fc',
+          fontWeight: '600',
+          textDecorationLine: 'underline',
+          textDecorationStyle: 'dotted',
+        }}
+      >
+        {word}
+      </Text>
+      {expanded && (
+        <Text style={{ color: '#9e9e9e', fontSize: 11, marginLeft: 3 }}>
+          ({translation}{pronunciation ? ` · ${pronunciation}` : ''})
+        </Text>
+      )}
+    </Pressable>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -325,6 +397,16 @@ function renderInlineTokens(
           <Text key={key} accessibilityLabel={`:${token.name}:`}>
             {token.emoji}
           </Text>
+        );
+
+      case 'annotation':
+        return (
+          <AnnotationChip
+            key={key}
+            word={token.word}
+            translation={token.translation}
+            pronunciation={token.pronunciation}
+          />
         );
 
       default:
@@ -786,7 +868,8 @@ export function parseMessageContent(
     content.includes('[') ||
     content.includes('#') ||
     content.includes('>') ||
-    content.includes(':');
+    content.includes(':') ||
+    content.includes('{{');
 
   // If no formatting markers and no emoji, return plain string
   if (!hasFormatting && emojiMap.size === 0) return content;

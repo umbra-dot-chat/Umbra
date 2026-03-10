@@ -5,10 +5,12 @@
  * Displays the full video + controls UI.
  */
 
-import React from 'react';
-import { View } from 'react-native';
+import React, { useState } from 'react';
+import { View, TouchableOpacity, Text, StyleSheet, Platform } from 'react-native';
 import { ActiveCallPanel as WispActiveCallPanel } from '@coexist/wisp-react-native';
 import { SlotRenderer } from '@/components/plugins/SlotRenderer';
+import { CallStatsOverlay, type GhostMetadata } from '@/components/call/CallStatsOverlay';
+import { useDeveloperSettings } from '@/hooks/useDeveloperSettings';
 import type { ActiveCall, CallStats, VideoQuality, AudioQuality } from '@/types/call';
 
 interface ActiveCallPanelProps {
@@ -16,6 +18,7 @@ interface ActiveCallPanelProps {
   videoQuality: VideoQuality;
   audioQuality: AudioQuality;
   callStats: CallStats | null;
+  ghostMetadata: GhostMetadata | null;
   onToggleMute: () => void;
   onToggleCamera: () => void;
   onEndCall: () => void;
@@ -27,12 +30,17 @@ interface ActiveCallPanelProps {
 
 export function ActiveCallPanel({
   activeCall,
+  callStats,
+  ghostMetadata,
   onToggleMute,
   onToggleCamera,
   onEndCall,
   onSwitchCamera,
   onSettings,
 }: ActiveCallPanelProps) {
+  const { statsOverlay } = useDeveloperSettings();
+  const [showStats, setShowStats] = useState(statsOverlay || __DEV__);
+
   return (
     <View style={{ flex: 1, position: 'relative' }}>
       <SlotRenderer slot="voice-call-header" />
@@ -50,6 +58,18 @@ export function ActiveCallPanel({
         onSwitchCamera={onSwitchCamera}
         onSettings={onSettings}
       />
+      <CallStatsOverlay
+        callStats={callStats}
+        ghostMetadata={ghostMetadata}
+        visible={showStats}
+      />
+      <TouchableOpacity
+        style={statsStyles.toggle}
+        onPress={() => setShowStats(v => !v)}
+        activeOpacity={0.7}
+      >
+        <Text style={statsStyles.toggleText}>{showStats ? 'STATS' : 'STATS'}</Text>
+      </TouchableOpacity>
       <SlotRenderer
         slot="voice-call-overlay"
         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, pointerEvents: 'box-none' }}
@@ -57,3 +77,23 @@ export function ActiveCallPanel({
     </View>
   );
 }
+
+const statsStyles = StyleSheet.create({
+  toggle: {
+    position: 'absolute',
+    top: 8,
+    right: 8,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    borderRadius: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    zIndex: 101,
+  },
+  toggleText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1,
+    ...(Platform.OS === 'web' ? { fontFamily: 'monospace' } : {}),
+  },
+});

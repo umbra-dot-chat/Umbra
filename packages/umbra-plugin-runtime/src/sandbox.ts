@@ -15,6 +15,7 @@ import type {
   PluginCommand,
   PluginSlashCommand,
   PluginShortcut,
+  TextTransform,
   PluginMessage,
   PluginFriend,
   PluginConversation,
@@ -87,6 +88,9 @@ export interface ServiceBridge {
   // Call signaling
   sendCallSignal(payload: any): void;
   onCallSignal(cb: (event: any) => void): () => void;
+
+  // Text transforms
+  registerTextTransform(pluginId: string, transform: TextTransform): () => void;
 
   // Shortcuts
   registerShortcut(pluginId: string, shortcut: PluginShortcut): () => void;
@@ -252,6 +256,14 @@ export function createSandboxedAPI(
     onCallSignal: (cb) => {
       requirePermission('voice:read', 'onCallSignal');
       const unsub = bridge.onCallSignal(cb);
+      subscriptions.push(unsub);
+      return unsub;
+    },
+
+    // ── Text transforms ────────────────────────────────────────────────
+    registerTextTransform: (transform) => {
+      requirePermission('commands', 'registerTextTransform');
+      const unsub = bridge.registerTextTransform(pluginId, transform);
       subscriptions.push(unsub);
       return unsub;
     },

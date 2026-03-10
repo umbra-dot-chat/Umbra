@@ -229,6 +229,10 @@ export interface PluginAPI {
   /** Subscribe to custom call signal events. Returns unsubscribe fn. */
   onCallSignal(cb: (event: any) => void): () => void;
 
+  // ── Text transforms ─────────────────────────────────────────────────────
+  /** Register a text transform to pre-process message text before rendering. Requires `commands`. Returns unregister fn. */
+  registerTextTransform(transform: TextTransform): () => void;
+
   // ── Shortcuts (requires shortcuts) ───────────────────────────────────────
   /** Register a keyboard shortcut. Returns unregister fn. */
   registerShortcut(shortcut: PluginShortcut): () => void;
@@ -308,6 +312,10 @@ export interface PluginSlashCommand {
   sendAsMessage?: boolean;
   /** Called when selected (for local-only commands). Ignored if sendAsMessage is true. */
   onSelect?: () => void;
+  /** Called when the command is executed with arguments (e.g. "/tutor spanish") */
+  onExecute?: (args: string) => void | Promise<void>;
+  /** Return suggestions for the arguments portion of the command */
+  getSuggestions?: (partialArgs: string) => SlashCommandSuggestion[];
   /** Usage hint for commands with arguments, e.g. "<language>" */
   args?: string;
 }
@@ -339,6 +347,32 @@ export interface VoiceParticipantEvent {
   type: 'joined' | 'left';
   did: string;
   displayName: string;
+}
+
+// ── Text transforms ──────────────────────────────────────────────────────────
+
+/**
+ * A text transform that plugins can register to pre-process message
+ * text before it's rendered in the chat. Transforms are applied in
+ * priority order (lower numbers first).
+ */
+export interface TextTransform {
+  /** Unique transform ID, e.g. "tutor:strip-markup" */
+  id: string;
+  /** Lower numbers run first (default 100) */
+  priority?: number;
+  /** The transform function: receives raw text, returns processed text */
+  transform: (text: string, context?: { senderDid?: string; conversationId?: string }) => string;
+}
+
+// ── Slash command suggestions ────────────────────────────────────────────────
+
+/** A suggestion shown in slash command autocomplete */
+export interface SlashCommandSuggestion {
+  /** The text to fill in */
+  label: string;
+  /** Short description */
+  description?: string;
 }
 
 // ── Shortcut types ───────────────────────────────────────────────────────────

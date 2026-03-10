@@ -229,7 +229,7 @@ export default function ChatPage() {
   const {
     activeCall, startCall, toggleMute, toggleCamera, endCall,
     videoQuality, audioQuality, setVideoQuality, setAudioQuality,
-    switchCamera, callStats,
+    switchCamera, callStats, ghostMetadata,
   } = useCall();
 
   const { openSettings } = useSettingsDialog();
@@ -574,6 +574,7 @@ export default function ChatPage() {
             videoQuality={videoQuality}
             audioQuality={audioQuality}
             callStats={callStats}
+            ghostMetadata={ghostMetadata}
             onToggleMute={toggleMute}
             onToggleCamera={toggleCamera}
             onEndCall={() => endCall()}

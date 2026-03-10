@@ -66,6 +66,7 @@ import type {
   PluginCommand,
   PluginSlashCommand,
   PluginShortcut,
+  TextTransform,
   PluginMessage,
   PluginFriend,
   PluginConversation,
@@ -121,6 +122,8 @@ export interface PluginContextValue {
   pluginCommands: PluginCommand[];
   /** Plugin-registered slash commands (for chat input autocomplete) */
   pluginSlashCommands: SlashCommandDef[];
+  /** Apply all registered text transforms to message text */
+  applyTextTransforms(text: string, context?: { senderDid?: string; conversationId?: string }): string;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -149,6 +152,7 @@ export function PluginProvider({ children }: { children: React.ReactNode }) {
   const marketplaceRef = useRef(new MarketplaceClient(undefined, BUNDLED_REGISTRY));
   const commandsRef = useRef<Map<string, PluginCommand[]>>(new Map());
   const slashCommandsRef = useRef<Map<string, SlashCommandDef[]>>(new Map());
+  const textTransformsRef = useRef<Map<string, TextTransform[]>>(new Map());
 
   const registry = registryRef.current;
   const loader = loaderRef.current;
@@ -277,8 +281,8 @@ export function PluginProvider({ children }: { children: React.ReactNode }) {
           description: cmd.description,
           icon: cmd.icon,
           category: pluginId.split('.').pop() ?? pluginId,
-          sendAsMessage: cmd.sendAsMessage,
-          onExecute: cmd.onSelect,
+          sendAsMessage: cmd.sendAsMessage ?? !!cmd.onExecute,
+          onExecute: cmd.onExecute ?? cmd.onSelect,
           args: cmd.args,
         };
         existing.push(slashDef);
@@ -308,6 +312,20 @@ export function PluginProvider({ children }: { children: React.ReactNode }) {
       sendCallSignal: (payload: any) => VoiceStreamBridge.sendSignal(payload),
       onCallSignal: (cb: (event: any) => void) => VoiceStreamBridge.onSignal(cb),
 
+      // ── Text transforms ──────────────────────────────────────────────
+      registerTextTransform: (pluginId: string, transform: TextTransform) => {
+        const existing = textTransformsRef.current.get(pluginId) ?? [];
+        existing.push(transform);
+        textTransformsRef.current.set(pluginId, existing);
+        return () => {
+          const transforms = textTransformsRef.current.get(pluginId) ?? [];
+          textTransformsRef.current.set(
+            pluginId,
+            transforms.filter((t) => t.id !== transform.id)
+          );
+        };
+      },
+
       // ── Shortcuts ────────────────────────────────────────────────────
       registerShortcut: (pluginId: string, shortcut: PluginShortcut) => {
         return ShortcutRegistry.register(pluginId, shortcut);
@@ -330,6 +348,30 @@ export function PluginProvider({ children }: { children: React.ReactNode }) {
     }
     setPluginSlashCommands(all);
   }, []);
+
+  const applyTextTransforms = useCallback(
+    (text: string, context?: { senderDid?: string; conversationId?: string }): string => {
+      // Collect all transforms, sort by priority
+      const allTransforms: TextTransform[] = [];
+      for (const transforms of textTransformsRef.current.values()) {
+        allTransforms.push(...transforms);
+      }
+      if (allTransforms.length === 0) return text;
+
+      allTransforms.sort((a, b) => (a.priority ?? 100) - (b.priority ?? 100));
+
+      let result = text;
+      for (const t of allTransforms) {
+        try {
+          result = t.transform(result, context);
+        } catch (err) {
+          console.warn(`[Plugin] Text transform "${t.id}" failed:`, err);
+        }
+      }
+      return result;
+    },
+    []
+  );
 
   // ── Plugin state persistence helpers ──────────────────────────────────
   // Uses the WASM KV store with a system-level plugin ID to track
@@ -500,11 +542,12 @@ export function PluginProvider({ children }: { children: React.ReactNode }) {
       // Remove saved state
       await removePluginState(id);
 
-      // Clear commands
+      // Clear commands and transforms
       commandsRef.current.delete(id);
       updateCommands();
       slashCommandsRef.current.delete(id);
       updateSlashCommands();
+      textTransformsRef.current.delete(id);
 
       loader.invalidateCache(id);
     },
@@ -533,6 +576,7 @@ export function PluginProvider({ children }: { children: React.ReactNode }) {
       updateCommands();
       slashCommandsRef.current.delete(id);
       updateSlashCommands();
+      textTransformsRef.current.delete(id);
     },
     [registry, updateCommands, updateSlashCommands, savePluginState]
   );
@@ -561,6 +605,7 @@ export function PluginProvider({ children }: { children: React.ReactNode }) {
       enabledCount,
       pluginCommands,
       pluginSlashCommands,
+      applyTextTransforms,
     }),
     [
       isLoading,
@@ -574,6 +619,7 @@ export function PluginProvider({ children }: { children: React.ReactNode }) {
       enabledCount,
       pluginCommands,
       pluginSlashCommands,
+      applyTextTransforms,
     ]
   );
 

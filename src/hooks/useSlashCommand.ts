@@ -22,8 +22,8 @@ export interface SlashCommandDef {
    * If false/undefined, onExecute is called directly.
    */
   sendAsMessage?: boolean;
-  /** Called when the command is selected (for local commands) */
-  onExecute?: () => void;
+  /** Called when the command is selected. Receives args if command has arguments. */
+  onExecute?: ((args: string) => void) | (() => void);
   /** Usage hint for commands with arguments, e.g. "<track-id>" */
   args?: string;
 }
@@ -112,18 +112,29 @@ export function useSlashCommand({
   );
 
   const selectCommand = useCallback(
-    (cmd: SlashCommandDef, _currentText: string): { newText: string; shouldSend: boolean } => {
+    (cmd: SlashCommandDef, currentText: string): { newText: string; shouldSend: boolean } => {
       setSlashOpen(false);
       setSlashQuery('');
 
+      // Extract the args portion: "/tutor spanish" → "spanish"
+      const argsText = currentText.startsWith('/')
+        ? currentText.slice(1 + cmd.command.length).trim()
+        : '';
+
       if (cmd.sendAsMessage) {
-        // Fill in the command text and send it
-        const fullCommand = `/${cmd.command}`;
+        // Call onExecute with args if present (for local state changes)
+        if (cmd.onExecute && argsText) {
+          (cmd.onExecute as (args: string) => void)(argsText);
+        }
+        // Fill in the current text as-is (preserves args) and send it
+        const fullCommand = argsText ? `/${cmd.command} ${argsText}` : `/${cmd.command}`;
         return { newText: fullCommand, shouldSend: true };
       }
 
       // Execute the local command and clear the input
-      cmd.onExecute?.();
+      if (cmd.onExecute) {
+        (cmd.onExecute as (args: string) => void)(argsText);
+      }
       return { newText: '', shouldSend: false };
     },
     [],

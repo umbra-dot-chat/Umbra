@@ -30,6 +30,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useSound } from '@/contexts/SoundContext';
 import { VoiceStreamBridge } from '@/services/VoiceStreamBridge';
 import { encryptSignal, decryptSignal, isSignalEncryptionAvailable } from '@/services/callCrypto';
+import { useDeveloperSettings } from '@/hooks/useDeveloperSettings';
 
 // ─── Context Value ───────────────────────────────────────────────────────────
 
@@ -90,6 +91,8 @@ interface CallContextValue {
   opusConfig: OpusConfig;
   /** Set granular Opus configuration */
   setOpusConfig: (config: OpusConfig) => void;
+  /** Ghost bot metadata from data channel */
+  ghostMetadata: any | null;
 }
 
 const CallContext = createContext<CallContextValue | null>(null);
@@ -104,6 +107,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
   const { service } = useUmbra();
   const { identity } = useAuth();
   const { playSound } = useSound();
+  const devSettings = useDeveloperSettings();
   const myDid = identity?.did ?? '';
   const myName = identity?.displayName ?? '';
 
@@ -111,6 +115,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
   const [videoQuality, setVideoQualityState] = useState<VideoQuality>('auto');
   const [audioQuality, setAudioQualityState] = useState<AudioQuality>('opus-voice');
   const [callStats, setCallStats] = useState<CallStats | null>(null);
+  const [ghostMetadata, setGhostMetadata] = useState<any | null>(null);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [screenShareStream, setScreenShareStream] = useState<MediaStream | null>(null);
   const [noiseSuppression, setNoiseSuppressionState] = useState(true);
@@ -606,6 +611,10 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
 
     try {
       const ctx = new AudioContext();
+      // Resume suspended AudioContext (browsers require user interaction first)
+      if (ctx.state === 'suspended') {
+        ctx.resume().catch(() => {});
+      }
       const source = ctx.createMediaStreamSource(remoteStream);
       const gain = ctx.createGain();
       gain.gain.value = volume / 100;
@@ -690,13 +699,47 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     manager.onStatsUpdate = (stats) => {
       setCallStats(stats);
     };
-    manager.startStats(2000);
+    manager.onDataChannelMessage = (data) => {
+      if (data?.type === 'ghost-metadata') {
+        setGhostMetadata(data);
+      }
+    };
+    manager.startStats(1000);
 
     return () => {
       manager.stopStats();
       manager.onStatsUpdate = null;
+      manager.onDataChannelMessage = null;
+      setGhostMetadata(null);
     };
   }, [activeCall?.status]);
+
+  // Send diagnostic config to bot via data channel when settings change
+  useEffect(() => {
+    const manager = callManagerRef.current;
+    if (!manager || activeCall?.status !== 'connected' || !devSettings.diagnosticsEnabled) return;
+
+    manager.sendDataChannelMessage({
+      type: 'diagnostic-config',
+      settings: {
+        frameTimingAlerts: devSettings.frameTimingAlerts,
+        ringBufferLogging: devSettings.ringBufferLogging,
+        rawMediaCapture: devSettings.rawMediaCapture,
+        codecNegotiationLog: devSettings.codecNegotiationLog,
+        degradationDetection: devSettings.degradationDetection,
+        referenceSignalMode: devSettings.referenceSignalMode,
+      },
+    });
+  }, [
+    activeCall?.status,
+    devSettings.diagnosticsEnabled,
+    devSettings.frameTimingAlerts,
+    devSettings.ringBufferLogging,
+    devSettings.rawMediaCapture,
+    devSettings.codecNegotiationLog,
+    devSettings.degradationDetection,
+    devSettings.referenceSignalMode,
+  ]);
 
   // ── Handle Incoming Call Events ──────────────────────────────────────────
 
@@ -962,6 +1005,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     setInputVolume,
     opusConfig,
     setOpusConfig,
+    ghostMetadata,
   };
 
   return (

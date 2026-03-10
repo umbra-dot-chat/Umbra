@@ -64,6 +64,7 @@ import {
   MusicIcon,
   ArrowLeftIcon,
   FileTextIcon,
+  CodeIcon,
 } from '@/components/ui';
 import { useNetwork } from '@/hooks/useNetwork';
 import { useCall } from '@/hooks/useCall';
@@ -106,6 +107,7 @@ import { TEST_IDS } from '@/constants/test-ids';
 import { LinkedAccountsPanel, FriendDiscoveryPanel } from '@/components/discovery';
 import { IdentityCardDialog } from '@/components/modals/IdentityCardDialog';
 import { useSync, markSyncDirty } from '@/contexts/SyncContext';
+import { useDeveloperSettings } from '@/hooks/useDeveloperSettings';
 
 // Cast icons for Wisp Input compatibility (accepts strokeWidth prop)
 type InputIcon = React.ComponentType<{ size?: number | string; color?: string; strokeWidth?: number }>;
@@ -180,7 +182,7 @@ function compressImage(
 // Types
 // ---------------------------------------------------------------------------
 
-export type SettingsSection = 'account' | 'appearance' | 'messaging' | 'notifications' | 'sounds' | 'privacy' | 'audio-video' | 'network' | 'data' | 'plugins' | 'keyboard-shortcuts' | 'about';
+export type SettingsSection = 'account' | 'appearance' | 'messaging' | 'notifications' | 'sounds' | 'privacy' | 'audio-video' | 'network' | 'data' | 'plugins' | 'keyboard-shortcuts' | 'about' | 'developer';
 
 export interface SettingsDialogProps {
   open: boolean;
@@ -208,6 +210,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'plugins', label: 'Plugins', icon: ZapIcon },
   { id: 'keyboard-shortcuts', label: 'Shortcuts', icon: KeyIcon },
   { id: 'about', label: 'About', icon: BookOpenIcon },
+  { id: 'developer', label: 'Developer', icon: CodeIcon },
 ];
 
 const NAV_TEST_IDS: Record<SettingsSection, string> = {
@@ -223,6 +226,7 @@ const NAV_TEST_IDS: Record<SettingsSection, string> = {
   'plugins': TEST_IDS.SETTINGS.NAV_PLUGINS,
   'keyboard-shortcuts': TEST_IDS.SETTINGS.NAV_SHORTCUTS,
   'about': TEST_IDS.SETTINGS.NAV_ABOUT,
+  'developer': TEST_IDS.SETTINGS.NAV_DEVELOPER,
 };
 
 const SECTION_TEST_IDS: Record<SettingsSection, string> = {
@@ -238,6 +242,7 @@ const SECTION_TEST_IDS: Record<SettingsSection, string> = {
   'plugins': TEST_IDS.SETTINGS.SECTION_PLUGINS,
   'keyboard-shortcuts': TEST_IDS.SETTINGS.SECTION_SHORTCUTS,
   'about': TEST_IDS.SETTINGS.SECTION_ABOUT,
+  'developer': TEST_IDS.SETTINGS.SECTION_DEVELOPER,
 };
 
 interface SubNavItem { id: string; label: string; }
@@ -273,6 +278,11 @@ const SUBCATEGORIES: Partial<Record<SettingsSection, SubNavItem[]>> = {
     { id: 'relays', label: 'Relays' },
     { id: 'peers', label: 'Peers' },
     { id: 'identity', label: 'Identity' },
+  ],
+  developer: [
+    { id: 'diagnostics', label: 'Call Diagnostics' },
+    { id: 'capture', label: 'Media Capture' },
+    { id: 'testing', label: 'Testing' },
   ],
 };
 
@@ -4466,6 +4476,160 @@ function KeyboardShortcutsSection() {
 }
 
 // ---------------------------------------------------------------------------
+// Developer — Call diagnostics, media capture, and testing tools
+// ---------------------------------------------------------------------------
+
+function DeveloperSection() {
+  const { theme } = useTheme();
+  const tc = theme.colors;
+  const { playSound } = useSound();
+  const dev = useDeveloperSettings();
+
+  const handleToggle = useCallback(
+    (setter: (v: boolean) => void) => (v: boolean) => {
+      playSound(v ? 'toggle_on' : 'toggle_off');
+      setter(v);
+    },
+    [playSound],
+  );
+
+  return (
+    <View style={{ gap: 20 }}>
+      <SectionHeader
+        title="Developer"
+        description="Diagnostic tools for debugging WebRTC calls, media quality, and performance."
+      />
+
+      {/* Warning banner */}
+      <Card style={{ padding: 12, borderColor: tc.status.warning ?? '#ff9800', borderWidth: 1 }}>
+        <RNText style={{ fontSize: 12, color: tc.text.secondary, lineHeight: 18 }}>
+          These settings are for debugging. Raw media capture uses significant disk space.
+          Some options may affect call performance when enabled.
+        </RNText>
+      </Card>
+
+      {/* ── Call Diagnostics ─────────────────────────────────────────────── */}
+      <View nativeID="sub-diagnostics">
+        <RNText style={{ fontSize: 14, fontWeight: '600', color: tc.text.primary, marginBottom: 12 }}>
+          Call Diagnostics
+        </RNText>
+
+        <SettingRow
+          label="Enable Call Diagnostics"
+          description="Master switch for all diagnostic features"
+        >
+          <Toggle
+            checked={dev.diagnosticsEnabled}
+            onChange={handleToggle(dev.setDiagnosticsEnabled)}
+          />
+        </SettingRow>
+
+        <SettingRow
+          label="Show Stats Overlay"
+          description="Real-time stats overlay during active calls"
+        >
+          <Toggle
+            checked={dev.statsOverlay}
+            onChange={handleToggle(dev.setStatsOverlay)}
+          />
+        </SettingRow>
+
+        {dev.diagnosticsEnabled && (
+          <>
+            <SettingRow
+              label="Frame Timing Alerts"
+              description="Log alerts when frame intervals drift >5ms from target"
+            >
+              <Toggle
+                checked={dev.frameTimingAlerts}
+                onChange={handleToggle(dev.setFrameTimingAlerts)}
+              />
+            </SettingRow>
+
+            <SettingRow
+              label="Ring Buffer Logging"
+              description="Log audio ring buffer state per frame for garble detection"
+            >
+              <Toggle
+                checked={dev.ringBufferLogging}
+                onChange={handleToggle(dev.setRingBufferLogging)}
+              />
+            </SettingRow>
+
+            <SettingRow
+              label="Codec Negotiation Log"
+              description="Log SDP codec negotiation on both sides and diff for mismatches"
+            >
+              <Toggle
+                checked={dev.codecNegotiationLog}
+                onChange={handleToggle(dev.setCodecNegotiationLog)}
+              />
+            </SettingRow>
+
+            <SettingRow
+              label="Degradation Detection"
+              description="Auto-capture state snapshots when quality metrics degrade"
+            >
+              <Toggle
+                checked={dev.degradationDetection}
+                onChange={handleToggle(dev.setDegradationDetection)}
+              />
+            </SettingRow>
+          </>
+        )}
+      </View>
+
+      {/* ── Media Capture ────────────────────────────────────────────────── */}
+      <View nativeID="sub-capture">
+        <RNText style={{ fontSize: 14, fontWeight: '600', color: tc.text.primary, marginBottom: 12 }}>
+          Media Capture
+        </RNText>
+
+        <SettingRow
+          label="Raw Media Capture"
+          description="Dump raw PCM audio (.wav) and I420 video (.yuv) to disk before encoding"
+        >
+          <Toggle
+            checked={dev.rawMediaCapture}
+            onChange={handleToggle(dev.setRawMediaCapture)}
+            disabled={!dev.diagnosticsEnabled}
+          />
+        </SettingRow>
+
+        <SettingRow
+          label="A/V Sync Validation"
+          description="Enable frame counter, click track, and timestamp sync checks"
+        >
+          <Toggle
+            checked={dev.avSyncValidation}
+            onChange={handleToggle(dev.setAvSyncValidation)}
+            disabled={!dev.diagnosticsEnabled}
+          />
+        </SettingRow>
+      </View>
+
+      {/* ── Testing ──────────────────────────────────────────────────────── */}
+      <View nativeID="sub-testing">
+        <RNText style={{ fontSize: 14, fontWeight: '600', color: tc.text.primary, marginBottom: 12 }}>
+          Testing
+        </RNText>
+
+        <SettingRow
+          label="Reference Signal Mode"
+          description="Replace all media with a 440Hz sine wave test tone for quality validation"
+        >
+          <Toggle
+            checked={dev.referenceSignalMode}
+            onChange={handleToggle(dev.setReferenceSignalMode)}
+            disabled={!dev.diagnosticsEnabled}
+          />
+        </SettingRow>
+      </View>
+    </View>
+  );
+}
+
+// ---------------------------------------------------------------------------
 
 function AboutSection() {
   const { theme } = useTheme();
@@ -5074,6 +5238,8 @@ export function SettingsDialog({ open, onClose, onOpenMarketplace, initialSectio
         return <KeyboardShortcutsSection />;
       case 'about':
         return <AboutSection />;
+      case 'developer':
+        return <DeveloperSection />;
     }
   };
 
