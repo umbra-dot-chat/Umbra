@@ -71,6 +71,10 @@ interface ActiveCall {
   disconnectTimer: ReturnType<typeof setTimeout> | null;
   cleanedUp: boolean; // Guard against double-cleanup
   stats: CallStats;
+  // Per-call video quality (initialized from config, changeable via commands)
+  videoWidth: number;
+  videoHeight: number;
+  videoFps: number;
   // Diagnostic tools
   capture: RawMediaCapture | null;
   degradation: DegradationDetector | null;
@@ -349,6 +353,9 @@ export class CallHandler {
         roundTripTime: 0, bytesSent: 0, bytesReceived: 0,
         lastStatsAt: now, prevBytesSent: 0,
       },
+      videoWidth: this.config.maxVideoWidth,
+      videoHeight: this.config.maxVideoHeight,
+      videoFps: this.config.maxVideoFps,
       capture: null,
       degradation: null,
       audioTestSignal: null,
@@ -359,7 +366,7 @@ export class CallHandler {
     if (this.config.diagDegradation) {
       call.degradation = new DegradationDetector(this.log);
       call.degradation.start({
-        videoTargetIntervalMs: offer.callType === 'video' ? (1000 / this.config.maxVideoFps) : undefined,
+        videoTargetIntervalMs: offer.callType === 'video' ? (1000 / call.videoFps) : undefined,
         onDegradation: (event) => {
           // Send degradation event to client via data channel
           if (call.dataChannel?.readyState === 'open') {
@@ -377,7 +384,7 @@ export class CallHandler {
 
     if (this.config.diagRawCapture) {
       call.capture = new RawMediaCapture(this.config.mediaCacheDir, offer.callId, this.log);
-      const videoRes = offer.callType === 'video' ? { width: this.config.maxVideoWidth, height: this.config.maxVideoHeight } : undefined;
+      const videoRes = offer.callType === 'video' ? { width: call.videoWidth, height: call.videoHeight } : undefined;
       call.capture.start(videoRes?.width, videoRes?.height);
     }
 
@@ -608,20 +615,14 @@ export class CallHandler {
     // Pick a random video to start with
     const firstVideo = this.mediaManager.getRandomVideoFile();
     if (firstVideo) {
-      // Cap resolution and FPS to stay within software encoding budget.
-      // @roamhq/wrtc uses CPU-only VP8/H264 encoding — at 1080p@30fps the
-      // encoding alone saturates 6 Broadwell cores, causing frame queuing,
-      // garbled output, and freezes. 720p@24fps keeps raw throughput at ~37MB/s
-      // (down from 93MB/s at 1080p@30fps) giving comfortable CPU headroom.
-      const maxW = this.config.maxVideoWidth;
-      const maxH = this.config.maxVideoHeight;
-      const maxFps = this.config.maxVideoFps;
+      // Cap resolution and FPS to the per-call quality settings (default 720p@24fps).
+      // @roamhq/wrtc uses CPU-only VP8/H264 encoding — 720p@24fps keeps raw
+      // throughput at ~37MB/s which gives comfortable CPU headroom.
       const res = firstVideo.resolution ? parseResolution(firstVideo.resolution) : null;
-      const nativeW = res?.width ?? maxW;
-      const nativeH = res?.height ?? maxH;
-      const width = Math.min(nativeW, maxW);
-      const height = Math.min(nativeH, maxH);
-      const fps = maxFps;
+      const nativeW = res?.width ?? call.videoWidth;
+      const nativeH = res?.height ?? call.videoHeight;
+      const { width, height } = fitToBox(nativeW, nativeH, call.videoWidth, call.videoHeight);
+      const fps = call.videoFps;
 
       this.log.info(`[CALL] Starting video: ${firstVideo.name} (${width}x${height}@${fps}fps)`);
 
@@ -635,10 +636,13 @@ export class CallHandler {
           const next = this.mediaManager.getNextVideoFile();
           if (next && call.videoSource) {
             const nextRes = next.resolution ? parseResolution(next.resolution) : null;
+            const nextNW = nextRes?.width ?? call.videoWidth;
+            const nextNH = nextRes?.height ?? call.videoHeight;
+            const fit = fitToBox(nextNW, nextNH, call.videoWidth, call.videoHeight);
             call.videoSource.switchVideo(next.path, {
-              width: Math.min(nextRes?.width ?? maxW, maxW),
-              height: Math.min(nextRes?.height ?? maxH, maxH),
-              fps: maxFps,
+              width: fit.width,
+              height: fit.height,
+              fps: call.videoFps,
             });
           }
         },
@@ -929,6 +933,24 @@ export class CallHandler {
         return this.cmdSendFile(query, senderDid);
       }
 
+      case 'quality': {
+        const preset = args[0];
+        if (!preset) return 'Usage: /ghost quality <preset>\nPresets: 4k, 2160p, 1440p, 1080p, 720p, 480p, auto';
+        return this.cmdQuality(preset.toLowerCase(), senderDid);
+      }
+
+      case 'resolution': {
+        const res = args[0];
+        if (!res) return 'Usage: /ghost resolution <WxH> (e.g., /ghost resolution 1920x1080)';
+        return this.cmdResolution(res, senderDid);
+      }
+
+      case 'fps': {
+        const fpsStr = args[0];
+        if (!fpsStr) return 'Usage: /ghost fps <number> (e.g., /ghost fps 30)';
+        return this.cmdFps(fpsStr, senderDid);
+      }
+
       case 'help':
         return this.cmdHelp();
 
@@ -948,6 +970,7 @@ export class CallHandler {
       lines.push(`    Audio: ${call.audioSource?.currentFile ?? 'none'} (${call.audioSource?.isPlaying ? 'playing' : 'paused'})`);
       if (call.videoSource) {
         lines.push(`    Video: ${call.videoSource.currentFile ?? 'none'} (${call.videoSource.isPlaying ? 'playing' : 'paused'})`);
+        lines.push(`    Quality: ${call.videoWidth}x${call.videoHeight}@${call.videoFps}fps`);
       }
       lines.push(`    Bitrate: ${call.stats.audioBitrate}bps | RTT: ${(call.stats.roundTripTime * 1000).toFixed(0)}ms`);
     }
@@ -1022,14 +1045,11 @@ export class CallHandler {
     if (!call?.videoSource) return 'No active video call.';
 
     const res = video.resolution ? parseResolution(video.resolution) : null;
-    const maxW = this.config.maxVideoWidth;
-    const maxH = this.config.maxVideoHeight;
-    call.videoSource.switchVideo(video.path, {
-      width: Math.min(res?.width ?? maxW, maxW),
-      height: Math.min(res?.height ?? maxH, maxH),
-      fps: this.config.maxVideoFps,
-    });
-    return `📹 Now playing: ${video.name} (${Math.min(res?.width ?? maxW, maxW)}x${Math.min(res?.height ?? maxH, maxH)})`;
+    const nativeW = res?.width ?? call.videoWidth;
+    const nativeH = res?.height ?? call.videoHeight;
+    const { width, height } = fitToBox(nativeW, nativeH, call.videoWidth, call.videoHeight);
+    call.videoSource.switchVideo(video.path, { width, height, fps: call.videoFps });
+    return `📹 Now playing: ${video.name} (${width}x${height})`;
   }
 
   private cmdNextVideo(senderDid: string): string {
@@ -1040,14 +1060,11 @@ export class CallHandler {
     if (!call?.videoSource) return 'No active video call.';
 
     const res = next.resolution ? parseResolution(next.resolution) : null;
-    const maxW = this.config.maxVideoWidth;
-    const maxH = this.config.maxVideoHeight;
-    call.videoSource.switchVideo(next.path, {
-      width: Math.min(res?.width ?? maxW, maxW),
-      height: Math.min(res?.height ?? maxH, maxH),
-      fps: this.config.maxVideoFps,
-    });
-    return `📹 Now playing: ${next.name} (${Math.min(res?.width ?? maxW, maxW)}x${Math.min(res?.height ?? maxH, maxH)})`;
+    const nativeW = res?.width ?? call.videoWidth;
+    const nativeH = res?.height ?? call.videoHeight;
+    const { width, height } = fitToBox(nativeW, nativeH, call.videoWidth, call.videoHeight);
+    call.videoSource.switchVideo(next.path, { width, height, fps: call.videoFps });
+    return `📹 Now playing: ${next.name} (${width}x${height})`;
   }
 
   private async cmdUpgrade(senderDid: string): Promise<string> {
@@ -1149,6 +1166,96 @@ export class CallHandler {
     }
   }
 
+  // ── Quality commands ──────────────────────────────────────────────────────
+
+  private cmdQuality(preset: string, senderDid: string): string {
+    const call = this.findCallForPeer(senderDid);
+    if (!call) return 'No active call.';
+
+    let width: number;
+    let height: number;
+    let fps: number;
+    let label: string;
+    let warning = '';
+
+    switch (preset) {
+      case '4k':
+      case '2160p':
+        width = 3840; height = 2160; fps = 24; label = '4K (3840x2160@24fps)';
+        warning = '\n⚠️ Warning: 4K requires significant CPU for software encoding. May cause frame drops on weaker hardware.';
+        break;
+      case '1440p':
+        width = 2560; height = 1440; fps = 24; label = '1440p (2560x1440@24fps)';
+        warning = '\n⚠️ Warning: 1440p is CPU-intensive for software encoding.';
+        break;
+      case '1080p':
+        width = 1920; height = 1080; fps = 30; label = '1080p (1920x1080@30fps)';
+        break;
+      case '720p':
+        width = 1280; height = 720; fps = 30; label = '720p (1280x720@30fps)';
+        break;
+      case '480p':
+        width = 854; height = 480; fps = 30; label = '480p (854x480@30fps)';
+        break;
+      case 'auto':
+        width = this.config.maxVideoWidth;
+        height = this.config.maxVideoHeight;
+        fps = this.config.maxVideoFps;
+        label = `auto (${width}x${height}@${fps}fps)`;
+        break;
+      default:
+        return `Unknown preset: ${preset}. Available: 4k, 2160p, 1440p, 1080p, 720p, 480p, auto`;
+    }
+
+    return this.applyQuality(call, width, height, fps, label, warning);
+  }
+
+  private cmdResolution(resStr: string, senderDid: string): string {
+    const call = this.findCallForPeer(senderDid);
+    if (!call) return 'No active call.';
+
+    const parsed = parseResolution(resStr);
+    if (!parsed) return `Invalid resolution format: ${resStr}. Use WxH (e.g., 1920x1080)`;
+    if (parsed.width < 160 || parsed.height < 120) return 'Resolution too small. Minimum: 160x120';
+    if (parsed.width > 7680 || parsed.height > 4320) return 'Resolution too large. Maximum: 7680x4320';
+
+    let warning = '';
+    if (parsed.width > 1920 || parsed.height > 1080) {
+      warning = '\n⚠️ Warning: Resolutions above 1080p are CPU-intensive for software encoding.';
+    }
+
+    const label = `${parsed.width}x${parsed.height}@${call.videoFps}fps`;
+    return this.applyQuality(call, parsed.width, parsed.height, call.videoFps, label, warning);
+  }
+
+  private cmdFps(fpsStr: string, senderDid: string): string {
+    const call = this.findCallForPeer(senderDid);
+    if (!call) return 'No active call.';
+
+    const fps = parseInt(fpsStr, 10);
+    if (isNaN(fps) || fps < 1 || fps > 120) return 'Invalid FPS. Must be between 1 and 120.';
+
+    const label = `${call.videoWidth}x${call.videoHeight}@${fps}fps`;
+    return this.applyQuality(call, call.videoWidth, call.videoHeight, fps, label, '');
+  }
+
+  private applyQuality(call: ActiveCall, width: number, height: number, fps: number, label: string, warning: string): string {
+    call.videoWidth = width;
+    call.videoHeight = height;
+    call.videoFps = fps;
+
+    // If video is currently playing, restart at the new resolution
+    if (call.videoSource?.currentFile) {
+      const currentFile = call.videoSource.currentFile;
+      call.videoSource.switchVideo(currentFile, { width, height, fps });
+      this.log.info(`[CALL] Quality changed to ${label} — restarted video: ${currentFile}`);
+      return `📺 Quality set to ${label}. Video restarted at new resolution.${warning}`;
+    }
+
+    this.log.info(`[CALL] Quality changed to ${label} (no active video to restart)`);
+    return `📺 Quality set to ${label}. Will apply to next video.${warning}`;
+  }
+
   private cmdHelp(): string {
     return [
       '🤖 Ghost Call Commands:',
@@ -1170,6 +1277,12 @@ export class CallHandler {
       '  /ghost videos — List video files',
       '  /ghost play-video <id> — Play specific video',
       '  /ghost next-video — Next video',
+      '',
+      '📺 Quality:',
+      '  /ghost quality <preset> — Change video quality',
+      '    Presets: 4k, 2160p, 1440p, 1080p, 720p, 480p, auto',
+      '  /ghost resolution <WxH> — Set custom resolution',
+      '  /ghost fps <number> — Change FPS independently',
       '',
       '📁 Files:',
       '  /ghost files [category] — List files',
@@ -1367,6 +1480,29 @@ export class CallHandler {
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
+
+/**
+ * Scale a native resolution to fit within a max bounding box while preserving
+ * aspect ratio. Dimensions are rounded to nearest even number (required by
+ * most video encoders including H264/VP8).
+ */
+function fitToBox(
+  nativeW: number, nativeH: number,
+  maxW: number, maxH: number,
+): { width: number; height: number } {
+  if (nativeW <= maxW && nativeH <= maxH) {
+    return { width: roundEven(nativeW), height: roundEven(nativeH) };
+  }
+  const scale = Math.min(maxW / nativeW, maxH / nativeH);
+  return {
+    width: roundEven(Math.round(nativeW * scale)),
+    height: roundEven(Math.round(nativeH * scale)),
+  };
+}
+
+function roundEven(n: number): number {
+  return n % 2 === 0 ? n : n + 1;
+}
 
 function getMimeType(format: string): string {
   const types: Record<string, string> = {
