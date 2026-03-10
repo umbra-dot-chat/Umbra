@@ -27,8 +27,16 @@ export interface PluginManifest {
   description: string;
   /** Plugin author */
   author: { name: string; url?: string };
-  /** Icon URL or path relative to plugin bundle root */
+  /** @deprecated Use branding.emoji instead */
   icon?: string;
+  /** Visual branding (colors, emoji, tagline) */
+  branding?: {
+    emoji?: string;
+    primaryColor: string;
+    secondaryColor: string;
+    tagline?: string;
+    featured?: boolean;
+  };
   /** Supported platforms */
   platforms: PluginPlatform[];
   /** Required permissions */

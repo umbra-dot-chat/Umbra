@@ -44,9 +44,10 @@ import {
   ShoppingBagIcon,
   CheckIcon,
 } from '@/components/ui';
-import type { MarketplaceListing } from '@umbra/plugin-runtime';
+import type { MarketplaceListing, PluginBranding } from '@umbra/plugin-runtime';
 import type { PluginPermission, PluginInstance } from '@umbra/plugin-sdk';
 import { TEST_IDS } from '@/constants/test-ids';
+import { LinearGradient } from 'expo-linear-gradient';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -65,12 +66,13 @@ interface SectionItem {
   label: string;
   icon: React.ComponentType<{ size?: number; color?: string }>;
   color: string;
+  secondaryColor: string;
 }
 
 const SECTIONS: SectionItem[] = [
-  { id: 'plugins', label: 'Plugins', icon: PuzzleIcon, color: '#8B5CF6' },
-  { id: 'themes', label: 'Themes', icon: PaletteIcon, color: '#EC4899' },
-  { id: 'fonts', label: 'Fonts', icon: FontIcon, color: '#3B82F6' },
+  { id: 'plugins', label: 'Plugins', icon: PuzzleIcon, color: '#8B5CF6', secondaryColor: '#a78bfa' },
+  { id: 'themes', label: 'Themes', icon: PaletteIcon, color: '#EC4899', secondaryColor: '#f472b6' },
+  { id: 'fonts', label: 'Fonts', icon: FontIcon, color: '#3B82F6', secondaryColor: '#60a5fa' },
 ];
 
 // Simple "A" icon for Fonts section
@@ -79,6 +81,116 @@ function FontIcon({ size = 16, color }: { size?: number; color?: string }) {
     <RNText style={{ fontSize: size, fontWeight: '700', color: color ?? '#FFF', textAlign: 'center', lineHeight: size }}>
       A
     </RNText>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Plugin Branding Helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+/** Default branding when plugin has none specified. */
+const DEFAULT_BRANDING: PluginBranding = {
+  primaryColor: '#8B5CF6',
+  secondaryColor: '#a78bfa',
+};
+
+/** Get resolved branding for a listing (with defaults). */
+function getBranding(listing: MarketplaceListing): PluginBranding {
+  return listing.branding ?? DEFAULT_BRANDING;
+}
+
+/** Get the display icon content — emoji or 2-letter monogram. */
+function getPluginIconContent(branding: PluginBranding, name: string): string {
+  if (branding.emoji) return branding.emoji;
+  // Generate 2-letter monogram from first 2 words or first 2 chars
+  const words = name.trim().split(/\s+/);
+  if (words.length >= 2) return (words[0][0] + words[1][0]).toUpperCase();
+  return name.slice(0, 2).toUpperCase();
+}
+
+/** Map a tag to a category emoji for the dot badge. */
+const CATEGORY_EMOJIS: Record<string, string> = {
+  utility: '\u{1F527}',
+  translation: '\u{1F310}',
+  language: '\u{1F310}',
+  system: '\u{2699}\u{FE0F}',
+  monitor: '\u{1F4C8}',
+  media: '\u{1F3AC}',
+  customization: '\u{1F3A8}',
+  security: '\u{1F512}',
+  messages: '\u{1F4AC}',
+  social: '\u{1F465}',
+  productivity: '\u{26A1}',
+  fun: '\u{1F389}',
+  music: '\u{1F3B5}',
+  gaming: '\u{1F3AE}',
+};
+
+function getCategoryEmoji(tags: string[]): string {
+  for (const tag of tags) {
+    const emoji = CATEGORY_EMOJIS[tag.toLowerCase()];
+    if (emoji) return emoji;
+  }
+  return '\u{1F9E9}'; // puzzle piece fallback
+}
+
+/** Adjust a hex color's brightness for light/dark mode. */
+function adjustColorForMode(hex: string, isDark: boolean): string {
+  if (isDark) return hex; // Keep vibrant in dark mode
+  // In light mode, darken slightly for readability
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  const factor = 0.85;
+  return `#${Math.round(r * factor).toString(16).padStart(2, '0')}${Math.round(g * factor).toString(16).padStart(2, '0')}${Math.round(b * factor).toString(16).padStart(2, '0')}`;
+}
+
+/** Plugin icon component — emoji/monogram on gradient rounded square. */
+function PluginIcon({ branding, name, size = 44 }: { branding: PluginBranding; name: string; size?: number }) {
+  const content = getPluginIconContent(branding, name);
+  const isEmoji = branding.emoji != null;
+  return (
+    <LinearGradient
+      colors={[branding.primaryColor, branding.secondaryColor]}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 1 }}
+      style={{ width: size, height: size, borderRadius: size * 0.25, alignItems: 'center', justifyContent: 'center' }}
+    >
+      <RNText style={{ fontSize: isEmoji ? size * 0.5 : size * 0.4, fontWeight: isEmoji ? undefined : '800' as any, color: '#FFF', textAlign: 'center', lineHeight: size * 0.65 }}>
+        {content}
+      </RNText>
+    </LinearGradient>
+  );
+}
+
+/** Category dot badge overlapping the icon corner. */
+function CategoryDot({ tags, primaryColor }: { tags: string[]; primaryColor: string }) {
+  const emoji = getCategoryEmoji(tags);
+  return (
+    <View style={{
+      position: 'absolute', bottom: -3, right: -3,
+      width: 16, height: 16, borderRadius: 8,
+      backgroundColor: primaryColor,
+      borderWidth: 2, borderColor: '#18181b',
+      alignItems: 'center', justifyContent: 'center',
+    }}>
+      <RNText style={{ fontSize: 7, lineHeight: 10 }}>{emoji}</RNText>
+    </View>
+  );
+}
+
+/** Featured badge ribbon. */
+function FeaturedBadge() {
+  return (
+    <LinearGradient
+      colors={['#f59e0b', '#f97316']}
+      start={{ x: 0, y: 0 }}
+      end={{ x: 1, y: 0 }}
+      style={{ paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4, flexDirection: 'row', alignItems: 'center', gap: 3 }}
+    >
+      <RNText style={{ fontSize: 8, lineHeight: 10 }}>{'\u{2B50}'}</RNText>
+      <RNText style={{ fontSize: 9, fontWeight: '700', color: '#FFF' }}>Featured</RNText>
+    </LinearGradient>
   );
 }
 
@@ -188,70 +300,115 @@ function ListingCard({
   const { theme, mode } = useTheme();
   const tc = theme.colors;
   const isDark = mode === 'dark';
+  const branding = getBranding(listing);
+  const pc = adjustColorForMode(branding.primaryColor, isDark);
+  const sc = adjustColorForMode(branding.secondaryColor, isDark);
 
   return (
     <Pressable
       onPress={onViewDetail}
-      style={({ pressed }) => ({
-        padding: 14, borderRadius: 10, borderWidth: 1,
+      style={({ pressed, hovered }: any) => ({
+        borderRadius: 12, borderWidth: 1,
         borderColor: tc.border.subtle,
         backgroundColor: pressed ? tc.background.surface : tc.background.sunken,
-        gap: 10,
+        overflow: 'hidden',
+        ...(Platform.OS === 'web' && hovered ? {
+          transform: [{ translateY: -2 }],
+          shadowColor: pc,
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.2,
+          shadowRadius: 12,
+        } : {}),
       })}
     >
-      <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}>
-        <View style={{ width: 40, height: 40, borderRadius: 10, backgroundColor: isDark ? tc.background.raised : tc.background.sunken, alignItems: 'center', justifyContent: 'center' }}>
-          <ZapIcon size={20} color={tc.accent.primary} />
-        </View>
-        <View style={{ flex: 1 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <RNText style={{ fontSize: 14, fontWeight: '600', color: tc.text.primary }}>{listing.name}</RNText>
-            <RNText style={{ fontSize: 11, color: tc.text.muted }}>v{listing.version}</RNText>
+      {/* Top accent gradient stripe */}
+      <LinearGradient
+        colors={[pc, sc]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 0 }}
+        style={{ height: 3, width: '100%' }}
+      />
+      <View style={{ padding: 14, gap: 10 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}>
+          {/* Plugin icon with category dot */}
+          <View style={{ position: 'relative' }}>
+            <PluginIcon branding={{ ...branding, primaryColor: pc, secondaryColor: sc }} name={listing.name} size={44} />
+            <CategoryDot tags={listing.tags} primaryColor={pc} />
           </View>
-          <RNText style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }} numberOfLines={2}>{listing.description}</RNText>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 }}>
-            <RNText style={{ fontSize: 11, color: tc.text.muted }}>{listing.author.name}</RNText>
-            {listing.downloads > 0 && (
-              <>
-                <RNText style={{ fontSize: 11, color: tc.text.muted }}>·</RNText>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
-                  <DownloadIcon size={10} color={tc.text.muted} />
-                  <RNText style={{ fontSize: 11, color: tc.text.muted }}>{listing.downloads.toLocaleString()}</RNText>
-                </View>
-              </>
-            )}
-            {listing.size > 0 && (
-              <>
-                <RNText style={{ fontSize: 11, color: tc.text.muted }}>·</RNText>
-                <RNText style={{ fontSize: 11, color: tc.text.muted }}>{formatSize(listing.size)}</RNText>
-              </>
-            )}
-          </View>
-        </View>
-        <View style={{ alignItems: 'flex-end', justifyContent: 'center' }}>
-          {isInstalled ? (
-            <View style={{ paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6, backgroundColor: isEnabled ? `${tc.status.success}20` : `${tc.text.muted}20` }}>
-              <RNText style={{ fontSize: 11, fontWeight: '600', color: isEnabled ? tc.status.success : tc.text.muted }}>
-                {isEnabled ? 'Installed' : 'Disabled'}
-              </RNText>
+          <View style={{ flex: 1 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <RNText style={{ fontSize: 14, fontWeight: '600', color: tc.text.primary }}>{listing.name}</RNText>
+              <RNText style={{ fontSize: 11, color: tc.text.muted }}>v{listing.version}</RNText>
+              {branding.featured && <FeaturedBadge />}
             </View>
-          ) : (
-            <Button size="xs" variant="primary" onPress={(e) => { e?.stopPropagation?.(); onInstall(); }} disabled={installing} iconLeft={installing ? undefined : <DownloadIcon size={12} color={tc.text.onAccent} />}>
-              {installing ? 'Installing...' : 'Install'}
-            </Button>
-          )}
+            {branding.tagline ? (
+              <RNText style={{ fontSize: 12, color: pc, marginTop: 1, fontWeight: '500' }} numberOfLines={1}>{branding.tagline}</RNText>
+            ) : null}
+            <RNText style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }} numberOfLines={2}>{listing.description}</RNText>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 }}>
+              <RNText style={{ fontSize: 11, color: tc.text.muted }}>{listing.author.name}</RNText>
+              {listing.downloads > 0 && (
+                <>
+                  <RNText style={{ fontSize: 11, color: tc.text.muted }}>{'\u00B7'}</RNText>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                    <DownloadIcon size={10} color={tc.text.muted} />
+                    <RNText style={{ fontSize: 11, color: tc.text.muted }}>{listing.downloads.toLocaleString()}</RNText>
+                  </View>
+                </>
+              )}
+              {listing.size > 0 && (
+                <>
+                  <RNText style={{ fontSize: 11, color: tc.text.muted }}>{'\u00B7'}</RNText>
+                  <RNText style={{ fontSize: 11, color: tc.text.muted }}>{formatSize(listing.size)}</RNText>
+                </>
+              )}
+            </View>
+          </View>
+          <View style={{ alignItems: 'flex-end', justifyContent: 'center' }}>
+            {isInstalled ? (
+              <View style={{ paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6, backgroundColor: isEnabled ? `${tc.status.success}20` : `${tc.text.muted}20` }}>
+                <RNText style={{ fontSize: 11, fontWeight: '600', color: isEnabled ? tc.status.success : tc.text.muted }}>
+                  {isEnabled ? 'Installed' : 'Disabled'}
+                </RNText>
+              </View>
+            ) : (
+              <Pressable
+                onPress={(e) => { e?.stopPropagation?.(); onInstall(); }}
+                disabled={installing}
+                style={{ overflow: 'hidden', borderRadius: 6 }}
+              >
+                <LinearGradient
+                  colors={installing ? [tc.text.muted, tc.text.muted] : [pc, sc]}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 1 }}
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 6 }}
+                >
+                  {!installing && <DownloadIcon size={12} color="#FFF" />}
+                  <RNText style={{ fontSize: 11, fontWeight: '600', color: '#FFF' }}>
+                    {installing ? 'Installing...' : 'Install'}
+                  </RNText>
+                </LinearGradient>
+              </Pressable>
+            )}
+          </View>
         </View>
-      </View>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
-        {/* Platform badges */}
-        {listing.platforms && listing.platforms.length > 0 && (
-          <PlatformBadges platforms={listing.platforms} />
-        )}
-        {listing.tags.length > 0 && listing.tags.slice(0, 4).map((tag) => (
-          <Tag key={tag} size="sm" style={{ borderRadius: 6 }}>
-            {tag}
-          </Tag>
-        ))}
+        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
+          {/* Platform badges */}
+          {listing.platforms && listing.platforms.length > 0 && (
+            <PlatformBadges platforms={listing.platforms} />
+          )}
+          {listing.tags.length > 0 && listing.tags.slice(0, 4).map((tag) => {
+            const isCategoryTag = CATEGORY_EMOJIS[tag.toLowerCase()] != null;
+            return (
+              <Tag key={tag} size="sm" style={{
+                borderRadius: 6,
+                ...(isCategoryTag ? { backgroundColor: `${pc}18` } : {}),
+              }}>
+                <RNText style={{ fontSize: 10, color: isCategoryTag ? pc : tc.text.muted }}>{tag}</RNText>
+              </Tag>
+            );
+          })}
+        </View>
       </View>
     </Pressable>
   );
@@ -302,45 +459,58 @@ function PlatformBadges({ platforms }: { platforms: string[] }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function InstalledPluginCard({
-  plugin, onToggle, onUninstall, onViewDetail,
+  plugin, listing, onToggle, onUninstall, onViewDetail,
 }: {
-  plugin: PluginInstance; onToggle: () => void; onUninstall: () => void; onViewDetail: () => void;
+  plugin: PluginInstance; listing?: MarketplaceListing; onToggle: () => void; onUninstall: () => void; onViewDetail: () => void;
 }) {
   const { theme, mode } = useTheme();
   const tc = theme.colors;
   const isDark = mode === 'dark';
   const [confirmUninstall, setConfirmUninstall] = useState(false);
+  const branding = listing ? getBranding(listing) : DEFAULT_BRANDING;
+  const pc = adjustColorForMode(branding.primaryColor, isDark);
+  const sc = adjustColorForMode(branding.secondaryColor, isDark);
+  const isEnabled = plugin.state === 'enabled';
 
   return (
-    <View style={{ padding: 14, borderRadius: 10, borderWidth: 1, borderColor: tc.border.subtle, backgroundColor: tc.background.sunken, gap: 10 }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-        <View style={{ width: 36, height: 36, borderRadius: 8, backgroundColor: isDark ? tc.background.raised : tc.background.sunken, alignItems: 'center', justifyContent: 'center' }}>
-          <ZapIcon size={18} color={plugin.state === 'enabled' ? tc.status.success : tc.text.muted} />
+    <View style={{ borderRadius: 12, borderWidth: 1, borderColor: tc.border.subtle, backgroundColor: tc.background.sunken, overflow: 'hidden' }}>
+      {/* Accent stripe — vibrant when enabled, muted when disabled */}
+      <LinearGradient
+        colors={isEnabled ? [pc, sc] : [tc.text.muted, tc.text.muted]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 0 }}
+        style={{ height: 3, width: '100%', opacity: isEnabled ? 1 : 0.3 }}
+      />
+      <View style={{ padding: 14, gap: 10 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          <View style={{ opacity: isEnabled ? 1 : 0.5 }}>
+            <PluginIcon branding={{ ...branding, primaryColor: pc, secondaryColor: sc }} name={plugin.manifest.name} size={36} />
+          </View>
+          <Pressable onPress={onViewDetail} style={{ flex: 1 }}>
+            <RNText style={{ fontSize: 14, fontWeight: '600', color: tc.text.primary }}>{plugin.manifest.name}</RNText>
+            <RNText style={{ fontSize: 12, color: tc.text.secondary }} numberOfLines={1}>v{plugin.manifest.version} · {plugin.manifest.author.name}</RNText>
+            {plugin.state === 'error' && plugin.error && (
+              <RNText style={{ fontSize: 11, color: tc.status.danger, marginTop: 2 }} numberOfLines={1}>Error: {plugin.error}</RNText>
+            )}
+          </Pressable>
+          <Toggle checked={isEnabled} onChange={onToggle} size="sm" />
         </View>
-        <Pressable onPress={onViewDetail} style={{ flex: 1 }}>
-          <RNText style={{ fontSize: 14, fontWeight: '600', color: tc.text.primary }}>{plugin.manifest.name}</RNText>
-          <RNText style={{ fontSize: 12, color: tc.text.secondary }} numberOfLines={1}>v{plugin.manifest.version} · {plugin.manifest.author.name}</RNText>
-          {plugin.state === 'error' && plugin.error && (
-            <RNText style={{ fontSize: 11, color: tc.status.danger, marginTop: 2 }} numberOfLines={1}>Error: {plugin.error}</RNText>
-          )}
-        </Pressable>
-        <Toggle checked={plugin.state === 'enabled'} onChange={onToggle} size="sm" />
+        {confirmUninstall ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingTop: 4 }}>
+            <RNText style={{ fontSize: 12, color: tc.status.danger, flex: 1 }}>Remove this plugin and its data?</RNText>
+            <Button size="xs" variant="destructive" onPress={() => { onUninstall(); setConfirmUninstall(false); }}>
+              Remove
+            </Button>
+            <Button size="xs" variant="tertiary" onPress={() => setConfirmUninstall(false)}>Cancel</Button>
+          </View>
+        ) : (
+          <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
+            <Button size="xs" variant="tertiary" onPress={() => setConfirmUninstall(true)} iconLeft={<TrashIcon size={12} color={tc.text.muted} />}>
+              Uninstall
+            </Button>
+          </View>
+        )}
       </View>
-      {confirmUninstall ? (
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingTop: 4 }}>
-          <RNText style={{ fontSize: 12, color: tc.status.danger, flex: 1 }}>Remove this plugin and its data?</RNText>
-          <Button size="xs" variant="destructive" onPress={() => { onUninstall(); setConfirmUninstall(false); }}>
-            Remove
-          </Button>
-          <Button size="xs" variant="tertiary" onPress={() => setConfirmUninstall(false)}>Cancel</Button>
-        </View>
-      ) : (
-        <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
-          <Button size="xs" variant="tertiary" onPress={() => setConfirmUninstall(true)} iconLeft={<TrashIcon size={12} color={tc.text.muted} />}>
-            Uninstall
-          </Button>
-        </View>
-      )}
     </View>
   );
 }
@@ -359,67 +529,122 @@ function PluginDetailView({
   const tc = theme.colors;
   const isDark = mode === 'dark';
   const isInstalled = !!plugin;
+  const branding = getBranding(listing);
+  const pc = adjustColorForMode(branding.primaryColor, isDark);
+  const sc = adjustColorForMode(branding.secondaryColor, isDark);
+  const iconContent = getPluginIconContent(branding, listing.name);
 
   return (
-    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 24, gap: 20 }}>
-      <Pressable onPress={onBack} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ gap: 20 }}>
+      {/* Back button */}
+      <Pressable onPress={onBack} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 24, paddingTop: 16 }}>
         <ArrowLeftIcon size={16} color={tc.text.secondary} />
         <RNText style={{ fontSize: 13, color: tc.text.secondary }}>Back</RNText>
       </Pressable>
-      <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 16 }}>
-        <View style={{ width: 56, height: 56, borderRadius: 14, backgroundColor: isDark ? tc.background.raised : tc.background.sunken, alignItems: 'center', justifyContent: 'center' }}>
-          <ZapIcon size={28} color={tc.accent.primary} />
-        </View>
-        <View style={{ flex: 1 }}>
-          <RNText style={{ fontSize: 20, fontWeight: '700', color: tc.text.primary }}>{listing.name}</RNText>
-          <RNText style={{ fontSize: 13, color: tc.text.secondary, marginTop: 2 }}>by {listing.author.name} · v{listing.version}</RNText>
-          {listing.author.url && (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 }}>
-              <ExternalLinkIcon size={11} color={tc.accent.primary} />
-              <RNText style={{ fontSize: 11, color: tc.accent.primary }}>{listing.author.url}</RNText>
+
+      {/* Gradient banner header */}
+      <View style={{ marginHorizontal: 16, borderRadius: 16, overflow: 'hidden' }}>
+        <LinearGradient
+          colors={[pc, sc]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
+          style={{ height: 140, justifyContent: 'flex-end', padding: 16, position: 'relative' }}
+        >
+          {/* Faded emoji watermark */}
+          <RNText style={{ position: 'absolute', top: 16, right: 20, fontSize: 56, opacity: 0.2 }}>
+            {iconContent}
+          </RNText>
+          {branding.featured && (
+            <View style={{ position: 'absolute', top: 12, left: 12 }}>
+              <FeaturedBadge />
+            </View>
+          )}
+          <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 14 }}>
+            <View style={{ borderWidth: 3, borderColor: isDark ? '#1e1e22' : '#fff', borderRadius: 16, overflow: 'hidden' }}>
+              <PluginIcon branding={branding} name={listing.name} size={56} />
+            </View>
+            <View style={{ flex: 1, paddingBottom: 2 }}>
+              <RNText style={{ fontSize: 20, fontWeight: '700', color: '#FFF' }}>{listing.name}</RNText>
+              <RNText style={{ fontSize: 13, color: 'rgba(255,255,255,0.8)', marginTop: 1 }}>by {listing.author.name} · v{listing.version}</RNText>
+            </View>
+          </View>
+        </LinearGradient>
+      </View>
+
+      <View style={{ paddingHorizontal: 24, gap: 20 }}>
+        {/* Tagline */}
+        {branding.tagline && (
+          <RNText style={{ fontSize: 14, fontWeight: '500', color: pc, fontStyle: 'italic' }}>{branding.tagline}</RNText>
+        )}
+
+        {/* Stats row */}
+        <View style={{ flexDirection: 'row', gap: 0 }}>
+          {listing.downloads > 0 && (
+            <View style={{ flex: 1, alignItems: 'center', gap: 2 }}>
+              <RNText style={{ fontSize: 10, color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>Downloads</RNText>
+              <RNText style={{ fontSize: 16, fontWeight: '700', color: tc.text.primary }}>{listing.downloads.toLocaleString()}</RNText>
+            </View>
+          )}
+          {listing.rating != null && (
+            <View style={{ flex: 1, alignItems: 'center', gap: 2 }}>
+              <RNText style={{ fontSize: 10, color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>Rating</RNText>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <RNText style={{ fontSize: 14 }}>{'\u2B50'}</RNText>
+                <RNText style={{ fontSize: 16, fontWeight: '700', color: tc.text.primary }}>{listing.rating.toFixed(1)}</RNText>
+              </View>
+            </View>
+          )}
+          {listing.size > 0 && (
+            <View style={{ flex: 1, alignItems: 'center', gap: 2 }}>
+              <RNText style={{ fontSize: 10, color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>Size</RNText>
+              <RNText style={{ fontSize: 16, fontWeight: '700', color: tc.text.primary }}>{formatSize(listing.size)}</RNText>
             </View>
           )}
         </View>
-      </View>
-      <View style={{ flexDirection: 'row', gap: 8 }}>
-        {isInstalled ? (
-          <>
-            <Button size="sm" variant={plugin.state === 'enabled' ? 'secondary' : 'primary'} onPress={onToggle} style={{ flex: 1 }}>
-              {plugin.state === 'enabled' ? 'Disable' : 'Enable'}
-            </Button>
-            <Button size="sm" variant="destructive" onPress={onUninstall} iconLeft={<TrashIcon size={14} color={tc.text.onAccent} />}>
-              Uninstall
-            </Button>
-          </>
-        ) : (
-          <Button size="sm" variant="primary" onPress={onInstall} disabled={installing} iconLeft={<DownloadIcon size={14} color={tc.text.onAccent} />} style={{ flex: 1 }}>
-            {installing ? 'Installing...' : 'Install Plugin'}
-          </Button>
-        )}
-      </View>
+
+        {/* Actions */}
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          {isInstalled ? (
+            <>
+              <Button size="sm" variant={plugin.state === 'enabled' ? 'secondary' : 'primary'} onPress={onToggle} style={{ flex: 1 }}>
+                {plugin.state === 'enabled' ? 'Disable' : 'Enable'}
+              </Button>
+              <Button size="sm" variant="destructive" onPress={onUninstall} iconLeft={<TrashIcon size={14} color={tc.text.onAccent} />}>
+                Uninstall
+              </Button>
+            </>
+          ) : (
+            <Pressable onPress={onInstall} disabled={installing} style={{ flex: 1, borderRadius: 8, overflow: 'hidden' }}>
+              <LinearGradient
+                colors={installing ? [tc.text.muted, tc.text.muted] : [pc, sc]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10 }}
+              >
+                {!installing && <DownloadIcon size={14} color="#FFF" />}
+                <RNText style={{ fontSize: 14, fontWeight: '600', color: '#FFF' }}>
+                  {installing ? 'Installing...' : 'Install Plugin'}
+                </RNText>
+              </LinearGradient>
+            </Pressable>
+          )}
+        </View>
+      {listing.author.url && (
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+          <ExternalLinkIcon size={11} color={pc} />
+          <RNText style={{ fontSize: 11, color: pc }}>{listing.author.url}</RNText>
+        </View>
+      )}
+
       <Separator spacing="sm" />
       <View style={{ gap: 6 }}>
         <RNText style={{ fontSize: 14, fontWeight: '600', color: tc.text.primary }}>Description</RNText>
         <RNText style={{ fontSize: 13, color: tc.text.secondary, lineHeight: 20 }}>{listing.description}</RNText>
       </View>
-      <View style={{ flexDirection: 'row', gap: 16, flexWrap: 'wrap' }}>
-        {listing.downloads > 0 && (
-          <View style={{ gap: 2 }}>
-            <RNText style={{ fontSize: 11, color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>Downloads</RNText>
-            <RNText style={{ fontSize: 14, fontWeight: '600', color: tc.text.primary }}>{listing.downloads.toLocaleString()}</RNText>
-          </View>
-        )}
-        {listing.size > 0 && (
-          <View style={{ gap: 2 }}>
-            <RNText style={{ fontSize: 11, color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>Size</RNText>
-            <RNText style={{ fontSize: 14, fontWeight: '600', color: tc.text.primary }}>{formatSize(listing.size)}</RNText>
-          </View>
-        )}
-        <View style={{ gap: 4 }}>
-          <RNText style={{ fontSize: 11, color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>Platforms</RNText>
-          <View style={{ flexDirection: 'row', gap: 4, flexWrap: 'wrap' }}>
-            <PlatformBadges platforms={listing.platforms} />
-          </View>
+      <View style={{ gap: 4 }}>
+        <RNText style={{ fontSize: 11, color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>Platforms</RNText>
+        <View style={{ flexDirection: 'row', gap: 4, flexWrap: 'wrap' }}>
+          <PlatformBadges platforms={listing.platforms} />
         </View>
       </View>
       {listing.permissions && listing.permissions.length > 0 && (
@@ -448,14 +673,21 @@ function PluginDetailView({
         <View style={{ gap: 6 }}>
           <RNText style={{ fontSize: 14, fontWeight: '600', color: tc.text.primary }}>Tags</RNText>
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
-            {listing.tags.map((tag) => (
-              <Tag key={tag} size="sm" style={{ borderRadius: 6 }}>
-                {tag}
-              </Tag>
-            ))}
+            {listing.tags.map((tag) => {
+              const isCategoryTag = CATEGORY_EMOJIS[tag.toLowerCase()] != null;
+              return (
+                <Tag key={tag} size="sm" style={{
+                  borderRadius: 6,
+                  ...(isCategoryTag ? { backgroundColor: `${pc}18` } : {}),
+                }}>
+                  <RNText style={{ fontSize: 11, color: isCategoryTag ? pc : tc.text.muted }}>{tag}</RNText>
+                </Tag>
+              );
+            })}
           </View>
         </View>
       )}
+      </View>
     </ScrollView>
   );
 }
@@ -1320,7 +1552,7 @@ export function PluginMarketplace({ open, onClose }: PluginMarketplaceProps) {
                         const listing = listings.find((l) => l.id === plugin.manifest.id);
                         return (
                           <InstalledPluginCard
-                            key={plugin.manifest.id} plugin={plugin}
+                            key={plugin.manifest.id} plugin={plugin} listing={listing}
                             onToggle={() => handleToggle(plugin.manifest.id)}
                             onUninstall={() => handleUninstall(plugin.manifest.id)}
                             onViewDetail={() => { if (listing) setSelectedListing(listing); }}
@@ -1428,18 +1660,21 @@ export function PluginMarketplace({ open, onClose }: PluginMarketplaceProps) {
                     backgroundColor: isActive ? tc.accent.primary : tc.accent.highlight,
                   }}
                 >
-                  <View
+                  <LinearGradient
+                    colors={[sec.color, sec.secondaryColor]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
                     style={{
                       width: 20,
                       height: 20,
                       borderRadius: 5,
-                      backgroundColor: isActive ? sec.color : 'transparent',
                       alignItems: 'center',
                       justifyContent: 'center',
+                      opacity: isActive ? 1 : 0.6,
                     }}
                   >
-                    <Icon size={11} color={isActive ? tc.text.onAccent : tc.text.secondary} />
-                  </View>
+                    <Icon size={11} color="#FFF" />
+                  </LinearGradient>
                   <RNText
                     style={{
                       fontSize: 12,
@@ -1531,9 +1766,14 @@ export function PluginMarketplace({ open, onClose }: PluginMarketplaceProps) {
                     marginBottom: 2,
                   })}
                 >
-                  <View style={{ width: 24, height: 24, borderRadius: 6, backgroundColor: isActive ? sec.color : tc.accent.highlight, alignItems: 'center', justifyContent: 'center' }}>
-                    <Icon size={13} color={isActive ? tc.text.onAccent : tc.text.secondary} />
-                  </View>
+                  <LinearGradient
+                    colors={isActive ? [sec.color, sec.secondaryColor] : [sec.color, sec.secondaryColor]}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={{ width: 24, height: 24, borderRadius: 6, alignItems: 'center', justifyContent: 'center', opacity: isActive ? 1 : 0.7 }}
+                  >
+                    <Icon size={13} color="#FFF" />
+                  </LinearGradient>
                   <RNText style={{ fontSize: 13, fontWeight: isActive ? '600' : '400', color: isActive ? tc.text.onAccent : tc.text.secondary, flex: 1 }} numberOfLines={1}>
                     {sec.label}
                   </RNText>
@@ -1565,9 +1805,14 @@ export function PluginMarketplace({ open, onClose }: PluginMarketplaceProps) {
             }}
           >
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-              <View style={{ width: 36, height: 36, borderRadius: 10, backgroundColor: activeSectionInfo.color, alignItems: 'center', justifyContent: 'center' }}>
-                <activeSectionInfo.icon size={18} color={tc.text.onAccent} />
-              </View>
+              <LinearGradient
+                colors={[activeSectionInfo.color, activeSectionInfo.secondaryColor]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={{ width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' }}
+              >
+                <activeSectionInfo.icon size={18} color="#FFF" />
+              </LinearGradient>
               <RNText style={{ fontSize: 18, fontWeight: '700', color: tc.text.primary }}>{activeSectionInfo.label}</RNText>
             </View>
             <Pressable onPress={handleClose} style={{ width: 28, height: 28, borderRadius: 6, alignItems: 'center', justifyContent: 'center' }} accessibilityLabel="Close marketplace">

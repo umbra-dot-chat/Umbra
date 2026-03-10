@@ -8,6 +8,13 @@
       "description": "Translate messages to any language with one click. Supports 100+ languages via a free translation API.",
       "author": { "name": "Umbra Team", "url": "https://umbra.chat" },
       "version": "1.0.0",
+      "branding": {
+        "emoji": "\ud83c\udf10",
+        "primaryColor": "#3b82f6",
+        "secondaryColor": "#06b6d4",
+        "tagline": "Translate anything, instantly",
+        "featured": true
+      },
       "downloadUrl": "/plugins/translator/bundle.js",
       "size": 24576,
       "downloads": 1240,
@@ -27,6 +34,12 @@
       "description": "View real-time system stats (CPU, memory, disk) in the sidebar. Simulated data for demo purposes.",
       "author": { "name": "Umbra Team", "url": "https://umbra.chat" },
       "version": "1.0.0",
+      "branding": {
+        "emoji": "\ud83d\udcca",
+        "primaryColor": "#f97316",
+        "secondaryColor": "#ef4444",
+        "tagline": "Real-time system insights at a glance"
+      },
       "downloadUrl": "/plugins/system-monitor/bundle.js",
       "size": 102400,
       "downloads": 310,

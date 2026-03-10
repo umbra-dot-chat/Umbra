@@ -37,4 +37,4 @@ export type { BundleStorage, StoredBundle } from './installer';
 
 // ── Marketplace ──────────────────────────────────────────────────────────────
 export { MarketplaceClient } from './marketplace';
-export type { MarketplaceListing, PluginRegistry as PluginRegistryJSON } from './marketplace';
+export type { MarketplaceListing, PluginBranding, PluginRegistry as PluginRegistryJSON } from './marketplace';

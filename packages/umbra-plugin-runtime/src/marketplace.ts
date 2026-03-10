@@ -11,6 +11,20 @@ import type { PluginPermission, PluginPlatform, SlotRegistration } from '@umbra/
 // TYPES
 // =============================================================================
 
+/** Visual branding for a plugin listing. */
+export interface PluginBranding {
+  /** Emoji icon displayed on the card (e.g. "🌐", "📊"). Falls back to letter monogram if absent. */
+  emoji?: string;
+  /** Primary brand color (hex, e.g. "#3b82f6") */
+  primaryColor: string;
+  /** Secondary brand color for gradients (hex, e.g. "#06b6d4") */
+  secondaryColor: string;
+  /** Short marketing tagline shown below the name (one line) */
+  tagline?: string;
+  /** Whether this plugin is a staff pick / featured */
+  featured?: boolean;
+}
+
 /** A plugin listing in the marketplace registry. */
 export interface MarketplaceListing {
   /** Unique plugin ID (reverse-domain) */
@@ -23,8 +37,10 @@ export interface MarketplaceListing {
   author: { name: string; url?: string };
   /** Current version */
   version: string;
-  /** Icon URL */
+  /** @deprecated Use branding.emoji instead */
   icon?: string;
+  /** Visual branding (colors, emoji, tagline) */
+  branding?: PluginBranding;
   /** Download URL for the plugin bundle */
   downloadUrl: string;
   /** Bundle size in bytes */
