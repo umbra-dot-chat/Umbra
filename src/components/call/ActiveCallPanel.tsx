@@ -89,7 +89,7 @@ export function ActiveCallPanel({
   return (
     <View
       style={{
-        maxHeight,
+        height: maxHeight,
         overflow: 'hidden',
         position: 'relative',
         zIndex: 10,
