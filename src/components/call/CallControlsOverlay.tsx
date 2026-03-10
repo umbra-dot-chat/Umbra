@@ -9,7 +9,7 @@
 import React, { useRef, useEffect, useCallback, useState } from 'react';
 import { View, Animated, Platform } from 'react-native';
 import type { ViewStyle } from 'react-native';
-import { CallControls } from '@coexist/wisp-react-native';
+import { CallControls, useTheme } from '@coexist/wisp-react-native';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import { useAppTheme } from '@/contexts/ThemeContext';
 
@@ -42,6 +42,7 @@ export function CallControlsOverlay({
   onEndCall,
 }: CallControlsOverlayProps) {
   const isMobile = useIsMobile();
+  const { theme } = useTheme();
   const { motionPreferences } = useAppTheme();
   const reduceMotion = motionPreferences.reduceMotion;
 
@@ -113,11 +114,11 @@ export function CallControlsOverlay({
     paddingVertical: 8,
     ...(Platform.OS === 'web'
       ? {
-          backgroundColor: 'rgba(0,0,0,0.5)',
+          backgroundColor: theme.colors.background.overlay,
           backdropFilter: 'blur(12px)',
         }
       : {
-          backgroundColor: 'rgba(0,0,0,0.75)',
+          backgroundColor: theme.colors.background.overlay,
         }),
   };
 
