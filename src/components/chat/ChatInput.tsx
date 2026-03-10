@@ -239,20 +239,26 @@ export function ChatInput({
   // useLayoutEffect fires before browser paint, so there's no visual flash.
   useLayoutEffect(() => {
     if (Platform.OS !== 'web') return;
-    const container = ghostContainerRef.current as unknown as HTMLElement;
-    if (!container) return;
-    const textarea = container.querySelector('textarea');
-    if (!textarea) return;
-    const containerRect = container.getBoundingClientRect();
-    const textareaRect = textarea.getBoundingClientRect();
-    const padTop = parseFloat(window.getComputedStyle(textarea).paddingTop) || 0;
-    const topPx = `${(textareaRect.top - containerRect.top) + padTop}px`;
-    // Apply to command highlight overlay
-    const cmdEl = cmdOverlayRef.current as unknown as HTMLElement;
-    if (cmdEl) cmdEl.style.paddingTop = topPx;
-    // Apply to ghost text overlay
-    const ghostEl = ghostOverlayRef.current as unknown as HTMLElement;
-    if (ghostEl) ghostEl.style.paddingTop = topPx;
+    try {
+      const container = ghostContainerRef.current as unknown as HTMLElement;
+      if (!container || !container.isConnected) return;
+      const textarea = container.querySelector('textarea');
+      if (!textarea) return;
+      const containerRect = container.getBoundingClientRect();
+      const textareaRect = textarea.getBoundingClientRect();
+      // Guard: skip if elements have no dimensions (detached/hidden)
+      if (containerRect.width === 0 || textareaRect.width === 0) return;
+      const padTop = parseFloat(window.getComputedStyle(textarea).paddingTop) || 0;
+      const topPx = `${(textareaRect.top - containerRect.top) + padTop}px`;
+      // Apply to command highlight overlay
+      const cmdEl = cmdOverlayRef.current as unknown as HTMLElement;
+      if (cmdEl) cmdEl.style.paddingTop = topPx;
+      // Apply to ghost text overlay
+      const ghostEl = ghostOverlayRef.current as unknown as HTMLElement;
+      if (ghostEl) ghostEl.style.paddingTop = topPx;
+    } catch {
+      // Guard against DOM measurement errors on detached elements
+    }
   }, [commandHighlight, ghostText, replyingTo, editing]);
 
   // Measure typed text width to position ghost text overlay
@@ -269,12 +275,17 @@ export function ChatInput({
   }, [message, ghostText]);
 
   // ── Transparent textarea text for command highlighting (web only) ───────
+  // Also stores a ref to the textarea so we can eagerly reset on submit.
+  const transparentTextareaRef = useRef<HTMLTextAreaElement | null>(null);
+
   useEffect(() => {
     if (Platform.OS !== 'web') return;
     const container = ghostContainerRef.current as unknown as HTMLElement;
     if (!container) return;
     const textarea = container.querySelector('textarea');
     if (!textarea) return;
+
+    transparentTextareaRef.current = textarea;
 
     if (commandHighlight) {
       textarea.style.color = 'transparent';
@@ -283,6 +294,12 @@ export function ChatInput({
       textarea.style.color = '';
       textarea.style.caretColor = '';
     }
+
+    // Cleanup: always reset textarea color when effect re-runs or unmounts
+    return () => {
+      textarea.style.color = '';
+      textarea.style.caretColor = '';
+    };
   }, [commandHighlight, theme.colors.text.primary]);
 
   // ── Value change handler ────────────────────────────────────────────────
@@ -306,14 +323,29 @@ export function ChatInput({
 
   const handleSlashSelect = useCallback(
     (cmd: SlashCommandDef) => {
-      const { newText, shouldSend } = selectCommand(cmd, message);
-      if (shouldSend) {
-        // Clear and submit
+      try {
+        const { newText, shouldSend } = selectCommand(cmd, message);
+        if (shouldSend) {
+          // Eagerly reset textarea color before React re-renders (prevents stuck transparent text)
+          if (Platform.OS === 'web' && transparentTextareaRef.current) {
+            transparentTextareaRef.current.style.color = '';
+            transparentTextareaRef.current.style.caretColor = '';
+          }
+          // Clear and submit
+          onMessageChange('');
+          onClearReply();
+          onSubmit(newText);
+        } else {
+          onMessageChange(newText);
+        }
+      } catch (err) {
+        // Defensive: if command execution fails, at least clear the input and reset state
+        console.error('[ChatInput] handleSlashSelect error:', err);
+        if (Platform.OS === 'web' && transparentTextareaRef.current) {
+          transparentTextareaRef.current.style.color = '';
+          transparentTextareaRef.current.style.caretColor = '';
+        }
         onMessageChange('');
-        onClearReply();
-        onSubmit(newText);
-      } else {
-        onMessageChange(newText);
       }
     },
     [selectCommand, message, onMessageChange, onClearReply, onSubmit],
@@ -364,6 +396,7 @@ export function ChatInput({
     if (!wrapper) return;
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      try {
       // Slash command menu takes priority when open
       if (slashOpenRef.current && filteredCommandsRef.current.length > 0) {
         if (e.key === 'ArrowDown') {
@@ -379,7 +412,9 @@ export function ChatInput({
         } else if (e.key === 'Enter') {
           e.preventDefault();
           e.stopPropagation();
-          const selected = filteredCommandsRef.current[slashActiveIndexRef.current];
+          const idx = slashActiveIndexRef.current;
+          const cmds = filteredCommandsRef.current;
+          const selected = idx >= 0 && idx < cmds.length ? cmds[idx] : cmds[0];
           if (selected) {
             handleSlashSelectRef.current(selected);
           }
@@ -391,7 +426,9 @@ export function ChatInput({
           e.preventDefault();
           e.stopPropagation();
           // Tab = select the highlighted command and fill it in without sending
-          const selected = filteredCommandsRef.current[slashActiveIndexRef.current];
+          const idx = slashActiveIndexRef.current;
+          const cmds = filteredCommandsRef.current;
+          const selected = idx >= 0 && idx < cmds.length ? cmds[idx] : cmds[0];
           if (selected) {
             const fullCommand = `/${selected.command} `;
             onMessageChangeRef.current(fullCommand);
@@ -441,6 +478,10 @@ export function ChatInput({
           e.stopPropagation();
           closeMentionRef.current();
         }
+      }
+      } catch (err) {
+        // Defensive: prevent keydown errors from crashing the page
+        console.error('[ChatInput] keydown handler error:', err);
       }
     };
 
@@ -534,6 +575,11 @@ export function ChatInput({
               onValueChange={handleValueChange}
               onSelectionChange={handleSelectionChange}
               onSubmit={(msg) => {
+                // Eagerly reset transparent textarea (safety net for command highlight cleanup)
+                if (Platform.OS === 'web' && transparentTextareaRef.current) {
+                  transparentTextareaRef.current.style.color = '';
+                  transparentTextareaRef.current.style.caretColor = '';
+                }
                 closeMention();
                 closeSlash();
                 onMessageChange('');
@@ -608,7 +654,7 @@ export function ChatInput({
                       fontSize,
                       fontFamily,
                       lineHeight: `${lineHeight}px`,
-                      color: theme.colors.text.link,
+                      color: theme.colors.accent.primary,
                     } as any}
                   >
                     {commandHighlight.argsText}
