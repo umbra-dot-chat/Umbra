@@ -3,7 +3,7 @@
  * that maximizes tile area while fitting all participants in the container.
  */
 
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useRef } from 'react';
 import { View, Pressable } from 'react-native';
 import type { LayoutChangeEvent, ViewStyle } from 'react-native';
 import { VideoTile, Text, useTheme } from '@coexist/wisp-react-native';
@@ -18,7 +18,6 @@ export interface JustifiedVideoGridProps {
   localDid: string;
   activeSpeakerDid: string | null;
   speakingDids: Set<string>;
-  onTileDoubleClick?: (did: string) => void;
   gap?: number;
   aspectRatio?: number;
 }
@@ -72,13 +71,32 @@ export function JustifiedVideoGrid({
   localDid,
   activeSpeakerDid,
   speakingDids,
-  onTileDoubleClick,
   gap = 8,
   aspectRatio = 16 / 9,
 }: JustifiedVideoGridProps) {
   const { theme } = useTheme();
   const [containerSize, setContainerSize] = useState({ w: 0, h: 0 });
   const { fullscreenDid, enterFullscreen, exitFullscreen } = useFullscreen();
+
+  // Double-tap detection: track last press time per tile
+  const lastPressRef = useRef<{ did: string; time: number } | null>(null);
+  const DOUBLE_TAP_THRESHOLD = 300;
+
+  const handleTilePress = useCallback((did: string) => {
+    const now = Date.now();
+    const last = lastPressRef.current;
+    if (last && last.did === did && now - last.time < DOUBLE_TAP_THRESHOLD) {
+      // Double-tap detected
+      if (fullscreenDid === did) {
+        exitFullscreen();
+      } else {
+        enterFullscreen(did);
+      }
+      lastPressRef.current = null;
+    } else {
+      lastPressRef.current = { did, time: now };
+    }
+  }, [fullscreenDid, enterFullscreen, exitFullscreen]);
 
   const handleLayout = useCallback((e: LayoutChangeEvent) => {
     const { width, height } = e.nativeEvent.layout;
@@ -139,7 +157,8 @@ export function JustifiedVideoGrid({
       {fullscreenParticipant ? (
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={`${fullscreenParticipant.displayName} video fullscreen, press escape to exit`}
+          accessibilityLabel={`${fullscreenParticipant.displayName} video fullscreen, double-tap or press escape to exit`}
+          onPress={() => handleTilePress(fullscreenParticipant.did)}
           onLongPress={exitFullscreen}
           delayLongPress={500}
           style={{
@@ -214,7 +233,8 @@ export function JustifiedVideoGrid({
                 <Pressable
                   key={participant.did}
                   accessibilityRole="button"
-                  accessibilityLabel={`${participant.displayName} video tile`}
+                  accessibilityLabel={`${participant.displayName} video tile, double-tap for fullscreen`}
+                  onPress={() => handleTilePress(participant.did)}
                   onLongPress={() => enterFullscreen(participant.did)}
                   delayLongPress={500}
                   style={tileStyle}
