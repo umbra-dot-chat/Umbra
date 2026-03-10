@@ -53,7 +53,7 @@ export function SidebarCallPanel({
         onPress={onReturnToCall}
         accessibilityRole="button"
         accessibilityLabel="Return to call"
-        style={{ height: 50, borderRadius: 6, overflow: 'hidden' }}
+        style={{ height: 50, borderRadius: 8, overflow: 'hidden' }}
       >
         {isVoiceOnly ? (
           <View style={{
@@ -83,7 +83,7 @@ export function SidebarCallPanel({
       <View style={{
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 6,
+        gap: 8,
         marginTop: 4,
         paddingHorizontal: 2,
         height: 24,
