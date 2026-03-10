@@ -569,7 +569,7 @@ export default function ChatPage() {
           onGroupSettings={activeConversation?.groupId ? () => setGroupSettingsOpen(true) : undefined}
         />
         <SlotRenderer slot="chat-header" props={{ conversationId: resolvedConversationId }} />
-        {activeCall && activeCall.status !== 'incoming' && activeCall.conversationId === resolvedConversationId ? (
+        {activeCall && activeCall.status !== 'incoming' && activeCall.conversationId === resolvedConversationId && (
           <ActiveCallPanel
             activeCall={activeCall}
             localDid={myDid}
@@ -588,8 +588,6 @@ export default function ChatPage() {
             onAudioQualityChange={setAudioQuality}
             onSettings={() => openSettings('audio-video')}
           />
-        ) : (
-          <ActiveCallBar />
         )}
         <ChatArea
           messages={messages}
