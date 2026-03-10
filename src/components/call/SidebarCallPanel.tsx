@@ -41,7 +41,7 @@ export function SidebarCallPanel({
   return (
     <View
       style={{
-        height: 120,
+        height: 148,
         backgroundColor: colors.background.raised,
         borderTopWidth: 1,
         borderTopColor: colors.border.subtle,
@@ -53,7 +53,7 @@ export function SidebarCallPanel({
         onPress={onReturnToCall}
         accessibilityRole="button"
         accessibilityLabel="Return to call"
-        style={{ height: 50, borderRadius: 8, overflow: 'hidden' }}
+        style={{ height: 40, borderRadius: 8, overflow: 'hidden' }}
       >
         {isVoiceOnly ? (
           <View style={{
