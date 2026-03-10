@@ -1,9 +1,9 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Platform, Pressable, View } from 'react-native';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { Platform, Pressable, Text as RNText, View } from 'react-native';
 import { TEST_IDS } from '@/constants/test-ids';
 import {
   Avatar, MessageInput, useTheme,
-  CombinedPicker, MentionAutocomplete, GradientBorder,
+  CombinedPicker, MentionAutocomplete, GradientBorder, GradientText,
 } from '@coexist/wisp-react-native';
 import type { EmojiItem } from '@coexist/wisp-core/types/EmojiPicker.types';
 import type { GifItem } from '@coexist/wisp-core/types/GifPicker.types';
@@ -16,6 +16,33 @@ import { usePlugins } from '@/contexts/PluginContext';
 import { SlashCommandMenu } from './SlashCommandMenu';
 import { AnimatedPresence } from '@/components/ui/AnimatedPresence';
 import { getSystemCommands, GHOST_COMMANDS, isGhostBot } from '@/services/SlashCommandRegistry';
+import { useAppTheme } from '@/contexts/ThemeContext';
+import { cycleDurations, opacity } from '@coexist/wisp-core/tokens';
+
+// ---------------------------------------------------------------------------
+// Ghost text helper — computes the inline completion suggestion
+// ---------------------------------------------------------------------------
+
+function getGhostText(
+  message: string,
+  commands: SlashCommandDef[],
+): string {
+  if (!message.startsWith('/') || message.length < 2) return '';
+  const typed = message.slice(1).toLowerCase(); // e.g. "ghost q"
+  if (!typed) return '';
+
+  // Find best-matching command whose command text starts with the typed text
+  const match = commands.find((cmd) =>
+    cmd.command.toLowerCase().startsWith(typed) && cmd.command.toLowerCase() !== typed,
+  );
+  if (!match) return '';
+
+  // Return only the untyped portion
+  const rest = match.command.slice(typed.length);
+  // Append args hint if present
+  const argsSuffix = match.args ? ` ${match.args}` : '';
+  return rest + argsSuffix;
+}
 
 export interface ChatInputProps {
   message: string;
@@ -51,6 +78,7 @@ export function ChatInput({
   friendDid, onClearChat,
 }: ChatInputProps) {
   const { theme } = useTheme();
+  const { motionPreferences } = useAppTheme();
   const { friends } = useFriends();
   const { onlineDids } = useNetwork();
   const { pluginSlashCommands } = usePlugins();
@@ -119,6 +147,144 @@ export function ChatInput({
     closeSlash,
   } = useSlashCommand({ commands: allSlashCommands });
 
+  // ── Ghost text autocomplete (web only) ──────────────────────────────────
+
+  const ghostText = useMemo(
+    () => Platform.OS === 'web' ? getGhostText(message, allSlashCommands) : '',
+    [message, allSlashCommands],
+  );
+
+  // ── Command highlight detection ──────────────────────────────────────────
+  // Determine if the current message is a valid/exact slash command match
+  const commandHighlight = useMemo(() => {
+    if (!message.startsWith('/') || message.length < 2) return null;
+    const afterSlash = message.slice(1);
+
+    // Find exact match: the typed text equals the command or starts with "command "
+    const exactMatch = allSlashCommands.find((cmd) => {
+      const cmdText = cmd.command.toLowerCase();
+      const typed = afterSlash.toLowerCase();
+      return typed === cmdText || typed.startsWith(cmdText + ' ');
+    });
+
+    if (exactMatch) {
+      const commandText = '/' + exactMatch.command;
+      const argsText = message.slice(commandText.length);
+      return { commandText, argsText, command: exactMatch };
+    }
+
+    // Partial match: a command starts with what the user has typed so far
+    const typed = afterSlash.toLowerCase();
+    const partialMatch = allSlashCommands.find((cmd) =>
+      cmd.command.toLowerCase().startsWith(typed)
+    );
+
+    if (partialMatch) {
+      // Highlight the entire typed text as the command (it's a valid prefix)
+      return { commandText: message, argsText: '', command: partialMatch };
+    }
+
+    return null;
+  }, [message, allSlashCommands]);
+
+  // Ref for ghost text measurement (hidden span to measure typed text width)
+  const ghostMeasureRef = useRef<HTMLSpanElement | null>(null);
+  const [ghostLeftOffset, setGhostLeftOffset] = useState(0);
+
+  // Runtime-measured textarea offsets (relative to ghost overlay container)
+  const [textareaLeftOffset, setTextareaLeftOffset] = useState(52); // sensible default (9px hPad + 34px icon + 8px gap + 1px border)
+  const [textareaRightPad, setTextareaRightPad] = useState(94); // emoji(34) + send(34) + gaps + pad
+  // Refs for overlay elements — used by useLayoutEffect to correct vertical positioning
+  const cmdOverlayRef = useRef<View>(null);
+  const ghostOverlayRef = useRef<View>(null);
+  const ghostContainerRef = useRef<View>(null);
+
+  // Typography values from theme — ensures overlays match MessageInput exactly
+  const fontFamily = theme.typography.fontFamily;
+  const fontSize = theme.typography.sizes.sm.fontSize; // 14
+  const lineHeight = fontSize * 1.4; // 19.6 — matches MessageInput's internal computation
+
+  // Measure textarea horizontal/right offsets at runtime for precise overlay alignment.
+  // Re-measures on focus change, reply/edit bar toggle, and container resize.
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const measure = () => {
+      const container = ghostContainerRef.current as unknown as HTMLElement;
+      if (!container) return;
+      const textarea = container.querySelector('textarea');
+      if (!textarea) return;
+      const containerRect = container.getBoundingClientRect();
+      const textareaRect = textarea.getBoundingClientRect();
+      const textareaStyles = window.getComputedStyle(textarea);
+      const padLeft = parseFloat(textareaStyles.paddingLeft) || 0;
+      const padRight = parseFloat(textareaStyles.paddingRight) || 0;
+      setTextareaLeftOffset((textareaRect.left - containerRect.left) + padLeft);
+      setTextareaRightPad((containerRect.right - textareaRect.right) + padRight);
+    };
+    const raf = requestAnimationFrame(measure);
+    // Re-measure on container resize (handles window resize, sidebar toggle, etc.)
+    let ro: ResizeObserver | undefined;
+    const container = ghostContainerRef.current as unknown as HTMLElement;
+    if (container && typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(() => requestAnimationFrame(measure));
+      ro.observe(container);
+    }
+    return () => {
+      cancelAnimationFrame(raf);
+      ro?.disconnect();
+    };
+  }, [inputFocused, !!replyingTo, !!editing]);
+
+  // Correct vertical alignment of overlays AFTER each render via direct DOM manipulation.
+  // useLayoutEffect fires before browser paint, so there's no visual flash.
+  useLayoutEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const container = ghostContainerRef.current as unknown as HTMLElement;
+    if (!container) return;
+    const textarea = container.querySelector('textarea');
+    if (!textarea) return;
+    const containerRect = container.getBoundingClientRect();
+    const textareaRect = textarea.getBoundingClientRect();
+    const padTop = parseFloat(window.getComputedStyle(textarea).paddingTop) || 0;
+    const topPx = `${(textareaRect.top - containerRect.top) + padTop}px`;
+    // Apply to command highlight overlay
+    const cmdEl = cmdOverlayRef.current as unknown as HTMLElement;
+    if (cmdEl) cmdEl.style.paddingTop = topPx;
+    // Apply to ghost text overlay
+    const ghostEl = ghostOverlayRef.current as unknown as HTMLElement;
+    if (ghostEl) ghostEl.style.paddingTop = topPx;
+  }, [commandHighlight, ghostText, replyingTo, editing]);
+
+  // Measure typed text width to position ghost text overlay
+  useEffect(() => {
+    if (Platform.OS !== 'web' || !ghostText) return;
+    // Use requestAnimationFrame for DOM measurement
+    const raf = requestAnimationFrame(() => {
+      const span = ghostMeasureRef.current;
+      if (span) {
+        setGhostLeftOffset(span.offsetWidth);
+      }
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [message, ghostText]);
+
+  // ── Transparent textarea text for command highlighting (web only) ───────
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const container = ghostContainerRef.current as unknown as HTMLElement;
+    if (!container) return;
+    const textarea = container.querySelector('textarea');
+    if (!textarea) return;
+
+    if (commandHighlight) {
+      textarea.style.color = 'transparent';
+      textarea.style.caretColor = theme.colors.text.primary;
+    } else {
+      textarea.style.color = '';
+      textarea.style.caretColor = '';
+    }
+  }, [commandHighlight, theme.colors.text.primary]);
+
   // ── Value change handler ────────────────────────────────────────────────
 
   const handleValueChange = useCallback(
@@ -170,6 +336,8 @@ export function ChatInput({
   const setSlashActiveIndexRef = useRef(setSlashActiveIndex);
   const handleSlashSelectRef = useRef(handleSlashSelect);
   const onSubmitRef = useRef(onSubmit);
+  const ghostTextRef = useRef(ghostText);
+  const allSlashCommandsRef = useRef(allSlashCommands);
 
   mentionOpenRef.current = mentionOpen;
   slashOpenRef.current = slashOpen;
@@ -186,6 +354,8 @@ export function ChatInput({
   setSlashActiveIndexRef.current = setSlashActiveIndex;
   handleSlashSelectRef.current = handleSlashSelect;
   onSubmitRef.current = onSubmit;
+  ghostTextRef.current = ghostText;
+  allSlashCommandsRef.current = allSlashCommands;
 
   useEffect(() => {
     if (Platform.OS !== 'web') return;
@@ -228,6 +398,17 @@ export function ChatInput({
             closeSlashRef.current();
           }
         }
+        return;
+      }
+
+      // Ghost text Tab acceptance (when slash menu is NOT open)
+      if (e.key === 'Tab' && ghostTextRef.current) {
+        e.preventDefault();
+        e.stopPropagation();
+        // Accept the ghost text — fill the full command
+        const currentMsg = messageRef.current;
+        const fullText = currentMsg + ghostTextRef.current + ' ';
+        onMessageChangeRef.current(fullText);
         return;
       }
 
@@ -311,19 +492,21 @@ export function ChatInput({
         />
       </AnimatedPresence>
       <View ref={inputWrapperRef} testID={TEST_IDS.INPUT.CONTAINER} style={{ padding: 12 }}>
-        {/* Slash command autocomplete menu */}
-        {slashOpen && filteredCommands.length > 0 && !mentionOpen && (
-          <View style={{ position: 'absolute', bottom: 64, left: 12, right: 12, zIndex: 16 }}>
-            <SlashCommandMenu
-              commands={filteredCommands}
-              query={slashQuery}
-              activeIndex={slashActiveIndex}
-              onActiveIndexChange={setSlashActiveIndex}
-              onSelect={handleSlashSelect}
-              open={slashOpen}
-            />
-          </View>
-        )}
+        {/* Slash command autocomplete menu — with AnimatedPresence scaleIn */}
+        <AnimatedPresence
+          visible={slashOpen && filteredCommands.length > 0 && !mentionOpen}
+          preset="scaleIn"
+          style={{ position: 'absolute', bottom: 64, left: 12, right: 12, zIndex: 16 }}
+        >
+          <SlashCommandMenu
+            commands={filteredCommands}
+            query={slashQuery}
+            activeIndex={slashActiveIndex}
+            onActiveIndexChange={setSlashActiveIndex}
+            onSelect={handleSlashSelect}
+            open={slashOpen}
+          />
+        </AnimatedPresence>
         {/* Mention autocomplete dropdown */}
         {mentionOpen && (
           <View style={{ position: 'absolute', bottom: 64, left: 12, right: 12, zIndex: 15 }}>
@@ -342,39 +525,149 @@ export function ChatInput({
           animated={inputFocused}
           radius={22}
           width={2}
-          speed={3000}
+          speed={cycleDurations.normal}
         >
-          <MessageInput
-            testID={TEST_IDS.INPUT.TEXT_INPUT}
-            value={message}
-            onValueChange={handleValueChange}
-            onSelectionChange={handleSelectionChange}
-            onSubmit={(msg) => {
-              closeMention();
-              closeSlash();
-              onMessageChange('');
-              onClearReply();
-              if (editing && onCancelEdit) onCancelEdit();
-              onSubmit(msg);
-            }}
-            placeholder={editing ? 'Edit message...' : 'Type a message...'}
-            variant="pill"
-            showAttachment={!editing}
-            onAttachmentClick={onAttachmentClick}
-            showEmoji
-            onEmojiClick={onToggleEmoji}
-            highlightMentions
-            mentionNames={mentionNames}
-            editing={editing ? {
-              text: editing.text,
-              onCancel: onCancelEdit || (() => {}),
-            } : undefined}
-            replyingTo={!editing && replyingTo ? {
-              sender: replyingTo.sender,
-              text: replyingTo.text,
-              onClear: onClearReply,
-            } : undefined}
-          />
+          <View ref={ghostContainerRef} style={{ position: 'relative' }}>
+            <MessageInput
+              testID={TEST_IDS.INPUT.TEXT_INPUT}
+              value={message}
+              onValueChange={handleValueChange}
+              onSelectionChange={handleSelectionChange}
+              onSubmit={(msg) => {
+                closeMention();
+                closeSlash();
+                onMessageChange('');
+                onClearReply();
+                if (editing && onCancelEdit) onCancelEdit();
+                onSubmit(msg);
+              }}
+              placeholder={editing ? 'Edit message...' : 'Type a message...'}
+              variant="pill"
+              showAttachment={!editing}
+              onAttachmentClick={onAttachmentClick}
+              showEmoji
+              onEmojiClick={onToggleEmoji}
+              highlightMentions
+              mentionNames={mentionNames}
+              editing={editing ? {
+                text: editing.text,
+                onCancel: onCancelEdit || (() => {}),
+              } : undefined}
+              replyingTo={!editing && replyingTo ? {
+                sender: replyingTo.sender,
+                text: replyingTo.text,
+                onClear: onClearReply,
+              } : undefined}
+            />
+            {/* Command highlight overlay — web only */}
+            {Platform.OS === 'web' && commandHighlight && (
+              <View
+                ref={cmdOverlayRef}
+                pointerEvents="none"
+                accessibilityElementsHidden
+                aria-hidden
+                style={{
+                  position: 'absolute',
+                  top: 0,
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  paddingLeft: textareaLeftOffset,
+                  paddingRight: textareaRightPad,
+                  overflow: 'hidden',
+                  flexDirection: 'row',
+                }}
+              >
+                {motionPreferences.enableAnimations ? (
+                  <GradientText
+                    animated
+                    speed={cycleDurations.slow}
+                    style={{
+                      fontSize,
+                      fontFamily,
+                      lineHeight,
+                    }}
+                  >
+                    {commandHighlight.commandText}
+                  </GradientText>
+                ) : (
+                  <RNText
+                    style={{
+                      fontSize,
+                      fontFamily,
+                      lineHeight: `${lineHeight}px`,
+                      color: theme.colors.brand.primary,
+                    } as any}
+                  >
+                    {commandHighlight.commandText}
+                  </RNText>
+                )}
+                {commandHighlight.argsText ? (
+                  <RNText
+                    style={{
+                      fontSize,
+                      fontFamily,
+                      lineHeight: `${lineHeight}px`,
+                      color: theme.colors.text.link,
+                    } as any}
+                  >
+                    {commandHighlight.argsText}
+                  </RNText>
+                ) : null}
+              </View>
+            )}
+            {/* Ghost text overlay — web only */}
+            {Platform.OS === 'web' && ghostText !== '' && (
+              <>
+                {/* Hidden measurement span to calculate typed text width */}
+                <RNText
+                  ref={ghostMeasureRef as any}
+                  style={{
+                    position: 'absolute',
+                    top: -9999,
+                    left: -9999,
+                    fontSize,
+                    fontFamily,
+                    lineHeight: `${lineHeight}px`,
+                    whiteSpace: 'pre',
+                    visibility: 'hidden',
+                  } as any}
+                >
+                  {message}
+                </RNText>
+                {/* The ghost text suggestion */}
+                <View
+                  ref={ghostOverlayRef}
+                  pointerEvents="none"
+                  accessibilityElementsHidden
+                  aria-hidden
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    paddingLeft: textareaLeftOffset + ghostLeftOffset,
+                    paddingRight: textareaRightPad,
+                    overflow: 'hidden',
+                  }}
+                >
+                  <RNText
+                    numberOfLines={1}
+                    style={{
+                      fontSize,
+                      fontFamily,
+                      lineHeight: `${lineHeight}px`,
+                      color: theme.colors.text.muted,
+                      opacity: opacity.hint,
+                    } as any}
+                  >
+                    {ghostText}
+                  </RNText>
+                </View>
+              </>
+            )}
+          </View>
         </GradientBorder>
       </View>
     </>
