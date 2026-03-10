@@ -10,9 +10,11 @@ import {
   useTheme,
 } from '@coexist/wisp-react-native';
 import type { PendingGroupInvite } from '@umbra/service';
+import type { ActiveCall } from '@/types/call';
 import React, { useCallback, useRef, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { NewChatMenu } from './NewChatMenu';
+import { SidebarCallPanel } from '@/components/call/SidebarCallPanel';
 import { SlotRenderer } from '@/components/plugins/SlotRenderer';
 import { TEST_IDS } from '@/constants/test-ids';
 
@@ -38,6 +40,16 @@ export interface ChatSidebarProps {
   loading?: boolean;
   /** Number of pending friend requests for badge display */
   pendingFriendRequests?: number;
+  /** Active call to show in the sidebar footer panel */
+  activeCall?: ActiveCall | null;
+  /** Navigate back to the active call conversation */
+  onReturnToCall?: () => void;
+  /** Toggle microphone mute */
+  onToggleMute?: () => void;
+  /** Toggle camera on/off */
+  onToggleCamera?: () => void;
+  /** End the active call */
+  onEndCall?: () => void;
 }
 
 export function ChatSidebar(props: ChatSidebarProps) {
@@ -49,6 +61,7 @@ function ChatSidebarInner({
   activeId, onSelectConversation,
   onFriendsPress, onNewDm, onCreateGroup, onGuidePress, onMarketplacePress, isFriendsActive,
   pendingInvites, onAcceptInvite, onDeclineInvite, loading, pendingFriendRequests,
+  activeCall, onReturnToCall, onToggleMute, onToggleCamera, onEndCall,
 }: ChatSidebarProps) {
   const { theme } = useTheme();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -313,6 +326,17 @@ function ChatSidebarInner({
             )}
           </ScrollView>
         </SidebarSection>
+
+        {/* Active call footer panel */}
+        {activeCall && activeCall.status === 'connected' && onReturnToCall && onToggleMute && onToggleCamera && onEndCall && (
+          <SidebarCallPanel
+            activeCall={activeCall}
+            onReturnToCall={onReturnToCall}
+            onToggleMute={onToggleMute}
+            onToggleCamera={onToggleCamera}
+            onEndCall={onEndCall}
+          />
+        )}
       </Sidebar>
   );
 }

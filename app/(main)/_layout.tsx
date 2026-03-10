@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { Animated, Easing, PanResponder, Platform, View, useWindowDimensions } from 'react-native';
 import { Slot, usePathname, useRouter } from 'expo-router';
-import { HStack, useTheme, CallPipWidget, CommunityCreateDialog } from '@coexist/wisp-react-native';
+import { HStack, useTheme, CommunityCreateDialog } from '@coexist/wisp-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useUmbra } from '@/contexts/UmbraContext';
@@ -220,8 +220,8 @@ function MainLayoutInner() {
   // Upload progress for nav rail ring indicator
   const { uploadRingProgress } = useUploadProgress();
 
-  // Call state for PiP widget
-  const { activeCall, toggleMute, endCall } = useCallContext();
+  // Call state for sidebar call panel
+  const { activeCall, toggleMute, toggleCamera, endCall } = useCallContext();
 
   // Build a DID → friend map for efficient lookups, enriched with relay presence
   const friendMap = useMemo(() => {
@@ -516,6 +516,16 @@ function MainLayoutInner() {
     router.push('/files');
   }, [router, playSound]);
 
+  // Return to the active call conversation
+  const handleReturnToCall = useCallback(() => {
+    if (activeCall) {
+      setActiveId(activeCall.conversationId);
+      if (pathname !== '/') {
+        router.push('/');
+      }
+    }
+  }, [activeCall, pathname, router]);
+
   // Determine active community from pathname
   const activeCommunityId = useMemo(() => {
     const match = pathname.match(/^\/community\/(.+)$/);
@@ -698,6 +708,11 @@ function MainLayoutInner() {
                       onDeclineInvite={handleDeclineInvite}
                       loading={coreLoading || conversationsLoading}
                       pendingFriendRequests={incomingRequests.length}
+                      activeCall={activeCall}
+                      onReturnToCall={handleReturnToCall}
+                      onToggleMute={toggleMute}
+                      onToggleCamera={toggleCamera}
+                      onEndCall={() => endCall()}
                     />
                   )}
                 </View>
@@ -785,6 +800,11 @@ function MainLayoutInner() {
                     onDeclineInvite={handleDeclineInvite}
                     loading={coreLoading || conversationsLoading}
                     pendingFriendRequests={incomingRequests.length}
+                    activeCall={activeCall}
+                    onReturnToCall={handleReturnToCall}
+                    onToggleMute={toggleMute}
+                    onToggleCamera={toggleCamera}
+                    onEndCall={() => endCall()}
                   />
                 )}
               </View>
@@ -894,25 +914,6 @@ function MainLayoutInner() {
         open={marketplaceOpen}
         onClose={() => { playSound('dialog_close'); setMarketplaceOpen(false); }}
       />
-
-      {/* PiP widget: show when active call and user is on a different conversation */}
-      {activeCall && activeCall.status === 'connected' && activeCall.conversationId !== activeId && (
-        <CallPipWidget
-          stream={activeCall.remoteStream}
-          callerName={activeCall.remoteDisplayName}
-          connectedAt={activeCall.connectedAt}
-          isMuted={activeCall.isMuted}
-          isCameraOff={activeCall.isCameraOff}
-          onPress={() => {
-            setActiveId(activeCall.conversationId);
-            if (pathname !== '/') {
-              router.push('/');
-            }
-          }}
-          onEndCall={() => endCall()}
-          onToggleMute={toggleMute}
-        />
-      )}
 
       <AccountSwitcher
         open={accountSwitcherOpen}
