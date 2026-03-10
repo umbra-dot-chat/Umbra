@@ -60,6 +60,10 @@ function computeLayout(
     }
   }
 
+  // Enforce minimum tile dimensions so tiles are never invisibly thin
+  if (best.tileW < 120) best.tileW = 120;
+  if (best.tileH < 80) best.tileH = 80;
+
   return best;
 }
 
@@ -131,8 +135,6 @@ export function JustifiedVideoGrid({
   const containerStyle: ViewStyle = {
     flex: 1,
     backgroundColor: theme.colors.background.sunken,
-    borderRadius: 12,
-    overflow: 'hidden',
   };
 
   const gridStyle: ViewStyle = {
