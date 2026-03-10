@@ -53,15 +53,15 @@ export function ActiveCallBar() {
       {/* Caller info */}
       <Avatar name={activeCall.remoteDisplayName} size="xs" status="online" />
       <View style={{ flex: 1, gap: 2 }}>
-        <Text size="sm" weight="semibold" style={{ color: '#FFFFFF' }}>
+        <Text size="sm" weight="semibold" style={{ color: themeColors.text.inverse }}>
           {activeCall.remoteDisplayName}
         </Text>
         {statusLabel ? (
-          <Text size="xs" style={{ color: 'rgba(255,255,255,0.8)' }}>
+          <Text size="xs" style={{ color: themeColors.text.inverse, opacity: 0.8 }}>
             {statusLabel}
           </Text>
         ) : activeCall.connectedAt ? (
-          <CallTimer startedAt={activeCall.connectedAt} size="sm" color="rgba(255,255,255,0.8)" />
+          <CallTimer startedAt={activeCall.connectedAt} size="sm" color={themeColors.text.inverse} style={{ opacity: 0.8 }} />
         ) : null}
       </View>
 
