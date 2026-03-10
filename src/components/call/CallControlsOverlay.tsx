@@ -3,7 +3,7 @@
  *
  * On desktop/web: fades out after 3 seconds of no mouse movement, reappears
  * on hover. On mobile: always visible (no auto-hide).
- * Uses a frosted glass background on web, solid dark on native.
+ * Buttons render without a container/pill for a minimal look.
  */
 
 import React, { useRef, useEffect, useCallback, useState } from 'react';
@@ -108,25 +108,16 @@ export function CallControlsOverlay({
     zIndex: 50,
   };
 
-  const pillStyle: ViewStyle = {
-    borderRadius: 9999,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    ...(Platform.OS === 'web'
-      ? {
-          backgroundColor: theme.colors.background.overlay,
-          backdropFilter: 'blur(12px)',
-        }
-      : {
-          backgroundColor: theme.colors.background.overlay,
-        }),
+  const controlsContainerStyle: ViewStyle = {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
   };
 
   // On mobile, render without animation wrapper
   if (isMobile) {
     return (
       <View style={wrapperStyle} accessibilityRole="toolbar" accessibilityLabel="Call controls">
-        <View style={pillStyle}>
+        <View style={controlsContainerStyle}>
           <CallControls
             isMuted={isMuted}
             isVideoOff={isCameraOff}
@@ -152,7 +143,7 @@ export function CallControlsOverlay({
       accessibilityRole="toolbar"
       accessibilityLabel="Call controls"
     >
-      <View style={pillStyle}>
+      <View style={controlsContainerStyle}>
         <CallControls
           isMuted={isMuted}
           isVideoOff={isCameraOff}
