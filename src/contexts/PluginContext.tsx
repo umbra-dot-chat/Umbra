@@ -284,6 +284,7 @@ export function PluginProvider({ children }: { children: React.ReactNode }) {
           sendAsMessage: cmd.sendAsMessage ?? !!cmd.onExecute,
           onExecute: cmd.onExecute ?? cmd.onSelect,
           args: cmd.args,
+          getSuggestions: cmd.getSuggestions,
         };
         existing.push(slashDef);
         slashCommandsRef.current.set(pluginId, existing);

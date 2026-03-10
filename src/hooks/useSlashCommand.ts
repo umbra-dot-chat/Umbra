@@ -4,6 +4,13 @@ import { useState, useCallback, useMemo, useRef } from 'react';
 // Types
 // ---------------------------------------------------------------------------
 
+export interface SlashCommandSuggestion {
+  /** The text to fill in */
+  label: string;
+  /** Short description */
+  description?: string;
+}
+
 export interface SlashCommandDef {
   /** Unique ID, e.g. "ghost:help" or "system:clear" */
   id: string;
@@ -26,6 +33,8 @@ export interface SlashCommandDef {
   onExecute?: ((args: string) => void) | (() => void);
   /** Usage hint for commands with arguments, e.g. "<track-id>" */
   args?: string;
+  /** Return suggestions for the arguments portion. Called with partial arg text. */
+  getSuggestions?: (partialArgs: string) => SlashCommandSuggestion[];
 }
 
 export interface UseSlashCommandOptions {
@@ -75,9 +84,36 @@ export function useSlashCommand({
     if (!slashQuery) return commands.slice(0, maxSuggestions);
 
     const q = slashQuery.toLowerCase();
+
+    // Check if a command is fully typed and user is typing args
+    const matchedCmd = commands.find((cmd) => {
+      const cmdText = cmd.command.toLowerCase();
+      return q === cmdText || q.startsWith(cmdText + ' ');
+    });
+
+    if (matchedCmd?.getSuggestions) {
+      // Extract the args portion after the command
+      const argsText = q.slice(matchedCmd.command.length).trim();
+      const suggestions = matchedCmd.getSuggestions(argsText);
+      if (suggestions.length > 0) {
+        // Convert suggestions to SlashCommandDef items for the menu
+        return suggestions.slice(0, maxSuggestions).map((s, i) => ({
+          id: `${matchedCmd.id}:suggestion:${i}`,
+          command: `${matchedCmd.command} ${s.label}`,
+          label: s.label,
+          description: s.description,
+          icon: matchedCmd.icon,
+          category: matchedCmd.category,
+          sendAsMessage: matchedCmd.sendAsMessage,
+          onExecute: matchedCmd.onExecute,
+          args: undefined,
+        } as SlashCommandDef));
+      }
+    }
+
+    // Default: filter commands by query
     return commands
       .filter((cmd) => {
-        // Match against the command text, label, description, and category
         return (
           cmd.command.toLowerCase().includes(q) ||
           cmd.label.toLowerCase().includes(q) ||
