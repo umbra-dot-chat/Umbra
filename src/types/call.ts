@@ -123,9 +123,12 @@ export const VIDEO_QUALITY_PRESETS: Record<Exclude<VideoQuality, 'auto'>, VideoQ
 export interface CallParticipant {
   did: string;
   displayName: string;
+  stream: MediaStream | null;
   isMuted: boolean;
   isCameraOff: boolean;
-  stream?: MediaStream;
+  isSpeaking: boolean;
+  isScreenSharing: boolean;
+  avatar?: string;
 }
 
 // ─── Active Call ─────────────────────────────────────────────────────────────
@@ -159,6 +162,10 @@ export interface ActiveCall {
   isMuted: boolean;
   /** Whether local camera is off */
   isCameraOff: boolean;
+  /** All call participants keyed by DID (source of truth going forward) */
+  participants: Map<string, CallParticipant>;
+  /** Whether local video tile is shown */
+  selfViewVisible: boolean;
 }
 
 // ─── Call Signaling Envelopes ────────────────────────────────────────────────
