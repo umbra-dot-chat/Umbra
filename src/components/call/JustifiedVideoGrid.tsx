@@ -120,10 +120,8 @@ export function JustifiedVideoGrid({
 
   const count = tiles.length;
 
-  // Adaptive 1:1 layout: when exactly 2 participants and both cameras on,
-  // use equal side-by-side; when one camera off, remote gets 75% width
-  const isAdaptive1v1 = count === 2 && tiles.every((t) => !t.isCameraOff);
-  const is1v1Asymmetric = count === 2 && tiles.some((t) => t.isCameraOff);
+  // 1:1 layout: equal side-by-side for all 2-participant calls
+  const isAdaptive1v1 = count === 2;
 
   const layout = useMemo(() => {
     if (containerSize.w === 0 || containerSize.h === 0 || count === 0) {
@@ -206,17 +204,11 @@ export function JustifiedVideoGrid({
               const isLocal = participant.did === localDid;
               const isSpeaking = speakingDids.has(participant.did);
 
-              // Adaptive widths for 1v1
+              // Equal widths for 1v1 calls
               let tileWidth = layout.tileW;
               let tileHeight = layout.tileH;
               if (isAdaptive1v1) {
                 tileWidth = (containerSize.w - gap * 3) / 2;
-                tileHeight = tileWidth / aspectRatio;
-              } else if (is1v1Asymmetric) {
-                const isOff = participant.isCameraOff;
-                tileWidth = isOff
-                  ? (containerSize.w - gap * 3) * 0.25
-                  : (containerSize.w - gap * 3) * 0.75;
                 tileHeight = tileWidth / aspectRatio;
               }
 
