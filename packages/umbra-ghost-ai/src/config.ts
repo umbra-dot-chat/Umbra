@@ -2,6 +2,17 @@
  * Ghost configuration — loaded from CLI args + environment variables.
  */
 
+export interface IceServer {
+  urls: string | string[];
+  username?: string;
+  credential?: string;
+}
+
+export const DEFAULT_ICE_SERVERS: IceServer[] = [
+  { urls: 'stun:stun.l.google.com:19302' },
+  { urls: 'stun:stun1.l.google.com:19302' },
+];
+
 export interface GhostConfig {
   /** Relay WebSocket URL */
   relayUrl: string;
@@ -21,6 +32,20 @@ export interface GhostConfig {
   httpPort: number;
   /** Log level */
   logLevel: 'debug' | 'info' | 'warn' | 'error';
+  /** Enable call handling */
+  callEnabled: boolean;
+  /** Fake ring delay before answering (ms) */
+  callRingDelayMs: number;
+  /** Path to media config JSON */
+  mediaConfigPath: string;
+  /** Directory to cache downloaded media */
+  mediaCacheDir: string;
+  /** ICE servers for WebRTC */
+  iceServers: IceServer[];
+  /** How often to collect WebRTC stats (ms) */
+  callStatsIntervalMs: number;
+  /** How often to broadcast metadata via data channel (ms) */
+  metadataBroadcastMs: number;
 }
 
 const LOG_LEVELS = { debug: 0, info: 1, warn: 2, error: 3 } as const;
@@ -36,6 +61,13 @@ export function loadConfig(opts: Record<string, string | undefined>): GhostConfi
     codebasePath: opts.codebasePath || process.env.CODEBASE_PATH || '../Umbra',
     httpPort: parseInt(opts.httpPort || process.env.HTTP_PORT || '3333', 10),
     logLevel: (opts.logLevel || process.env.LOG_LEVEL || 'info') as GhostConfig['logLevel'],
+    callEnabled: (opts.callEnabled || process.env.CALL_ENABLED || 'true') === 'true',
+    callRingDelayMs: parseInt(opts.callRingDelay || process.env.CALL_RING_DELAY || '2500', 10),
+    mediaConfigPath: opts.mediaConfig || process.env.MEDIA_CONFIG || 'media.config.json',
+    mediaCacheDir: opts.mediaCacheDir || process.env.MEDIA_CACHE_DIR || '',
+    iceServers: DEFAULT_ICE_SERVERS,
+    callStatsIntervalMs: 2000,
+    metadataBroadcastMs: 2000,
   };
 }
 

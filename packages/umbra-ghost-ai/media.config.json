@@ -1,0 +1,108 @@
+{
+  "audio": [
+    {
+      "id": "jazz-cafe",
+      "name": "Jazz Café",
+      "url": "https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3",
+      "format": "mp3"
+    },
+    {
+      "id": "classical-piano",
+      "name": "Classical Piano",
+      "url": "https://cdn.pixabay.com/download/audio/2022/01/18/audio_d0a13f69d2.mp3",
+      "format": "mp3"
+    },
+    {
+      "id": "ambient-chill",
+      "name": "Ambient Chill",
+      "url": "https://cdn.pixabay.com/download/audio/2022/10/25/audio_946bc498db.mp3",
+      "format": "mp3"
+    },
+    {
+      "id": "lofi-study",
+      "name": "Lofi Study",
+      "url": "https://cdn.pixabay.com/download/audio/2024/11/04/audio_4956b4edd1.mp3",
+      "format": "mp3"
+    },
+    {
+      "id": "acoustic-guitar",
+      "name": "Acoustic Guitar",
+      "url": "https://cdn.pixabay.com/download/audio/2023/09/04/audio_8fdfbf41ba.mp3",
+      "format": "mp3"
+    }
+  ],
+  "video": [
+    {
+      "id": "big-buck-bunny",
+      "name": "Big Buck Bunny (4K)",
+      "url": "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/2160/Big_Buck_Bunny_2160_10s_1MB.mp4",
+      "format": "mp4",
+      "resolution": "3840x2160"
+    },
+    {
+      "id": "jellyfish",
+      "name": "Jellyfish (4K)",
+      "url": "https://test-videos.co.uk/vids/jellyfish/mp4/h264/2160/Jellyfish_2160_10s_1MB.mp4",
+      "format": "mp4",
+      "resolution": "3840x2160"
+    },
+    {
+      "id": "sintel-trailer",
+      "name": "Sintel Trailer (4K)",
+      "url": "https://test-videos.co.uk/vids/sintel/mp4/h264/2160/Sintel_2160_10s_1MB.mp4",
+      "format": "mp4",
+      "resolution": "3840x2160"
+    },
+    {
+      "id": "countdown",
+      "name": "Countdown Timer",
+      "url": "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/1080/Big_Buck_Bunny_1080_10s_1MB.mp4",
+      "format": "mp4",
+      "resolution": "1920x1080"
+    },
+    {
+      "id": "nature-forest",
+      "name": "Nature Forest (1080p)",
+      "url": "https://test-videos.co.uk/vids/jellyfish/mp4/h264/1080/Jellyfish_1080_10s_1MB.mp4",
+      "format": "mp4",
+      "resolution": "1920x1080"
+    }
+  ],
+  "files": [
+    {
+      "id": "sample-image-1",
+      "name": "Sample Image (Landscape)",
+      "url": "https://picsum.photos/1920/1080",
+      "format": "jpg",
+      "category": "image"
+    },
+    {
+      "id": "sample-image-2",
+      "name": "Sample Image (Portrait)",
+      "url": "https://picsum.photos/1080/1920",
+      "format": "jpg",
+      "category": "image"
+    },
+    {
+      "id": "sample-text",
+      "name": "Sample Text Document",
+      "generate": "lorem-ipsum",
+      "format": "txt",
+      "category": "document"
+    },
+    {
+      "id": "sample-json",
+      "name": "Sample JSON Data",
+      "generate": "sample-json",
+      "format": "json",
+      "category": "document"
+    },
+    {
+      "id": "sample-archive",
+      "name": "Sample ZIP Archive",
+      "generate": "sample-archive",
+      "format": "zip",
+      "category": "archive"
+    }
+  ]
+}

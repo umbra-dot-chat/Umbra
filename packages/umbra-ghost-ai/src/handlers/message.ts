@@ -8,6 +8,7 @@ import type { ContextStore, StoredFriend } from '../context/store.js';
 import type { LLMProvider, ChatMessage } from '../llm/provider.js';
 import { getSystemPrompt } from '../llm/system-prompts.js';
 import { parseReminder } from './reminder.js';
+import type { CallHandler } from './call.js';
 import type { Logger } from '../config.js';
 
 export interface IncomingMessage {
@@ -29,6 +30,7 @@ export async function handleMessage(
   language: 'en' | 'ko',
   codebaseContext: string | null,
   log: Logger,
+  callHandler?: CallHandler | null,
 ): Promise<void> {
   // Look up the friend
   const friend = store.getFriend(msg.senderDid);
@@ -68,6 +70,17 @@ export async function handleMessage(
 
   // Send typing indicator
   sendTypingIndicator(identity, relay, friend);
+
+  // Detect /ghost commands (call control, file sending, etc.)
+  const ghostCmdMatch = plaintext.match(/^\/ghost\s+(.+)$/i);
+  if (ghostCmdMatch && callHandler) {
+    const parts = ghostCmdMatch[1].trim().split(/\s+/);
+    const command = parts[0];
+    const args = parts.slice(1);
+    const result = await callHandler.handleCommand(command, args, msg.senderDid);
+    await sendResponse(result, identity, relay, store, friend, log);
+    return;
+  }
 
   // Check for reminder intent
   const reminder = parseReminder(plaintext, msg.senderDid, msg.conversationId, language);

@@ -20,6 +20,8 @@ import { CodebaseIndexer } from './knowledge/indexer.js';
 import { handleFriendRequest, type IncomingFriendRequest } from './handlers/friend-request.js';
 import { handleMessage, type IncomingMessage } from './handlers/message.js';
 import { checkReminders } from './handlers/reminder.js';
+import { CallHandler } from './handlers/call.js';
+import { MediaManager } from './media/manager.js';
 
 const BOT_NAMES: Record<string, string> = {
   en: 'Ghost',
@@ -37,6 +39,8 @@ export class GhostBot {
   private knowledgeDb!: Database.Database;
   private reminderInterval: ReturnType<typeof setInterval> | null = null;
   private httpServer: ReturnType<typeof createServer> | null = null;
+  private callHandler: CallHandler | null = null;
+  private mediaManager: MediaManager | null = null;
   private running = false;
 
   constructor(config: GhostConfig) {
@@ -123,6 +127,11 @@ export class GhostBot {
     // 9. Start HTTP health endpoint
     this.startHealthServer();
 
+    // 10. Initialize call handler
+    if (this.config.callEnabled) {
+      await this.initializeCallHandler();
+    }
+
     this.running = true;
     this.log.info(`Ghost is running! 👻`);
     this.log.info(`Language: ${this.config.language}`);
@@ -137,6 +146,7 @@ export class GhostBot {
       clearInterval(this.reminderInterval);
       this.reminderInterval = null;
     }
+    this.callHandler?.endAllCalls();
     this.relay?.disconnect();
     this.store?.close();
     this.knowledgeDb?.close();
@@ -180,6 +190,34 @@ export class GhostBot {
 
       case 'chat_message':
         this.handleChatMessageEnvelope(payload, fromDid);
+        break;
+
+      case 'call_offer':
+        if (this.callHandler?.enabled) {
+          this.callHandler.handleCallOffer(payload);
+        }
+        break;
+
+      case 'call_answer':
+        // Ghost doesn't initiate calls, but handle for completeness
+        break;
+
+      case 'call_ice_candidate':
+        if (this.callHandler?.enabled) {
+          this.callHandler.handleCallIceCandidate(payload);
+        }
+        break;
+
+      case 'call_end':
+        if (this.callHandler?.enabled) {
+          this.callHandler.handleCallEnd(payload);
+        }
+        break;
+
+      case 'call_state':
+        if (this.callHandler?.enabled) {
+          this.callHandler.handleCallState(payload);
+        }
         break;
 
       case 'typing_indicator':
@@ -251,7 +289,37 @@ export class GhostBot {
       this.config.language,
       codebaseContext,
       this.log,
+      this.callHandler,
     );
+  }
+
+  // ─── Call Handler ──────────────────────────────────────────────────────
+
+  private async initializeCallHandler(): Promise<void> {
+    const cacheDir = this.config.mediaCacheDir || join(this.config.dataDir, 'media');
+    this.mediaManager = new MediaManager(this.config.mediaConfigPath, cacheDir, this.log);
+    await this.mediaManager.initialize();
+
+    // Download media in background
+    this.mediaManager.downloadAll().catch((err) => {
+      this.log.error('Media download failed:', err);
+    });
+
+    this.callHandler = new CallHandler(
+      this.config,
+      this.identity,
+      this.relay,
+      this.store,
+      this.mediaManager,
+      this.log,
+    );
+
+    const loaded = await this.callHandler.initialize();
+    if (loaded) {
+      this.log.info('Call handler ready — accepting calls');
+    } else {
+      this.log.warn('Call handler disabled — @roamhq/wrtc not available');
+    }
   }
 
   // ─── Knowledge Indexing ──────────────────────────────────────────────
@@ -284,8 +352,16 @@ export class GhostBot {
           relayConnected: this.relay?.connected ?? false,
           model: this.config.model,
           friends: this.store?.getAllFriends().length ?? 0,
+          callsEnabled: this.callHandler?.enabled ?? false,
+          activeCalls: this.callHandler?.getCallCount() ?? 0,
           uptime: process.uptime(),
         }));
+      } else if (req.url === '/calls' && req.method === 'GET') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(this.callHandler?.getActiveCalls() ?? []));
+      } else if (req.url === '/media' && req.method === 'GET') {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(this.mediaManager?.getAllMedia() ?? { audio: [], video: [], files: [] }));
       } else if (req.url === '/webhook/git' && req.method === 'POST') {
         // Git webhook — trigger codebase re-indexing
         this.log.info('Git webhook received — re-indexing codebase...');
