@@ -594,6 +594,10 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
                   messageId: updatePayload.messageId,
                   newText: decryptedText,
                 });
+                // Persist streamed content to storage so it survives page reload
+                service.editMessage(updatePayload.messageId, decryptedText).catch((err: any) =>
+                  console.warn('[useNetwork] Failed to persist streaming update:', err)
+                );
               }
             } catch (err) { console.warn('[useNetwork] Failed to process chat_message_update:', err); }
 
