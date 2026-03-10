@@ -65,7 +65,25 @@ Agent(
 )
 ```
 
-### Step 4: QA Pipeline
+### Step 4: QA Pipeline (Tech-Lead Owns the Loop)
+
+**REPORTING CHAIN**: All QA and UX agents report back to the tech-lead. The tech-lead is the ONLY agent that routes fixes to developers. QA/UX agents NEVER spawn developers or fix bugs directly (except ux-designer for tiny <20 line visual fixes).
+
+```
+Developer completes → Tech-lead spawns QA agents (parallel)
+                              ↓
+         ┌──────────────┬──────────────┬──────────────┐
+         │ qa-automated │  qa-manual   │ ux-designer  │
+         └──────┬───────┴──────┬───────┴──────┬───────┘
+                ↓              ↓              ↓
+         Reports back    Reports back    Reports back
+         to TECH-LEAD    to TECH-LEAD    to TECH-LEAD
+                ↓              ↓              ↓
+         Tech-lead collects ALL reports, triages findings
+                              ↓
+              All PASS? → Step 6 (Completion)
+              Any FAIL? → Write bug report → Re-spawn developer → Step 4 again
+```
 
 After the developer subagent completes:
 

@@ -49,14 +49,21 @@ When spawning a developer, ALWAYS include in the prompt:
 - Any bug report context (if re-spawning after QA failure)
 - Commit instructions: `type(scope): subject`, <100 lines, no Co-Authored-By
 
-## QA Pipeline
+## QA Pipeline (YOU OWN THIS LOOP)
 
-After every developer completes:
+After every developer completes, YOU are the central hub. All QA/UX agents report back to YOU, and YOU route fixes.
 
-1. **Spawn `qa-automated`**: Tell it what changed, what tests to run (see `AGENTS/team/qa-workflow.md`)
-2. If automated passes → **Spawn `qa-manual`**: Tell it what to verify visually
-3. If either fails → Write bug report per `AGENTS/team/bug-report-template.md` → Re-spawn developer
-4. Iterations are unlimited. Compact context when needed.
+1. **Spawn `qa-automated`**: Tell it what changed, what tests to run
+2. **Spawn `qa-manual`**: Tell it what to verify visually (can run in parallel with automated)
+3. **Spawn `ux-designer`**: For any UI changes (can run in parallel with qa-manual)
+4. **Collect ALL reports**: Wait for all QA/UX agents to complete
+5. **Triage findings**: Batch related issues and route to the right developer
+6. If any agent reports FAIL/NEEDS WORK → **Write bug report** → **Re-spawn developer** with full context
+7. After developer fixes → **Re-run the full QA pipeline again** (go to step 1)
+8. Repeat until ALL three agents report PASS
+9. Iterations are unlimited. Compact context when needed.
+
+**CRITICAL**: You are the ONLY agent that spawns developers. QA and UX agents NEVER spawn developers or fix bugs (except ux-designer for tiny <20 line visual fixes). The flow is always: QA/UX → report to tech-lead → tech-lead routes to developer → developer fixes → QA/UX re-verifies.
 
 ## Escalation
 
