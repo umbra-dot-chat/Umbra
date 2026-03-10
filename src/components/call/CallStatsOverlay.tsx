@@ -236,7 +236,7 @@ export function CallStatsOverlay({ callStats, ghostMetadata, visible }: CallStat
     marginBottom: 4,
     paddingBottom: 4,
     borderBottomWidth: 0.5,
-    borderBottomColor: 'rgba(255, 255, 255, 0.15)',
+    borderBottomColor: colors.border.subtle,
   };
 
   const scoreLabelStyle: TextStyle = {
