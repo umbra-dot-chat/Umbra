@@ -220,19 +220,22 @@ export class CallHandler {
     }
   }
 
-  handleCallIceCandidate(rawPayload: any): void {
+  async handleCallIceCandidate(rawPayload: any): Promise<void> {
     const payload: CallIceCandidatePayload = this.decryptSignalPayload(rawPayload);
     const call = this.activeCalls.get(payload.callId);
     if (!call) return;
 
     try {
-      call.peer.addIceCandidate(new this.wrtc.RTCIceCandidate({
+      await call.peer.addIceCandidate(new this.wrtc.RTCIceCandidate({
         candidate: payload.candidate,
         sdpMid: payload.sdpMid,
         sdpMLineIndex: payload.sdpMLineIndex,
       }));
-    } catch (err) {
-      this.log.debug(`[CALL] ICE candidate error:`, err);
+    } catch (err: any) {
+      // Ignore errors from closed peer connections (race with call end)
+      if (!err?.message?.includes('closed')) {
+        this.log.debug(`[CALL] ICE candidate error:`, err);
+      }
     }
   }
 
@@ -317,23 +320,50 @@ export class CallHandler {
       }
     };
 
+    let disconnectTimer: ReturnType<typeof setTimeout> | null = null;
+
     peer.onconnectionstatechange = () => {
-      this.log.debug(`[CALL] Connection state: ${peer.connectionState}`);
-      if (peer.connectionState === 'failed' || peer.connectionState === 'disconnected') {
-        this.log.warn(`[CALL] Connection ${peer.connectionState} for ${offer.callId}`);
+      const state = peer.connectionState;
+      this.log.debug(`[CALL] Connection state: ${state}`);
+
+      // Clear any pending disconnect timer on state change
+      if (disconnectTimer) {
+        clearTimeout(disconnectTimer);
+        disconnectTimer = null;
+      }
+
+      if (state === 'failed') {
+        this.log.warn(`[CALL] Connection failed for ${offer.callId}`);
         this.cleanupCall(call);
+      } else if (state === 'disconnected') {
+        // "disconnected" is temporary — give it 30s to recover before cleaning up
+        this.log.info(`[CALL] Connection temporarily disconnected for ${offer.callId}, waiting 30s...`);
+        disconnectTimer = setTimeout(() => {
+          if (peer.connectionState === 'disconnected' || peer.connectionState === 'failed') {
+            this.log.warn(`[CALL] Connection did not recover for ${offer.callId}, cleaning up`);
+            this.cleanupCall(call);
+          }
+        }, 30_000);
+      } else if (state === 'connected') {
+        this.log.info(`[CALL] Connection established for ${offer.callId}`);
       }
     };
+
+    // Create a MediaStream so the client's ontrack handler receives
+    // event.streams[0] — without this, tracks arrive without a stream
+    // and the client ignores them.
+    const stream = new this.wrtc.MediaStream();
 
     // Create audio track (add to peer BEFORE SDP exchange, but don't start playing yet)
     const audioSrc = new RTCAudioSource();
     const audioTrack = audioSrc.createTrack();
     call.audioSource = new AudioSource(audioSrc, this.ffmpegPath, this.log);
-    peer.addTrack(audioTrack);
+    stream.addTrack(audioTrack);
+    peer.addTrack(audioTrack, stream);
 
     // Create video track if video call (add to peer BEFORE SDP exchange)
     if (offer.callType === 'video') {
-      this.createVideoTrack(call);
+      this.createVideoTrack(call, stream);
     }
 
     // Create data channel
@@ -373,13 +403,14 @@ export class CallHandler {
 
     await peer.setLocalDescription(answer);
 
-    // Send answer
+    // Send answer — sdp must be JSON.stringify({sdp, type}) to match client's
+    // completeHandshake() which does JSON.parse(payload.sdp)
     this.relay.sendEnvelope(friend.did, {
       envelope: 'call_answer',
       version: 1,
       payload: {
         callId: offer.callId,
-        sdp: peer.localDescription.sdp,
+        sdp: JSON.stringify({ sdp: peer.localDescription!.sdp, type: 'answer' }),
         type: 'answer',
       },
     });
@@ -405,7 +436,7 @@ export class CallHandler {
     this.log.info(`[CALL] Answered ${offer.callType} call: ${offer.callId}`);
   }
 
-  private createVideoTrack(call: ActiveCall): void {
+  private createVideoTrack(call: ActiveCall, stream?: any): void {
     const { nonstandard } = this.wrtc;
     const { RTCVideoSource } = nonstandard;
 
@@ -413,23 +444,32 @@ export class CallHandler {
     const videoTrack = videoSrc.createTrack();
     call.videoSource = new VideoSource(videoSrc, this.ffmpegPath, this.log);
 
-    call.videoSender = call.peer.addTrack(videoTrack);
+    if (stream) {
+      stream.addTrack(videoTrack);
+      call.videoSender = call.peer.addTrack(videoTrack, stream);
+    } else {
+      call.videoSender = call.peer.addTrack(videoTrack);
+    }
 
     const firstVideo = this.mediaManager.getVideoFile();
     if (firstVideo) {
-      const res = firstVideo.resolution ? parseResolution(firstVideo.resolution) : null;
+      // Cap output resolution — source files may be 4K but encoding is CPU-bound.
+      // 6-core A16 GPU server: 1080p@30fps is comfortable.
+      const MAX_WIDTH = 1920;
+      const MAX_HEIGHT = 1080;
+      const MAX_FPS = 30;
+
       call.videoSource.start(firstVideo.path, {
-        width: res?.width ?? 1920,
-        height: res?.height ?? 1080,
-        fps: 30,
+        width: MAX_WIDTH,
+        height: MAX_HEIGHT,
+        fps: MAX_FPS,
         loop: true,
         onTrackEnded: () => {
           const next = this.mediaManager.getNextVideoFile();
           if (next && call.videoSource) {
-            const nextRes = next.resolution ? parseResolution(next.resolution) : null;
             call.videoSource.switchVideo(next.path, {
-              width: nextRes?.width,
-              height: nextRes?.height,
+              width: MAX_WIDTH,
+              height: MAX_HEIGHT,
             });
           }
         },
