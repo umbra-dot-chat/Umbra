@@ -230,6 +230,7 @@ export default function ChatPage() {
     activeCall, startCall, toggleMute, toggleCamera, endCall,
     videoQuality, audioQuality, setVideoQuality, setAudioQuality,
     switchCamera, callStats, ghostMetadata,
+    isScreenSharing, startScreenShare, stopScreenShare,
   } = useCall();
 
   const { openSettings } = useSettingsDialog();
@@ -571,12 +572,15 @@ export default function ChatPage() {
         {activeCall && activeCall.status !== 'incoming' && activeCall.conversationId === resolvedConversationId ? (
           <ActiveCallPanel
             activeCall={activeCall}
+            localDid={myDid}
             videoQuality={videoQuality}
             audioQuality={audioQuality}
             callStats={callStats}
             ghostMetadata={ghostMetadata}
+            isScreenSharing={isScreenSharing}
             onToggleMute={toggleMute}
             onToggleCamera={toggleCamera}
+            onToggleScreenShare={isScreenSharing ? stopScreenShare : startScreenShare}
             onEndCall={() => endCall()}
             onSwitchCamera={() => switchCamera()}
             onVideoQualityChange={setVideoQuality}
