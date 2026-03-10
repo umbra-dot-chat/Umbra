@@ -109,7 +109,7 @@ export function CallControlsOverlay({
   };
 
   const pillStyle: ViewStyle = {
-    borderRadius: 24,
+    borderRadius: 9999,
     paddingHorizontal: 16,
     paddingVertical: 8,
     ...(Platform.OS === 'web'
