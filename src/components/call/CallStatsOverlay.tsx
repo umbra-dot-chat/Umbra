@@ -12,7 +12,9 @@
  */
 
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, StyleSheet, Platform } from 'react-native';
+import { View, Text, Platform } from 'react-native';
+import type { TextStyle, ViewStyle } from 'react-native';
+import { useTheme } from '@coexist/wisp-react-native';
 import type { CallStats } from '@/types/call';
 
 export interface GhostMetadata {
@@ -66,16 +68,23 @@ const DROP_RATE_WARN = 2;
 const BUF_HEALTH_GOOD = 0.5;
 const BUF_HEALTH_WARN = 0.2;
 
-function healthColor(value: number | null, goodThreshold: number, warnThreshold: number, lowerIsBetter = true): string {
-  if (value == null) return '#888';
+interface HealthColors {
+  muted: string;
+  success: string;
+  warning: string;
+  danger: string;
+}
+
+function healthColor(value: number | null, goodThreshold: number, warnThreshold: number, hc: HealthColors, lowerIsBetter = true): string {
+  if (value == null) return hc.muted;
   if (lowerIsBetter) {
-    if (value <= goodThreshold) return '#4caf50';
-    if (value <= warnThreshold) return '#ff9800';
-    return '#f44336';
+    if (value <= goodThreshold) return hc.success;
+    if (value <= warnThreshold) return hc.warning;
+    return hc.danger;
   } else {
-    if (value >= goodThreshold) return '#4caf50';
-    if (value >= warnThreshold) return '#ff9800';
-    return '#f44336';
+    if (value >= goodThreshold) return hc.success;
+    if (value >= warnThreshold) return hc.warning;
+    return hc.danger;
   }
 }
 
@@ -92,8 +101,8 @@ function formatBitrate(kbps: number | null): string {
   return `${Math.round(kbps)} kbps`;
 }
 
-function qualityScore(stats: CallStats | null, ghost: GhostMetadata | null): { score: number; label: string; color: string } {
-  if (!stats) return { score: 0, label: 'N/A', color: '#888' };
+function qualityScore(stats: CallStats | null, ghost: GhostMetadata | null, hc: HealthColors): { score: number; label: string; color: string } {
+  if (!stats) return { score: 0, label: 'N/A', color: hc.muted };
   let score = 100;
 
   // FPS penalty
@@ -137,16 +146,27 @@ function qualityScore(stats: CallStats | null, ghost: GhostMetadata | null): { s
 
   let label: string;
   let color: string;
-  if (score >= 85) { label = 'Excellent'; color = '#4caf50'; }
-  else if (score >= 70) { label = 'Good'; color = '#8bc34a'; }
-  else if (score >= 50) { label = 'Fair'; color = '#ff9800'; }
-  else if (score >= 30) { label = 'Poor'; color = '#ff5722'; }
-  else { label = 'Critical'; color = '#f44336'; }
+  if (score >= 85) { label = 'Excellent'; color = hc.success; }
+  else if (score >= 70) { label = 'Good'; color = hc.success; }
+  else if (score >= 50) { label = 'Fair'; color = hc.warning; }
+  else if (score >= 30) { label = 'Poor'; color = hc.danger; }
+  else { label = 'Critical'; color = hc.danger; }
 
   return { score, label, color };
 }
 
 export function CallStatsOverlay({ callStats, ghostMetadata, visible }: CallStatsOverlayProps) {
+  const { theme } = useTheme();
+  const colors = theme.colors;
+
+  // Health color tokens for dynamic coloring
+  const hc: HealthColors = {
+    muted: colors.text.muted,
+    success: colors.status.success,
+    warning: colors.status.warning,
+    danger: colors.status.danger,
+  };
+
   if (!visible) return null;
 
   const s = callStats;
@@ -192,112 +212,175 @@ export function CallStatsOverlay({ callStats, ghostMetadata, visible }: CallStat
   const dropRate = (s?.framesDecoded != null && s?.framesDropped != null && s.framesDecoded > 0)
     ? (s.framesDropped / (s.framesDecoded + s.framesDropped)) * 100
     : null;
-  const { score, label: scoreLabel, color: scoreColor } = qualityScore(s, g);
+  const { score, label: scoreLabel, color: scoreColor } = qualityScore(s, g, hc);
+
+  // ── Inline styles (replacing StyleSheet.create) ───────────────────────
+  const monoFont = Platform.OS === 'web' ? { fontFamily: 'monospace' } : {};
+
+  const containerStyle: ViewStyle = {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    backgroundColor: colors.background.overlay,
+    borderRadius: 8,
+    padding: 8,
+    maxWidth: 420,
+    zIndex: 100,
+    ...(Platform.OS === 'web' ? { backdropFilter: 'blur(8px)' } as any : {}),
+  };
+
+  const scoreRowStyle: ViewStyle = {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 4,
+    paddingBottom: 4,
+    borderBottomWidth: 0.5,
+    borderBottomColor: 'rgba(255, 255, 255, 0.15)',
+  };
+
+  const scoreLabelStyle: TextStyle = {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 1,
+    ...monoFont,
+  };
+
+  const scoreValueStyle: TextStyle = {
+    fontSize: 11,
+    fontWeight: '700',
+    ...monoFont,
+  };
+
+  const timestampStyle: TextStyle = {
+    color: colors.text.muted,
+    fontSize: 10,
+    ...monoFont,
+  };
+
+  const headerStyle: TextStyle = {
+    color: colors.data.cyan,
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1,
+    marginTop: 4,
+    marginBottom: 2,
+    ...monoFont,
+  };
+
+  const statStyle: TextStyle = {
+    color: colors.text.inverse,
+    fontSize: 10,
+    lineHeight: 14,
+    ...monoFont,
+  };
+
+  const mutedStyle: TextStyle = { color: colors.text.muted };
 
   return (
-    <View style={styles.container} pointerEvents="none">
+    <View style={containerStyle} pointerEvents="none">
       {/* Quality Score Header */}
-      <View style={styles.scoreRow}>
-        <Text style={[styles.scoreLabel, { color: scoreColor }]}>
+      <View style={scoreRowStyle}>
+        <Text style={[scoreLabelStyle, { color: scoreColor }]}>
           {scoreLabel.toUpperCase()}
         </Text>
-        <Text style={[styles.scoreValue, { color: scoreColor }]}>
+        <Text style={[scoreValueStyle, { color: scoreColor }]}>
           {score}/100
         </Text>
-        <Text style={styles.timestamp}>{timeStr}</Text>
+        <Text style={timestampStyle}>{timeStr}</Text>
       </View>
 
       {/* ── VIDEO ───────────────────────────────────────────────────────── */}
-      <Text style={styles.header}>VIDEO</Text>
-      <Text style={styles.stat}>
+      <Text style={headerStyle}>VIDEO</Text>
+      <Text style={statStyle}>
         {'  '}Res: {s?.resolution ? `${s.resolution.width}x${s.resolution.height}` : '--'}
       </Text>
-      <Text style={styles.stat}>
+      <Text style={statStyle}>
         {'  '}FPS:{' '}
-        <Text style={{ color: healthColor(s?.frameRate ?? null, FPS_GOOD, FPS_WARN, false) }}>
+        <Text style={{ color: healthColor(s?.frameRate ?? null, FPS_GOOD, FPS_WARN, hc, false) }}>
           {s?.frameRate != null ? Math.round(s.frameRate) : '--'}
         </Text>
         {measuredFps != null && (
-          <Text style={{ color: '#aaa' }}>
+          <Text style={mutedStyle}>
             {' '}(measured: {measuredFps})
           </Text>
         )}
       </Text>
-      <Text style={styles.stat}>
+      <Text style={statStyle}>
         {'  '}Bitrate: {formatBitrate(s?.bitrate ?? null)}
         {s?.availableOutgoingBitrate != null && (
-          <Text style={{ color: '#aaa' }}>{' '}(avail: {formatBitrate(s.availableOutgoingBitrate)})</Text>
+          <Text style={mutedStyle}>{' '}(avail: {formatBitrate(s.availableOutgoingBitrate)})</Text>
         )}
       </Text>
-      <Text style={styles.stat}>
+      <Text style={statStyle}>
         {'  '}Decoded: {s?.framesDecoded?.toLocaleString() ?? '--'} | Dropped:{' '}
-        <Text style={{ color: healthColor(dropRate, DROP_RATE_GOOD, DROP_RATE_WARN) }}>
+        <Text style={{ color: healthColor(dropRate, DROP_RATE_GOOD, DROP_RATE_WARN, hc) }}>
           {s?.framesDropped ?? 0}
         </Text>
         {dropRate != null && (
-          <Text style={{ color: healthColor(dropRate, DROP_RATE_GOOD, DROP_RATE_WARN) }}>
+          <Text style={{ color: healthColor(dropRate, DROP_RATE_GOOD, DROP_RATE_WARN, hc) }}>
             {' '}({dropRate.toFixed(2)}%)
           </Text>
         )}
       </Text>
       {s?.codec && (
-        <Text style={styles.stat}>
+        <Text style={statStyle}>
           {'  '}Codec: {s.codec}
         </Text>
       )}
 
       {/* ── AUDIO ──────────────────────────────────────────────────────── */}
-      <Text style={styles.header}>AUDIO</Text>
-      <Text style={styles.stat}>
+      <Text style={headerStyle}>AUDIO</Text>
+      <Text style={statStyle}>
         {'  '}Bitrate: {s?.audioBitrate != null ? `${s.audioBitrate} kbps` : '--'}
         {s?.audioLevel != null && (
-          <Text style={{ color: '#aaa' }}>{' '}| Level: {(s.audioLevel * 100).toFixed(0)}%</Text>
+          <Text style={mutedStyle}>{' '}| Level: {(s.audioLevel * 100).toFixed(0)}%</Text>
         )}
       </Text>
 
       {/* ── NETWORK ────────────────────────────────────────────────────── */}
-      <Text style={styles.header}>NETWORK</Text>
-      <Text style={styles.stat}>
+      <Text style={headerStyle}>NETWORK</Text>
+      <Text style={statStyle}>
         {'  '}RTT:{' '}
-        <Text style={{ color: healthColor(s?.roundTripTime ?? null, RTT_GOOD, RTT_WARN) }}>
+        <Text style={{ color: healthColor(s?.roundTripTime ?? null, RTT_GOOD, RTT_WARN, hc) }}>
           {s?.roundTripTime != null ? `${s.roundTripTime.toFixed(0)} ms` : '--'}
         </Text>
         {'  '}Jitter:{' '}
-        <Text style={{ color: healthColor(s?.jitter ?? null, JITTER_GOOD, JITTER_WARN) }}>
+        <Text style={{ color: healthColor(s?.jitter ?? null, JITTER_GOOD, JITTER_WARN, hc) }}>
           {s?.jitter != null ? `${s.jitter.toFixed(1)} ms` : '--'}
         </Text>
       </Text>
-      <Text style={styles.stat}>
+      <Text style={statStyle}>
         {'  '}Loss:{' '}
-        <Text style={{ color: healthColor(s?.packetLoss ?? null, LOSS_GOOD, LOSS_WARN) }}>
+        <Text style={{ color: healthColor(s?.packetLoss ?? null, LOSS_GOOD, LOSS_WARN, hc) }}>
           {s?.packetLoss != null ? `${s.packetLoss.toFixed(2)}%` : '--'}
         </Text>
         {s?.packetsLost != null && s.packetsLost > 0 && (
-          <Text style={{ color: '#aaa' }}>{' '}({s.packetsLost} total)</Text>
+          <Text style={mutedStyle}>{' '}({s.packetsLost} total)</Text>
         )}
       </Text>
-      <Text style={styles.stat}>
+      <Text style={statStyle}>
         {'  '}ICE: {s?.localCandidateType ?? '--'} {'<>'} {s?.remoteCandidateType ?? '--'}
         {s?.candidateType === 'relay' && (
-          <Text style={{ color: '#ff9800' }}>{' '}(TURN relay)</Text>
+          <Text style={{ color: colors.status.warning }}>{' '}(TURN relay)</Text>
         )}
         {s?.candidateType === 'host' && (
-          <Text style={{ color: '#4caf50' }}>{' '}(direct)</Text>
+          <Text style={{ color: colors.status.success }}>{' '}(direct)</Text>
         )}
         {s?.candidateType === 'srflx' && (
-          <Text style={{ color: '#8bc34a' }}>{' '}(STUN)</Text>
+          <Text style={{ color: colors.status.success }}>{' '}(STUN)</Text>
         )}
       </Text>
 
       {/* ── GHOST BOT ──────────────────────────────────────────────────── */}
       {g && (
         <>
-          <Text style={styles.header}>BOT SOURCE</Text>
+          <Text style={headerStyle}>BOT SOURCE</Text>
           {g.audio && (
-            <Text style={styles.stat}>
+            <Text style={statStyle}>
               {'  '}Audio: {formatFilename(g.audio.file)}
               {'\n  '}  buf: {g.audio.bufferMs}ms | underruns:{' '}
-              <Text style={{ color: g.audio.underruns > 0 ? '#ff9800' : '#4caf50' }}>
+              <Text style={{ color: g.audio.underruns > 0 ? colors.status.warning : colors.status.success }}>
                 {g.audio.underruns}
               </Text>
               {' '}| frames: {g.audio.framesDelivered.toLocaleString()}
@@ -305,30 +388,30 @@ export function CallStatsOverlay({ callStats, ghostMetadata, visible }: CallStat
           )}
           {g.video && (
             <>
-              <Text style={styles.stat}>
+              <Text style={statStyle}>
                 {'  '}Video: {formatFilename(g.video.file)}
               </Text>
-              <Text style={styles.stat}>
+              <Text style={statStyle}>
                 {'  '}  src: {g.video.width}x{g.video.height} @ {g.video.fps}fps
               </Text>
-              <Text style={styles.stat}>
+              <Text style={statStyle}>
                 {'  '}  buf: {g.video.bufferedFrames}f{' '}
-                <Text style={{ color: healthColor(g.video.bufferHealth, BUF_HEALTH_GOOD, BUF_HEALTH_WARN, false) }}>
+                <Text style={{ color: healthColor(g.video.bufferHealth, BUF_HEALTH_GOOD, BUF_HEALTH_WARN, hc, false) }}>
                   ({Math.round(g.video.bufferHealth * 100)}%)
                 </Text>
                 {' '}| dropped:{' '}
-                <Text style={{ color: g.video.droppedFrames > 0 ? '#ff9800' : '#4caf50' }}>
+                <Text style={{ color: g.video.droppedFrames > 0 ? colors.status.warning : colors.status.success }}>
                   {g.video.droppedFrames}
                 </Text>
               </Text>
-              <Text style={styles.stat}>
+              <Text style={statStyle}>
                 {'  '}  delivered: {g.video.framesDelivered.toLocaleString()}
               </Text>
             </>
           )}
-          <Text style={styles.stat}>
+          <Text style={statStyle}>
             {'  '}Uptime: {g.uptime}s | Bot RTT:{' '}
-            <Text style={{ color: healthColor(g.stats.rtt * 1000, RTT_GOOD, RTT_WARN) }}>
+            <Text style={{ color: healthColor(g.stats.rtt * 1000, RTT_GOOD, RTT_WARN, hc) }}>
               {(g.stats.rtt * 1000).toFixed(0)}ms
             </Text>
           </Text>
@@ -336,13 +419,13 @@ export function CallStatsOverlay({ callStats, ghostMetadata, visible }: CallStat
       )}
 
       {/* ── VALIDATION ─────────────────────────────────────────────────── */}
-      <Text style={styles.header}>VALIDATION</Text>
-      <Text style={styles.stat}>
+      <Text style={headerStyle}>VALIDATION</Text>
+      <Text style={statStyle}>
         {'  '}Stats age: {s ? 'LIVE' : 'NO DATA'}
         {s?.frameRate != null && measuredFps != null && (
           <>
             {'\n  '}FPS match:{' '}
-            <Text style={{ color: Math.abs(s.frameRate - measuredFps) < 5 ? '#4caf50' : '#ff9800' }}>
+            <Text style={{ color: Math.abs(s.frameRate - measuredFps) < 5 ? colors.status.success : colors.status.warning }}>
               {Math.abs(s.frameRate - measuredFps) < 5 ? 'OK' : 'DRIFT'}
             </Text>
             {' '}(reported={Math.round(s.frameRate)} measured={measuredFps})
@@ -351,7 +434,7 @@ export function CallStatsOverlay({ callStats, ghostMetadata, visible }: CallStat
         {g?.video && s?.resolution && (
           <>
             {'\n  '}Res match:{' '}
-            <Text style={{ color: (g.video.width === s.resolution.width && g.video.height === s.resolution.height) ? '#4caf50' : '#ff9800' }}>
+            <Text style={{ color: (g.video.width === s.resolution.width && g.video.height === s.resolution.height) ? colors.status.success : colors.status.warning }}>
               {g.video.width === s.resolution.width && g.video.height === s.resolution.height ? 'OK' : 'MISMATCH'}
             </Text>
             {' '}(bot={g.video.width}x{g.video.height} client={s.resolution.width}x{s.resolution.height})
@@ -361,57 +444,3 @@ export function CallStatsOverlay({ callStats, ghostMetadata, visible }: CallStat
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    position: 'absolute',
-    top: 8,
-    left: 8,
-    backgroundColor: 'rgba(0, 0, 0, 0.82)',
-    borderRadius: 8,
-    padding: 10,
-    maxWidth: 420,
-    zIndex: 100,
-    ...(Platform.OS === 'web' ? { backdropFilter: 'blur(8px)' } as any : {}),
-  },
-  scoreRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    marginBottom: 4,
-    paddingBottom: 4,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: 'rgba(255, 255, 255, 0.15)',
-  },
-  scoreLabel: {
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 1,
-    ...(Platform.OS === 'web' ? { fontFamily: 'monospace' } : {}),
-  },
-  scoreValue: {
-    fontSize: 11,
-    fontWeight: '700',
-    ...(Platform.OS === 'web' ? { fontFamily: 'monospace' } : {}),
-  },
-  timestamp: {
-    color: '#888',
-    fontSize: 10,
-    ...(Platform.OS === 'web' ? { fontFamily: 'monospace' } : {}),
-  },
-  header: {
-    color: '#4fc3f7',
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 1,
-    marginTop: 5,
-    marginBottom: 1,
-    ...(Platform.OS === 'web' ? { fontFamily: 'monospace' } : {}),
-  },
-  stat: {
-    color: '#e0e0e0',
-    fontSize: 10,
-    lineHeight: 14,
-    ...(Platform.OS === 'web' ? { fontFamily: 'monospace' } : {}),
-  },
-});
