@@ -6,6 +6,7 @@
  */
 
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { AppState, Platform, type AppStateStatus } from 'react-native';
 import { CallManager } from '@/services/CallManager';
 import type {
   ActiveCall,
@@ -15,6 +16,7 @@ import type {
   CallEvent,
   CallIceCandidatePayload,
   CallOfferPayload,
+  CallParticipant,
   CallStatePayload,
   CallStats,
   CallStatus,
@@ -93,6 +95,10 @@ interface CallContextValue {
   setOpusConfig: (config: OpusConfig) => void;
   /** Ghost bot metadata from data channel */
   ghostMetadata: any | null;
+  /** Whether local video tile is shown */
+  selfViewVisible: boolean;
+  /** Toggle self-view visibility */
+  toggleSelfView: () => void;
 }
 
 const CallContext = createContext<CallContextValue | null>(null);
@@ -124,6 +130,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
   const [volume, setVolumeState] = useState(100);
   const [inputVolume, setInputVolumeState] = useState(100);
   const [opusConfig, setOpusConfigState] = useState<OpusConfig>({ ...DEFAULT_OPUS_CONFIG });
+  const [selfViewVisible, setSelfViewVisible] = useState(true);
   const callManagerRef = useRef<CallManager | null>(null);
   const ringTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const gainNodeRef = useRef<GainNode | null>(null);
@@ -135,6 +142,8 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
   // Set synchronously in callOffer handler so ICE candidates arriving
   // before setActiveCall propagates are not dropped
   const pendingCallIdRef = useRef<string | null>(null);
+  // Timer to auto-end a call stuck in 'disconnected' / 'reconnecting' state
+  const disconnectedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Keep activeCallRef in sync with state for use in event handler closures
   useEffect(() => {
@@ -152,6 +161,10 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
 
   const cleanup = useCallback(() => {
     clearRingTimeout();
+    if (disconnectedTimeoutRef.current) {
+      clearTimeout(disconnectedTimeoutRef.current);
+      disconnectedTimeoutRef.current = null;
+    }
     if (callManagerRef.current) {
       callManagerRef.current.close();
       callManagerRef.current = null;
@@ -165,6 +178,15 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       sessionStorage.removeItem('umbra_active_call');
     } catch { /* not available */ }
   }, [clearRingTimeout]);
+
+  const toggleSelfView = useCallback(() => setSelfViewVisible((v) => !v), []);
+
+  /** Create a CallParticipant entry with defaults */
+  const makeParticipant = useCallback((
+    did: string, displayName: string, stream: MediaStream | null, isCameraOff: boolean,
+  ): CallParticipant => ({
+    did, displayName, stream, isMuted: false, isCameraOff, isSpeaking: false, isScreenSharing: false,
+  }), []);
 
   // Track whether WASM signal encryption is available
   const signalEncryptionRef = useRef<boolean | null>(null);
@@ -216,6 +238,22 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     }
   }, [service]);
 
+  /**
+   * Send call_end + cleanup using refs. Safe for beforeunload / AppState / unmount
+   * where the reactive `activeCall` state may be stale.
+   */
+  const endCallFromRef = useCallback((reason: CallEndReason = 'completed') => {
+    const call = activeCallRef.current;
+    if (!call) return;
+    const endPayload: CallEndPayload = {
+      callId: call.callId,
+      senderDid: myDid,
+      reason,
+    };
+    sendSignal(call.remoteDid, JSON.stringify(endPayload), 'call_end');
+    cleanup();
+  }, [myDid, sendSignal, cleanup]);
+
   // ── Start Outgoing Call ──────────────────────────────────────────────────
 
   const startCall = useCallback(async (
@@ -250,7 +288,15 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
 
     // Set up remote stream handler
     manager.onRemoteStream = (stream) => {
-      setActiveCall((prev) => prev ? { ...prev, remoteStream: stream } : prev);
+      setActiveCall((prev) => {
+        if (!prev) return prev;
+        const updatedParticipants = new Map(prev.participants);
+        const remote = updatedParticipants.get(remoteDid);
+        if (remote) {
+          updatedParticipants.set(remoteDid, { ...remote, stream });
+        }
+        return { ...prev, remoteStream: stream, participants: updatedParticipants };
+      });
       VoiceStreamBridge.setPeerStream(remoteDid, stream);
     };
 
@@ -259,12 +305,17 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       console.log('[CallContext] Outgoing connection state →', state, 'at', new Date().toISOString());
       if (state === 'connected') {
         clearRingTimeout();
+        // Clear any pending disconnected timeout on successful reconnect
+        if (disconnectedTimeoutRef.current) {
+          clearTimeout(disconnectedTimeoutRef.current);
+          disconnectedTimeoutRef.current = null;
+        }
         setActiveCall((prev) => prev ? {
           ...prev,
           status: 'connected',
           connectedAt: Date.now(),
         } : prev);
-      } else if (state === 'failed' || state === 'disconnected') {
+      } else if (state === 'failed' || state === 'closed') {
         if (state === 'failed') {
           const pc = (manager as any).pc as RTCPeerConnection | undefined;
           if (pc) {
@@ -272,14 +323,15 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
               'iceGatheringState:', pc.iceGatheringState, 'signalingState:', pc.signalingState);
           }
         }
-        setActiveCall((prev) => {
-          if (!prev) return prev;
-          if (state === 'failed') {
-            cleanup();
-            return null;
-          }
-          return { ...prev, status: 'reconnecting' };
-        });
+        endCallFromRef(state === 'failed' ? 'failed' : 'completed');
+      } else if (state === 'disconnected') {
+        setActiveCall((prev) => prev ? { ...prev, status: 'reconnecting' } : prev);
+        // Auto-end if stuck disconnected for 30s
+        if (disconnectedTimeoutRef.current) clearTimeout(disconnectedTimeoutRef.current);
+        disconnectedTimeoutRef.current = setTimeout(() => {
+          console.warn('[CallContext] Disconnected timeout — ending call');
+          endCallFromRef('timeout');
+        }, 30_000);
       }
     };
 
@@ -292,6 +344,10 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       VoiceStreamBridge.setActive(true);
       VoiceStreamBridge.addParticipant({ did: myDid, displayName: myName });
       VoiceStreamBridge.addParticipant({ did: remoteDid, displayName: remoteDisplayName });
+
+      const participants = new Map<string, CallParticipant>();
+      participants.set(myDid, makeParticipant(myDid, myName, localStream, !isVideo));
+      participants.set(remoteDid, makeParticipant(remoteDid, remoteDisplayName, null, true));
 
       const call: ActiveCall = {
         callId,
@@ -307,6 +363,8 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
         remoteStream: null,
         isMuted: false,
         isCameraOff: !isVideo,
+        participants,
+        selfViewVisible: true,
       };
 
       setActiveCall(call);
@@ -351,7 +409,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       console.error('[CallContext] Failed to start call:', err);
       cleanup();
     }
-  }, [activeCall, myDid, myName, sendSignal, clearRingTimeout, cleanup]);
+  }, [activeCall, myDid, myName, sendSignal, clearRingTimeout, cleanup, makeParticipant]);
 
   // ── Accept Incoming Call ─────────────────────────────────────────────────
 
@@ -381,7 +439,15 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      setActiveCall((prev) => prev ? { ...prev, localStream } : prev);
+      setActiveCall((prev) => {
+        if (!prev) return prev;
+        const updatedParticipants = new Map(prev.participants);
+        const local = updatedParticipants.get(myDid);
+        if (local) {
+          updatedParticipants.set(myDid, { ...local, stream: localStream });
+        }
+        return { ...prev, localStream, participants: updatedParticipants };
+      });
 
       // Send answer via relay
       const answerPayload: CallAnswerPayload = {
@@ -420,7 +486,15 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     if (!manager) return;
 
     const isMuted = manager.toggleMute();
-    setActiveCall((prev) => prev ? { ...prev, isMuted } : prev);
+    setActiveCall((prev) => {
+      if (!prev) return prev;
+      const updatedParticipants = new Map(prev.participants);
+      const local = updatedParticipants.get(myDid);
+      if (local) {
+        updatedParticipants.set(myDid, { ...local, isMuted });
+      }
+      return { ...prev, isMuted, participants: updatedParticipants };
+    });
     playSound(isMuted ? 'call_mute' : 'call_unmute');
 
     // Notify remote peer
@@ -441,7 +515,15 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     if (!manager) return;
 
     const isCameraOff = manager.toggleCamera();
-    setActiveCall((prev) => prev ? { ...prev, isCameraOff } : prev);
+    setActiveCall((prev) => {
+      if (!prev) return prev;
+      const updatedParticipants = new Map(prev.participants);
+      const local = updatedParticipants.get(myDid);
+      if (local) {
+        updatedParticipants.set(myDid, { ...local, isCameraOff });
+      }
+      return { ...prev, isCameraOff, participants: updatedParticipants };
+    });
 
     if (activeCall) {
       const statePayload: CallStatePayload = {
@@ -503,11 +585,20 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
 
     manager.switchCamera(deviceId).then(() => {
       // Update the local stream reference
-      setActiveCall((prev) => prev ? { ...prev, localStream: manager.getLocalStream() } : prev);
+      const newStream = manager.getLocalStream();
+      setActiveCall((prev) => {
+        if (!prev) return prev;
+        const updatedParticipants = new Map(prev.participants);
+        const local = updatedParticipants.get(myDid);
+        if (local) {
+          updatedParticipants.set(myDid, { ...local, stream: newStream });
+        }
+        return { ...prev, localStream: newStream, participants: updatedParticipants };
+      });
     }).catch((err) => {
       console.warn('[CallContext] Failed to switch camera:', err);
     });
-  }, []);
+  }, [myDid]);
 
   // ── Screen Sharing ────────────────────────────────────────────────────────
 
@@ -818,7 +909,15 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
           };
 
           manager.onRemoteStream = (stream) => {
-            setActiveCall((prev) => prev ? { ...prev, remoteStream: stream } : prev);
+            setActiveCall((prev) => {
+              if (!prev) return prev;
+              const updatedParticipants = new Map(prev.participants);
+              const remote = updatedParticipants.get(payload.senderDid);
+              if (remote) {
+                updatedParticipants.set(payload.senderDid, { ...remote, stream });
+              }
+              return { ...prev, remoteStream: stream, participants: updatedParticipants };
+            });
             VoiceStreamBridge.setPeerStream(payload.senderDid, stream);
           };
 
@@ -826,20 +925,31 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
             console.log('[CallContext] Connection state →', state, 'at', new Date().toISOString());
             if (state === 'connected') {
               clearRingTimeout();
+              if (disconnectedTimeoutRef.current) {
+                clearTimeout(disconnectedTimeoutRef.current);
+                disconnectedTimeoutRef.current = null;
+              }
               setActiveCall((prev) => prev ? {
                 ...prev,
                 status: 'connected',
                 connectedAt: Date.now(),
               } : prev);
-            } else if (state === 'failed') {
-              const pc = (manager as any).pc as RTCPeerConnection | undefined;
-              if (pc) {
-                console.error('[CallContext] Connection FAILED — iceConnectionState:', pc.iceConnectionState,
-                  'iceGatheringState:', pc.iceGatheringState, 'signalingState:', pc.signalingState);
+            } else if (state === 'failed' || state === 'closed') {
+              if (state === 'failed') {
+                const pc = (manager as any).pc as RTCPeerConnection | undefined;
+                if (pc) {
+                  console.error('[CallContext] Connection FAILED — iceConnectionState:', pc.iceConnectionState,
+                    'iceGatheringState:', pc.iceGatheringState, 'signalingState:', pc.signalingState);
+                }
               }
-              cleanup();
+              endCallFromRef(state === 'failed' ? 'failed' : 'completed');
             } else if (state === 'disconnected') {
               setActiveCall((prev) => prev ? { ...prev, status: 'reconnecting' } : prev);
+              if (disconnectedTimeoutRef.current) clearTimeout(disconnectedTimeoutRef.current);
+              disconnectedTimeoutRef.current = setTimeout(() => {
+                console.warn('[CallContext] Disconnected timeout — ending call');
+                endCallFromRef('timeout');
+              }, 30_000);
             }
           };
 
@@ -849,6 +959,10 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
           VoiceStreamBridge.addParticipant({ did: payload.senderDid, displayName: payload.senderDisplayName });
 
           // Set incoming call state
+          const incomingParticipants = new Map<string, CallParticipant>();
+          incomingParticipants.set(myDid, makeParticipant(myDid, myName, null, payload.callType === 'voice'));
+          incomingParticipants.set(payload.senderDid, makeParticipant(payload.senderDid, payload.senderDisplayName, null, true));
+
           const call: ActiveCall = {
             callId: payload.callId,
             conversationId: payload.conversationId,
@@ -863,6 +977,8 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
             remoteStream: null,
             isMuted: false,
             isCameraOff: payload.callType === 'voice',
+            participants: incomingParticipants,
+            selfViewVisible: true,
           };
 
           setActiveCall(call);
@@ -936,11 +1052,16 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
 
           setActiveCall((prev) => {
             if (!prev) return prev;
-            return {
-              ...prev,
-              ...(payload.isMuted !== undefined ? {} : {}),
-              // Remote peer state updates would go here for the participant model
-            };
+            const updatedParticipants = new Map(prev.participants);
+            const remote = updatedParticipants.get(payload.senderDid);
+            if (remote) {
+              updatedParticipants.set(payload.senderDid, {
+                ...remote,
+                ...(payload.isMuted !== undefined ? { isMuted: payload.isMuted } : {}),
+                ...(payload.isCameraOff !== undefined ? { isCameraOff: payload.isCameraOff } : {}),
+              });
+            }
+            return { ...prev, participants: updatedParticipants };
           });
           break;
         }
@@ -949,15 +1070,49 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
 
     return unsubscribe;
     // eslint-disable-next-line react-hooks/exhaustive-deps — activeCall accessed via ref
-  }, [service, myDid, sendSignal, clearRingTimeout, cleanup, maybeDecryptPayload]);
+  }, [service, myDid, myName, sendSignal, clearRingTimeout, cleanup, maybeDecryptPayload, makeParticipant]);
 
-  // ── Cleanup on unmount ───────────────────────────────────────────────────
+  // ── Cleanup on unmount — send call_end before tearing down ──────────────
 
   useEffect(() => {
     return () => {
-      cleanup();
+      // Use endCallFromRef to notify the remote peer before cleanup
+      endCallFromRef('completed');
     };
-  }, [cleanup]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps — intentionally run only on unmount
+  }, [endCallFromRef]);
+
+  // ── beforeunload (web) — end call when the user closes or navigates away ─
+
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof window === 'undefined') return;
+
+    const handleBeforeUnload = () => {
+      endCallFromRef('completed');
+    };
+
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+    };
+  }, [endCallFromRef]);
+
+  // ── AppState (mobile) — end call when the app goes to background ──────────
+
+  useEffect(() => {
+    if (Platform.OS === 'web') return;
+
+    const handleAppStateChange = (nextState: AppStateStatus) => {
+      // End the call if the app is sent to background or becomes inactive
+      if (nextState !== 'active' && activeCallRef.current) {
+        console.log('[CallContext] App state →', nextState, '— ending active call');
+        endCallFromRef('completed');
+      }
+    };
+
+    const sub = AppState.addEventListener('change', handleAppStateChange);
+    return () => sub.remove();
+  }, [endCallFromRef]);
 
   // ── Sound on call connect / incoming ring ────────────────────────────────
 
@@ -1006,6 +1161,8 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     opusConfig,
     setOpusConfig,
     ghostMetadata,
+    selfViewVisible,
+    toggleSelfView,
   };
 
   return (
