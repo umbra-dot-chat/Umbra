@@ -4,6 +4,8 @@
  * On desktop/web: fades out after 3 seconds of no mouse movement, reappears
  * on hover. On mobile: always visible (no auto-hide).
  * Buttons render without a container/pill for a minimal look.
+ * Uses forced dark styling (white icons, gray backgrounds) for the
+ * always-black call screen.
  */
 
 import React, { useRef, useEffect, useCallback, useState } from 'react';
@@ -29,6 +31,40 @@ export interface CallControlsOverlayProps {
 
 const AUTO_HIDE_DELAY = 3000;
 const FADE_DURATION = 200;
+const CSS_ID = 'call-controls-overlay-css';
+
+// ─── Web CSS overrides ──────────────────────────────────────────────────────
+
+/**
+ * Inject CSS to force dark-on-black button styling for the call controls.
+ * The Wisp CallControls resolves colors from the active theme, which breaks
+ * on the always-black call background in light mode. These overrides force
+ * a lighter gray button background and white icons.
+ */
+function injectCallControlsCSS() {
+  if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+  if (document.getElementById(CSS_ID)) return;
+
+  const style = document.createElement('style');
+  style.id = CSS_ID;
+  style.textContent = `
+    /* Default (non-active) call control buttons — lighter gray bg, white icons */
+    #call-controls-overlay [role="button"] {
+      background-color: rgba(255, 255, 255, 0.2) !important;
+    }
+    #call-controls-overlay [role="button"] svg {
+      stroke: #FFFFFF !important;
+    }
+    /* Active/toggled buttons — brighter bg */
+    #call-controls-overlay [role="button"][aria-selected="true"] {
+      background-color: rgba(255, 255, 255, 0.5) !important;
+    }
+    #call-controls-overlay [role="button"][aria-selected="true"] svg {
+      stroke: #FFFFFF !important;
+    }
+  `;
+  document.head.appendChild(style);
+}
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
@@ -49,6 +85,11 @@ export function CallControlsOverlay({
   const opacity = useRef(new Animated.Value(1)).current;
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [pointerEvents, setPointerEvents] = useState<'auto' | 'none'>('auto');
+
+  // Inject CSS overrides on mount (web only)
+  useEffect(() => {
+    injectCallControlsCSS();
+  }, []);
 
   const fadeOut = useCallback(() => {
     if (isMobile) return;
@@ -116,7 +157,7 @@ export function CallControlsOverlay({
   // On mobile, render without animation wrapper
   if (isMobile) {
     return (
-      <View style={wrapperStyle} accessibilityRole="toolbar" accessibilityLabel="Call controls">
+      <View nativeID="call-controls-overlay" style={wrapperStyle} accessibilityRole="toolbar" accessibilityLabel="Call controls">
         <View style={controlsContainerStyle}>
           <CallControls
             isMuted={isMuted}
@@ -143,7 +184,7 @@ export function CallControlsOverlay({
       accessibilityRole="toolbar"
       accessibilityLabel="Call controls"
     >
-      <View style={controlsContainerStyle}>
+      <View nativeID="call-controls-overlay" style={controlsContainerStyle}>
         <CallControls
           isMuted={isMuted}
           isVideoOff={isCameraOff}
