@@ -93,7 +93,7 @@ export function ActiveCallPanel({
         overflow: 'hidden',
         position: 'relative',
         zIndex: 10,
-        backgroundColor: theme.colors.background.sunken,
+        backgroundColor: '#000000',
       }}
     >
       <SlotRenderer slot="voice-call-header" />
@@ -147,7 +147,7 @@ export function ActiveCallPanel({
               alignContent: 'center',
               gap: 12,
               padding: 12,
-              backgroundColor: theme.colors.background.sunken,
+              backgroundColor: '#000000',
             }}
           >
             {participantList.map((p) => (

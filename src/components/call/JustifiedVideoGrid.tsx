@@ -132,7 +132,7 @@ export function JustifiedVideoGrid({
 
   const containerStyle: ViewStyle = {
     flex: 1,
-    backgroundColor: theme.colors.background.sunken,
+    backgroundColor: '#000000',
   };
 
   const gridStyle: ViewStyle = {
