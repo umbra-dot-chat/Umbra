@@ -86,11 +86,13 @@ function injectGridTileCSS() {
   style.id = GRID_CSS_ID;
   style.textContent = `
     /* Force video tiles in the grid to clip to rounded corners.
-       The Wisp VideoTile uses borderRadius:0 for size="full",
-       so we need CSS to enforce clipping on the wrapper and video. */
+       Pressable renders as <button> which has browser quirks with
+       overflow:hidden + border-radius. Use clip-path as a reliable
+       alternative that always clips children to rounded corners. */
     #video-grid [role="button"] {
       border-radius: 12px !important;
       overflow: hidden !important;
+      clip-path: inset(0 round 12px) !important;
     }
     #video-grid [role="button"] > div {
       border-radius: 12px !important;
