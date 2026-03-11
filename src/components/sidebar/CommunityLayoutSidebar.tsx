@@ -11,10 +11,12 @@
  */
 
 import React, { useMemo, useState, useCallback, useEffect, useRef } from 'react';
-import { View, Image, Pressable, Text as RNText } from 'react-native';
+import { View, Image, Pressable } from 'react-native';
 import type { LayoutRectangle, GestureResponderEvent } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
+  Box,
+  Text,
   useTheme,
   CommunitySidebar,
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator,
@@ -89,6 +91,7 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
   const router = useRouter();
   const { identity } = useAuth();
   const { service } = useUmbra();
+  const { theme } = useTheme();
   const myDid = identity?.did ?? '';
 
   const {
@@ -342,9 +345,9 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
       if (channel.type !== 'voice') return defaultIcon;
       const participantDids = voiceParticipants.get(channel.id);
       if (!participantDids || participantDids.size === 0) return defaultIcon;
-      return <VolumeIcon size={18} color="#43b581" />;
+      return <VolumeIcon size={18} color={theme.colors.status.success} />;
     },
-    [voiceParticipants],
+    [voiceParticipants, theme.colors.status.success],
   );
 
   const handleCategoryToggle = useCallback((categoryId: string) => {
@@ -1176,11 +1179,10 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
   // works correctly (Sidebar wraps children in ScrollView which breaks flex).
   // ---------------------------------------------------------------------------
 
-  const { theme } = useTheme();
   const iconColor = theme.colors.text.onRaisedSecondary;
 
   return (
-    <View
+    <Box
       style={{
         width: '100%',
         height: '100%',
@@ -1197,7 +1199,7 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
       />
 
       {/* Header action buttons — overlaid on top-right of community header */}
-      <View
+      <Box
         style={{
           position: 'absolute',
           top: 0,
@@ -1225,11 +1227,11 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
         >
           <ShareIcon size={16} color={theme.colors.text.secondary} />
         </Pressable>
-      </View>
+      </Box>
 
       {/* Seat claim banner */}
       {matchingSeats.length > 0 && (
-        <View
+        <Box
           style={{
             padding: 10,
             backgroundColor: theme.colors.accent.primary + '15',
@@ -1237,17 +1239,17 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
             borderBottomColor: theme.colors.accent.primary + '30',
           }}
         >
-          <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
-            <View style={{ flex: 1 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                <RNText style={{ fontSize: 14, fontWeight: '600', color: theme.colors.text.primary }}>
+          <Box style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
+            <Box style={{ flex: 1 }}>
+              <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                <Text size="sm" weight="semibold" style={{ color: theme.colors.text.primary }}>
                   Claim your seat
-                </RNText>
-              </View>
-              <RNText style={{ fontSize: 12, color: theme.colors.text.muted, marginBottom: 8 }}>
+                </Text>
+              </Box>
+              <Text size="xs" style={{ color: theme.colors.text.muted, marginBottom: 8 }}>
                 We found your {matchingSeats[0].platform} account "{matchingSeats[0].platformUsername}" in this community. Claim to get your original roles.
-              </RNText>
-              <View style={{ flexDirection: 'row', gap: 8 }}>
+              </Text>
+              <Box style={{ flexDirection: 'row', gap: 8 }}>
                 <Pressable
                   onPress={() => handleClaimSeat(matchingSeats[0].id)}
                   style={{
@@ -1257,9 +1259,9 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
                     borderRadius: 6,
                   }}
                 >
-                  <RNText style={{ fontSize: 12, fontWeight: '600', color: theme.colors.text.onAccent }}>
+                  <Text size="xs" weight="semibold" style={{ color: theme.colors.text.onAccent }}>
                     Claim Seat
-                  </RNText>
+                  </Text>
                 </Pressable>
                 <Pressable
                   onPress={() => handleDismissSeat(matchingSeats[0].id)}
@@ -1269,14 +1271,14 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
                     borderRadius: 6,
                   }}
                 >
-                  <RNText style={{ fontSize: 12, color: theme.colors.text.muted }}>
+                  <Text size="xs" style={{ color: theme.colors.text.muted }}>
                     Dismiss
-                  </RNText>
+                  </Text>
                 </Pressable>
-              </View>
-            </View>
-          </View>
-        </View>
+              </Box>
+            </Box>
+          </Box>
+        </Box>
       )}
 
       {/* Community banner — shown above channel list when available */}
@@ -1292,7 +1294,7 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
         />
       )}
 
-      <View style={{ flex: 1, minHeight: 0 }}>
+      <Box style={{ flex: 1, minHeight: 0 }}>
         <CommunitySidebar
           community={communityInfo}
           spaces={wispSpaces}
@@ -1316,7 +1318,7 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
           loading={communityLoading}
           skeleton={communityLoading && !community}
         />
-      </View>
+      </Box>
 
       {/* Voice channel controls moved to VoiceCallPanel inline */}
 
@@ -1598,6 +1600,6 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
           title="Community Invite"
         />
       )}
-    </View>
+    </Box>
   );
 }
