@@ -32,6 +32,9 @@ writeFileSync(join(shimDir, 'react-jsx-runtime.js'),
 writeFileSync(join(shimDir, 'react-native.js'),
   `const RN = globalThis.ReactNative; export default RN; export const { View, Text, Pressable, ScrollView, Platform, StyleSheet, Animated, Dimensions } = RN;`
 );
+writeFileSync(join(shimDir, 'wisp-react-native.js'),
+  `const W = globalThis.WispRN ?? {}; export default W; export const { Box, Text, HStack, VStack, Button, Divider, Separator, useTheme, Card, Stack, Badge, Input } = W;`
+);
 
 /** @type {import('esbuild').BuildOptions} */
 const buildOptions = {
@@ -47,6 +50,7 @@ const buildOptions = {
     'react': join(shimDir, 'react.js'),
     'react/jsx-runtime': join(shimDir, 'react-jsx-runtime.js'),
     'react-native': join(shimDir, 'react-native.js'),
+    '@coexist/wisp-react-native': join(shimDir, 'wisp-react-native.js'),
   },
   define: {
     'process.env.NODE_ENV': isWatch ? '"development"' : '"production"',
