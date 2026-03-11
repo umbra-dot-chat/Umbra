@@ -18,8 +18,10 @@ sed_i() {
   fi
 }
 
-# Check for Wisp in sibling directory (local dev) or .wisp (CI)
-if [ -d "$UMBRA_DIR/../Wisp/packages" ]; then
+# Check for Wisp: in-repo (packages/umbra-uikit) first, then sibling dir, then .wisp (CI)
+if [ -d "$UMBRA_DIR/packages/umbra-uikit/packages" ]; then
+  WISP_DIR="$UMBRA_DIR/packages/umbra-uikit"
+elif [ -d "$UMBRA_DIR/../Wisp/packages" ]; then
   WISP_DIR="$UMBRA_DIR/../Wisp"
 elif [ -d "$UMBRA_DIR/.wisp/packages" ]; then
   WISP_DIR="$UMBRA_DIR/.wisp"

@@ -1,0 +1,119 @@
+{
+  "name": "@coexist/wisp-core",
+  "version": "0.1.1",
+  "publishConfig": {
+    "access": "public"
+  },
+  "description": "Framework-agnostic core for the Wisp design system — tokens, themes, styles, logic, and types",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.mjs",
+      "require": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./tokens": {
+      "import": "./dist/tokens/index.mjs",
+      "require": "./dist/tokens/index.js",
+      "types": "./dist/tokens/index.d.ts"
+    },
+    "./theme": {
+      "import": "./dist/theme/index.mjs",
+      "require": "./dist/theme/index.js",
+      "types": "./dist/theme/index.d.ts"
+    },
+    "./variants": {
+      "import": "./dist/variants/index.mjs",
+      "require": "./dist/variants/index.js",
+      "types": "./dist/variants/index.d.ts"
+    },
+    "./styles": {
+      "import": "./dist/styles/index.mjs",
+      "require": "./dist/styles/index.js",
+      "types": "./dist/styles/index.d.ts"
+    },
+    "./logic": {
+      "import": "./dist/logic/index.mjs",
+      "require": "./dist/logic/index.js",
+      "types": "./dist/logic/index.d.ts"
+    },
+    "./types": {
+      "import": "./dist/types/index.mjs",
+      "require": "./dist/types/index.js",
+      "types": "./dist/types/index.d.ts"
+    },
+    "./utils": {
+      "import": "./dist/utils/index.mjs",
+      "require": "./dist/utils/index.js",
+      "types": "./dist/utils/index.d.ts"
+    },
+    "./animation": {
+      "import": "./dist/animation/index.mjs",
+      "require": "./dist/animation/index.js",
+      "types": "./dist/animation/index.d.ts"
+    },
+    "./tokens/*": {
+      "import": "./dist/tokens/*.mjs",
+      "require": "./dist/tokens/*.js",
+      "types": "./dist/tokens/*.d.ts"
+    },
+    "./theme/*": {
+      "import": "./dist/theme/*.mjs",
+      "require": "./dist/theme/*.js",
+      "types": "./dist/theme/*.d.ts"
+    },
+    "./styles/*": {
+      "import": "./dist/styles/*.mjs",
+      "require": "./dist/styles/*.js",
+      "types": "./dist/styles/*.d.ts"
+    },
+    "./types/*": {
+      "import": "./dist/types/*.mjs",
+      "require": "./dist/types/*.js",
+      "types": "./dist/types/*.d.ts"
+    },
+    "./logic/*": {
+      "import": "./dist/logic/*.mjs",
+      "require": "./dist/logic/*.js",
+      "types": "./dist/logic/*.d.ts"
+    },
+    "./utils/*": {
+      "import": "./dist/utils/*.mjs",
+      "require": "./dist/utils/*.js",
+      "types": "./dist/utils/*.d.ts"
+    },
+    "./variants/*": {
+      "import": "./dist/variants/*.mjs",
+      "require": "./dist/variants/*.js",
+      "types": "./dist/variants/*.d.ts"
+    },
+    "./animation/*": {
+      "import": "./dist/animation/*.mjs",
+      "require": "./dist/animation/*.js",
+      "types": "./dist/animation/*.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "tsup": "^8.5.1",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "qrcode-generator": "^2.0.4"
+  }
+}
