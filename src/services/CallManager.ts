@@ -763,12 +763,13 @@ export class CallManager {
   stopScreenShare(): void {
     if (!this.screenShareStream) return;
 
-    for (const track of this.screenShareStream.getTracks()) {
-      track.stop();
-    }
+    // Capture ref and clear early to prevent re-entry from track.onended
+    const stream = this.screenShareStream;
+    this.screenShareStream = null;
+    this._isScreenSharing = false;
 
     if (this.pc) {
-      const screenVideoTrack = this.screenShareStream.getVideoTracks()[0];
+      const screenVideoTrack = stream.getVideoTracks()[0];
       if (screenVideoTrack) {
         const sender = this.pc.getSenders().find((s) => s.track === screenVideoTrack);
         if (sender) {
@@ -777,8 +778,9 @@ export class CallManager {
       }
     }
 
-    this.screenShareStream = null;
-    this._isScreenSharing = false;
+    for (const track of stream.getTracks()) {
+      track.stop();
+    }
     // Notify remote peer that screen sharing has stopped
     this.sendDataChannelMessage({ type: 'screen-share-state', isScreenSharing: false });
   }
