@@ -42,6 +42,15 @@ export interface StoredTutorState {
   updatedAt: number;
 }
 
+export interface StoredGroup {
+  groupId: string;
+  groupName: string;
+  groupKey: string;
+  conversationId: string;
+  membersJson: string;
+  joinedAt: number;
+}
+
 export interface StoredTherapyState {
   userDid: string;
   active: boolean;
@@ -111,6 +120,15 @@ export class ContextStore {
         active INTEGER NOT NULL DEFAULT 0,
         session_count INTEGER NOT NULL DEFAULT 0,
         updated_at INTEGER NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS groups (
+        group_id TEXT PRIMARY KEY,
+        group_name TEXT NOT NULL,
+        group_key TEXT NOT NULL,
+        conversation_id TEXT NOT NULL,
+        members_json TEXT NOT NULL DEFAULT '[]',
+        joined_at INTEGER NOT NULL
       );
     `);
   }
@@ -260,6 +278,44 @@ export class ContextStore {
 
   clearUserTherapyState(userDid: string): void {
     this.db.prepare('DELETE FROM user_therapy_state WHERE user_did = ?').run(userDid);
+  }
+
+  // ─── Groups ──────────────────────────────────────────────────────────
+
+  saveGroup(group: StoredGroup): void {
+    this.db.prepare(`
+      INSERT OR REPLACE INTO groups (group_id, group_name, group_key, conversation_id, members_json, joined_at)
+      VALUES (?, ?, ?, ?, ?, ?)
+    `).run(group.groupId, group.groupName, group.groupKey, group.conversationId, group.membersJson, group.joinedAt);
+  }
+
+  getGroup(groupId: string): StoredGroup | null {
+    const row = this.db.prepare('SELECT * FROM groups WHERE group_id = ?').get(groupId) as any;
+    if (!row) return null;
+    return {
+      groupId: row.group_id,
+      groupName: row.group_name,
+      groupKey: row.group_key,
+      conversationId: row.conversation_id,
+      membersJson: row.members_json,
+      joinedAt: row.joined_at,
+    };
+  }
+
+  getAllGroups(): StoredGroup[] {
+    const rows = this.db.prepare('SELECT * FROM groups ORDER BY joined_at DESC').all() as any[];
+    return rows.map((row) => ({
+      groupId: row.group_id,
+      groupName: row.group_name,
+      groupKey: row.group_key,
+      conversationId: row.conversation_id,
+      membersJson: row.members_json,
+      joinedAt: row.joined_at,
+    }));
+  }
+
+  removeGroup(groupId: string): void {
+    this.db.prepare('DELETE FROM groups WHERE group_id = ?').run(groupId);
   }
 
   close(): void {
