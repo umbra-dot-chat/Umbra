@@ -452,7 +452,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       setActiveCall((prev) => prev ? { ...prev, status: 'connecting' } : prev);
 
       // The offer SDP was stored when we received the call_offer
-      const storedOffer = (manager as any)._pendingOfferSdp;
+      const storedOffer = manager.pendingOfferSdp;
       if (!storedOffer) throw new Error('No pending offer SDP');
       console.log('[CallContext] Accepting call, offer SDP length:', storedOffer.length);
 
@@ -986,7 +986,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
 
           // Create a manager and store the offer for later acceptance
           const manager = new CallManager();
-          (manager as any)._pendingOfferSdp = payload.sdp;
+          manager.pendingOfferSdp = payload.sdp;
           callManagerRef.current = manager;
 
           // Set up handlers

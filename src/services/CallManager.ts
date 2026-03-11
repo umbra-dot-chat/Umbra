@@ -116,6 +116,9 @@ export class CallManager {
   private _isScreenSharing = false;
   private e2eeWorker: Worker | null = null;
 
+  // Stores the remote offer SDP for deferred acceptance (incoming calls)
+  pendingOfferSdp: string | null = null;
+
   // Data channel for peer-to-peer metadata (screen share state, codec info, etc.)
   private dataChannel: RTCDataChannel | null = null;
 
@@ -1211,6 +1214,7 @@ export class CallManager {
 
     this.remoteStream = null;
     this.dataChannel = null;
+    this.pendingOfferSdp = null;
 
     if (this.pc) {
       this.pc.close();
