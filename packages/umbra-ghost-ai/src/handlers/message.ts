@@ -30,6 +30,7 @@ export interface IncomingMessage {
 const TUTOR_TAG_REGEX = /\[TUTOR-\w+-([\d.]+)\]/;
 const TUTOR_TAG_FALLBACK = /TUTOR[- ]\w+[- ]([\d.]+)/i;
 const TUTOR_TAG_STRIP = /\[TUTOR-\w+-[\d.]+\]\s*/g;
+const THERAPY_TAG_STRIP = /\[THERAPY-SESSION\]\s*/g;
 
 export async function handleMessage(
   msg: IncomingMessage,
@@ -108,6 +109,31 @@ export async function handleMessage(
     plaintext = `I'd like to practice ${tutorArg}. Let's start chatting!`;
   }
 
+  // Detect /therapy commands (sent by the Questionable Therapy plugin)
+  const therapyCmdMatch = plaintext.match(/^\/therapy\s*(.*)$/i);
+  if (therapyCmdMatch) {
+    const therapyArg = (therapyCmdMatch[1] || '').trim().toLowerCase();
+
+    if (therapyArg === 'stop' || therapyArg === 'end') {
+      store.clearUserTherapyState(msg.senderDid);
+      log.info(`Therapy mode deactivated for ${friend.displayName}`);
+      const goodbyeText = `[THERAPY-SESSION] Our session is wrapping up. Remember, whatever you're carrying, you don't have to carry it alone. Take care of yourself, and I'm here whenever you want to talk again.`;
+      await sendResponse(goodbyeText, identity, relay, store, friend, log);
+      return;
+    }
+
+    // Activate therapy mode (default for /therapy or /therapy start)
+    const existing = store.getUserTherapyState(msg.senderDid);
+    const sessionCount = existing ? existing.sessionCount + 1 : 0;
+    store.setUserTherapyState({
+      userDid: msg.senderDid,
+      active: true,
+      sessionCount,
+      updatedAt: Date.now(),
+    });
+    log.info(`Therapy mode activated for ${friend.displayName} (session #${sessionCount + 1})`);
+    plaintext = `I'd like to start a therapy session. How are we doing today?`;
+  }
 
   // Detect /ghost commands (call control, file sending, etc.)
   const ghostCmdMatch = plaintext.match(/^\/ghost\s+(.+)$/i);
@@ -142,11 +168,13 @@ export async function handleMessage(
   const history = store.getRecentMessages(msg.conversationId, 20);
   const messages: ChatMessage[] = [];
 
-  // System prompt — pass tutor config so the language section is replaced (not overridden)
+  // System prompt — pass tutor/therapy config so the language section is replaced
   const tutorState = store.getUserTutorState(msg.senderDid);
+  const therapyState = store.getUserTherapyState(msg.senderDid);
   let systemContent = getSystemPrompt(
     language,
     tutorState ? { language: tutorState.language, score: tutorState.score } : null,
+    therapyState?.active ? { sessionCount: therapyState.sessionCount } : null,
   );
   if (codebaseContext) {
     systemContent += '\n\n## Relevant Codebase Context\n' + codebaseContext;
@@ -185,9 +213,9 @@ export async function handleMessage(
     if (tutorState) {
       parseTutorScore(responseText, tutorState, store, friend, log);
     }
-    const cleanedResponse = tutorState
-      ? responseText.replace(TUTOR_TAG_STRIP, '')
-      : responseText;
+    let cleanedResponse = responseText;
+    if (tutorState) cleanedResponse = cleanedResponse.replace(TUTOR_TAG_STRIP, '');
+    if (therapyState?.active) cleanedResponse = cleanedResponse.replace(THERAPY_TAG_STRIP, '');
 
     // Send final update with tags intact (client plugin parses them)
     sendMessageUpdate(responseMessageId, responseText, identity, relay, friend);
@@ -210,9 +238,9 @@ export async function handleMessage(
     if (tutorState) {
       parseTutorScore(responseText, tutorState, store, friend, log);
     }
-    const cleanedResponse = tutorState
-      ? responseText.replace(TUTOR_TAG_STRIP, '')
-      : responseText;
+    let cleanedResponse = responseText;
+    if (tutorState) cleanedResponse = cleanedResponse.replace(TUTOR_TAG_STRIP, '');
+    if (therapyState?.active) cleanedResponse = cleanedResponse.replace(THERAPY_TAG_STRIP, '');
 
     // Send with tags intact (client plugin parses them), store stripped
     const messageId = uuid();
