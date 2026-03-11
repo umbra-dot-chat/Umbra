@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef, useCallback } from 'react';
-import { View, ScrollView, Platform, Text as RNText, Dimensions, useWindowDimensions, Animated, Easing, Pressable, Image } from 'react-native';
-import { Text, Button, Card, VStack, HStack, Separator, Presence, useTheme } from '@coexist/wisp-react-native';
+import { Dimensions, useWindowDimensions, Animated, Easing, Pressable, Image, Platform } from 'react-native';
+import { Text, Button, Card, VStack, HStack, Separator, Presence, useTheme, Box, ScrollArea } from '@coexist/wisp-react-native';
 import { useBlobPath, AnimatedBlobs } from '@/components/auth/AnimatedBlobs';
 import { WalletIcon, DownloadIcon, KeyIcon, LockIcon } from '@/components/ui';
 import { TEST_IDS } from '@/constants/test-ids';
@@ -104,7 +104,7 @@ function AuthContent({ inverted, onCreateWallet, onImportWallet, taglineIndex, t
         accessibilityLabel="Umbra logo"
       />
       {/* Slot-machine tagline rotation */}
-      <View style={{ height: taglineLineHeight, overflow: 'hidden', maxWidth: 360 }}>
+      <Box style={{ height: taglineLineHeight, overflow: 'hidden', maxWidth: 360 }}>
         <Animated.View style={{ transform: [{ translateY: taglineSlideAnim }] }}>
           <Text
             size="md"
@@ -114,7 +114,7 @@ function AuthContent({ inverted, onCreateWallet, onImportWallet, taglineIndex, t
             {TAGLINES[taglineIndex]}
           </Text>
         </Animated.View>
-      </View>
+      </Box>
     </VStack>
   );
 
@@ -166,11 +166,11 @@ function AuthContent({ inverted, onCreateWallet, onImportWallet, taglineIndex, t
                     opacity: pressed && !inverted ? 0.8 : 1,
                   })}
                 >
-                  <View style={{
+                  <Box style={{
                     width: 40,
                     height: 40,
                     borderRadius: 20,
-                    backgroundColor: inverted ? (isDark ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.3)') : (tc.accent?.primary ?? '#5865F2'),
+                    backgroundColor: inverted ? (isDark ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.3)') : (tc.accent?.primary ?? tc.brand?.primary ?? tc.accent?.primary),
                     alignItems: 'center',
                     justifyContent: 'center',
                     overflow: 'hidden',
@@ -179,19 +179,19 @@ function AuthContent({ inverted, onCreateWallet, onImportWallet, taglineIndex, t
                     {!inverted && account.avatar ? (
                       <Image source={{ uri: account.avatar }} style={{ width: 40, height: 40 }} />
                     ) : (
-                      <Text size="sm" weight="bold" style={{ color: inverted ? textColor : '#fff' }}>
+                      <Text size="sm" weight="bold" style={{ color: inverted ? textColor : tc.text?.inverse ?? '#fff' }}>
                         {(account.displayName ?? '?').charAt(0).toUpperCase()}
                       </Text>
                     )}
-                  </View>
-                  <View style={{ flex: 1 }}>
+                  </Box>
+                  <Box style={{ flex: 1 }}>
                     <Text size="md" weight="semibold" style={{ color: textColor }}>
                       {account.displayName}
                     </Text>
                     <Text size="xs" style={{ color: mutedColor }}>
                       {account.did.slice(0, 24)}...
                     </Text>
-                  </View>
+                  </Box>
                   {account.pin && (
                     <LockIcon size={16} color={mutedColor} />
                   )}
@@ -202,27 +202,27 @@ function AuthContent({ inverted, onCreateWallet, onImportWallet, taglineIndex, t
 
           {/* Compact action row: Create / Import as small buttons */}
           <HStack gap="md" style={{ width: '100%', alignItems: 'center' }}>
-            <View style={{ flex: 1 }}>
+            <Box style={{ flex: 1 }}>
               <Separator spacing="none" style={invertedSepStyle} />
-            </View>
+            </Box>
             <Text size="sm" style={{ color: mutedColor }}>
               or
             </Text>
-            <View style={{ flex: 1 }}>
+            <Box style={{ flex: 1 }}>
               <Separator spacing="none" style={invertedSepStyle} />
-            </View>
+            </Box>
           </HStack>
           <HStack gap="sm" style={{ width: '100%' }}>
             {inverted ? (
               <>
-                <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 36, borderRadius: 8, backgroundColor: tc.background.canvas, borderWidth: 1, borderColor: tc.background.canvas }}>
+                <Box style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 36, borderRadius: 8, backgroundColor: tc.background.canvas, borderWidth: 1, borderColor: tc.background.canvas }}>
                   <WalletIcon size={16} color={tc.text.primary} />
-                  <RNText style={{ fontSize: 14, fontWeight: '500', color: tc.text.primary }}>Create New</RNText>
-                </View>
-                <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 36, borderRadius: 8, backgroundColor: tc.background.canvas, borderWidth: 1, borderColor: tc.background.canvas }}>
+                  <Text size="sm" weight="medium" style={{ color: tc.text.primary }}>Create New</Text>
+                </Box>
+                <Box style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, height: 36, borderRadius: 8, backgroundColor: tc.background.canvas, borderWidth: 1, borderColor: tc.background.canvas }}>
                   <DownloadIcon size={16} color={tc.text.primary} />
-                  <RNText style={{ fontSize: 14, fontWeight: '500', color: tc.text.primary }}>Import</RNText>
-                </View>
+                  <Text size="sm" weight="medium" style={{ color: tc.text.primary }}>Import</Text>
+                </Box>
               </>
             ) : (
               <>
@@ -278,7 +278,7 @@ function AuthContent({ inverted, onCreateWallet, onImportWallet, taglineIndex, t
           >
             <VStack gap="md">
               <VStack gap="xs">
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                   <Text size="lg" weight="semibold" style={{ color: textColor }}>
                     Create Account
                   </Text>
@@ -292,7 +292,7 @@ function AuthContent({ inverted, onCreateWallet, onImportWallet, taglineIndex, t
                       <HelpText>
                         Generate a new account with a unique key pair. This becomes your identity on the Umbra network.
                       </HelpText>
-                      <HelpHighlight icon={<KeyIcon size={22} color="#6366f1" />}>
+                      <HelpHighlight icon={<KeyIcon size={22} color={tc.accent?.primary} />}>
                         You'll receive a 12-word recovery phrase. Write it down and keep it safe — it's the only way to restore your identity.
                       </HelpHighlight>
                       <HelpListItem>Your keys never leave your device</HelpListItem>
@@ -300,7 +300,7 @@ function AuthContent({ inverted, onCreateWallet, onImportWallet, taglineIndex, t
                       <HelpListItem>Fully self-sovereign identity</HelpListItem>
                     </HelpIndicator>
                   )}
-                </View>
+                </Box>
                 <Text
                   size="sm"
                   style={{ color: mutedColor }}
@@ -309,10 +309,10 @@ function AuthContent({ inverted, onCreateWallet, onImportWallet, taglineIndex, t
                 </Text>
               </VStack>
               {inverted ? (
-                <View style={{ width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, height: 40, borderRadius: 8, backgroundColor: tc.background.canvas, borderWidth: 1, borderColor: tc.background.canvas }}>
+                <Box style={{ width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, height: 40, borderRadius: 8, backgroundColor: tc.background.canvas, borderWidth: 1, borderColor: tc.background.canvas }}>
                   <WalletIcon size={18} color={tc.text.primary} />
-                  <RNText style={{ fontSize: 16, fontWeight: '500', color: tc.text.primary }}>Create New Account</RNText>
-                </View>
+                  <Text size="md" weight="medium" style={{ color: tc.text.primary }}>Create New Account</Text>
+                </Box>
               ) : (
                 <Button
                   variant="primary"
@@ -334,18 +334,18 @@ function AuthContent({ inverted, onCreateWallet, onImportWallet, taglineIndex, t
 
           {/* Divider */}
           <HStack gap="md" style={{ width: '100%', alignItems: 'center' }}>
-            <View style={{ flex: 1 }}>
+            <Box style={{ flex: 1 }}>
               <Separator spacing="none" style={invertedSepStyle} />
-            </View>
+            </Box>
             <Text
               size="sm"
               style={{ color: mutedColor }}
             >
               or
             </Text>
-            <View style={{ flex: 1 }}>
+            <Box style={{ flex: 1 }}>
               <Separator spacing="none" style={invertedSepStyle} />
-            </View>
+            </Box>
           </HStack>
 
           {/* Import Account */}
@@ -357,7 +357,7 @@ function AuthContent({ inverted, onCreateWallet, onImportWallet, taglineIndex, t
           >
             <VStack gap="md">
               <VStack gap="xs">
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                   <Text size="lg" weight="semibold" style={{ color: textColor }}>
                     Import Account
                   </Text>
@@ -371,14 +371,14 @@ function AuthContent({ inverted, onCreateWallet, onImportWallet, taglineIndex, t
                       <HelpText>
                         Restore your identity using a previously saved recovery phrase (12 or 24 words).
                       </HelpText>
-                      <HelpHighlight icon={<DownloadIcon size={22} color="#6366f1" />}>
+                      <HelpHighlight icon={<DownloadIcon size={22} color={tc.accent?.primary} />}>
                         This recovers your exact DID, keys, and identity — your friends will recognize you automatically.
                       </HelpHighlight>
                       <HelpListItem>Use the same recovery phrase from account creation</HelpListItem>
                       <HelpListItem>Works across devices and platforms</HelpListItem>
                     </HelpIndicator>
                   )}
-                </View>
+                </Box>
                 <Text
                   size="sm"
                   style={{ color: mutedColor }}
@@ -387,10 +387,10 @@ function AuthContent({ inverted, onCreateWallet, onImportWallet, taglineIndex, t
                 </Text>
               </VStack>
               {inverted ? (
-                <View style={{ width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, height: 40, borderRadius: 8, backgroundColor: tc.background.canvas, borderWidth: 1, borderColor: tc.background.canvas }}>
+                <Box style={{ width: '100%', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, height: 40, borderRadius: 8, backgroundColor: tc.background.canvas, borderWidth: 1, borderColor: tc.background.canvas }}>
                   <DownloadIcon size={18} color={tc.text.primary} />
-                  <RNText style={{ fontSize: 16, fontWeight: '500', color: tc.text.primary }}>Import Existing Account</RNText>
-                </View>
+                  <Text size="md" weight="medium" style={{ color: tc.text.primary }}>Import Existing Account</Text>
+                </Box>
               ) : (
                 <Button
                   variant="primary"
@@ -426,20 +426,20 @@ function AuthContent({ inverted, onCreateWallet, onImportWallet, taglineIndex, t
   // ── Layout: side-by-side on wide screens, stacked on narrow ─────────────
   if (isWide) {
     return (
-      <View style={{ width: '100%', flexDirection: 'row', alignItems: 'center', gap: 48 }}>
+      <Box style={{ width: '100%', flexDirection: 'row', alignItems: 'center', gap: 48 }}>
         {brandingBlock}
         {controlsBlock}
-      </View>
+      </Box>
     );
   }
 
   return (
-    <View style={{ width: '100%' }}>
+    <Box style={{ width: '100%' }}>
       <VStack gap="xl" style={{ alignItems: 'center' }}>
         {brandingBlock}
         {controlsBlock}
       </VStack>
-    </View>
+    </Box>
   );
 }
 
@@ -629,8 +629,8 @@ export default function AuthScreen() {
   );
 
   return (
-    <View testID={TEST_IDS.AUTH.SCREEN} accessibilityLabel="Authentication screen" style={{ flex: 1, backgroundColor: tc.background.canvas }}>
-      <ScrollView
+    <Box testID={TEST_IDS.AUTH.SCREEN} accessibilityLabel="Authentication screen" style={{ flex: 1, backgroundColor: tc.background.canvas }}>
+      <ScrollArea
         contentContainerStyle={{
           flexGrow: 1,
         }}
@@ -639,7 +639,7 @@ export default function AuthScreen() {
         alwaysBounceVertical={true}
       >
         {/* All layers in one container — scrolls & bounces as a unit */}
-        <View style={{ minHeight: windowHeight, justifyContent: 'center', alignItems: 'center', padding: isWide ? 48 : 24 }}>
+        <Box style={{ minHeight: windowHeight, justifyContent: 'center', alignItems: 'center', padding: isWide ? 48 : 24 }}>
           {/* Layer 1: Blob fill */}
           <AnimatedBlobs pathData={pathData} color={tc.text.primary} />
 
@@ -650,7 +650,7 @@ export default function AuthScreen() {
             opacity: contentEntranceOpacity,
             transform: [{ translateY: contentEntranceTranslateY }],
           }}>
-            <View style={{ width: '100%', maxWidth: contentMaxWidth, position: 'relative' }}>
+            <Box style={{ width: '100%', maxWidth: contentMaxWidth, position: 'relative' }}>
               {/* Layer 2: Normal content */}
               <AuthContent
                 onCreateWallet={handleCreateWallet}
@@ -658,7 +658,7 @@ export default function AuthScreen() {
                 onAccountPress={handleAccountPress}
                 {...sharedContentProps}
               />
-            </View>
+            </Box>
           </Animated.View>
 
           {/* Layer 3: Inverted content clipped to blob shape */}
@@ -676,9 +676,9 @@ export default function AuthScreen() {
                 }}
                 pointerEvents="none"
               >
-                <View style={{ width: '100%', maxWidth: contentMaxWidth }}>
+                <Box style={{ width: '100%', maxWidth: contentMaxWidth }}>
                   {invertedContentElement}
-                </View>
+                </Box>
               </Animated.View>
             </NativeInvertedLayer>
           ) : (
@@ -698,13 +698,13 @@ export default function AuthScreen() {
               ]}
               pointerEvents="none"
             >
-              <View style={{ width: '100%', maxWidth: contentMaxWidth }}>
+              <Box style={{ width: '100%', maxWidth: contentMaxWidth }}>
                 {invertedContentElement}
-              </View>
+              </Box>
             </Animated.View>
           )}
-        </View>
-      </ScrollView>
+        </Box>
+      </ScrollArea>
 
       {/* Wallet flow modals */}
       <CreateWalletFlow
@@ -725,6 +725,6 @@ export default function AuthScreen() {
           accountName={pinDialogAccount.displayName}
         />
       )}
-    </View>
+    </Box>
   );
 }
