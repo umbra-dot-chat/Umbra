@@ -139,3 +139,91 @@ export async function detectAndExecuteWispCommand(
 
   return { detected: false };
 }
+
+/**
+ * Handle explicit /swarm <subcommand> slash commands.
+ * Unlike detectAndExecuteWispCommand (natural language), this only
+ * matches the exact /swarm prefix.
+ */
+export async function handleSwarmCommand(
+  message: string,
+  userDid: string,
+  log: Logger,
+): Promise<WispCommandResult> {
+  const match = message.match(/^\/swarm\s+(\w+)(?:\s+(.*))?$/i);
+  if (!match) return { detected: false };
+
+  const subcommand = match[1].toLowerCase();
+  const args = match[2]?.trim() || '';
+
+  log.info(`Swarm command: /${subcommand} ${args}`);
+
+  try {
+    switch (subcommand) {
+      case 'summon': {
+        await fetch(`${WISP_API_URL}/wisps/summon`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userDid }),
+        });
+        return {
+          detected: true, action: 'summon',
+          response: '🐝 Summoning the wisp swarm! You\'ll receive friend requests from Nyx, Flicker, Bramble, and Pixel shortly, followed by a group chat invite.',
+        };
+      }
+      case 'status': {
+        const resp = await fetch(`${WISP_API_URL}/wisps/status`);
+        const data = await resp.json() as { wispCount?: number; running?: boolean; wisps?: { name: string }[] };
+        const names = data.wisps?.map((w) => w.name).join(', ') || 'none';
+        return {
+          detected: true, action: 'status',
+          response: `🐝 Swarm status: ${data.wispCount ?? 0} wisps active (${names}). ${data.running ? 'Running' : 'Idle'}.`,
+        };
+      }
+      case 'group': {
+        const groupName = args || 'Wisp Hollow';
+        await fetch(`${WISP_API_URL}/wisps/create-group`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: groupName, userDid }),
+        });
+        return {
+          detected: true, action: 'create-group',
+          response: `🐝 Created group "${groupName}" with all wisps! Check your group invites.`,
+        };
+      }
+      case 'list': {
+        const resp = await fetch(`${WISP_API_URL}/wisps/status`);
+        const data = await resp.json() as { wisps?: { name: string }[] };
+        const wispList = data.wisps?.map((w) => `• ${w.name}`).join('\n') || 'No wisps available';
+        return {
+          detected: true, action: 'list',
+          response: `🐝 Available wisps:\n${wispList}`,
+        };
+      }
+      case 'scenario': {
+        const scenarioName = args || 'group-chat';
+        await fetch(`${WISP_API_URL}/wisps/scenario`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: scenarioName }),
+        });
+        return {
+          detected: true, action: 'scenario',
+          response: `🐝 Running "${scenarioName}" scenario! Watch the wisps do their thing.`,
+        };
+      }
+      default:
+        return {
+          detected: true, action: 'unknown',
+          response: `🐝 Unknown swarm command: "${subcommand}". Try: summon, status, group, list, scenario.`,
+        };
+    }
+  } catch (err) {
+    log.warn(`Swarm API call failed for "${subcommand}":`, err);
+    return {
+      detected: true, action: subcommand,
+      response: '🐝 The wisps seem to be sleeping. Make sure the wisp swarm is running (`wisps start`) and try again!',
+    };
+  }
+}
