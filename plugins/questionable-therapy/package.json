@@ -1,0 +1,20 @@
+{
+  "name": "@umbra/plugin-questionable-therapy",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Questionable Therapy plugin for Umbra — transform Ghost into a warm, unconventional therapist",
+  "main": "dist/bundle.js",
+  "scripts": {
+    "dev": "node build.mjs --watch",
+    "build": "node build.mjs"
+  },
+  "dependencies": {},
+  "peerDependencies": {
+    "react": ">=18.0.0"
+  },
+  "devDependencies": {
+    "@umbra/plugin-sdk": "workspace:*",
+    "esbuild": "^0.20.0",
+    "typescript": "^5.0.0"
+  }
+}

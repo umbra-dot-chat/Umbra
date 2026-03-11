@@ -1,0 +1,16 @@
+{
+  "id": "com.umbra.questionable-therapy",
+  "name": "Questionable Therapy",
+  "version": "1.0.0",
+  "description": "Transform Ghost into a warm, slightly unconventional therapist. Includes ambient zen audio, calming visuals, and a dedicated therapy session mode.",
+  "author": { "name": "Umbra Team", "url": "https://umbra.chat" },
+  "platforms": ["web", "desktop", "mobile"],
+  "permissions": ["messages:read", "messages:write", "storage:kv", "commands", "notifications"],
+  "slots": [
+    { "slot": "chat-header", "component": "TherapySessionBanner", "priority": 20 },
+    { "slot": "right-panel", "component": "ZenMediaControls", "priority": 50 },
+    { "slot": "message-decorator", "component": "TherapyMessageStyle", "priority": 35 }
+  ],
+  "entryPoint": "dist/bundle.js",
+  "storage": { "kv": true }
+}
