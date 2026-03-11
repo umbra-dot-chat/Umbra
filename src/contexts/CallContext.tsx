@@ -691,6 +691,8 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       setIsScreenSharing(true);
     } catch (err) {
       console.warn('[CallContext] Failed to start screen share:', err);
+      setIsScreenSharing(false);
+      setScreenShareStream(null);
     }
   }, []);
 
@@ -779,8 +781,9 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
+    let ctx: AudioContext | null = null;
     try {
-      const ctx = new AudioContext();
+      ctx = new AudioContext();
       // Resume suspended AudioContext (browsers require user interaction first)
       if (ctx.state === 'suspended') {
         ctx.resume().catch(() => {});
@@ -794,7 +797,8 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       audioCtxRef.current = ctx;
       gainNodeRef.current = gain;
     } catch {
-      // Web Audio not available
+      // Web Audio not available — clean up partially created context
+      ctx?.close().catch(() => {});
     }
 
     return () => {
@@ -818,14 +822,15 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       return;
     }
 
+    let inputCtx: AudioContext | null = null;
     try {
-      const ctx = new AudioContext();
-      const source = ctx.createMediaStreamSource(localStream);
-      const gain = ctx.createGain();
+      inputCtx = new AudioContext();
+      const source = inputCtx.createMediaStreamSource(localStream);
+      const gain = inputCtx.createGain();
       gain.gain.value = inputVolume / 100;
 
       // Create a destination to pipe gained audio into a new MediaStream
-      const dest = ctx.createMediaStreamDestination();
+      const dest = inputCtx.createMediaStreamDestination();
       source.connect(gain);
       gain.connect(dest);
 
@@ -842,10 +847,11 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      inputAudioCtxRef.current = ctx;
+      inputAudioCtxRef.current = inputCtx;
       inputGainNodeRef.current = gain;
     } catch {
-      // Web Audio not available
+      // Web Audio not available — clean up partially created context
+      inputCtx?.close().catch(() => {});
     }
 
     return () => {

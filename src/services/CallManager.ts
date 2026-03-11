@@ -712,6 +712,11 @@ export class CallManager {
     }
     const offer = JSON.parse(offerSdp);
     await this.pc.setRemoteDescription(new RTCSessionDescription({ sdp: offer.sdp, type: offer.type }));
+    // Drain any pending ICE candidates now that remote description is set
+    for (const candidate of this.pendingCandidates) {
+      await this.pc.addIceCandidate(new RTCIceCandidate(candidate));
+    }
+    this.pendingCandidates = [];
     const answer = await this.pc.createAnswer();
     let answerSdpStr = answer.sdp ?? '';
     if (this._audioQuality !== 'pcm') {
@@ -769,12 +774,16 @@ export class CallManager {
     this._isScreenSharing = false;
 
     if (this.pc) {
-      const screenVideoTrack = stream.getVideoTracks()[0];
-      if (screenVideoTrack) {
-        const sender = this.pc.getSenders().find((s) => s.track === screenVideoTrack);
-        if (sender) {
-          this.pc.removeTrack(sender);
+      try {
+        const screenVideoTrack = stream.getVideoTracks()[0];
+        if (screenVideoTrack) {
+          const sender = this.pc.getSenders().find((s) => s.track === screenVideoTrack);
+          if (sender) {
+            this.pc.removeTrack(sender);
+          }
         }
+      } catch {
+        // PC may be closed — safe to ignore since we're stopping anyway
       }
     }
 
