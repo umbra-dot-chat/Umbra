@@ -7,13 +7,15 @@
  */
 
 import React, { useState, useMemo, useCallback } from 'react';
-import { View, ScrollView, Pressable, Text as RNText } from 'react-native';
+import { Pressable } from 'react-native';
 import {
   Dialog,
-  Button,
+  Box,
+  Text,
   HStack,
   VStack,
   Avatar,
+  ScrollArea,
   SearchInput,
   useTheme,
 } from '@coexist/wisp-react-native';
@@ -96,7 +98,7 @@ export function NewDmDialog({ open, onClose, onSelectFriend }: NewDmDialogProps)
           gradientBorder
         />
 
-        <View
+        <Box
           style={{
             maxHeight: 300,
             borderRadius: 8,
@@ -106,15 +108,15 @@ export function NewDmDialog({ open, onClose, onSelectFriend }: NewDmDialogProps)
           }}
         >
           {filteredFriends.length === 0 ? (
-            <View style={{ padding: 24, alignItems: 'center' }}>
-              <RNText style={{ fontSize: 13, color: tc.text.muted }}>
+            <Box style={{ padding: 24, alignItems: 'center' }}>
+              <Text size="sm" style={{ color: tc.text.muted }}>
                 {friends.length === 0
                   ? 'No friends yet. Add friends first!'
                   : 'No friends match your search.'}
-              </RNText>
-            </View>
+              </Text>
+            </Box>
           ) : (
-            <ScrollView>
+            <ScrollArea>
               {filteredFriends.map((friend) => {
                 const existingConvoId = existingDmMap[friend.did];
                 return (
@@ -137,30 +139,28 @@ export function NewDmDialog({ open, onClose, onSelectFriend }: NewDmDialogProps)
                     <HStack style={{ alignItems: 'center', gap: 10, flex: 1 }}>
                       <Avatar name={friend.displayName} size="sm" status={onlineDids.has(friend.did) ? 'online' : undefined} />
                       <VStack style={{ flex: 1 }}>
-                        <RNText
-                          style={{
-                            fontSize: 14,
-                            fontWeight: '500',
-                            color: tc.text.primary,
-                          }}
+                        <Text
+                          size="sm"
+                          weight="medium"
+                          style={{ color: tc.text.primary }}
                         >
                           {friend.displayName}
-                        </RNText>
-                        <RNText
+                        </Text>
+                        <Text
+                          size="xs"
                           style={{
-                            fontSize: 11,
                             color: tc.text.muted,
                             fontFamily: 'monospace',
                           }}
                           numberOfLines={1}
                         >
                           {friend.did.slice(0, 24)}...
-                        </RNText>
+                        </Text>
                       </VStack>
                     </HStack>
 
                     {existingConvoId && (
-                      <View
+                      <Box
                         style={{
                           flexDirection: 'row',
                           alignItems: 'center',
@@ -172,23 +172,21 @@ export function NewDmDialog({ open, onClose, onSelectFriend }: NewDmDialogProps)
                         }}
                       >
                         <CheckIcon size={10} color={tc.accent.primary} />
-                        <RNText
-                          style={{
-                            fontSize: 10,
-                            fontWeight: '600',
-                            color: tc.accent.primary,
-                          }}
+                        <Text
+                          size="xs"
+                          weight="semibold"
+                          style={{ color: tc.accent.primary }}
                         >
                           Already chatting
-                        </RNText>
-                      </View>
+                        </Text>
+                      </Box>
                     )}
                   </Pressable>
                 );
               })}
-            </ScrollView>
+            </ScrollArea>
           )}
-        </View>
+        </Box>
       </VStack>
     </Dialog>
   );
