@@ -1,0 +1,37 @@
+# QA Manual Agent Memory
+
+## Key Selectors
+- `[data-testid="chat.area.message.list"]` - ChatArea ScrollView (message list)
+- `[data-testid="main.container"]` - Main layout container (flex: 1, flexDirection: row)
+- `[data-testid="sidebar.conversation.item"]` - Conversation list item (click to enter chat)
+- `[data-testid="input.container"]` / `[data-testid="input.text"]` - Chat input
+- `[data-testid="chat.header"]` - Chat header bar
+- `[data-testid="chat.call.voice"]` / `[data-testid="chat.call.video"]` - Call buttons
+- Test IDs defined in `src/constants/test-ids.ts`
+
+## Layout Architecture
+- Main container: `flex: 1, flexDirection: 'row'` at `/Users/mattmattmattmatt/Development/Umbra/app/(main)/index.tsx` line 552
+- Inside: KeyboardAvoidingView `flex: 1, flexDirection: 'column'` wraps ChatHeader + ActiveCallPanel/ActiveCallBar + ChatArea
+- ActiveCallPanel renders only when `activeCall` is non-null and matches current conversation
+- ActiveCallPanel: `flex: 2, overflow: hidden, zIndex: 10` (line 45 of ActiveCallPanel.tsx)
+- ChatArea root is a ScrollView: `flex: 1, overflow: hidden` (line 474 of ChatArea.tsx)
+
+## Mobile Behavior
+- On mobile (375px), sidebar takes full width; chat panel has width: 0px when sidebar is visible
+- Clicking a conversation item navigates to chat view (full width)
+- Back button returns to conversation list
+- After page reload on mobile, view returns to conversation list (not chat)
+
+## Pre-existing Issues (not bugs from current changes)
+- `ChatArea.tsx` line 400: TS2551 error on `getInnerViewRef` (pre-existing, unrelated to flex/overflow changes)
+- Type errors in `__tests__/`, `app/(main)/friends.tsx`, `node_modules/`, `packages/umbra-test-bot/` are all pre-existing
+- `GET relay.umbra.chat/api/sync/...` returns 404 in dev (no relay server running)
+
+## Dev Server
+- Launch config: `.claude/launch.json` -> `expo-dev` on port 8083
+- Server name: `expo-dev`
+
+## Verification Patterns
+- ActiveCallPanel is conditionally rendered; cannot verify its computed styles without an active call
+- Verify source code directly for components that are conditionally rendered
+- On mobile, must click into conversation before inspecting chat area styles (width: 0 when hidden)
