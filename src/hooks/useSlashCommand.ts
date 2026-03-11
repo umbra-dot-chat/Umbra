@@ -158,8 +158,8 @@ export function useSlashCommand({
         : '';
 
       if (cmd.sendAsMessage) {
-        // Call onExecute with args if present (for local state changes)
-        if (cmd.onExecute && argsText) {
+        // Always call onExecute for local state changes (e.g. therapy session activation)
+        if (cmd.onExecute) {
           (cmd.onExecute as (args: string) => void)(argsText);
         }
         // Fill in the current text as-is (preserves args) and send it

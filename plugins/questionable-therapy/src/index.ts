@@ -94,6 +94,7 @@ export async function activate(pluginApi: PluginAPI): Promise<void> {
     label: 'Questionable Therapy',
     description: 'Start or stop a therapy session with Ghost',
     icon: '\uD83E\uDDD8',
+    sendAsMessage: true,
     getSuggestions: (partialArgs: string): SlashCommandSuggestion[] => {
       const q = partialArgs.toLowerCase().trim();
       if (!q) return suggestions;

@@ -687,7 +687,7 @@ export default function ChatPage() {
         onUploadFile={isDm && resolvedConversationId ? handleAttachment : undefined}
         panelContentWidth={panelContentWidth}
       />
-      {/* Plugin right-panel slot removed — plugins use popup overlays instead */}
+      <SlotRenderer slot="right-panel" props={{ conversationId: resolvedConversationId }} />
       <InputDialog
         open={sharedFolderDialogOpen}
         onClose={() => setSharedFolderDialogOpen(false)}
