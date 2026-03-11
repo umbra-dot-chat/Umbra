@@ -4,7 +4,8 @@ import { TEST_IDS } from '@/constants/test-ids';
 import {
   Avatar, Box, Button, ChatBubble, Text, TypingIndicator, NewMessageDivider, useTheme,
 } from '@coexist/wisp-react-native';
-import { SmileIcon, ReplyIcon, ThreadIcon, MoreIcon } from '@/components/ui';
+import { SmileIcon, ReplyIcon, ThreadIcon, MoreIcon, PhoneIcon, VideoIcon } from '@/components/ui';
+import { InlineEventCard } from '@/components/ui/InlineEventCard';
 import { HoverBubble } from './HoverBubble';
 import { MsgGroup } from './MsgGroup';
 import { InlineMsgGroup } from './InlineMsgGroup';
@@ -515,57 +516,43 @@ export function ChatArea({
         const showUnreadDivider = firstUnreadMessageId != null &&
           group.some((m) => m.id === firstUnreadMessageId);
 
-        // ── Call event: render as a centered system-style row ──
+        // ── Call event: render as an InlineEventCard ──
         if (isCallEventMessage(firstText)) {
           const parsed = parseCallEvent(firstText);
           const displayText = parsed
             ? formatCallEventDisplay(parsed.callType, parsed.status, parsed.duration)
             : firstText;
-          const icon = parsed?.callType === 'video' ? '\uD83D\uDCF9' : '\uD83D\uDCDE';
+          const isVideo = parsed?.callType === 'video';
+          const isMissed = parsed?.status === 'missed' || parsed?.status === 'declined';
+          const accentColor = isMissed ? themeColors.status.danger : themeColors.border.subtle;
+          const iconColor = isMissed ? themeColors.status.danger : themeColors.text.muted;
+          const callIcon = isVideo
+            ? <VideoIcon size={16} color={iconColor} />
+            : <PhoneIcon size={16} color={iconColor} />;
 
           return (
-            <Box
-              key={`group-${groupIdx}`}
-              style={{
-                alignItems: 'center',
-                paddingVertical: 6,
-              }}
-            >
+            <Box key={`group-${groupIdx}`} style={{ paddingVertical: 4 }}>
               {showUnreadDivider && (
                 <NewMessageDivider style={{ marginBottom: 8, alignSelf: 'stretch' }} />
               )}
-              <Box
-                style={{
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  gap: 6,
-                  paddingHorizontal: 12,
-                  paddingVertical: 4,
-                  borderRadius: 12,
-                  backgroundColor: themeColors.background.surface ?? themeColors.background.sunken,
-                }}
-              >
-                <Text size="xs">{icon}</Text>
-                <Text
-                  size="xs"
-                  weight="medium"
-                  style={{
-                    color: themeColors.text.muted,
-                  }}
-                >
-                  {displayText}
-                </Text>
-                <Text
-                  size="xs"
-                  style={{
-                    color: themeColors.text.muted,
-                    opacity: 0.7,
-                    marginLeft: 4,
-                  }}
-                >
-                  {timeStr}
-                </Text>
-              </Box>
+              <InlineEventCard
+                visible
+                accentColor={accentColor}
+                icon={callIcon}
+                title={displayText}
+                subtitle={timeStr}
+                actions={onCallBack ? (
+                  <Button
+                    variant="tertiary"
+                    size="xs"
+                    onPress={() => onCallBack(isVideo ? 'video' : 'voice')}
+                    testID="call.history-card.callback"
+                  >
+                    Call back
+                  </Button>
+                ) : undefined}
+                testID="call.history-card"
+              />
             </Box>
           );
         }
