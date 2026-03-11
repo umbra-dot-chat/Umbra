@@ -36,7 +36,7 @@ export interface LinkedAccountsPanelProps {
 
 export function LinkedAccountsPanel({ did, style }: LinkedAccountsPanelProps) {
   const { theme } = useTheme();
-  const textMuted = theme?.colors?.text?.muted ?? '#94a3b8';
+  const textMuted = theme.colors.text.muted;
 
   const {
     accounts,
