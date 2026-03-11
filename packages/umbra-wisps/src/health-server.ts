@@ -36,6 +36,18 @@ export function startHealthServer(
         json(res, result);
       } else if (req.method === 'GET' && url.pathname === '/wisps/scenarios') {
         json(res, { scenarios: orchestrator.getAvailableScenarios() });
+      } else if (req.method === 'POST' && url.pathname === '/wisps/summon') {
+        const body = await readBody(req);
+        const { userDid } = JSON.parse(body) as { userDid: string };
+        if (!userDid) {
+          res.writeHead(400);
+          res.end(JSON.stringify({ error: 'userDid required' }));
+          return;
+        }
+        await orchestrator.befriendUser(userDid);
+        const creator = orchestrator.getWisps()[0];
+        const groupId = await orchestrator.createGroup('Wisp Hangout', creator.name);
+        json(res, { ok: true, groupId });
       } else {
         res.writeHead(404);
         res.end('Not found');
