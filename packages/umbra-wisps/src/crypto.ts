@@ -75,78 +75,100 @@ export function decryptMessage(
 
 /**
  * Encrypt a raw key using ECDH shared secret (for group key exchange).
+ * Matches Rust umbra-core's decrypt_from_sender with group key parameters.
  */
 export function encryptGroupKey(
   groupKeyHex: string,
   myEncryptionPrivateKey: string,
   recipientEncryptionPublicKey: string,
+  groupId: string,
 ): { ciphertext: string; nonce: string } {
   const sharedSecret = x25519.getSharedSecret(
     hexToBytes(myEncryptionPrivateKey),
     hexToBytes(recipientEncryptionPublicKey),
   );
-  const salt = new TextEncoder().encode('umbra-group-key-exchange');
-  const aesKey = hkdf(sha256, sharedSecret, salt, 'umbra-group-key-v1', 32);
+  // Must match Rust: HKDF salt = groupId bytes, info = 'umbra-message-encryption-v1'
+  const salt = new TextEncoder().encode(groupId);
+  const aesKey = hkdf(sha256, sharedSecret, salt, 'umbra-message-encryption-v1', 32);
   const nonce = randomBytes(12);
-  const cipher = gcm(aesKey, nonce);
+  // Must match Rust: AAD = "group-key-transfer:{groupId}:1"
+  const aad = new TextEncoder().encode(`group-key-transfer:${groupId}:1`);
+  const cipher = gcm(aesKey, nonce, aad);
   const ciphertextBytes = cipher.encrypt(hexToBytes(groupKeyHex));
   return {
-    ciphertext: Buffer.from(ciphertextBytes).toString('base64'),
+    ciphertext: bytesToHex(ciphertextBytes),  // Hex, not base64 (Rust expects hex)
     nonce: bytesToHex(nonce),
   };
 }
 
 /**
  * Decrypt a raw key using ECDH shared secret (for group key exchange).
+ * Matches Rust umbra-core's encrypt_for_recipient with group key parameters.
  */
 export function decryptGroupKey(
-  ciphertextBase64: string,
+  ciphertextHex: string,
   nonceHex: string,
   myEncryptionPrivateKey: string,
   senderEncryptionPublicKey: string,
+  groupId: string,
 ): string {
   const sharedSecret = x25519.getSharedSecret(
     hexToBytes(myEncryptionPrivateKey),
     hexToBytes(senderEncryptionPublicKey),
   );
-  const salt = new TextEncoder().encode('umbra-group-key-exchange');
-  const aesKey = hkdf(sha256, sharedSecret, salt, 'umbra-group-key-v1', 32);
+  // Must match Rust: HKDF salt = groupId bytes, info = 'umbra-message-encryption-v1'
+  const salt = new TextEncoder().encode(groupId);
+  const aesKey = hkdf(sha256, sharedSecret, salt, 'umbra-message-encryption-v1', 32);
   const nonce = hexToBytes(nonceHex);
-  const ciphertext = Buffer.from(ciphertextBase64, 'base64');
-  const cipher = gcm(aesKey, nonce);
+  const ciphertext = hexToBytes(ciphertextHex);  // Hex, not base64
+  // Must match Rust: AAD = "group-key-transfer:{groupId}:1"
+  const aad = new TextEncoder().encode(`group-key-transfer:${groupId}:1`);
+  const cipher = gcm(aesKey, nonce, aad);
   const plaintext = cipher.decrypt(new Uint8Array(ciphertext));
   return bytesToHex(plaintext);
 }
 
 /**
  * Encrypt a message using a symmetric AES-256-GCM key (for group messages).
+ * Matches Rust umbra-core's group message encryption format.
  */
 export function encryptGroupMessage(
   plaintext: string,
   groupKeyHex: string,
+  groupId: string,
+  senderDid: string,
+  timestamp: number,
 ): { ciphertext: string; nonce: string } {
   const key = hexToBytes(groupKeyHex);
   const nonce = randomBytes(12);
-  const cipher = gcm(key, nonce);
+  // Must match Rust: AAD = "group-msg:{group_id}:{sender_did}:{timestamp}"
+  const aad = new TextEncoder().encode(`group-msg:${groupId}:${senderDid}:${timestamp}`);
+  const cipher = gcm(key, nonce, aad);
   const ciphertextBytes = cipher.encrypt(new TextEncoder().encode(plaintext));
   return {
-    ciphertext: Buffer.from(ciphertextBytes).toString('base64'),
+    ciphertext: bytesToHex(ciphertextBytes),  // Hex (Rust expects hex)
     nonce: bytesToHex(nonce),
   };
 }
 
 /**
  * Decrypt a message using a symmetric AES-256-GCM key (for group messages).
+ * Matches Rust umbra-core's group message decryption format.
  */
 export function decryptGroupMessage(
-  ciphertextBase64: string,
+  ciphertextHex: string,
   nonceHex: string,
   groupKeyHex: string,
+  groupId: string,
+  senderDid: string,
+  timestamp: number,
 ): string {
   const key = hexToBytes(groupKeyHex);
   const nonce = hexToBytes(nonceHex);
-  const ciphertext = Buffer.from(ciphertextBase64, 'base64');
-  const cipher = gcm(key, nonce);
+  const ciphertext = hexToBytes(ciphertextHex);  // Hex, not base64
+  // Must match Rust: AAD = "group-msg:{group_id}:{sender_did}:{timestamp}"
+  const aad = new TextEncoder().encode(`group-msg:${groupId}:${senderDid}:${timestamp}`);
+  const cipher = gcm(key, nonce, aad);
   const plaintext = cipher.decrypt(new Uint8Array(ciphertext));
   return new TextDecoder().decode(plaintext);
 }

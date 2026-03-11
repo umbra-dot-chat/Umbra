@@ -175,16 +175,26 @@ export class Wisp {
   sendGroupMessage(groupId: string, text: string): void {
     const group = this.groups.get(groupId);
     if (!group) return;
-    const { ciphertext, nonce } = encryptGroupMessage(text, group.groupKey);
+    const timestamp = Date.now();
+    const { ciphertext, nonce } = encryptGroupMessage(
+      text, group.groupKey, groupId, this.identity.did, timestamp,
+    );
+    const msgId = uuid();
     for (const member of group.members) {
       if (member.did === this.identity.did) continue;
       this.relay.sendEnvelope(member.did, {
         envelope: 'group_message', version: 1,
         payload: {
-          id: uuid(), groupId, conversationId: group.conversationId,
-          from: this.identity.did,
-          senderDisplayName: this.persona.name,
-          timestamp: Date.now(), ciphertext, nonce,
+          // camelCase fields for GroupMessagePayload type in the app
+          messageId: msgId,
+          groupId,
+          conversationId: group.conversationId,
+          senderDid: this.identity.did,
+          senderName: this.persona.name,
+          ciphertext,  // Already hex from updated crypto
+          nonce,
+          keyVersion: 1,
+          timestamp,
         },
       });
     }
@@ -351,6 +361,7 @@ export class Wisp {
       const groupKey = decryptGroupKey(
         p.encryptedGroupKey, p.nonce,
         this.identity.encryptionPrivateKey, inviter.encryptionKey,
+        p.groupId,
       );
       const members = JSON.parse(p.membersJson) as { did: string; displayName: string }[];
       this.groups.set(p.groupId, {
@@ -374,17 +385,20 @@ export class Wisp {
   }
 
   private handleGroupMessage(p: {
-    id: string; groupId: string; from: string;
-    senderDisplayName: string; ciphertext: string; nonce: string;
+    messageId: string; groupId: string; senderDid: string;
+    senderName: string; ciphertext: string; nonce: string; timestamp: number;
   }): void {
     const group = this.groups.get(p.groupId);
     if (!group) return;
     try {
-      const plaintext = decryptGroupMessage(p.ciphertext, p.nonce, group.groupKey);
-      console.log(`[${this.persona.name}] Group "${group.groupName}" from ${p.senderDisplayName}: ${plaintext.slice(0, 50)}...`);
-      this.appendHistory(group.conversationId, 'user', `${p.senderDisplayName}: ${plaintext}`);
+      const plaintext = decryptGroupMessage(
+        p.ciphertext, p.nonce, group.groupKey,
+        p.groupId, p.senderDid, p.timestamp,
+      );
+      console.log(`[${this.persona.name}] Group "${group.groupName}" from ${p.senderName}: ${plaintext.slice(0, 50)}...`);
+      this.appendHistory(group.conversationId, 'user', `${p.senderName}: ${plaintext}`);
       // Notify orchestrator for group response coordination
-      this.onGroupMessage?.(p.from, p.senderDisplayName, plaintext, p.groupId);
+      this.onGroupMessage?.(p.senderDid, p.senderName, plaintext, p.groupId);
     } catch (err) {
       console.warn(`[${this.persona.name}] Failed to decrypt group message:`, err);
     }

@@ -716,9 +716,11 @@ export class UmbraService {
     groupId: string,
     ciphertext: string,
     nonce: string,
-    keyVersion: number
+    keyVersion: number,
+    senderDid: string,
+    timestamp: number,
   ): Promise<string> {
-    return groups.decryptGroupMessage(groupId, ciphertext, nonce, keyVersion);
+    return groups.decryptGroupMessage(groupId, ciphertext, nonce, keyVersion, senderDid, timestamp);
   }
 
   sendGroupInvite(groupId: string, memberDid: string, relayWs?: WebSocket | null): Promise<void> {

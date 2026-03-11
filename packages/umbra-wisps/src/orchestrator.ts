@@ -176,7 +176,7 @@ export class WispOrchestrator {
       const friend = creator.getFriend(wisp.did);
       if (!friend) continue;
       const { ciphertext, nonce } = encryptGroupKey(
-        groupKeyHex, creator.identity.encryptionPrivateKey, friend.encryptionKey,
+        groupKeyHex, creator.identity.encryptionPrivateKey, friend.encryptionKey, groupId,
       );
       creator.sendRawEnvelope(wisp.did, {
         envelope: 'group_invite', version: 1,
@@ -195,7 +195,7 @@ export class WispOrchestrator {
       const userFriend = creator.getFriend(userDid);
       if (userFriend) {
         const { ciphertext, nonce } = encryptGroupKey(
-          groupKeyHex, creator.identity.encryptionPrivateKey, userFriend.encryptionKey,
+          groupKeyHex, creator.identity.encryptionPrivateKey, userFriend.encryptionKey, groupId,
         );
         creator.sendRawEnvelope(userDid, {
           envelope: 'group_invite', version: 1,

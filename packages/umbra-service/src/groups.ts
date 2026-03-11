@@ -212,19 +212,25 @@ export async function encryptGroupMessage(
  * @param ciphertext - Hex-encoded ciphertext
  * @param nonce - Hex-encoded nonce
  * @param keyVersion - Key version that was used for encryption
+ * @param senderDid - Sender's DID (required for AAD)
+ * @param timestamp - Message timestamp (required for AAD)
  * @returns Decrypted plaintext
  */
 export async function decryptGroupMessage(
   groupId: string,
   ciphertext: string,
   nonce: string,
-  keyVersion: number
+  keyVersion: number,
+  senderDid: string,
+  timestamp: number,
 ): Promise<string> {
   const json = JSON.stringify({
     group_id: groupId,
-    ciphertext,
-    nonce,
+    ciphertext_hex: ciphertext,
+    nonce_hex: nonce,
     key_version: keyVersion,
+    sender_did: senderDid,
+    timestamp,
   });
   const resultJson = wasm().umbra_wasm_groups_decrypt_message(json);
   return await parseWasm<string>(resultJson);
