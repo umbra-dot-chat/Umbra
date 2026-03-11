@@ -22,8 +22,6 @@ export interface JustifiedVideoGridProps {
   speakingDids: Set<string>;
   gap?: number;
   aspectRatio?: number;
-  /** Maximum height the grid can occupy (from parent panel constraint). */
-  maxHeight?: number;
 }
 
 // ─── Layout Algorithm ───────────────────────────────────────────────────────
@@ -35,7 +33,7 @@ interface GridLayout {
   tileH: number;
 }
 
-function computeLayout(
+export function computeLayout(
   containerW: number,
   containerH: number,
   count: number,
@@ -118,10 +116,9 @@ export function JustifiedVideoGrid({
   speakingDids,
   gap = 8,
   aspectRatio = 16 / 9,
-  maxHeight: parentMaxHeight,
 }: JustifiedVideoGridProps) {
   const { theme } = useTheme();
-  const [containerWidth, setContainerWidth] = useState(0);
+  const [containerSize, setContainerSize] = useState({ w: 0, h: 0 });
   const { fullscreenDid, enterFullscreen, exitFullscreen } = useFullscreen();
 
   // Inject CSS on mount
@@ -150,8 +147,8 @@ export function JustifiedVideoGrid({
   }, [fullscreenDid, enterFullscreen, exitFullscreen]);
 
   const handleLayout = useCallback((e: LayoutChangeEvent) => {
-    const { width } = e.nativeEvent.layout;
-    setContainerWidth(width);
+    const { width, height } = e.nativeEvent.layout;
+    setContainerSize({ w: width, h: height });
   }, []);
 
   // Build tile list: remote participants first, self-view last
@@ -170,39 +167,29 @@ export function JustifiedVideoGrid({
   // 1:1 layout: equal side-by-side for all 2-participant calls
   const isAdaptive1v1 = count === 2;
 
-  // Compute tile dimensions from the available width.
-  // Use the parent's maxHeight as a height constraint so computeLayout
-  // can pick a layout that fits. Falls back to a large value if unknown.
-  const layout = useMemo(() => {
-    if (containerWidth === 0 || count === 0) return null;
-    const maxH = parentMaxHeight ?? 10000;
-    return computeLayout(containerWidth, maxH, count, aspectRatio, gap);
-  }, [containerWidth, count, aspectRatio, gap, parentMaxHeight]);
+  // Outer padding: a bit more horizontal space, minimal extra vertical
+  const padH = 16;
+  const padV = 10;
 
-  // Compute the content height: rows * tileH + gaps + padding
-  const contentHeight = useMemo(() => {
-    if (!layout) return undefined;
-    let tileH = layout.tileH;
-    if (isAdaptive1v1 && containerWidth > 0) {
-      const tileW = (containerWidth - gap * 3) / 2;
-      tileH = tileW / aspectRatio;
+  const layout = useMemo(() => {
+    if (containerSize.w === 0 || containerSize.h === 0 || count === 0) {
+      return null;
     }
-    return layout.rows * tileH + gap * (layout.rows + 1);
-  }, [layout, isAdaptive1v1, containerWidth, gap, aspectRatio]);
+    // Subtract extra outer padding from container before layout calc
+    // (computeLayout already accounts for gap-sized padding on each side)
+    const extraH = (padH - gap) * 2;
+    const extraV = (padV - gap) * 2;
+    return computeLayout(containerSize.w - extraH, containerSize.h - extraV, count, aspectRatio, gap);
+  }, [containerSize.w, containerSize.h, count, aspectRatio, gap]);
 
   // Find the fullscreen participant (if set)
   const fullscreenParticipant = fullscreenDid
     ? tiles.find((t) => t.did === fullscreenDid)
     : null;
 
-  // Use flex:1 to fill parent (allows onLayout measurement), then cap with
-  // maxHeight once we know the content height so the grid doesn't waste space.
   const containerStyle: ViewStyle = {
     flex: 1,
     backgroundColor: '#000000',
-    ...(contentHeight !== undefined && !fullscreenParticipant
-      ? { maxHeight: contentHeight }
-      : {}),
   };
 
   const gridStyle: ViewStyle = {
@@ -213,7 +200,8 @@ export function JustifiedVideoGrid({
     alignItems: 'center',
     alignContent: 'center',
     gap,
-    padding: gap,
+    paddingHorizontal: padH,
+    paddingVertical: padV,
   };
 
   return (
@@ -268,7 +256,7 @@ export function JustifiedVideoGrid({
         </Pressable>
       ) : (
         /* Normal grid mode */
-        layout && containerWidth > 0 && (
+        layout && containerSize.w > 0 && (
           <View nativeID="video-grid" style={gridStyle}>
             {tiles.map((participant) => {
               const isLocal = participant.did === localDid;
@@ -278,7 +266,7 @@ export function JustifiedVideoGrid({
               let tileWidth = layout.tileW;
               let tileHeight = layout.tileH;
               if (isAdaptive1v1) {
-                tileWidth = (containerWidth - gap * 3) / 2;
+                tileWidth = (containerSize.w - padH * 2 - gap) / 2;
                 tileHeight = tileWidth / aspectRatio;
               }
 

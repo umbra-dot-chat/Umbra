@@ -9,7 +9,7 @@ import { View, Pressable, Platform, useWindowDimensions } from 'react-native';
 import { Text, SegmentedControl, VideoTile, useTheme } from '@coexist/wisp-react-native';
 import { SlotRenderer } from '@/components/plugins/SlotRenderer';
 import { CallStatsOverlay, type GhostMetadata } from '@/components/call/CallStatsOverlay';
-import { JustifiedVideoGrid } from '@/components/call/JustifiedVideoGrid';
+import { JustifiedVideoGrid, computeLayout } from '@/components/call/JustifiedVideoGrid';
 import { CallControlsOverlay } from '@/components/call/CallControlsOverlay';
 import { VoiceAvatarCard } from '@/components/call/VoiceAvatarCard';
 import { useSpeakerDetection } from '@/hooks/useSpeakerDetection';
@@ -56,7 +56,7 @@ export function ActiveCallPanel({
 }: ActiveCallPanelProps) {
   const { theme } = useTheme();
   const isMobile = useIsMobile();
-  const { height: windowHeight } = useWindowDimensions();
+  const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const maxHeight = Math.round(windowHeight * (isMobile ? 0.30 : 0.55));
 
   const { statsOverlay } = useDeveloperSettings();
@@ -92,10 +92,54 @@ export function ActiveCallPanel({
     { value: 'participants', label: 'Participants' },
   ], []);
 
+  // Count visible tiles (matching JustifiedVideoGrid's logic)
+  const tileCount = useMemo(() => {
+    const remote = participantList.filter((p) => p.did !== localDid);
+    const local = participantList.find((p) => p.did === localDid);
+    let count = remote.length;
+    if (activeCall.selfViewVisible && local) count += 1;
+    return count;
+  }, [participantList, localDid, activeCall.selfViewVisible]);
+
+  // Height for the always-visible controls bar below the video area
+  const CONTROLS_BAR_HEIGHT = 52;
+
+  // Compute the panel height to fit video tiles + controls bar.
+  // For video grid mode, we estimate content height using computeLayout
+  // so the panel only takes the space the tiles need, capped at maxHeight.
+  // For screen-share or voice-only modes, use the full maxHeight.
+  const panelHeight = useMemo(() => {
+    if (!showingVideoGrid || tileCount === 0) return maxHeight;
+
+    const gap = 8; // Must match JustifiedVideoGrid default gap
+    const ar = 16 / 9; // Must match JustifiedVideoGrid default aspectRatio
+    const padH = 16; // Must match JustifiedVideoGrid padH
+    const padV = 10; // Must match JustifiedVideoGrid padV
+    const isAdaptive1v1 = tileCount === 2;
+
+    const estimatedWidth = windowWidth;
+
+    // Adjust for extra padding beyond gap (same logic as JustifiedVideoGrid)
+    const extraH = (padH - gap) * 2;
+    const extraV = (padV - gap) * 2;
+    const maxVideoH = maxHeight - CONTROLS_BAR_HEIGHT;
+    const layout = computeLayout(estimatedWidth - extraH, maxVideoH - extraV, tileCount, ar, gap);
+
+    let tileH = layout.tileH;
+    if (isAdaptive1v1) {
+      const tileW = (estimatedWidth - padH * 2 - gap) / 2;
+      tileH = tileW / ar;
+    }
+
+    // Content height = rows of tiles + inter-tile gaps + outer padding
+    const contentH = layout.rows * tileH + gap * (layout.rows - 1) + padV * 2;
+    return Math.round(Math.max(Math.min(contentH + CONTROLS_BAR_HEIGHT, maxHeight), 120));
+  }, [showingVideoGrid, tileCount, windowWidth, maxHeight]);
+
   return (
     <View
       style={{
-        maxHeight,
+        height: panelHeight,
         overflow: 'hidden',
         position: 'relative',
         zIndex: 10,
@@ -104,14 +148,8 @@ export function ActiveCallPanel({
     >
       <SlotRenderer slot="voice-call-header" />
 
-      {/* Main call area — position:relative anchors the absolute overlays.
-           When showing the video grid, let the grid's computed height drive
-           the wrapper size (no flex:1). For screen-share and voice-only modes,
-           use flex:1 so content can expand into the maxHeight. */}
-      <View style={{
-        ...(showingVideoGrid ? { flexShrink: 1 } : { flex: 1 }),
-        position: 'relative',
-      }}>
+      {/* Main call area */}
+      <View style={{ flex: 1, position: 'relative' }}>
         {/* Screen share tab bar */}
         {anyScreenSharing && hasVideo && (
           <View style={{ paddingHorizontal: 12, paddingTop: 8, zIndex: 20 }} accessibilityRole="tablist" accessibilityLabel="Screen share view">
@@ -145,7 +183,6 @@ export function ActiveCallPanel({
               localDid={localDid}
               activeSpeakerDid={activeSpeakerDid}
               speakingDids={speakingDids}
-              maxHeight={maxHeight}
             />
           )
         ) : (
@@ -173,19 +210,6 @@ export function ActiveCallPanel({
             ))}
           </View>
         )}
-
-        {/* Controls overlay */}
-        <CallControlsOverlay
-          isMuted={activeCall.isMuted}
-          isDeafened={activeCall.isDeafened}
-          isCameraOff={activeCall.isCameraOff}
-          isScreenSharing={isScreenSharing}
-          onToggleMute={onToggleMute}
-          onToggleDeafen={onToggleDeafen}
-          onToggleCamera={onToggleCamera}
-          onToggleScreenShare={onToggleScreenShare}
-          onEndCall={onEndCall}
-        />
 
         {/* Stats overlay */}
         <CallStatsOverlay
@@ -223,6 +247,19 @@ export function ActiveCallPanel({
           </Text>
         </Pressable>
       </View>
+
+      {/* Controls bar — always visible, below the video area */}
+      <CallControlsOverlay
+        isMuted={activeCall.isMuted}
+        isDeafened={activeCall.isDeafened}
+        isCameraOff={activeCall.isCameraOff}
+        isScreenSharing={isScreenSharing}
+        onToggleMute={onToggleMute}
+        onToggleDeafen={onToggleDeafen}
+        onToggleCamera={onToggleCamera}
+        onToggleScreenShare={onToggleScreenShare}
+        onEndCall={onEndCall}
+      />
 
       {/* Plugin overlay slot */}
       <SlotRenderer

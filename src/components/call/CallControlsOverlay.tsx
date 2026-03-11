@@ -1,19 +1,15 @@
 /**
- * CallControlsOverlay — Floating call controls that auto-hide after idle.
+ * CallControlsOverlay — Always-visible call controls bar.
  *
- * On desktop/web: fades out after 3 seconds of no mouse movement, reappears
- * on hover. On mobile: always visible (no auto-hide).
- * Buttons render without a container/pill for a minimal look.
+ * Renders as a static row below the video grid (not an auto-hiding overlay).
  * Uses forced dark styling (white icons, gray backgrounds) for the
  * always-black call screen.
  */
 
-import React, { useRef, useEffect, useCallback, useState } from 'react';
-import { View, Animated, Platform } from 'react-native';
+import React, { useEffect } from 'react';
+import { View, Platform } from 'react-native';
 import type { ViewStyle } from 'react-native';
-import { CallControls, useTheme } from '@coexist/wisp-react-native';
-import { useIsMobile } from '@/hooks/useIsMobile';
-import { useAppTheme } from '@/contexts/ThemeContext';
+import { CallControls } from '@coexist/wisp-react-native';
 
 // ─── Props ──────────────────────────────────────────────────────────────────
 
@@ -29,13 +25,9 @@ export interface CallControlsOverlayProps {
   onEndCall: () => void;
 }
 
-// ─── Constants ──────────────────────────────────────────────────────────────
+// ─── CSS ────────────────────────────────────────────────────────────────────
 
-const AUTO_HIDE_DELAY = 3000;
-const FADE_DURATION = 200;
 const CSS_ID = 'call-controls-overlay-css';
-
-// ─── Web CSS overrides ──────────────────────────────────────────────────────
 
 /**
  * Inject CSS to force dark-on-black button styling for the call controls.
@@ -79,128 +71,38 @@ export function CallControlsOverlay({
   onToggleScreenShare,
   onEndCall,
 }: CallControlsOverlayProps) {
-  const isMobile = useIsMobile();
-  const { theme } = useTheme();
-  const { motionPreferences } = useAppTheme();
-  const reduceMotion = motionPreferences.reduceMotion;
-
-  const opacity = useRef(new Animated.Value(1)).current;
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [pointerEvents, setPointerEvents] = useState<'auto' | 'none'>('auto');
-
   // Inject CSS overrides on mount (web only)
   useEffect(() => {
     injectCallControlsCSS();
   }, []);
 
-  const fadeOut = useCallback(() => {
-    if (isMobile) return;
-    const duration = reduceMotion ? 0 : FADE_DURATION;
-    Animated.timing(opacity, {
-      toValue: 0,
-      duration,
-      useNativeDriver: true,
-    }).start(() => {
-      setPointerEvents('none');
-    });
-  }, [isMobile, opacity, reduceMotion]);
-
-  const fadeIn = useCallback(() => {
-    if (isMobile) return;
-    setPointerEvents('auto');
-    const duration = reduceMotion ? 0 : FADE_DURATION;
-    Animated.timing(opacity, {
-      toValue: 1,
-      duration,
-      useNativeDriver: true,
-    }).start();
-  }, [isMobile, opacity, reduceMotion]);
-
-  const resetTimer = useCallback(() => {
-    if (isMobile) return;
-    if (timerRef.current) clearTimeout(timerRef.current);
-    fadeIn();
-    timerRef.current = setTimeout(fadeOut, AUTO_HIDE_DELAY);
-  }, [isMobile, fadeIn, fadeOut]);
-
-  // Start the auto-hide timer on mount (desktop only)
-  useEffect(() => {
-    if (isMobile) return;
-    timerRef.current = setTimeout(fadeOut, AUTO_HIDE_DELAY);
-    return () => {
-      if (timerRef.current) clearTimeout(timerRef.current);
-    };
-  }, [isMobile, fadeOut]);
-
-  // Attach mousemove listener on web to detect activity
-  useEffect(() => {
-    if (Platform.OS !== 'web' || isMobile) return;
-    const handler = () => resetTimer();
-    window.addEventListener('mousemove', handler);
-    return () => window.removeEventListener('mousemove', handler);
-  }, [isMobile, resetTimer]);
-
-  // ── Styles ──────────────────────────────────────────────────────────────
-
-  const wrapperStyle: ViewStyle = {
-    position: 'absolute',
-    bottom: 16,
-    left: 0,
-    right: 0,
+  const barStyle: ViewStyle = {
     alignItems: 'center',
-    zIndex: 50,
-  };
-
-  const controlsContainerStyle: ViewStyle = {
+    justifyContent: 'center',
+    paddingVertical: 8,
     paddingHorizontal: 8,
-    paddingVertical: 4,
   };
-
-  // On mobile, render without animation wrapper
-  if (isMobile) {
-    return (
-      <View nativeID="call-controls-overlay" style={wrapperStyle} accessibilityRole="toolbar" accessibilityLabel="Call controls">
-        <View style={controlsContainerStyle}>
-          <CallControls
-            isMuted={isMuted}
-            isVideoOff={isCameraOff}
-            isScreenSharing={isScreenSharing}
-            isSpeakerOn={!isDeafened}
-            onToggleMute={onToggleMute}
-            onToggleVideo={onToggleCamera}
-            onToggleScreenShare={onToggleScreenShare}
-            onToggleSpeaker={onToggleDeafen}
-            onEndCall={onEndCall}
-            callType="video"
-            layout="compact"
-          />
-        </View>
-      </View>
-    );
-  }
 
   return (
-    <Animated.View
-      style={[wrapperStyle, { opacity }]}
-      pointerEvents={pointerEvents}
+    <View
+      nativeID="call-controls-overlay"
+      style={barStyle}
       accessibilityRole="toolbar"
       accessibilityLabel="Call controls"
     >
-      <View nativeID="call-controls-overlay" style={controlsContainerStyle}>
-        <CallControls
-          isMuted={isMuted}
-          isVideoOff={isCameraOff}
-          isScreenSharing={isScreenSharing}
-          isSpeakerOn
-          onToggleMute={onToggleMute}
-          onToggleVideo={onToggleCamera}
-          onToggleScreenShare={onToggleScreenShare}
-          onToggleSpeaker={() => {}}
-          onEndCall={onEndCall}
-          callType="video"
-          layout="compact"
-        />
-      </View>
-    </Animated.View>
+      <CallControls
+        isMuted={isMuted}
+        isVideoOff={isCameraOff}
+        isScreenSharing={isScreenSharing}
+        isSpeakerOn={!isDeafened}
+        onToggleMute={onToggleMute}
+        onToggleVideo={onToggleCamera}
+        onToggleScreenShare={onToggleScreenShare}
+        onToggleSpeaker={onToggleDeafen}
+        onEndCall={onEndCall}
+        callType="video"
+        layout="compact"
+      />
+    </View>
   );
 }
