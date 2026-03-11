@@ -10,6 +10,7 @@ import { WispLLMClient } from './llm-client.js';
 import { loadOrCreateWispIdentity } from './identity-store.js';
 import { DEFAULT_PERSONAS, type WispPersona } from './personas.js';
 import { ConversationLoop } from './conversation-loop.js';
+import { maybeReact } from './reactions.js';
 
 const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
 
@@ -60,6 +61,9 @@ export class WispOrchestrator {
   async spawnWisp(persona: WispPersona, allNames: string[]): Promise<Wisp> {
     const identity = loadOrCreateWispIdentity(this.config.dataDir, persona.name);
     const wisp = new Wisp(identity, persona, this.config.relayUrl, this.llm, allNames);
+    wisp.onUserMessage = (senderDid, messageId) => {
+      maybeReact(this.getWisps(), senderDid, messageId);
+    };
     await wisp.start();
     this.wisps.set(persona.name, wisp);
     return wisp;
