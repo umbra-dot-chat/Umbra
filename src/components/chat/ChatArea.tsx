@@ -204,14 +204,19 @@ function parseCallEvent(text: string): { callType: string; status: string; durat
  * Format a parsed call event into a user-friendly display string.
  *
  * Examples:
- *   "Voice call — 3:02"          (completed, < 1 hour)
- *   "Video call — 1:23:45"       (completed, >= 1 hour)
+ *   "Voice call started"         (started)
+ *   "Voice call ended — 3:02"    (completed, < 1 hour)
+ *   "Video call ended — 1:23:45" (completed, >= 1 hour)
  *   "Missed voice call"          (missed)
  *   "Declined video call"        (declined)
  *   "Cancelled voice call"       (cancelled)
  */
 function formatCallEventDisplay(callType: string, status: string, duration: number): string {
-  const label = callType === 'video' ? 'video call' : 'voice call';
+  const label = callType === 'video' ? 'Video call' : 'Voice call';
+
+  if (status === 'started') {
+    return `${label} started`;
+  }
 
   if (status === 'completed' && duration > 0) {
     const hrs = Math.floor(duration / 3600);
@@ -221,18 +226,20 @@ function formatCallEventDisplay(callType: string, status: string, duration: numb
       hrs > 0
         ? `${hrs}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
         : `${mins}:${String(secs).padStart(2, '0')}`;
-    return `${label.charAt(0).toUpperCase() + label.slice(1)} \u2014 ${timePart}`;
+    return `${label} ended \u2014 ${timePart}`;
   }
 
   switch (status) {
+    case 'completed':
+      return `${label} ended`;
     case 'missed':
-      return `Missed ${label}`;
+      return `Missed ${label.toLowerCase()}`;
     case 'declined':
-      return `Declined ${label}`;
+      return `Declined ${label.toLowerCase()}`;
     case 'cancelled':
-      return `Cancelled ${label}`;
+      return `Cancelled ${label.toLowerCase()}`;
     default:
-      return `${label.charAt(0).toUpperCase() + label.slice(1)}`;
+      return label;
   }
 }
 
@@ -523,36 +530,49 @@ export function ChatArea({
             ? formatCallEventDisplay(parsed.callType, parsed.status, parsed.duration)
             : firstText;
           const isVideo = parsed?.callType === 'video';
+          const isStarted = parsed?.status === 'started';
           const isMissed = parsed?.status === 'missed' || parsed?.status === 'declined';
-          const accentColor = isMissed ? themeColors.status.danger : themeColors.border.subtle;
-          const iconColor = isMissed ? themeColors.status.danger : themeColors.text.muted;
+          const accentColor = isMissed
+            ? themeColors.status.danger
+            : isStarted
+              ? themeColors.status.success
+              : themeColors.border.subtle;
+          const iconColor = isMissed
+            ? themeColors.status.danger
+            : isStarted
+              ? themeColors.status.success
+              : themeColors.text.muted;
           const callIcon = isVideo
             ? <VideoIcon size={16} color={iconColor} />
             : <PhoneIcon size={16} color={iconColor} />;
+          // "Call back" only on ended events, not started
+          const showCallBack = onCallBack && !isStarted;
 
           return (
-            <Box key={`group-${groupIdx}`} style={{ paddingVertical: 4 }}>
+            <Box key={`group-${groupIdx}`} style={{ paddingVertical: 4, alignItems: 'center' }}>
               {showUnreadDivider && (
                 <NewMessageDivider style={{ marginBottom: 8, alignSelf: 'stretch' }} />
               )}
-              <InlineEventCard
-                visible
-                accentColor={accentColor}
-                icon={callIcon}
-                title={displayText}
-                subtitle={timeStr}
-                actions={onCallBack ? (
-                  <Button
-                    variant="tertiary"
-                    size="xs"
-                    onPress={() => onCallBack(isVideo ? 'video' : 'voice')}
-                    testID="call.history-card.callback"
-                  >
-                    Call back
-                  </Button>
-                ) : undefined}
-                testID="call.history-card"
-              />
+              <Box style={{ maxWidth: 380, width: '100%' }}>
+                <InlineEventCard
+                  visible
+                  accentColor={accentColor}
+                  icon={callIcon}
+                  title={displayText}
+                  subtitle={timeStr}
+                  actions={showCallBack ? (
+                    <Button
+                      variant="tertiary"
+                      size="xs"
+                      onPress={() => onCallBack(isVideo ? 'video' : 'voice')}
+                      testID="call.history-card.callback"
+                    >
+                      Call back
+                    </Button>
+                  ) : undefined}
+                  testID="call.history-card"
+                />
+              </Box>
             </Box>
           );
         }
@@ -773,12 +793,16 @@ export function ChatArea({
 
       {/* Active call card — rendered at the bottom of the message stream */}
       {activeCall && (
-        <InlineCallCardMessage
-          activeCall={activeCall}
-          isGroup={isGroupCall}
-          onAccept={onAcceptCall}
-          onEnd={onEndCall}
-        />
+        <Box style={{ alignItems: 'center' }}>
+          <Box style={{ maxWidth: 380, width: '100%' }}>
+            <InlineCallCardMessage
+              activeCall={activeCall}
+              isGroup={isGroupCall}
+              onAccept={onAcceptCall}
+              onEnd={onEndCall}
+            />
+          </Box>
+        </Box>
       )}
 
       {/* Typing indicator */}

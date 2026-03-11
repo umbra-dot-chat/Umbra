@@ -1302,10 +1302,18 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
 
     if (status === 'connected' && prevStatus !== 'connected') {
       playSound('call_join');
+      // Send a "call started" event message into the chat
+      if (activeCall && service) {
+        const startText = `[call:${activeCall.callType}:started:0]`;
+        const relayWs = service.getRelayWs();
+        service.sendMessage(activeCall.conversationId, startText, relayWs)
+          .then((msg) => service.dispatchMessageEvent({ type: 'messageSent', message: msg }))
+          .catch((err) => console.warn('[CallContext] Failed to send call-started event:', err));
+      }
     } else if (status === 'incoming' && prevStatus !== 'incoming') {
       playSound('call_ringing');
     }
-  }, [activeCall?.status, playSound]);
+  }, [activeCall?.status, activeCall, service, playSound]);
 
   // ── Context Value ────────────────────────────────────────────────────────
 
