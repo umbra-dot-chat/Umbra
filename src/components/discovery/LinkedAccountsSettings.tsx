@@ -48,8 +48,8 @@ export interface LinkedAccountsSettingsProps {
 export function LinkedAccountsSettings({ did, style }: LinkedAccountsSettingsProps) {
   const { theme } = useTheme();
 
-  const textPrimary = theme?.colors?.text?.primary ?? '#fafafa';
-  const textMuted = theme?.colors?.text?.muted ?? '#71717a';
+  const textPrimary = theme.colors.text.primary;
+  const textMuted = theme.colors.text.muted;
 
   const {
     accounts,
