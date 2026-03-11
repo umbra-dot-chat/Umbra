@@ -329,8 +329,8 @@ export class AudioSource {
       }
 
       if (written < chunk.length && written === 0) {
-        // Ring buffer completely full — data was lost. Log once.
-        this.log.debug(`[AUDIO] Ring buffer overflow: dropped ${chunk.length} bytes`);
+        // Ring buffer completely full — data was lost
+        this.log.warn(`[AUDIO] Ring buffer overflow: dropped ${chunk.length} bytes`);
       }
 
       // Start feeding once we have enough audio pre-buffered

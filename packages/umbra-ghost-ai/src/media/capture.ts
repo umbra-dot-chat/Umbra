@@ -42,6 +42,7 @@ export class RawMediaCapture {
     mkdirSync(dir, { recursive: true });
 
     this.audioStream = createWriteStream(join(dir, 'audio-raw.pcm'));
+    this.audioStream.on('error', (err) => this.log.error('[CAPTURE] Audio write error:', err));
     this.audioByteCount = 0;
     this.startedAt = Date.now();
 
@@ -49,6 +50,7 @@ export class RawMediaCapture {
       this.videoWidth = videoWidth;
       this.videoHeight = videoHeight;
       this.videoStream = createWriteStream(join(dir, `video-${videoWidth}x${videoHeight}.yuv`));
+      this.videoStream.on('error', (err) => this.log.error('[CAPTURE] Video write error:', err));
       this.videoFrameCount = 0;
     }
 
@@ -78,26 +80,29 @@ export class RawMediaCapture {
 
     if (this.audioStream) {
       const pcmPath = this.audioStream.path as string;
-      this.audioStream.end();
+      const stream = this.audioStream;
       this.audioStream = null;
 
-      // Write a proper WAV file from the raw PCM
+      // End the stream and convert to WAV after close
       const wavPath = pcmPath.replace('.pcm', '.wav');
-      try {
-        this.writePcmToWav(pcmPath, wavPath);
-        audioPath = wavPath;
-        this.log.info(`[CAPTURE] Audio saved: ${wavPath} (${this.audioByteCount} bytes, ${(durationMs / 1000).toFixed(1)}s)`);
-      } catch (err) {
-        this.log.error('[CAPTURE] Failed to finalize WAV:', err);
-        audioPath = pcmPath; // Fall back to raw PCM
-      }
+      stream.end(() => {
+        try {
+          this.writePcmToWav(pcmPath, wavPath);
+          this.log.info(`[CAPTURE] Audio saved: ${wavPath} (${this.audioByteCount} bytes, ${(durationMs / 1000).toFixed(1)}s)`);
+        } catch (err) {
+          this.log.error('[CAPTURE] Failed to finalize WAV:', err);
+        }
+      });
+      audioPath = wavPath;
     }
 
     if (this.videoStream) {
       videoPath = this.videoStream.path as string;
-      this.videoStream.end();
+      const stream = this.videoStream;
       this.videoStream = null;
-      this.log.info(`[CAPTURE] Video saved: ${videoPath} (${this.videoFrameCount} frames, ${this.videoWidth}x${this.videoHeight})`);
+      stream.end(() => {
+        this.log.info(`[CAPTURE] Video saved: ${videoPath} (${this.videoFrameCount} frames, ${this.videoWidth}x${this.videoHeight})`);
+      });
     }
 
     return { audioPath, videoPath, durationMs };
