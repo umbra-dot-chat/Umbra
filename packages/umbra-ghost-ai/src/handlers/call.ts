@@ -768,11 +768,11 @@ export class CallHandler {
     const friend = this.store.getFriend(call.peerDid);
     if (friend) {
       this.relay.sendEnvelope(friend.did, {
-        envelope: 'call_offer',
+        envelope: 'call_reoffer',
         version: 1,
         payload: {
           callId: call.callId,
-          sdp: call.peer.localDescription.sdp,
+          sdp: JSON.stringify({ sdp: offer.sdp, type: offer.type }),
           sdpType: 'offer',
           callType: 'video',
           senderDid: this.identity.did,
