@@ -3,8 +3,8 @@
  * that maximizes tile area while fitting all participants in the container.
  */
 
-import React, { useState, useMemo, useCallback, useRef } from 'react';
-import { View, Pressable } from 'react-native';
+import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
+import { View, Pressable, Platform } from 'react-native';
 import type { LayoutChangeEvent, ViewStyle } from 'react-native';
 import { VideoTile, Text, useTheme } from '@coexist/wisp-react-native';
 import type { CallParticipant } from '@/types/call';
@@ -68,6 +68,41 @@ function computeLayout(
   return best;
 }
 
+// ─── CSS injection (web only) ───────────────────────────────────────────────
+
+const GRID_CSS_ID = 'video-grid-tile-css';
+
+/**
+ * Force border-radius and overflow clipping on video tiles in the grid.
+ * The Wisp VideoTile uses borderRadius: 0 for size="full", and the <video>
+ * element can escape overflow:hidden in some browsers. These CSS rules
+ * ensure the video is properly clipped to rounded corners.
+ */
+function injectGridTileCSS() {
+  if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+  if (document.getElementById(GRID_CSS_ID)) return;
+
+  const style = document.createElement('style');
+  style.id = GRID_CSS_ID;
+  style.textContent = `
+    /* Force video tiles in the grid to clip to rounded corners.
+       The Wisp VideoTile uses borderRadius:0 for size="full",
+       so we need CSS to enforce clipping on the wrapper and video. */
+    #video-grid [role="button"] {
+      border-radius: 12px !important;
+      overflow: hidden !important;
+    }
+    #video-grid [role="button"] > div {
+      border-radius: 12px !important;
+      overflow: hidden !important;
+    }
+    #video-grid video {
+      border-radius: 12px !important;
+    }
+  `;
+  document.head.appendChild(style);
+}
+
 // ─── Component ──────────────────────────────────────────────────────────────
 
 export function JustifiedVideoGrid({
@@ -82,6 +117,11 @@ export function JustifiedVideoGrid({
   const { theme } = useTheme();
   const [containerSize, setContainerSize] = useState({ w: 0, h: 0 });
   const { fullscreenDid, enterFullscreen, exitFullscreen } = useFullscreen();
+
+  // Inject CSS on mount
+  useEffect(() => {
+    injectGridTileCSS();
+  }, []);
 
   // Double-tap detection: track last press time per tile
   const lastPressRef = useRef<{ did: string; time: number } | null>(null);
@@ -176,7 +216,7 @@ export function JustifiedVideoGrid({
             displayName={fullscreenParticipant.displayName}
             isMuted={fullscreenParticipant.isMuted}
             isCameraOff={fullscreenParticipant.isCameraOff}
-            isSpeaking={speakingDids.has(fullscreenParticipant.did)}
+            isSpeaking={false}
             mirror={fullscreenParticipant.did === localDid}
             size="full"
             style={{ flex: 1 }}
@@ -200,7 +240,7 @@ export function JustifiedVideoGrid({
       ) : (
         /* Normal grid mode */
         layout && containerSize.w > 0 && (
-          <View style={gridStyle}>
+          <View nativeID="video-grid" style={gridStyle}>
             {tiles.map((participant) => {
               const isLocal = participant.did === localDid;
               const isSpeaking = speakingDids.has(participant.did);
@@ -213,7 +253,9 @@ export function JustifiedVideoGrid({
                 tileHeight = tileWidth / aspectRatio;
               }
 
-              // Inner tile clips the video to rounded corners
+              // Inner tile clips the video to rounded corners.
+              // Uses className "video-grid-tile" for CSS-based clipping
+              // since the Wisp VideoTile uses borderRadius:0 for size="full".
               const innerStyle: ViewStyle = {
                 flex: 1,
                 borderRadius: 12,
@@ -240,7 +282,7 @@ export function JustifiedVideoGrid({
                       displayName={participant.displayName}
                       isMuted={participant.isMuted}
                       isCameraOff={participant.isCameraOff}
-                      isSpeaking={isSpeaking}
+                      isSpeaking={false}
                       mirror={isLocal}
                       size="full"
                       style={{ flex: 1 }}
