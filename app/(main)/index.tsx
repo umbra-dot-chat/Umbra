@@ -22,8 +22,8 @@ import { SlotRenderer } from '@/components/plugins/SlotRenderer';
 import { MessageIcon } from '@/components/ui';
 import { HelpIndicator } from '@/components/ui/HelpIndicator';
 import { HelpText, HelpHighlight, HelpListItem } from '@/components/ui/HelpContent';
-import { ActiveCallBar } from '@/components/call/ActiveCallBar';
 import { ActiveCallPanel } from '@/components/call/ActiveCallPanel';
+import { InlineCallCard } from '@/components/call/InlineCallCard';
 import { useCall } from '@/hooks/useCall';
 import { pickFile, pickFileHandle } from '@/utils/filePicker';
 import { triggerWebDownload } from '@/utils/fileDownload';
@@ -572,6 +572,10 @@ export default function ChatPage() {
           onGroupSettings={activeConversation?.groupId ? () => setGroupSettingsOpen(true) : undefined}
         />
         <SlotRenderer slot="chat-header" props={{ conversationId: resolvedConversationId }} />
+        <InlineCallCard
+          conversationId={resolvedConversationId}
+          isGroup={activeConversation?.type === 'group'}
+        />
         {activeCall && activeCall.status !== 'incoming' && activeCall.conversationId === resolvedConversationId && (
           <ActiveCallPanel
             activeCall={activeCall}
