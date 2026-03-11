@@ -210,6 +210,7 @@ export class CallManager {
           this.onRemoteScreenShareStream?.(stream);
           // When the track ends, notify screen share stopped
           event.track.onended = () => this.onRemoteScreenShareStream?.(null);
+          event.track.onmute = () => this.onRemoteScreenShareStream?.(null);
           return;
         }
         this.remoteStream = stream;
@@ -245,6 +246,8 @@ export class CallManager {
 
     // Handle renegotiation (triggered by addTrack for screen sharing)
     pc.onnegotiationneeded = async () => {
+      // Only renegotiate when signaling state is stable to avoid glare
+      if (pc.signalingState !== 'stable') return;
       try {
         const offer = await pc.createOffer();
         let sdp = offer.sdp ?? '';
@@ -771,6 +774,8 @@ export class CallManager {
 
     this.screenShareStream = null;
     this._isScreenSharing = false;
+    // Notify remote peer that screen sharing has stopped
+    this.sendDataChannelMessage({ type: 'screen-share-state', isScreenSharing: false });
   }
 
   /**

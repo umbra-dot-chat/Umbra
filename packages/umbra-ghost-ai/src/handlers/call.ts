@@ -474,6 +474,7 @@ export class CallHandler {
 
     // Handle renegotiation when tracks are added/removed (e.g., screen share)
     peer.onnegotiationneeded = async () => {
+      if (peer.signalingState !== 'stable') return;
       try {
         const reoffer = await peer.createOffer();
         await peer.setLocalDescription(reoffer);
