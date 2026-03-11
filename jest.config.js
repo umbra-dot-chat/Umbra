@@ -14,6 +14,11 @@ module.exports = {
     '^@umbra/wasm$': '<rootDir>/__mocks__/@umbra/wasm.js',
   },
   testMatch: ['**/__tests__/**/*.test.{ts,tsx}'],
+  testPathIgnorePatterns: [
+    '/node_modules/',
+    '<rootDir>/__tests__/e2e-ios/',
+    '<rootDir>/__tests__/e2e/',
+  ],
   collectCoverageFrom: [
     'src/components/**/*.{ts,tsx}',
     'src/hooks/**/*.{ts,tsx}',
