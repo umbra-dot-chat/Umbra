@@ -48,6 +48,9 @@ export class Wisp {
   /** Callback invoked on user messages (for reactions/LLM). */
   onUserMessage?: (senderDid: string, messageId: string, conversationId: string) => void;
 
+  /** Callback invoked on group messages from non-wisps (for group response). */
+  onGroupMessage?: (senderDid: string, senderName: string, text: string, groupId: string) => void;
+
   constructor(
     identity: WispIdentity, persona: WispPersona,
     relayUrl: string, llm: WispLLMClient, allPersonaNames: string[],
@@ -379,9 +382,21 @@ export class Wisp {
     try {
       const plaintext = decryptGroupMessage(p.ciphertext, p.nonce, group.groupKey);
       console.log(`[${this.persona.name}] Group "${group.groupName}" from ${p.senderDisplayName}: ${plaintext.slice(0, 50)}...`);
-      this.appendHistory(group.conversationId, 'user', plaintext);
+      this.appendHistory(group.conversationId, 'user', `${p.senderDisplayName}: ${plaintext}`);
+      // Notify orchestrator for group response coordination
+      this.onGroupMessage?.(p.from, p.senderDisplayName, plaintext, p.groupId);
     } catch (err) {
       console.warn(`[${this.persona.name}] Failed to decrypt group message:`, err);
+    }
+  }
+
+  /** Generate a response and send it to a group. */
+  async generateAndSendGroupMessage(senderName: string, text: string, groupId: string): Promise<void> {
+    try {
+      const response = await this.generateResponse(senderName, text, groupId);
+      this.sendGroupMessage(groupId, response);
+    } catch (err) {
+      console.warn(`[${this.persona.name}] Failed to respond in group:`, err);
     }
   }
 

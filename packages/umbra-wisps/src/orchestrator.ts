@@ -80,9 +80,40 @@ export class WispOrchestrator {
     wisp.onUserMessage = (senderDid, messageId) => {
       maybeReact(this.getWisps(), senderDid, messageId);
     };
+    wisp.onGroupMessage = (senderDid, senderName, text, groupId) => {
+      this.handleGroupResponse(wisp, senderDid, senderName, text, groupId);
+    };
     await wisp.start();
     this.wisps.set(persona.name, wisp);
     return wisp;
+  }
+
+  /**
+   * Coordinate group responses: 1-2 random wisps reply to each group message.
+   * The wisp that received the event is excluded from responding if it was the sender.
+   */
+  private handleGroupResponse(
+    receiver: Wisp, senderDid: string, senderName: string, text: string, groupId: string,
+  ): void {
+    // Only let ONE wisp handle the coordination (first alphabetically that has the group)
+    const allWisps = this.getWisps().filter(w => w.getGroup(groupId));
+    if (allWisps.length === 0) return;
+    allWisps.sort((a, b) => a.name.localeCompare(b.name));
+    if (allWisps[0].name !== receiver.name) return; // Only first wisp coordinates
+
+    // Pick 1-2 random wisps (excluding sender) to respond
+    const responders = allWisps.filter(w => w.did !== senderDid);
+    if (responders.length === 0) return;
+    const count = Math.random() < 0.5 ? 1 : Math.min(2, responders.length);
+    const shuffled = responders.sort(() => Math.random() - 0.5);
+    const chosen = shuffled.slice(0, count);
+
+    for (let i = 0; i < chosen.length; i++) {
+      const delay = 2000 + Math.random() * 4000 + i * 3000; // Stagger responses
+      setTimeout(() => {
+        void chosen[i].generateAndSendGroupMessage(senderName, text, groupId);
+      }, delay);
+    }
   }
 
   getWisp(name: string): Wisp | undefined { return this.wisps.get(name); }
