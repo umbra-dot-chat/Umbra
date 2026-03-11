@@ -17,6 +17,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Animated, Image, Platform, Pressable, ScrollView, View } from 'react-native';
+import { Box } from '@coexist/wisp-react-native';
 import Svg, { Circle } from 'react-native-svg';
 import { Text, Skeleton, useTheme, NotificationBadge } from '@coexist/wisp-react-native';
 import { UmbraIcon, FolderIcon, PlusIcon, SettingsIcon, BellIcon } from '@/components/ui';
@@ -302,7 +303,7 @@ export function NavigationRail({
           overflow: 'hidden',
         }}
       >
-        <View style={indicatorFillStyle} />
+        <Box style={indicatorFillStyle} />
       </Animated.View>
 
       {/* Home button */}
@@ -342,7 +343,7 @@ export function NavigationRail({
       )}
 
       {/* Divider */}
-      <View
+      <Box
         style={{
           width: 28,
           height: 2,
@@ -364,14 +365,14 @@ export function NavigationRail({
           /* Skeleton placeholders while loading */
           <>
             {[1, 2, 3].map((i) => (
-              <View key={i} style={{ marginBottom: 4, width: '100%', alignItems: 'center' }}>
+              <Box key={i} style={{ marginBottom: 4, width: '100%', alignItems: 'center' }}>
                 <Skeleton
                   variant="rectangular"
                   width={ICON_SIZE}
                   height={ICON_SIZE}
                   radius={ICON_SIZE / 2}
                 />
-              </View>
+              </Box>
             ))}
           </>
         ) : (
@@ -420,8 +421,8 @@ export function NavigationRail({
 
       {/* Settings button — anchored to the bottom */}
       {onOpenSettings && (
-        <View style={{ paddingBottom: Math.round(safeAreaBottom / 3) + 12, paddingTop: 8, alignItems: 'center', width: '100%' }}>
-          <View
+        <Box style={{ paddingBottom: Math.round(safeAreaBottom / 3) + 12, paddingTop: 8, alignItems: 'center', width: '100%' }}>
+          <Box
             style={{
               width: 28,
               height: 2,
@@ -433,7 +434,7 @@ export function NavigationRail({
 
           {/* Account avatar bubble — above settings gear, matches RailItem size */}
           {onAvatarPress && (
-            <View style={{ marginBottom: 4, width: '100%', alignItems: 'center' }}>
+            <Box style={{ marginBottom: 4, width: '100%', alignItems: 'center' }}>
               <Pressable
                 testID={TEST_IDS.NAV.AVATAR}
                 onPress={onAvatarPress}
@@ -463,7 +464,7 @@ export function NavigationRail({
                   </Text>
                 )}
               </Pressable>
-            </View>
+            </Box>
           )}
 
           {/* Notification bell — between avatar and settings */}
@@ -497,7 +498,7 @@ export function NavigationRail({
               color={theme.colors.text.secondary}
             />
           </RailItem>
-        </View>
+        </Box>
       )}
     </View>
   );
@@ -587,7 +588,7 @@ function RailItem({ itemKey, registerRef, active, onPress, accentColor, theme, c
     >
       {/* Upload progress ring overlay */}
       {showRing && (
-        <View
+        <Box
           style={{
             position: 'absolute',
             width: ICON_SIZE + 6,
@@ -620,7 +621,7 @@ function RailItem({ itemKey, registerRef, active, onPress, accentColor, theme, c
               origin={`${(ICON_SIZE + 6) / 2}, ${(ICON_SIZE + 6) / 2}`}
             />
           </Svg>
-        </View>
+        </Box>
       )}
 
       <NotificationBadge
