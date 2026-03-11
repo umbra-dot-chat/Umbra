@@ -170,7 +170,7 @@ function AuthContent({ inverted, onCreateWallet, onImportWallet, taglineIndex, t
                     width: 40,
                     height: 40,
                     borderRadius: 20,
-                    backgroundColor: inverted ? (isDark ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.3)') : (tc.accent?.primary ?? tc.brand?.primary ?? tc.accent?.primary),
+                    backgroundColor: inverted ? (isDark ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.3)') : tc.accent?.primary,
                     alignItems: 'center',
                     justifyContent: 'center',
                     overflow: 'hidden',
@@ -179,7 +179,7 @@ function AuthContent({ inverted, onCreateWallet, onImportWallet, taglineIndex, t
                     {!inverted && account.avatar ? (
                       <Image source={{ uri: account.avatar }} style={{ width: 40, height: 40 }} />
                     ) : (
-                      <Text size="sm" weight="bold" style={{ color: inverted ? textColor : tc.text?.inverse ?? '#fff' }}>
+                      <Text size="sm" weight="bold" style={{ color: inverted ? textColor : (tc.text as any)?.inverse ?? '#fff' }}>
                         {(account.displayName ?? '?').charAt(0).toUpperCase()}
                       </Text>
                     )}
