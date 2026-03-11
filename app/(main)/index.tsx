@@ -231,6 +231,7 @@ export default function ChatPage() {
     videoQuality, audioQuality, setVideoQuality, setAudioQuality,
     switchCamera, callStats, ghostMetadata,
     isScreenSharing, startScreenShare, stopScreenShare, screenShareStream,
+    remoteScreenShareStream,
   } = useCall();
 
   const { openSettings } = useSettingsDialog();
@@ -579,8 +580,8 @@ export default function ChatPage() {
             audioQuality={audioQuality}
             callStats={callStats}
             ghostMetadata={ghostMetadata}
-            isScreenSharing={isScreenSharing}
-            screenShareStream={screenShareStream}
+            isScreenSharing={isScreenSharing || !!remoteScreenShareStream}
+            screenShareStream={screenShareStream ?? remoteScreenShareStream}
             onToggleMute={toggleMute}
             onToggleDeafen={toggleDeafen}
             onToggleCamera={toggleCamera}
