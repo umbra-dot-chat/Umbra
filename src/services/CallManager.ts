@@ -116,8 +116,8 @@ export class CallManager {
   private _isScreenSharing = false;
   private e2eeWorker: Worker | null = null;
 
-  // Data channel reference for sending messages to remote peer
-  private remoteDataChannel: RTCDataChannel | null = null;
+  // Data channel for peer-to-peer metadata (screen share state, codec info, etc.)
+  private dataChannel: RTCDataChannel | null = null;
 
   // TURN credential secret (shared with coturn)
   private turnSecret: string | null = null;
@@ -230,18 +230,9 @@ export class CallManager {
       this.onConnectionStateChange?.(pc.connectionState);
     };
 
-    // Listen for incoming data channels (e.g., ghost-metadata from bot)
+    // Listen for incoming data channels (answerer side receives channel from offerer)
     pc.ondatachannel = (event) => {
-      const channel = event.channel;
-      this.remoteDataChannel = channel;
-      channel.onmessage = (msg) => {
-        try {
-          const data = JSON.parse(msg.data);
-          this.onDataChannelMessage?.(data);
-        } catch {
-          // Ignore non-JSON messages
-        }
-      };
+      this.setupDataChannel(event.channel);
     };
 
     // Handle renegotiation (triggered by addTrack for screen sharing)
@@ -325,6 +316,9 @@ export class CallManager {
     for (const track of stream.getTracks()) {
       pc.addTrack(track, stream);
     }
+
+    // Create a data channel for peer metadata (offerer creates, answerer receives via ondatachannel)
+    this.setupDataChannel(pc.createDataChannel('call-metadata', { ordered: true }));
 
     // Apply frame-level E2EE transforms if requested
     if (mediaE2EE && sharedKeyBytes) {
@@ -807,12 +801,27 @@ export class CallManager {
   }
 
   /**
+   * Wire up message handling on a data channel (used by both offerer and answerer).
+   */
+  private setupDataChannel(channel: RTCDataChannel): void {
+    this.dataChannel = channel;
+    channel.onmessage = (msg) => {
+      try {
+        const data = JSON.parse(msg.data);
+        this.onDataChannelMessage?.(data);
+      } catch {
+        // Ignore non-JSON messages
+      }
+    };
+  }
+
+  /**
    * Send a JSON message to the remote peer via the data channel.
    */
   sendDataChannelMessage(data: Record<string, unknown>): void {
-    if (this.remoteDataChannel && this.remoteDataChannel.readyState === 'open') {
+    if (this.dataChannel && this.dataChannel.readyState === 'open') {
       try {
-        this.remoteDataChannel.send(JSON.stringify(data));
+        this.dataChannel.send(JSON.stringify(data));
       } catch {
         // Ignore send errors
       }
@@ -1194,7 +1203,7 @@ export class CallManager {
     }
 
     this.remoteStream = null;
-    this.remoteDataChannel = null;
+    this.dataChannel = null;
 
     if (this.pc) {
       this.pc.close();
