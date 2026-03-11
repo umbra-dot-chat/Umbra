@@ -9,6 +9,7 @@ import { Wisp } from './wisp.js';
 import { WispLLMClient } from './llm-client.js';
 import { loadOrCreateWispIdentity } from './identity-store.js';
 import { DEFAULT_PERSONAS, type WispPersona } from './personas.js';
+import { ConversationLoop } from './conversation-loop.js';
 
 const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
 
@@ -25,6 +26,7 @@ export class WispOrchestrator {
   private wisps: Map<string, Wisp> = new Map();
   private llm: WispLLMClient;
   private config: OrchestratorConfig;
+  private conversationLoop: ConversationLoop | null = null;
   private _running = false;
 
   constructor(config: OrchestratorConfig) {
@@ -42,10 +44,13 @@ export class WispOrchestrator {
       await this.spawnWisp(persona, allNames);
     }
     this._running = true;
+    this.conversationLoop = new ConversationLoop(() => this.getWisps());
+    this.conversationLoop.start();
     console.log(`[Orchestrator] ${this.wisps.size} wisps active`);
   }
 
   async stop(): Promise<void> {
+    this.conversationLoop?.stop();
     for (const wisp of this.wisps.values()) wisp.stop();
     this.wisps.clear();
     this._running = false;
