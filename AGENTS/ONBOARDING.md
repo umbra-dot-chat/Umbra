@@ -34,6 +34,7 @@ Umbra is a **private, peer-to-peer encrypted messaging app** with voice/video ca
 | `umbra-cli` | Rust | Command-line interface |
 | `umbra-test-bot` | TypeScript | E2E test bot |
 | `umbra-bridge-bot` | TypeScript | Cross-platform bridge |
+| `umbra-uikit` | TypeScript | Wisp design system (core tokens + React Native components) |
 
 ## Frontend Stack
 
@@ -83,7 +84,7 @@ ssh root@45.77.149.94 "systemctl restart ghost-en"
 
 ## Conventions
 
-- **UI**: Always use Wisp components. Never `StyleSheet.create()`.
+- **UI**: Always use Wisp components (`packages/umbra-uikit/`). Never `StyleSheet.create()`. Audit for violations before writing code. See `rules/wisp-enforcement.md`.
 - **Colors**: Access via `useTheme()` → `colors.background.canvas`, `colors.text.primary`, etc.
 - **State**: React Context providers in `src/contexts/`. No Redux.
 - **Hooks**: 49 custom hooks in `src/hooks/`. Check before creating new ones.

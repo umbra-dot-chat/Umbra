@@ -82,9 +82,15 @@ colors.data.{blue, violet, amber, emerald, cyan}
 | CommunityContext | `src/contexts/CommunityContext.tsx` | Communities, channels |
 | DeveloperSettingsContext | `src/contexts/DeveloperSettingsContext.tsx` | Debug toggles |
 
-## Wisp UI Sync
+## Wisp UI Kit
 
-When the Wisp UI kit is modified locally (at `../Wisp/`):
+Wisp lives in the monorepo at `packages/umbra-uikit/`. For the full component catalog, color tokens, spacing scale, and anti-patterns, read `AGENTS/domain/wisp-uikit.md`.
+
+For mandatory enforcement rules and the audit-on-entry procedure, read `AGENTS/rules/wisp-enforcement.md`.
+
+### Syncing Wisp Changes
+
+After modifying Wisp source in `packages/umbra-uikit/`:
 
 ```bash
 npm run patch              # Syncs to node_modules/@coexist/

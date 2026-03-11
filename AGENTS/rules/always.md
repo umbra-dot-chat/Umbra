@@ -43,6 +43,7 @@ These rules apply to EVERY agent session, regardless of task area. They are non-
 24. **Type-check before committing AND before deploying.** `npx tsc --noEmit` must pass. No exceptions.
 25. **Never use `StyleSheet.create()`.** All UI uses Wisp components exclusively.
 26. **Never implement crypto in JavaScript.** All crypto goes through umbra-core (Rust).
+26b. **Wisp enforcement is mandatory.** ANY agent touching UI code must audit modified files for Wisp violations (custom primitives, hardcoded colors, StyleSheet usage, duplicate components) BEFORE writing new code. Catalog violations and report to the user. See `AGENTS/rules/wisp-enforcement.md` for the full scanning procedure and catalog format. The Wisp UI kit lives at `packages/umbra-uikit/` — if a component is needed that doesn't exist, add it to Wisp, never to the app.
 27. **Check existing hooks** (49 in `src/hooks/`) before creating new ones.
 28. **Check existing contexts** (19 in `src/contexts/`) before creating new state management.
 29. **Use strongly-worded constraints for critical rules.** "It is unacceptable to remove tests" > "Try not to remove tests."

@@ -10,7 +10,7 @@ Read `AGENTS/ONBOARDING.md` for full project context (packages, stack, commands)
 
 ## Stack Rules
 
-- **UI**: ALL components use `@coexist/wisp-react-native`. Never `StyleSheet.create()`.
+- **UI**: ALL components use `@coexist/wisp-react-native` (source: `packages/umbra-uikit/`). Never `StyleSheet.create()`. Agents MUST audit for Wisp violations before writing UI code — see `AGENTS/rules/wisp-enforcement.md`.
 - **Colors**: `useTheme()` → `colors.background.canvas`, `colors.text.primary`, etc.
 - **Crypto**: ALL crypto in `umbra-core` (Rust). Never implement crypto in JavaScript.
 - **Hooks**: 49 hooks in `src/hooks/`. Check before creating new ones.
@@ -53,8 +53,10 @@ npm run test:e2e               # Playwright E2E
 
 ## Reference
 
-- `AGENTS/rules/always.md` — Full rule set (33 rules)
+- `AGENTS/rules/always.md` — Full rule set (33+ rules)
+- `AGENTS/rules/wisp-enforcement.md` — Wisp UI kit enforcement rules + audit procedure
 - `AGENTS/rules/before-commit.md` — Pre-commit checklist
 - `AGENTS/rules/before-deploy.md` — Pre-deploy checklist
 - `AGENTS/TESTING_PLAYBOOK.md` — Iterative verification guide
+- `AGENTS/domain/wisp-uikit.md` — Full Wisp component catalog + anti-patterns
 - `AGENTS/domain/` — Domain-specific knowledge (load just-in-time)
