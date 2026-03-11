@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Platform, Pressable, Text as RNText, View } from 'react-native';
+import { Platform, Pressable } from 'react-native';
+import type { View } from 'react-native';
 import { TEST_IDS } from '@/constants/test-ids';
 import {
-  Avatar, MessageInput, useTheme,
+  Avatar, Box, MessageInput, Text, useTheme,
   CombinedPicker, MentionAutocomplete, GradientBorder, GradientText,
 } from '@coexist/wisp-react-native';
 import type { EmojiItem } from '@coexist/wisp-core/types/EmojiPicker.types';
@@ -15,7 +16,7 @@ import type { SlashCommandDef } from '@/hooks/useSlashCommand';
 import { usePlugins } from '@/contexts/PluginContext';
 import { SlashCommandMenu } from './SlashCommandMenu';
 import { AnimatedPresence } from '@/components/ui/AnimatedPresence';
-import { getSystemCommands, GHOST_COMMANDS, isGhostBot } from '@/services/SlashCommandRegistry';
+import { getSystemCommands, GHOST_COMMANDS, SWARM_COMMANDS, isGhostBot } from '@/services/SlashCommandRegistry';
 import { useAppTheme } from '@/contexts/ThemeContext';
 import { opacity } from '@coexist/wisp-core/tokens';
 
@@ -128,6 +129,7 @@ export function ChatInput({
     // Ghost commands (when chatting with a Ghost bot)
     if (isGhostBot(friendDid)) {
       commands.push(...GHOST_COMMANDS);
+      commands.push(...SWARM_COMMANDS);
     }
 
     // Plugin slash commands
@@ -532,7 +534,7 @@ export function ChatInput({
           // }}
         />
       </AnimatedPresence>
-      <View ref={inputWrapperRef} testID={TEST_IDS.INPUT.CONTAINER} style={{ padding: 12 }}>
+      <Box ref={inputWrapperRef} testID={TEST_IDS.INPUT.CONTAINER} style={{ padding: 12 }}>
         {/* Slash command autocomplete menu — with AnimatedPresence scaleIn */}
         <AnimatedPresence
           visible={slashOpen && filteredCommands.length > 0 && !mentionOpen}
@@ -550,7 +552,7 @@ export function ChatInput({
         </AnimatedPresence>
         {/* Mention autocomplete dropdown */}
         {mentionOpen && (
-          <View style={{ position: 'absolute', bottom: 64, left: 12, right: 12, zIndex: 15 }}>
+          <Box style={{ position: 'absolute', bottom: 64, left: 12, right: 12, zIndex: 15 }}>
             <MentionAutocomplete
               users={filteredUsers}
               query={mentionQuery}
@@ -559,7 +561,7 @@ export function ChatInput({
               onSelect={handleMentionSelect}
               open={mentionOpen}
             />
-          </View>
+          </Box>
         )}
         <GradientBorder
           visible={inputFocused}
@@ -568,7 +570,7 @@ export function ChatInput({
           width={2}
           speed={3000}
         >
-          <View ref={ghostContainerRef} style={{ position: 'relative' }}>
+          <Box ref={ghostContainerRef} style={{ position: 'relative' }}>
             <MessageInput
               testID={TEST_IDS.INPUT.TEXT_INPUT}
               value={message}
@@ -607,7 +609,7 @@ export function ChatInput({
             />
             {/* Command highlight overlay — web only */}
             {Platform.OS === 'web' && commandHighlight && (
-              <View
+              <Box
                 ref={cmdOverlayRef}
                 pointerEvents="none"
                 accessibilityElementsHidden
@@ -637,7 +639,7 @@ export function ChatInput({
                     {commandHighlight.commandText}
                   </GradientText>
                 ) : (
-                  <RNText
+                  <Text
                     style={{
                       fontSize,
                       fontFamily,
@@ -646,10 +648,10 @@ export function ChatInput({
                     } as any}
                   >
                     {commandHighlight.commandText}
-                  </RNText>
+                  </Text>
                 )}
                 {commandHighlight.argsText ? (
-                  <RNText
+                  <Text
                     style={{
                       fontSize,
                       fontFamily,
@@ -658,15 +660,15 @@ export function ChatInput({
                     } as any}
                   >
                     {commandHighlight.argsText}
-                  </RNText>
+                  </Text>
                 ) : null}
-              </View>
+              </Box>
             )}
             {/* Ghost text overlay — web only */}
             {Platform.OS === 'web' && ghostText !== '' && (
               <>
                 {/* Hidden measurement span to calculate typed text width */}
-                <RNText
+                <Text
                   ref={ghostMeasureRef as any}
                   style={{
                     position: 'absolute',
@@ -680,9 +682,9 @@ export function ChatInput({
                   } as any}
                 >
                   {message}
-                </RNText>
+                </Text>
                 {/* The ghost text suggestion */}
-                <View
+                <Box
                   ref={ghostOverlayRef}
                   pointerEvents="none"
                   accessibilityElementsHidden
@@ -698,7 +700,7 @@ export function ChatInput({
                     overflow: 'hidden',
                   }}
                 >
-                  <RNText
+                  <Text
                     numberOfLines={1}
                     style={{
                       fontSize,
@@ -709,13 +711,13 @@ export function ChatInput({
                     } as any}
                   >
                     {ghostText}
-                  </RNText>
-                </View>
+                  </Text>
+                </Box>
               </>
             )}
-          </View>
+          </Box>
         </GradientBorder>
-      </View>
+      </Box>
     </>
   );
 }

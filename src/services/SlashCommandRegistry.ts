@@ -225,6 +225,60 @@ export const GHOST_COMMANDS: SlashCommandDef[] = [
 ];
 
 // =============================================================================
+// Swarm commands — available when chatting with Ghost bot
+// =============================================================================
+
+export const SWARM_COMMANDS: SlashCommandDef[] = [
+  {
+    id: 'swarm:summon',
+    command: 'swarm summon',
+    label: 'Summon Wisps',
+    description: 'Befriend all wisps and create a group chat',
+    icon: '\uD83D\uDC1D',
+    category: 'Swarm',
+    sendAsMessage: true,
+  },
+  {
+    id: 'swarm:status',
+    command: 'swarm status',
+    label: 'Swarm Status',
+    description: 'Show wisp swarm status',
+    icon: '\uD83D\uDC1D',
+    category: 'Swarm',
+    sendAsMessage: true,
+  },
+  {
+    id: 'swarm:group',
+    command: 'swarm group',
+    label: 'Create Group',
+    description: 'Create a named group chat with all wisps',
+    icon: '\uD83D\uDC1D',
+    category: 'Swarm',
+    sendAsMessage: true,
+    args: '<name>',
+  },
+  {
+    id: 'swarm:list',
+    command: 'swarm list',
+    label: 'List Wisps',
+    description: 'Show available wisps and their personas',
+    icon: '\uD83D\uDC1D',
+    category: 'Swarm',
+    sendAsMessage: true,
+  },
+  {
+    id: 'swarm:scenario',
+    command: 'swarm scenario',
+    label: 'Run Scenario',
+    description: 'Run a wisp scenario (debate, group-chat, etc.)',
+    icon: '\uD83D\uDC1D',
+    category: 'Swarm',
+    sendAsMessage: true,
+    args: '<name>',
+  },
+];
+
+// =============================================================================
 // Helpers
 // =============================================================================
 
