@@ -103,7 +103,7 @@ jest.mock('@/hooks/useNetwork', () => ({
 import { UmbraService } from '@umbra/service';
 import { useMessages } from '@/hooks/useMessages';
 
-const mockService = UmbraService.instance as Record<string, jest.Mock>;
+const mockService = UmbraService.instance as unknown as Record<string, jest.Mock>;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -112,6 +112,7 @@ const mockService = UmbraService.instance as Record<string, jest.Mock>;
 const CONV_ID = 'conv-file-1';
 
 const makeFilePayload = (overrides: Record<string, unknown> = {}) => ({
+  fileId: 'file-test-1',
   filename: 'report.pdf',
   size: 8192,
   mimeType: 'application/pdf',

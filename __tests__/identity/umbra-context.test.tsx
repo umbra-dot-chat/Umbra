@@ -58,7 +58,7 @@ beforeEach(() => {
   // Reset the mock to default success behavior
   (UmbraService.initialize as jest.Mock).mockResolvedValue(undefined);
   (UmbraService.getVersion as jest.Mock).mockReturnValue('0.1.0-test');
-  UmbraService._initialized = false;
+  (UmbraService as any)._initialized = false;
 });
 
 // ===========================================================================

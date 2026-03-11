@@ -15,7 +15,7 @@ import { renderHook, act, waitFor } from '@testing-library/react-native';
 
 const mockService = {
   getNetworkStatus: jest.fn(() =>
-    Promise.resolve({ isRunning: false, peerCount: 0, listenAddresses: [] }),
+    Promise.resolve({ isRunning: false, peerCount: 0, listenAddresses: [] as string[] }),
   ),
   startNetwork: jest.fn(() => Promise.resolve()),
   stopNetwork: jest.fn(() => Promise.resolve()),

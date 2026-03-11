@@ -757,7 +757,7 @@ test.describe('4.13 Reply', () => {
 
       // Walk up from the reply to find a container that also contains
       // the original message text (the quoted context)
-      let container = replyNode.parentElement;
+      let container: HTMLElement | null = replyNode.parentElement;
       let depth = 0;
       while (container && depth < 15) {
         const text = container.textContent || '';
@@ -838,7 +838,7 @@ test.describe('4.13 Reply', () => {
       if (!replyNode?.parentElement) return false;
 
       // Walk up to find the reply bubble container
-      let container = replyNode.parentElement;
+      let container: HTMLElement | null = replyNode.parentElement;
       let depth = 0;
       while (container && depth < 10) {
         container = container.parentElement;
@@ -1231,7 +1231,7 @@ test.describe('4.15 Pin Message', () => {
       if (!textNode?.parentElement) return false;
 
       // Walk up to the message group container and look for pin indicators
-      let container = textNode.parentElement;
+      let container: HTMLElement | null = textNode.parentElement;
       let depth = 0;
       while (container && depth < 15) {
         // Check for SVG with pin-related path or accessibility label

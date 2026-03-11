@@ -104,7 +104,7 @@ jest.mock('@umbra/service', () => {
 import { UmbraService } from '@umbra/service';
 import { MessagingProvider, useMessaging } from '@/contexts/MessagingContext';
 
-const mockService = UmbraService.instance as Record<string, jest.Mock>;
+const mockService = UmbraService.instance as unknown as Record<string, jest.Mock>;
 // Ensure methods exist
 if (!mockService.onMetadataEvent) {
   mockService.onMetadataEvent = jest.fn(() => jest.fn());

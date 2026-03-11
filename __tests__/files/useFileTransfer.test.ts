@@ -28,7 +28,7 @@ jest.mock('@/contexts/UmbraContext', () => ({
 import { UmbraService } from '@umbra/service';
 import { useFileTransfer } from '@/hooks/useFileTransfer';
 
-const mockService = UmbraService.instance as Record<string, jest.Mock>;
+const mockService = UmbraService.instance as unknown as Record<string, jest.Mock>;
 
 // ---------------------------------------------------------------------------
 // Helpers

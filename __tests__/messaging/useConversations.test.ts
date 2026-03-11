@@ -59,7 +59,7 @@ jest.mock('@/contexts/AuthContext', () => ({
 import { UmbraService } from '@umbra/service';
 import { useConversations } from '@/hooks/useConversations';
 
-const mockService = UmbraService.instance as Record<string, jest.Mock>;
+const mockService = UmbraService.instance as unknown as Record<string, jest.Mock>;
 
 // ---------------------------------------------------------------------------
 // Sample data
@@ -132,9 +132,9 @@ describe('useConversations', () => {
       await waitFor(() => expect(result.current.isLoading).toBe(false));
 
       expect(result.current.conversations[0].id).toBe('conv-1');
-      expect(result.current.conversations[0].peerDisplayName).toBe('Alice');
-      expect(result.current.conversations[1].peerDisplayName).toBe('Bob');
-      expect(result.current.conversations[2].peerDisplayName).toBe('Charlie');
+      expect((result.current.conversations[0] as any).peerDisplayName).toBe('Alice');
+      expect((result.current.conversations[1] as any).peerDisplayName).toBe('Bob');
+      expect((result.current.conversations[2] as any).peerDisplayName).toBe('Charlie');
     });
 
     it('T2.2.8 — sets error when getConversations fails', async () => {
@@ -225,7 +225,7 @@ describe('useConversations', () => {
       });
 
       expect(result.current.conversations).toHaveLength(1);
-      expect(result.current.conversations[0].peerDisplayName).toBe('New Friend');
+      expect((result.current.conversations[0] as any).peerDisplayName).toBe('New Friend');
     });
 
     it('T2.5.3 — handles non-Error rejection gracefully', async () => {

@@ -20,7 +20,7 @@ describe('T1.5 Loading / Splash Screen', () => {
     // On a fresh launch, the app should show either a loading indicator
     // or transition directly to the auth screen. We race both possibilities.
     await waitFor(
-      element(by.id(TEST_IDS.COMMON.LOADING)).or(element(by.id(TEST_IDS.AUTH.SCREEN))),
+      (element(by.id(TEST_IDS.COMMON.LOADING)) as any).or(element(by.id(TEST_IDS.AUTH.SCREEN))),
     )
       .toExist()
       .withTimeout(TIMEOUTS.APP_LAUNCH);
@@ -47,7 +47,7 @@ describe('T1.5 Loading / Splash Screen', () => {
     // With an existing identity (no PIN), should transition to main screen
     // or possibly the auth screen with stored accounts
     await waitFor(
-      element(by.id(TEST_IDS.MAIN.CONTAINER))
+      (element(by.id(TEST_IDS.MAIN.CONTAINER)) as any)
         .or(element(by.id(TEST_IDS.AUTH.SCREEN)))
         .or(element(by.id(TEST_IDS.PIN.LOCK_SCREEN))),
     )

@@ -99,7 +99,7 @@ jest.mock('@/hooks/useNetwork', () => ({
 import { UmbraService } from '@umbra/service';
 import { useMessages } from '@/hooks/useMessages';
 
-const mockService = UmbraService.instance as Record<string, jest.Mock>;
+const mockService = UmbraService.instance as unknown as Record<string, jest.Mock>;
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -414,7 +414,7 @@ describe('useMessages', () => {
       });
 
       // editMessage only calls the service; local state updates happen via events
-      expect(result.current.messages[0]?.content?.text).toBe('Original');
+      expect((result.current.messages[0]?.content as any)?.text).toBe('Original');
     });
   });
 
@@ -946,7 +946,7 @@ describe('useMessages', () => {
       ]);
       const { result } = renderHook(() => useMessages(CONV_ID));
       await waitFor(() => expect(result.current.isLoading).toBe(false));
-      expect(result.current.messages[0].content.text).toBe('[Encrypted with a different key]');
+      expect((result.current.messages[0].content as any).text).toBe('[Encrypted with a different key]');
     });
 
     it('T4.20.2 — FRIEND_NOT_FOUND error shows "[Sender unknown]"', async () => {
@@ -965,7 +965,7 @@ describe('useMessages', () => {
       ]);
       const { result } = renderHook(() => useMessages(CONV_ID));
       await waitFor(() => expect(result.current.isLoading).toBe(false));
-      expect(result.current.messages[0].content.text).toBe('[Sender unknown]');
+      expect((result.current.messages[0].content as any).text).toBe('[Sender unknown]');
     });
 
     it('T4.20.3 — CONVERSATION_NOT_FOUND error shows "[Message from unknown conversation]"', async () => {
@@ -984,7 +984,7 @@ describe('useMessages', () => {
       ]);
       const { result } = renderHook(() => useMessages(CONV_ID));
       await waitFor(() => expect(result.current.isLoading).toBe(false));
-      expect(result.current.messages[0].content.text).toBe('[Message from unknown conversation]');
+      expect((result.current.messages[0].content as any).text).toBe('[Message from unknown conversation]');
     });
 
     it('T4.20.4 — INVALID_FORMAT error shows "[Corrupted message]"', async () => {
@@ -1003,7 +1003,7 @@ describe('useMessages', () => {
       ]);
       const { result } = renderHook(() => useMessages(CONV_ID));
       await waitFor(() => expect(result.current.isLoading).toBe(false));
-      expect(result.current.messages[0].content.text).toBe('[Corrupted message]');
+      expect((result.current.messages[0].content as any).text).toBe('[Corrupted message]');
     });
 
     it('T4.20.5 — generic error shows "[Unable to decrypt message]"', async () => {
@@ -1022,7 +1022,7 @@ describe('useMessages', () => {
       ]);
       const { result } = renderHook(() => useMessages(CONV_ID));
       await waitFor(() => expect(result.current.isLoading).toBe(false));
-      expect(result.current.messages[0].content.text).toBe('[Unable to decrypt message]');
+      expect((result.current.messages[0].content as any).text).toBe('[Unable to decrypt message]');
     });
 
     it('T4.20.6 — messages with decrypt errors still appear in conversation list', async () => {
@@ -1094,9 +1094,9 @@ describe('useMessages', () => {
       const { result } = renderHook(() => useMessages(CONV_ID));
       await waitFor(() => expect(result.current.isLoading).toBe(false));
       expect(result.current.messages).toHaveLength(3);
-      expect(result.current.messages[0].content.text).toBe('Before the error');
-      expect(result.current.messages[1].content.text).toBe('[Sender unknown]');
-      expect(result.current.messages[2].content.text).toBe('After the error');
+      expect((result.current.messages[0].content as any).text).toBe('Before the error');
+      expect((result.current.messages[1].content as any).text).toBe('[Sender unknown]');
+      expect((result.current.messages[2].content as any).text).toBe('After the error');
     });
   });
 

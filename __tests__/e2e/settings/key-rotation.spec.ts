@@ -208,7 +208,7 @@ test.describe('11.10 Key Rotation', () => {
     // First, get Alice's DID from her page context.
     const aliceDid = await pageA.evaluate(async () => {
       const { UmbraService } = await import('@umbra/service');
-      return UmbraService.instance.getDid();
+      return (await UmbraService.instance.getIdentity()).did;
     });
 
     // Then read Alice's friend record from Bob's service and verify the
