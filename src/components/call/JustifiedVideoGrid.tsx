@@ -9,6 +9,7 @@ import type { LayoutChangeEvent, ViewStyle } from 'react-native';
 import { VideoTile, Text, useTheme } from '@coexist/wisp-react-native';
 import type { CallParticipant } from '@/types/call';
 import { useFullscreen } from '@/hooks/useFullscreen';
+import { SpeakerBorder } from '@/components/call/SpeakerBorder';
 
 // ─── Props ──────────────────────────────────────────────────────────────────
 
@@ -212,38 +213,40 @@ export function JustifiedVideoGrid({
                 tileHeight = tileWidth / aspectRatio;
               }
 
-              const tileStyle: ViewStyle = {
-                width: tileWidth,
-                height: tileHeight,
+              // Inner tile clips the video to rounded corners
+              const innerStyle: ViewStyle = {
+                flex: 1,
                 borderRadius: 12,
                 overflow: 'hidden',
-                borderWidth: isSpeaking ? 2 : 0,
-                borderColor: isSpeaking
-                  ? theme.colors.accent.primary
-                  : 'transparent',
               };
 
               return (
-                <Pressable
+                <SpeakerBorder
                   key={participant.did}
-                  accessibilityRole="button"
-                  accessibilityLabel={`${participant.displayName} video tile, double-tap for fullscreen`}
-                  onPress={() => handleTilePress(participant.did)}
-                  onLongPress={() => enterFullscreen(participant.did)}
-                  delayLongPress={500}
-                  style={tileStyle}
+                  active={isSpeaking}
+                  borderRadius={12}
+                  style={{ width: tileWidth, height: tileHeight }}
                 >
-                  <VideoTile
-                    stream={participant.stream}
-                    displayName={participant.displayName}
-                    isMuted={participant.isMuted}
-                    isCameraOff={participant.isCameraOff}
-                    isSpeaking={isSpeaking}
-                    mirror={isLocal}
-                    size="full"
-                    style={{ flex: 1 }}
-                  />
-                </Pressable>
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`${participant.displayName} video tile, double-tap for fullscreen`}
+                    onPress={() => handleTilePress(participant.did)}
+                    onLongPress={() => enterFullscreen(participant.did)}
+                    delayLongPress={500}
+                    style={innerStyle}
+                  >
+                    <VideoTile
+                      stream={participant.stream}
+                      displayName={participant.displayName}
+                      isMuted={participant.isMuted}
+                      isCameraOff={participant.isCameraOff}
+                      isSpeaking={isSpeaking}
+                      mirror={isLocal}
+                      size="full"
+                      style={{ flex: 1 }}
+                    />
+                  </Pressable>
+                </SpeakerBorder>
               );
             })}
           </View>

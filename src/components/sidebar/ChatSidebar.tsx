@@ -327,15 +327,17 @@ function ChatSidebarInner({
           </ScrollView>
         </SidebarSection>
 
-        {/* Active call footer panel — only shown when navigated away from the call conversation */}
+        {/* Active call footer panel — sticky at the bottom of the sidebar */}
         {activeCall && activeCall.status === 'connected' && activeCall.conversationId !== activeId && onReturnToCall && onToggleMute && onToggleCamera && onEndCall && (
-          <SidebarCallPanel
-            activeCall={activeCall}
-            onReturnToCall={onReturnToCall}
-            onToggleMute={onToggleMute}
-            onToggleCamera={onToggleCamera}
-            onEndCall={onEndCall}
-          />
+          <View style={{ position: 'sticky' as any, bottom: 0, zIndex: 100, marginHorizontal: -8 }}>
+            <SidebarCallPanel
+              activeCall={activeCall}
+              onReturnToCall={onReturnToCall}
+              onToggleMute={onToggleMute}
+              onToggleCamera={onToggleCamera}
+              onEndCall={onEndCall}
+            />
+          </View>
         )}
       </Sidebar>
   );
