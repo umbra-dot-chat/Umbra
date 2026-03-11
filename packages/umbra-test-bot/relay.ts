@@ -110,7 +110,7 @@ export class RelayClient {
         this.send({ type: 'register', did: this.did });
       });
 
-      this.ws.on('message', (raw) => {
+      this.ws.on('message', (raw: Buffer | string) => {
         try {
           const str = typeof raw === 'string' ? raw : raw.toString('utf-8');
           const msg = JSON.parse(str) as ServerMessage;
@@ -135,7 +135,7 @@ export class RelayClient {
         }
       });
 
-      this.ws.on('error', (err) => {
+      this.ws.on('error', (err: Error) => {
         clearTimeout(timeout);
         if (!this._registered) reject(err);
       });
