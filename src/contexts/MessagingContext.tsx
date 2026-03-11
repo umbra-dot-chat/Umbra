@@ -51,7 +51,7 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
   if (__DEV__) dbg.trackRender(SRC);
   const { preferencesReady, didChanged, syncVersion } = useUmbra();
 
-  const [displayMode, setDisplayModeState] = useState<MessageDisplayMode>('bubble');
+  const [displayMode, setDisplayModeState] = useState<MessageDisplayMode>('inline');
   const [loaded, setLoaded] = useState(false);
 
   // ── Persistence helpers ──────────────────────────────────────────────

@@ -150,12 +150,12 @@ describe('MessagingContext — Display modes', () => {
   // T4.4 — Display modes (bubble / inline)
   // =========================================================================
 
-  it('T4.4.1 — default displayMode is "bubble"', async () => {
+  it('T4.4.1 — default displayMode is "inline"', async () => {
     const { result } = renderHook(() => useMessaging(), { wrapper: Wrapper });
 
     await waitFor(() => expect(result.current.preferencesLoaded).toBe(true));
 
-    expect(result.current.displayMode).toBe('bubble');
+    expect(result.current.displayMode).toBe('inline');
   });
 
   it('T4.4.2 — setDisplayMode changes mode to "inline"', async () => {
