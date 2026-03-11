@@ -23,7 +23,7 @@ import { MessageIcon } from '@/components/ui';
 import { HelpIndicator } from '@/components/ui/HelpIndicator';
 import { HelpText, HelpHighlight, HelpListItem } from '@/components/ui/HelpContent';
 import { ActiveCallPanel } from '@/components/call/ActiveCallPanel';
-import { InlineCallCard } from '@/components/call/InlineCallCard';
+import type { CallEndReason } from '@/types/call';
 import { useCall } from '@/hooks/useCall';
 import { pickFile, pickFileHandle } from '@/utils/filePicker';
 import { triggerWebDownload } from '@/utils/fileDownload';
@@ -227,7 +227,7 @@ export default function ChatPage() {
   }, [searchPanelRequested, clearSearchPanelRequest, rightPanel, togglePanel]);
   const { showProfile } = useProfilePopoverContext();
   const {
-    activeCall, startCall, toggleMute, toggleDeafen, toggleCamera, endCall,
+    activeCall, startCall, acceptCall, toggleMute, toggleDeafen, toggleCamera, endCall,
     videoQuality, audioQuality, setVideoQuality, setAudioQuality,
     switchCamera, callStats, ghostMetadata,
     isScreenSharing, startScreenShare, stopScreenShare, screenShareStream,
@@ -572,10 +572,6 @@ export default function ChatPage() {
           onGroupSettings={activeConversation?.groupId ? () => setGroupSettingsOpen(true) : undefined}
         />
         <SlotRenderer slot="chat-header" props={{ conversationId: resolvedConversationId }} />
-        <InlineCallCard
-          conversationId={resolvedConversationId}
-          isGroup={activeConversation?.type === 'group'}
-        />
         {activeCall && activeCall.status !== 'incoming' && activeCall.conversationId === resolvedConversationId && (
           <ActiveCallPanel
             activeCall={activeCall}
@@ -628,6 +624,11 @@ export default function ChatPage() {
           activeUploads={activeUploadsMap}
           scrollToMessageId={scrollToMessageId}
           onScrollToComplete={() => setScrollToMessageId(null)}
+          activeCall={activeCall?.conversationId === resolvedConversationId ? activeCall : null}
+          isGroupCall={activeConversation?.type === 'group'}
+          onAcceptCall={() => acceptCall()}
+          onEndCall={(reason) => endCall(reason as CallEndReason)}
+          onCallBack={(callType) => callType === 'video' ? handleVideoCall() : handleVoiceCall()}
         />
         <SlotRenderer slot="chat-toolbar" props={{ conversationId: resolvedConversationId }} />
         {pendingAttachment && (
