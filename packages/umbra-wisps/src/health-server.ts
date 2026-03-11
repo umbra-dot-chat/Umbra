@@ -29,6 +29,13 @@ export function startHealthServer(
         const groupId = await orchestrator.createGroup(name, creator.name);
         if (userDid) await orchestrator.befriendUser(userDid);
         json(res, { ok: true, groupId });
+      } else if (req.method === 'POST' && url.pathname === '/wisps/scenario') {
+        const body = await readBody(req);
+        const { name } = JSON.parse(body) as { name: string };
+        const result = await orchestrator.runScenario(name);
+        json(res, result);
+      } else if (req.method === 'GET' && url.pathname === '/wisps/scenarios') {
+        json(res, { scenarios: orchestrator.getAvailableScenarios() });
       } else {
         res.writeHead(404);
         res.end('Not found');

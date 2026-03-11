@@ -14,6 +14,15 @@ import { maybeReact } from './reactions.js';
 import { uuid, encryptGroupKey } from './crypto.js';
 import { randomBytes } from '@noble/ciphers/webcrypto';
 import { bytesToHex } from '@noble/curves/abstract/utils';
+import { runScenario, getScenario, listScenarios } from './scenarios/index.js';
+import { startHealthServer } from './health-server.js';
+import type { Server } from 'node:http';
+
+// Register all built-in scenarios (side-effect imports)
+import './scenarios/dm-conversation.js';
+import './scenarios/group-chat.js';
+import './scenarios/friend-storm.js';
+import './scenarios/debate.js';
 
 const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
 
@@ -31,6 +40,7 @@ export class WispOrchestrator {
   private llm: WispLLMClient;
   private config: OrchestratorConfig;
   private conversationLoop: ConversationLoop | null = null;
+  private httpServer: Server | null = null;
   private _running = false;
 
   constructor(config: OrchestratorConfig) {
@@ -50,11 +60,14 @@ export class WispOrchestrator {
     this._running = true;
     this.conversationLoop = new ConversationLoop(() => this.getWisps());
     this.conversationLoop.start();
+    this.httpServer = startHealthServer(this, this.config.httpPort);
     console.log(`[Orchestrator] ${this.wisps.size} wisps active`);
   }
 
   async stop(): Promise<void> {
     this.conversationLoop?.stop();
+    this.httpServer?.close();
+    this.httpServer = null;
     for (const wisp of this.wisps.values()) wisp.stop();
     this.wisps.clear();
     this._running = false;
@@ -142,6 +155,16 @@ export class WispOrchestrator {
     console.log(`[Orchestrator] Group "${name}" created (${groupId.slice(0, 12)}...)`);
     return groupId;
   }
+
+  /** Run a named scenario. */
+  async runScenario(name: string): Promise<{ success: boolean; error?: string }> {
+    const scenario = getScenario(name);
+    if (!scenario) return { success: false, error: `Unknown scenario: ${name}` };
+    return runScenario(scenario, this);
+  }
+
+  /** List registered scenario names. */
+  getAvailableScenarios(): string[] { return listScenarios(); }
 
   getStatus() {
     return {
