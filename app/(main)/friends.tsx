@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useRef, useMemo } from 'react';
-import { View, ScrollView, Pressable } from 'react-native';
+import { ScrollView } from 'react-native';
 import {
   Tabs, TabList, Tab, TabPanel,
   Text,
@@ -12,6 +12,8 @@ import {
   SegmentedControl,
   Spinner,
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator,
+  Box,
+  ScrollArea,
 } from '@coexist/wisp-react-native';
 import {
   FriendListItem,
@@ -499,17 +501,17 @@ export default function FriendsPage() {
 
   if (isLoading) {
     return (
-      <View style={{ flex: 1, backgroundColor: theme.colors.background.canvas, alignItems: 'center', justifyContent: 'center' }}>
+      <Box style={{ flex: 1, backgroundColor: theme.colors.background.canvas, alignItems: 'center', justifyContent: 'center' }}>
         <Text size="sm" style={{ color: theme.colors.text.muted }}>Loading friends...</Text>
-      </View>
+      </Box>
     );
   }
 
   return (
-    <View testID={TEST_IDS.FRIENDS.PAGE} style={{ flex: 1, backgroundColor: theme.colors.background.canvas }}>
+    <Box testID={TEST_IDS.FRIENDS.PAGE} style={{ flex: 1, backgroundColor: theme.colors.background.canvas }}>
       <Tabs value={activeTab} onChange={handleTabChange} style={{ flex: 1 }}>
         {/* Header bar with title + tabs */}
-        <View
+        <Box
           style={{
             flexDirection: 'row',
             alignItems: 'center',
@@ -520,7 +522,7 @@ export default function FriendsPage() {
             borderBottomColor: theme.colors.border.subtle,
           }}
         >
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginRight: isMobile ? 4 : 24 }}>
+          <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginRight: isMobile ? 4 : 24 }}>
             <MobileBackButton onPress={() => router.back()} label="Back to conversations" />
             {!isMobile && (
               <>
@@ -528,7 +530,7 @@ export default function FriendsPage() {
                 <Text size="lg" weight="bold">Friends</Text>
               </>
             )}
-          </View>
+          </Box>
 
           <TabList indicatorGradient style={{ borderBottomWidth: 0 }}>
             <Tab
@@ -562,20 +564,21 @@ export default function FriendsPage() {
             </Tab>
           </TabList>
 
-          <View style={{ flex: 1 }} />
+          <Box style={{ flex: 1 }} />
 
-          <Pressable
+          <Button
+            variant="tertiary"
+            size="sm"
             onPress={() => setQrCardOpen(true)}
-            style={{ paddingHorizontal: 8 }}
-            hitSlop={6}
-          >
-            <QrCodeIcon size={20} color={theme.colors.text.secondary} />
-          </Pressable>
-        </View>
+            iconLeft={<QrCodeIcon size={20} color={theme.colors.text.secondary} />}
+            accessibilityLabel="Open QR code"
+          />
+
+        </Box>
 
         {/* ─── All Friends ─── */}
         <TabPanel value="all" style={{ flex: 1 }}>
-          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }} keyboardShouldPersistTaps="handled">
+          <ScrollArea style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }} keyboardShouldPersistTaps="handled">
 
             {/* AI Agent Banner */}
             {!agentBannerDismissed && (
@@ -589,9 +592,9 @@ export default function FriendsPage() {
               />
             )}
 
-            <View style={{ marginBottom: 16 }}>
+            <Box style={{ marginBottom: 16 }}>
               {/* Platform selector */}
-              <View style={{ marginBottom: 10 }}>
+              <Box style={{ marginBottom: 10 }}>
                 <Text size="xs" color="tertiary" style={{ marginBottom: 6 }}>Search on</Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                   <SegmentedControl
@@ -601,11 +604,11 @@ export default function FriendsPage() {
                     size="sm"
                   />
                 </ScrollView>
-              </View>
+              </Box>
 
               {/* Umbra: Username + DID search */}
               {searchPlatform === 'umbra' && (
-                <View>
+                <Box>
                   <Input
                     value={usernameQuery}
                     onChangeText={handleUsernameSearch}
@@ -620,9 +623,9 @@ export default function FriendsPage() {
 
                   {/* Search results / feedback */}
                   {usernameSearching && (
-                    <View style={{ alignItems: 'center', paddingVertical: 12 }}>
+                    <Box style={{ alignItems: 'center', paddingVertical: 12 }}>
                       <Spinner size="sm" />
-                    </View>
+                    </Box>
                   )}
 
                   {usernameSearchError && (
@@ -655,9 +658,9 @@ export default function FriendsPage() {
                             />
                           ))}
                           {hasMore && (
-                            <Pressable onPress={() => setShowAllUsernameResults(true)} style={{ paddingVertical: 6, alignItems: 'center' }}>
-                              <Text size="xs" color="accent">Show all {usernameResults.length} results</Text>
-                            </Pressable>
+                            <Button variant="tertiary" size="xs" onPress={() => setShowAllUsernameResults(true)} style={{ alignSelf: 'center' }}>
+                              Show all {usernameResults.length} results
+                            </Button>
                           )}
                         </Card>
                       </GradientBorder>
@@ -680,12 +683,12 @@ export default function FriendsPage() {
                       {addFriendFeedback.message}
                     </Text>
                   )}
-                </View>
+                </Box>
               )}
 
               {/* Platform username search */}
               {searchPlatform !== 'umbra' && (
-                <View>
+                <Box>
                   <Input
                     value={platformQuery}
                     onChangeText={handlePlatformSearch}
@@ -699,9 +702,9 @@ export default function FriendsPage() {
 
                   {/* Search results */}
                   {platformSearching && (
-                    <View style={{ alignItems: 'center', paddingVertical: 16 }}>
+                    <Box style={{ alignItems: 'center', paddingVertical: 16 }}>
                       <Spinner size="sm" />
-                    </View>
+                    </Box>
                   )}
 
                   {platformSearchError && (
@@ -734,9 +737,9 @@ export default function FriendsPage() {
                             />
                           ))}
                           {hasMore && (
-                            <Pressable onPress={() => setShowAllPlatformResults(true)} style={{ paddingVertical: 6, alignItems: 'center' }}>
-                              <Text size="xs" color="accent">Show all {platformResults.length} results</Text>
-                            </Pressable>
+                            <Button variant="tertiary" size="xs" onPress={() => setShowAllPlatformResults(true)} style={{ alignSelf: 'center' }}>
+                              Show all {platformResults.length} results
+                            </Button>
                           )}
                         </Card>
                       </GradientBorder>
@@ -760,9 +763,9 @@ export default function FriendsPage() {
                       {addFriendFeedback.message}
                     </Text>
                   )}
-                </View>
+                </Box>
               )}
-            </View>
+            </Box>
 
             {friends.length === 0 ? (
               <FriendSection
@@ -781,12 +784,12 @@ export default function FriendsPage() {
                 </FriendSection>
               </>
             )}
-          </ScrollView>
+          </ScrollArea>
         </TabPanel>
 
         {/* ─── Online ─── */}
         <TabPanel value="online" style={{ flex: 1 }}>
-          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }}>
+          <ScrollArea style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }}>
             {onlineFriends.length > 0 ? (
               <FriendSection title="Online" count={onlineFriends.length}>
                 {onlineFriends.map(renderFriendItem)}
@@ -798,12 +801,12 @@ export default function FriendsPage() {
                 emptyMessage="No friends online right now."
               />
             )}
-          </ScrollView>
+          </ScrollArea>
         </TabPanel>
 
         {/* ─── Pending ─── */}
         <TabPanel value="pending" style={{ flex: 1 }}>
-          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }} keyboardShouldPersistTaps="handled">
+          <ScrollArea style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }} keyboardShouldPersistTaps="handled">
             <FriendSection
               title="Incoming"
               count={incomingRequests.length}
@@ -818,7 +821,7 @@ export default function FriendsPage() {
                   <HelpText>
                     Incoming requests are from people who want to connect with you. You can accept or decline each one.
                   </HelpText>
-                  <HelpHighlight icon={<UserCheckIcon size={22} color="#6366f1" />}>
+                  <HelpHighlight icon={<UserCheckIcon size={22} color={theme.colors.accent.primary} />}>
                     Accepting a request creates an encrypted conversation between you and your new friend.
                   </HelpHighlight>
                   <HelpListItem>Outgoing requests are ones you've sent to others</HelpListItem>
@@ -836,12 +839,12 @@ export default function FriendsPage() {
             >
               {outgoingRequests.map(renderOutgoingRequest)}
             </FriendSection>
-          </ScrollView>
+          </ScrollArea>
         </TabPanel>
 
         {/* ─── Blocked ─── */}
         <TabPanel value="blocked" style={{ flex: 1 }}>
-          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }}>
+          <ScrollArea style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }}>
             <FriendSection
               title="Blocked Users"
               count={blockedUsers.length}
@@ -865,7 +868,7 @@ export default function FriendsPage() {
                 />
               ))}
             </FriendSection>
-          </ScrollView>
+          </ScrollArea>
         </TabPanel>
       </Tabs>
 
@@ -958,6 +961,6 @@ export default function FriendsPage() {
         minLength={0}
         maxLength={200}
       />
-    </View>
+    </Box>
   );
 }
