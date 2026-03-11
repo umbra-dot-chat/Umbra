@@ -9,9 +9,9 @@
  */
 
 import React, { useCallback, useState, useRef } from 'react';
-import { Image, Platform, Pressable, ScrollView, View, Animated } from 'react-native';
+import { Image, Platform, Pressable, Animated } from 'react-native';
 import type { ViewStyle } from 'react-native';
-import { Text, useTheme } from '@coexist/wisp-react-native';
+import { Box, Button, ScrollArea, Text, useTheme } from '@coexist/wisp-react-native';
 import { PlusIcon, CheckIcon, TrashIcon } from '@/components/ui';
 import { GrowablePinInput } from '@/components/auth/GrowablePinInput';
 import type { StoredAccount } from '@/contexts/AuthContext';
@@ -158,7 +158,7 @@ export function AccountSwitcher({
     borderColor: tc.border.subtle,
     overflow: 'hidden',
     ...(Platform.OS === 'web'
-      ? ({ boxShadow: '0 8px 32px rgba(0,0,0,0.25)' } as any)
+      ? ({ boxShadow: `0 8px 32px ${tc.background.overlay}` } as any)
       : {}),
   };
 
@@ -176,8 +176,8 @@ export function AccountSwitcher({
           accessibilityRole="button"
           accessibilityLabel="Close account switcher"
         />
-        <View style={popoverStyle}>
-          <View style={{ padding: 16, alignItems: 'center' }}>
+        <Box style={popoverStyle}>
+          <Box style={{ padding: 16, alignItems: 'center' }}>
             <Text size="sm" weight="semibold" style={{ color: tc.text.primary, marginBottom: 4 }}>
               Remove Account
             </Text>
@@ -201,18 +201,18 @@ export function AccountSwitcher({
             </Animated.View>
 
             {pinError && (
-              <Text size="xs" style={{ color: tc.status?.danger ?? '#ef4444', marginTop: 8 }}>
+              <Text size="xs" style={{ color: tc.status.danger, marginTop: 8 }}>
                 {pinError}
               </Text>
             )}
 
-            <Pressable onPress={resetRemoveState} style={{ marginTop: 12 }}>
+            <Button variant="tertiary" size="xs" onPress={resetRemoveState} style={{ marginTop: 12 }}>
               <Text size="xs" style={{ color: tc.text.secondary, textDecorationLine: 'underline' }}>
                 Cancel
               </Text>
-            </Pressable>
-          </View>
-        </View>
+            </Button>
+          </Box>
+        </Box>
       </>
     );
   }
@@ -235,9 +235,9 @@ export function AccountSwitcher({
       />
 
       {/* Popover */}
-      <View testID={TEST_IDS.ACCOUNT.SWITCHER} style={popoverStyle}>
+      <Box testID={TEST_IDS.ACCOUNT.SWITCHER} style={popoverStyle}>
         {/* Header */}
-        <View
+        <Box
           style={{
             paddingHorizontal: 14,
             paddingTop: 12,
@@ -249,12 +249,11 @@ export function AccountSwitcher({
           <Text size="sm" weight="semibold" style={{ color: tc.text.primary }}>
             Accounts
           </Text>
-        </View>
+        </Box>
 
         {/* Account list */}
-        <ScrollView
+        <ScrollArea
           style={{ maxHeight: 260 }}
-          showsVerticalScrollIndicator={false}
         >
           {accounts.map((account) => {
             const isActive = account.did === activeAccountDid;
@@ -276,7 +275,7 @@ export function AccountSwitcher({
                 })}
               >
                 {/* Avatar */}
-                <View
+                <Box
                   style={{
                     width: AVATAR_SIZE,
                     height: AVATAR_SIZE,
@@ -304,10 +303,10 @@ export function AccountSwitcher({
                       {(account.displayName ?? '?').charAt(0).toUpperCase()}
                     </Text>
                   )}
-                </View>
+                </Box>
 
                 {/* Name + DID */}
-                <View style={{ flex: 1, marginRight: 4 }}>
+                <Box style={{ flex: 1, marginRight: 4 }}>
                   <Text
                     size="sm"
                     weight={isActive ? 'semibold' : 'regular'}
@@ -323,7 +322,7 @@ export function AccountSwitcher({
                   >
                     {account.did.slice(0, 24)}...
                   </Text>
-                </View>
+                </Box>
 
                 {/* Active indicator or remove button */}
                 {isActive ? (
@@ -348,7 +347,7 @@ export function AccountSwitcher({
               </Pressable>
             );
           })}
-        </ScrollView>
+        </ScrollArea>
 
         {/* Add account button */}
         <Pressable
@@ -364,7 +363,7 @@ export function AccountSwitcher({
             backgroundColor: pressed ? tc.background.sunken : 'transparent',
           })}
         >
-          <View
+          <Box
             style={{
               width: AVATAR_SIZE,
               height: AVATAR_SIZE,
@@ -379,12 +378,12 @@ export function AccountSwitcher({
             }}
           >
             <PlusIcon size={16} color={tc.text.secondary} />
-          </View>
+          </Box>
           <Text size="sm" style={{ color: tc.text.secondary }}>
             Add Account
           </Text>
         </Pressable>
-      </View>
+      </Box>
     </>
   );
 }
