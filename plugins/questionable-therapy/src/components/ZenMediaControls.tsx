@@ -6,6 +6,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { Pressable } from 'react-native';
 import { Box, Text, VStack, HStack, Button, Separator, useTheme } from '@coexist/wisp-react-native';
 import { ZEN_TRACKS } from '../constants';
 import {
@@ -156,8 +157,9 @@ export function ZenMediaControls() {
         {ZEN_TRACKS.map((t, i) => {
           const isActive = i === currentTrack;
           return (
-            <Box
+            <Pressable
               key={t.id}
+              onPress={() => handleTrackSelect(i)}
               style={{
                 flexDirection: 'row',
                 alignItems: 'center',
@@ -166,9 +168,7 @@ export function ZenMediaControls() {
                 backgroundColor: isActive
                   ? 'rgba(107, 143, 113, 0.15)'
                   : 'transparent',
-                cursor: 'pointer',
               }}
-              onPress={() => handleTrackSelect(i)}
             >
               <VStack gap={2} style={{ flex: 1 }}>
                 <Text
@@ -189,7 +189,7 @@ export function ZenMediaControls() {
                   {'\u266B'}
                 </Text>
               )}
-            </Box>
+            </Pressable>
           );
         })}
       </VStack>
