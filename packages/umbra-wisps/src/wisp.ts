@@ -5,6 +5,8 @@
  * and LLM-powered conversation with history tracking.
  */
 
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
 import { RelayClient, type ServerMessage } from './relay-client.js';
 import {
   encryptMessage, decryptMessage, computeConversationId, uuid,
@@ -43,6 +45,7 @@ export class Wisp {
   private conversationHistory: Map<string, ChatMessage[]> = new Map();
   private systemPrompt: string;
   private allPersonaNames: string[];
+  private dataDir: string;
   private _running = false;
 
   /** Callback invoked on user messages (for reactions/LLM). */
@@ -54,14 +57,17 @@ export class Wisp {
   constructor(
     identity: WispIdentity, persona: WispPersona,
     relayUrl: string, llm: WispLLMClient, allPersonaNames: string[],
+    dataDir: string = './wisp-data',
   ) {
     this.identity = identity;
     this.persona = persona;
     this.llm = llm;
     this.allPersonaNames = allPersonaNames;
+    this.dataDir = dataDir;
     this.systemPrompt = buildWispSystemPrompt(persona, allPersonaNames);
     this.relay = new RelayClient(relayUrl, identity.did);
     this.callHandler = new WispCallHandler(identity, this.relay, persona.name);
+    this.loadPersistedState();
   }
 
   get running() { return this._running; }
@@ -103,7 +109,7 @@ export class Wisp {
   }
 
   hasFriend(did: string): boolean { return this.friends.has(did); }
-  addFriend(friend: WispFriend): void { this.friends.set(friend.did, friend); }
+  addFriend(friend: WispFriend): void { this.friends.set(friend.did, friend); this.persistState(); }
   getFriend(did: string): WispFriend | undefined { return this.friends.get(did); }
   getGroup(groupId: string): WispGroup | undefined { return this.groups.get(groupId); }
   getGroups(): WispGroup[] { return Array.from(this.groups.values()); }
@@ -204,6 +210,7 @@ export class Wisp {
   /** Add this wisp to a group directly (used by orchestrator). */
   addGroup(group: WispGroup): void {
     this.groups.set(group.groupId, group);
+    this.persistState();
   }
 
   /** Send a raw envelope via this wisp's relay (used by orchestrator). */
@@ -300,6 +307,7 @@ export class Wisp {
         accepted: true, timestamp: Date.now(),
       },
     });
+    this.persistState();
     console.log(`[${this.persona.name}] Accepted friend request from ${p.fromDisplayName}`);
   }
 
@@ -313,6 +321,7 @@ export class Wisp {
       did: p.fromDid, displayName: p.fromDisplayName,
       signingKey: p.fromSigningKey, encryptionKey: p.fromEncryptionKey, conversationId,
     });
+    this.persistState();
     console.log(`[${this.persona.name}] Now friends with ${p.fromDisplayName}`);
   }
 
@@ -366,7 +375,7 @@ export class Wisp {
       const members = JSON.parse(p.membersJson) as { did: string; displayName: string }[];
       this.groups.set(p.groupId, {
         groupId: p.groupId, groupName: p.groupName,
-        groupKey, members, conversationId: p.groupId,
+        groupKey, members, conversationId: `group-${p.groupId}`,
       });
       // Send acceptance
       this.relay.sendEnvelope(p.inviterDid, {
@@ -378,6 +387,7 @@ export class Wisp {
           timestamp: Date.now(),
         },
       });
+      this.persistState();
       console.log(`[${this.persona.name}] Joined group "${p.groupName}"`);
     } catch (err) {
       console.warn(`[${this.persona.name}] Failed to handle group invite:`, err);
@@ -411,6 +421,42 @@ export class Wisp {
       this.sendGroupMessage(groupId, response);
     } catch (err) {
       console.warn(`[${this.persona.name}] Failed to respond in group:`, err);
+    }
+  }
+
+  // -- State Persistence --
+
+  private get statePath(): string {
+    return join(this.dataDir, this.persona.name, 'state.json');
+  }
+
+  private loadPersistedState(): void {
+    try {
+      if (!existsSync(this.statePath)) return;
+      const raw = JSON.parse(readFileSync(this.statePath, 'utf-8')) as {
+        friends?: WispFriend[];
+        groups?: WispGroup[];
+      };
+      if (raw.friends) {
+        for (const f of raw.friends) this.friends.set(f.did, f);
+        console.log(`[${this.persona.name}] Restored ${raw.friends.length} friends from disk`);
+      }
+      if (raw.groups) {
+        for (const g of raw.groups) this.groups.set(g.groupId, g);
+        console.log(`[${this.persona.name}] Restored ${raw.groups.length} groups from disk`);
+      }
+    } catch { /* ignore corrupt state */ }
+  }
+
+  persistState(): void {
+    try {
+      const data = {
+        friends: Array.from(this.friends.values()),
+        groups: Array.from(this.groups.values()),
+      };
+      writeFileSync(this.statePath, JSON.stringify(data, null, 2), 'utf-8');
+    } catch (err) {
+      console.warn(`[${this.persona.name}] Failed to persist state:`, err);
     }
   }
 

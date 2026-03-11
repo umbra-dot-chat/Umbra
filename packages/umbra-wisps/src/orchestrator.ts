@@ -76,7 +76,7 @@ export class WispOrchestrator {
 
   async spawnWisp(persona: WispPersona, allNames: string[]): Promise<Wisp> {
     const identity = loadOrCreateWispIdentity(this.config.dataDir, persona.name);
-    const wisp = new Wisp(identity, persona, this.config.relayUrl, this.llm, allNames);
+    const wisp = new Wisp(identity, persona, this.config.relayUrl, this.llm, allNames, this.config.dataDir);
     wisp.onUserMessage = (senderDid, messageId) => {
       maybeReact(this.getWisps(), senderDid, messageId);
     };
@@ -164,9 +164,11 @@ export class WispOrchestrator {
     const membersJson = JSON.stringify(members);
 
     // Creator adds itself to the group directly
+    // conversationId must use "group-{groupId}" to match WASM convention
+    const conversationId = `group-${groupId}`;
     const group: WispGroup = {
       groupId, groupName: name, groupKey: groupKeyHex,
-      members, conversationId: groupId,
+      members, conversationId,
     };
     creator.addGroup(group);
 
