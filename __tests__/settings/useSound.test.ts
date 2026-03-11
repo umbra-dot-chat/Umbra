@@ -60,6 +60,9 @@ jest.mock('@umbra/wasm', () => ({
 jest.mock('@/contexts/UmbraContext', () => ({
   useUmbra: jest.fn(() => ({
     isReady: true,
+    preferencesReady: true,
+    didChanged: 0,
+    syncVersion: 0,
   })),
 }));
 
@@ -85,7 +88,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   kvStore = {};
 
-  (useUmbra as jest.Mock).mockReturnValue({ isReady: true });
+  (useUmbra as jest.Mock).mockReturnValue({ isReady: true, preferencesReady: true, didChanged: 0, syncVersion: 0 });
 });
 
 // ===========================================================================
@@ -731,7 +734,7 @@ describe('T11.7.33 -- Restore from KV', () => {
 
 describe('T11.7.34 -- No restore when not ready', () => {
   it('T11.7.34 -- does not restore preferences when isReady is false', async () => {
-    (useUmbra as jest.Mock).mockReturnValue({ isReady: false });
+    (useUmbra as jest.Mock).mockReturnValue({ isReady: false, preferencesReady: false, didChanged: 0, syncVersion: 0 });
 
     const { result } = renderHook(() => useSound(), { wrapper });
 

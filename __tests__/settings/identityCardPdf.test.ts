@@ -13,7 +13,7 @@ import type { IdentityCardData } from '@/utils/identity-card-pdf';
 // ── jsPDF mock ─────────────────────────────────────────────────────────
 
 const mockSave = jest.fn();
-const mockOutput = jest.fn(() => new Blob(['mock-pdf'], { type: 'application/pdf' }));
+const mockOutput = jest.fn((): any => new Blob(['mock-pdf'], { type: 'application/pdf' }));
 const mockText = jest.fn();
 const mockRect = jest.fn();
 const mockRoundedRect = jest.fn();
@@ -91,8 +91,8 @@ beforeEach(() => {
 
 describe('Identity Card PDF Generation', () => {
 
-  test('T-IC.1: generateIdentityCardPDF creates an A4 portrait jsPDF document', () => {
-    const doc = generateIdentityCardPDF(baseData);
+  test('T-IC.1: generateIdentityCardPDF creates an A4 portrait jsPDF document', async () => {
+    const doc = await generateIdentityCardPDF(baseData);
     expect(jsPDF).toHaveBeenCalledWith(expect.objectContaining({
       orientation: 'portrait',
       unit: 'mm',
@@ -101,8 +101,8 @@ describe('Identity Card PDF Generation', () => {
     expect(doc).toBeDefined();
   });
 
-  test('T-IC.2: PDF includes passenger name and DID', () => {
-    generateIdentityCardPDF(baseData);
+  test('T-IC.2: PDF includes passenger name and DID', async () => {
+    await generateIdentityCardPDF(baseData);
     // Check that the display name appears
     expect(mockText).toHaveBeenCalledWith(
       'Alice',
@@ -116,8 +116,8 @@ describe('Identity Card PDF Generation', () => {
     expect(didCalls.length).toBeGreaterThan(0);
   });
 
-  test('T-IC.3: PDF renders QR code modules', () => {
-    generateIdentityCardPDF(baseData);
+  test('T-IC.3: PDF renders QR code modules', async () => {
+    await generateIdentityCardPDF(baseData);
     // QR code draws individual module rectangles
     expect(mockRect).toHaveBeenCalled();
     // Should draw dark modules (from our mock: (r+c)%2 === 0 = 8 dark modules in a 4x4 grid)
@@ -127,8 +127,8 @@ describe('Identity Card PDF Generation', () => {
     expect(rectCalls.length).toBeGreaterThan(0);
   });
 
-  test('T-IC.4: PDF without recovery phrase does not render seed words', () => {
-    generateIdentityCardPDF({ ...baseData, includeRecoveryPhrase: false });
+  test('T-IC.4: PDF without recovery phrase does not render seed words', async () => {
+    await generateIdentityCardPDF({ ...baseData, includeRecoveryPhrase: false });
     // None of the seed words should appear
     const wordCalls = mockText.mock.calls.filter(
       (call: any[]) => typeof call[0] === 'string' && call[0] === 'abandon',
@@ -136,8 +136,8 @@ describe('Identity Card PDF Generation', () => {
     expect(wordCalls.length).toBe(0);
   });
 
-  test('T-IC.5: PDF with recovery phrase renders all 24 words', () => {
-    generateIdentityCardPDF({
+  test('T-IC.5: PDF with recovery phrase renders all 24 words', async () => {
+    await generateIdentityCardPDF({
       ...baseData,
       recoveryPhrase: phraseWords,
       includeRecoveryPhrase: true,
@@ -153,8 +153,8 @@ describe('Identity Card PDF Generation', () => {
     }
   });
 
-  test('T-IC.6: PDF renders avatar fallback initial when no avatar provided', () => {
-    generateIdentityCardPDF({ ...baseData, avatar: null });
+  test('T-IC.6: PDF renders avatar fallback initial when no avatar provided', async () => {
+    await generateIdentityCardPDF({ ...baseData, avatar: null });
     // Should render the initial "A" for "Alice"
     const initialCalls = mockText.mock.calls.filter(
       (call: any[]) => call[0] === 'A' && typeof call[3] === 'object' && call[3].align === 'center',
@@ -162,19 +162,18 @@ describe('Identity Card PDF Generation', () => {
     expect(initialCalls.length).toBeGreaterThan(0);
   });
 
-  test('T-IC.7: downloadIdentityCardPDF triggers save with correct filename', () => {
-    downloadIdentityCardPDF(baseData);
+  test('T-IC.7: downloadIdentityCardPDF triggers save with correct filename', async () => {
+    await downloadIdentityCardPDF(baseData);
     expect(mockSave).toHaveBeenCalledWith('umbra-recovery-alice.pdf');
   });
 
-  test('T-IC.8: getIdentityCardPreviewUrl returns a blob URL', () => {
-    // Mock URL.createObjectURL
-    const mockCreateObjectURL = jest.fn(() => 'blob:mock-url');
-    global.URL.createObjectURL = mockCreateObjectURL;
+  test('T-IC.8: getIdentityCardPreviewUrl returns a data URI string', async () => {
+    // Mock doc.output('datauristring') to return a data URI
+    const mockDataUri = 'data:application/pdf;base64,bW9jaw==';
+    mockOutput.mockReturnValueOnce(mockDataUri);
 
-    const url = getIdentityCardPreviewUrl(baseData);
-    expect(url).toBe('blob:mock-url');
-    expect(mockOutput).toHaveBeenCalledWith('blob');
-    expect(mockCreateObjectURL).toHaveBeenCalled();
+    const url = await getIdentityCardPreviewUrl(baseData);
+    expect(url).toBe(mockDataUri);
+    expect(mockOutput).toHaveBeenCalledWith('datauristring');
   });
 });

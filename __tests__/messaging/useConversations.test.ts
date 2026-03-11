@@ -7,6 +7,7 @@
  *   T4.23.1 - T4.23.2  Empty state
  */
 
+import React from 'react';
 import { renderHook, act, waitFor } from '@testing-library/react-native';
 
 // ---------------------------------------------------------------------------
@@ -58,8 +59,14 @@ jest.mock('@/contexts/AuthContext', () => ({
 
 import { UmbraService } from '@umbra/service';
 import { useConversations } from '@/hooks/useConversations';
+import { ConversationsProvider } from '@/contexts/ConversationsContext';
 
 const mockService = UmbraService.instance as unknown as Record<string, jest.Mock>;
+
+// Wrapper that includes the required ConversationsProvider
+function Wrapper({ children }: { children: React.ReactNode }) {
+  return React.createElement(ConversationsProvider, null, children);
+}
 
 // ---------------------------------------------------------------------------
 // Sample data
@@ -117,7 +124,7 @@ describe('useConversations', () => {
     it('T2.2.6 — fetches conversations on mount when service is ready', async () => {
       mockService.getConversations.mockResolvedValueOnce(sampleConversations);
 
-      const { result } = renderHook(() => useConversations());
+      const { result } = renderHook(() => useConversations(), { wrapper: Wrapper });
 
       await waitFor(() => expect(result.current.isLoading).toBe(false));
 
@@ -128,7 +135,7 @@ describe('useConversations', () => {
     it('T2.2.7 — conversations array contains expected conversation objects', async () => {
       mockService.getConversations.mockResolvedValueOnce(sampleConversations);
 
-      const { result } = renderHook(() => useConversations());
+      const { result } = renderHook(() => useConversations(), { wrapper: Wrapper });
       await waitFor(() => expect(result.current.isLoading).toBe(false));
 
       expect(result.current.conversations[0].id).toBe('conv-1');
@@ -140,7 +147,7 @@ describe('useConversations', () => {
     it('T2.2.8 — sets error when getConversations fails', async () => {
       mockService.getConversations.mockRejectedValueOnce(new Error('Fetch failed'));
 
-      const { result } = renderHook(() => useConversations());
+      const { result } = renderHook(() => useConversations(), { wrapper: Wrapper });
       await waitFor(() => expect(result.current.isLoading).toBe(false));
 
       expect(result.current.error).toBeInstanceOf(Error);
@@ -150,7 +157,7 @@ describe('useConversations', () => {
     it('T2.2.9 — refresh re-fetches conversations', async () => {
       mockService.getConversations.mockResolvedValueOnce(sampleConversations);
 
-      const { result } = renderHook(() => useConversations());
+      const { result } = renderHook(() => useConversations(), { wrapper: Wrapper });
       await waitFor(() => expect(result.current.isLoading).toBe(false));
 
       // Now mock a fresh result for refresh
@@ -176,7 +183,7 @@ describe('useConversations', () => {
     it('T2.2.10 — subscribes to message events and refreshes on message activity', async () => {
       mockService.getConversations.mockResolvedValue([]);
 
-      renderHook(() => useConversations());
+      renderHook(() => useConversations(), { wrapper: Wrapper });
 
       await waitFor(() => {
         expect(mockService.onMessageEvent).toHaveBeenCalled();
@@ -196,7 +203,7 @@ describe('useConversations', () => {
     it('T2.5.1 — conversations starts empty when backend returns no conversations', async () => {
       mockService.getConversations.mockResolvedValueOnce([]);
 
-      const { result } = renderHook(() => useConversations());
+      const { result } = renderHook(() => useConversations(), { wrapper: Wrapper });
       await waitFor(() => expect(result.current.isLoading).toBe(false));
 
       expect(result.current.conversations).toEqual([]);
@@ -205,7 +212,7 @@ describe('useConversations', () => {
     it('T2.5.2 — refresh after creating a DM picks up new conversation', async () => {
       mockService.getConversations.mockResolvedValueOnce([]);
 
-      const { result } = renderHook(() => useConversations());
+      const { result } = renderHook(() => useConversations(), { wrapper: Wrapper });
       await waitFor(() => expect(result.current.isLoading).toBe(false));
       expect(result.current.conversations).toEqual([]);
 
@@ -231,7 +238,7 @@ describe('useConversations', () => {
     it('T2.5.3 — handles non-Error rejection gracefully', async () => {
       mockService.getConversations.mockRejectedValueOnce('string error');
 
-      const { result } = renderHook(() => useConversations());
+      const { result } = renderHook(() => useConversations(), { wrapper: Wrapper });
       await waitFor(() => expect(result.current.isLoading).toBe(false));
 
       expect(result.current.error).toBeInstanceOf(Error);
@@ -241,7 +248,7 @@ describe('useConversations', () => {
     it('T2.5.4 — subscribes to friend events for real-time DM creation', async () => {
       mockService.getConversations.mockResolvedValue([]);
 
-      renderHook(() => useConversations());
+      renderHook(() => useConversations(), { wrapper: Wrapper });
 
       await waitFor(() => {
         expect(mockService.onFriendEvent).toHaveBeenCalled();
@@ -258,7 +265,7 @@ describe('useConversations', () => {
       mockService.onFriendEvent.mockReturnValue(unsubFriend);
       mockService.getConversations.mockResolvedValue([]);
 
-      const { unmount } = renderHook(() => useConversations());
+      const { unmount } = renderHook(() => useConversations(), { wrapper: Wrapper });
       await waitFor(() => {
         expect(mockService.onMessageEvent).toHaveBeenCalled();
       });
@@ -278,7 +285,7 @@ describe('useConversations', () => {
     it('T4.23.1 — conversations is empty array when no conversations exist', async () => {
       mockService.getConversations.mockResolvedValueOnce([]);
 
-      const { result } = renderHook(() => useConversations());
+      const { result } = renderHook(() => useConversations(), { wrapper: Wrapper });
       await waitFor(() => expect(result.current.isLoading).toBe(false));
 
       expect(result.current.conversations).toEqual([]);
@@ -288,7 +295,7 @@ describe('useConversations', () => {
     it('T4.23.2 — isLoading transitions from true to false after fetch', async () => {
       mockService.getConversations.mockResolvedValueOnce([]);
 
-      const { result } = renderHook(() => useConversations());
+      const { result } = renderHook(() => useConversations(), { wrapper: Wrapper });
 
       // Initially loading
       expect(result.current.isLoading).toBe(true);

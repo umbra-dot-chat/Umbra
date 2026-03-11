@@ -14,7 +14,10 @@ import qrcode from 'qrcode-generator';
 let _jsPDF: typeof import('jspdf')['jsPDF'] | null = null;
 async function loadJsPDF() {
   if (!_jsPDF) {
-    const mod = await import('jspdf');
+    // Use require() instead of dynamic import() for Node.js v24+ compatibility
+    // (dynamic import in Jest VM requires --experimental-vm-modules).
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const mod = require('jspdf');
     _jsPDF = mod.jsPDF;
   }
   return _jsPDF;
@@ -95,6 +98,7 @@ function drawThinRule(doc: any, x: number, y: number, w: number) {
 
 export async function generateIdentityCardPDF(data: IdentityCardData) {
   const jsPDF = await loadJsPDF();
+  if (!jsPDF) throw new Error('jsPDF failed to load');
   const showPhrase = data.includeRecoveryPhrase && data.recoveryPhrase && data.recoveryPhrase.length === 24;
 
   // A4 portrait

@@ -49,6 +49,7 @@ jest.mock('@/contexts/UmbraContext', () => ({
     isReady: true,
     preferencesReady: true,
     didChanged: 0,
+    syncVersion: 0,
     service: mockService,
   })),
 }));
@@ -59,7 +60,7 @@ jest.mock('@/contexts/AuthContext', () => ({
   })),
 }));
 
-// Mock Wisp useTheme hook
+// Mock Wisp useTheme hook and MotionProvider
 const mockSetOverrides = jest.fn();
 const mockSetMode = jest.fn();
 jest.mock('@coexist/wisp-react-native', () => ({
@@ -68,6 +69,7 @@ jest.mock('@coexist/wisp-react-native', () => ({
     setMode: mockSetMode,
     mode: 'dark',
   })),
+  MotionProvider: ({ children }: any) => children,
 }));
 
 // Mock FontContext

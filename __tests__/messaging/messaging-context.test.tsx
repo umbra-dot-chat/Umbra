@@ -30,6 +30,9 @@ jest.mock('@/contexts/UmbraContext', () => ({
       error: null,
       version: '0.1.0-test',
       initStage: 'ready',
+      preferencesReady: true,
+      didChanged: 0,
+      syncVersion: 0,
     };
   },
 }));

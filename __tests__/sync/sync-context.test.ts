@@ -42,6 +42,7 @@ const mockUmbraContext = {
   preferencesReady: true,
   didChanged: 0,
   service: null,
+  bumpSyncVersion: jest.fn(),
 };
 
 jest.mock('@/contexts/UmbraContext', () => ({
@@ -71,6 +72,8 @@ jest.mock('@/hooks/useNetwork', () => ({
   getRelayHttpUrl: () => mockGetRelayHttpUrl(),
   registerSyncUpdateCallback: (cb: Function) => mockRegisterSyncUpdateCallback(cb),
   unregisterSyncUpdateCallback: (cb: Function) => mockUnregisterSyncUpdateCallback(cb),
+  subscribeRelayState: jest.fn((cb: Function) => jest.fn()),
+  sendSyncPush: jest.fn(),
 }));
 
 // @umbra/service is auto-mocked via moduleNameMapper → __mocks__/@umbra/service.js
@@ -258,13 +261,13 @@ describe('T-SCTX.6-8 — setSyncEnabled', () => {
 // ===========================================================================
 
 describe('T-SCTX.9-10 — KV Restore on Mount', () => {
-  it('T-SCTX.9 — restores syncEnabled=true from KV when saved', () => {
+  it('T-SCTX.9 — restores syncEnabled=true from KV when saved', async () => {
     kvStore['__umbra_system__:__sync_enabled__'] = 'true';
 
     const { result } = renderHook(() => useSync(), { wrapper });
 
-    // The effect runs asynchronously; advance timers
-    act(() => {
+    // The KV restore is async — flush timers and microtasks
+    await act(async () => {
       jest.runAllTimers();
     });
 
@@ -550,12 +553,13 @@ describe('T-SCTX.22-24 — restoreFromRemote', () => {
 // ===========================================================================
 
 describe('T-SCTX.25 — WS Sync Update Listener', () => {
-  it('T-SCTX.25 — registers/unregisters sync callback on mount/unmount when enabled', () => {
+  it('T-SCTX.25 — registers/unregisters sync callback on mount/unmount when enabled', async () => {
     kvStore['__umbra_system__:__sync_enabled__'] = 'true';
 
     const { unmount } = renderHook(() => useSync(), { wrapper });
 
-    act(() => {
+    // Flush async KV restore and timers so syncEnabled becomes true
+    await act(async () => {
       jest.runAllTimers();
     });
 
