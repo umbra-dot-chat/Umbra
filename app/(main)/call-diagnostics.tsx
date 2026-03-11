@@ -11,8 +11,7 @@
  */
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
-import { View, ScrollView, Pressable, TextInput } from 'react-native';
-import { Text, useTheme } from '@coexist/wisp-react-native';
+import { Text, Button, TextArea, useTheme, Box, ScrollArea } from '@coexist/wisp-react-native';
 import { CallManager } from '@/services/CallManager';
 import { resolveTurnCredentials } from '@/config/network';
 import { useCallContext } from '@/contexts/CallContext';
@@ -378,17 +377,9 @@ export default function CallDiagnosticsPage() {
     borderBottomColor: colors.border.subtle,
   };
 
-  const labelStyle = { color: colors.text.muted, fontSize: 13 };
-  const valueStyle = { color: colors.text.primary, fontSize: 13, fontWeight: '500' as const };
-  const monoStyle = { color: colors.text.primary, fontSize: 11, fontFamily: 'monospace' as any };
-
-  const btnStyle = (color: string) => ({
-    backgroundColor: color,
-    borderRadius: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    alignItems: 'center' as const,
-  });
+  const labelColor = { color: colors.text.muted };
+  const valueColor = { color: colors.text.primary };
+  const monoColor = { color: colors.text.primary, fontFamily: 'monospace' as any };
 
   const StatusDot = ({ status }: { status: 'pass' | 'fail' | 'testing' | 'idle' }) => {
     const dotColor =
@@ -397,7 +388,7 @@ export default function CallDiagnosticsPage() {
       status === 'testing' ? colors.status.warning :
       colors.text.muted;
     return (
-      <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: dotColor, marginRight: 6 }} />
+      <Box style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: dotColor, marginRight: 6 }} />
     );
   };
 
@@ -409,7 +400,7 @@ export default function CallDiagnosticsPage() {
   };
 
   return (
-    <ScrollView
+    <ScrollArea
       style={{ flex: 1, backgroundColor: colors.background.canvas }}
       contentContainerStyle={{ padding: 20, maxWidth: 800, gap: 8 }}
     >
@@ -421,130 +412,128 @@ export default function CallDiagnosticsPage() {
       </Text>
 
       {/* ─── 1. Relay Connectivity ─── */}
-      <View style={sectionStyle}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+      <Box style={sectionStyle}>
+        <Box style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <Text size="lg" weight="semibold" style={{ color: colors.text.primary }}>
             1. Relay Connectivity
           </Text>
-          <Pressable onPress={testAllRelays} style={btnStyle(colors.accent.primary)}>
-            <Text size="xs" weight="semibold" style={{ color: '#FFF' }}>Test All</Text>
-          </Pressable>
-        </View>
+          <Button variant="primary" size="xs" onPress={testAllRelays}>
+            Test All
+          </Button>
+        </Box>
 
         {relayResults.map((result, i) => (
-          <View key={i} style={rowStyle}>
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <Box key={i} style={rowStyle}>
+            <Box style={{ flexDirection: 'row', alignItems: 'center' }}>
               <StatusDot status={result.status} />
-              <Text style={labelStyle}>{result.label}</Text>
-            </View>
-            <Text style={valueStyle}>
+              <Text size="sm" style={labelColor}>{result.label}</Text>
+            </Box>
+            <Text size="sm" weight="medium" style={valueColor}>
               {result.status === 'testing' ? 'Testing...' :
                result.status === 'pass' ? `${result.latency}ms` :
                result.status === 'fail' ? result.error ?? 'Failed' :
                '—'}
             </Text>
-          </View>
+          </Box>
         ))}
-      </View>
+      </Box>
 
       {/* ─── 2. TURN/STUN Connectivity ─── */}
-      <View style={sectionStyle}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+      <Box style={sectionStyle}>
+        <Box style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <Text size="lg" weight="semibold" style={{ color: colors.text.primary }}>
             2. TURN/STUN Connectivity
           </Text>
-          <Pressable onPress={testIceServers} style={btnStyle(colors.accent.primary)}>
-            <Text size="xs" weight="semibold" style={{ color: '#FFF' }}>
-              {iceTestRunning ? 'Testing...' : 'Run Tests'}
-            </Text>
-          </Pressable>
-        </View>
+          <Button variant="primary" size="xs" onPress={testIceServers} disabled={iceTestRunning}>
+            {iceTestRunning ? 'Testing...' : 'Run Tests'}
+          </Button>
+        </Box>
 
         {turnCreds && (
-          <View style={rowStyle}>
-            <Text style={labelStyle}>TURN Credentials</Text>
-            <Text style={monoStyle}>{turnCreds.username.slice(0, 20)}...</Text>
-          </View>
+          <Box style={rowStyle}>
+            <Text size="sm" style={labelColor}>TURN Credentials</Text>
+            <Text size="xs" style={monoColor}>{turnCreds.username.slice(0, 20)}...</Text>
+          </Box>
         )}
 
         {stunResults.map((result, i) => (
-          <View key={`stun-${i}`} style={rowStyle}>
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <Box key={`stun-${i}`} style={rowStyle}>
+            <Box style={{ flexDirection: 'row', alignItems: 'center' }}>
               <StatusDot status={result.success ? 'pass' : 'fail'} />
-              <Text style={labelStyle}>STUN {result.url.split(':')[1]}</Text>
-            </View>
-            <Text style={valueStyle}>
+              <Text size="sm" style={labelColor}>STUN {result.url.split(':')[1]}</Text>
+            </Box>
+            <Text size="sm" weight="medium" style={valueColor}>
               {result.success ? `${result.rtt}ms — IP: ${result.publicIp}` : result.error ?? 'Failed'}
             </Text>
-          </View>
+          </Box>
         ))}
 
         {turnResults.map((result, i) => (
-          <View key={`turn-${i}`} style={rowStyle}>
-            <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+          <Box key={`turn-${i}`} style={rowStyle}>
+            <Box style={{ flexDirection: 'row', alignItems: 'center' }}>
               <StatusDot status={result.success ? 'pass' : 'fail'} />
-              <Text style={labelStyle}>TURN {result.url.includes('udp') ? 'UDP' : 'TCP'}</Text>
-            </View>
-            <Text style={valueStyle}>
+              <Text size="sm" style={labelColor}>TURN {result.url.includes('udp') ? 'UDP' : 'TCP'}</Text>
+            </Box>
+            <Text size="sm" weight="medium" style={valueColor}>
               {result.success ? `${result.rtt}ms (relay)` : result.error ?? 'Failed'}
             </Text>
-          </View>
+          </Box>
         ))}
-      </View>
+      </Box>
 
       {/* ─── 3. Loopback Audio Test ─── */}
-      <View style={sectionStyle}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+      <Box style={sectionStyle}>
+        <Box style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <Text size="lg" weight="semibold" style={{ color: colors.text.primary }}>
             3. Loopback Audio Test
           </Text>
           {!audioStream ? (
-            <Pressable onPress={startAudioTest} style={btnStyle(colors.status.success)}>
-              <Text size="xs" weight="semibold" style={{ color: '#FFF' }}>Start Mic</Text>
-            </Pressable>
+            <Button variant="secondary" size="xs" onPress={startAudioTest}>
+              Start Mic
+            </Button>
           ) : (
-            <View style={{ flexDirection: 'row', gap: 8 }}>
-              <Pressable onPress={toggleLoopback} style={btnStyle(audioLoopback ? colors.status.warning : colors.accent.primary)}>
-                <Text size="xs" weight="semibold" style={{ color: '#FFF' }}>{audioLoopback ? 'Stop Loopback' : 'Loopback'}</Text>
-              </Pressable>
-              <Pressable onPress={stopAudioTest} style={btnStyle(colors.status.danger)}>
-                <Text size="xs" weight="semibold" style={{ color: '#FFF' }}>Stop</Text>
-              </Pressable>
-            </View>
+            <Box style={{ flexDirection: 'row', gap: 8 }}>
+              <Button variant={audioLoopback ? 'secondary' : 'primary'} size="xs" onPress={toggleLoopback}>
+                {audioLoopback ? 'Stop Loopback' : 'Loopback'}
+              </Button>
+              <Button variant="destructive" size="xs" onPress={stopAudioTest}>
+                Stop
+              </Button>
+            </Box>
           )}
-        </View>
+        </Box>
 
         {audioStream && (
           <>
-            <View style={rowStyle}>
-              <Text style={labelStyle}>Device</Text>
-              <Text style={valueStyle}>{audioDeviceName}</Text>
-            </View>
-            <View style={rowStyle}>
-              <Text style={labelStyle}>Audio Level</Text>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1, marginLeft: 16 }}>
-                <View style={{ flex: 1, height: 8, borderRadius: 4, backgroundColor: colors.border.subtle }}>
-                  <View style={{
+            <Box style={rowStyle}>
+              <Text size="sm" style={labelColor}>Device</Text>
+              <Text size="sm" weight="medium" style={valueColor}>{audioDeviceName}</Text>
+            </Box>
+            <Box style={rowStyle}>
+              <Text size="sm" style={labelColor}>Audio Level</Text>
+              <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1, marginLeft: 16 }}>
+                <Box style={{ flex: 1, height: 8, borderRadius: 4, backgroundColor: colors.border.subtle }}>
+                  <Box style={{
                     width: `${Math.round(audioLevel * 100)}%`,
                     height: 8,
                     borderRadius: 4,
                     backgroundColor: audioLevel > 0.5 ? colors.status.success : audioLevel > 0.1 ? colors.status.warning : colors.text.muted,
                   }} />
-                </View>
-                <Text style={monoStyle}>{Math.round(audioLevel * 100)}%</Text>
-              </View>
-            </View>
+                </Box>
+                <Text size="xs" style={monoColor}>{Math.round(audioLevel * 100)}%</Text>
+              </Box>
+            </Box>
           </>
         )}
         {!audioStream && (
-          <Text style={{ color: colors.text.muted, fontSize: 13 }}>
+          <Text size="sm" style={{ color: colors.text.muted }}>
             Click Start Mic to test microphone capture and audio levels.
           </Text>
         )}
-      </View>
+      </Box>
 
       {/* ─── 4. Call Negotiation Test ─── */}
-      <View style={sectionStyle}>
+      <Box style={sectionStyle}>
         <Text size="lg" weight="semibold" style={{ color: colors.text.primary, marginBottom: 8 }}>
           4. Call Negotiation Test
         </Text>
@@ -552,206 +541,207 @@ export default function CallDiagnosticsPage() {
           Create an SDP offer, copy it to another tab, paste the answer back to verify WebRTC negotiation.
         </Text>
 
-        <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
-          <Pressable onPress={createTestOffer} style={btnStyle(colors.accent.primary)}>
-            <Text size="xs" weight="semibold" style={{ color: '#FFF' }}>Create Offer</Text>
-          </Pressable>
-          <Pressable onPress={acceptTestOffer} style={btnStyle(colors.status.success)}>
-            <Text size="xs" weight="semibold" style={{ color: '#FFF' }}>Accept Offer</Text>
-          </Pressable>
-          <Pressable onPress={applyTestAnswer} style={btnStyle('#8B5CF6')}>
-            <Text size="xs" weight="semibold" style={{ color: '#FFF' }}>Apply Answer</Text>
-          </Pressable>
-          <Pressable onPress={closeNegotiation} style={btnStyle(colors.status.danger)}>
-            <Text size="xs" weight="semibold" style={{ color: '#FFF' }}>Reset</Text>
-          </Pressable>
-        </View>
+        <Box style={{ flexDirection: 'row', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+          <Button variant="primary" size="xs" onPress={createTestOffer}>
+            Create Offer
+          </Button>
+          <Button variant="secondary" size="xs" onPress={acceptTestOffer}>
+            Accept Offer
+          </Button>
+          <Button variant="primary" size="xs" onPress={applyTestAnswer}>
+            Apply Answer
+          </Button>
+          <Button variant="destructive" size="xs" onPress={closeNegotiation}>
+            Reset
+          </Button>
+        </Box>
 
-        <View style={rowStyle}>
-          <Text style={labelStyle}>State</Text>
-          <Text style={valueStyle}>{negotiationState}</Text>
-        </View>
+        <Box style={rowStyle}>
+          <Text size="sm" style={labelColor}>State</Text>
+          <Text size="sm" weight="medium" style={valueColor}>{negotiationState}</Text>
+        </Box>
 
         {offerSdp ? (
-          <View style={{ marginTop: 8 }}>
-            <Text style={labelStyle}>Offer SDP (copy this):</Text>
-            <TextInput
+          <Box style={{ marginTop: 8 }}>
+            <TextArea
+              label="Offer SDP (copy this)"
               value={offerSdp}
-              multiline
               numberOfLines={3}
-              style={{ ...monoStyle, borderWidth: 1, borderColor: colors.border.subtle, borderRadius: 6, padding: 8, marginTop: 4, maxHeight: 80 }}
+              editable={false}
               selectTextOnFocus
+              size="sm"
+              style={{ marginTop: 4 }}
             />
-          </View>
+          </Box>
         ) : null}
 
         {answerSdp ? (
-          <View style={{ marginTop: 8 }}>
-            <Text style={labelStyle}>Answer SDP (copy this back):</Text>
-            <TextInput
+          <Box style={{ marginTop: 8 }}>
+            <TextArea
+              label="Answer SDP (copy this back)"
               value={answerSdp}
-              multiline
               numberOfLines={3}
-              style={{ ...monoStyle, borderWidth: 1, borderColor: colors.border.subtle, borderRadius: 6, padding: 8, marginTop: 4, maxHeight: 80 }}
+              editable={false}
               selectTextOnFocus
+              size="sm"
+              style={{ marginTop: 4 }}
             />
-          </View>
+          </Box>
         ) : null}
 
-        <View style={{ marginTop: 8 }}>
-          <Text style={labelStyle}>Paste SDP here:</Text>
-          <TextInput
+        <Box style={{ marginTop: 8 }}>
+          <TextArea
+            label="Paste SDP here"
             value={pastedOffer}
             onChangeText={setPastedOffer}
-            multiline
             numberOfLines={3}
             placeholder="Paste offer or answer SDP..."
-            placeholderTextColor={colors.text.muted}
-            style={{ ...monoStyle, borderWidth: 1, borderColor: colors.border.subtle, borderRadius: 6, padding: 8, marginTop: 4, maxHeight: 80 }}
+            size="sm"
+            style={{ marginTop: 4 }}
           />
-        </View>
+        </Box>
 
         {negotiationLog.length > 0 && (
-          <View style={{ marginTop: 8 }}>
-            <Text style={labelStyle}>Log:</Text>
+          <Box style={{ marginTop: 8 }}>
+            <Text size="sm" style={labelColor}>Log:</Text>
             {negotiationLog.map((entry, i) => (
-              <Text key={i} style={{ ...monoStyle, fontSize: 10, marginTop: 2 }}>{entry}</Text>
+              <Text key={i} size="xs" style={{ ...monoColor, marginTop: 2 }}>{entry}</Text>
             ))}
-          </View>
+          </Box>
         )}
-      </View>
+      </Box>
 
       {/* ─── 5. Real-Time Call Stats ─── */}
-      <View style={sectionStyle}>
+      <Box style={sectionStyle}>
         <Text size="lg" weight="semibold" style={{ color: colors.text.primary, marginBottom: 12 }}>
           5. Real-Time Call Stats
         </Text>
 
         {!activeCall ? (
-          <Text style={{ color: colors.text.muted, fontSize: 13 }}>
+          <Text size="sm" style={{ color: colors.text.muted }}>
             No active call. Start a call to see real-time statistics.
           </Text>
         ) : (
           <>
-            <View style={rowStyle}>
-              <Text style={labelStyle}>Call ID</Text>
-              <Text style={monoStyle}>{activeCall.callId.slice(0, 20)}...</Text>
-            </View>
-            <View style={rowStyle}>
-              <Text style={labelStyle}>Status</Text>
-              <Text style={valueStyle}>{activeCall.status}</Text>
-            </View>
-            <View style={rowStyle}>
-              <Text style={labelStyle}>Type</Text>
-              <Text style={valueStyle}>{activeCall.callType}</Text>
-            </View>
-            <View style={rowStyle}>
-              <Text style={labelStyle}>Remote</Text>
-              <Text style={valueStyle}>{activeCall.remoteDisplayName}</Text>
-            </View>
+            <Box style={rowStyle}>
+              <Text size="sm" style={labelColor}>Call ID</Text>
+              <Text size="xs" style={monoColor}>{activeCall.callId.slice(0, 20)}...</Text>
+            </Box>
+            <Box style={rowStyle}>
+              <Text size="sm" style={labelColor}>Status</Text>
+              <Text size="sm" weight="medium" style={valueColor}>{activeCall.status}</Text>
+            </Box>
+            <Box style={rowStyle}>
+              <Text size="sm" style={labelColor}>Type</Text>
+              <Text size="sm" weight="medium" style={valueColor}>{activeCall.callType}</Text>
+            </Box>
+            <Box style={rowStyle}>
+              <Text size="sm" style={labelColor}>Remote</Text>
+              <Text size="sm" weight="medium" style={valueColor}>{activeCall.remoteDisplayName}</Text>
+            </Box>
 
             {callStats && (
               <>
-                <View style={{ marginTop: 8, borderTopWidth: 1, borderTopColor: colors.border.subtle, paddingTop: 8 }}>
+                <Box style={{ marginTop: 8, borderTopWidth: 1, borderTopColor: colors.border.subtle, paddingTop: 8 }}>
                   <Text size="sm" weight="semibold" style={{ color: colors.text.primary, marginBottom: 4 }}>Network</Text>
-                </View>
-                <View style={rowStyle}>
-                  <Text style={labelStyle}>RTT</Text>
-                  <Text style={valueStyle}>{callStats.roundTripTime?.toFixed(0) ?? '—'}ms</Text>
-                </View>
-                <View style={rowStyle}>
-                  <Text style={labelStyle}>Packet Loss</Text>
-                  <Text style={{ ...valueStyle, color: qualityColor(callStats.packetLoss) }}>
+                </Box>
+                <Box style={rowStyle}>
+                  <Text size="sm" style={labelColor}>RTT</Text>
+                  <Text size="sm" weight="medium" style={valueColor}>{callStats.roundTripTime?.toFixed(0) ?? '—'}ms</Text>
+                </Box>
+                <Box style={rowStyle}>
+                  <Text size="sm" style={labelColor}>Packet Loss</Text>
+                  <Text size="sm" weight="medium" style={{ color: qualityColor(callStats.packetLoss) }}>
                     {callStats.packetLoss?.toFixed(2) ?? '—'}%
                   </Text>
-                </View>
-                <View style={rowStyle}>
-                  <Text style={labelStyle}>Jitter</Text>
-                  <Text style={valueStyle}>{callStats.jitter?.toFixed(1) ?? '—'}ms</Text>
-                </View>
-                <View style={rowStyle}>
-                  <Text style={labelStyle}>Available Bitrate</Text>
-                  <Text style={valueStyle}>{callStats.availableOutgoingBitrate ?? '—'} kbps</Text>
-                </View>
+                </Box>
+                <Box style={rowStyle}>
+                  <Text size="sm" style={labelColor}>Jitter</Text>
+                  <Text size="sm" weight="medium" style={valueColor}>{callStats.jitter?.toFixed(1) ?? '—'}ms</Text>
+                </Box>
+                <Box style={rowStyle}>
+                  <Text size="sm" style={labelColor}>Available Bitrate</Text>
+                  <Text size="sm" weight="medium" style={valueColor}>{callStats.availableOutgoingBitrate ?? '—'} kbps</Text>
+                </Box>
 
-                <View style={{ marginTop: 8, borderTopWidth: 1, borderTopColor: colors.border.subtle, paddingTop: 8 }}>
+                <Box style={{ marginTop: 8, borderTopWidth: 1, borderTopColor: colors.border.subtle, paddingTop: 8 }}>
                   <Text size="sm" weight="semibold" style={{ color: colors.text.primary, marginBottom: 4 }}>Media</Text>
-                </View>
-                <View style={rowStyle}>
-                  <Text style={labelStyle}>Audio Bitrate</Text>
-                  <Text style={valueStyle}>{callStats.audioBitrate ?? '—'} kbps</Text>
-                </View>
-                <View style={rowStyle}>
-                  <Text style={labelStyle}>Video Bitrate</Text>
-                  <Text style={valueStyle}>{callStats.bitrate ?? '—'} kbps</Text>
-                </View>
-                <View style={rowStyle}>
-                  <Text style={labelStyle}>Codec</Text>
-                  <Text style={valueStyle}>{callStats.codec ?? '—'}</Text>
-                </View>
+                </Box>
+                <Box style={rowStyle}>
+                  <Text size="sm" style={labelColor}>Audio Bitrate</Text>
+                  <Text size="sm" weight="medium" style={valueColor}>{callStats.audioBitrate ?? '—'} kbps</Text>
+                </Box>
+                <Box style={rowStyle}>
+                  <Text size="sm" style={labelColor}>Video Bitrate</Text>
+                  <Text size="sm" weight="medium" style={valueColor}>{callStats.bitrate ?? '—'} kbps</Text>
+                </Box>
+                <Box style={rowStyle}>
+                  <Text size="sm" style={labelColor}>Codec</Text>
+                  <Text size="sm" weight="medium" style={valueColor}>{callStats.codec ?? '—'}</Text>
+                </Box>
                 {callStats.resolution && (
-                  <View style={rowStyle}>
-                    <Text style={labelStyle}>Resolution</Text>
-                    <Text style={valueStyle}>{callStats.resolution.width}x{callStats.resolution.height}</Text>
-                  </View>
+                  <Box style={rowStyle}>
+                    <Text size="sm" style={labelColor}>Resolution</Text>
+                    <Text size="sm" weight="medium" style={valueColor}>{callStats.resolution.width}x{callStats.resolution.height}</Text>
+                  </Box>
                 )}
-                <View style={rowStyle}>
-                  <Text style={labelStyle}>Frame Rate</Text>
-                  <Text style={valueStyle}>{callStats.frameRate ?? '—'} fps</Text>
-                </View>
-                <View style={rowStyle}>
-                  <Text style={labelStyle}>Audio Level</Text>
-                  <Text style={valueStyle}>{callStats.audioLevel != null ? (callStats.audioLevel * 100).toFixed(0) + '%' : '—'}</Text>
-                </View>
+                <Box style={rowStyle}>
+                  <Text size="sm" style={labelColor}>Frame Rate</Text>
+                  <Text size="sm" weight="medium" style={valueColor}>{callStats.frameRate ?? '—'} fps</Text>
+                </Box>
+                <Box style={rowStyle}>
+                  <Text size="sm" style={labelColor}>Audio Level</Text>
+                  <Text size="sm" weight="medium" style={valueColor}>{callStats.audioLevel != null ? (callStats.audioLevel * 100).toFixed(0) + '%' : '—'}</Text>
+                </Box>
 
-                <View style={{ marginTop: 8, borderTopWidth: 1, borderTopColor: colors.border.subtle, paddingTop: 8 }}>
+                <Box style={{ marginTop: 8, borderTopWidth: 1, borderTopColor: colors.border.subtle, paddingTop: 8 }}>
                   <Text size="sm" weight="semibold" style={{ color: colors.text.primary, marginBottom: 4 }}>ICE</Text>
-                </View>
-                <View style={rowStyle}>
-                  <Text style={labelStyle}>Local Candidate</Text>
-                  <Text style={valueStyle}>{callStats.localCandidateType ?? '—'}</Text>
-                </View>
-                <View style={rowStyle}>
-                  <Text style={labelStyle}>Remote Candidate</Text>
-                  <Text style={valueStyle}>{callStats.remoteCandidateType ?? '—'}</Text>
-                </View>
-                <View style={rowStyle}>
-                  <Text style={labelStyle}>Packets Lost</Text>
-                  <Text style={valueStyle}>{callStats.packetsLost ?? '—'}</Text>
-                </View>
-                <View style={rowStyle}>
-                  <Text style={labelStyle}>Fraction Lost</Text>
-                  <Text style={valueStyle}>{callStats.fractionLost != null ? (callStats.fractionLost * 100).toFixed(2) + '%' : '—'}</Text>
-                </View>
+                </Box>
+                <Box style={rowStyle}>
+                  <Text size="sm" style={labelColor}>Local Candidate</Text>
+                  <Text size="sm" weight="medium" style={valueColor}>{callStats.localCandidateType ?? '—'}</Text>
+                </Box>
+                <Box style={rowStyle}>
+                  <Text size="sm" style={labelColor}>Remote Candidate</Text>
+                  <Text size="sm" weight="medium" style={valueColor}>{callStats.remoteCandidateType ?? '—'}</Text>
+                </Box>
+                <Box style={rowStyle}>
+                  <Text size="sm" style={labelColor}>Packets Lost</Text>
+                  <Text size="sm" weight="medium" style={valueColor}>{callStats.packetsLost ?? '—'}</Text>
+                </Box>
+                <Box style={rowStyle}>
+                  <Text size="sm" style={labelColor}>Fraction Lost</Text>
+                  <Text size="sm" weight="medium" style={valueColor}>{callStats.fractionLost != null ? (callStats.fractionLost * 100).toFixed(2) + '%' : '—'}</Text>
+                </Box>
               </>
             )}
           </>
         )}
-      </View>
+      </Box>
 
       {/* ─── 6. ICE Candidate Log ─── */}
-      <View style={sectionStyle}>
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+      <Box style={sectionStyle}>
+        <Box style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
           <Text size="lg" weight="semibold" style={{ color: colors.text.primary }}>
             6. ICE Candidate Log
           </Text>
-          <Pressable onPress={() => setIceCandidates([])} style={btnStyle(colors.status.danger)}>
-            <Text size="xs" weight="semibold" style={{ color: '#FFF' }}>Clear</Text>
-          </Pressable>
-        </View>
+          <Button variant="destructive" size="xs" onPress={() => setIceCandidates([])}>
+            Clear
+          </Button>
+        </Box>
 
         {iceCandidates.length === 0 ? (
-          <Text style={{ color: colors.text.muted, fontSize: 13 }}>
+          <Text size="sm" style={{ color: colors.text.muted }}>
             ICE candidates will appear here during TURN/STUN tests and active calls.
           </Text>
         ) : (
           iceCandidates.slice(0, 50).map((c, i) => (
-            <Text key={i} style={{ ...monoStyle, fontSize: 10, marginBottom: 2 }}>
+            <Text key={i} size="xs" style={{ ...monoColor, marginBottom: 2 }}>
               {new Date(c.timestamp).toISOString().slice(11, 23)} [{c.direction}] {c.type} {c.protocol} {c.address}:{c.port}
             </Text>
           ))
         )}
-      </View>
-    </ScrollView>
+      </Box>
+    </ScrollArea>
   );
 }
