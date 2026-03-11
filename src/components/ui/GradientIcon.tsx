@@ -17,7 +17,8 @@
  */
 
 import React, { useEffect, useRef } from 'react';
-import { Animated, Platform, View } from 'react-native';
+import { Animated, Platform } from 'react-native';
+import { Box } from '@coexist/wisp-react-native';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -243,7 +244,7 @@ function GradientIconNative({
   const maskElement = React.cloneElement(children, { color: 'black' });
 
   return (
-    <View style={{ width: size, height: size }}>
+    <Box style={{ width: size, height: size }}>
       <MaskedViewComponent maskElement={maskElement}>
         <AnimatedGradientComponent
           colors={colors}
@@ -256,7 +257,7 @@ function GradientIconNative({
           }}
         />
       </MaskedViewComponent>
-    </View>
+    </Box>
   );
 }
 

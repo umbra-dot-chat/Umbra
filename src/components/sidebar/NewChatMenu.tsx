@@ -7,8 +7,8 @@
  */
 
 import React, { useEffect, useRef, useCallback } from 'react';
-import { View, Platform } from 'react-native';
-import { Button, Text, useTheme } from '@coexist/wisp-react-native';
+import { Platform } from 'react-native';
+import { Box, Button, Text, useTheme } from '@coexist/wisp-react-native';
 import { UsersIcon, MessageIcon } from '@/components/ui';
 
 export interface NewChatMenuProps {
@@ -21,7 +21,7 @@ export interface NewChatMenuProps {
 export function NewChatMenu({ visible, onClose, onNewDm, onNewGroup }: NewChatMenuProps) {
   const { theme } = useTheme();
   const tc = theme.colors;
-  const menuRef = useRef<View>(null);
+  const menuRef = useRef<any>(null);
   // Track whether an internal item was clicked so the outside-click handler skips closing
   const internalClickRef = useRef(false);
 
@@ -71,7 +71,7 @@ export function NewChatMenu({ visible, onClose, onNewDm, onNewGroup }: NewChatMe
   if (!visible) return null;
 
   return (
-    <View
+    <Box
       ref={menuRef}
       style={{
         position: 'absolute',
@@ -85,7 +85,7 @@ export function NewChatMenu({ visible, onClose, onNewDm, onNewGroup }: NewChatMe
         borderColor: tc.border.strong,
         overflow: 'hidden',
         minWidth: 180,
-        shadowColor: '#000',
+        shadowColor: tc.background.overlay,
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.4,
         shadowRadius: 12,
@@ -103,7 +103,7 @@ export function NewChatMenu({ visible, onClose, onNewDm, onNewGroup }: NewChatMe
         <Text size="sm" weight="medium" style={{ color: tc.text.onRaised }}>New DM</Text>
       </Button>
 
-      <View style={{ height: 1, backgroundColor: tc.border.strong }} />
+      <Box style={{ height: 1, backgroundColor: tc.border.strong }} />
 
       <Button
         variant="tertiary"
@@ -115,6 +115,6 @@ export function NewChatMenu({ visible, onClose, onNewDm, onNewGroup }: NewChatMe
       >
         <Text size="sm" weight="medium" style={{ color: tc.text.onRaised }}>New Group</Text>
       </Button>
-    </View>
+    </Box>
   );
 }

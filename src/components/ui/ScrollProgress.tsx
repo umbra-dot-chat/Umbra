@@ -7,7 +7,8 @@
  */
 
 import React, { useCallback, useRef, useState } from 'react';
-import { Animated, Platform, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
+import { Animated, Platform, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
+import { Box } from '@coexist/wisp-react-native';
 
 interface ScrollProgressProps {
   /** Height of the bar in pixels. @default 2 */
@@ -54,7 +55,7 @@ export function ScrollProgressBar({
       };
 
   return (
-    <View style={{ width: '100%', height, overflow: 'hidden' }}>
+    <Box style={{ width: '100%', height, overflow: 'hidden' }}>
       <Animated.View
         style={[
           {
@@ -68,6 +69,6 @@ export function ScrollProgressBar({
           gradientStyle,
         ]}
       />
-    </View>
+    </Box>
   );
 }

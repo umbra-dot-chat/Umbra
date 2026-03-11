@@ -7,9 +7,7 @@
  */
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { View, TextInput as RNTextInput } from 'react-native';
-import type { ViewStyle, TextStyle } from 'react-native';
-import { Dialog, Input, Button, Text, useTheme } from '@coexist/wisp-react-native';
+import { Box, Dialog, Input, Button, Text, useTheme } from '@coexist/wisp-react-native';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -112,7 +110,7 @@ export function InputDialog({
         </>
       }
     >
-      <View style={{ gap: 8 }}>
+      <Box style={{ gap: 8 }}>
         {label && (
           <Text
             size="sm"
@@ -139,7 +137,7 @@ export function InputDialog({
             {error}
           </Text>
         )}
-      </View>
+      </Box>
     </Dialog>
   );
 }

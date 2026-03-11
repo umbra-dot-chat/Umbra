@@ -6,8 +6,7 @@
  */
 
 import React from 'react';
-import { View, Pressable } from 'react-native';
-import { Text, useTheme } from '@coexist/wisp-react-native';
+import { Box, Button, Text, useTheme } from '@coexist/wisp-react-native';
 
 interface Props {
   /** Plugin ID for error reporting */
@@ -70,7 +69,7 @@ function PluginErrorFallback({
   const tc = theme.colors;
 
   return (
-    <View
+    <Box
       style={{
         padding: 8,
         borderRadius: 6,
@@ -80,19 +79,13 @@ function PluginErrorFallback({
         gap: 4,
       }}
     >
-      <Text
-        style={{
-          fontSize: 11,
-          fontWeight: '600',
-          color: tc.status.danger,
-        }}
-      >
+      <Text size="xs" weight="semibold" style={{ color: tc.status.danger }}>
         Plugin error: {pluginId}
       </Text>
       {error && (
         <Text
+          size="xs"
           style={{
-            fontSize: 10,
             color: tc.status.danger,
             fontFamily: 'monospace',
             opacity: 0.8,
@@ -102,17 +95,11 @@ function PluginErrorFallback({
           {error.message}
         </Text>
       )}
-      <Pressable onPress={onRetry}>
-        <Text
-          style={{
-            fontSize: 10,
-            color: tc.status.info,
-            fontWeight: '600',
-          }}
-        >
+      <Button variant="tertiary" size="xs" onPress={onRetry}>
+        <Text size="xs" weight="semibold" style={{ color: tc.status.info }}>
           Retry
         </Text>
-      </Pressable>
-    </View>
+      </Button>
+    </Box>
   );
 }
