@@ -6,7 +6,8 @@
  * - Swap the speaker icon for a headphones icon (Discord-style deafen).
  * - Reorder buttons: mute, deafen, camera, screenshare, end.
  * - Apply danger-color backgrounds to toggled-off buttons.
- * - Force dark styling (gray buttons, white icons) on the always-black call bg.
+ * - Sidebar: theme-aware icon/bg colors matching NavigationRail.
+ * - Call panel: forced dark styling for the always-black call bg.
  */
 
 import React, { useEffect } from 'react';
@@ -52,14 +53,24 @@ function headphonesOffSvg(color: string): string {
  * - Button reordering (mute → deafen → camera → screenshare → end)
  * - Headphones icon swap via background-image data URIs
  * - Red/danger backgrounds on toggled-off buttons
- * - Forced dark styling (gray buttons, white icons)
+ * - Sidebar: theme-aware colors matching NavigationRail style
+ * - Call panel: forced dark styling for always-black background
  */
-function injectControlsCSS(id: string, dangerColor: string, isSidebar: boolean, sunkenColor?: string) {
+function injectControlsCSS(
+  id: string,
+  dangerColor: string,
+  isSidebar: boolean,
+  opts: { sunkenColor: string; iconColor: string },
+) {
   if (Platform.OS !== 'web' || typeof document === 'undefined') return;
 
   const cssId = `${id}-css`;
   const existing = document.getElementById(cssId);
   if (existing) existing.remove();
+
+  // Sidebar uses theme-aware icon colors; call panel forces white on dark bg
+  const defaultIconColor = isSidebar ? opts.iconColor : '#FFFFFF';
+  const defaultBg = isSidebar ? opts.sunkenColor : 'rgba(255, 255, 255, 0.2)';
 
   const s = document.createElement('style');
   s.id = cssId;
@@ -78,17 +89,27 @@ function injectControlsCSS(id: string, dangerColor: string, isSidebar: boolean, 
 
     /* ── Default buttons: variant-specific bg and icon color ── */
     #${id} [role="button"]:not([aria-label="End call"]) {
-      background-color: ${isSidebar && sunkenColor ? sunkenColor : 'rgba(255, 255, 255, 0.2)'} !important;
+      background-color: ${defaultBg} !important;
     }
     #${id} [role="button"] svg {
-      stroke: #FFFFFF !important;
+      stroke: ${defaultIconColor} !important;
     }
 
-    /* ── Toggled-off buttons: danger bg ── */
+    /* ── Toggled-off buttons: danger bg + white icons ── */
     #${id} [role="button"][aria-label="Unmute microphone"],
     #${id} [role="button"][aria-label="Turn on camera"],
     #${id} [role="button"][aria-label="Turn on speaker"] {
       background-color: ${dangerColor} !important;
+    }
+    #${id} [role="button"][aria-label="Unmute microphone"] svg,
+    #${id} [role="button"][aria-label="Turn on camera"] svg,
+    #${id} [role="button"][aria-label="Turn on speaker"] svg {
+      stroke: #FFFFFF !important;
+    }
+
+    /* ── End call button: always white icon ── */
+    #${id} [role="button"][aria-label="End call"] svg {
+      stroke: #FFFFFF !important;
     }
 
     /* ── Headphones icon swap: hide speaker SVG, show headphones via bg image ── */
@@ -97,7 +118,7 @@ function injectControlsCSS(id: string, dangerColor: string, isSidebar: boolean, 
       visibility: hidden !important;
     }
     #${id} [aria-label="Turn off speaker"] {
-      background-image: ${headphonesSvg('#FFFFFF')} !important;
+      background-image: ${headphonesSvg(defaultIconColor)} !important;
       background-repeat: no-repeat !important;
       background-position: center !important;
       background-size: 20px 20px !important;
@@ -108,9 +129,6 @@ function injectControlsCSS(id: string, dangerColor: string, isSidebar: boolean, 
       background-position: center !important;
       background-size: 20px 20px !important;
     }
-    ${isSidebar ? `
-    /* ── Sidebar: space-between already set on container ── */
-    ` : ''}
   `;
   document.head.appendChild(s);
 }
@@ -132,13 +150,14 @@ export function CallControlsOverlay({
   const { theme } = useTheme();
   const dangerColor = theme.colors.status.danger;
   const sunkenColor = theme.colors.background.sunken;
+  const iconColor = theme.colors.text.secondary;
 
   const id = variant === 'sidebar' ? 'sidebar-call-controls' : 'call-controls-overlay';
 
   const isSidebar = variant === 'sidebar';
   useEffect(() => {
-    injectControlsCSS(id, dangerColor, isSidebar, sunkenColor);
-  }, [id, dangerColor, isSidebar, sunkenColor]);
+    injectControlsCSS(id, dangerColor, isSidebar, { sunkenColor, iconColor });
+  }, [id, dangerColor, isSidebar, sunkenColor, iconColor]);
 
   const barStyle: ViewStyle = variant === 'sidebar'
     ? { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }
