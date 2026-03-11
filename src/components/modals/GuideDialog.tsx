@@ -10,10 +10,10 @@
  */
 
 import React, { useState, useMemo, useCallback } from 'react';
-import { View, Pressable, ScrollView, Text as RNText, Platform, useWindowDimensions } from 'react-native';
+import { Pressable, Platform, useWindowDimensions } from 'react-native';
 import type { ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Overlay, useTheme } from '@coexist/wisp-react-native';
+import { Overlay, Box, Text, ScrollArea, useTheme } from '@coexist/wisp-react-native';
 import {
   BookOpenIcon,
   UsersIcon,
@@ -121,10 +121,10 @@ export function GuideDialog({ open, onClose }: GuideDialogProps) {
             flexDirection: 'row',
             borderRadius: 16,
             overflow: 'hidden',
-            backgroundColor: isDark ? 'rgba(30, 30, 34, 0.94)' : 'rgba(255, 255, 255, 0.92)',
+            backgroundColor: isDark ? tc.background.raised : tc.background.canvas,
             borderWidth: 1,
-            borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.6)',
-            shadowColor: '#000',
+            borderColor: tc.border.subtle,
+            shadowColor: tc.background.overlay,
             shadowOffset: { width: 0, height: 16 },
             shadowOpacity: isDark ? 0.7 : 0.2,
             shadowRadius: 48,
@@ -140,11 +140,9 @@ export function GuideDialog({ open, onClose }: GuideDialogProps) {
   const sidebarStyle = useMemo<ViewStyle>(
     () => ({
       width: 210,
-      backgroundColor: isDark
-        ? 'rgba(255, 255, 255, 0.04)'
-        : 'rgba(0, 0, 0, 0.03)',
+      backgroundColor: tc.background.sunken,
       borderRightWidth: 1,
-      borderRightColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
+      borderRightColor: tc.border.subtle,
       paddingVertical: 16,
       paddingHorizontal: 10,
     }),
@@ -189,9 +187,9 @@ export function GuideDialog({ open, onClose }: GuideDialogProps) {
   if (isMobile) {
     return (
       <Overlay open={open} backdrop="dim" center onBackdropPress={onClose} animationType="fade">
-        <View style={modalStyle}>
+        <Box style={modalStyle}>
           {/* ── Mobile Header ── */}
-          <View
+          <Box
             style={{
               flexDirection: 'row',
               alignItems: 'center',
@@ -204,8 +202,8 @@ export function GuideDialog({ open, onClose }: GuideDialogProps) {
               backgroundColor: isDark ? tc.background.surface : tc.background.sunken,
             }}
           >
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-              <View
+            <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <Box
                 style={{
                   width: 28,
                   height: 28,
@@ -216,11 +214,11 @@ export function GuideDialog({ open, onClose }: GuideDialogProps) {
                 }}
               >
                 <BookOpenIcon size={14} color={tc.text.onAccent} />
-              </View>
-              <RNText style={{ fontSize: 16, fontWeight: '700', color: tc.text.primary }}>
+              </Box>
+              <Text size="md" weight="bold" style={{ color: tc.text.primary }}>
                 User Guide
-              </RNText>
-            </View>
+              </Text>
+            </Box>
             <Pressable
               onPress={onClose}
               style={{
@@ -234,12 +232,11 @@ export function GuideDialog({ open, onClose }: GuideDialogProps) {
             >
               <XIcon size={18} color={tc.text.secondary} />
             </Pressable>
-          </View>
+          </Box>
 
           {/* ── Horizontal Chapter Picker ── */}
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
+          <ScrollArea
+            direction="horizontal"
             contentContainerStyle={{ paddingHorizontal: 12, paddingVertical: 10, gap: 6 }}
             style={{
               borderBottomWidth: 1,
@@ -264,7 +261,7 @@ export function GuideDialog({ open, onClose }: GuideDialogProps) {
                     backgroundColor: isActive ? tc.accent.primary : tc.accent.highlight,
                   }}
                 >
-                  <View
+                  <Box
                     style={{
                       width: 20,
                       height: 20,
@@ -275,31 +272,28 @@ export function GuideDialog({ open, onClose }: GuideDialogProps) {
                     }}
                   >
                     <Icon size={11} color={isActive ? tc.text.onAccent : tc.text.secondary} />
-                  </View>
-                  <RNText
-                    style={{
-                      fontSize: 12,
-                      fontWeight: isActive ? '600' : '400',
-                      color: isActive ? tc.text.onAccent : tc.text.secondary,
-                    }}
+                  </Box>
+                  <Text
+                    size="xs"
+                    weight={isActive ? 'semibold' : 'regular'}
+                    style={{ color: isActive ? tc.text.onAccent : tc.text.secondary }}
                     numberOfLines={1}
                   >
                     {ch.label}
-                  </RNText>
+                  </Text>
                 </Pressable>
               );
             })}
-          </ScrollView>
+          </ScrollArea>
 
           {/* ── Chapter Content ── */}
-          <ScrollView
+          <ScrollArea
             style={{ flex: 1 }}
             contentContainerStyle={{ padding: 16, paddingBottom: 16 + safeInsets.bottom, gap: 14 }}
-            showsVerticalScrollIndicator={false}
           >
             {/* Inline chapter title */}
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 4 }}>
-              <View
+            <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 4 }}>
+              <Box
                 style={{
                   width: 32,
                   height: 32,
@@ -310,14 +304,14 @@ export function GuideDialog({ open, onClose }: GuideDialogProps) {
                 }}
               >
                 <activeInfo.icon size={16} color={tc.text.onAccent} />
-              </View>
-              <RNText style={{ fontSize: 17, fontWeight: '700', color: tc.text.primary }}>
+              </Box>
+              <Text size="md" weight="bold" style={{ color: tc.text.primary }}>
                 {activeInfo.label}
-              </RNText>
-            </View>
+              </Text>
+            </Box>
             {renderChapter()}
-          </ScrollView>
-        </View>
+          </ScrollArea>
+        </Box>
       </Overlay>
     );
   }
@@ -332,17 +326,17 @@ export function GuideDialog({ open, onClose }: GuideDialogProps) {
       onBackdropPress={onClose}
       animationType={Platform.OS === 'web' ? 'none' : 'fade'}
       style={Platform.OS === 'web' ? {
-        backgroundColor: 'rgba(0, 0, 0, 0.3)',
+        backgroundColor: tc.background.overlay,
         backdropFilter: 'blur(2px)',
         WebkitBackdropFilter: 'blur(2px)',
       } as any : undefined}
     >
-      <View style={modalStyle}>
+      <Box style={modalStyle}>
         {/* ── Left: Chapter Navigation ── */}
-        <View style={sidebarStyle}>
+        <Box style={sidebarStyle}>
           {/* Book Title */}
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 8, marginBottom: 16 }}>
-            <View
+          <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 8, marginBottom: 16 }}>
+            <Box
               style={{
                 width: 30,
                 height: 30,
@@ -353,12 +347,12 @@ export function GuideDialog({ open, onClose }: GuideDialogProps) {
               }}
             >
               <BookOpenIcon size={16} color={tc.text.onAccent} />
-            </View>
-            <RNText style={{ fontSize: 15, fontWeight: '700', color: tc.text.primary }}>User Guide</RNText>
-          </View>
+            </Box>
+            <Text size="sm" weight="bold" style={{ color: tc.text.primary }}>User Guide</Text>
+          </Box>
 
           {/* Chapter List */}
-          <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
+          <ScrollArea style={{ flex: 1 }}>
             {CHAPTERS.map((ch) => {
               const isActive = activeChapter === ch.id;
               const Icon = ch.icon;
@@ -382,7 +376,7 @@ export function GuideDialog({ open, onClose }: GuideDialogProps) {
                     marginBottom: 2,
                   })}
                 >
-                  <View
+                  <Box
                     style={{
                       width: 24,
                       height: 24,
@@ -393,33 +387,33 @@ export function GuideDialog({ open, onClose }: GuideDialogProps) {
                     }}
                   >
                     <Icon size={13} color={isActive ? tc.text.onAccent : tc.text.secondary} />
-                  </View>
-                  <RNText
+                  </Box>
+                  <Text
+                    size="sm"
+                    weight={isActive ? 'semibold' : 'regular'}
                     style={{
-                      fontSize: 13,
-                      fontWeight: isActive ? '600' : '400',
                       color: isActive ? tc.text.onAccent : tc.text.secondary,
                       flex: 1,
                     }}
                     numberOfLines={1}
                   >
                     {ch.label}
-                  </RNText>
+                  </Text>
                 </Pressable>
               );
             })}
-          </ScrollView>
+          </ScrollArea>
 
           {/* Footer */}
-          <RNText style={{ fontSize: 11, color: tc.text.muted, textAlign: 'center', marginTop: 12 }}>
+          <Text size="xs" style={{ color: tc.text.muted, textAlign: 'center', marginTop: 12 }}>
             Umbra v0.1.0
-          </RNText>
-        </View>
+          </Text>
+        </Box>
 
         {/* ── Right: Chapter Content ── */}
-        <View style={{ flex: 1 }}>
+        <Box style={{ flex: 1 }}>
           {/* Chapter Header */}
-          <View
+          <Box
             style={{
               flexDirection: 'row',
               alignItems: 'center',
@@ -430,8 +424,8 @@ export function GuideDialog({ open, onClose }: GuideDialogProps) {
               borderBottomColor: tc.border.subtle,
             }}
           >
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-              <View
+            <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <Box
                 style={{
                   width: 36,
                   height: 36,
@@ -442,11 +436,11 @@ export function GuideDialog({ open, onClose }: GuideDialogProps) {
                 }}
               >
                 <activeInfo.icon size={18} color={tc.text.onAccent} />
-              </View>
-              <RNText style={{ fontSize: 18, fontWeight: '700', color: tc.text.primary }}>
+              </Box>
+              <Text size="lg" weight="bold" style={{ color: tc.text.primary }}>
                 {activeInfo.label}
-              </RNText>
-            </View>
+              </Text>
+            </Box>
 
             <Pressable
               onPress={onClose}
@@ -461,18 +455,17 @@ export function GuideDialog({ open, onClose }: GuideDialogProps) {
             >
               <XIcon size={16} color={tc.text.secondary} />
             </Pressable>
-          </View>
+          </Box>
 
           {/* Chapter Body */}
-          <ScrollView
+          <ScrollArea
             style={{ flex: 1 }}
             contentContainerStyle={{ padding: 28, gap: 16 }}
-            showsVerticalScrollIndicator={false}
           >
             {renderChapter()}
-          </ScrollView>
-        </View>
-      </View>
+          </ScrollArea>
+        </Box>
+      </Box>
     </Overlay>
   );
 }
