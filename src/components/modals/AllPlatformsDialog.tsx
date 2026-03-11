@@ -3,8 +3,8 @@
  */
 
 import React from 'react';
-import { View, Pressable, ScrollView, Text as RNText, Linking } from 'react-native';
-import { Overlay, useTheme } from '@coexist/wisp-react-native';
+import { Pressable, Linking } from 'react-native';
+import { Overlay, Box, Text, ScrollArea, useTheme } from '@coexist/wisp-react-native';
 import type { PlatformDownload } from '@/types/version';
 import {
   XIcon,
@@ -70,8 +70,6 @@ export function AllPlatformsDialog({ open, onClose, downloads, version, releaseU
   const { desktop, mobile, web } = groupDownloads(downloads);
 
   const sectionTitleStyle = {
-    fontSize: 12,
-    fontWeight: '600' as const,
     color: tc.text.muted,
     textTransform: 'uppercase' as const,
     letterSpacing: 0.8,
@@ -97,7 +95,7 @@ export function AllPlatformsDialog({ open, onClose, downloads, version, releaseU
       onBackdropPress={onClose}
       animationType="fade"
     >
-      <View
+      <Box
         style={{
           backgroundColor: tc.background.surface,
           borderRadius: 16,
@@ -109,7 +107,7 @@ export function AllPlatformsDialog({ open, onClose, downloads, version, releaseU
         }}
       >
         {/* Header */}
-        <View
+        <Box
           style={{
             flexDirection: 'row',
             alignItems: 'center',
@@ -120,12 +118,12 @@ export function AllPlatformsDialog({ open, onClose, downloads, version, releaseU
             borderBottomColor: tc.border.subtle,
           }}
         >
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
             <DownloadIcon size={20} color={tc.accent.primary} />
-            <RNText style={{ fontSize: 17, fontWeight: '700', color: tc.text.primary }}>
+            <Text size="md" weight="bold" style={{ color: tc.text.primary }}>
               Download Umbra v{version}
-            </RNText>
-          </View>
+            </Text>
+          </Box>
           <Pressable
             onPress={onClose}
             style={({ pressed }) => ({
@@ -136,18 +134,17 @@ export function AllPlatformsDialog({ open, onClose, downloads, version, releaseU
           >
             <XIcon size={18} color={tc.text.muted} />
           </Pressable>
-        </View>
+        </Box>
 
         {/* Content */}
-        <ScrollView
+        <ScrollArea
           style={{ flex: 1 }}
           contentContainerStyle={{ padding: 20, paddingTop: 0 }}
-          showsVerticalScrollIndicator={false}
         >
           {/* Desktop */}
           {desktop.length > 0 && (
             <>
-              <RNText style={sectionTitleStyle}>Desktop</RNText>
+              <Text size="xs" weight="semibold" style={sectionTitleStyle}>Desktop</Text>
               {desktop.map((d) => (
                 <Pressable
                   key={d.platform}
@@ -157,19 +154,19 @@ export function AllPlatformsDialog({ open, onClose, downloads, version, releaseU
                     backgroundColor: pressed ? tc.accent.highlight : tc.background.raised,
                   })}
                 >
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                    <RNText style={{ fontSize: 18 }}>{getPlatformIcon(d.icon)}</RNText>
-                    <View>
-                      <RNText style={{ fontSize: 14, fontWeight: '500', color: tc.text.primary }}>
+                  <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                    <Text size="md" style={{ fontSize: 18 }}>{getPlatformIcon(d.icon)}</Text>
+                    <Box>
+                      <Text size="sm" weight="medium" style={{ color: tc.text.primary }}>
                         {d.label}
-                      </RNText>
+                      </Text>
                       {d.size && (
-                        <RNText style={{ fontSize: 11, color: tc.text.muted, marginTop: 1 }}>
+                        <Text size="xs" style={{ color: tc.text.muted, marginTop: 1 }}>
                           {d.size}
-                        </RNText>
+                        </Text>
                       )}
-                    </View>
-                  </View>
+                    </Box>
+                  </Box>
                   <DownloadIcon size={16} color={tc.text.muted} />
                 </Pressable>
               ))}
@@ -179,7 +176,7 @@ export function AllPlatformsDialog({ open, onClose, downloads, version, releaseU
           {/* Mobile */}
           {mobile.length > 0 && (
             <>
-              <RNText style={sectionTitleStyle}>Mobile</RNText>
+              <Text size="xs" weight="semibold" style={sectionTitleStyle}>Mobile</Text>
               {mobile.map((d) => (
                 <Pressable
                   key={d.platform}
@@ -189,12 +186,12 @@ export function AllPlatformsDialog({ open, onClose, downloads, version, releaseU
                     backgroundColor: pressed ? tc.accent.highlight : tc.background.raised,
                   })}
                 >
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                    <RNText style={{ fontSize: 18 }}>{getPlatformIcon(d.icon)}</RNText>
-                    <RNText style={{ fontSize: 14, fontWeight: '500', color: tc.text.primary }}>
+                  <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                    <Text size="md" style={{ fontSize: 18 }}>{getPlatformIcon(d.icon)}</Text>
+                    <Text size="sm" weight="medium" style={{ color: tc.text.primary }}>
                       {d.label}
-                    </RNText>
-                  </View>
+                    </Text>
+                  </Box>
                   <ExternalLinkIcon size={16} color={tc.text.muted} />
                 </Pressable>
               ))}
@@ -204,7 +201,7 @@ export function AllPlatformsDialog({ open, onClose, downloads, version, releaseU
           {/* Web */}
           {web.length > 0 && (
             <>
-              <RNText style={sectionTitleStyle}>Web</RNText>
+              <Text size="xs" weight="semibold" style={sectionTitleStyle}>Web</Text>
               {web.map((d) => (
                 <Pressable
                   key={d.platform}
@@ -214,12 +211,12 @@ export function AllPlatformsDialog({ open, onClose, downloads, version, releaseU
                     backgroundColor: pressed ? tc.accent.highlight : tc.background.raised,
                   })}
                 >
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                  <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
                     <GlobeIcon size={18} color={tc.text.secondary} />
-                    <RNText style={{ fontSize: 14, fontWeight: '500', color: tc.text.primary }}>
+                    <Text size="sm" weight="medium" style={{ color: tc.text.primary }}>
                       {d.label}
-                    </RNText>
-                  </View>
+                    </Text>
+                  </Box>
                   <ExternalLinkIcon size={16} color={tc.text.muted} />
                 </Pressable>
               ))}
@@ -241,14 +238,14 @@ export function AllPlatformsDialog({ open, onClose, downloads, version, releaseU
                 backgroundColor: pressed ? tc.accent.highlight : 'transparent',
               })}
             >
-              <RNText style={{ fontSize: 13, color: tc.text.link, fontWeight: '500' }}>
+              <Text size="sm" weight="medium" style={{ color: tc.text.link }}>
                 View on GitHub
-              </RNText>
+              </Text>
               <ExternalLinkIcon size={14} color={tc.text.link} />
             </Pressable>
           )}
-        </ScrollView>
-      </View>
+        </ScrollArea>
+      </Box>
     </Overlay>
   );
 }

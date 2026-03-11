@@ -53,11 +53,14 @@ export function CommandPalette({ open, onOpenChange, onOpenSettings, onOpenMarke
 
   // In light mode, override the raised surface to be light-colored instead of the
   // default dark raised background from the Wisp design system.
+  // NOTE: These hex/rgba values are intentional — they define theme token overrides
+  // passed to WispProvider, not inline style colors.
+  const lightBorderSubtle = '#E4E4E7';
   const lightRaisedOverrides = mode === 'light' ? {
     colors: {
       background: { raised: '#FFFFFF', },
       text: { onRaised: '#0C0C0E', onRaisedSecondary: '#71717A', muted: '#8E8E96' },
-      border: { subtle: '#E4E4E7' },
+      border: { subtle: lightBorderSubtle },
       accent: { highlight: 'rgba(0, 0, 0, 0.04)', highlightRaised: 'rgba(0, 0, 0, 0.04)' },
     },
   } : undefined;
@@ -69,7 +72,7 @@ export function CommandPalette({ open, onOpenChange, onOpenSettings, onOpenMarke
       onOpenChange={onOpenChange}
       onSelect={handleSelect}
       size="md"
-      style={mode === 'light' ? { borderWidth: 1, borderColor: '#E4E4E7', shadowOpacity: 0.15 } : undefined}
+      style={mode === 'light' ? { borderWidth: 1, borderColor: lightBorderSubtle, shadowOpacity: 0.15 } : undefined}
     >
       <CommandInput placeholder="Search users, messages, or type a command..." />
       <CommandList>

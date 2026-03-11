@@ -7,8 +7,8 @@
  */
 
 import React, { useCallback, useState } from 'react';
-import { View, Image } from 'react-native';
-import { Dialog, Button, Text, useTheme } from '@coexist/wisp-react-native';
+import { Image } from 'react-native';
+import { Dialog, Button, Text, Box, useTheme } from '@coexist/wisp-react-native';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -81,7 +81,7 @@ export function ConfirmDialog({
         </>
       }
     >
-      <View style={{ gap: 8, alignItems: 'center' }}>
+      <Box style={{ gap: 8, alignItems: 'center' }}>
         {image && (
           <Image
             source={image}
@@ -97,7 +97,7 @@ export function ConfirmDialog({
             {error}
           </Text>
         )}
-      </View>
+      </Box>
     </Dialog>
   );
 }
