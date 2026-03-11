@@ -1,8 +1,11 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
-import { Animated, Easing, View, Pressable, ScrollView, Text as RNText, Platform, Image, Linking, Modal, SafeAreaView, useWindowDimensions, StyleSheet } from 'react-native';
+import { Animated, Easing, View, Pressable, ScrollView, Platform, Image, Linking, Modal, useWindowDimensions } from 'react-native';
 import type { ViewStyle, TextStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
+  Box,
+  Spinner,
+  ScrollArea,
   Overlay,
   Toggle,
   Input,
@@ -332,42 +335,42 @@ function SettingRow({
 
   if (vertical) {
     return (
-      <View style={{ gap: 8 }}>
-        <View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <RNText style={{ fontSize: 14, fontWeight: '500', color: tc.text.primary }}>
+      <Box style={{ gap: 8 }}>
+        <Box>
+          <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Text style={{ fontSize: 14, fontWeight: '500', color: tc.text.primary }}>
               {label}
-            </RNText>
+            </Text>
             {helpIndicator}
-          </View>
+          </Box>
           {description && (
-            <RNText style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
+            <Text style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
               {description}
-            </RNText>
+            </Text>
           )}
-        </View>
+        </Box>
         {children}
-      </View>
+      </Box>
     );
   }
 
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 40 }}>
-      <View style={{ flex: 1, marginRight: 16 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-          <RNText style={{ fontSize: 14, fontWeight: '500', color: tc.text.primary }}>
+    <Box style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 40 }}>
+      <Box style={{ flex: 1, marginRight: 16 }}>
+        <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <Text style={{ fontSize: 14, fontWeight: '500', color: tc.text.primary }}>
             {label}
-          </RNText>
+          </Text>
           {helpIndicator}
-        </View>
+        </Box>
         {description && (
-          <RNText style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
+          <Text style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
             {description}
-          </RNText>
+          </Text>
         )}
-      </View>
-      <View style={{ flexShrink: 0 }}>{children}</View>
-    </View>
+      </Box>
+      <Box style={{ flexShrink: 0 }}>{children}</Box>
+    </Box>
   );
 }
 
@@ -418,7 +421,7 @@ function InlineDropdown({
   }, [open]);
 
   const optionsList = (
-    <ScrollView style={{ maxHeight: isNative ? 400 : 240 }} showsVerticalScrollIndicator={false} nestedScrollEnabled>
+    <ScrollArea style={{ maxHeight: isNative ? 400 : 240 }}>
       {options.map((opt) => {
         const isActive = opt.value === value;
         return (
@@ -442,27 +445,27 @@ function InlineDropdown({
                   : 'transparent',
             })}
           >
-            <View style={{ flex: 1 }}>
-              <RNText style={{
+            <Box style={{ flex: 1 }}>
+              <Text style={{
                 fontSize: 14,
                 fontWeight: isActive ? '600' : '400',
                 color: isActive ? tc.accent.primary : (isNative ? tc.text.onRaised : tc.text.primary),
               }}>
                 {opt.label}
-              </RNText>
+              </Text>
               {opt.description && (
-                <RNText style={{ fontSize: 12, color: isNative ? tc.text.onRaisedSecondary : tc.text.muted, marginTop: 2 }}>
+                <Text style={{ fontSize: 12, color: isNative ? tc.text.onRaisedSecondary : tc.text.muted, marginTop: 2 }}>
                   {opt.description}
-                </RNText>
+                </Text>
               )}
-            </View>
+            </Box>
             {isActive && (
-              <RNText style={{ fontSize: 14, color: tc.accent.primary, fontWeight: '600' }}>✓</RNText>
+              <Text style={{ fontSize: 14, color: tc.accent.primary, fontWeight: '600' }}>✓</Text>
             )}
           </Pressable>
         );
       })}
-    </ScrollView>
+    </ScrollArea>
   );
 
   // Web: portal-based positioned dropdown
@@ -472,7 +475,7 @@ function InlineDropdown({
         onPress={() => setOpen(false)}
         style={{ position: 'fixed' as any, top: 0, left: 0, right: 0, bottom: 0, zIndex: 99999 }}
       />
-      <View
+      <Box
         style={{
           position: 'fixed' as any,
           top: dropdownPos.top,
@@ -493,12 +496,12 @@ function InlineDropdown({
         }}
       >
         {optionsList}
-      </View>
+      </Box>
     </>
   );
 
   return (
-    <View>
+    <Box>
       <Pressable
         ref={triggerRef}
         onPress={() => setOpen((p) => !p)}
@@ -520,17 +523,17 @@ function InlineDropdown({
           gap: 8,
         }}
       >
-        <RNText style={{ flex: 1, fontSize: 14, color: selected ? tc.text.primary : tc.text.muted }} numberOfLines={1}>
+        <Text style={{ flex: 1, fontSize: 14, color: selected ? tc.text.primary : tc.text.muted }} numberOfLines={1}>
           {selected?.label ?? placeholder}
-        </RNText>
+        </Text>
         {selected?.description && (
-          <RNText style={{ fontSize: 11, color: tc.text.muted }}>
+          <Text style={{ fontSize: 11, color: tc.text.muted }}>
             {selected.description}
-          </RNText>
+          </Text>
         )}
-        <View style={{ transform: [{ rotate: open ? '180deg' : '0deg' }] }}>
+        <Box style={{ transform: [{ rotate: open ? '180deg' : '0deg' }] }}>
           <ChevronDownIcon size={16} color={tc.text.secondary} />
-        </View>
+        </Box>
       </Pressable>
 
       {/* Web: portal dropdown to document.body */}
@@ -549,7 +552,7 @@ function InlineDropdown({
               style={{ width: '85%', maxWidth: 400 }}
               onPress={(e) => e.stopPropagation()}
             >
-              <View
+              <Box
                 style={{
                   backgroundColor: tc.background.raised,
                   borderRadius: defaultRadii.md,
@@ -562,12 +565,12 @@ function InlineDropdown({
                 }}
               >
                 {optionsList}
-              </View>
+              </Box>
             </Pressable>
           </Pressable>
         </Modal>
       )}
-    </View>
+    </Box>
   );
 }
 
@@ -580,14 +583,14 @@ function SectionHeader({ title, description }: { title: string; description: str
   const tc = theme.colors;
 
   return (
-    <View style={{ marginBottom: 20 }}>
-      <RNText style={{ fontSize: 18, fontWeight: '700', color: tc.text.primary }}>
+    <Box style={{ marginBottom: 20 }}>
+      <Text style={{ fontSize: 18, fontWeight: '700', color: tc.text.primary }}>
         {title}
-      </RNText>
+      </Text>
       <GradientText animated speed={10000} style={{ fontSize: 13, marginTop: 4 }}>
         {description}
       </GradientText>
-    </View>
+    </Box>
   );
 }
 
@@ -669,12 +672,12 @@ function AccountSyncSubsection() {
     : 'Never synced';
 
   return (
-    <View style={{ gap: 12 }} testID={TEST_IDS.SYNC.SETTINGS_SECTION}>
-      <View>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-          <RNText style={{ fontSize: 15, fontWeight: '600', color: tc.text.primary }}>
+    <Box style={{ gap: 12 }} testID={TEST_IDS.SYNC.SETTINGS_SECTION}>
+      <Box>
+        <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+          <Text style={{ fontSize: 15, fontWeight: '600', color: tc.text.primary }}>
             Cross-Device Sync
-          </RNText>
+          </Text>
           <HelpIndicator
             id="settings-sync"
             title="Account Sync"
@@ -688,48 +691,48 @@ function AccountSyncSubsection() {
             <HelpListItem>Only you can decrypt your synced data</HelpListItem>
             <HelpListItem>Messages and files are NOT synced</HelpListItem>
           </HelpIndicator>
-        </View>
-        <RNText style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
+        </Box>
+        <Text style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
           Encrypted sync of account data across devices.
-        </RNText>
-      </View>
+        </Text>
+      </Box>
 
       {/* Enable/disable toggle */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-        <View style={{ flex: 1 }}>
-          <RNText style={{ fontSize: 14, color: tc.text.primary }}>
+      <Box style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Box style={{ flex: 1 }}>
+          <Text style={{ fontSize: 14, color: tc.text.primary }}>
             Enable sync
-          </RNText>
-          <RNText style={{ fontSize: 12, color: tc.text.muted }}>
+          </Text>
+          <Text style={{ fontSize: 12, color: tc.text.muted }}>
             Automatically sync friends, groups, and preferences
-          </RNText>
-        </View>
+          </Text>
+        </Box>
         <Toggle checked={syncEnabled} onChange={setSyncEnabled} testID={TEST_IDS.SYNC.ENABLE_TOGGLE} />
-      </View>
+      </Box>
 
       {/* Status indicator */}
       {syncEnabled && (
         <Card variant="outlined" padding="md">
-          <View style={{ gap: 8 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }} testID={TEST_IDS.SYNC.STATUS_INDICATOR}>
-                <View style={{
+          <Box style={{ gap: 8 }}>
+            <Box style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+              <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }} testID={TEST_IDS.SYNC.STATUS_INDICATOR}>
+                <Box style={{
                   width: 8, height: 8, borderRadius: 4,
                   backgroundColor: statusColor,
                 }} />
-                <RNText style={{ fontSize: 13, fontWeight: '600', color: tc.text.primary }} testID={TEST_IDS.SYNC.STATUS_LABEL}>
+                <Text style={{ fontSize: 13, fontWeight: '600', color: tc.text.primary }} testID={TEST_IDS.SYNC.STATUS_LABEL}>
                   {statusLabel}
-                </RNText>
-              </View>
-              <RNText style={{ fontSize: 11, color: tc.text.muted }} testID={TEST_IDS.SYNC.LAST_SYNCED}>
+                </Text>
+              </Box>
+              <Text style={{ fontSize: 11, color: tc.text.muted }} testID={TEST_IDS.SYNC.LAST_SYNCED}>
                 {lastSyncLabel}
-              </RNText>
-            </View>
+              </Text>
+            </Box>
 
             {syncError && (
-              <RNText style={{ fontSize: 12, color: tc.status.danger }}>
+              <Text style={{ fontSize: 12, color: tc.status.danger }}>
                 {syncError}
-              </RNText>
+              </Text>
             )}
 
             {/* Sync now button */}
@@ -744,9 +747,9 @@ function AccountSyncSubsection() {
                 if (e.nativeEvent.actionName === 'activate') handleSyncNow();
               }}
             >
-              <RNText style={{ fontSize: 13, fontWeight: '600', color: tc.text.primary }}>
+              <Text style={{ fontSize: 13, fontWeight: '600', color: tc.text.primary }}>
                 {isSyncing ? 'Syncing...' : 'Sync Now'}
-              </RNText>
+              </Text>
             </Button>
 
             {/* Delete synced data */}
@@ -762,11 +765,11 @@ function AccountSyncSubsection() {
                 if (e.nativeEvent.actionName === 'activate') setShowDeleteConfirm(true);
               }}
             >
-              <RNText style={{ fontSize: 13, fontWeight: '600', color: tc.status.danger }}>
+              <Text style={{ fontSize: 13, fontWeight: '600', color: tc.status.danger }}>
                 Delete Synced Data
-              </RNText>
+              </Text>
             </Button>
-          </View>
+          </Box>
         </Card>
       )}
 
@@ -793,18 +796,18 @@ function AccountSyncSubsection() {
                 if (e.nativeEvent.actionName === 'activate') handleDelete();
               }}
             >
-              <RNText style={{ color: tc.status.danger, fontWeight: '600', fontSize: 14 }}>
+              <Text style={{ color: tc.status.danger, fontWeight: '600', fontSize: 14 }}>
                 {isDeleting ? 'Deleting...' : 'Delete'}
-              </RNText>
+              </Text>
             </Button>
           </HStack>
         }
       >
-        <RNText style={{ fontSize: 13, color: tc.text.secondary, textAlign: 'center', lineHeight: 18 }}>
+        <Text style={{ fontSize: 13, color: tc.text.secondary, textAlign: 'center', lineHeight: 18 }}>
           This will permanently delete your synced data from the relay server. Your local data will not be affected. This cannot be undone.
-        </RNText>
+        </Text>
       </Dialog>
-    </View>
+    </Box>
   );
 }
 
@@ -1076,17 +1079,17 @@ function AccountSection() {
       : identity.did;
 
   return (
-    <View style={{ gap: 24 }}>
+    <Box style={{ gap: 24 }}>
       <SectionHeader
         title="Account"
         description="Your identity, profile, and connection details."
       />
 
       {/* ── Profile subsection ─────────────────────────────────────────── */}
-      <View nativeID="sub-profile" style={{ gap: 16 }}>
+      <Box nativeID="sub-profile" style={{ gap: 16 }}>
         <SettingRow label="Banner" description="A wide header image for your profile." vertical>
           <Pressable onPress={handleBannerPick}>
-            <View
+            <Box
               style={{
                 width: '100%',
                 height: 120,
@@ -1107,11 +1110,11 @@ function AccountSection() {
                   resizeMode="cover"
                 />
               ) : (
-                <RNText style={{ color: tc.text.muted, fontSize: 13 }}>
+                <Text style={{ color: tc.text.muted, fontSize: 13 }}>
                   Click to upload a banner image
-                </RNText>
+                </Text>
               )}
-            </View>
+            </Box>
           </Pressable>
           {bannerPreview && (
             <HStack gap="sm" style={{ marginTop: 4 }}>
@@ -1134,7 +1137,7 @@ function AccountSection() {
           {bannerError && (
             <HStack gap="xs" style={{ alignItems: 'center', marginTop: 4 }}>
               <AlertTriangleIcon size={14} color={tc.status.danger} />
-              <RNText style={{ color: tc.status.danger, fontSize: 12 }}>{bannerError}</RNText>
+              <Text style={{ color: tc.status.danger, fontSize: 12 }}>{bannerError}</Text>
             </HStack>
           )}
         </SettingRow>
@@ -1142,7 +1145,7 @@ function AccountSection() {
         <SettingRow label="Avatar" description="Your profile picture. Click to upload a new image." vertical>
           <HStack gap="md" style={{ alignItems: 'center' }}>
             <Pressable onPress={handleAvatarPick}>
-              <View
+              <Box
                 style={{
                   width: 64,
                   height: 64,
@@ -1163,7 +1166,7 @@ function AccountSection() {
                 ) : (
                   <UserIcon size={28} color={tc.text.muted} />
                 )}
-              </View>
+              </Box>
             </Pressable>
             <Button variant="tertiary" size="sm" onPress={handleAvatarPick}>
               Upload Photo
@@ -1172,7 +1175,7 @@ function AccountSection() {
           {avatarError && (
             <HStack gap="xs" style={{ alignItems: 'center', marginTop: 4 }}>
               <AlertTriangleIcon size={14} color={tc.status.danger} />
-              <RNText style={{ color: tc.status.danger, fontSize: 12 }}>{avatarError}</RNText>
+              <Text style={{ color: tc.status.danger, fontSize: 12 }}>{avatarError}</Text>
             </HStack>
           )}
         </SettingRow>
@@ -1204,20 +1207,20 @@ function AccountSection() {
         {(saving || saved) && (
           <HStack gap="xs" style={{ justifyContent: 'flex-end', alignItems: 'center' }}>
             {saved ? <CheckIcon size={14} color={tc.status.success} /> : null}
-            <RNText style={{ color: saved ? tc.status.success : tc.text.muted, fontSize: 12 }}>
+            <Text style={{ color: saved ? tc.status.success : tc.text.muted, fontSize: 12 }}>
               {saving ? 'Saving...' : 'Saved'}
-            </RNText>
+            </Text>
           </HStack>
         )}
-      </View>
+      </Box>
 
       {/* ── Identity subsection ────────────────────────────────────────── */}
-      <View nativeID="sub-identity">
+      <Box nativeID="sub-identity">
           {/* Identity info card */}
           <Card variant="outlined" padding="lg" style={{ width: '100%' }}>
-            <View style={{ gap: 12 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                <View
+            <Box style={{ gap: 12 }}>
+              <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                <Box
                   style={{
                     width: 48,
                     height: 48,
@@ -1234,28 +1237,28 @@ function AccountSection() {
                       style={{ width: 48, height: 48 }}
                     />
                   ) : (
-                    <RNText style={{ fontSize: 20, fontWeight: '700', color: tc.text.onAccent }}>
+                    <Text style={{ fontSize: 20, fontWeight: '700', color: tc.text.onAccent }}>
                       {identity.displayName.charAt(0).toUpperCase()}
-                    </RNText>
+                    </Text>
                   )}
-                </View>
-                <View style={{ flex: 1 }}>
-                  <RNText style={{ fontSize: 18, fontWeight: '700', color: tc.text.primary }}>
+                </Box>
+                <Box style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 18, fontWeight: '700', color: tc.text.primary }}>
                     {identity.displayName}
-                  </RNText>
-                  <RNText style={{ fontSize: 12, color: tc.text.muted, marginTop: 2 }}>
+                  </Text>
+                  <Text style={{ fontSize: 12, color: tc.text.muted, marginTop: 2 }}>
                     Member since {memberSince}
-                  </RNText>
-                </View>
-              </View>
+                  </Text>
+                </Box>
+              </Box>
 
               <Separator spacing="sm" />
 
-              <View>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                  <RNText style={{ fontSize: 11, fontWeight: '600', color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+              <Box>
+                <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                  <Text style={{ fontSize: 11, fontWeight: '600', color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
                     Decentralized ID
-                  </RNText>
+                  </Text>
                   <HelpIndicator
                     id="settings-did"
                     title="Your Decentralized ID"
@@ -1271,9 +1274,9 @@ function AccountSection() {
                     <HelpListItem>Share it with friends to connect</HelpListItem>
                     <HelpListItem>It never changes unless you create a new wallet</HelpListItem>
                   </HelpIndicator>
-                </View>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <RNText
+                </Box>
+                <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Text
                     testID={TEST_IDS.SETTINGS.DID_DISPLAY}
                     accessibilityValue={{ text: identity.did }}
                     style={{
@@ -1285,7 +1288,7 @@ function AccountSection() {
                     numberOfLines={1}
                   >
                     {truncatedDid}
-                  </RNText>
+                  </Text>
                   <Pressable
                     onPress={handleCopyDid}
                     style={{
@@ -1299,13 +1302,13 @@ function AccountSection() {
                     }}
                   >
                     <CopyIcon size={14} color={didCopied ? tc.status.success : tc.text.secondary} />
-                    <RNText style={{ fontSize: 11, color: didCopied ? tc.status.success : tc.text.secondary, fontWeight: '500' }}>
+                    <Text style={{ fontSize: 11, color: didCopied ? tc.status.success : tc.text.secondary, fontWeight: '500' }}>
                       {didCopied ? 'Copied' : 'Copy'}
-                    </RNText>
+                    </Text>
                   </Pressable>
-                </View>
-              </View>
-            </View>
+                </Box>
+              </Box>
+            </Box>
           </Card>
 
           {/* Account Recovery Details PDF */}
@@ -1326,14 +1329,14 @@ function AccountSection() {
             }}
           >
             <FileTextIcon size={18} color={tc.text.secondary} />
-            <View style={{ flex: 1 }}>
-              <RNText style={{ fontSize: 13, fontWeight: '600', color: tc.text.primary }}>
+            <Box style={{ flex: 1 }}>
+              <Text style={{ fontSize: 13, fontWeight: '600', color: tc.text.primary }}>
                 Account Recovery Details
-              </RNText>
-              <RNText style={{ fontSize: 11, color: tc.text.secondary }}>
+              </Text>
+              <Text style={{ fontSize: 11, color: tc.text.secondary }}>
                 Download a printable PDF with your DID, QR code, and recovery phrase
-              </RNText>
-            </View>
+              </Text>
+            </Box>
             <DownloadIcon size={16} color={tc.text.muted} />
           </Pressable>
           <IdentityCardDialog
@@ -1342,27 +1345,27 @@ function AccountSection() {
           />
 
           {/* Linked Accounts */}
-          <View style={{ marginTop: 20 }}>
-            <View style={{ marginBottom: 12 }}>
-              <RNText style={{ fontSize: 15, fontWeight: '600', color: tc.text.primary }}>
+          <Box style={{ marginTop: 20 }}>
+            <Box style={{ marginBottom: 12 }}>
+              <Text style={{ fontSize: 15, fontWeight: '600', color: tc.text.primary }}>
                 Linked Accounts
-              </RNText>
-              <RNText style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
+              </Text>
+              <Text style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
                 Connect accounts from other platforms.
-              </RNText>
-            </View>
+              </Text>
+            </Box>
             <LinkedAccountsPanel did={identity?.did ?? null} />
-          </View>
-      </View>
+          </Box>
+      </Box>
 
-      <View nativeID="sub-sharing">
+      <Box nativeID="sub-sharing">
           {/* QR Code sharing */}
-          <View style={{ gap: 12 }}>
-            <View>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <RNText style={{ fontSize: 15, fontWeight: '600', color: tc.text.primary }}>
+          <Box style={{ gap: 12 }}>
+            <Box>
+              <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Text style={{ fontSize: 15, fontWeight: '600', color: tc.text.primary }}>
                   Share Your Identity
-                </RNText>
+                </Text>
                 <HelpIndicator
                   id="settings-qr"
                   title="QR Code Sharing"
@@ -1376,11 +1379,11 @@ function AccountSection() {
                   <HelpListItem>It's safe to share — it only contains your public identity</HelpListItem>
                   <HelpListItem>Scanning initiates a friend request automatically</HelpListItem>
                 </HelpIndicator>
-              </View>
-              <RNText style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
+              </Box>
+              <Text style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
                 Others can scan this code to connect with you.
-              </RNText>
-            </View>
+              </Text>
+            </Box>
 
             <Card variant="outlined" padding="lg" style={{ alignItems: 'center' }}>
               <QRCode
@@ -1393,25 +1396,25 @@ function AccountSection() {
                 lightColor="transparent"
                 eyeColor={tc.accent.primary}
               />
-              <RNText style={{ fontSize: 11, color: tc.text.muted, marginTop: 12, textAlign: 'center' }}>
+              <Text style={{ fontSize: 11, color: tc.text.muted, marginTop: 12, textAlign: 'center' }}>
                 {identity.displayName}
-              </RNText>
+              </Text>
             </Card>
-          </View>
-      </View>
+          </Box>
+      </Box>
 
-      <View nativeID="sub-sync">
+      <Box nativeID="sub-sync">
         <AccountSyncSubsection />
-      </View>
+      </Box>
 
-      <View nativeID="sub-danger">
+      <Box nativeID="sub-danger">
       {/* Danger zone */}
-      <View style={{ gap: 12 }}>
-        <View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <RNText style={{ fontSize: 15, fontWeight: '600', color: tc.status.danger }}>
+      <Box style={{ gap: 12 }}>
+        <Box>
+          <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Text style={{ fontSize: 15, fontWeight: '600', color: tc.status.danger }}>
               Danger Zone
-            </RNText>
+            </Text>
             <HelpIndicator
               id="settings-danger"
               title="Before You Log Out"
@@ -1426,11 +1429,11 @@ function AccountSection() {
                 Without your recovery phrase, you'll lose access to your identity, friends, and message history permanently.
               </HelpHighlight>
             </HelpIndicator>
-          </View>
-          <RNText style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
+          </Box>
+          <Text style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
             Logging out will clear your current session.
-          </RNText>
-        </View>
+          </Text>
+        </Box>
 
         <Button
           variant="secondary"
@@ -1441,9 +1444,9 @@ function AccountSection() {
           accessibilityActions={[{ name: 'activate', label: 'Rotate Encryption Key' }]}
           onAccessibilityAction={(e: any) => { if (e.nativeEvent.actionName === 'activate') setShowRotateKeyConfirm(true); }}
         >
-          <RNText style={{ color: tc.status.danger, fontWeight: '600', fontSize: 14 }}>
+          <Text style={{ color: tc.status.danger, fontWeight: '600', fontSize: 14 }}>
             Rotate Encryption Key
-          </RNText>
+          </Text>
         </Button>
 
         <Button
@@ -1455,11 +1458,11 @@ function AccountSection() {
           accessibilityActions={[{ name: 'activate', label: 'Log Out' }]}
           onAccessibilityAction={(e: any) => { if (e.nativeEvent.actionName === 'activate') setShowLogoutConfirm(true); }}
         >
-          <RNText style={{ color: tc.status.danger, fontWeight: '600', fontSize: 14 }}>
+          <Text style={{ color: tc.status.danger, fontWeight: '600', fontSize: 14 }}>
             Log Out
-          </RNText>
+          </Text>
         </Button>
-      </View>
+      </Box>
 
       {/* Key rotation confirmation dialog */}
       <Dialog
@@ -1480,23 +1483,23 @@ function AccountSection() {
               style={{ borderColor: tc.status.dangerBorder, backgroundColor: tc.status.dangerSurface }}
               testID={TEST_IDS.SETTINGS.ROTATE_KEY_CONFIRM}
             >
-              <RNText style={{ color: tc.status.danger, fontWeight: '600', fontSize: 14 }}>
+              <Text style={{ color: tc.status.danger, fontWeight: '600', fontSize: 14 }}>
                 {isRotatingKey ? 'Rotating...' : 'Rotate Key'}
-              </RNText>
+              </Text>
             </Button>
           </HStack>
         }
       >
-        <View style={{ gap: 12 }}>
-          <RNText style={{ fontSize: 13, color: tc.text.secondary, lineHeight: 18 }} testID={TEST_IDS.SETTINGS.ROTATE_KEY_WARNING}>
+        <Box style={{ gap: 12 }}>
+          <Text style={{ fontSize: 13, color: tc.text.secondary, lineHeight: 18 }} testID={TEST_IDS.SETTINGS.ROTATE_KEY_WARNING}>
             This will regenerate your encryption keys and notify all connected friends. Messages sent with your old key will no longer be decryptable by new sessions.
-          </RNText>
-          <View style={{ backgroundColor: tc.status.dangerSurface, borderRadius: 8, padding: 12, borderWidth: 1, borderColor: tc.status.dangerBorder }}>
-            <RNText style={{ fontSize: 12, color: tc.status.danger, fontWeight: '600' }}>
+          </Text>
+          <Box style={{ backgroundColor: tc.status.dangerSurface, borderRadius: 8, padding: 12, borderWidth: 1, borderColor: tc.status.dangerBorder }}>
+            <Text style={{ fontSize: 12, color: tc.status.danger, fontWeight: '600' }}>
               Warning: This action cannot be undone. Your friends will need to re-establish encrypted sessions.
-            </RNText>
-          </View>
-        </View>
+            </Text>
+          </Box>
+        </Box>
       </Dialog>
 
       {/* Key rotation success/error feedback */}
@@ -1514,11 +1517,11 @@ function AccountSection() {
             </Button>
           }
         >
-          <View style={{ gap: 8 }}>
-            <RNText style={{ fontSize: 13, color: tc.text.secondary, lineHeight: 18 }}>
+          <Box style={{ gap: 8 }}>
+            <Text style={{ fontSize: 13, color: tc.text.secondary, lineHeight: 18 }}>
               Your encryption key has been rotated successfully. {rotateKeyResult.friendCount} friend{rotateKeyResult.friendCount !== 1 ? 's were' : ' was'} notified.
-            </RNText>
-          </View>
+            </Text>
+          </Box>
         </Dialog>
       )}
 
@@ -1535,9 +1538,9 @@ function AccountSection() {
             </Button>
           }
         >
-          <RNText style={{ fontSize: 13, color: tc.text.secondary }}>
+          <Text style={{ fontSize: 13, color: tc.text.secondary }}>
             {rotateKeyError}
-          </RNText>
+          </Text>
         </Dialog>
       )}
 
@@ -1560,22 +1563,22 @@ function AccountSection() {
               style={{ borderColor: tc.status.dangerBorder, backgroundColor: tc.status.dangerSurface }}
               testID={TEST_IDS.COMMON.CONFIRM_YES}
             >
-              <RNText style={{ color: tc.status.danger, fontWeight: '600', fontSize: 14 }}>
+              <Text style={{ color: tc.status.danger, fontWeight: '600', fontSize: 14 }}>
                 Log Out
-              </RNText>
+              </Text>
             </Button>
           </HStack>
         }
       >
-        <View style={{ alignItems: 'center', gap: 12 }}>
+        <Box style={{ alignItems: 'center', gap: 12 }}>
           <Image source={umbraDeadImage} style={{ width: 160, height: 160 }} resizeMode="contain" />
-          <RNText style={{ fontSize: 13, color: tc.text.secondary, textAlign: 'center', lineHeight: 18 }}>
+          <Text style={{ fontSize: 13, color: tc.text.secondary, textAlign: 'center', lineHeight: 18 }}>
             You'll be signed out of this account. Your account data is saved and you can sign back in from the login screen.
-          </RNText>
-        </View>
+          </Text>
+        </Box>
       </Dialog>
-      </View>
-    </View>
+      </Box>
+    </Box>
   );
 }
 
@@ -1605,10 +1608,10 @@ function AppearanceSection() {
   );
 
   return (
-    <View style={{ gap: 20 }}>
+    <Box style={{ gap: 20 }}>
       <SectionHeader title="Appearance" description="Customize the look and feel of the application." />
 
-      <View nativeID="sub-theme">
+      <Box nativeID="sub-theme">
         <SettingRow label="Theme" description="Choose a color theme for the entire app." vertical>
           <InlineDropdown
             options={themeOptions}
@@ -1618,9 +1621,9 @@ function AppearanceSection() {
             testID={TEST_IDS.SETTINGS.THEME_SELECTOR}
           />
           {activeTheme && (
-            <View style={{ flexDirection: 'row', gap: 6, marginTop: 8 }}>
+            <Box style={{ flexDirection: 'row', gap: 6, marginTop: 8 }}>
               {activeTheme.swatches.map((color, i) => (
-                <View
+                <Box
                   key={i}
                   style={{
                     width: 24,
@@ -1632,12 +1635,12 @@ function AppearanceSection() {
                   }}
                 />
               ))}
-            </View>
+            </Box>
           )}
         </SettingRow>
-      </View>
+      </Box>
 
-      <View nativeID="sub-dark-mode">
+      <Box nativeID="sub-dark-mode">
         {showModeToggle && (
         <SettingRow label="Dark Mode" description="Switch between light and dark themes.">
           <SoundToggle
@@ -1651,9 +1654,9 @@ function AppearanceSection() {
           />
         </SettingRow>
         )}
-      </View>
+      </Box>
 
-      <View nativeID="sub-colors" testID={TEST_IDS.SETTINGS.ACCENT_COLOR} accessibilityValue={{ text: accentColor ?? '' }}>
+      <Box nativeID="sub-colors" testID={TEST_IDS.SETTINGS.ACCENT_COLOR} accessibilityValue={{ text: accentColor ?? '' }}>
         <SettingRow label="Accent Color" description="Choose a primary color for buttons, links, and highlights." vertical>
           <ColorPicker
             value={accentColor ?? theme.colors.accent.primary}
@@ -1668,17 +1671,17 @@ function AppearanceSection() {
             </Button>
           )}
         </SettingRow>
-      </View>
+      </Box>
 
-      <View nativeID="sub-text-size">
+      <Box nativeID="sub-text-size">
         <TextSizeSettingRow value={textSize} onChange={setTextSize} />
-      </View>
+      </Box>
 
-      <View nativeID="sub-font">
+      <Box nativeID="sub-font">
         <FontSettingRow />
-      </View>
+      </Box>
 
-      <View nativeID="sub-motion">
+      <Box nativeID="sub-motion">
         <SettingRow label="Animations" description="Enable or disable all UI animations.">
           <SoundToggle
             checked={motionPreferences.enableAnimations}
@@ -1697,8 +1700,8 @@ function AppearanceSection() {
             onChange={() => setMotionPreferences({ reduceMotion: !motionPreferences.reduceMotion })}
           />
         </SettingRow>
-      </View>
-    </View>
+      </Box>
+    </Box>
   );
 }
 
@@ -1748,20 +1751,20 @@ function FontSettingRow() {
 
       {/* Preview of active font */}
       {activeFont.id !== 'system' && (
-        <View style={{ marginTop: 8, padding: 12, borderRadius: 8, backgroundColor: 'rgba(99,102,241,0.06)', borderWidth: 1, borderColor: 'rgba(99,102,241,0.12)' }}>
-          <RNText style={{
+        <Box style={{ marginTop: 8, padding: 12, borderRadius: 8, backgroundColor: 'rgba(99,102,241,0.06)', borderWidth: 1, borderColor: 'rgba(99,102,241,0.12)' }}>
+          <Text style={{
             fontSize: 16, fontWeight: '600', color: tc.text.primary,
             fontFamily: activeFont.css.split(',')[0].replace(/"/g, ''),
           }} numberOfLines={1}>
             The quick brown fox jumps over the lazy dog
-          </RNText>
-          <RNText style={{
+          </Text>
+          <Text style={{
             fontSize: 12, color: tc.text.muted, marginTop: 4,
             fontFamily: activeFont.css.split(',')[0].replace(/"/g, ''),
           }}>
             ABCDEFGHIJKLMNOPQRSTUVWXYZ abcdefghijklmnopqrstuvwxyz 0123456789
-          </RNText>
-        </View>
+          </Text>
+        </Box>
       )}
     </SettingRow>
   );
@@ -1772,7 +1775,7 @@ function NotificationsSection() {
   const [messagePreview, setMessagePreview] = useState(true);
 
   return (
-    <View style={{ gap: 20 }}>
+    <Box style={{ gap: 20 }}>
       <SectionHeader
         title="Notifications"
         description="Control how and when you receive alerts and updates."
@@ -1785,7 +1788,7 @@ function NotificationsSection() {
       <SettingRow label="Message Preview" description="Show message content in notification banners.">
         <SoundToggle checked={messagePreview} onChange={() => setMessagePreview((p) => !p)} />
       </SettingRow>
-    </View>
+    </Box>
   );
 }
 
@@ -1822,7 +1825,7 @@ function SoundsSection() {
   };
 
   return (
-    <View style={{ gap: 20 }}>
+    <Box style={{ gap: 20 }}>
       <SectionHeader
         title="Sounds"
         description="Choose a sound theme and control which sounds play."
@@ -1846,9 +1849,9 @@ function SoundsSection() {
             {(() => {
               const meta = SOUND_THEMES.find((t) => t.id === activeTheme);
               return meta ? (
-                <RNText style={{ fontSize: 12, color: tc.text.muted, marginTop: 4 }}>
+                <Text style={{ fontSize: 12, color: tc.text.muted, marginTop: 4 }}>
                   {meta.description}
-                </RNText>
+                </Text>
               ) : null;
             })()}
           </SettingRow>
@@ -1867,26 +1870,26 @@ function SoundsSection() {
 
           {/* ── Per-category enabled toggles + volumes ──────────────── */}
 
-          <View style={{ gap: 16 }}>
-            <RNText style={{ fontSize: 13, fontWeight: '600', color: tc.text.primary }}>
+          <Box style={{ gap: 16 }}>
+            <Text style={{ fontSize: 13, fontWeight: '600', color: tc.text.primary }}>
               Sound Categories
-            </RNText>
+            </Text>
 
             {SOUND_CATEGORIES.map((cat) => {
               const enabled = categoryEnabled[cat] ?? true;
               const pct = Math.round((categoryVolumes[cat] ?? 1) * 100);
               return (
-                <View key={cat} style={{ gap: 8, opacity: enabled ? 1 : 0.5 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <View style={{ flex: 1, marginRight: 12 }}>
-                      <RNText style={{ fontSize: 13, fontWeight: '600', color: tc.text.primary }}>
+                <Box key={cat} style={{ gap: 8, opacity: enabled ? 1 : 0.5 }}>
+                  <Box style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <Box style={{ flex: 1, marginRight: 12 }}>
+                      <Text style={{ fontSize: 13, fontWeight: '600', color: tc.text.primary }}>
                         {CATEGORY_LABELS[cat]}
-                      </RNText>
-                      <RNText style={{ fontSize: 12, color: tc.text.muted, marginTop: 2 }}>
+                      </Text>
+                      <Text style={{ fontSize: 12, color: tc.text.muted, marginTop: 2 }}>
                         {CATEGORY_DESCRIPTIONS[cat]}
-                      </RNText>
-                    </View>
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                      </Text>
+                    </Box>
+                    <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                       {enabled && (
                         <Pressable
                           onPress={() => playSound(SoundEngine.getSampleSound(cat))}
@@ -1901,10 +1904,10 @@ function SoundsSection() {
                         </Pressable>
                       )}
                       <Toggle checked={enabled} onChange={(v) => setCategoryEnabled(cat, v)} />
-                    </View>
-                  </View>
+                    </Box>
+                  </Box>
                   {enabled && (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                    <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                       <Slider
                         value={pct}
                         min={0}
@@ -1912,18 +1915,18 @@ function SoundsSection() {
                         step={5}
                         onChange={(v) => setCategoryVolume(cat, v / 100)}
                       />
-                      <RNText style={{ fontSize: 12, color: tc.text.muted, minWidth: 32, textAlign: 'right' }}>
+                      <Text style={{ fontSize: 12, color: tc.text.muted, minWidth: 32, textAlign: 'right' }}>
                         {pct}%
-                      </RNText>
-                    </View>
+                      </Text>
+                    </Box>
                   )}
-                </View>
+                </Box>
               );
             })}
-          </View>
+          </Box>
         </>
       )}
-    </View>
+    </Box>
   );
 }
 
@@ -2030,18 +2033,18 @@ function PrivacySection() {
   );
 
   return (
-    <View style={{ gap: 20 }}>
+    <Box style={{ gap: 20 }}>
       <SectionHeader
         title="Privacy"
         description="Manage your visibility and control what others can see."
       />
 
-      <View nativeID="sub-discovery">
+      <Box nativeID="sub-discovery">
         <FriendDiscoveryPanel did={identity?.did ?? null} />
-      </View>
+      </Box>
 
-      <View nativeID="sub-visibility">
-          <View style={{ gap: 20 }}>
+      <Box nativeID="sub-visibility">
+          <Box style={{ gap: 20 }}>
             <SettingRow
               label="Read Receipts"
               description="Let others know when you've seen their messages."
@@ -2066,14 +2069,14 @@ function PrivacySection() {
             <SettingRow label="Typing Indicators" description="Show when you are typing a message to others.">
               <SoundToggle checked={typingIndicators} onChange={() => setTypingIndicators((p) => !p)} />
             </SettingRow>
-          </View>
+          </Box>
 
           <SettingRow label="Online Status" description="Show your online status to other users.">
             <SoundToggle checked={showOnline} onChange={() => setShowOnline((p) => !p)} />
           </SettingRow>
-      </View>
+      </Box>
 
-      <View nativeID="sub-security">
+      <Box nativeID="sub-security">
           <SettingRow
             label="PIN Lock"
             description="Require a PIN to unlock the app and access your keys."
@@ -2119,11 +2122,11 @@ function PrivacySection() {
         icon={<KeyIcon size={24} color={tc.accent.primary} />}
         size="sm"
       >
-        <View style={{ alignItems: 'center', paddingVertical: 8 }}>
+        <Box style={{ alignItems: 'center', paddingVertical: 8 }}>
           {pinError && (
-            <RNText style={{ color: tc.status.danger, fontSize: 13, marginBottom: 12, textAlign: 'center' }}>
+            <Text style={{ color: tc.status.danger, fontSize: 13, marginBottom: 12, textAlign: 'center' }}>
               {pinError}
-            </RNText>
+            </Text>
           )}
 
           {pinDialogMode === 'remove' ? (
@@ -2159,10 +2162,10 @@ function PrivacySection() {
               type="number"
             />
           )}
-        </View>
+        </Box>
       </Dialog>
-      </View>
-    </View>
+      </Box>
+    </Box>
   );
 }
 
@@ -2406,20 +2409,20 @@ function AudioVideoSection() {
   }, [setAudioQuality, handleOpusConfigChange]);
 
   return (
-    <View style={{ gap: 20 }}>
+    <Box style={{ gap: 20 }}>
       <SectionHeader title="Audio & Video" description="Configure your camera, microphone, and call quality settings." />
 
-      <View nativeID="sub-calling">
+      <Box nativeID="sub-calling">
       {/* Calling */}
-      <View style={{ gap: 16 }}>
-        <View>
-          <RNText style={{ fontSize: 15, fontWeight: '600', color: tc.text.primary }}>
+      <Box style={{ gap: 16 }}>
+        <Box>
+          <Text style={{ fontSize: 15, fontWeight: '600', color: tc.text.primary }}>
             Calling
-          </RNText>
-          <RNText style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
+          </Text>
+          <Text style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
             Configure incoming call behavior and ring volume.
-          </RNText>
-        </View>
+          </Text>
+        </Box>
 
         <SettingRow label="Incoming Call Display" description="How incoming calls appear when the app is open." vertical>
           <SegmentedControl
@@ -2441,10 +2444,10 @@ function AudioVideoSection() {
             onChange={setRingVolume}
           />
         </SettingRow>
-      </View>
-      </View>
+      </Box>
+      </Box>
 
-      <View nativeID="sub-video">
+      <Box nativeID="sub-video">
       {/* Video Quality */}
       <SettingRow label="Video Quality" description="Set the default video quality for calls." vertical>
         <InlineDropdown
@@ -2458,21 +2461,21 @@ function AudioVideoSection() {
       <Separator spacing="sm" />
 
       {/* Test Video — live preview with effects applied */}
-      <View style={{ gap: 16 }}>
-        <View>
-          <RNText style={{ fontSize: 15, fontWeight: '600', color: tc.text.primary }}>
+      <Box style={{ gap: 16 }}>
+        <Box>
+          <Text style={{ fontSize: 15, fontWeight: '600', color: tc.text.primary }}>
             Test Video
-          </RNText>
-          <RNText style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
+          </Text>
+          <Text style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
             Preview your camera with the current video effect applied.
-          </RNText>
-        </View>
+          </Text>
+        </Box>
 
         {Platform.OS === 'web' ? (
           /* Web: canvas-based preview */
           effectsPreviewStream ? (
-            <View style={{ gap: 12 }}>
-              <View style={{
+            <Box style={{ gap: 12 }}>
+              <Box style={{
                 width: '100%',
                 height: 220,
                 borderRadius: 10,
@@ -2489,7 +2492,7 @@ function AudioVideoSection() {
                 />
 
                 {effectsProcessing && videoEffect !== 'none' && (
-                  <View style={{
+                  <Box style={{
                     position: 'absolute',
                     top: 8,
                     left: 8,
@@ -2501,20 +2504,20 @@ function AudioVideoSection() {
                     paddingHorizontal: 8,
                     borderRadius: 6,
                   }}>
-                    <View style={{
+                    <Box style={{
                       width: 6,
                       height: 6,
                       borderRadius: 3,
                       backgroundColor: tc.status.success,
                     }} />
-                    <RNText style={{ fontSize: 10, color: '#fff', fontWeight: '500' }}>
+                    <Text style={{ fontSize: 10, color: '#fff', fontWeight: '500' }}>
                       {videoEffect === 'blur' ? 'Blur active' : 'Background active'}
-                    </RNText>
-                  </View>
+                    </Text>
+                  </Box>
                 )}
 
                 {videoEffect === 'none' && (
-                  <View style={{
+                  <Box style={{
                     position: 'absolute',
                     top: 8,
                     left: 8,
@@ -2523,17 +2526,17 @@ function AudioVideoSection() {
                     paddingHorizontal: 8,
                     borderRadius: 6,
                   }}>
-                    <RNText style={{ fontSize: 10, color: '#fff', opacity: 0.8 }}>
+                    <Text style={{ fontSize: 10, color: '#fff', opacity: 0.8 }}>
                       No effect
-                    </RNText>
-                  </View>
+                    </Text>
+                  </Box>
                 )}
-              </View>
+              </Box>
 
               <Button variant="secondary" size="sm" onPress={stopEffectsPreview}>
                 Stop Preview
               </Button>
-            </View>
+            </Box>
           ) : (
             <Button
               variant="secondary"
@@ -2546,7 +2549,7 @@ function AudioVideoSection() {
           )
         ) : (
           /* Mobile: native Metal-backed preview */
-          <View style={{ gap: 12 }}>
+          <Box style={{ gap: 12 }}>
             <VideoEffectsPreview
               effect={videoEffect}
               blurIntensity={blurIntensity}
@@ -2563,38 +2566,38 @@ function AudioVideoSection() {
             />
 
             {videoEffect !== 'none' && (
-              <View style={{
+              <Box style={{
                 flexDirection: 'row',
                 alignItems: 'center',
                 gap: 6,
                 paddingVertical: 4,
                 paddingHorizontal: 8,
               }}>
-                <View style={{
+                <Box style={{
                   width: 6, height: 6, borderRadius: 3,
                   backgroundColor: tc.status.success,
                 }} />
-                <RNText style={{ fontSize: 11, color: tc.text.muted }}>
+                <Text style={{ fontSize: 11, color: tc.text.muted }}>
                   {videoEffect === 'blur' ? 'Background blur active' : 'Virtual background active'}
-                </RNText>
-              </View>
+                </Text>
+              </Box>
             )}
-          </View>
+          </Box>
         )}
-      </View>
+      </Box>
 
       <Separator spacing="sm" />
 
       {/* Video Effects — available on all platforms */}
-      <View style={{ gap: 16 }}>
-        <View>
-          <RNText style={{ fontSize: 15, fontWeight: '600', color: tc.text.primary }}>
+      <Box style={{ gap: 16 }}>
+        <Box>
+          <Text style={{ fontSize: 15, fontWeight: '600', color: tc.text.primary }}>
             Video Effects
-          </RNText>
-          <RNText style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
+          </Text>
+          <Text style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
             Apply background effects to your camera during calls.
-          </RNText>
-        </View>
+          </Text>
+        </Box>
 
         <SettingRow label="Background Effect" description="Choose how your background appears on video calls." vertical>
           <SegmentedControl
@@ -2621,13 +2624,13 @@ function AudioVideoSection() {
         )}
 
         {videoEffect === 'virtual-background' && (
-          <View style={{ gap: 10 }}>
-            <RNText style={{ fontSize: 11, fontWeight: '600', color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+          <Box style={{ gap: 10 }}>
+            <Text style={{ fontSize: 11, fontWeight: '600', color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
               Background Image
-            </RNText>
+            </Text>
 
             {/* Preset grid */}
-            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+            <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
               {BACKGROUND_PRESETS.map((preset) => {
                 const isSelected = backgroundPresetId === preset.id;
                 return (
@@ -2648,7 +2651,7 @@ function AudioVideoSection() {
                     })}
                   >
                     {/* Thumbnail preview */}
-                    <View style={{ width: '100%', height: '100%', position: 'relative' }}>
+                    <Box style={{ width: '100%', height: '100%', position: 'relative' }}>
                       {Platform.OS === 'web' ? (
                         <img
                           src={preset.thumbnail}
@@ -2662,7 +2665,7 @@ function AudioVideoSection() {
                           resizeMode="cover"
                         />
                       )}
-                      <View style={{
+                      <Box style={{
                         position: 'absolute',
                         bottom: 0,
                         left: 0,
@@ -2671,13 +2674,13 @@ function AudioVideoSection() {
                         backgroundColor: 'rgba(0,0,0,0.5)',
                         alignItems: 'center',
                       }}>
-                        <RNText style={{ fontSize: 8, color: '#fff', fontWeight: '500' }}>
+                        <Text style={{ fontSize: 8, color: '#fff', fontWeight: '500' }}>
                           {preset.name}
-                        </RNText>
-                      </View>
-                    </View>
+                        </Text>
+                      </Box>
+                    </Box>
                     {isSelected && (
-                      <View style={{
+                      <Box style={{
                         position: 'absolute',
                         top: 2,
                         right: 2,
@@ -2689,18 +2692,18 @@ function AudioVideoSection() {
                         alignItems: 'center',
                       }}>
                         <CheckIcon size={9} color={tc.text.onAccent} />
-                      </View>
+                      </Box>
                     )}
                   </Pressable>
                 );
               })}
-            </View>
+            </Box>
 
             {/* Custom URL input */}
-            <View style={{ gap: 4 }}>
-              <RNText style={{ fontSize: 11, color: tc.text.muted }}>
+            <Box style={{ gap: 4 }}>
+              <Text style={{ fontSize: 11, color: tc.text.muted }}>
                 Or use a custom image URL:
-              </RNText>
+              </Text>
               <Input
                 placeholder="https://example.com/background.jpg"
                 value={customBackgroundUrl || ''}
@@ -2711,13 +2714,13 @@ function AudioVideoSection() {
                 size="sm"
                 gradientBorder
               />
-            </View>
-          </View>
+            </Box>
+          </Box>
         )}
-      </View>
-      </View>
+      </Box>
+      </Box>
 
-      <View nativeID="sub-audio">
+      <Box nativeID="sub-audio">
       {/* Audio Quality Preset */}
       <SettingRow label="Audio Quality" description="Choose an audio codec and quality preset." vertical>
         <InlineDropdown
@@ -2727,7 +2730,7 @@ function AudioVideoSection() {
           placeholder="Select quality"
         />
         {audioQuality === 'pcm' && (
-          <View style={{
+          <Box style={{
             flexDirection: 'row',
             alignItems: 'center',
             gap: 8,
@@ -2739,10 +2742,10 @@ function AudioVideoSection() {
             marginTop: 8,
           }}>
             <AlertTriangleIcon size={16} color={tc.status.warning} />
-            <RNText style={{ fontSize: 12, color: tc.status.warning, flex: 1 }}>
+            <Text style={{ fontSize: 12, color: tc.status.warning, flex: 1 }}>
               Lossless audio uses ~1.4 Mbps. Ensure you have a stable connection.
-            </RNText>
-          </View>
+            </Text>
+          </Box>
         )}
       </SettingRow>
 
@@ -2750,15 +2753,15 @@ function AudioVideoSection() {
       {audioQuality !== 'pcm' && (
         <>
           <Separator spacing="sm" />
-          <View style={{ gap: 16 }}>
-            <View>
-              <RNText style={{ fontSize: 15, fontWeight: '600', color: tc.text.primary }}>
+          <Box style={{ gap: 16 }}>
+            <Box>
+              <Text style={{ fontSize: 15, fontWeight: '600', color: tc.text.primary }}>
                 Opus Configuration
-              </RNText>
-              <RNText style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
+              </Text>
+              <Text style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
                 Fine-tune the Opus audio encoder for your needs.
-              </RNText>
-            </View>
+              </Text>
+            </Box>
 
             {/* Application Mode */}
             <SettingRow label="Application Mode" description="Optimize encoding for voice, music, or low latency." vertical>
@@ -2772,7 +2775,7 @@ function AudioVideoSection() {
 
             {/* Bitrate Slider */}
             <SettingRow label="Bitrate" description={`${opusConfig.bitrate} kbps`} vertical>
-              <View style={{ gap: 8 }}>
+              <Box style={{ gap: 8 }}>
                 <Slider
                   value={opusConfig.bitrate}
                   min={16}
@@ -2780,7 +2783,7 @@ function AudioVideoSection() {
                   step={8}
                   onChange={(val) => handleOpusConfigChange({ bitrate: val as AudioBitrate })}
                 />
-                <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+                <Box style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
                   {bitratePresets.map((preset) => {
                     const isActive = opusConfig.bitrate >= preset.value;
                     return (
@@ -2794,18 +2797,18 @@ function AudioVideoSection() {
                           backgroundColor: isActive ? tc.accent.primary : tc.background.sunken,
                         }}
                       >
-                        <RNText style={{
+                        <Text style={{
                           fontSize: 10,
                           fontWeight: '600',
                           color: isActive ? tc.text.onAccent : tc.text.secondary,
                         }}>
                           {preset.label}
-                        </RNText>
+                        </Text>
                       </Pressable>
                     );
                   })}
-                </View>
-              </View>
+                </Box>
+              </Box>
             </SettingRow>
 
             {/* Complexity Slider */}
@@ -2834,22 +2837,22 @@ function AudioVideoSection() {
                 onChange={(val) => handleOpusConfigChange({ dtx: val })}
               />
             </SettingRow>
-          </View>
+          </Box>
         </>
       )}
 
       <Separator spacing="sm" />
 
       {/* Volume Controls */}
-      <View style={{ gap: 16 }}>
-        <View>
-          <RNText style={{ fontSize: 15, fontWeight: '600', color: tc.text.primary }}>
+      <Box style={{ gap: 16 }}>
+        <Box>
+          <Text style={{ fontSize: 15, fontWeight: '600', color: tc.text.primary }}>
             Volume Controls
-          </RNText>
-          <RNText style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
+          </Text>
+          <Text style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
             Adjust input and output volume levels.
-          </RNText>
-        </View>
+          </Text>
+        </Box>
 
         <SettingRow label="Microphone Volume" description={`${inputVolume}%`} vertical>
           <Slider
@@ -2863,16 +2866,16 @@ function AudioVideoSection() {
 
         {/* Voice Meter (web only — uses AudioContext) */}
         {Platform.OS === 'web' && (
-        <View style={{ gap: 8 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-            <View>
-              <RNText style={{ fontSize: 13, fontWeight: '600', color: tc.text.primary }}>
+        <Box style={{ gap: 8 }}>
+          <Box style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+            <Box>
+              <Text style={{ fontSize: 13, fontWeight: '600', color: tc.text.primary }}>
                 Voice Meter
-              </RNText>
-              <RNText style={{ fontSize: 11, color: tc.text.secondary }}>
+              </Text>
+              <Text style={{ fontSize: 11, color: tc.text.secondary }}>
                 Test your microphone levels and check for clipping.
-              </RNText>
-            </View>
+              </Text>
+            </Box>
             <Button
               variant="secondary"
               size="sm"
@@ -2880,13 +2883,13 @@ function AudioVideoSection() {
             >
               {micTestActive ? 'Stop' : 'Test Mic'}
             </Button>
-          </View>
+          </Box>
           {micTestActive && (
-            <View style={{ gap: 6 }}>
+            <Box style={{ gap: 6 }}>
               {/* Level bar */}
-              <View style={{ height: 12, borderRadius: 6, backgroundColor: tc.background.sunken, overflow: 'hidden', position: 'relative' }}>
+              <Box style={{ height: 12, borderRadius: 6, backgroundColor: tc.background.sunken, overflow: 'hidden', position: 'relative' }}>
                 {/* Clipping threshold marker at 85% */}
-                <View style={{
+                <Box style={{
                   position: 'absolute',
                   left: '85%',
                   top: 0,
@@ -2896,7 +2899,7 @@ function AudioVideoSection() {
                   opacity: 0.5,
                   zIndex: 1,
                 }} />
-                <View style={{
+                <Box style={{
                   width: `${micTestLevel}%`,
                   height: '100%',
                   borderRadius: 6,
@@ -2907,19 +2910,19 @@ function AudioVideoSection() {
                     : tc.accent.primary,
                   transition: 'width 0.05s ease-out',
                 } as any} />
-              </View>
+              </Box>
               {/* Labels */}
-              <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                <RNText style={{ fontSize: 10, color: tc.text.muted }}>
+              <Box style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                <Text style={{ fontSize: 10, color: tc.text.muted }}>
                   {micTestLevel > 85 ? '⚠ Clipping — lower your mic volume' : micTestLevel > 50 ? 'Good level' : micTestLevel > 10 ? 'Low — speak louder or raise mic volume' : 'Waiting for input...'}
-                </RNText>
-                <RNText style={{ fontSize: 10, fontWeight: '600', fontVariant: ['tabular-nums'], color: micTestLevel > 85 ? tc.status.danger : tc.text.muted }}>
+                </Text>
+                <Text style={{ fontSize: 10, fontWeight: '600', fontVariant: ['tabular-nums'], color: micTestLevel > 85 ? tc.status.danger : tc.text.muted }}>
                   {micTestLevel}%
-                </RNText>
-              </View>
-            </View>
+                </Text>
+              </Box>
+            </Box>
           )}
-        </View>
+        </Box>
         )}
 
         <SettingRow label="Output Volume" description={`${volume}%`} vertical>
@@ -2931,118 +2934,118 @@ function AudioVideoSection() {
             onChange={handleOutputVolumeChange}
           />
         </SettingRow>
-      </View>
-      </View>
+      </Box>
+      </Box>
 
-      <View nativeID="sub-devices">
+      <Box nativeID="sub-devices">
       {/* Devices section */}
-      <View style={{ gap: 16 }}>
-        <View>
-          <RNText style={{ fontSize: 15, fontWeight: '600', color: tc.text.primary }}>
+      <Box style={{ gap: 16 }}>
+        <Box>
+          <Text style={{ fontSize: 15, fontWeight: '600', color: tc.text.primary }}>
             Devices
-          </RNText>
-          <RNText style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
+          </Text>
+          <Text style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
             {Platform.OS === 'web'
               ? 'Your available audio and video input/output devices.'
               : 'Camera and microphone are managed by your device.'}
-          </RNText>
-        </View>
+          </Text>
+        </Box>
 
         {Platform.OS === 'web' ? (
           <>
             {/* Microphones */}
-            <View style={{ gap: 6 }}>
-              <RNText style={{ fontSize: 11, fontWeight: '600', color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+            <Box style={{ gap: 6 }}>
+              <Text style={{ fontSize: 11, fontWeight: '600', color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
                 Microphones
-              </RNText>
+              </Text>
               {audioInputs.length === 0 ? (
-                <RNText style={{ fontSize: 13, color: tc.text.secondary }}>No microphones detected</RNText>
+                <Text style={{ fontSize: 13, color: tc.text.secondary }}>No microphones detected</Text>
               ) : (
                 audioInputs.map((device) => (
-                  <View key={device.deviceId} style={{
+                  <Box key={device.deviceId} style={{
                     flexDirection: 'row', alignItems: 'center', gap: 8,
                     paddingVertical: 6, paddingHorizontal: 10,
                     borderRadius: 6, backgroundColor: tc.background.sunken,
                   }}>
-                    <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: tc.status.success }} />
-                    <RNText style={{ fontSize: 13, color: tc.text.primary, flex: 1 }} numberOfLines={1}>
+                    <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: tc.status.success }} />
+                    <Text style={{ fontSize: 13, color: tc.text.primary, flex: 1 }} numberOfLines={1}>
                       {device.label || `Microphone ${device.deviceId.slice(0, 8)}`}
-                    </RNText>
-                  </View>
+                    </Text>
+                  </Box>
                 ))
               )}
-            </View>
+            </Box>
 
             {/* Cameras */}
-            <View style={{ gap: 6 }}>
-              <RNText style={{ fontSize: 11, fontWeight: '600', color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+            <Box style={{ gap: 6 }}>
+              <Text style={{ fontSize: 11, fontWeight: '600', color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
                 Cameras
-              </RNText>
+              </Text>
               {videoInputs.length === 0 ? (
-                <RNText style={{ fontSize: 13, color: tc.text.secondary }}>No cameras detected</RNText>
+                <Text style={{ fontSize: 13, color: tc.text.secondary }}>No cameras detected</Text>
               ) : (
                 videoInputs.map((device) => (
-                  <View key={device.deviceId} style={{
+                  <Box key={device.deviceId} style={{
                     flexDirection: 'row', alignItems: 'center', gap: 8,
                     paddingVertical: 6, paddingHorizontal: 10,
                     borderRadius: 6, backgroundColor: tc.background.sunken,
                   }}>
-                    <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: tc.status.success }} />
-                    <RNText style={{ fontSize: 13, color: tc.text.primary, flex: 1 }} numberOfLines={1}>
+                    <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: tc.status.success }} />
+                    <Text style={{ fontSize: 13, color: tc.text.primary, flex: 1 }} numberOfLines={1}>
                       {device.label || `Camera ${device.deviceId.slice(0, 8)}`}
-                    </RNText>
-                  </View>
+                    </Text>
+                  </Box>
                 ))
               )}
-            </View>
+            </Box>
 
             {/* Speakers */}
-            <View style={{ gap: 6 }}>
-              <RNText style={{ fontSize: 11, fontWeight: '600', color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+            <Box style={{ gap: 6 }}>
+              <Text style={{ fontSize: 11, fontWeight: '600', color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
                 Speakers
-              </RNText>
+              </Text>
               {audioOutputs.length === 0 ? (
-                <RNText style={{ fontSize: 13, color: tc.text.secondary }}>No speakers detected</RNText>
+                <Text style={{ fontSize: 13, color: tc.text.secondary }}>No speakers detected</Text>
               ) : (
                 audioOutputs.map((device) => (
-                  <View key={device.deviceId} style={{
+                  <Box key={device.deviceId} style={{
                     flexDirection: 'row', alignItems: 'center', gap: 8,
                     paddingVertical: 6, paddingHorizontal: 10,
                     borderRadius: 6, backgroundColor: tc.background.sunken,
                   }}>
-                    <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: tc.status.success }} />
-                    <RNText style={{ fontSize: 13, color: tc.text.primary, flex: 1 }} numberOfLines={1}>
+                    <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: tc.status.success }} />
+                    <Text style={{ fontSize: 13, color: tc.text.primary, flex: 1 }} numberOfLines={1}>
                       {device.label || `Speaker ${device.deviceId.slice(0, 8)}`}
-                    </RNText>
-                  </View>
+                    </Text>
+                  </Box>
                 ))
               )}
-            </View>
+            </Box>
 
             {!isSupported && (
-              <View style={{
+              <Box style={{
                 padding: 12, borderRadius: 8,
                 backgroundColor: tc.status.warningSurface,
                 borderWidth: 1, borderColor: tc.status.warningBorder,
               }}>
-                <RNText style={{ fontSize: 12, color: tc.status.warning }}>
+                <Text style={{ fontSize: 12, color: tc.status.warning }}>
                   Media devices are not available in this browser or environment.
-                </RNText>
-              </View>
+                </Text>
+              </Box>
             )}
 
             {/* Device Test — inline within Devices section */}
             <Separator spacing="sm" />
-            <View>
-              <RNText style={{ fontSize: 11, fontWeight: '600', color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+            <Box>
+              <Text style={{ fontSize: 11, fontWeight: '600', color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
                 Test Devices
-              </RNText>
-            </View>
+              </Text>
+            </Box>
 
             {cameraPreviewStream ? (
-              <View style={{ gap: 12 }}>
+              <Box style={{ gap: 12 }}>
                 {/* Camera preview */}
-                <View style={{
+                <Box style={{
                   width: '100%', height: 180, borderRadius: 10, overflow: 'hidden',
                   backgroundColor: tc.background.sunken,
                 }}>
@@ -3053,27 +3056,27 @@ function AudioVideoSection() {
                     playsInline
                     style={{ width: '100%', height: '100%', objectFit: 'cover', transform: 'scaleX(-1)' } as any}
                   />
-                </View>
+                </Box>
 
                 {/* Mic level meter */}
-                <View style={{ gap: 4 }}>
-                  <RNText style={{ fontSize: 11, fontWeight: '600', color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                <Box style={{ gap: 4 }}>
+                  <Text style={{ fontSize: 11, fontWeight: '600', color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
                     Microphone Level
-                  </RNText>
-                  <View style={{ height: 8, borderRadius: 4, backgroundColor: tc.background.sunken, overflow: 'hidden' }}>
-                    <View style={{
+                  </Text>
+                  <Box style={{ height: 8, borderRadius: 4, backgroundColor: tc.background.sunken, overflow: 'hidden' }}>
+                    <Box style={{
                       width: `${micLevel}%`,
                       height: '100%',
                       borderRadius: 4,
                       backgroundColor: micLevel > 70 ? tc.status.danger : micLevel > 30 ? tc.status.success : tc.accent.primary,
                     }} />
-                  </View>
-                </View>
+                  </Box>
+                </Box>
 
                 <Button variant="secondary" size="sm" onPress={stopTestPreview}>
                   Stop Test
                 </Button>
-              </View>
+              </Box>
             ) : (
               <Button variant="secondary" size="sm" onPress={startTestPreview}>
                 Test Camera & Microphone
@@ -3083,79 +3086,79 @@ function AudioVideoSection() {
         ) : (
           <>
             {/* Mobile device display — simplified */}
-            <View style={{ gap: 6 }}>
-              <RNText style={{ fontSize: 11, fontWeight: '600', color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+            <Box style={{ gap: 6 }}>
+              <Text style={{ fontSize: 11, fontWeight: '600', color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
                 Camera
-              </RNText>
-              <View style={{
+              </Text>
+              <Box style={{
                 flexDirection: 'row', alignItems: 'center', gap: 8,
                 paddingVertical: 8, paddingHorizontal: 12,
                 borderRadius: 8, backgroundColor: tc.background.sunken,
               }}>
-                <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: tc.status.success }} />
-                <RNText style={{ fontSize: 13, color: tc.text.primary, flex: 1 }}>
+                <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: tc.status.success }} />
+                <Text style={{ fontSize: 13, color: tc.text.primary, flex: 1 }}>
                   Front Camera
-                </RNText>
-                <RNText style={{ fontSize: 11, color: tc.text.muted }}>
+                </Text>
+                <Text style={{ fontSize: 11, color: tc.text.muted }}>
                   Default
-                </RNText>
-              </View>
-              <View style={{
+                </Text>
+              </Box>
+              <Box style={{
                 flexDirection: 'row', alignItems: 'center', gap: 8,
                 paddingVertical: 8, paddingHorizontal: 12,
                 borderRadius: 8, backgroundColor: tc.background.sunken,
               }}>
-                <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: tc.status.success }} />
-                <RNText style={{ fontSize: 13, color: tc.text.primary, flex: 1 }}>
+                <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: tc.status.success }} />
+                <Text style={{ fontSize: 13, color: tc.text.primary, flex: 1 }}>
                   Back Camera
-                </RNText>
-              </View>
-              <RNText style={{ fontSize: 11, color: tc.text.muted, marginTop: 2 }}>
+                </Text>
+              </Box>
+              <Text style={{ fontSize: 11, color: tc.text.muted, marginTop: 2 }}>
                 Switch cameras during a call using the camera flip button.
-              </RNText>
-            </View>
+              </Text>
+            </Box>
 
-            <View style={{ gap: 6 }}>
-              <RNText style={{ fontSize: 11, fontWeight: '600', color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+            <Box style={{ gap: 6 }}>
+              <Text style={{ fontSize: 11, fontWeight: '600', color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
                 Microphone
-              </RNText>
-              <View style={{
+              </Text>
+              <Box style={{
                 flexDirection: 'row', alignItems: 'center', gap: 8,
                 paddingVertical: 8, paddingHorizontal: 12,
                 borderRadius: 8, backgroundColor: tc.background.sunken,
               }}>
-                <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: tc.status.success }} />
-                <RNText style={{ fontSize: 13, color: tc.text.primary, flex: 1 }}>
+                <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: tc.status.success }} />
+                <Text style={{ fontSize: 13, color: tc.text.primary, flex: 1 }}>
                   Default Microphone
-                </RNText>
-              </View>
-            </View>
+                </Text>
+              </Box>
+            </Box>
 
-            <View style={{
+            <Box style={{
               padding: 12, borderRadius: 8,
               backgroundColor: tc.status.infoSurface,
               borderWidth: 1, borderColor: tc.status.infoBorder,
             }}>
-              <RNText style={{ fontSize: 12, color: tc.status.info }}>
+              <Text style={{ fontSize: 12, color: tc.status.info }}>
                 Device permissions are managed by your device settings. Camera and microphone
                 access will be requested when you start a call.
-              </RNText>
-            </View>
+              </Text>
+            </Box>
           </>
         )}
-      </View>
-      </View>
+      </Box>
+      </Box>
 
       {/* Audio Processing */}
-      <View style={{ gap: 16 }}>
-        <View>
-          <RNText style={{ fontSize: 15, fontWeight: '600', color: tc.text.primary }}>
+      <Box style={{ gap: 16 }}>
+        <Box>
+          <Text style={{ fontSize: 15, fontWeight: '600', color: tc.text.primary }}>
             Audio Processing
-          </RNText>
-          <RNText style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
+          </Text>
+          <Text style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
             Enhance audio quality during calls.
-          </RNText>
-        </View>
+          </Text>
+        </Box>
 
         <SettingRow label="Noise Suppression" description="Reduce background noise from your microphone.">
           <SoundToggle checked={noiseSuppression} onChange={setNoiseSuppression} />
@@ -3166,21 +3169,21 @@ function AudioVideoSection() {
         <SettingRow label="Auto Gain Control" description="Automatically adjust microphone volume.">
           <SoundToggle checked={autoGainControl} onChange={setAutoGainControl} />
         </SettingRow>
-      </View>
+      </Box>
 
       <Separator spacing="sm" />
 
       {/* Encryption (web only — Insertable Streams / RTCRtpScriptTransform) */}
       {Platform.OS === 'web' && (
-      <View style={{ gap: 16 }}>
-        <View>
-          <RNText style={{ fontSize: 15, fontWeight: '600', color: tc.text.primary }}>
+      <Box style={{ gap: 16 }}>
+        <Box>
+          <Text style={{ fontSize: 15, fontWeight: '600', color: tc.text.primary }}>
             Encryption
-          </RNText>
-          <RNText style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
+          </Text>
+          <Text style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
             Call signaling is always end-to-end encrypted. Optionally encrypt media frames too.
-          </RNText>
-        </View>
+          </Text>
+        </Box>
 
         <SettingRow
           label="End-to-End Media Encryption"
@@ -3198,21 +3201,21 @@ function AudioVideoSection() {
         </SettingRow>
 
         {mediaE2EE && (
-          <View style={{
+          <Box style={{
             padding: 12, borderRadius: 8,
             backgroundColor: tc.status.infoSurface,
             borderWidth: 1, borderColor: tc.status.infoBorder,
           }}>
-            <RNText style={{ fontSize: 12, color: tc.status.info }}>
+            <Text style={{ fontSize: 12, color: tc.status.info }}>
               Media E2EE is enabled. Both peers must have this setting enabled for encrypted media.
               Call signaling (SDP, ICE) is always encrypted regardless of this setting.
-            </RNText>
-          </View>
+            </Text>
+          </Box>
         )}
-      </View>
+      </Box>
       )}
 
-    </View>
+    </Box>
   );
 }
 
@@ -3427,31 +3430,31 @@ function NetworkSection() {
   }[connectionState];
 
   return (
-    <View style={{ gap: 20 }}>
+    <Box style={{ gap: 20 }}>
       <SectionHeader title="Network" description="Manage your peer-to-peer network connection." />
 
-      <View nativeID="sub-connection">
+      <Box nativeID="sub-connection">
       {/* Connection Status */}
       <Card variant="outlined" padding="lg" style={{ width: '100%' }}>
-        <View style={{ gap: 12 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-            <View style={{
+        <Box style={{ gap: 12 }}>
+          <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <Box style={{
               width: 10, height: 10, borderRadius: 5,
               backgroundColor: isConnected ? tc.status.success : tc.status.danger,
             }} />
-            <RNText style={{ fontSize: 16, fontWeight: '600', color: tc.text.primary }}>
+            <Text style={{ fontSize: 16, fontWeight: '600', color: tc.text.primary }}>
               {isConnected ? 'Connected' : 'Disconnected'}
-            </RNText>
-          </View>
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
-            <RNText style={{ fontSize: 13, color: tc.text.secondary }}>
+            </Text>
+          </Box>
+          <Box style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+            <Text style={{ fontSize: 13, color: tc.text.secondary }}>
               Peers: {peerCount}
-            </RNText>
-            <RNText style={{ fontSize: 13, color: tc.text.secondary }}>
+            </Text>
+            <Text style={{ fontSize: 13, color: tc.text.secondary }}>
               Addresses: {listenAddresses?.length ?? 0}
-            </RNText>
-          </View>
-        </View>
+            </Text>
+          </Box>
+        </Box>
       </Card>
 
       {/* Network Toggle */}
@@ -3478,19 +3481,19 @@ function NetworkSection() {
       >
         <SoundToggle checked={isConnected} onChange={() => isConnected ? stopNetwork() : startNetwork()} />
       </SettingRow>
-      </View>
+      </Box>
 
-      <View nativeID="sub-relays">
+      <Box nativeID="sub-relays">
       {/* Relay Servers */}
-      <View style={{ gap: 12 }} testID={TEST_IDS.SETTINGS.RELAY_STATUS}>
-        <View>
-          <RNText style={{ fontSize: 15, fontWeight: '600', color: tc.text.primary }}>
+      <Box style={{ gap: 12 }} testID={TEST_IDS.SETTINGS.RELAY_STATUS}>
+        <Box>
+          <Text style={{ fontSize: 15, fontWeight: '600', color: tc.text.primary }}>
             Relay Servers
-          </RNText>
-          <RNText style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
+          </Text>
+          <Text style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
             Relay servers store messages while you or your friends are offline.
-          </RNText>
-        </View>
+          </Text>
+        </Box>
 
         {relays.map((relay) => {
           const displayUrl = relay.url.replace('wss://', '').replace('ws://', '').replace(/\/ws\/?$/, '');
@@ -3501,7 +3504,7 @@ function NetworkSection() {
             : info?.region || info?.location || null;
 
           return (
-            <View
+            <Box
               key={relay.url}
               style={{
                 flexDirection: 'row',
@@ -3515,71 +3518,71 @@ function NetworkSection() {
                 borderColor: tc.border.subtle,
               }}
             >
-              <View style={{
+              <Box style={{
                 width: 8, height: 8, borderRadius: 4,
                 backgroundColor: relay.enabled ? tc.status.success : tc.text.muted,
               }} />
-              <View style={{ flex: 1, gap: 3 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Box style={{ flex: 1, gap: 3 }}>
+                <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                   {relay.isDefault && (
-                    <View style={{
+                    <Box style={{
                       paddingHorizontal: 5,
                       paddingVertical: 1,
                       borderRadius: 4,
                       backgroundColor: `${tc.text.muted}20`,
                     }}>
-                      <RNText style={{ fontSize: 9, color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: '700' }}>
+                      <Text style={{ fontSize: 9, color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: '700' }}>
                         Default
-                      </RNText>
-                    </View>
+                      </Text>
+                    </Box>
                   )}
-                  <RNText style={{ fontSize: 13, color: tc.text.primary, fontFamily: 'monospace', flex: 1 }} numberOfLines={1}>
+                  <Text style={{ fontSize: 13, color: tc.text.primary, fontFamily: 'monospace', flex: 1 }} numberOfLines={1}>
                     {displayUrl}
-                  </RNText>
-                </View>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  </Text>
+                </Box>
+                <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                   {locationLabel && (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                    <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
                       <MapPinIcon size={10} color={tc.text.secondary} />
-                      <RNText style={{ fontSize: 11, color: tc.text.secondary }}>
+                      <Text style={{ fontSize: 11, color: tc.text.secondary }}>
                         {locationLabel}
-                      </RNText>
-                    </View>
+                      </Text>
+                    </Box>
                   )}
                   {info?.ping != null && (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                    <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
                       <ActivityIcon size={10} color={pingColor} />
-                      <RNText style={{ fontSize: 11, color: pingColor, fontFamily: 'monospace' }}>
+                      <Text style={{ fontSize: 11, color: pingColor, fontFamily: 'monospace' }}>
                         {info.ping}ms
-                      </RNText>
-                    </View>
+                      </Text>
+                    </Box>
                   )}
                   {info?.online != null && (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                    <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
                       <UsersIcon size={10} color={tc.text.muted} />
-                      <RNText style={{ fontSize: 11, color: tc.text.muted }}>
+                      <Text style={{ fontSize: 11, color: tc.text.muted }}>
                         {info.online} online
-                      </RNText>
-                    </View>
+                      </Text>
+                    </Box>
                   )}
                   {info?.federationEnabled && info?.connectedPeers != null && info.connectedPeers > 0 && (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                    <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
                       <ZapIcon size={10} color={tc.accent.primary} />
-                      <RNText style={{ fontSize: 11, color: tc.accent.primary }}>
+                      <Text style={{ fontSize: 11, color: tc.accent.primary }}>
                         {info.connectedPeers} {info.connectedPeers === 1 ? 'peer' : 'peers'}
-                      </RNText>
-                    </View>
+                      </Text>
+                    </Box>
                   )}
                   {info?.federationEnabled && info?.meshOnline != null && info.meshOnline > (info?.online ?? 0) && (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                    <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
                       <NetworkIcon size={10} color={tc.text.muted} />
-                      <RNText style={{ fontSize: 11, color: tc.text.muted }}>
+                      <Text style={{ fontSize: 11, color: tc.text.muted }}>
                         {info.meshOnline} mesh
-                      </RNText>
-                    </View>
+                      </Text>
+                    </Box>
                   )}
-                </View>
-              </View>
+                </Box>
+              </Box>
               <Toggle
                 checked={relay.enabled}
                 onChange={() => handleToggleRelay(relay.url)}
@@ -3594,13 +3597,13 @@ function NetworkSection() {
                   <XIcon size={14} color={tc.text.muted} />
                 </Pressable>
               )}
-            </View>
+            </Box>
           );
         })}
 
         {/* Add relay input */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <View style={{ flex: 1 }}>
+        <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Box style={{ flex: 1 }}>
             <Input
               value={newRelayUrl}
               onChangeText={(text: string) => {
@@ -3612,7 +3615,7 @@ function NetworkSection() {
               fullWidth
               gradientBorder
             />
-          </View>
+          </Box>
           <Button
             size="sm"
             variant="secondary"
@@ -3622,11 +3625,11 @@ function NetworkSection() {
           >
             Add
           </Button>
-        </View>
+        </Box>
         {relayError && (
-          <RNText style={{ fontSize: 12, color: tc.status.danger, marginTop: -4 }}>
+          <Text style={{ fontSize: 12, color: tc.status.danger, marginTop: -4 }}>
             {relayError}
-          </RNText>
+          </Text>
         )}
 
         {/* Run Your Own Relay */}
@@ -3649,7 +3652,7 @@ function NetworkSection() {
             marginTop: 4,
           })}
         >
-          <View style={{
+          <Box style={{
             width: 36,
             height: 36,
             borderRadius: 8,
@@ -3658,28 +3661,28 @@ function NetworkSection() {
             justifyContent: 'center',
           }}>
             <ServerIcon size={18} color={tc.accent.primary} />
-          </View>
-          <View style={{ flex: 1, gap: 2 }}>
-            <RNText style={{ fontSize: 14, fontWeight: '600', color: tc.text.primary }}>
+          </Box>
+          <Box style={{ flex: 1, gap: 2 }}>
+            <Text style={{ fontSize: 14, fontWeight: '600', color: tc.text.primary }}>
               Run Your Own Relay
-            </RNText>
-            <RNText style={{ fontSize: 12, color: tc.text.secondary }}>
+            </Text>
+            <Text style={{ fontSize: 12, color: tc.text.secondary }}>
               Download the relay binary and host your own server
-            </RNText>
-          </View>
+            </Text>
+          </Box>
           <ExternalLinkIcon size={16} color={tc.text.muted} />
         </Pressable>
-      </View>
-      </View>
+      </Box>
+      </Box>
 
-      <View nativeID="sub-peers">
+      <Box nativeID="sub-peers">
       {/* Peer ID */}
       {connectionInfo?.peerId && (
-        <View style={{ gap: 8 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <RNText style={{ fontSize: 11, fontWeight: '600', color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+        <Box style={{ gap: 8 }}>
+          <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Text style={{ fontSize: 11, fontWeight: '600', color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
               Peer ID
-            </RNText>
+            </Text>
             <HelpIndicator
               id="settings-peer-id"
               title="Peer ID"
@@ -3692,11 +3695,11 @@ function NetworkSection() {
               <HelpListItem>DID = your identity (persists across devices)</HelpListItem>
               <HelpListItem>Peer ID = this device's network address (changes per session)</HelpListItem>
             </HelpIndicator>
-          </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <RNText style={{ fontSize: 12, color: tc.text.secondary, fontFamily: 'monospace', flex: 1 }} numberOfLines={1}>
+          </Box>
+          <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Text style={{ fontSize: 12, color: tc.text.secondary, fontFamily: 'monospace', flex: 1 }} numberOfLines={1}>
               {connectionInfo.peerId}
-            </RNText>
+            </Text>
             <Pressable
               onPress={handleCopyPeerId}
               style={{
@@ -3706,23 +3709,23 @@ function NetworkSection() {
               }}
             >
               <CopyIcon size={14} color={peerIdCopied ? '#22c55e' : tc.text.secondary} />
-              <RNText style={{ fontSize: 11, color: peerIdCopied ? '#22c55e' : tc.text.secondary, fontWeight: '500' }}>
+              <Text style={{ fontSize: 11, color: peerIdCopied ? '#22c55e' : tc.text.secondary, fontWeight: '500' }}>
                 {peerIdCopied ? 'Copied' : 'Copy'}
-              </RNText>
+              </Text>
             </Pressable>
-          </View>
-        </View>
+          </Box>
+        </Box>
       )}
 
       <Separator spacing="sm" />
 
       {/* ── WebRTC Connection Flow ─────────────────────────────────── */}
-      <View style={{ gap: 12 }}>
-        <View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <RNText style={{ fontSize: 15, fontWeight: '600', color: tc.text.primary }}>
+      <Box style={{ gap: 12 }}>
+        <Box>
+          <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Text style={{ fontSize: 15, fontWeight: '600', color: tc.text.primary }}>
               Connect to Peer
-            </RNText>
+            </Text>
             <HelpIndicator
               id="settings-connect-peer"
               title="Direct P2P Connection"
@@ -3739,71 +3742,71 @@ function NetworkSection() {
               <HelpListItem>Step 2: Your peer pastes your offer and generates an answer</HelpListItem>
               <HelpListItem>Step 3: Paste their answer to complete the connection</HelpListItem>
             </HelpIndicator>
-          </View>
-          <RNText style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
+          </Box>
+          <Text style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
             Exchange connection data with another user to establish a direct P2P link.
-          </RNText>
-        </View>
+          </Text>
+        </Box>
 
         {/* Connection State Indicator */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-          <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: connectionStateColor }} />
-          <RNText style={{ fontSize: 12, color: connectionStateColor }}>
+        <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+          <Box style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: connectionStateColor }} />
+          <Text style={{ fontSize: 12, color: connectionStateColor }}>
             {connectionStateLabel}
-          </RNText>
-        </View>
+          </Text>
+        </Box>
 
         {/* Step 1: Create Offer button */}
         {connectionState === 'idle' && (
-          <View style={{ flexDirection: 'row', gap: 8 }}>
+          <Box style={{ flexDirection: 'row', gap: 8 }}>
             <Button size="sm" onPress={createOffer} style={{ flex: 1 }}>
               Create Offer (I invite)
             </Button>
-          </View>
+          </Box>
         )}
 
         {/* Show offer data for copying */}
         {offerData && connectionState === 'waiting_for_answer' && (
           <Card variant="outlined" padding="md" style={{ width: '100%' }}>
-            <View style={{ gap: 8 }}>
-              <RNText style={{ fontSize: 11, fontWeight: '600', color: tc.text.muted, textTransform: 'uppercase' }}>
+            <Box style={{ gap: 8 }}>
+              <Text style={{ fontSize: 11, fontWeight: '600', color: tc.text.muted, textTransform: 'uppercase' }}>
                 Your Offer (share with peer)
-              </RNText>
-              <RNText style={{ fontSize: 10, color: tc.text.secondary, fontFamily: 'monospace' }} numberOfLines={3}>
+              </Text>
+              <Text style={{ fontSize: 10, color: tc.text.secondary, fontFamily: 'monospace' }} numberOfLines={3}>
                 {offerData.slice(0, 200)}...
-              </RNText>
+              </Text>
               <Button size="sm" variant={offerCopied ? 'tertiary' : 'secondary'} onPress={handleCopyOffer}>
                 {offerCopied ? 'Copied!' : 'Copy Offer'}
               </Button>
-            </View>
+            </Box>
           </Card>
         )}
 
         {/* Show answer data for copying (answerer side) */}
         {answerData && connectionState !== 'connected' && (
           <Card variant="outlined" padding="md" style={{ width: '100%' }}>
-            <View style={{ gap: 8 }}>
-              <RNText style={{ fontSize: 11, fontWeight: '600', color: tc.text.muted, textTransform: 'uppercase' }}>
+            <Box style={{ gap: 8 }}>
+              <Text style={{ fontSize: 11, fontWeight: '600', color: tc.text.muted, textTransform: 'uppercase' }}>
                 Your Answer (share with peer)
-              </RNText>
-              <RNText style={{ fontSize: 10, color: tc.text.secondary, fontFamily: 'monospace' }} numberOfLines={3}>
+              </Text>
+              <Text style={{ fontSize: 10, color: tc.text.secondary, fontFamily: 'monospace' }} numberOfLines={3}>
                 {answerData.slice(0, 200)}...
-              </RNText>
+              </Text>
               <Button size="sm" variant={answerCopied ? 'tertiary' : 'secondary'} onPress={handleCopyAnswer}>
                 {answerCopied ? 'Copied!' : 'Copy Answer'}
               </Button>
-            </View>
+            </Box>
           </Card>
         )}
 
         {/* Paste input for offer/answer */}
         {(connectionState === 'idle' || connectionState === 'waiting_for_answer') && (
-          <View style={{ gap: 8 }}>
-            <RNText style={{ fontSize: 11, fontWeight: '600', color: tc.text.muted, textTransform: 'uppercase' }}>
+          <Box style={{ gap: 8 }}>
+            <Text style={{ fontSize: 11, fontWeight: '600', color: tc.text.muted, textTransform: 'uppercase' }}>
               {connectionState === 'waiting_for_answer'
                 ? 'Paste Answer from Peer'
                 : 'Paste Offer from Peer'}
-            </RNText>
+            </Text>
             <TextArea
               value={pasteInput}
               onChangeText={setPasteInput}
@@ -3819,29 +3822,29 @@ function NetworkSection() {
             >
               {connectionState === 'waiting_for_answer' ? 'Complete Connection' : 'Accept Offer'}
             </Button>
-          </View>
+          </Box>
         )}
 
         {/* Connected state */}
         {connectionState === 'connected' && (
           <Card variant="outlined" padding="md" style={{ width: '100%', backgroundColor: tc.status.successSurface }}>
-            <RNText style={{ fontSize: 14, fontWeight: '600', color: tc.status.success, textAlign: 'center' }}>
+            <Text style={{ fontSize: 14, fontWeight: '600', color: tc.status.success, textAlign: 'center' }}>
               Peer connected successfully!
-            </RNText>
+            </Text>
           </Card>
         )}
 
         {/* Error state */}
         {connectionState === 'error' && networkError && (
           <Card variant="outlined" padding="md" style={{ width: '100%', backgroundColor: tc.status.dangerSurface }}>
-            <View style={{ gap: 8 }}>
-              <RNText style={{ fontSize: 12, color: tc.status.danger }}>
+            <Box style={{ gap: 8 }}>
+              <Text style={{ fontSize: 12, color: tc.status.danger }}>
                 {networkError.message}
-              </RNText>
+              </Text>
               <Button size="sm" variant="secondary" onPress={resetSignaling}>
                 Try Again
               </Button>
-            </View>
+            </Box>
           </Card>
         )}
 
@@ -3851,21 +3854,21 @@ function NetworkSection() {
             Reset
           </Button>
         )}
-      </View>
-      </View>
+      </Box>
+      </Box>
 
-      <View nativeID="sub-identity">
+      <Box nativeID="sub-identity">
       {/* Connection Info QR (existing) */}
       {identity && (
-        <View style={{ gap: 12 }}>
-          <View>
-            <RNText style={{ fontSize: 15, fontWeight: '600', color: tc.text.primary }}>
+        <Box style={{ gap: 12 }}>
+          <Box>
+            <Text style={{ fontSize: 15, fontWeight: '600', color: tc.text.primary }}>
               Your DID
-            </RNText>
-            <RNText style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
+            </Text>
+            <Text style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
               Share your DID for others to add you as a friend.
-            </RNText>
-          </View>
+            </Text>
+          </Box>
           <Card variant="outlined" padding="lg" style={{ alignItems: 'center' }}>
             <QRCode
               value={identity.did}
@@ -3877,14 +3880,14 @@ function NetworkSection() {
               lightColor="transparent"
               eyeColor={tc.accent.primary}
             />
-            <RNText style={{ fontSize: 11, color: tc.text.muted, marginTop: 12, textAlign: 'center' }}>
+            <Text style={{ fontSize: 11, color: tc.text.muted, marginTop: 12, textAlign: 'center' }}>
               {identity.displayName} • {identity.did.slice(0, 20)}...
-            </RNText>
+            </Text>
           </Card>
-        </View>
+        </Box>
       )}
-      </View>
-    </View>
+      </Box>
+    </Box>
   );
 }
 
@@ -3982,35 +3985,35 @@ function DataManagementSection() {
   }, [identity, service]);
 
   return (
-    <View style={{ gap: 24 }}>
+    <Box style={{ gap: 24 }}>
       <SectionHeader
         title="Data Management"
         description="Manage your locally stored data. All data is stored on this device only."
       />
 
-      <View nativeID="sub-storage">
+      <Box nativeID="sub-storage">
           {/* Info card */}
           <Card variant="outlined" padding="lg" style={{ width: '100%' }}>
-            <View style={{ gap: 8 }}>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Box style={{ gap: 8 }}>
+              <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 <DatabaseIcon size={18} color={tc.accent.primary} />
-                <RNText style={{ fontSize: 14, fontWeight: '600', color: tc.text.primary }}>
+                <Text style={{ fontSize: 14, fontWeight: '600', color: tc.text.primary }}>
                   Local Storage
-                </RNText>
-              </View>
-              <RNText style={{ fontSize: 12, color: tc.text.secondary, lineHeight: 18 }}>
+                </Text>
+              </Box>
+              <Text style={{ fontSize: 12, color: tc.text.secondary, lineHeight: 18 }}>
                 Your messages, friends, and conversations are stored locally using IndexedDB.
                 Data is isolated per identity and persists across page refreshes.
-              </RNText>
+              </Text>
               {identity && (
-                <RNText style={{ fontSize: 11, color: tc.text.muted, fontFamily: 'monospace', marginTop: 4 }}>
+                <Text style={{ fontSize: 11, color: tc.text.muted, fontFamily: 'monospace', marginTop: 4 }}>
                   DID: {identity.did.slice(0, 24)}...
-                </RNText>
+                </Text>
               )}
 
               {/* Storage usage bar */}
               {storageUsage && storageUsage.total > 0 && (
-                <View style={{ marginTop: 12, gap: 6 }}>
+                <Box style={{ marginTop: 12, gap: 6 }}>
                   <Progress
                     value={storageUsage.total}
                     max={storageUsage.total * 2}
@@ -4022,36 +4025,36 @@ function DataManagementSection() {
                     gradient
                     glowEdge
                   />
-                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 2 }}>
+                  <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 2 }}>
                     {storageUsage.byContext.community > 0 && (
-                      <RNText style={{ fontSize: 11, color: tc.text.muted }}>
+                      <Text style={{ fontSize: 11, color: tc.text.muted }}>
                         Communities: {fmtBytes(storageUsage.byContext.community)}
-                      </RNText>
+                      </Text>
                     )}
                     {storageUsage.byContext.dm > 0 && (
-                      <RNText style={{ fontSize: 11, color: tc.text.muted }}>
+                      <Text style={{ fontSize: 11, color: tc.text.muted }}>
                         DMs: {fmtBytes(storageUsage.byContext.dm)}
-                      </RNText>
+                      </Text>
                     )}
                     {storageUsage.byContext.sharedFolders > 0 && (
-                      <RNText style={{ fontSize: 11, color: tc.text.muted }}>
+                      <Text style={{ fontSize: 11, color: tc.text.muted }}>
                         Shared Folders: {fmtBytes(storageUsage.byContext.sharedFolders)}
-                      </RNText>
+                      </Text>
                     )}
                     {storageUsage.byContext.cache > 0 && (
-                      <RNText style={{ fontSize: 11, color: tc.text.muted }}>
+                      <Text style={{ fontSize: 11, color: tc.text.muted }}>
                         Cache: {fmtBytes(storageUsage.byContext.cache)}
-                      </RNText>
+                      </Text>
                     )}
-                  </View>
-                </View>
+                  </Box>
+                </Box>
               )}
               {storageLoading && (
-                <RNText style={{ fontSize: 11, color: tc.text.muted, marginTop: 8 }}>
+                <Text style={{ fontSize: 11, color: tc.text.muted, marginTop: 8 }}>
                   Loading storage info...
-                </RNText>
+                </Text>
               )}
-            </View>
+            </Box>
           </Card>
 
           {/* Status message */}
@@ -4064,29 +4067,29 @@ function DataManagementSection() {
                 backgroundColor: clearStatus.includes('Failed') ? tc.status.dangerSurface : tc.status.successSurface,
               }}
             >
-              <RNText style={{
+              <Text style={{
                 fontSize: 13,
                 color: clearStatus.includes('Failed') ? tc.status.danger : tc.status.success,
                 fontWeight: '500',
                 textAlign: 'center',
               }}>
                 {clearStatus}
-              </RNText>
+              </Text>
             </Card>
           )}
-      </View>
+      </Box>
 
-      <View nativeID="sub-danger-zone">
+      <Box nativeID="sub-danger-zone">
       {/* Selective wipe */}
-      <View style={{ gap: 12 }}>
-        <View>
-          <RNText style={{ fontSize: 15, fontWeight: '600', color: tc.text.primary }}>
+      <Box style={{ gap: 12 }}>
+        <Box>
+          <Text style={{ fontSize: 15, fontWeight: '600', color: tc.text.primary }}>
             Clear Messages
-          </RNText>
-          <RNText style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
+          </Text>
+          <Text style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
             Delete all messages, reactions, pins, and threads. Your friends, groups, and conversations will be kept.
-          </RNText>
-        </View>
+          </Text>
+        </Box>
 
         <Button
           variant="secondary"
@@ -4094,21 +4097,21 @@ function DataManagementSection() {
           iconLeft={<TrashIcon size={16} color={tc.status.warning} />}
           style={{ borderColor: tc.status.warningBorder, backgroundColor: tc.status.warningSurface }}
         >
-          <RNText style={{ color: tc.status.warning, fontWeight: '600', fontSize: 14 }}>
+          <Text style={{ color: tc.status.warning, fontWeight: '600', fontSize: 14 }}>
             Clear Messages
-          </RNText>
+          </Text>
         </Button>
-      </View>
+      </Box>
 
       <Separator spacing="sm" />
 
       {/* Full wipe */}
-      <View style={{ gap: 12 }}>
-        <View>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <RNText style={{ fontSize: 15, fontWeight: '600', color: tc.status.danger }}>
+      <Box style={{ gap: 12 }}>
+        <Box>
+          <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Text style={{ fontSize: 15, fontWeight: '600', color: tc.status.danger }}>
               Clear All Data
-            </RNText>
+            </Text>
             <HelpIndicator
               id="settings-clear-all"
               title="Clear All Data"
@@ -4123,11 +4126,11 @@ function DataManagementSection() {
                 Your identity and recovery phrase are NOT affected. You can still log back in, but you'll need to re-add friends and start new conversations.
               </HelpHighlight>
             </HelpIndicator>
-          </View>
-          <RNText style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
+          </Box>
+          <Text style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
             Delete everything: messages, friends, groups, and conversations. Your identity is preserved.
-          </RNText>
-        </View>
+          </Text>
+        </Box>
 
         <Button
           variant="secondary"
@@ -4135,11 +4138,11 @@ function DataManagementSection() {
           iconLeft={<AlertTriangleIcon size={16} color={tc.status.danger} />}
           style={{ borderColor: tc.status.dangerBorder, backgroundColor: tc.status.dangerSurface }}
         >
-          <RNText style={{ color: tc.status.danger, fontWeight: '600', fontSize: 14 }}>
+          <Text style={{ color: tc.status.danger, fontWeight: '600', fontSize: 14 }}>
             Clear All Data
-          </RNText>
+          </Text>
         </Button>
-      </View>
+      </Box>
 
       {/* Clear messages confirmation */}
       <Dialog
@@ -4159,9 +4162,9 @@ function DataManagementSection() {
               onPress={handleClearMessages}
               style={{ borderColor: tc.status.warningBorder, backgroundColor: tc.status.warningSurface }}
             >
-              <RNText style={{ color: tc.status.warning, fontWeight: '600', fontSize: 14 }}>
+              <Text style={{ color: tc.status.warning, fontWeight: '600', fontSize: 14 }}>
                 Clear Messages
-              </RNText>
+              </Text>
             </Button>
           </HStack>
         }
@@ -4185,15 +4188,15 @@ function DataManagementSection() {
               onPress={handleClearAllData}
               style={{ borderColor: tc.status.dangerBorder, backgroundColor: tc.status.dangerSurface }}
             >
-              <RNText style={{ color: tc.status.danger, fontWeight: '600', fontSize: 14 }}>
+              <Text style={{ color: tc.status.danger, fontWeight: '600', fontSize: 14 }}>
                 Clear All Data
-              </RNText>
+              </Text>
             </Button>
           </HStack>
         }
       />
-      </View>
-    </View>
+      </Box>
+    </Box>
   );
 }
 
@@ -4233,16 +4236,16 @@ function PluginsSection({ onOpenMarketplace }: { onOpenMarketplace?: () => void 
   }, [uninstallPlugin]);
 
   return (
-    <View style={{ gap: 16 }}>
-      <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
-        <View style={{ flex: 1 }}>
-          <RNText style={{ fontSize: 18, fontWeight: '700', color: tc.text.primary, marginBottom: 4 }}>
+    <Box style={{ gap: 16 }}>
+      <Box style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <Box style={{ flex: 1 }}>
+          <Text style={{ fontSize: 18, fontWeight: '700', color: tc.text.primary, marginBottom: 4 }}>
             Plugins
-          </RNText>
-          <RNText style={{ fontSize: 13, color: tc.text.secondary }}>
+          </Text>
+          <Text style={{ fontSize: 13, color: tc.text.secondary }}>
             Extend Umbra with plugins. {enabledCount} plugin{enabledCount !== 1 ? 's' : ''} active.
-          </RNText>
-        </View>
+          </Text>
+        </Box>
         {onOpenMarketplace && (
           <Button
             size="sm"
@@ -4253,7 +4256,7 @@ function PluginsSection({ onOpenMarketplace }: { onOpenMarketplace?: () => void 
             Marketplace
           </Button>
         )}
-      </View>
+      </Box>
 
       {!hasPlugins && (
         <Pressable
@@ -4271,16 +4274,16 @@ function PluginsSection({ onOpenMarketplace }: { onOpenMarketplace?: () => void 
           })}
         >
           <ZapIcon size={24} color={tc.text.muted} />
-          <RNText style={{ fontSize: 14, fontWeight: '600', color: tc.text.primary }}>
+          <Text style={{ fontSize: 14, fontWeight: '600', color: tc.text.primary }}>
             No plugins installed
-          </RNText>
-          <RNText style={{ fontSize: 12, color: tc.text.secondary, textAlign: 'center' }}>
+          </Text>
+          <Text style={{ fontSize: 12, color: tc.text.secondary, textAlign: 'center' }}>
             Browse the marketplace to discover and install plugins that extend Umbra's functionality.
-          </RNText>
+          </Text>
           {onOpenMarketplace && (
-            <RNText style={{ fontSize: 12, color: tc.accent.primary, fontWeight: '600', marginTop: 4 }}>
+            <Text style={{ fontSize: 12, color: tc.accent.primary, fontWeight: '600', marginTop: 4 }}>
               Open Marketplace
-            </RNText>
+            </Text>
           )}
         </Pressable>
       )}
@@ -4296,7 +4299,7 @@ function PluginsSection({ onOpenMarketplace }: { onOpenMarketplace?: () => void 
         />
       ))}
 
-    </View>
+    </Box>
   );
 }
 
@@ -4317,7 +4320,7 @@ function PluginSettingsCard({
   const [showConfirm, setShowConfirm] = useState(false);
 
   return (
-    <View
+    <Box
       style={{
         padding: 12,
         borderRadius: 10,
@@ -4327,8 +4330,8 @@ function PluginSettingsCard({
         gap: 8,
       }}
     >
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-        <View
+      <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+        <Box
           style={{
             width: 32,
             height: 32,
@@ -4339,52 +4342,52 @@ function PluginSettingsCard({
           }}
         >
           <ZapIcon size={16} color={plugin.state === 'enabled' ? tc.status.success : tc.text.muted} />
-        </View>
-        <View style={{ flex: 1 }}>
-          <RNText style={{ fontSize: 14, fontWeight: '600', color: tc.text.primary }}>
+        </Box>
+        <Box style={{ flex: 1 }}>
+          <Text style={{ fontSize: 14, fontWeight: '600', color: tc.text.primary }}>
             {plugin.manifest.name}
-          </RNText>
-          <RNText style={{ fontSize: 12, color: tc.text.secondary }} numberOfLines={1}>
+          </Text>
+          <Text style={{ fontSize: 12, color: tc.text.secondary }} numberOfLines={1}>
             {plugin.manifest.description}
-          </RNText>
-          <RNText style={{ fontSize: 11, color: tc.text.muted, marginTop: 1 }}>
+          </Text>
+          <Text style={{ fontSize: 11, color: tc.text.muted, marginTop: 1 }}>
             v{plugin.manifest.version} · {plugin.manifest.author.name}
-          </RNText>
+          </Text>
           {plugin.state === 'error' && plugin.error && (
-            <RNText style={{ fontSize: 11, color: tc.status.danger, marginTop: 2 }} numberOfLines={1}>
+            <Text style={{ fontSize: 11, color: tc.status.danger, marginTop: 2 }} numberOfLines={1}>
               Error: {plugin.error}
-            </RNText>
+            </Text>
           )}
-        </View>
+        </Box>
         <Toggle
           checked={plugin.state === 'enabled'}
           onChange={onToggle}
           size="sm"
         />
-      </View>
+      </Box>
 
       {/* Permissions badges */}
       {plugin.manifest.permissions && plugin.manifest.permissions.length > 0 && (
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, paddingLeft: 44 }}>
+        <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, paddingLeft: 44 }}>
           {plugin.manifest.permissions.slice(0, 4).map((perm: string) => (
             <Tag key={perm} size="sm" style={{ borderRadius: 6 }}>
               {perm}
             </Tag>
           ))}
           {plugin.manifest.permissions.length > 4 && (
-            <RNText style={{ fontSize: 9, color: tc.text.muted, alignSelf: 'center' }}>
+            <Text style={{ fontSize: 9, color: tc.text.muted, alignSelf: 'center' }}>
               +{plugin.manifest.permissions.length - 4} more
-            </RNText>
+            </Text>
           )}
-        </View>
+        </Box>
       )}
 
       {/* Uninstall */}
       {showConfirm ? (
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingLeft: 44 }}>
-          <RNText style={{ fontSize: 11, color: tc.status.danger, flex: 1 }}>
+        <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingLeft: 44 }}>
+          <Text style={{ fontSize: 11, color: tc.status.danger, flex: 1 }}>
             Remove plugin and data?
-          </RNText>
+          </Text>
           <Button
             size="xs"
             variant="destructive"
@@ -4395,9 +4398,9 @@ function PluginSettingsCard({
           <Button size="xs" variant="tertiary" onPress={() => setShowConfirm(false)}>
             Cancel
           </Button>
-        </View>
+        </Box>
       ) : (
-        <View style={{ flexDirection: 'row', justifyContent: 'flex-end', paddingLeft: 44 }}>
+        <Box style={{ flexDirection: 'row', justifyContent: 'flex-end', paddingLeft: 44 }}>
           <Button
             size="xs"
             variant="tertiary"
@@ -4406,9 +4409,9 @@ function PluginSettingsCard({
           >
             Uninstall
           </Button>
-        </View>
+        </Box>
       )}
-    </View>
+    </Box>
   );
 }
 
@@ -4424,7 +4427,7 @@ function KeyboardShortcutsSection() {
   const allShortcuts = ShortcutRegistry.getAllFlat();
 
   return (
-    <View style={{ gap: 16 }}>
+    <Box style={{ gap: 16 }}>
       <Text size="lg" weight="bold" style={{ color: tc.text.primary }}>
         Keyboard Shortcuts
       </Text>
@@ -4440,9 +4443,9 @@ function KeyboardShortcutsSection() {
           </Text>
         </Card>
       ) : (
-        <View style={{ gap: 8 }}>
+        <Box style={{ gap: 8 }}>
           {allShortcuts.map(({ pluginId, shortcut }) => (
-            <View
+            <Box
               key={`${pluginId}:${shortcut.id}`}
               style={{
                 flexDirection: 'row',
@@ -4454,7 +4457,7 @@ function KeyboardShortcutsSection() {
                 backgroundColor: tc.background.raised,
               }}
             >
-              <View style={{ flex: 1, gap: 2 }}>
+              <Box style={{ flex: 1, gap: 2 }}>
                 <Text size="sm" weight="semibold" style={{ color: tc.text.primary }}>
                   {shortcut.label}
                 </Text>
@@ -4463,8 +4466,8 @@ function KeyboardShortcutsSection() {
                     {shortcut.category}
                   </Text>
                 )}
-              </View>
-              <View
+              </Box>
+              <Box
                 style={{
                   paddingHorizontal: 8,
                   paddingVertical: 4,
@@ -4477,12 +4480,12 @@ function KeyboardShortcutsSection() {
                 <Text size="xs" family="mono" style={{ color: tc.text.secondary }}>
                   {shortcut.keys}
                 </Text>
-              </View>
-            </View>
+              </Box>
+            </Box>
           ))}
-        </View>
+        </Box>
       )}
-    </View>
+    </Box>
   );
 }
 
@@ -4505,7 +4508,7 @@ function DeveloperSection() {
   );
 
   return (
-    <View style={{ gap: 20 }}>
+    <Box style={{ gap: 20 }}>
       <SectionHeader
         title="Developer"
         description="Diagnostic tools for debugging WebRTC calls, media quality, and performance."
@@ -4513,17 +4516,17 @@ function DeveloperSection() {
 
       {/* Warning banner */}
       <Card style={{ padding: 12, borderColor: tc.status.warning ?? '#ff9800', borderWidth: 1 }}>
-        <RNText style={{ fontSize: 12, color: tc.text.secondary, lineHeight: 18 }}>
+        <Text style={{ fontSize: 12, color: tc.text.secondary, lineHeight: 18 }}>
           These settings are for debugging. Raw media capture uses significant disk space.
           Some options may affect call performance when enabled.
-        </RNText>
+        </Text>
       </Card>
 
       {/* ── Call Diagnostics ─────────────────────────────────────────────── */}
-      <View nativeID="sub-diagnostics">
-        <RNText style={{ fontSize: 14, fontWeight: '600', color: tc.text.primary, marginBottom: 12 }}>
+      <Box nativeID="sub-diagnostics">
+        <Text style={{ fontSize: 14, fontWeight: '600', color: tc.text.primary, marginBottom: 12 }}>
           Call Diagnostics
-        </RNText>
+        </Text>
 
         <SettingRow
           label="Enable Call Diagnostics"
@@ -4588,13 +4591,13 @@ function DeveloperSection() {
             </SettingRow>
           </>
         )}
-      </View>
+      </Box>
 
       {/* ── Media Capture ────────────────────────────────────────────────── */}
-      <View nativeID="sub-capture">
-        <RNText style={{ fontSize: 14, fontWeight: '600', color: tc.text.primary, marginBottom: 12 }}>
+      <Box nativeID="sub-capture">
+        <Text style={{ fontSize: 14, fontWeight: '600', color: tc.text.primary, marginBottom: 12 }}>
           Media Capture
-        </RNText>
+        </Text>
 
         <SettingRow
           label="Raw Media Capture"
@@ -4617,13 +4620,13 @@ function DeveloperSection() {
             disabled={!dev.diagnosticsEnabled}
           />
         </SettingRow>
-      </View>
+      </Box>
 
       {/* ── Testing ──────────────────────────────────────────────────────── */}
-      <View nativeID="sub-testing">
-        <RNText style={{ fontSize: 14, fontWeight: '600', color: tc.text.primary, marginBottom: 12 }}>
+      <Box nativeID="sub-testing">
+        <Text style={{ fontSize: 14, fontWeight: '600', color: tc.text.primary, marginBottom: 12 }}>
           Testing
-        </RNText>
+        </Text>
 
         <SettingRow
           label="Reference Signal Mode"
@@ -4635,8 +4638,8 @@ function DeveloperSection() {
             disabled={!dev.diagnosticsEnabled}
           />
         </SettingRow>
-      </View>
-    </View>
+      </Box>
+    </Box>
   );
 }
 
@@ -4671,31 +4674,31 @@ function AboutSection() {
   };
 
   return (
-    <View>
-      <RNText style={{ fontSize: 20, fontWeight: '700', color: tc.text.primary, marginBottom: 20 }}>About</RNText>
+    <Box>
+      <Text style={{ fontSize: 20, fontWeight: '700', color: tc.text.primary, marginBottom: 20 }}>About</Text>
 
       <Card style={{ padding: 16, marginBottom: 16 }}>
-        <RNText style={{ fontSize: 16, fontWeight: '600', color: tc.text.primary, marginBottom: 12 }}>
+        <Text style={{ fontSize: 16, fontWeight: '600', color: tc.text.primary, marginBottom: 12 }}>
           Umbra
-        </RNText>
+        </Text>
 
-        <RNText style={labelStyle}>App Version</RNText>
-        <RNText style={valueStyle}>{update.currentVersion}</RNText>
+        <Text style={labelStyle}>App Version</Text>
+        <Text style={valueStyle}>{update.currentVersion}</Text>
 
         {coreVersion ? (
           <>
-            <RNText style={labelStyle}>Core Version</RNText>
-            <RNText style={valueStyle}>{coreVersion}</RNText>
+            <Text style={labelStyle}>Core Version</Text>
+            <Text style={valueStyle}>{coreVersion}</Text>
           </>
         ) : null}
 
-        <RNText style={labelStyle}>Latest Available</RNText>
-        <RNText style={valueStyle}>
+        <Text style={labelStyle}>Latest Available</Text>
+        <Text style={valueStyle}>
           {update.isLoading ? 'Checking...' : update.latestVersion || update.currentVersion}
           {update.hasUpdate && !update.isWebUser && (
-            <RNText style={{ color: tc.status.success, fontSize: 12 }}> (update available)</RNText>
+            <Text style={{ color: tc.status.success, fontSize: 12 }}> (update available)</Text>
           )}
-        </RNText>
+        </Text>
 
         <HStack gap={8} style={{ marginTop: 4 }}>
           <Button
@@ -4717,7 +4720,7 @@ function AboutSection() {
       </Card>
 
       <Card style={{ padding: 16, marginBottom: 16 }}>
-        <RNText style={{ fontSize: 14, fontWeight: '600', color: tc.text.primary, marginBottom: 10 }}>Links</RNText>
+        <Text style={{ fontSize: 14, fontWeight: '600', color: tc.text.primary, marginBottom: 10 }}>Links</Text>
 
         <Pressable
           onPress={() => {
@@ -4726,7 +4729,7 @@ function AboutSection() {
           style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8 }}
         >
           <ExternalLinkIcon size={14} color={tc.text.link} />
-          <RNText style={{ fontSize: 13, color: tc.text.link }}>GitHub Repository</RNText>
+          <Text style={{ fontSize: 13, color: tc.text.link }}>GitHub Repository</Text>
         </Pressable>
 
         {update.releaseUrl && (
@@ -4735,7 +4738,7 @@ function AboutSection() {
             style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8 }}
           >
             <ExternalLinkIcon size={14} color={tc.text.link} />
-            <RNText style={{ fontSize: 13, color: tc.text.link }}>Release Notes</RNText>
+            <Text style={{ fontSize: 13, color: tc.text.link }}>Release Notes</Text>
           </Pressable>
         )}
 
@@ -4744,15 +4747,15 @@ function AboutSection() {
           style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8 }}
         >
           <GlobeIcon size={14} color={tc.text.link} />
-          <RNText style={{ fontSize: 13, color: tc.text.link }}>Web App</RNText>
+          <Text style={{ fontSize: 13, color: tc.text.link }}>Web App</Text>
         </Pressable>
       </Card>
 
       <Card style={{ padding: 16 }}>
-        <RNText style={{ fontSize: 12, color: tc.text.muted, lineHeight: 18 }}>
+        <Text style={{ fontSize: 12, color: tc.text.muted, lineHeight: 18 }}>
           Umbra is a private, peer-to-peer messaging application with end-to-end encryption.
           Built with Ed25519/X25519/AES-256-GCM cryptography and WebRTC for direct communication.
-        </RNText>
+        </Text>
       </Card>
 
       <AllPlatformsDialog
@@ -4762,7 +4765,7 @@ function AboutSection() {
         version={update.latestVersion || update.currentVersion}
         releaseUrl={update.releaseUrl}
       />
-    </View>
+    </Box>
   );
 }
 
@@ -4805,7 +4808,7 @@ function MessageDisplayPreview({
       })}
     >
       {/* Preview card header */}
-      <View
+      <Box
         style={{
           flexDirection: 'row',
           justifyContent: 'space-between',
@@ -4817,7 +4820,7 @@ function MessageDisplayPreview({
           borderBottomColor: tc.border.subtle,
         }}
       >
-        <RNText
+        <Text
           style={{
             fontSize: 12,
             fontWeight: '600',
@@ -4825,9 +4828,9 @@ function MessageDisplayPreview({
           }}
         >
           {mode === 'bubble' ? 'Bubbles' : 'Inline'}
-        </RNText>
+        </Text>
         {selected && (
-          <View
+          <Box
             style={{
               width: 18,
               height: 18,
@@ -4838,12 +4841,12 @@ function MessageDisplayPreview({
             }}
           >
             <CheckIcon size={11} color="#fff" />
-          </View>
+          </Box>
         )}
-      </View>
+      </Box>
 
       {/* Preview message area */}
-      <View
+      <Box
         style={{
           padding: 10,
           gap: 8,
@@ -4855,7 +4858,7 @@ function MessageDisplayPreview({
           /* ── Bubble preview ── */
           <>
             {SAMPLE_MESSAGES.map((msg, i) => (
-              <View
+              <Box
                 key={i}
                 style={{
                   flexDirection: msg.isOwn ? 'row-reverse' : 'row',
@@ -4864,7 +4867,7 @@ function MessageDisplayPreview({
                 }}
               >
                 {!msg.isOwn && (
-                  <View
+                  <Box
                     style={{
                       width: 18,
                       height: 18,
@@ -4874,7 +4877,7 @@ function MessageDisplayPreview({
                     }}
                   />
                 )}
-                <View
+                <Box
                   style={{
                     paddingHorizontal: 8,
                     paddingVertical: 5,
@@ -4887,7 +4890,7 @@ function MessageDisplayPreview({
                     maxWidth: '75%',
                   }}
                 >
-                  <RNText
+                  <Text
                     style={{
                       fontSize: 10,
                       color: msg.isOwn
@@ -4896,9 +4899,9 @@ function MessageDisplayPreview({
                     }}
                   >
                     {msg.text}
-                  </RNText>
-                </View>
-              </View>
+                  </Text>
+                </Box>
+              </Box>
             ))}
           </>
         ) : (
@@ -4907,7 +4910,7 @@ function MessageDisplayPreview({
             {SAMPLE_MESSAGES.map((msg, i) => {
               const showHeader = i === 0 || SAMPLE_MESSAGES[i - 1].sender !== msg.sender;
               return (
-                <View
+                <Box
                   key={i}
                   style={{
                     flexDirection: 'row',
@@ -4915,9 +4918,9 @@ function MessageDisplayPreview({
                     alignItems: 'flex-start',
                   }}
                 >
-                  <View style={{ width: 18 }}>
+                  <Box style={{ width: 18 }}>
                     {showHeader && (
-                      <View
+                      <Box
                         style={{
                           width: 18,
                           height: 18,
@@ -4927,10 +4930,10 @@ function MessageDisplayPreview({
                         }}
                       />
                     )}
-                  </View>
-                  <View style={{ flex: 1 }}>
+                  </Box>
+                  <Box style={{ flex: 1 }}>
                     {showHeader && (
-                      <View
+                      <Box
                         style={{
                           flexDirection: 'row',
                           alignItems: 'baseline',
@@ -4938,7 +4941,7 @@ function MessageDisplayPreview({
                           marginBottom: 1,
                         }}
                       >
-                        <RNText
+                        <Text
                           style={{
                             fontSize: 10,
                             fontWeight: '700',
@@ -4946,18 +4949,18 @@ function MessageDisplayPreview({
                           }}
                         >
                           {msg.sender}
-                        </RNText>
-                        <RNText
+                        </Text>
+                        <Text
                           style={{
                             fontSize: 8,
                             color: tc.text.muted,
                           }}
                         >
                           2:34 PM
-                        </RNText>
-                      </View>
+                        </Text>
+                      </Box>
                     )}
-                    <RNText
+                    <Text
                       style={{
                         fontSize: 10,
                         color: tc.text.secondary,
@@ -4965,14 +4968,14 @@ function MessageDisplayPreview({
                       }}
                     >
                       {msg.text}
-                    </RNText>
-                  </View>
-                </View>
+                    </Text>
+                  </Box>
+                </Box>
               );
             })}
           </>
         )}
-      </View>
+      </Box>
     </Pressable>
   );
 }
@@ -4983,14 +4986,14 @@ function MessagingSection() {
   const { displayMode, setDisplayMode } = useMessaging();
 
   return (
-    <View style={{ gap: 20 }}>
+    <Box style={{ gap: 20 }}>
       <SectionHeader
         title="Messaging"
         description="Choose how messages are displayed in conversations."
       />
 
-      <View nativeID="sub-display">
-        <RNText
+      <Box nativeID="sub-display">
+        <Text
           style={{
             fontSize: 13,
             fontWeight: '600',
@@ -5001,9 +5004,9 @@ function MessagingSection() {
           }}
         >
           Display Style
-        </RNText>
+        </Text>
 
-        <View style={{ flexDirection: 'row', gap: 12 }}>
+        <Box style={{ flexDirection: 'row', gap: 12 }}>
           <MessageDisplayPreview
             mode="bubble"
             selected={displayMode === 'bubble'}
@@ -5014,9 +5017,9 @@ function MessagingSection() {
             selected={displayMode === 'inline'}
             onSelect={() => setDisplayMode('inline')}
           />
-        </View>
+        </Box>
 
-        <RNText
+        <Text
           style={{
             fontSize: 12,
             color: tc.text.muted,
@@ -5026,9 +5029,9 @@ function MessagingSection() {
           {displayMode === 'bubble'
             ? 'Messages appear in colored bubbles. Your messages are on the right, theirs on the left.'
             : 'All messages are left-aligned with sender name and timestamp. Similar to Slack or Discord.'}
-        </RNText>
-      </View>
-    </View>
+        </Text>
+      </Box>
+    </Box>
   );
 }
 
@@ -5255,9 +5258,9 @@ export function SettingsDialog({ open, onClose, onOpenMarketplace, initialSectio
   };
 
   const sidebarContent = (
-    <ScrollView style={sidebarStyle} showsVerticalScrollIndicator={false}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: isMobile ? 8 : 0 }}>
-        <RNText style={sidebarTitleStyle}>Settings</RNText>
+    <ScrollArea style={sidebarStyle}>
+      <Box style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: isMobile ? 8 : 0 }}>
+        <Text style={sidebarTitleStyle}>Settings</Text>
         {isMobile && (
           <Pressable
             onPress={onClose}
@@ -5269,7 +5272,7 @@ export function SettingsDialog({ open, onClose, onOpenMarketplace, initialSectio
             <XIcon size={20} color={tc.text.secondary} />
           </Pressable>
         )}
-      </View>
+      </Box>
 
       {NAV_ITEMS.map((item) => {
         const isActive = activeSection === item.id;
@@ -5278,7 +5281,7 @@ export function SettingsDialog({ open, onClose, onOpenMarketplace, initialSectio
         const hasSubs = subs && subs.length > 1;
 
         return (
-          <View key={item.id}>
+          <Box key={item.id}>
             {/* Top-level nav item */}
             <Pressable
               onPress={() => handleSectionChange(item.id)}
@@ -5308,7 +5311,7 @@ export function SettingsDialog({ open, onClose, onOpenMarketplace, initialSectio
                 size={18}
                 color={isActive ? tc.text.primary : tc.text.secondary}
               />
-              <RNText
+              <Text
                 style={{
                   fontSize: 14,
                   fontWeight: isActive ? '600' : '400',
@@ -5316,16 +5319,16 @@ export function SettingsDialog({ open, onClose, onOpenMarketplace, initialSectio
                 }}
               >
                 {item.label}
-              </RNText>
+              </Text>
             </Pressable>
 
             {/* Sub-items: show when section is active and has subcategories */}
             {isActive && hasSubs && (
-              <View style={{ marginTop: 4, marginBottom: 4 }}>
+              <Box style={{ marginTop: 4, marginBottom: 4 }}>
                 {subs.map((sub) => {
                   const isSubActive = activeSubsection === sub.id;
                   return (
-                    <View
+                    <Box
                       key={sub.id}
                       style={{
                         flexDirection: 'row',
@@ -5333,7 +5336,7 @@ export function SettingsDialog({ open, onClose, onOpenMarketplace, initialSectio
                         marginBottom: 1,
                       }}
                     >
-                      <View
+                      <Box
                         style={{
                           width: 2,
                           borderRadius: 1,
@@ -5357,7 +5360,7 @@ export function SettingsDialog({ open, onClose, onOpenMarketplace, initialSectio
                               : 'transparent',
                         })}
                       >
-                        <RNText
+                        <Text
                           style={{
                             fontSize: 13,
                             fontWeight: isSubActive ? '600' : '400',
@@ -5367,24 +5370,24 @@ export function SettingsDialog({ open, onClose, onOpenMarketplace, initialSectio
                           }}
                         >
                           {sub.label}
-                        </RNText>
+                        </Text>
                       </Pressable>
-                    </View>
+                    </Box>
                   );
                 })}
-              </View>
+              </Box>
             )}
-          </View>
+          </Box>
         );
       })}
-    </ScrollView>
+    </ScrollArea>
   );
 
   const contentArea = (
-    <View style={{ flex: 1, paddingTop: isMobile ? insets.top : 0, paddingBottom: isMobile ? insets.bottom : 0, paddingLeft: isMobile ? insets.left : 0, paddingRight: isMobile ? insets.right : 0 }}>
+    <Box style={{ flex: 1, paddingTop: isMobile ? insets.top : 0, paddingBottom: isMobile ? insets.bottom : 0, paddingLeft: isMobile ? insets.left : 0, paddingRight: isMobile ? insets.right : 0 }}>
       {/* Mobile: back button + section title header */}
       {isMobile && (
-        <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: tc.border.subtle }}>
+        <Box style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: tc.border.subtle }}>
           <Pressable
             onPress={() => setMobileShowSidebar(true)}
             style={{ padding: 4, marginRight: 8 }}
@@ -5394,10 +5397,10 @@ export function SettingsDialog({ open, onClose, onOpenMarketplace, initialSectio
           >
             <ArrowLeftIcon size={20} color={tc.text.secondary} />
           </Pressable>
-          <RNText style={{ fontSize: 16, fontWeight: '600', color: tc.text.primary }}>
+          <Text style={{ fontSize: 16, fontWeight: '600', color: tc.text.primary }}>
             {NAV_ITEMS.find((n) => n.id === activeSection)?.label ?? 'Settings'}
-          </RNText>
-        </View>
+          </Text>
+        </Box>
       )}
       <ScrollView
         ref={contentScrollRef}
@@ -5409,7 +5412,7 @@ export function SettingsDialog({ open, onClose, onOpenMarketplace, initialSectio
           {renderSection()}
         </Animated.View>
       </ScrollView>
-    </View>
+    </Box>
   );
 
   return (
@@ -5429,10 +5432,10 @@ export function SettingsDialog({ open, onClose, onOpenMarketplace, initialSectio
 
       <HelpPopoverHost />
       <AuraBurst active={open && !isMobile} radius={16}>
-        <View style={modalStyle} testID={TEST_IDS.SETTINGS.DIALOG}>
+        <Box style={modalStyle} testID={TEST_IDS.SETTINGS.DIALOG}>
           {/* Glass inner highlight — top edge shine */}
           {!isMobile && Platform.OS === 'web' && (
-            <View
+            <Box
               style={{
                 position: 'absolute',
                 top: 0,
@@ -5447,7 +5450,7 @@ export function SettingsDialog({ open, onClose, onOpenMarketplace, initialSectio
           )}
           {isMobile ? (
             // Mobile: both views always mounted, slide via translateX
-            <View style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+            <Box style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
               <Animated.View style={{
                 position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
                 transform: [{ translateX: mobileSidebarX }],
@@ -5460,7 +5463,7 @@ export function SettingsDialog({ open, onClose, onOpenMarketplace, initialSectio
               }}>
                 {contentArea}
               </Animated.View>
-            </View>
+            </Box>
           ) : (
             // Desktop: side-by-side
             <>
@@ -5468,7 +5471,7 @@ export function SettingsDialog({ open, onClose, onOpenMarketplace, initialSectio
               {contentArea}
             </>
           )}
-        </View>
+        </Box>
       </AuraBurst>
     </Overlay>
   );
