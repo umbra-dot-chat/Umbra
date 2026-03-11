@@ -274,7 +274,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     }
 
     const callId = `call-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    console.log('[CallContext] Starting', callType, 'call to', remoteDid, 'callId:', callId);
+    console.debug('[CallContext] Starting', callType, 'call to', remoteDid, 'callId:', callId);
     const isVideo = callType === 'video';
     const manager = new CallManager();
     callManagerRef.current = manager;
@@ -328,7 +328,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
 
     // Set up connection state handler
     manager.onConnectionStateChange = (state) => {
-      console.log('[CallContext] Outgoing connection state →', state, 'at', new Date().toISOString());
+      console.debug('[CallContext] Outgoing connection state →', state, 'at', new Date().toISOString());
       if (state === 'connected') {
         clearRingTimeout();
         // Clear any pending disconnected timeout on successful reconnect
@@ -454,7 +454,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       // The offer SDP was stored when we received the call_offer
       const storedOffer = manager.pendingOfferSdp;
       if (!storedOffer) throw new Error('No pending offer SDP');
-      console.log('[CallContext] Accepting call, offer SDP length:', storedOffer.length);
+      console.debug('[CallContext] Accepting call, offer SDP length:', storedOffer.length);
 
       const isVideo = activeCall.callType === 'video';
       const sdpAnswer = await manager.acceptOffer(storedOffer, isVideo);
@@ -984,7 +984,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
             return;
           }
 
-          console.log('[CallContext] Incoming call offer from', payload.senderDid, 'callId:', payload.callId, 'type:', payload.callType);
+          console.debug('[CallContext] Incoming call offer from', payload.senderDid, 'callId:', payload.callId, 'type:', payload.callType);
 
           // Set pendingCallIdRef synchronously so ICE candidates arriving
           // before setActiveCall propagates are not dropped
@@ -1041,7 +1041,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
           };
 
           manager.onConnectionStateChange = (state) => {
-            console.log('[CallContext] Connection state →', state, 'at', new Date().toISOString());
+            console.debug('[CallContext] Connection state →', state, 'at', new Date().toISOString());
             if (state === 'connected') {
               clearRingTimeout();
               if (disconnectedTimeoutRef.current) {
@@ -1118,7 +1118,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
           const manager = callManagerRef.current;
           if (!manager) return;
 
-          console.log('[CallContext] Call answer received, SDP length:', payload.sdp?.length);
+          console.debug('[CallContext] Call answer received, SDP length:', payload.sdp?.length);
           clearRingTimeout();
           setActiveCall((prev) => prev ? { ...prev, status: 'connecting' } : prev);
 
@@ -1160,7 +1160,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
         case 'callEnd': {
           const { payload } = event;
           if (currentCallId && currentCallId === payload.callId) {
-            console.log('[CallContext] Call ended by remote, reason:', payload.reason);
+            console.debug('[CallContext] Call ended by remote, reason:', payload.reason);
             cleanup();
           }
           break;
@@ -1257,7 +1257,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     const handleAppStateChange = (nextState: AppStateStatus) => {
       // End the call if the app is sent to background or becomes inactive
       if (nextState !== 'active' && activeCallRef.current) {
-        console.log('[CallContext] App state →', nextState, '— ending active call');
+        console.debug('[CallContext] App state →', nextState, '— ending active call');
         endCallFromRef('completed');
       }
     };
