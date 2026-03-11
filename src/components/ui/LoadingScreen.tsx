@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Platform, Animated, Dimensions, Text as RNText, Image, type ImageSourcePropType } from 'react-native';
-import { useTheme } from '@coexist/wisp-react-native';
+import { Platform, Animated, Dimensions, Image, type ImageSourcePropType } from 'react-native';
+import { Box, Text, useTheme } from '@coexist/wisp-react-native';
 import { useBlobPath, AnimatedBlobs } from '@/components/auth/AnimatedBlobs';
 import { TAGLINES } from '@/constants/taglines';
 import Svg, { Path } from 'react-native-svg';
@@ -168,7 +168,7 @@ export function LoadingScreen({ steps, onComplete }: LoadingScreenProps) {
 
   // Inverted content wrapper
   const invertedContent = (
-    <View
+    <Box
       style={{
         position: 'absolute',
         top: 0,
@@ -190,7 +190,7 @@ export function LoadingScreen({ steps, onComplete }: LoadingScreenProps) {
         taglineSlideAnim={taglineSlideAnim}
         taglineLineHeight={taglineLineHeight}
       />
-    </View>
+    </Box>
   );
 
   return (
@@ -210,7 +210,7 @@ export function LoadingScreen({ steps, onComplete }: LoadingScreenProps) {
       <AnimatedBlobs pathData={pathData} color={tc.text.primary} />
 
       {/* Layer 2: Normal content (ghost logo + progress bar) */}
-      <View
+      <Box
         style={{
           flex: 1,
           justifyContent: 'center',
@@ -227,7 +227,7 @@ export function LoadingScreen({ steps, onComplete }: LoadingScreenProps) {
           taglineSlideAnim={taglineSlideAnim}
           taglineLineHeight={taglineLineHeight}
         />
-      </View>
+      </Box>
 
       {/* Layer 3: Inverted content clipped to blob shape */}
       {isNative ? (
@@ -235,21 +235,19 @@ export function LoadingScreen({ steps, onComplete }: LoadingScreenProps) {
           {invertedContent}
         </NativeInvertedLayer>
       ) : (
-        <View
-          style={[
-            {
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-            },
-            clipStyle,
-          ]}
+        <Box
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            ...clipStyle,
+          }}
           pointerEvents="none"
         >
           {invertedContent}
-        </View>
+        </Box>
       )}
     </Animated.View>
   );
@@ -327,7 +325,7 @@ function LoadingContent({
     : tc.text.secondary;
 
   return (
-    <View style={{ alignItems: 'center', gap: 32 }}>
+    <Box style={{ alignItems: 'center', gap: 32 }}>
       {/* Ghost logo */}
       <Image
         source={ghostSource}
@@ -336,24 +334,24 @@ function LoadingContent({
       />
 
       {/* Tagline rotation */}
-      <View style={{ height: taglineLineHeight, overflow: 'hidden' }}>
+      <Box style={{ height: taglineLineHeight, overflow: 'hidden' }}>
         <Animated.View style={{ transform: [{ translateY: taglineSlideAnim }] }}>
-          <RNText
+          <Text
+            size="sm"
             style={{
-              fontSize: 13,
               color: mutedColor,
               textAlign: 'center',
               letterSpacing: 0.3,
             }}
           >
             {TAGLINES[taglineIndex]}
-          </RNText>
+          </Text>
         </Animated.View>
-      </View>
+      </Box>
 
       {/* Progress bar + status label */}
-      <View style={{ alignItems: 'center', gap: 12 }}>
-        <View
+      <Box style={{ alignItems: 'center', gap: 12 }}>
+        <Box
           style={{
             width: 200,
             height: 3,
@@ -373,22 +371,22 @@ function LoadingContent({
               }),
             }, gradientBarStyle]}
           />
-        </View>
+        </Box>
 
         {/* Status text describing current loading step */}
         {statusLabel ? (
-          <RNText
+          <Text
+            size="sm"
             style={{
-              fontSize: 13,
               color: mutedColor,
               textAlign: 'center',
               letterSpacing: 0.3,
             }}
           >
             {statusLabel}
-          </RNText>
+          </Text>
         ) : null}
-      </View>
-    </View>
+      </Box>
+    </Box>
   );
 }
