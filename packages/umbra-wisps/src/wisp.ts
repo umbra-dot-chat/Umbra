@@ -232,6 +232,12 @@ export class Wisp {
         case 'group_message':
           this.handleGroupMessage(envelope.payload);
           break;
+        case 'call_offer':
+          this.handleCallOffer(envelope.payload);
+          break;
+        case 'call_end':
+          this.handleCallEnd(envelope.payload);
+          break;
       }
     } catch { /* ignore parse errors */ }
   }
@@ -351,5 +357,29 @@ export class Wisp {
     } catch (err) {
       console.warn(`[${this.persona.name}] Failed to decrypt group message:`, err);
     }
+  }
+
+  // -- Call Signaling (v1: stub, no real WebRTC) --
+
+  private handleCallOffer(p: {
+    callId: string; sdp: string; callType: string;
+    senderDid: string; conversationId: string;
+  }): void {
+    console.log(`[${this.persona.name}] Incoming ${p.callType} call from ${p.senderDid.slice(0, 20)}...`);
+    // v1: auto-end after 3s (simulates brief answer then hangup)
+    setTimeout(() => {
+      this.relay.sendEnvelope(p.senderDid, {
+        envelope: 'call_end', version: 1,
+        payload: {
+          callId: p.callId, reason: 'completed',
+          endedBy: this.identity.did, timestamp: Date.now(),
+        },
+      });
+      console.log(`[${this.persona.name}] Ended call ${p.callId.slice(0, 12)}...`);
+    }, 3000);
+  }
+
+  private handleCallEnd(p: { callId: string; reason: string }): void {
+    console.log(`[${this.persona.name}] Call ${p.callId.slice(0, 12)}... ended: ${p.reason}`);
   }
 }
