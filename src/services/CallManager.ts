@@ -128,6 +128,8 @@ export class CallManager {
   onConnectionStateChange: ((state: RTCPeerConnectionState) => void) | null = null;
   onStatsUpdate: ((stats: CallStats) => void) | null = null;
   onDataChannelMessage: ((data: any) => void) | null = null;
+  onRenegotiationNeeded: ((offer: { sdp: string; type: string }) => void) | null = null;
+  onRemoteScreenShareStream: ((stream: MediaStream | null) => void) | null = null;
 
   /**
    * Set the TURN shared secret for credential generation.
@@ -200,17 +202,26 @@ export class CallManager {
     };
 
     pc.ontrack = (event) => {
-      if (event.streams[0]) {
-        this.remoteStream = event.streams[0];
-        this.onRemoteStream?.(event.streams[0]);
+      const stream = event.streams[0];
+      if (stream) {
+        // Check if this is the screen share stream (arrives as a second stream)
+        if (this.remoteStream && stream.id !== this.remoteStream.id && event.track.kind === 'video') {
+          // This is a new video stream from remote — treat as screen share
+          this.onRemoteScreenShareStream?.(stream);
+          // When the track ends, notify screen share stopped
+          event.track.onended = () => this.onRemoteScreenShareStream?.(null);
+          return;
+        }
+        this.remoteStream = stream;
+        this.onRemoteStream?.(stream);
       } else {
         // Some WebRTC implementations (e.g. @roamhq/wrtc) may deliver
         // tracks without an associated stream. Wrap the track in a new
         // MediaStream so the client can still play audio/video.
-        const stream = this.remoteStream ?? new MediaStream();
-        stream.addTrack(event.track);
-        this.remoteStream = stream;
-        this.onRemoteStream?.(stream);
+        const s = this.remoteStream ?? new MediaStream();
+        s.addTrack(event.track);
+        this.remoteStream = s;
+        this.onRemoteStream?.(s);
       }
     };
 
@@ -230,6 +241,21 @@ export class CallManager {
           // Ignore non-JSON messages
         }
       };
+    };
+
+    // Handle renegotiation (triggered by addTrack for screen sharing)
+    pc.onnegotiationneeded = async () => {
+      try {
+        const offer = await pc.createOffer();
+        let sdp = offer.sdp ?? '';
+        if (this._audioQuality !== 'pcm') {
+          sdp = this.mungeOpusSdp(sdp, this._opusConfig);
+        }
+        await pc.setLocalDescription({ ...offer, sdp } as RTCSessionDescriptionInit);
+        this.onRenegotiationNeeded?.({ sdp, type: offer.type! });
+      } catch (err) {
+        console.error('[CallManager] Renegotiation offer failed:', err);
+      }
     };
 
     this.pc = pc;
@@ -671,6 +697,33 @@ export class CallManager {
       // No video sender found — stop the track we just acquired
       newTrack.stop();
     }
+  }
+
+  /**
+   * Handle an incoming renegotiation offer from the remote peer.
+   * Sets the new remote SDP offer and returns a local SDP answer.
+   */
+  async handleReoffer(offerSdp: string): Promise<string> {
+    if (!this.pc) throw new Error('No peer connection');
+    const offer = JSON.parse(offerSdp);
+    await this.pc.setRemoteDescription(new RTCSessionDescription({ sdp: offer.sdp, type: offer.type }));
+    const answer = await this.pc.createAnswer();
+    let answerSdpStr = answer.sdp ?? '';
+    if (this._audioQuality !== 'pcm') {
+      answerSdpStr = this.mungeOpusSdp(answerSdpStr, this._opusConfig);
+    }
+    await this.pc.setLocalDescription({ ...answer, sdp: answerSdpStr } as RTCSessionDescriptionInit);
+    return JSON.stringify({ sdp: answerSdpStr, type: answer.type });
+  }
+
+  /**
+   * Handle an incoming renegotiation answer from the remote peer.
+   * Completes the renegotiation by setting the remote answer SDP.
+   */
+  async handleReanswer(answerSdp: string): Promise<void> {
+    if (!this.pc) throw new Error('No peer connection');
+    const answer = JSON.parse(answerSdp);
+    await this.pc.setRemoteDescription(new RTCSessionDescription({ sdp: answer.sdp, type: answer.type }));
   }
 
   /**
@@ -1148,5 +1201,7 @@ export class CallManager {
     this.onIceCandidate = null;
     this.onConnectionStateChange = null;
     this.onStatsUpdate = null;
+    this.onRenegotiationNeeded = null;
+    this.onRemoteScreenShareStream = null;
   }
 }
