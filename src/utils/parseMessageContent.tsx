@@ -17,7 +17,8 @@
  */
 
 import React, { useState } from 'react';
-import { Image, Text, View, Pressable, Linking, type TextStyle, type ViewStyle } from 'react-native';
+import { Image, Pressable, Linking, type TextStyle, type ViewStyle } from 'react-native';
+import { Box, Text, useTheme } from '@coexist/wisp-react-native';
 import type { CommunityEmoji, CommunitySticker } from '@umbra/service';
 import { resolveShortcode } from '@/constants/emojiShortcodes';
 
@@ -262,12 +263,14 @@ function AnnotationChip({
   pronunciation: string;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const { theme } = useTheme();
+  const colors = theme.colors;
 
   return (
     <Pressable onPress={() => setExpanded((v) => !v)} style={{ flexDirection: 'row', alignItems: 'baseline' }}>
       <Text
         style={{
-          color: '#bb86fc',
+          color: colors.accent.primary,
           fontWeight: '600',
           textDecorationLine: 'underline',
           textDecorationStyle: 'dotted',
@@ -276,7 +279,7 @@ function AnnotationChip({
         {word}
       </Text>
       {expanded && (
-        <Text style={{ color: '#9e9e9e', fontSize: 11, marginLeft: 3 }}>
+        <Text size="xs" style={{ color: colors.text.muted, marginLeft: 3 }}>
           ({translation}{pronunciation ? ` · ${pronunciation}` : ''})
         </Text>
       )}
@@ -598,9 +601,9 @@ function renderBlocks(
           const uSz = Math.round(fontSize * unicodeEmojiMultiplier(emojiInfo.total));
           const gap = cSz > 40 ? 4 : 2;
           return (
-            <View key={key} style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap }}>
+            <Box key={key} style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap }}>
               {renderEmojiOnlyTokens(tokens, opts, cSz, uSz, key)}
-            </View>
+            </Box>
           );
         }
         return (
@@ -633,7 +636,7 @@ function renderBlocks(
           marginVertical: 4,
         };
         return (
-          <View key={key} style={cbStyle}>
+          <Box key={key} style={cbStyle}>
             <Text
               style={{
                 fontFamily: 'monospace',
@@ -643,7 +646,7 @@ function renderBlocks(
             >
               {block.code}
             </Text>
-          </View>
+          </Box>
         );
       }
 
@@ -655,7 +658,7 @@ function renderBlocks(
           marginVertical: 2,
         };
         return (
-          <View key={key} style={qStyle}>
+          <Box key={key} style={qStyle}>
             {block.lines.map((line, li) => {
               const tokens = parseInline(line, opts.emojiMap);
               return (
@@ -664,13 +667,13 @@ function renderBlocks(
                 </Text>
               );
             })}
-          </View>
+          </Box>
         );
       }
 
       case 'unorderedList':
         return (
-          <View key={key} style={{ marginVertical: 2, paddingLeft: 12 }}>
+          <Box key={key} style={{ marginVertical: 2, paddingLeft: 12 }}>
             {block.items.map((item, li) => {
               const tokens = parseInline(item, opts.emojiMap);
               return (
@@ -679,12 +682,12 @@ function renderBlocks(
                 </Text>
               );
             })}
-          </View>
+          </Box>
         );
 
       case 'orderedList':
         return (
-          <View key={key} style={{ marginVertical: 2, paddingLeft: 12 }}>
+          <Box key={key} style={{ marginVertical: 2, paddingLeft: 12 }}>
             {block.items.map((item, li) => {
               const tokens = parseInline(item, opts.emojiMap);
               return (
@@ -693,7 +696,7 @@ function renderBlocks(
                 </Text>
               );
             })}
-          </View>
+          </Box>
         );
 
       default:
@@ -830,14 +833,14 @@ export function parseMessageContent(
       const sticker = stickerMap.get(stickerId);
       if (sticker) {
         return (
-          <View style={{ alignItems: 'flex-start' }}>
+          <Box style={{ alignItems: 'flex-start' }}>
             <Image
               source={{ uri: sticker.imageUrl }}
               style={{ width: 200, height: 200 }}
               resizeMode="contain"
               accessibilityLabel={sticker.name}
             />
-          </View>
+          </Box>
         );
       }
     }
@@ -847,14 +850,14 @@ export function parseMessageContent(
   const gifUrl = extractGifUrl(content);
   if (gifUrl) {
     return (
-      <View style={{ alignItems: 'flex-start' }}>
+      <Box style={{ alignItems: 'flex-start' }}>
         <Image
           source={{ uri: gifUrl }}
           style={{ width: 250, height: 200, borderRadius: 8 }}
           resizeMode="contain"
           accessibilityLabel="GIF"
         />
-      </View>
+      </Box>
     );
   }
 
@@ -899,7 +902,7 @@ export function parseMessageContent(
       return rendered[0];
     }
 
-    return <View style={{ gap: 4 }}>{rendered}</View>;
+    return <Box style={{ gap: 4 }}>{rendered}</Box>;
   }
 
   // Single-line inline parsing
@@ -915,9 +918,9 @@ export function parseMessageContent(
     const gap = cSz > 40 ? 4 : 2;
 
     return (
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap }}>
+      <Box style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap }}>
         {renderEmojiOnlyTokens(tokens, opts, cSz, uSz, 'emoji-only')}
-      </View>
+      </Box>
     );
   }
 
