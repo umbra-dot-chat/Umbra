@@ -311,6 +311,21 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       VoiceStreamBridge.setPeerStream(remoteDid, stream);
     };
 
+    // Set up renegotiation handler (for screen sharing)
+    manager.onRenegotiationNeeded = async (offer) => {
+      const reofferPayload = {
+        callId,
+        senderDid: myDid,
+        sdp: JSON.stringify(offer),
+      };
+      sendSignal(remoteDid, JSON.stringify(reofferPayload), 'call_reoffer');
+    };
+
+    // Set up remote screen share handler
+    manager.onRemoteScreenShareStream = (stream) => {
+      setRemoteScreenShareStream(stream);
+    };
+
     // Set up connection state handler
     manager.onConnectionStateChange = (state) => {
       console.log('[CallContext] Outgoing connection state →', state, 'at', new Date().toISOString());
@@ -674,6 +689,8 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       const stream = await manager.startScreenShare();
       setScreenShareStream(stream);
       setIsScreenSharing(true);
+      // Notify remote via data channel so their UI updates immediately
+      manager.sendDataChannelMessage({ type: 'screen-share-state', isScreenSharing: true });
     } catch (err) {
       console.warn('[CallContext] Failed to start screen share:', err);
     }
@@ -686,6 +703,8 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     manager.stopScreenShare();
     setScreenShareStream(null);
     setIsScreenSharing(false);
+    // Notify remote via data channel so their UI updates immediately
+    manager.sendDataChannelMessage({ type: 'screen-share-state', isScreenSharing: false });
   }, []);
 
   // ── Audio Processing ─────────────────────────────────────────────────────
@@ -857,6 +876,20 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     manager.onDataChannelMessage = (data) => {
       if (data?.type === 'ghost-metadata') {
         setGhostMetadata(data);
+      } else if (data?.type === 'screen-share-state') {
+        // Remote peer started or stopped screen sharing — update participant state
+        setActiveCall((prev) => {
+          if (!prev) return prev;
+          const updatedParticipants = new Map(prev.participants);
+          const remote = updatedParticipants.get(prev.remoteDid);
+          if (remote) {
+            updatedParticipants.set(prev.remoteDid, {
+              ...remote,
+              isScreenSharing: !!data.isScreenSharing,
+            });
+          }
+          return { ...prev, participants: updatedParticipants };
+        });
       }
     };
     manager.startStats(1000);
@@ -988,6 +1021,21 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
               return { ...prev, remoteStream: stream, participants: updatedParticipants };
             });
             VoiceStreamBridge.setPeerStream(payload.senderDid, stream);
+          };
+
+          // Set up renegotiation handler (for screen sharing)
+          manager.onRenegotiationNeeded = async (offer) => {
+            const reofferPayload = {
+              callId: payload.callId,
+              senderDid: myDid,
+              sdp: JSON.stringify(offer),
+            };
+            sendSignal(payload.senderDid, JSON.stringify(reofferPayload), 'call_reoffer');
+          };
+
+          // Set up remote screen share handler
+          manager.onRemoteScreenShareStream = (stream) => {
+            setRemoteScreenShareStream(stream);
           };
 
           manager.onConnectionStateChange = (state) => {
@@ -1133,6 +1181,38 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
             }
             return { ...prev, participants: updatedParticipants };
           });
+          break;
+        }
+
+        case 'callReoffer': {
+          const { payload } = event;
+          if (!currentCallId || currentCallId !== payload.callId) return;
+          const manager = callManagerRef.current;
+          if (!manager) break;
+          try {
+            const answerSdp = await manager.handleReoffer(payload.sdp);
+            const reanswerPayload = {
+              callId: payload.callId,
+              senderDid: myDid,
+              sdp: answerSdp,
+            };
+            sendSignal(payload.senderDid, JSON.stringify(reanswerPayload), 'call_reanswer');
+          } catch (err) {
+            console.error('[CallContext] Failed to handle reoffer:', err);
+          }
+          break;
+        }
+
+        case 'callReanswer': {
+          const { payload } = event;
+          if (!currentCallId || currentCallId !== payload.callId) return;
+          const manager = callManagerRef.current;
+          if (!manager) break;
+          try {
+            await manager.handleReanswer(payload.sdp);
+          } catch (err) {
+            console.error('[CallContext] Failed to handle reanswer:', err);
+          }
           break;
         }
       }
