@@ -32,6 +32,7 @@
     "packages/umbra-relay",
     "packages/umbra-bridge-bot",
     "packages/umbra-ghost-ai",
-    "packages/umbra-uikit"
+    "packages/umbra-uikit",
+    "packages/umbra-wisps"
   ]
 }
