@@ -221,7 +221,7 @@ function MainLayoutInner() {
   const { uploadRingProgress } = useUploadProgress();
 
   // Call state for sidebar call panel
-  const { activeCall, toggleMute, toggleCamera, endCall } = useCallContext();
+  const { activeCall, toggleMute, toggleDeafen, toggleCamera, endCall } = useCallContext();
 
   // Build a DID → friend map for efficient lookups, enriched with relay presence
   const friendMap = useMemo(() => {
@@ -715,6 +715,7 @@ function MainLayoutInner() {
                       activeCall={activeCall}
                       onReturnToCall={handleReturnToCall}
                       onToggleMute={toggleMute}
+                      onToggleDeafen={toggleDeafen}
                       onToggleCamera={toggleCamera}
                       onEndCall={() => endCall()}
                     />
@@ -807,6 +808,7 @@ function MainLayoutInner() {
                     activeCall={activeCall}
                     onReturnToCall={handleReturnToCall}
                     onToggleMute={toggleMute}
+                    onToggleDeafen={toggleDeafen}
                     onToggleCamera={toggleCamera}
                     onEndCall={() => endCall()}
                   />

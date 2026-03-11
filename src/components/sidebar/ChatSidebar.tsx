@@ -73,6 +73,8 @@ export interface ChatSidebarProps {
   onReturnToCall?: () => void;
   /** Toggle microphone mute */
   onToggleMute?: () => void;
+  /** Toggle deafen (mute mic + mute incoming audio) */
+  onToggleDeafen?: () => void;
   /** Toggle camera on/off */
   onToggleCamera?: () => void;
   /** End the active call */
@@ -88,7 +90,7 @@ function ChatSidebarInner({
   activeId, onSelectConversation,
   onFriendsPress, onNewDm, onCreateGroup, onGuidePress, onMarketplacePress, isFriendsActive,
   pendingInvites, onAcceptInvite, onDeclineInvite, loading, pendingFriendRequests,
-  activeCall, onReturnToCall, onToggleMute, onToggleCamera, onEndCall,
+  activeCall, onReturnToCall, onToggleMute, onToggleDeafen, onToggleCamera, onEndCall,
 }: ChatSidebarProps) {
   const { theme } = useTheme();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -360,12 +362,13 @@ function ChatSidebarInner({
         </SidebarSection>
 
         {/* Active call footer panel — pushed to the bottom via margin-top:auto */}
-        {activeCall && activeCall.status === 'connected' && activeCall.conversationId !== activeId && onReturnToCall && onToggleMute && onToggleCamera && onEndCall && (
+        {activeCall && activeCall.status === 'connected' && activeCall.conversationId !== activeId && onReturnToCall && onToggleMute && onToggleDeafen && onToggleCamera && onEndCall && (
           <View style={{ marginTop: 'auto' as any, marginHorizontal: -4 }}>
             <SidebarCallPanel
               activeCall={activeCall}
               onReturnToCall={onReturnToCall}
               onToggleMute={onToggleMute}
+              onToggleDeafen={onToggleDeafen}
               onToggleCamera={onToggleCamera}
               onEndCall={onEndCall}
             />

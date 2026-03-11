@@ -3,11 +3,14 @@
  *
  * Matches the sidebar's visual language: no card background, separated by
  * a full-width top border. Video preview preserves the stream's aspect ratio.
+ *
+ * Uses the shared CallControlsOverlay with variant="sidebar" for controls.
  */
 
-import React, { useEffect } from 'react';
-import { Platform, Pressable, View } from 'react-native';
-import { Avatar, CallControls, CallTimer, Text, VideoTile, useTheme } from '@coexist/wisp-react-native';
+import React from 'react';
+import { Pressable, View } from 'react-native';
+import { Avatar, CallTimer, Text, VideoTile, useTheme } from '@coexist/wisp-react-native';
+import { CallControlsOverlay } from '@/components/call/CallControlsOverlay';
 import type { ActiveCall } from '@/types/call';
 
 // ─── Props ──────────────────────────────────────────────────────────────────
@@ -16,32 +19,9 @@ export interface SidebarCallPanelProps {
   activeCall: ActiveCall;
   onReturnToCall: () => void;
   onToggleMute: () => void;
+  onToggleDeafen: () => void;
   onToggleCamera: () => void;
   onEndCall: () => void;
-}
-
-const noop = () => {};
-
-// ─── CSS injection (web only) ───────────────────────────────────────────────
-
-const CSS_ID = 'sidebar-call-controls-css';
-
-function injectSidebarControlsCSS() {
-  if (Platform.OS !== 'web' || typeof document === 'undefined') return;
-  if (document.getElementById(CSS_ID)) return;
-
-  const style = document.createElement('style');
-  style.id = CSS_ID;
-  style.textContent = `
-    /* Sidebar call controls: transparent button backgrounds */
-    #sidebar-call-controls [role="button"]:not([aria-label="End call"]) {
-      background-color: transparent !important;
-    }
-    #sidebar-call-controls [role="button"] svg {
-      stroke: currentColor !important;
-    }
-  `;
-  document.head.appendChild(style);
 }
 
 // ─── Component ──────────────────────────────────────────────────────────────
@@ -50,19 +30,14 @@ export function SidebarCallPanel({
   activeCall,
   onReturnToCall,
   onToggleMute,
+  onToggleDeafen,
   onToggleCamera,
   onEndCall,
 }: SidebarCallPanelProps) {
   const { theme } = useTheme();
   const colors = theme.colors;
 
-  const isVoiceOnly = activeCall.callType === 'voice' || activeCall.isCameraOff;
-  const callType = activeCall.callType === 'voice' ? 'audio' : activeCall.callType;
-
-  // Inject CSS overrides on mount (web only)
-  useEffect(() => {
-    injectSidebarControlsCSS();
-  }, []);
+  const isVoiceOnly = activeCall.callType === 'voice';
 
   return (
     <View
@@ -132,21 +107,19 @@ export function SidebarCallPanel({
         )}
       </View>
 
-      {/* Compact controls */}
-      <View nativeID="sidebar-call-controls" style={{ marginTop: 4 }}>
-        <CallControls
+      {/* Shared call controls with sidebar variant */}
+      <View style={{ marginTop: 4 }}>
+        <CallControlsOverlay
           isMuted={activeCall.isMuted}
-          isVideoOff={activeCall.isCameraOff}
+          isDeafened={activeCall.isDeafened}
+          isCameraOff={activeCall.isCameraOff}
           isScreenSharing={false}
-          isSpeakerOn={true}
           onToggleMute={onToggleMute}
-          onToggleVideo={onToggleCamera}
-          onToggleScreenShare={noop}
-          onToggleSpeaker={noop}
+          onToggleDeafen={onToggleDeafen}
+          onToggleCamera={onToggleCamera}
+          onToggleScreenShare={() => {}}
           onEndCall={onEndCall}
-          callType={callType as 'audio' | 'video'}
-          layout="compact"
-          style={{ paddingVertical: 0, paddingHorizontal: 0 }}
+          variant="sidebar"
         />
       </View>
     </View>
