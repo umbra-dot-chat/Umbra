@@ -579,7 +579,7 @@ function RailItem({ itemKey, registerRef, active, onPress, accentColor, theme, c
 
   return (
     <Animated.View
-      ref={(node) => registerRef(itemKey, node)}
+      ref={(node) => registerRef(itemKey, node as View | null)}
       style={[
         { width: '100%', alignItems: 'center', marginBottom: 4, position: 'relative' as const },
         animateMount ? { transform: [{ scale: mountScale }] } : undefined,

@@ -931,7 +931,7 @@ function MainLayoutInner() {
         accounts={accounts}
         activeAccountDid={identity?.did ?? null}
         onSwitchAccount={(did) => switchAccount(did)}
-        onActiveAccountPress={() => { openSettings('profile'); }}
+        onActiveAccountPress={() => { openSettings('account'); }}
         onRemoveAccount={(did) => removeAccount(did)}
         onAddAccount={async () => {
           // Ensure the current account is registered in the multi-account list

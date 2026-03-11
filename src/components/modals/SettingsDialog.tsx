@@ -1663,7 +1663,7 @@ function AppearanceSection() {
             showInput
           />
           {accentColor && (
-            <Button size="sm" variant="ghost" onPress={() => setAccentColor(null)} style={{ alignSelf: 'flex-start', marginTop: 8 }}>
+            <Button size="sm" variant="tertiary" onPress={() => setAccentColor(null)} style={{ alignSelf: 'flex-start', marginTop: 8 }}>
               Reset to theme default
             </Button>
           )}
@@ -4018,7 +4018,7 @@ function DataManagementSection() {
                     showValue
                     formatValue={() => fmtBytes(storageUsage.total)}
                     size="md"
-                    thickness="md"
+                    thickness="medium"
                     gradient
                     glowEdge
                   />

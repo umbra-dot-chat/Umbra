@@ -22,7 +22,7 @@ export interface GroupSettingsDialogProps {
 export function GroupSettingsDialog({ open, onClose, groupId }: GroupSettingsDialogProps) {
   const { theme } = useTheme();
   const tc = theme.colors;
-  const isDark = theme.name === 'dark';
+  const isDark = theme.mode === 'dark';
   const isMobile = useIsMobile();
   const { width: screenWidth, height: screenHeight } = useWindowDimensions();
 

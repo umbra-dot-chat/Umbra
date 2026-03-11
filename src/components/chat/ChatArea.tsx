@@ -397,7 +397,7 @@ export function ChatArea({
       }
     } else if (targetRef && scrollRef.current) {
       targetRef.measureLayout(
-        scrollRef.current.getInnerViewRef() as any,
+        scrollRef.current.getInnerViewNode() as any,
         (_x: number, y: number) => {
           scrollRef.current?.scrollTo({ y: Math.max(0, y - 80), animated: true });
           triggerHighlight();
