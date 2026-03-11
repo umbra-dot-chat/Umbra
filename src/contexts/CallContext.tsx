@@ -525,7 +525,13 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       const updatedParticipants = new Map(prev.participants);
       const local = updatedParticipants.get(myDid);
       if (local) {
-        updatedParticipants.set(myDid, { ...local, isCameraOff });
+        // When re-enabling camera, wrap the stream in a new MediaStream so the
+        // Wisp VideoTile's useEffect (which depends on [stream]) re-fires and
+        // re-attaches srcObject to the newly mounted <video> element.
+        const stream = !isCameraOff && prev.localStream
+          ? new MediaStream(prev.localStream.getTracks())
+          : local.stream;
+        updatedParticipants.set(myDid, { ...local, isCameraOff, stream });
       }
       return { ...prev, isCameraOff, participants: updatedParticipants };
     });
