@@ -8,9 +8,13 @@
  */
 
 import React, { useState, useCallback, useEffect, useMemo, useRef } from 'react';
-import { View, Pressable, ScrollView, Text as RNText, ActivityIndicator, Platform, useWindowDimensions } from 'react-native';
+import { Text as RNText, Pressable, ScrollView, Platform, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
+  Box,
+  Text,
+  Spinner,
+  ScrollArea,
   Overlay,
   Button,
   Input,
@@ -18,8 +22,8 @@ import {
   Toggle,
   Tag,
   useTheme,
+  SearchInput,
 } from '@coexist/wisp-react-native';
-import { SearchInput } from '@coexist/wisp-react-native';
 import { usePlugins } from '@/contexts/PluginContext';
 import { useFonts, FONT_REGISTRY, loadGoogleFont, getFontFamily } from '@/contexts/FontContext';
 import { useAppTheme } from '@/contexts/ThemeContext';
@@ -78,9 +82,9 @@ const SECTIONS: SectionItem[] = [
 // Simple "A" icon for Fonts section
 function FontIcon({ size = 16, color }: { size?: number; color?: string }) {
   return (
-    <RNText style={{ fontSize: size, fontWeight: '700', color: color ?? '#FFF', textAlign: 'center', lineHeight: size }}>
+    <Text style={{ fontSize: size, color: color ?? '#FFF', textAlign: 'center', lineHeight: size }} weight="bold">
       A
-    </RNText>
+    </Text>
   );
 }
 
@@ -156,9 +160,9 @@ function PluginIcon({ branding, name, size = 44 }: { branding: PluginBranding; n
       end={{ x: 1, y: 1 }}
       style={{ width: size, height: size, borderRadius: size * 0.25, alignItems: 'center', justifyContent: 'center' }}
     >
-      <RNText style={{ fontSize: isEmoji ? size * 0.5 : size * 0.4, fontWeight: isEmoji ? undefined : '800' as any, color: '#FFF', textAlign: 'center', lineHeight: size * 0.65 }}>
+      <Text style={{ fontSize: isEmoji ? size * 0.5 : size * 0.4, color: '#FFF', textAlign: 'center', lineHeight: size * 0.65 }} weight={isEmoji ? undefined : 'bold'}>
         {content}
-      </RNText>
+      </Text>
     </LinearGradient>
   );
 }
@@ -167,15 +171,15 @@ function PluginIcon({ branding, name, size = 44 }: { branding: PluginBranding; n
 function CategoryDot({ tags, primaryColor }: { tags: string[]; primaryColor: string }) {
   const emoji = getCategoryEmoji(tags);
   return (
-    <View style={{
+    <Box style={{
       position: 'absolute', bottom: -3, right: -3,
       width: 16, height: 16, borderRadius: 8,
       backgroundColor: primaryColor,
       borderWidth: 2, borderColor: '#18181b',
       alignItems: 'center', justifyContent: 'center',
     }}>
-      <RNText style={{ fontSize: 7, lineHeight: 10 }}>{emoji}</RNText>
-    </View>
+      <Text style={{ fontSize: 7, lineHeight: 10 }}>{emoji}</Text>
+    </Box>
   );
 }
 
@@ -188,8 +192,8 @@ function FeaturedBadge() {
       end={{ x: 1, y: 0 }}
       style={{ paddingHorizontal: 8, paddingVertical: 3, borderRadius: 4, flexDirection: 'row', alignItems: 'center', gap: 3 }}
     >
-      <RNText style={{ fontSize: 8, lineHeight: 10 }}>{'\u{2B50}'}</RNText>
-      <RNText style={{ fontSize: 9, fontWeight: '700', color: '#FFF' }}>Featured</RNText>
+      <Text style={{ fontSize: 8, lineHeight: 10 }}>{'\u{2B50}'}</Text>
+      <Text style={{ fontSize: 9, color: '#FFF' }} weight="bold">Featured</Text>
     </LinearGradient>
   );
 }
@@ -328,49 +332,49 @@ function ListingCard({
         end={{ x: 1, y: 0 }}
         style={{ height: 3, width: '100%' }}
       />
-      <View style={{ padding: 14, gap: 10 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}>
+      <Box style={{ padding: 14, gap: 10 }}>
+        <Box style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 12 }}>
           {/* Plugin icon with category dot */}
-          <View style={{ position: 'relative' }}>
+          <Box style={{ position: 'relative' }}>
             <PluginIcon branding={{ ...branding, primaryColor: pc, secondaryColor: sc }} name={listing.name} size={44} />
             <CategoryDot tags={listing.tags} primaryColor={pc} />
-          </View>
-          <View style={{ flex: 1 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <RNText style={{ fontSize: 14, fontWeight: '600', color: tc.text.primary }}>{listing.name}</RNText>
-              <RNText style={{ fontSize: 11, color: tc.text.muted }}>v{listing.version}</RNText>
+          </Box>
+          <Box style={{ flex: 1 }}>
+            <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+              <Text size="sm" weight="semibold" style={{ color: tc.text.primary }}>{listing.name}</Text>
+              <Text size="xs" style={{ color: tc.text.muted }}>v{listing.version}</Text>
               {branding.featured && <FeaturedBadge />}
-            </View>
+            </Box>
             {branding.tagline ? (
-              <RNText style={{ fontSize: 12, color: pc, marginTop: 1, fontWeight: '500' }} numberOfLines={1}>{branding.tagline}</RNText>
+              <Text size="xs" weight="medium" style={{ color: pc, marginTop: 1 }} numberOfLines={1}>{branding.tagline}</Text>
             ) : null}
-            <RNText style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }} numberOfLines={2}>{listing.description}</RNText>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 }}>
-              <RNText style={{ fontSize: 11, color: tc.text.muted }}>{listing.author.name}</RNText>
+            <Text size="xs" style={{ color: tc.text.secondary, marginTop: 2 }} numberOfLines={2}>{listing.description}</Text>
+            <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 6 }}>
+              <Text size="xs" style={{ color: tc.text.muted }}>{listing.author.name}</Text>
               {listing.downloads > 0 && (
                 <>
-                  <RNText style={{ fontSize: 11, color: tc.text.muted }}>{'\u00B7'}</RNText>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                  <Text size="xs" style={{ color: tc.text.muted }}>{'\u00B7'}</Text>
+                  <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
                     <DownloadIcon size={10} color={tc.text.muted} />
-                    <RNText style={{ fontSize: 11, color: tc.text.muted }}>{listing.downloads.toLocaleString()}</RNText>
-                  </View>
+                    <Text size="xs" style={{ color: tc.text.muted }}>{listing.downloads.toLocaleString()}</Text>
+                  </Box>
                 </>
               )}
               {listing.size > 0 && (
                 <>
-                  <RNText style={{ fontSize: 11, color: tc.text.muted }}>{'\u00B7'}</RNText>
-                  <RNText style={{ fontSize: 11, color: tc.text.muted }}>{formatSize(listing.size)}</RNText>
+                  <Text size="xs" style={{ color: tc.text.muted }}>{'\u00B7'}</Text>
+                  <Text size="xs" style={{ color: tc.text.muted }}>{formatSize(listing.size)}</Text>
                 </>
               )}
-            </View>
-          </View>
-          <View style={{ alignItems: 'flex-end', justifyContent: 'center' }}>
+            </Box>
+          </Box>
+          <Box style={{ alignItems: 'flex-end', justifyContent: 'center' }}>
             {isInstalled ? (
-              <View style={{ paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6, backgroundColor: isEnabled ? `${tc.status.success}20` : `${tc.text.muted}20` }}>
-                <RNText style={{ fontSize: 11, fontWeight: '600', color: isEnabled ? tc.status.success : tc.text.muted }}>
+              <Box style={{ paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6, backgroundColor: isEnabled ? `${tc.status.success}20` : `${tc.text.muted}20` }}>
+                <Text size="xs" weight="semibold" style={{ color: isEnabled ? tc.status.success : tc.text.muted }}>
                   {isEnabled ? 'Installed' : 'Disabled'}
-                </RNText>
-              </View>
+                </Text>
+              </Box>
             ) : (
               <Pressable
                 onPress={(e) => { e?.stopPropagation?.(); onInstall(); }}
@@ -384,15 +388,15 @@ function ListingCard({
                   style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 6 }}
                 >
                   {!installing && <DownloadIcon size={12} color="#FFF" />}
-                  <RNText style={{ fontSize: 11, fontWeight: '600', color: '#FFF' }}>
+                  <Text size="xs" weight="semibold" style={{ color: '#FFF' }}>
                     {installing ? 'Installing...' : 'Install'}
-                  </RNText>
+                  </Text>
                 </LinearGradient>
               </Pressable>
             )}
-          </View>
-        </View>
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
+          </Box>
+        </Box>
+        <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, alignItems: 'center' }}>
           {/* Platform badges */}
           {listing.platforms && listing.platforms.length > 0 && (
             <PlatformBadges platforms={listing.platforms} />
@@ -404,12 +408,12 @@ function ListingCard({
                 borderRadius: 6,
                 ...(isCategoryTag ? { backgroundColor: `${pc}18` } : {}),
               }}>
-                <RNText style={{ fontSize: 10, color: isCategoryTag ? pc : tc.text.muted }}>{tag}</RNText>
+                <Text style={{ fontSize: 10, color: isCategoryTag ? pc : tc.text.muted }}>{tag}</Text>
               </Tag>
             );
           })}
-        </View>
-      </View>
+        </Box>
+      </Box>
     </Pressable>
   );
 }
@@ -431,10 +435,10 @@ function PlatformBadges({ platforms }: { platforms: string[] }) {
   // If all three platforms, show a single "Cross-platform" badge
   if (platforms.length >= 3 && platforms.includes('web') && platforms.includes('desktop') && platforms.includes('mobile')) {
     return (
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, backgroundColor: 'rgba(16,185,129,0.15)' }}>
-        <RNText style={{ fontSize: 9 }}>{'\u{2728}'}</RNText>
-        <RNText style={{ fontSize: 10, fontWeight: '600', color: '#10B981' }}>Cross-platform</RNText>
-      </View>
+      <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, backgroundColor: 'rgba(16,185,129,0.15)' }}>
+        <Text style={{ fontSize: 9 }}>{'\u{2728}'}</Text>
+        <Text style={{ fontSize: 10, color: '#10B981' }} weight="semibold">Cross-platform</Text>
+      </Box>
     );
   }
 
@@ -444,10 +448,10 @@ function PlatformBadges({ platforms }: { platforms: string[] }) {
         const config = PLATFORM_CONFIG[p];
         if (!config) return null;
         return (
-          <View key={p} style={{ flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 5, paddingVertical: 2, borderRadius: 4, backgroundColor: `${config.color}15` }}>
-            <RNText style={{ fontSize: 9 }}>{config.icon}</RNText>
-            <RNText style={{ fontSize: 10, fontWeight: '500', color: config.color }}>{config.label}</RNText>
-          </View>
+          <Box key={p} style={{ flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 5, paddingVertical: 2, borderRadius: 4, backgroundColor: `${config.color}15` }}>
+            <Text style={{ fontSize: 9 }}>{config.icon}</Text>
+            <Text style={{ fontSize: 10, color: config.color }} weight="medium">{config.label}</Text>
+          </Box>
         );
       })}
     </>
@@ -473,7 +477,7 @@ function InstalledPluginCard({
   const isEnabled = plugin.state === 'enabled';
 
   return (
-    <View style={{ borderRadius: 12, borderWidth: 1, borderColor: tc.border.subtle, backgroundColor: tc.background.sunken, overflow: 'hidden' }}>
+    <Box style={{ borderRadius: 12, borderWidth: 1, borderColor: tc.border.subtle, backgroundColor: tc.background.sunken, overflow: 'hidden' }}>
       {/* Accent stripe — vibrant when enabled, muted when disabled */}
       <LinearGradient
         colors={isEnabled ? [pc, sc] : [tc.text.muted, tc.text.muted]}
@@ -481,37 +485,37 @@ function InstalledPluginCard({
         end={{ x: 1, y: 0 }}
         style={{ height: 3, width: '100%', opacity: isEnabled ? 1 : 0.3 }}
       />
-      <View style={{ padding: 14, gap: 10 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-          <View style={{ opacity: isEnabled ? 1 : 0.5 }}>
+      <Box style={{ padding: 14, gap: 10 }}>
+        <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+          <Box style={{ opacity: isEnabled ? 1 : 0.5 }}>
             <PluginIcon branding={{ ...branding, primaryColor: pc, secondaryColor: sc }} name={plugin.manifest.name} size={36} />
-          </View>
+          </Box>
           <Pressable onPress={onViewDetail} style={{ flex: 1 }}>
-            <RNText style={{ fontSize: 14, fontWeight: '600', color: tc.text.primary }}>{plugin.manifest.name}</RNText>
-            <RNText style={{ fontSize: 12, color: tc.text.secondary }} numberOfLines={1}>v{plugin.manifest.version} · {plugin.manifest.author.name}</RNText>
+            <Text size="sm" weight="semibold" style={{ color: tc.text.primary }}>{plugin.manifest.name}</Text>
+            <Text size="xs" style={{ color: tc.text.secondary }} numberOfLines={1}>v{plugin.manifest.version} · {plugin.manifest.author.name}</Text>
             {plugin.state === 'error' && plugin.error && (
-              <RNText style={{ fontSize: 11, color: tc.status.danger, marginTop: 2 }} numberOfLines={1}>Error: {plugin.error}</RNText>
+              <Text size="xs" style={{ color: tc.status.danger, marginTop: 2 }} numberOfLines={1}>Error: {plugin.error}</Text>
             )}
           </Pressable>
           <Toggle checked={isEnabled} onChange={onToggle} size="sm" />
-        </View>
+        </Box>
         {confirmUninstall ? (
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingTop: 4 }}>
-            <RNText style={{ fontSize: 12, color: tc.status.danger, flex: 1 }}>Remove this plugin and its data?</RNText>
+          <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingTop: 4 }}>
+            <Text size="xs" style={{ color: tc.status.danger, flex: 1 }}>Remove this plugin and its data?</Text>
             <Button size="xs" variant="destructive" onPress={() => { onUninstall(); setConfirmUninstall(false); }}>
               Remove
             </Button>
             <Button size="xs" variant="tertiary" onPress={() => setConfirmUninstall(false)}>Cancel</Button>
-          </View>
+          </Box>
         ) : (
-          <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
+          <Box style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
             <Button size="xs" variant="tertiary" onPress={() => setConfirmUninstall(true)} iconLeft={<TrashIcon size={12} color={tc.text.muted} />}>
               Uninstall
             </Button>
-          </View>
+          </Box>
         )}
-      </View>
-    </View>
+      </Box>
+    </Box>
   );
 }
 
@@ -535,15 +539,14 @@ function PluginDetailView({
   const iconContent = getPluginIconContent(branding, listing.name);
 
   return (
-    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ gap: 20 }}>
+    <ScrollArea style={{ flex: 1 }} contentContainerStyle={{ gap: 20 }}>
       {/* Back button */}
-      <Pressable onPress={onBack} style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 24, paddingTop: 16 }}>
-        <ArrowLeftIcon size={16} color={tc.text.secondary} />
-        <RNText style={{ fontSize: 13, color: tc.text.secondary }}>Back</RNText>
-      </Pressable>
+      <Button variant="tertiary" onPress={onBack} iconLeft={<ArrowLeftIcon size={16} color={tc.text.secondary} />} style={{ alignSelf: 'flex-start', marginLeft: 24, marginTop: 16 }}>
+        Back
+      </Button>
 
       {/* Gradient banner header */}
-      <View style={{ marginHorizontal: 16, borderRadius: 16, overflow: 'hidden' }}>
+      <Box style={{ marginHorizontal: 16, borderRadius: 16, overflow: 'hidden' }}>
         <LinearGradient
           colors={[pc, sc]}
           start={{ x: 0, y: 0 }}
@@ -551,59 +554,59 @@ function PluginDetailView({
           style={{ height: 140, justifyContent: 'flex-end', padding: 16, position: 'relative' }}
         >
           {/* Faded emoji watermark */}
-          <RNText style={{ position: 'absolute', top: 16, right: 20, fontSize: 56, opacity: 0.2 }}>
+          <Text style={{ position: 'absolute', top: 16, right: 20, fontSize: 56, opacity: 0.2 }}>
             {iconContent}
-          </RNText>
+          </Text>
           {branding.featured && (
-            <View style={{ position: 'absolute', top: 12, left: 12 }}>
+            <Box style={{ position: 'absolute', top: 12, left: 12 }}>
               <FeaturedBadge />
-            </View>
+            </Box>
           )}
-          <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 14 }}>
-            <View style={{ borderWidth: 3, borderColor: isDark ? '#1e1e22' : '#fff', borderRadius: 16, overflow: 'hidden' }}>
+          <Box style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 14 }}>
+            <Box style={{ borderWidth: 3, borderColor: isDark ? '#1e1e22' : '#fff', borderRadius: 16, overflow: 'hidden' }}>
               <PluginIcon branding={branding} name={listing.name} size={56} />
-            </View>
-            <View style={{ flex: 1, paddingBottom: 2 }}>
-              <RNText style={{ fontSize: 20, fontWeight: '700', color: '#FFF' }}>{listing.name}</RNText>
-              <RNText style={{ fontSize: 13, color: 'rgba(255,255,255,0.8)', marginTop: 1 }}>by {listing.author.name} · v{listing.version}</RNText>
-            </View>
-          </View>
+            </Box>
+            <Box style={{ flex: 1, paddingBottom: 2 }}>
+              <Text size="lg" weight="bold" style={{ color: '#FFF' }}>{listing.name}</Text>
+              <Text size="sm" style={{ color: 'rgba(255,255,255,0.8)', marginTop: 1 }}>by {listing.author.name} · v{listing.version}</Text>
+            </Box>
+          </Box>
         </LinearGradient>
-      </View>
+      </Box>
 
-      <View style={{ paddingHorizontal: 24, gap: 20 }}>
+      <Box style={{ paddingHorizontal: 24, gap: 20 }}>
         {/* Tagline */}
         {branding.tagline && (
-          <RNText style={{ fontSize: 14, fontWeight: '500', color: pc, fontStyle: 'italic' }}>{branding.tagline}</RNText>
+          <Text size="sm" weight="medium" style={{ color: pc, fontStyle: 'italic' }}>{branding.tagline}</Text>
         )}
 
         {/* Stats row */}
-        <View style={{ flexDirection: 'row', gap: 0 }}>
+        <Box style={{ flexDirection: 'row', gap: 0 }}>
           {listing.downloads > 0 && (
-            <View style={{ flex: 1, alignItems: 'center', gap: 2 }}>
-              <RNText style={{ fontSize: 10, color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>Downloads</RNText>
-              <RNText style={{ fontSize: 16, fontWeight: '700', color: tc.text.primary }}>{listing.downloads.toLocaleString()}</RNText>
-            </View>
+            <Box style={{ flex: 1, alignItems: 'center', gap: 2 }}>
+              <Text style={{ fontSize: 10, color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>Downloads</Text>
+              <Text size="md" weight="bold" style={{ color: tc.text.primary }}>{listing.downloads.toLocaleString()}</Text>
+            </Box>
           )}
           {listing.rating != null && (
-            <View style={{ flex: 1, alignItems: 'center', gap: 2 }}>
-              <RNText style={{ fontSize: 10, color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>Rating</RNText>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                <RNText style={{ fontSize: 14 }}>{'\u2B50'}</RNText>
-                <RNText style={{ fontSize: 16, fontWeight: '700', color: tc.text.primary }}>{listing.rating.toFixed(1)}</RNText>
-              </View>
-            </View>
+            <Box style={{ flex: 1, alignItems: 'center', gap: 2 }}>
+              <Text style={{ fontSize: 10, color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>Rating</Text>
+              <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                <Text size="sm">{'\u2B50'}</Text>
+                <Text size="md" weight="bold" style={{ color: tc.text.primary }}>{listing.rating.toFixed(1)}</Text>
+              </Box>
+            </Box>
           )}
           {listing.size > 0 && (
-            <View style={{ flex: 1, alignItems: 'center', gap: 2 }}>
-              <RNText style={{ fontSize: 10, color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>Size</RNText>
-              <RNText style={{ fontSize: 16, fontWeight: '700', color: tc.text.primary }}>{formatSize(listing.size)}</RNText>
-            </View>
+            <Box style={{ flex: 1, alignItems: 'center', gap: 2 }}>
+              <Text style={{ fontSize: 10, color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>Size</Text>
+              <Text size="md" weight="bold" style={{ color: tc.text.primary }}>{formatSize(listing.size)}</Text>
+            </Box>
           )}
-        </View>
+        </Box>
 
         {/* Actions */}
-        <View style={{ flexDirection: 'row', gap: 8 }}>
+        <Box style={{ flexDirection: 'row', gap: 8 }}>
           {isInstalled ? (
             <>
               <Button size="sm" variant={plugin.state === 'enabled' ? 'secondary' : 'primary'} onPress={onToggle} style={{ flex: 1 }}>
@@ -622,57 +625,57 @@ function PluginDetailView({
                 style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 10 }}
               >
                 {!installing && <DownloadIcon size={14} color="#FFF" />}
-                <RNText style={{ fontSize: 14, fontWeight: '600', color: '#FFF' }}>
+                <Text size="sm" weight="semibold" style={{ color: '#FFF' }}>
                   {installing ? 'Installing...' : 'Install Plugin'}
-                </RNText>
+                </Text>
               </LinearGradient>
             </Pressable>
           )}
-        </View>
+        </Box>
       {listing.author.url && (
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+        <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
           <ExternalLinkIcon size={11} color={pc} />
-          <RNText style={{ fontSize: 11, color: pc }}>{listing.author.url}</RNText>
-        </View>
+          <Text size="xs" style={{ color: pc }}>{listing.author.url}</Text>
+        </Box>
       )}
 
       <Separator spacing="sm" />
-      <View style={{ gap: 6 }}>
-        <RNText style={{ fontSize: 14, fontWeight: '600', color: tc.text.primary }}>Description</RNText>
-        <RNText style={{ fontSize: 13, color: tc.text.secondary, lineHeight: 20 }}>{listing.description}</RNText>
-      </View>
-      <View style={{ gap: 4 }}>
-        <RNText style={{ fontSize: 11, color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>Platforms</RNText>
-        <View style={{ flexDirection: 'row', gap: 4, flexWrap: 'wrap' }}>
+      <Box style={{ gap: 6 }}>
+        <Text size="sm" weight="semibold" style={{ color: tc.text.primary }}>Description</Text>
+        <Text size="sm" style={{ color: tc.text.secondary, lineHeight: 20 }}>{listing.description}</Text>
+      </Box>
+      <Box style={{ gap: 4 }}>
+        <Text size="xs" style={{ color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>Platforms</Text>
+        <Box style={{ flexDirection: 'row', gap: 4, flexWrap: 'wrap' }}>
           <PlatformBadges platforms={listing.platforms} />
-        </View>
-      </View>
+        </Box>
+      </Box>
       {listing.permissions && listing.permissions.length > 0 && (
-        <View style={{ gap: 8 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+        <Box style={{ gap: 8 }}>
+          <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
             <ShieldIcon size={14} color={tc.text.secondary} />
-            <RNText style={{ fontSize: 14, fontWeight: '600', color: tc.text.primary }}>Permissions</RNText>
-          </View>
-          <View style={{ gap: 6 }}>
+            <Text size="sm" weight="semibold" style={{ color: tc.text.primary }}>Permissions</Text>
+          </Box>
+          <Box style={{ gap: 6 }}>
             {listing.permissions.map((perm) => {
               const info = PERMISSION_LABELS[perm];
               return (
-                <View key={perm} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 6, backgroundColor: tc.background.sunken }}>
+                <Box key={perm} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 6, backgroundColor: tc.background.sunken }}>
                   {getPermissionIcon(perm, tc.text.muted)}
-                  <View style={{ flex: 1 }}>
-                    <RNText style={{ fontSize: 12, fontWeight: '500', color: tc.text.primary }}>{info?.label ?? perm}</RNText>
-                    {info?.description && <RNText style={{ fontSize: 11, color: tc.text.muted }}>{info.description}</RNText>}
-                  </View>
-                </View>
+                  <Box style={{ flex: 1 }}>
+                    <Text size="xs" weight="medium" style={{ color: tc.text.primary }}>{info?.label ?? perm}</Text>
+                    {info?.description && <Text size="xs" style={{ color: tc.text.muted }}>{info.description}</Text>}
+                  </Box>
+                </Box>
               );
             })}
-          </View>
-        </View>
+          </Box>
+        </Box>
       )}
       {listing.tags.length > 0 && (
-        <View style={{ gap: 6 }}>
-          <RNText style={{ fontSize: 14, fontWeight: '600', color: tc.text.primary }}>Tags</RNText>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+        <Box style={{ gap: 6 }}>
+          <Text size="sm" weight="semibold" style={{ color: tc.text.primary }}>Tags</Text>
+          <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
             {listing.tags.map((tag) => {
               const isCategoryTag = CATEGORY_EMOJIS[tag.toLowerCase()] != null;
               return (
@@ -680,15 +683,15 @@ function PluginDetailView({
                   borderRadius: 6,
                   ...(isCategoryTag ? { backgroundColor: `${pc}18` } : {}),
                 }}>
-                  <RNText style={{ fontSize: 11, color: isCategoryTag ? pc : tc.text.muted }}>{tag}</RNText>
+                  <Text size="xs" style={{ color: isCategoryTag ? pc : tc.text.muted }}>{tag}</Text>
                 </Tag>
               );
             })}
-          </View>
-        </View>
+          </Box>
+        </Box>
       )}
-      </View>
-    </ScrollView>
+      </Box>
+    </ScrollArea>
   );
 }
 
@@ -752,14 +755,14 @@ function FontCard({ font, isInstalled, isActive, isLoading, onInstall, onActivat
   }, [font]);
 
   return (
-    <View style={{
+    <Box style={{
       borderRadius: 10, borderWidth: 1,
       borderColor: isActive ? tc.accent.primary : tc.border.subtle,
       backgroundColor: isActive ? tc.accent.highlight : tc.background.sunken,
       padding: 14, gap: 10,
     }}>
       {/* Font preview — uses FontPreviewText to bypass global font override */}
-      <View style={{ minHeight: 48, justifyContent: 'center' }}>
+      <Box style={{ minHeight: 48, justifyContent: 'center' }}>
         <FontPreviewText
           fontFamily={font.id === 'system' ? undefined : font.css}
           nativeFontName={font.id === 'system' ? undefined : font.name}
@@ -776,18 +779,18 @@ function FontCard({ font, isInstalled, isActive, isLoading, onInstall, onActivat
         >
           jumps over the lazy dog — 0123456789
         </FontPreviewText>
-      </View>
+      </Box>
 
       {/* Font info + action */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
-        <View style={{ flex: 1 }}>
-          <RNText style={{ fontSize: 13, fontWeight: '600', color: tc.text.primary }}>{font.name}</RNText>
-          <RNText style={{ fontSize: 11, color: tc.text.muted, textTransform: 'capitalize' }}>{font.category}</RNText>
-        </View>
+      <Box style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+        <Box style={{ flex: 1 }}>
+          <Text size="sm" weight="semibold" style={{ color: tc.text.primary }}>{font.name}</Text>
+          <Text size="xs" style={{ color: tc.text.muted, textTransform: 'capitalize' }}>{font.category}</Text>
+        </Box>
         {isActive ? (
-          <View style={{ paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6, backgroundColor: `${tc.status.success}20` }}>
-            <RNText style={{ fontSize: 11, fontWeight: '600', color: tc.status.success }}>Active</RNText>
-          </View>
+          <Box style={{ paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6, backgroundColor: `${tc.status.success}20` }}>
+            <Text size="xs" weight="semibold" style={{ color: tc.status.success }}>Active</Text>
+          </Box>
         ) : isInstalled ? (
           <Button size="xs" variant="secondary" onPress={onActivate}>
             Use Font
@@ -797,8 +800,8 @@ function FontCard({ font, isInstalled, isActive, isLoading, onInstall, onActivat
             {isLoading ? 'Loading...' : 'Install'}
           </Button>
         )}
-      </View>
-    </View>
+      </Box>
+    </Box>
   );
 }
 
@@ -858,24 +861,24 @@ function FontsContent() {
   const totalCount = fonts.length;
 
   return (
-    <View style={{ flex: 1, padding: 20 }}>
+    <Box style={{ flex: 1, padding: 20 }}>
       {/* Header */}
-      <View style={{ marginBottom: 16 }}>
-        <RNText style={{ fontSize: 18, fontWeight: '700', color: tc.text.primary, marginBottom: 4 }}>Fonts</RNText>
-        <RNText style={{ fontSize: 13, color: tc.text.secondary }}>
+      <Box style={{ marginBottom: 16 }}>
+        <Text style={{ fontSize: 18, fontWeight: '700', color: tc.text.primary, marginBottom: 4 }}>Fonts</Text>
+        <Text style={{ fontSize: 13, color: tc.text.secondary }}>
           {catalogLoaded
             ? `Choose from ${totalCount.toLocaleString()} Google Fonts to personalize your Umbra experience.`
             : `Choose from ${featuredFonts.length} curated typefaces. Loading full catalog...`}
-        </RNText>
-      </View>
+        </Text>
+      </Box>
 
       {/* Search */}
-      <View style={{ marginBottom: 12 }}>
+      <Box style={{ marginBottom: 12 }}>
         <SearchInput value={search} onValueChange={setSearch} placeholder="Search fonts..." size="sm" fullWidth onClear={() => setSearch('')} gradientBorder />
-      </View>
+      </Box>
 
       {/* Category filter */}
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 16 }}>
+      <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 16 }}>
         {categories.map((cat) => (
           <Pressable
             key={cat}
@@ -887,25 +890,25 @@ function FontsContent() {
               borderColor: tc.border.subtle,
             }}
           >
-            <RNText style={{
-              fontSize: 12, fontWeight: categoryFilter === cat ? '600' : '400',
+            <Text style={{
+              fontSize: 12,
               color: categoryFilter === cat ? tc.text.onAccent : tc.text.secondary,
               textTransform: 'capitalize',
-            }}>
+            }} weight={categoryFilter === cat ? 'semibold' : undefined}>
               {cat === 'all' ? 'All' : cat}
-            </RNText>
+            </Text>
           </Pressable>
         ))}
-      </View>
+      </Box>
 
       {/* Font list */}
-      <ScrollView style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingBottom: 20 }}>
+      <ScrollArea style={{ flex: 1 }} showsVerticalScrollIndicator={false} contentContainerStyle={{ gap: 10, paddingBottom: 20 }}>
         {/* Featured section */}
         {filteredFeatured.length > 0 && (
           <>
-            <RNText style={{ fontSize: 13, fontWeight: '600', color: tc.text.secondary, marginBottom: 4, marginTop: 2 }}>
+            <Text style={{ fontSize: 13, fontWeight: '600', color: tc.text.secondary, marginBottom: 4, marginTop: 2 }}>
               {isSearching ? `Featured (${filteredFeatured.length})` : `Featured (${featuredFonts.length})`}
-            </RNText>
+            </Text>
             {filteredFeatured.map((font) => (
               <FontCard
                 key={font.id}
@@ -923,11 +926,11 @@ function FontsContent() {
         {/* All Google Fonts section */}
         {catalogLoaded && catalogFonts.length > 0 && (
           <>
-            <View style={{ marginTop: 16, marginBottom: 4 }}>
-              <RNText style={{ fontSize: 13, fontWeight: '600', color: tc.text.secondary }}>
+            <Box style={{ marginTop: 16, marginBottom: 4 }}>
+              <Text style={{ fontSize: 13, fontWeight: '600', color: tc.text.secondary }}>
                 All Google Fonts ({catalogFonts.length.toLocaleString()})
-              </RNText>
-            </View>
+              </Text>
+            </Box>
             {visibleCatalog.map((font) => (
               <FontCard
                 key={font.id}
@@ -951,9 +954,9 @@ function FontsContent() {
                   marginTop: 4,
                 }}
               >
-                <RNText style={{ fontSize: 13, fontWeight: '600', color: tc.accent.primary }}>
+                <Text style={{ fontSize: 13, fontWeight: '600', color: tc.accent.primary }}>
                   Load More ({(catalogFonts.length - visibleCount).toLocaleString()} remaining)
-                </RNText>
+                </Text>
               </Pressable>
             )}
           </>
@@ -961,20 +964,20 @@ function FontsContent() {
 
         {/* Loading indicator for catalog */}
         {!catalogLoaded && (
-          <View style={{ alignItems: 'center', paddingVertical: 20, gap: 8 }}>
-            <ActivityIndicator size="small" color={tc.text.muted} />
-            <RNText style={{ fontSize: 12, color: tc.text.muted }}>Loading full Google Fonts catalog...</RNText>
-          </View>
+          <Box style={{ alignItems: 'center', paddingVertical: 20, gap: 8 }}>
+            <Spinner size="sm" />
+            <Text style={{ fontSize: 12, color: tc.text.muted }}>Loading full Google Fonts catalog...</Text>
+          </Box>
         )}
 
         {/* Empty state */}
         {filteredFeatured.length === 0 && (catalogLoaded ? catalogFonts.length === 0 : true) && (
-          <View style={{ alignItems: 'center', paddingVertical: 40 }}>
-            <RNText style={{ fontSize: 14, color: tc.text.muted }}>No fonts match your search.</RNText>
-          </View>
+          <Box style={{ alignItems: 'center', paddingVertical: 40 }}>
+            <Text style={{ fontSize: 14, color: tc.text.muted }}>No fonts match your search.</Text>
+          </Box>
         )}
-      </ScrollView>
-    </View>
+      </ScrollArea>
+    </Box>
   );
 }
 
@@ -1003,7 +1006,7 @@ function ThemeCard({
   const [showUninstallConfirm, setShowUninstallConfirm] = useState(false);
 
   return (
-    <View
+    <Box
       style={{
         borderRadius: 10,
         borderWidth: 1,
@@ -1014,9 +1017,9 @@ function ThemeCard({
       }}
     >
       {/* Swatch preview row */}
-      <View style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
+      <Box style={{ flexDirection: 'row', gap: 6, alignItems: 'center' }}>
         {theme.swatches.map((color, i) => (
-          <View
+          <Box
             key={i}
             style={{
               width: 28,
@@ -1028,22 +1031,22 @@ function ThemeCard({
             }}
           />
         ))}
-      </View>
+      </Box>
 
       {/* Theme info + action */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-        <View style={{ flex: 1 }}>
-          <RNText style={{ fontSize: 14, fontWeight: '600', color: tc.text.primary }}>{theme.name}</RNText>
-          <RNText style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }} numberOfLines={2}>
+      <Box style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+        <Box style={{ flex: 1 }}>
+          <Text style={{ fontSize: 14, fontWeight: '600', color: tc.text.primary }}>{theme.name}</Text>
+          <Text style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }} numberOfLines={2}>
             {theme.description}
-          </RNText>
-          <RNText style={{ fontSize: 11, color: tc.text.muted, marginTop: 4 }}>by {theme.author}</RNText>
-        </View>
-        <View style={{ alignItems: 'flex-end', gap: 6 }}>
+          </Text>
+          <Text style={{ fontSize: 11, color: tc.text.muted, marginTop: 4 }}>by {theme.author}</Text>
+        </Box>
+        <Box style={{ alignItems: 'flex-end', gap: 6 }}>
           {isActive ? (
-            <View style={{ paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6, backgroundColor: `${tc.status.success}20` }}>
-              <RNText style={{ fontSize: 11, fontWeight: '600', color: tc.status.success }}>Active</RNText>
-            </View>
+            <Box style={{ paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6, backgroundColor: `${tc.status.success}20` }}>
+              <Text style={{ fontSize: 11, fontWeight: '600', color: tc.status.success }}>Active</Text>
+            </Box>
           ) : isInstalled ? (
             <Button size="xs" variant="secondary" onPress={onActivate}>
               Use Theme
@@ -1058,14 +1061,14 @@ function ThemeCard({
               Install
             </Button>
           )}
-        </View>
-      </View>
+        </Box>
+      </Box>
 
       {/* Uninstall option for installed themes */}
       {isInstalled && !isActive && (
         showUninstallConfirm ? (
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-            <RNText style={{ fontSize: 11, color: tc.status.danger, flex: 1 }}>Remove this theme?</RNText>
+          <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+            <Text style={{ fontSize: 11, color: tc.status.danger, flex: 1 }}>Remove this theme?</Text>
             <Button
               size="xs"
               variant="destructive"
@@ -1079,9 +1082,9 @@ function ThemeCard({
             <Button size="xs" variant="tertiary" onPress={() => setShowUninstallConfirm(false)}>
               Cancel
             </Button>
-          </View>
+          </Box>
         ) : (
-          <View style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
+          <Box style={{ flexDirection: 'row', justifyContent: 'flex-end' }}>
             <Button
               size="xs"
               variant="tertiary"
@@ -1090,10 +1093,10 @@ function ThemeCard({
             >
               Uninstall
             </Button>
-          </View>
+          </Box>
         )
       )}
-    </View>
+    </Box>
   );
 }
 
@@ -1152,19 +1155,19 @@ function ThemesContent() {
   );
 
   return (
-    <View style={{ flex: 1, padding: 20 }}>
+    <Box style={{ flex: 1, padding: 20 }}>
       {/* Header */}
-      <View style={{ marginBottom: 16 }}>
-        <RNText style={{ fontSize: 18, fontWeight: '700', color: tc.text.primary, marginBottom: 4 }}>
+      <Box style={{ marginBottom: 16 }}>
+        <Text style={{ fontSize: 18, fontWeight: '700', color: tc.text.primary, marginBottom: 4 }}>
           Themes
-        </RNText>
-        <RNText style={{ fontSize: 13, color: tc.text.secondary }}>
+        </Text>
+        <Text style={{ fontSize: 13, color: tc.text.secondary }}>
           Customize Umbra with {themes.length} community colour themes. Install your favorites and switch between them anytime.
-        </RNText>
-      </View>
+        </Text>
+      </Box>
 
       {/* Tabs */}
-      <View style={{ flexDirection: 'row', gap: 4, marginBottom: 12 }}>
+      <Box style={{ flexDirection: 'row', gap: 4, marginBottom: 12 }}>
         {(['browse', 'installed'] as const).map((t) => (
           <Pressable
             key={t}
@@ -1176,23 +1179,23 @@ function ThemesContent() {
               backgroundColor: tab === t ? tc.accent.primary : 'transparent',
             }}
           >
-            <RNText
+            <Text
               style={{
                 fontSize: 13,
-                fontWeight: tab === t ? '600' : '400',
                 color: tab === t ? tc.text.onAccent : tc.text.secondary,
               }}
+              weight={tab === t ? 'semibold' : undefined}
             >
               {t === 'browse' ? 'Browse' : `Installed (${installedThemeIds.size})`}
-            </RNText>
+            </Text>
           </Pressable>
         ))}
-      </View>
+      </Box>
 
       {tab === 'browse' ? (
         <>
           {/* Search */}
-          <View style={{ marginBottom: 12 }}>
+          <Box style={{ marginBottom: 12 }}>
             <SearchInput
               value={search}
               onValueChange={setSearch}
@@ -1202,10 +1205,10 @@ function ThemesContent() {
               onClear={() => setSearch('')}
               gradientBorder
             />
-          </View>
+          </Box>
 
           {/* Theme list */}
-          <ScrollView
+          <ScrollArea
             style={{ flex: 1 }}
             showsVerticalScrollIndicator={false}
             contentContainerStyle={{ gap: 10, paddingBottom: 20 }}
@@ -1222,16 +1225,16 @@ function ThemesContent() {
               />
             ))}
             {filteredThemes.length === 0 && (
-              <View style={{ alignItems: 'center', paddingVertical: 40 }}>
-                <RNText style={{ fontSize: 14, color: tc.text.muted }}>
+              <Box style={{ alignItems: 'center', paddingVertical: 40 }}>
+                <Text style={{ fontSize: 14, color: tc.text.muted }}>
                   No themes match your search.
-                </RNText>
-              </View>
+                </Text>
+              </Box>
             )}
-          </ScrollView>
+          </ScrollArea>
         </>
       ) : (
-        <ScrollView
+        <ScrollArea
           style={{ flex: 1 }}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ gap: 10, paddingBottom: 20 }}
@@ -1252,15 +1255,15 @@ function ThemesContent() {
               })}
             >
               <PaletteIcon size={24} color={tc.text.muted} />
-              <RNText style={{ fontSize: 14, fontWeight: '600', color: tc.text.primary }}>
+              <Text style={{ fontSize: 14, fontWeight: '600', color: tc.text.primary }}>
                 No themes installed
-              </RNText>
-              <RNText style={{ fontSize: 12, color: tc.text.secondary, textAlign: 'center' }}>
+              </Text>
+              <Text style={{ fontSize: 12, color: tc.text.secondary, textAlign: 'center' }}>
                 Browse the marketplace to discover and install colour themes.
-              </RNText>
-              <RNText style={{ fontSize: 12, color: tc.accent.primary, fontWeight: '600', marginTop: 4 }}>
+              </Text>
+              <Text style={{ fontSize: 12, color: tc.accent.primary, fontWeight: '600', marginTop: 4 }}>
                 Browse Themes
-              </RNText>
+              </Text>
             </Pressable>
           ) : (
             <>
@@ -1284,18 +1287,18 @@ function ThemesContent() {
                       : tc.background.sunken,
                 })}
               >
-                <View style={{ flex: 1 }}>
-                  <RNText style={{ fontSize: 14, fontWeight: '600', color: tc.text.primary }}>
+                <Box style={{ flex: 1 }}>
+                  <Text style={{ fontSize: 14, fontWeight: '600', color: tc.text.primary }}>
                     Default Theme
-                  </RNText>
-                  <RNText style={{ fontSize: 12, color: tc.text.secondary }}>
+                  </Text>
+                  <Text style={{ fontSize: 12, color: tc.text.secondary }}>
                     Use the standard Umbra colour palette
-                  </RNText>
-                </View>
+                  </Text>
+                </Box>
                 {!activeTheme && (
-                  <View style={{ paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6, backgroundColor: `${tc.status.success}20` }}>
-                    <RNText style={{ fontSize: 11, fontWeight: '600', color: tc.status.success }}>Active</RNText>
-                  </View>
+                  <Box style={{ paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6, backgroundColor: `${tc.status.success}20` }}>
+                    <Text style={{ fontSize: 11, fontWeight: '600', color: tc.status.success }}>Active</Text>
+                  </Box>
                 )}
               </Pressable>
 
@@ -1312,9 +1315,9 @@ function ThemesContent() {
               ))}
             </>
           )}
-        </ScrollView>
+        </ScrollArea>
       )}
-    </View>
+    </Box>
   );
 }
 
@@ -1326,20 +1329,20 @@ function ComingSoonContent({ title, description, icon: Icon, color }: { title: s
   const isDark = mode === 'dark';
 
   return (
-    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40, gap: 16 }}>
-      <View style={{ width: 64, height: 64, borderRadius: 16, backgroundColor: color + '15', alignItems: 'center', justifyContent: 'center' }}>
+    <Box style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40, gap: 16 }}>
+      <Box style={{ width: 64, height: 64, borderRadius: 16, backgroundColor: color + '15', alignItems: 'center', justifyContent: 'center' }}>
         <Icon size={32} color={color} />
-      </View>
-      <RNText style={{ fontSize: 18, fontWeight: '700', color: tc.text.primary, textAlign: 'center' }}>
+      </Box>
+      <Text style={{ fontSize: 18, fontWeight: '700', color: tc.text.primary, textAlign: 'center' }}>
         {title}
-      </RNText>
-      <RNText style={{ fontSize: 13, color: tc.text.secondary, textAlign: 'center', maxWidth: 320, lineHeight: 20 }}>
+      </Text>
+      <Text style={{ fontSize: 13, color: tc.text.secondary, textAlign: 'center', maxWidth: 320, lineHeight: 20 }}>
         {description}
-      </RNText>
-      <View style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, backgroundColor: isDark ? tc.background.raised : tc.background.sunken, borderWidth: isDark ? 0 : 1, borderColor: tc.border.subtle }}>
-        <RNText style={{ fontSize: 12, fontWeight: '600', color: tc.text.muted }}>Coming Soon</RNText>
-      </View>
-    </View>
+      </Text>
+      <Box style={{ paddingHorizontal: 12, paddingVertical: 6, borderRadius: 20, backgroundColor: isDark ? tc.background.raised : tc.background.sunken, borderWidth: isDark ? 0 : 1, borderColor: tc.border.subtle }}>
+        <Text style={{ fontSize: 12, fontWeight: '600', color: tc.text.muted }}>Coming Soon</Text>
+      </Box>
+    </Box>
   );
 }
 
@@ -1455,11 +1458,11 @@ export function PluginMarketplace({ open, onClose }: PluginMarketplaceProps) {
     <>
       {/* Error banner */}
       {error && (
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: isMobile ? 12 : 20, marginTop: 10, padding: 10, borderRadius: 8, backgroundColor: `${tc.status.danger}15` }}>
+        <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginHorizontal: isMobile ? 12 : 20, marginTop: 10, padding: 10, borderRadius: 8, backgroundColor: `${tc.status.danger}15` }}>
           <AlertTriangleIcon size={14} color={tc.status.danger} />
-          <RNText style={{ fontSize: 12, color: tc.status.danger, flex: 1 }}>{error}</RNText>
+          <Text style={{ fontSize: 12, color: tc.status.danger, flex: 1 }}>{error}</Text>
           <Pressable onPress={() => setError(null)} style={{ padding: 2 }}><XIcon size={12} color={tc.status.danger} /></Pressable>
-        </View>
+        </Box>
       )}
 
       {/* Section Content */}
@@ -1475,9 +1478,9 @@ export function PluginMarketplace({ open, onClose }: PluginMarketplaceProps) {
                 onBack={() => setSelectedListing(null)}
               />
             ) : (
-              <View style={{ flex: 1 }}>
+              <Box style={{ flex: 1 }}>
                 {/* Plugin sub-tabs */}
-                <View style={{ flexDirection: 'row', paddingHorizontal: 20, paddingTop: 12, gap: 4 }}>
+                <Box style={{ flexDirection: 'row', paddingHorizontal: 20, paddingTop: 12, gap: 4 }}>
                   {(['browse', 'installed'] as PluginTab[]).map((tab) => (
                     <Pressable
                       key={tab}
@@ -1485,44 +1488,44 @@ export function PluginMarketplace({ open, onClose }: PluginMarketplaceProps) {
                       testID={tab === 'browse' ? TEST_IDS.PLUGINS.TAB_BROWSE : TEST_IDS.PLUGINS.TAB_INSTALLED}
                       style={{ paddingHorizontal: 14, paddingVertical: 7, borderRadius: 6, backgroundColor: pluginTab === tab ? tc.accent.primary : 'transparent' }}
                     >
-                      <RNText style={{ fontSize: 13, fontWeight: pluginTab === tab ? '600' : '400', color: pluginTab === tab ? tc.text.onAccent : tc.text.secondary }}>
+                      <Text style={{ fontSize: 13, fontWeight: pluginTab === tab ? '600' : '400', color: pluginTab === tab ? tc.text.onAccent : tc.text.secondary }}>
                         {tab === 'browse' ? 'Browse' : `Installed (${allPlugins.length})`}
-                      </RNText>
+                      </Text>
                     </Pressable>
                   ))}
-                </View>
+                </Box>
 
                 {pluginTab === 'browse' ? (
-                  <View style={{ flex: 1 }}>
-                    <View style={{ paddingHorizontal: 20, paddingTop: 12, gap: 10 }}>
+                  <Box style={{ flex: 1 }}>
+                    <Box style={{ paddingHorizontal: 20, paddingTop: 12, gap: 10 }}>
                       <SearchInput value={search} onValueChange={setSearch} placeholder="Search plugins..." size="md" fullWidth onClear={() => setSearch('')} testID={TEST_IDS.PLUGINS.SEARCH_INPUT} gradientBorder />
                       {categories.length > 0 && (
                         <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-                          <View style={{ flexDirection: 'row', gap: 6 }}>
+                          <Box style={{ flexDirection: 'row', gap: 6 }}>
                             <Pressable onPress={() => setSelectedCategory(null)} style={{ paddingHorizontal: 10, paddingVertical: 5, borderRadius: 14, backgroundColor: !selectedCategory ? tc.accent.primary : (isDark ? tc.background.raised : tc.background.sunken), borderWidth: !selectedCategory ? 0 : (isDark ? 0 : 1), borderColor: tc.border.subtle }}>
-                              <RNText style={{ fontSize: 12, fontWeight: !selectedCategory ? '600' : '400', color: !selectedCategory ? tc.text.onAccent : tc.text.secondary }}>All</RNText>
+                              <Text style={{ fontSize: 12, color: !selectedCategory ? tc.text.onAccent : tc.text.secondary }} weight={!selectedCategory ? 'semibold' : undefined}>All</Text>
                             </Pressable>
                             {categories.map((cat) => (
                               <Pressable key={cat} onPress={() => setSelectedCategory(selectedCategory === cat ? null : cat)} style={{ paddingHorizontal: 10, paddingVertical: 5, borderRadius: 14, backgroundColor: selectedCategory === cat ? tc.accent.primary : (isDark ? tc.background.raised : tc.background.sunken), borderWidth: selectedCategory === cat ? 0 : (isDark ? 0 : 1), borderColor: tc.border.subtle }}>
-                                <RNText style={{ fontSize: 12, fontWeight: selectedCategory === cat ? '600' : '400', color: selectedCategory === cat ? tc.text.onAccent : tc.text.secondary }}>{cat}</RNText>
+                                <Text style={{ fontSize: 12, color: selectedCategory === cat ? tc.text.onAccent : tc.text.secondary }} weight={selectedCategory === cat ? 'semibold' : undefined}>{cat}</Text>
                               </Pressable>
                             ))}
-                          </View>
+                          </Box>
                         </ScrollView>
                       )}
-                    </View>
-                    <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20, gap: 10 }} showsVerticalScrollIndicator={false}>
+                    </Box>
+                    <ScrollArea style={{ flex: 1 }} contentContainerStyle={{ padding: 20, gap: 10 }} showsVerticalScrollIndicator={false}>
                       {loading ? (
-                        <View style={{ padding: 40, alignItems: 'center' }}>
-                          <ActivityIndicator size="small" color={tc.text.muted} />
-                          <RNText style={{ fontSize: 13, color: tc.text.muted, marginTop: 8 }}>Loading marketplace...</RNText>
-                        </View>
+                        <Box style={{ padding: 40, alignItems: 'center' }}>
+                          <Spinner size="sm" />
+                          <Text style={{ fontSize: 13, color: tc.text.muted, marginTop: 8 }}>Loading marketplace...</Text>
+                        </Box>
                       ) : filteredListings.length === 0 ? (
-                        <View style={{ padding: 40, alignItems: 'center' }}>
+                        <Box style={{ padding: 40, alignItems: 'center' }}>
                           <SearchIcon size={24} color={tc.text.muted} />
-                          <RNText style={{ fontSize: 14, fontWeight: '600', color: tc.text.primary, marginTop: 8 }}>{search || selectedCategory ? 'No plugins found' : 'Marketplace is empty'}</RNText>
-                          <RNText style={{ fontSize: 12, color: tc.text.muted, textAlign: 'center', marginTop: 4 }}>{search || selectedCategory ? 'Try a different search or category.' : 'Check back later for new plugins.'}</RNText>
-                        </View>
+                          <Text style={{ fontSize: 14, fontWeight: '600', color: tc.text.primary, marginTop: 8 }}>{search || selectedCategory ? 'No plugins found' : 'Marketplace is empty'}</Text>
+                          <Text style={{ fontSize: 12, color: tc.text.muted, textAlign: 'center', marginTop: 4 }}>{search || selectedCategory ? 'Try a different search or category.' : 'Check back later for new plugins.'}</Text>
+                        </Box>
                       ) : (
                         filteredListings.map((listing) => {
                           const plugin = registry.getPlugin(listing.id);
@@ -1536,17 +1539,17 @@ export function PluginMarketplace({ open, onClose }: PluginMarketplaceProps) {
                           );
                         })
                       )}
-                    </ScrollView>
-                  </View>
+                    </ScrollArea>
+                  </Box>
                 ) : (
-                  <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: 20, gap: 10 }} showsVerticalScrollIndicator={false}>
+                  <ScrollArea style={{ flex: 1 }} contentContainerStyle={{ padding: 20, gap: 10 }} showsVerticalScrollIndicator={false}>
                     {allPlugins.length === 0 ? (
-                      <View style={{ padding: 40, alignItems: 'center' }}>
+                      <Box style={{ padding: 40, alignItems: 'center' }}>
                         <ZapIcon size={24} color={tc.text.muted} />
-                        <RNText style={{ fontSize: 14, fontWeight: '600', color: tc.text.primary, marginTop: 8 }}>No plugins installed</RNText>
-                        <RNText style={{ fontSize: 12, color: tc.text.muted, textAlign: 'center', marginTop: 4 }}>Browse the marketplace to discover and install plugins.</RNText>
+                        <Text style={{ fontSize: 14, fontWeight: '600', color: tc.text.primary, marginTop: 8 }}>No plugins installed</Text>
+                        <Text style={{ fontSize: 12, color: tc.text.muted, textAlign: 'center', marginTop: 4 }}>Browse the marketplace to discover and install plugins.</Text>
                         <Button size="sm" variant="secondary" onPress={() => setPluginTab('browse')} style={{ marginTop: 12 }}>Browse Marketplace</Button>
-                      </View>
+                      </Box>
                     ) : (
                       allPlugins.map((plugin) => {
                         const listing = listings.find((l) => l.id === plugin.manifest.id);
@@ -1561,24 +1564,24 @@ export function PluginMarketplace({ open, onClose }: PluginMarketplaceProps) {
                       })
                     )}
                     {/* Dev mode: Load from URL */}
-                    <View style={{ marginTop: 12, padding: 14, borderRadius: 10, borderWidth: 1, borderStyle: 'dashed', borderColor: tc.border.subtle, backgroundColor: tc.background.sunken, gap: 10 }}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Box style={{ marginTop: 12, padding: 14, borderRadius: 10, borderWidth: 1, borderStyle: 'dashed', borderColor: tc.border.subtle, backgroundColor: tc.background.sunken, gap: 10 }}>
+                      <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                         <ZapIcon size={14} color={tc.accent.primary} />
-                        <RNText style={{ fontSize: 13, fontWeight: '600', color: tc.text.primary }}>Load Dev Plugin</RNText>
-                      </View>
-                      <RNText style={{ fontSize: 12, color: tc.text.muted }}>Enter a URL to a local plugin bundle for development and testing.</RNText>
-                      <View style={{ flexDirection: 'row', gap: 8 }}>
-                        <View style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 13, fontWeight: '600', color: tc.text.primary }}>Load Dev Plugin</Text>
+                      </Box>
+                      <Text style={{ fontSize: 12, color: tc.text.muted }}>Enter a URL to a local plugin bundle for development and testing.</Text>
+                      <Box style={{ flexDirection: 'row', gap: 8 }}>
+                        <Box style={{ flex: 1 }}>
                           <Input value={devUrl} onChangeText={setDevUrl} placeholder="http://localhost:3099/bundle.js" size="sm" fullWidth gradientBorder />
-                        </View>
+                        </Box>
                         <Button size="sm" variant="secondary" onPress={handleLoadDevPlugin} disabled={!devUrl.trim() || devLoading}>
                           {devLoading ? 'Loading...' : 'Load'}
                         </Button>
-                      </View>
-                    </View>
-                  </ScrollView>
+                      </Box>
+                    </Box>
+                  </ScrollArea>
                 )}
-              </View>
+              </Box>
             )
           ) : activeSection === 'themes' ? (
             <ThemesContent />
@@ -1593,7 +1596,7 @@ export function PluginMarketplace({ open, onClose }: PluginMarketplaceProps) {
   if (isMobile) {
     return (
       <Overlay open={open} backdrop="dim" center onBackdropPress={handleClose} animationType="fade">
-        <View
+        <Box
           testID={TEST_IDS.PLUGINS.MARKETPLACE}
           style={{
             width: windowWidth,
@@ -1603,7 +1606,7 @@ export function PluginMarketplace({ open, onClose }: PluginMarketplaceProps) {
           }}
         >
           {/* ── Mobile Header ── */}
-          <View
+          <Box
             style={{
               flexDirection: 'row',
               alignItems: 'center',
@@ -1616,12 +1619,12 @@ export function PluginMarketplace({ open, onClose }: PluginMarketplaceProps) {
               backgroundColor: isDark ? tc.background.surface : tc.background.sunken,
             }}
           >
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-              <View style={{ width: 28, height: 28, borderRadius: 7, backgroundColor: '#F59E0B', alignItems: 'center', justifyContent: 'center' }}>
+            <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+              <Box style={{ width: 28, height: 28, borderRadius: 7, backgroundColor: '#F59E0B', alignItems: 'center', justifyContent: 'center' }}>
                 <ShoppingBagIcon size={14} color={tc.text.onAccent} />
-              </View>
-              <RNText style={{ fontSize: 16, fontWeight: '700', color: tc.text.primary }}>Marketplace</RNText>
-            </View>
+              </Box>
+              <Text style={{ fontSize: 16, fontWeight: '700', color: tc.text.primary }}>Marketplace</Text>
+            </Box>
             <Pressable
               onPress={handleClose}
               style={{ width: 32, height: 32, borderRadius: 8, alignItems: 'center', justifyContent: 'center' }}
@@ -1629,10 +1632,10 @@ export function PluginMarketplace({ open, onClose }: PluginMarketplaceProps) {
             >
               <XIcon size={18} color={tc.text.secondary} />
             </Pressable>
-          </View>
+          </Box>
 
           {/* ── Horizontal Section Picker ── */}
-          <View
+          <Box
             style={{
               flexDirection: 'row',
               borderBottomWidth: 1,
@@ -1675,26 +1678,26 @@ export function PluginMarketplace({ open, onClose }: PluginMarketplaceProps) {
                   >
                     <Icon size={11} color="#FFF" />
                   </LinearGradient>
-                  <RNText
+                  <Text
                     style={{
                       fontSize: 12,
-                      fontWeight: isActive ? '600' : '400',
                       color: isActive ? tc.text.onAccent : tc.text.secondary,
                     }}
+                    weight={isActive ? 'semibold' : undefined}
                     numberOfLines={1}
                   >
                     {sec.label}
-                  </RNText>
+                  </Text>
                 </Pressable>
               );
             })}
-          </View>
+          </Box>
 
           {/* ── Content ── */}
-          <View style={{ flex: 1, paddingBottom: safeInsets.bottom }}>
+          <Box style={{ flex: 1, paddingBottom: safeInsets.bottom }}>
             {renderSectionContent()}
-          </View>
-        </View>
+          </Box>
+        </Box>
       </Overlay>
     );
   }
@@ -1714,7 +1717,7 @@ export function PluginMarketplace({ open, onClose }: PluginMarketplaceProps) {
         WebkitBackdropFilter: 'blur(2px)',
       } as any : undefined}
     >
-      <View
+      <Box
         testID={TEST_IDS.PLUGINS.MARKETPLACE}
         style={{
           width: 860, maxWidth: '95%', height: 600, maxHeight: '90%',
@@ -1731,7 +1734,7 @@ export function PluginMarketplace({ open, onClose }: PluginMarketplaceProps) {
         }}
       >
         {/* ── Left Sidebar ── */}
-        <View
+        <Box
           style={{
             width: 210,
             backgroundColor: isDark
@@ -1743,15 +1746,15 @@ export function PluginMarketplace({ open, onClose }: PluginMarketplaceProps) {
           }}
         >
           {/* Title */}
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 8, marginBottom: 16 }}>
-            <View style={{ width: 30, height: 30, borderRadius: 8, backgroundColor: '#F59E0B', alignItems: 'center', justifyContent: 'center' }}>
+          <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 8, marginBottom: 16 }}>
+            <Box style={{ width: 30, height: 30, borderRadius: 8, backgroundColor: '#F59E0B', alignItems: 'center', justifyContent: 'center' }}>
               <ShoppingBagIcon size={16} color={tc.text.onAccent} />
-            </View>
-            <RNText style={{ fontSize: 15, fontWeight: '700', color: tc.text.primary }}>Marketplace</RNText>
-          </View>
+            </Box>
+            <Text style={{ fontSize: 15, fontWeight: '700', color: tc.text.primary }}>Marketplace</Text>
+          </Box>
 
           {/* Section List */}
-          <ScrollView showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
+          <ScrollArea showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
             {SECTIONS.map((sec) => {
               const isActive = activeSection === sec.id;
               const Icon = sec.icon;
@@ -1774,29 +1777,29 @@ export function PluginMarketplace({ open, onClose }: PluginMarketplaceProps) {
                   >
                     <Icon size={13} color="#FFF" />
                   </LinearGradient>
-                  <RNText style={{ fontSize: 13, fontWeight: isActive ? '600' : '400', color: isActive ? tc.text.onAccent : tc.text.secondary, flex: 1 }} numberOfLines={1}>
+                  <Text style={{ fontSize: 13, fontWeight: isActive ? '600' : '400', color: isActive ? tc.text.onAccent : tc.text.secondary, flex: 1 }} numberOfLines={1}>
                     {sec.label}
-                  </RNText>
+                  </Text>
                   {sec.id === 'plugins' && allPlugins.length > 0 && (
-                    <View style={{ paddingHorizontal: 6, paddingVertical: 1, borderRadius: 8, backgroundColor: isActive ? 'rgba(255,255,255,0.2)' : tc.accent.highlight }}>
-                      <RNText style={{ fontSize: 10, fontWeight: '600', color: isActive ? tc.text.onAccent : tc.text.muted }}>{allPlugins.length}</RNText>
-                    </View>
+                    <Box style={{ paddingHorizontal: 6, paddingVertical: 1, borderRadius: 8, backgroundColor: isActive ? 'rgba(255,255,255,0.2)' : tc.accent.highlight }}>
+                      <Text style={{ fontSize: 10, fontWeight: '600', color: isActive ? tc.text.onAccent : tc.text.muted }}>{allPlugins.length}</Text>
+                    </Box>
                   )}
                 </Pressable>
               );
             })}
-          </ScrollView>
+          </ScrollArea>
 
           {/* Footer */}
-          <RNText style={{ fontSize: 11, color: tc.text.muted, textAlign: 'center', marginTop: 12 }}>
+          <Text style={{ fontSize: 11, color: tc.text.muted, textAlign: 'center', marginTop: 12 }}>
             Umbra Marketplace
-          </RNText>
-        </View>
+          </Text>
+        </Box>
 
         {/* ── Right Content ── */}
-        <View style={{ flex: 1 }}>
+        <Box style={{ flex: 1 }}>
           {/* Section Header */}
-          <View
+          <Box
             style={{
               flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
               paddingHorizontal: 28, paddingVertical: 16,
@@ -1804,7 +1807,7 @@ export function PluginMarketplace({ open, onClose }: PluginMarketplaceProps) {
               borderBottomColor: tc.border.subtle,
             }}
           >
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+            <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
               <LinearGradient
                 colors={[activeSectionInfo.color, activeSectionInfo.secondaryColor]}
                 start={{ x: 0, y: 0 }}
@@ -1813,16 +1816,16 @@ export function PluginMarketplace({ open, onClose }: PluginMarketplaceProps) {
               >
                 <activeSectionInfo.icon size={18} color="#FFF" />
               </LinearGradient>
-              <RNText style={{ fontSize: 18, fontWeight: '700', color: tc.text.primary }}>{activeSectionInfo.label}</RNText>
-            </View>
+              <Text style={{ fontSize: 18, fontWeight: '700', color: tc.text.primary }}>{activeSectionInfo.label}</Text>
+            </Box>
             <Pressable onPress={handleClose} style={{ width: 28, height: 28, borderRadius: 6, alignItems: 'center', justifyContent: 'center' }} accessibilityLabel="Close marketplace">
               <XIcon size={16} color={tc.text.secondary} />
             </Pressable>
-          </View>
+          </Box>
 
           {renderSectionContent()}
-        </View>
-      </View>
+        </Box>
+      </Box>
     </Overlay>
   );
 }
