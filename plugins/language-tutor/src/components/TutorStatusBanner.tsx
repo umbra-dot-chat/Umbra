@@ -6,11 +6,13 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { View, Text, Pressable, Platform } from 'react-native';
+import { Box, Text, useTheme } from '@coexist/wisp-react-native';
 import { LANGUAGES, getCefrLevel } from '../constants';
 import { subscribe, tutorActive, targetLanguage, currentScore } from '../state';
 
 export function TutorStatusBanner() {
+  const { theme } = useTheme();
+  const tc = theme.colors;
   const [, setTick] = useState(0);
 
   // Subscribe to state changes for reactivity
@@ -27,63 +29,55 @@ export function TutorStatusBanner() {
   const { level, label } = getCefrLevel(currentScore);
 
   return (
-    <View
+    <Box
       style={{
         flexDirection: 'row',
         alignItems: 'center',
         paddingHorizontal: 16,
         paddingVertical: 8,
-        backgroundColor: 'rgba(139, 92, 246, 0.08)',
+        backgroundColor: tc.brand.surface,
         borderBottomWidth: 1,
-        borderBottomColor: 'rgba(139, 92, 246, 0.15)',
+        borderBottomColor: tc.brand.border,
         gap: 8,
       }}
     >
       <Text style={{ fontSize: 18 }}>{lang.flag}</Text>
       <Text
-        style={{
-          fontSize: 13,
-          fontWeight: '600',
-          color: '#a78bfa',
-        }}
+        size="sm"
+        weight="semibold"
+        style={{ color: tc.brand.primary }}
       >
         {lang.name}
       </Text>
-      <View
+      <Box
         style={{
           paddingHorizontal: 6,
           paddingVertical: 2,
           borderRadius: 4,
-          backgroundColor: 'rgba(139, 92, 246, 0.15)',
+          backgroundColor: tc.brand.surface,
         }}
       >
         <Text
-          style={{
-            fontSize: 11,
-            fontWeight: '700',
-            color: '#a78bfa',
-          }}
+          size="xs"
+          weight="bold"
+          style={{ color: tc.brand.primary }}
         >
           {level}
         </Text>
-      </View>
+      </Box>
       <Text
-        style={{
-          fontSize: 12,
-          color: 'rgba(167, 139, 250, 0.7)',
-        }}
+        size="xs"
+        style={{ color: tc.text.secondary }}
       >
         {label}
       </Text>
-      <View style={{ flex: 1 }} />
+      <Box style={{ flex: 1 }} />
       <Text
-        style={{
-          fontSize: 11,
-          color: 'rgba(167, 139, 250, 0.5)',
-        }}
+        size="xs"
+        style={{ color: tc.text.muted }}
       >
         Score: {Math.round(currentScore)}
       </Text>
-    </View>
+    </Box>
   );
 }
