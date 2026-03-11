@@ -1,0 +1,1 @@
+const W = globalThis.WispRN ?? {}; export default W; export const { Box, Text, HStack, VStack, Button, Divider, Separator, useTheme, Card, Stack, Badge, Input } = W;
