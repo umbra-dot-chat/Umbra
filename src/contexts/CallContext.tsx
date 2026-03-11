@@ -496,6 +496,15 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
   const endCall = useCallback((reason: CallEndReason = 'completed') => {
     if (!activeCall) return;
 
+    // Capture call metadata before cleanup destroys state
+    const meta = {
+      conversationId: activeCall.conversationId,
+      callType: activeCall.callType,
+      connectedAt: activeCall.connectedAt,
+      endedAt: Date.now(),
+      reason,
+    };
+
     const endPayload: CallEndPayload = {
       callId: activeCall.callId,
       senderDid: myDid,
@@ -504,7 +513,24 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     sendSignal(activeCall.remoteDid, JSON.stringify(endPayload), 'call_end');
     playSound('call_leave');
     cleanup();
-  }, [activeCall, myDid, sendSignal, cleanup, playSound]);
+
+    // Send call event message so it appears in chat history (fire-and-forget)
+    const durationSec = meta.connectedAt
+      ? Math.floor((meta.endedAt - meta.connectedAt) / 1000)
+      : 0;
+    const statusMap: Record<string, string> = {
+      completed: 'completed', declined: 'declined', timeout: 'missed',
+      busy: 'missed', failed: 'missed', cancelled: 'cancelled',
+    };
+    const displayStatus = statusMap[meta.reason] ?? 'missed';
+    const eventText = `[call:${meta.callType}:${displayStatus}:${durationSec}]`;
+    if (service) {
+      const relayWs = service.getRelayWs();
+      service.sendMessage(meta.conversationId, eventText, relayWs)
+        .then((msg) => service.dispatchMessageEvent({ type: 'messageSent', message: msg }))
+        .catch((err) => console.warn('[CallContext] Failed to send call event:', err));
+    }
+  }, [activeCall, myDid, sendSignal, cleanup, playSound, service]);
 
   // ── Toggle Mute ──────────────────────────────────────────────────────────
 
