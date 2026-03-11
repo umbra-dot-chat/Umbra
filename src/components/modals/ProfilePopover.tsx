@@ -5,9 +5,9 @@
  */
 
 import React from 'react';
-import { Pressable, View, Dimensions, Platform } from 'react-native';
+import { Pressable, Dimensions, Platform } from 'react-native';
 import type { ViewStyle } from 'react-native';
-import { Avatar, useTheme, UserProfileCard } from '@coexist/wisp-react-native';
+import { Avatar, Box, useTheme, UserProfileCard } from '@coexist/wisp-react-native';
 import type { ProfileMember } from '@/hooks/useProfilePopover';
 
 export interface ProfilePopoverProps {
@@ -39,7 +39,13 @@ export function ProfilePopover({ selectedMember, anchor, onClose }: ProfilePopov
     width: cardWidth,
     borderRadius: 12,
     overflow: 'hidden',
-    ...(Platform.OS === 'web' ? { boxShadow: '0 8px 32px rgba(0,0,0,0.25)' } as any : {}),
+    ...(Platform.OS === 'web' ? { boxShadow: `0 8px 32px ${tc.background.overlay}` } as any : {
+      shadowColor: tc.background.overlay,
+      shadowOffset: { width: 0, height: 8 },
+      shadowOpacity: 1,
+      shadowRadius: 32,
+      elevation: 8,
+    }),
   };
 
   return (
@@ -57,7 +63,7 @@ export function ProfilePopover({ selectedMember, anchor, onClose }: ProfilePopov
       />
 
       {/* Profile card */}
-      <View style={wrapperStyle} testID="UserProfileCard">
+      <Box style={wrapperStyle} testID="UserProfileCard">
         <UserProfileCard
           name={selectedMember.name}
           username={`@${selectedMember.name.toLowerCase().replace(/\s/g, '')}`}
@@ -69,7 +75,7 @@ export function ProfilePopover({ selectedMember, anchor, onClose }: ProfilePopov
             { id: 'message', label: 'Message' },
           ]}
         />
-      </View>
+      </Box>
     </>
   );
 }
