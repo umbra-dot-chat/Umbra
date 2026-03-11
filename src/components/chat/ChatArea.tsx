@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Platform, ScrollView, View, Pressable, Text as RNText, Animated as RNAnimated } from 'react-native';
+import { Platform, ScrollView, View, Animated as RNAnimated } from 'react-native';
 import { TEST_IDS } from '@/constants/test-ids';
 import {
-  Avatar, ChatBubble, Text, TypingIndicator, NewMessageDivider, useTheme,
+  Avatar, Box, Button, ChatBubble, Text, TypingIndicator, NewMessageDivider, useTheme,
 } from '@coexist/wisp-react-native';
 import { SmileIcon, ReplyIcon, ThreadIcon, MoreIcon } from '@/components/ui';
 import { HoverBubble } from './HoverBubble';
@@ -14,6 +14,8 @@ import { usePlugins } from '@/contexts/PluginContext';
 import { useMessaging } from '@/contexts/MessagingContext';
 import { parseMessageContent, buildEmojiMap, isEmojiOnlyMessage, type EmojiMap } from '@/utils/parseMessageContent';
 import type { Message, CommunityEmoji } from '@umbra/service';
+import type { ActiveCall } from '@/types/call';
+import { InlineCallCardMessage } from '@/components/call/InlineCallCardMessage';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -65,6 +67,17 @@ export interface ChatAreaProps {
   scrollToMessageId?: string | null;
   /** Called after the scroll-to animation completes (to reset the ID). */
   onScrollToComplete?: () => void;
+  // ── Call event props ──
+  /** Active call to render as interactive card at the bottom of the stream. */
+  activeCall?: ActiveCall | null;
+  /** Whether the active call is a group call. */
+  isGroupCall?: boolean;
+  /** Accept/join an incoming call. */
+  onAcceptCall?: () => void;
+  /** End/decline the current call. */
+  onEndCall?: (reason?: string) => void;
+  /** Initiate a call-back from a historical call event. */
+  onCallBack?: (callType: 'voice' | 'video') => void;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -266,25 +279,25 @@ function groupMessages(messages: Message[]): Message[][] {
 function EmptyMessages() {
   const { theme } = useTheme();
   return (
-    <View testID={TEST_IDS.CHAT_AREA.EMPTY_STATE} style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40 }}>
+    <Box testID={TEST_IDS.CHAT_AREA.EMPTY_STATE} style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40 }}>
       <Text size="xl" weight="bold" style={{ color: theme.colors.text.primary, marginBottom: 8 }}>
         No messages yet
       </Text>
       <Text size="sm" style={{ color: theme.colors.text.muted, textAlign: 'center' }}>
         Send a message to start the conversation.
       </Text>
-    </View>
+    </Box>
   );
 }
 
 function LoadingSkeleton() {
   const { theme } = useTheme();
   return (
-    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40 }}>
+    <Box style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40 }}>
       <Text size="sm" style={{ color: theme.colors.text.muted }}>
         Loading messages...
       </Text>
-    </View>
+    </Box>
   );
 }
 
@@ -305,6 +318,11 @@ export function ChatArea({
   activeUploads,
   scrollToMessageId,
   onScrollToComplete,
+  activeCall,
+  isGroupCall,
+  onAcceptCall,
+  onEndCall,
+  onCallBack,
 }: ChatAreaProps) {
   const { theme } = useTheme();
   const themeColors = theme.colors;
@@ -481,9 +499,9 @@ export function ChatArea({
       {stickyHeader}
 
       {/* Date divider */}
-      <View style={{ alignItems: 'center', paddingVertical: 8 }}>
+      <Box style={{ alignItems: 'center', paddingVertical: 8 }}>
         <Text size="xs" style={{ color: themeColors.text.muted }}>Today</Text>
-      </View>
+      </Box>
 
       {groups.map((group, groupIdx) => {
         const firstMsg = group[0];
@@ -506,7 +524,7 @@ export function ChatArea({
           const icon = parsed?.callType === 'video' ? '\uD83D\uDCF9' : '\uD83D\uDCDE';
 
           return (
-            <View
+            <Box
               key={`group-${groupIdx}`}
               style={{
                 alignItems: 'center',
@@ -516,7 +534,7 @@ export function ChatArea({
               {showUnreadDivider && (
                 <NewMessageDivider style={{ marginBottom: 8, alignSelf: 'stretch' }} />
               )}
-              <View
+              <Box
                 style={{
                   flexDirection: 'row',
                   alignItems: 'center',
@@ -527,28 +545,28 @@ export function ChatArea({
                   backgroundColor: themeColors.background.surface ?? themeColors.background.sunken,
                 }}
               >
-                <RNText style={{ fontSize: 12 }}>{icon}</RNText>
-                <RNText
+                <Text size="xs">{icon}</Text>
+                <Text
+                  size="xs"
+                  weight="medium"
                   style={{
-                    fontSize: 12,
                     color: themeColors.text.muted,
-                    fontWeight: '500',
                   }}
                 >
                   {displayText}
-                </RNText>
-                <RNText
+                </Text>
+                <Text
+                  size="xs"
                   style={{
-                    fontSize: 11,
                     color: themeColors.text.muted,
                     opacity: 0.7,
                     marginLeft: 4,
                   }}
                 >
                   {timeStr}
-                </RNText>
-              </View>
-            </View>
+                </Text>
+              </Box>
+            </Box>
           );
         }
 
@@ -618,9 +636,9 @@ export function ChatArea({
                   message={{ id: msg.id, text, conversationId: msg.conversationId, senderDid: msg.senderDid }}
                 >
                   {inlineMode ? (
-                    <View style={{ paddingVertical: 2 }}>
+                    <Box style={{ paddingVertical: 2 }}>
                       {replyTo && (
-                        <View
+                        <Box
                           style={{
                             borderLeftWidth: 2,
                             borderLeftColor: themeColors.accent.primary,
@@ -629,10 +647,10 @@ export function ChatArea({
                             opacity: 0.7,
                           }}
                         >
-                          <RNText style={{ fontSize: 11, color: themeColors.text.muted }}>
+                          <Text size="xs" style={{ color: themeColors.text.muted }}>
                             {replyTo.sender}: {replyTo.text}
-                          </RNText>
-                        </View>
+                          </Text>
+                        </Box>
                       )}
                       {fileInfo ? (() => {
                         const upload = isOwn ? activeUploads?.get(fileInfo.fileId) : undefined;
@@ -654,16 +672,16 @@ export function ChatArea({
                           />
                         );
                       })() : typeof displayContent === 'string' ? (
-                        <RNText style={{ fontSize: 14, color: themeColors.text.primary, lineHeight: 20 }}>
+                        <Text size="sm" style={{ color: themeColors.text.primary, lineHeight: 20 }}>
                           {displayContent}
-                        </RNText>
+                        </Text>
                       ) : (
-                        <View style={{ minHeight: 20 }}>{displayContent}</View>
+                        <Box style={{ minHeight: 20 }}>{displayContent}</Box>
                       )}
                       {msg.edited && (
-                        <RNText style={{ fontSize: 10, color: themeColors.text.muted }}>(edited)</RNText>
+                        <Text size="xs" style={{ color: themeColors.text.muted }}>(edited)</Text>
                       )}
-                    </View>
+                    </Box>
                   ) : (
                     <ChatBubble
                       align={isOwn ? 'outgoing' : 'incoming'}
@@ -703,27 +721,20 @@ export function ChatArea({
                   props={{ message: msg, conversationId: msg.conversationId }}
                 />
                 {threadCount > 0 && (
-                  <Pressable
+                  <Button
+                    variant="tertiary"
+                    size="xs"
                     onPress={() => onOpenThread({ id: msg.id, sender: name, content: text, timestamp: time })}
+                    iconLeft={<ThreadIcon size={12} color={themeColors.accent.primary} />}
                     style={{
-                      flexDirection: 'row',
-                      alignItems: 'flex-start',
                       alignSelf: 'flex-start',
-                      paddingHorizontal: 8,
-                      paddingVertical: 3,
                       marginTop: 2,
-                      gap: 4,
                     }}
                   >
-                    <ThreadIcon size={12} color={themeColors.accent.primary} />
-                    <RNText style={{
-                      fontSize: 11,
-                      fontWeight: '600',
-                      color: themeColors.accent.primary,
-                    }}>
+                    <Text size="xs" weight="semibold" style={{ color: themeColors.accent.primary }}>
                       {threadCount} {threadCount === 1 ? 'reply' : 'replies'}
-                    </RNText>
-                  </Pressable>
+                    </Text>
+                  </Button>
                 )}
               </RNAnimated.View>
             );
@@ -772,6 +783,16 @@ export function ChatArea({
           </React.Fragment>
         );
       })}
+
+      {/* Active call card — rendered at the bottom of the message stream */}
+      {activeCall && (
+        <InlineCallCardMessage
+          activeCall={activeCall}
+          isGroup={isGroupCall}
+          onAccept={onAcceptCall}
+          onEnd={onEndCall}
+        />
+      )}
 
       {/* Typing indicator */}
       {typingUser && (
