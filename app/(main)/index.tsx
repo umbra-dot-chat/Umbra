@@ -227,7 +227,7 @@ export default function ChatPage() {
   }, [searchPanelRequested, clearSearchPanelRequest, rightPanel, togglePanel]);
   const { showProfile } = useProfilePopoverContext();
   const {
-    activeCall, startCall, toggleMute, toggleCamera, endCall,
+    activeCall, startCall, toggleMute, toggleDeafen, toggleCamera, endCall,
     videoQuality, audioQuality, setVideoQuality, setAudioQuality,
     switchCamera, callStats, ghostMetadata,
     isScreenSharing, startScreenShare, stopScreenShare, screenShareStream,
@@ -580,6 +580,7 @@ export default function ChatPage() {
             isScreenSharing={isScreenSharing}
             screenShareStream={screenShareStream}
             onToggleMute={toggleMute}
+            onToggleDeafen={toggleDeafen}
             onToggleCamera={toggleCamera}
             onToggleScreenShare={isScreenSharing ? stopScreenShare : startScreenShare}
             onEndCall={() => endCall()}

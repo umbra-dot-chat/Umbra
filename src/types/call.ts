@@ -125,6 +125,7 @@ export interface CallParticipant {
   displayName: string;
   stream: MediaStream | null;
   isMuted: boolean;
+  isDeafened: boolean;
   isCameraOff: boolean;
   isSpeaking: boolean;
   isScreenSharing: boolean;
@@ -160,6 +161,8 @@ export interface ActiveCall {
   remoteStream: MediaStream | null;
   /** Whether local mic is muted */
   isMuted: boolean;
+  /** Whether local audio output is deafened (can't hear others) */
+  isDeafened: boolean;
   /** Whether local camera is off */
   isCameraOff: boolean;
   /** All call participants keyed by DID (source of truth going forward) */

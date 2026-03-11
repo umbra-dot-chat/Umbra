@@ -19,9 +19,11 @@ import { useAppTheme } from '@/contexts/ThemeContext';
 
 export interface CallControlsOverlayProps {
   isMuted: boolean;
+  isDeafened: boolean;
   isCameraOff: boolean;
   isScreenSharing: boolean;
   onToggleMute: () => void;
+  onToggleDeafen: () => void;
   onToggleCamera: () => void;
   onToggleScreenShare: () => void;
   onEndCall: () => void;
@@ -68,9 +70,11 @@ function injectCallControlsCSS() {
 
 export function CallControlsOverlay({
   isMuted,
+  isDeafened,
   isCameraOff,
   isScreenSharing,
   onToggleMute,
+  onToggleDeafen,
   onToggleCamera,
   onToggleScreenShare,
   onEndCall,
@@ -161,11 +165,11 @@ export function CallControlsOverlay({
             isMuted={isMuted}
             isVideoOff={isCameraOff}
             isScreenSharing={isScreenSharing}
-            isSpeakerOn
+            isSpeakerOn={!isDeafened}
             onToggleMute={onToggleMute}
             onToggleVideo={onToggleCamera}
             onToggleScreenShare={onToggleScreenShare}
-            onToggleSpeaker={() => {}}
+            onToggleSpeaker={onToggleDeafen}
             onEndCall={onEndCall}
             callType="video"
             layout="compact"

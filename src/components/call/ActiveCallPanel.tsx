@@ -29,6 +29,7 @@ interface ActiveCallPanelProps {
   isScreenSharing: boolean;
   screenShareStream: MediaStream | null;
   onToggleMute: () => void;
+  onToggleDeafen: () => void;
   onToggleCamera: () => void;
   onToggleScreenShare: () => void;
   onEndCall: () => void;
@@ -48,6 +49,7 @@ export function ActiveCallPanel({
   isScreenSharing,
   screenShareStream,
   onToggleMute,
+  onToggleDeafen,
   onToggleCamera,
   onToggleScreenShare,
   onEndCall,
@@ -76,6 +78,10 @@ export function ActiveCallPanel({
     participantList.some((p) => p.isScreenSharing);
   const [screenTab, setScreenTab] = useState<string>('screen');
 
+  // Are we showing the self-sizing video grid (vs screen-share or voice-only)?
+  const showingScreenShare = anyScreenSharing && screenTab === 'screen' && !!screenShareStream;
+  const showingVideoGrid = hasVideo && !showingScreenShare;
+
   // Default to "screen" tab when screen sharing starts
   useEffect(() => {
     if (anyScreenSharing) setScreenTab('screen');
@@ -89,7 +95,7 @@ export function ActiveCallPanel({
   return (
     <View
       style={{
-        height: maxHeight,
+        maxHeight,
         overflow: 'hidden',
         position: 'relative',
         zIndex: 10,
@@ -98,8 +104,14 @@ export function ActiveCallPanel({
     >
       <SlotRenderer slot="voice-call-header" />
 
-      {/* Main call area */}
-      <View style={{ flex: 1, position: 'relative' }}>
+      {/* Main call area — position:relative anchors the absolute overlays.
+           When showing the video grid, let the grid's computed height drive
+           the wrapper size (no flex:1). For screen-share and voice-only modes,
+           use flex:1 so content can expand into the maxHeight. */}
+      <View style={{
+        ...(showingVideoGrid ? { flexShrink: 1 } : { flex: 1 }),
+        position: 'relative',
+      }}>
         {/* Screen share tab bar */}
         {anyScreenSharing && hasVideo && (
           <View style={{ paddingHorizontal: 12, paddingTop: 8, zIndex: 20 }} accessibilityRole="tablist" accessibilityLabel="Screen share view">
@@ -133,6 +145,7 @@ export function ActiveCallPanel({
               localDid={localDid}
               activeSpeakerDid={activeSpeakerDid}
               speakingDids={speakingDids}
+              maxHeight={maxHeight}
             />
           )
         ) : (
@@ -164,9 +177,11 @@ export function ActiveCallPanel({
         {/* Controls overlay */}
         <CallControlsOverlay
           isMuted={activeCall.isMuted}
+          isDeafened={activeCall.isDeafened}
           isCameraOff={activeCall.isCameraOff}
           isScreenSharing={isScreenSharing}
           onToggleMute={onToggleMute}
+          onToggleDeafen={onToggleDeafen}
           onToggleCamera={onToggleCamera}
           onToggleScreenShare={onToggleScreenShare}
           onEndCall={onEndCall}

@@ -47,6 +47,8 @@ interface CallContextValue {
   endCall: (reason?: CallEndReason) => void;
   /** Toggle mic mute */
   toggleMute: () => void;
+  /** Toggle deafen (mute incoming audio) */
+  toggleDeafen: () => void;
   /** Toggle camera */
   toggleCamera: () => void;
   /** Current video quality */
@@ -185,7 +187,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
   const makeParticipant = useCallback((
     did: string, displayName: string, stream: MediaStream | null, isCameraOff: boolean,
   ): CallParticipant => ({
-    did, displayName, stream, isMuted: false, isCameraOff, isSpeaking: false, isScreenSharing: false,
+    did, displayName, stream, isMuted: false, isDeafened: false, isCameraOff, isSpeaking: false, isScreenSharing: false,
   }), []);
 
   // Track whether WASM signal encryption is available
@@ -367,6 +369,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
         localStream,
         remoteStream: null,
         isMuted: false,
+        isDeafened: false,
         isCameraOff: !isVideo,
         participants,
         selfViewVisible: true,
@@ -511,6 +514,52 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       };
       sendSignal(activeCall.remoteDid, JSON.stringify(statePayload), 'call_state');
     }
+  }, [activeCall, myDid, sendSignal, playSound]);
+
+  // ── Toggle Deafen ───────────────────────────────────────────────────────
+
+  const toggleDeafen = useCallback(() => {
+    const manager = callManagerRef.current;
+    if (!manager) return;
+
+    setActiveCall((prev) => {
+      if (!prev) return prev;
+      const nextDeafened = !prev.isDeafened;
+
+      // When deafening, mute all incoming audio tracks
+      if (prev.remoteStream) {
+        prev.remoteStream.getAudioTracks().forEach((track) => {
+          track.enabled = !nextDeafened;
+        });
+      }
+
+      // When deafening, also mute mic if not already muted
+      let nextMuted = prev.isMuted;
+      if (nextDeafened && !prev.isMuted) {
+        manager.toggleMute();
+        nextMuted = true;
+
+        // Notify remote about mic mute
+        if (activeCall) {
+          const statePayload: CallStatePayload = {
+            callId: activeCall.callId,
+            senderDid: myDid,
+            isMuted: true,
+          };
+          sendSignal(activeCall.remoteDid, JSON.stringify(statePayload), 'call_state');
+        }
+      }
+
+      // Update local participant
+      const updatedParticipants = new Map(prev.participants);
+      const local = updatedParticipants.get(myDid);
+      if (local) {
+        updatedParticipants.set(myDid, { ...local, isDeafened: nextDeafened, isMuted: nextMuted });
+      }
+
+      playSound(nextDeafened ? 'call_mute' : 'call_unmute');
+      return { ...prev, isDeafened: nextDeafened, isMuted: nextMuted, participants: updatedParticipants };
+    });
   }, [activeCall, myDid, sendSignal, playSound]);
 
   // ── Toggle Camera ────────────────────────────────────────────────────────
@@ -992,6 +1041,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
             localStream: null,
             remoteStream: null,
             isMuted: false,
+            isDeafened: false,
             isCameraOff: payload.callType === 'voice',
             participants: incomingParticipants,
             selfViewVisible: true,
@@ -1153,6 +1203,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     acceptCall,
     endCall,
     toggleMute,
+    toggleDeafen,
     toggleCamera,
     videoQuality,
     audioQuality,
