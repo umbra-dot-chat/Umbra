@@ -14,6 +14,7 @@ import type { WispIdentity } from './identity-store.js';
 import type { WispPersona } from './personas.js';
 import { type ChatMessage, type WispLLMClient } from './llm-client.js';
 import { buildWispSystemPrompt, buildContextMessage } from './wisp-prompts.js';
+import { WispCallHandler } from './calls/call-handler.js';
 
 export interface WispFriend {
   did: string;
@@ -36,6 +37,7 @@ export class Wisp {
   readonly persona: WispPersona;
   private relay: RelayClient;
   private llm: WispLLMClient;
+  private callHandler: WispCallHandler;
   private friends: Map<string, WispFriend> = new Map();
   private groups: Map<string, WispGroup> = new Map();
   private conversationHistory: Map<string, ChatMessage[]> = new Map();
@@ -56,6 +58,7 @@ export class Wisp {
     this.allPersonaNames = allPersonaNames;
     this.systemPrompt = buildWispSystemPrompt(persona, allPersonaNames);
     this.relay = new RelayClient(relayUrl, identity.did);
+    this.callHandler = new WispCallHandler(identity, this.relay, persona.name);
   }
 
   get running() { return this._running; }
@@ -74,6 +77,7 @@ export class Wisp {
 
   stop(): void {
     this._running = false;
+    this.callHandler.cleanup();
     this.relay.disconnect();
   }
 
@@ -250,10 +254,15 @@ export class Wisp {
           this.handleGroupMessage(envelope.payload);
           break;
         case 'call_offer':
-          this.handleCallOffer(envelope.payload);
+          void this.callHandler.handleOffer(envelope.payload);
+          break;
+        case 'call_answer':
+          break; // Wisps don't initiate calls yet
+        case 'call_ice_candidate':
+          this.callHandler.handleIceCandidate(envelope.payload);
           break;
         case 'call_end':
-          this.handleCallEnd(envelope.payload);
+          this.callHandler.handleEnd(envelope.payload);
           break;
       }
     } catch { /* ignore parse errors */ }
@@ -376,27 +385,4 @@ export class Wisp {
     }
   }
 
-  // -- Call Signaling (v1: stub, no real WebRTC) --
-
-  private handleCallOffer(p: {
-    callId: string; sdp: string; callType: string;
-    senderDid: string; conversationId: string;
-  }): void {
-    console.log(`[${this.persona.name}] Incoming ${p.callType} call from ${p.senderDid.slice(0, 20)}...`);
-    // v1: auto-end after 3s (simulates brief answer then hangup)
-    setTimeout(() => {
-      this.relay.sendEnvelope(p.senderDid, {
-        envelope: 'call_end', version: 1,
-        payload: {
-          callId: p.callId, reason: 'completed',
-          endedBy: this.identity.did, timestamp: Date.now(),
-        },
-      });
-      console.log(`[${this.persona.name}] Ended call ${p.callId.slice(0, 12)}...`);
-    }, 3000);
-  }
-
-  private handleCallEnd(p: { callId: string; reason: string }): void {
-    console.log(`[${this.persona.name}] Call ${p.callId.slice(0, 12)}... ended: ${p.reason}`);
-  }
 }
