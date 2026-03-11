@@ -7,6 +7,7 @@
 
 import type { WispIdentity } from '../identity-store.js';
 import type { RelayClient } from '../relay-client.js';
+import { AudioSignalGenerator, VideoSignalGenerator, VIDEO_WIDTH, VIDEO_HEIGHT, VIDEO_FPS } from './test-signals.js';
 
 export interface ActiveWispCall {
   callId: string;
@@ -56,6 +57,88 @@ export class WispCallHandler {
   }
 
   static loadWrtc = loadWrtc;
+
+  async handleOffer(payload: {
+    callId: string; sdp: string; callType: string;
+    senderDid: string; conversationId: string;
+  }): Promise<void> {
+    const wrtc = loadWrtc();
+    if (!wrtc) return;
+
+    if (this.activeCall) {
+      this.relay.sendEnvelope(payload.senderDid, {
+        envelope: 'call_end', version: 1,
+        payload: { callId: payload.callId, reason: 'busy',
+          endedBy: this.identity.did, timestamp: Date.now() },
+      });
+      return;
+    }
+
+    const { RTCPeerConnection, RTCSessionDescription, MediaStream, nonstandard } = wrtc;
+    const { RTCAudioSource, RTCVideoSource } = nonstandard;
+
+    const peer = new RTCPeerConnection({
+      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+    });
+    const stream = new MediaStream();
+
+    // Audio track (always)
+    const audioSrc = new RTCAudioSource();
+    stream.addTrack(audioSrc.createTrack());
+    peer.addTrack(stream.getAudioTracks()[0], stream);
+
+    // Video track (video calls only)
+    let videoSrc: InstanceType<typeof RTCVideoSource> | null = null;
+    if (payload.callType === 'video') {
+      videoSrc = new RTCVideoSource();
+      stream.addTrack(videoSrc.createTrack());
+      peer.addTrack(stream.getVideoTracks()[0], stream);
+    }
+
+    peer.onicecandidate = (ev) => {
+      if (!ev.candidate) return;
+      this.relay.sendEnvelope(payload.senderDid, {
+        envelope: 'call_ice_candidate', version: 1,
+        payload: { callId: payload.callId, candidate: ev.candidate.candidate,
+          sdpMid: ev.candidate.sdpMid, sdpMLineIndex: ev.candidate.sdpMLineIndex },
+      });
+    };
+    peer.onconnectionstatechange = () => {
+      if (peer.connectionState === 'failed' || peer.connectionState === 'closed') this.cleanup();
+    };
+
+    let rawSdp = payload.sdp; // Handle JSON-wrapped SDP from Umbra client
+    try { if (rawSdp.startsWith('{')) rawSdp = JSON.parse(rawSdp).sdp; } catch { /* use as-is */ }
+
+    await peer.setRemoteDescription(new RTCSessionDescription({ type: 'offer', sdp: rawSdp }));
+    const answer = await peer.createAnswer();
+    await peer.setLocalDescription(answer);
+
+    this.relay.sendEnvelope(payload.senderDid, {
+      envelope: 'call_answer', version: 1,
+      payload: { callId: payload.callId, type: 'answer',
+        sdp: JSON.stringify({ sdp: answer.sdp, type: 'answer' }) },
+    });
+
+    const audioGen = new AudioSignalGenerator();
+    const audioInterval = setInterval(() => {
+      audioSrc.onData({ samples: audioGen.nextFrame(), sampleRate: 48000,
+        bitsPerSample: 16, channelCount: 1, numberOfFrames: 480 });
+    }, 10);
+    let videoInterval: ReturnType<typeof setInterval> | null = null;
+    if (videoSrc) {
+      const vg = new VideoSignalGenerator(), vs = videoSrc;
+      videoInterval = setInterval(() => {
+        vs.onFrame({ width: VIDEO_WIDTH, height: VIDEO_HEIGHT,
+          data: new Uint8Array(vg.nextFrame().buffer) });
+      }, 1000 / VIDEO_FPS);
+    }
+
+    this.activeCall = { callId: payload.callId, peerDid: payload.senderDid,
+      callType: payload.callType as 'voice' | 'video',
+      peer, audioInterval, videoInterval };
+    console.log(`[${this.wispName}] Answered ${payload.callType} call ${payload.callId.slice(0, 12)}...`);
+  }
 
   handleIceCandidate(payload: {
     callId: string;
