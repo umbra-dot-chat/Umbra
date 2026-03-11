@@ -251,6 +251,20 @@ export interface CallSignalForwardPayload {
   payload: string;
 }
 
+// ─── Renegotiation Payloads (screen sharing) ─────────────────────────────────
+
+export interface CallReofferPayload {
+  callId: string;
+  senderDid: string;
+  sdp: string;
+}
+
+export interface CallReanswerPayload {
+  callId: string;
+  senderDid: string;
+  sdp: string;
+}
+
 // ─── Call Event (dispatched through service) ─────────────────────────────────
 
 export type CallEvent =
@@ -259,6 +273,8 @@ export type CallEvent =
   | { type: 'callIceCandidate'; payload: CallIceCandidatePayload }
   | { type: 'callEnd'; payload: CallEndPayload }
   | { type: 'callState'; payload: CallStatePayload }
+  | { type: 'callReoffer'; payload: CallReofferPayload }
+  | { type: 'callReanswer'; payload: CallReanswerPayload }
   | { type: 'callRoomCreated'; payload: CallRoomCreatedPayload }
   | { type: 'callParticipantJoined'; payload: CallParticipantJoinedPayload }
   | { type: 'callParticipantLeft'; payload: CallParticipantLeftPayload }

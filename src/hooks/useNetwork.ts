@@ -654,6 +654,8 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
           } else if (envelope.envelope === 'call_ice_candidate' && envelope.version === 1) { service.dispatchCallEvent({ type: 'callIceCandidate', payload: envelope.payload as any });
           } else if (envelope.envelope === 'call_end' && envelope.version === 1) { service.dispatchCallEvent({ type: 'callEnd', payload: envelope.payload as any });
           } else if (envelope.envelope === 'call_state' && envelope.version === 1) { service.dispatchCallEvent({ type: 'callState', payload: envelope.payload as any });
+          } else if (envelope.envelope === 'call_reoffer' && envelope.version === 1) { service.dispatchCallEvent({ type: 'callReoffer', payload: envelope.payload as any });
+          } else if (envelope.envelope === 'call_reanswer' && envelope.version === 1) { service.dispatchCallEvent({ type: 'callReanswer', payload: envelope.payload as any });
 
           } else if (envelope.envelope === 'community_event' && envelope.version === 1) {
             const communityPayload = envelope.payload as CommunityEventPayload;
