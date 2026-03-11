@@ -166,7 +166,7 @@ export function ZenMediaControls() {
                 padding: 8,
                 borderRadius: 4,
                 backgroundColor: isActive
-                  ? 'rgba(107, 143, 113, 0.15)'
+                  ? tc.brand.surface
                   : 'transparent',
               }}
             >

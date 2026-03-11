@@ -35,7 +35,7 @@ export function TherapyMessageStyle({ message, children }: TherapyMessageStylePr
     <Box
       style={{
         borderLeftWidth: 3,
-        borderLeftColor: 'rgba(107, 143, 113, 0.5)',
+        borderLeftColor: tc.brand.border,
         paddingLeft: 8,
         marginTop: 2,
         marginBottom: 2,

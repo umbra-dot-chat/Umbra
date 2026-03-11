@@ -55,9 +55,9 @@ export function TherapySessionBanner() {
         alignItems: 'center',
         paddingHorizontal: 16,
         paddingVertical: 8,
-        backgroundColor: 'rgba(107, 143, 113, 0.12)',
+        backgroundColor: tc.accent.highlight,
         borderBottomWidth: 1,
-        borderBottomColor: 'rgba(107, 143, 113, 0.25)',
+        borderBottomColor: tc.brand.border,
         gap: 8,
       }}
     >
