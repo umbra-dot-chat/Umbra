@@ -12,6 +12,7 @@ import type { ContextStore, StoredFriend } from '../context/store.js';
 import type { LLMProvider, ChatMessage } from '../llm/provider.js';
 import { getSystemPrompt } from '../llm/system-prompts.js';
 import { parseReminder } from './reminder.js';
+import { detectAndExecuteWispCommand } from './wisp-commands.js';
 import type { CallHandler } from './call.js';
 import type { Logger } from '../config.js';
 
@@ -116,6 +117,13 @@ export async function handleMessage(
     const args = parts.slice(1);
     const result = await callHandler.handleCommand(command, args, msg.senderDid);
     await sendResponse(result, identity, relay, store, friend, log);
+    return;
+  }
+
+  // Check for wisp-related intents (before LLM to avoid wasted GPU cycles)
+  const wispResult = await detectAndExecuteWispCommand(plaintext, msg.senderDid, log);
+  if (wispResult.detected && wispResult.response) {
+    await sendResponse(wispResult.response, identity, relay, store, friend, log);
     return;
   }
 
