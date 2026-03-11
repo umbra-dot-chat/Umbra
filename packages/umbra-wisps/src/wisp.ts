@@ -8,7 +8,7 @@
 import { RelayClient, type ServerMessage } from './relay-client.js';
 import {
   encryptMessage, decryptMessage, computeConversationId, uuid,
-  decryptGroupKey,
+  decryptGroupKey, encryptGroupMessage, decryptGroupMessage,
 } from './crypto.js';
 import type { WispIdentity } from './identity-store.js';
 import type { WispPersona } from './personas.js';
@@ -146,6 +146,32 @@ export class Wisp {
     });
   }
 
+  // -- Group Messaging --
+
+  sendGroupMessage(groupId: string, text: string): void {
+    const group = this.groups.get(groupId);
+    if (!group) return;
+    const { ciphertext, nonce } = encryptGroupMessage(text, group.groupKey);
+    for (const member of group.members) {
+      if (member.did === this.identity.did) continue;
+      this.relay.sendEnvelope(member.did, {
+        envelope: 'group_message', version: 1,
+        payload: {
+          id: uuid(), groupId, conversationId: group.conversationId,
+          from: this.identity.did,
+          senderDisplayName: this.persona.name,
+          timestamp: Date.now(), ciphertext, nonce,
+        },
+      });
+    }
+    this.appendHistory(group.conversationId, 'assistant', text);
+  }
+
+  /** Add this wisp to a group directly (used by orchestrator). */
+  addGroup(group: WispGroup): void {
+    this.groups.set(group.groupId, group);
+  }
+
   // -- LLM Response --
 
   async generateResponse(senderName: string, text: string, conversationId: string): Promise<string> {
@@ -197,6 +223,9 @@ export class Wisp {
           break;
         case 'group_invite':
           this.handleGroupInvite(envelope.payload);
+          break;
+        case 'group_message':
+          this.handleGroupMessage(envelope.payload);
           break;
       }
     } catch { /* ignore parse errors */ }
@@ -301,6 +330,21 @@ export class Wisp {
       console.log(`[${this.persona.name}] Joined group "${p.groupName}"`);
     } catch (err) {
       console.warn(`[${this.persona.name}] Failed to handle group invite:`, err);
+    }
+  }
+
+  private handleGroupMessage(p: {
+    id: string; groupId: string; from: string;
+    senderDisplayName: string; ciphertext: string; nonce: string;
+  }): void {
+    const group = this.groups.get(p.groupId);
+    if (!group) return;
+    try {
+      const plaintext = decryptGroupMessage(p.ciphertext, p.nonce, group.groupKey);
+      console.log(`[${this.persona.name}] Group "${group.groupName}" from ${p.senderDisplayName}: ${plaintext.slice(0, 50)}...`);
+      this.appendHistory(group.conversationId, 'user', plaintext);
+    } catch (err) {
+      console.warn(`[${this.persona.name}] Failed to decrypt group message:`, err);
     }
   }
 }
