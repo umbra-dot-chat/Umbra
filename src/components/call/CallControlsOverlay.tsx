@@ -48,19 +48,17 @@ function injectCallControlsCSS() {
   const style = document.createElement('style');
   style.id = CSS_ID;
   style.textContent = `
-    /* Default (non-active) call control buttons — lighter gray bg, white icons */
-    #call-controls-overlay [role="button"] {
+    /* Default call control buttons — lighter gray bg, white icons.
+       Exclude the end-call button so it keeps its red background. */
+    #call-controls-overlay [role="button"]:not([aria-label="End call"]) {
       background-color: rgba(255, 255, 255, 0.2) !important;
     }
     #call-controls-overlay [role="button"] svg {
       stroke: #FFFFFF !important;
     }
-    /* Active/toggled buttons — brighter bg */
-    #call-controls-overlay [role="button"][aria-selected="true"] {
-      background-color: rgba(255, 255, 255, 0.5) !important;
-    }
-    #call-controls-overlay [role="button"][aria-selected="true"] svg {
-      stroke: #FFFFFF !important;
+    /* Active/toggled buttons (e.g. muted mic) — red to signal "off" state */
+    #call-controls-overlay [role="button"][aria-selected="true"]:not([aria-label="End call"]) {
+      background-color: #EF4444 !important;
     }
   `;
   document.head.appendChild(style);
