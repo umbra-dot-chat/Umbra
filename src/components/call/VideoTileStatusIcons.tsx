@@ -3,11 +3,14 @@
  * in the top-right corner of a video tile.
  *
  * Replaces the Wisp VideoTile's built-in "M" badge with proper SVG icons.
+ * Uses black circle backgrounds and the headphones-off icon for deafen
+ * (matching the Discord-style deafen indicator).
  */
 
 import React from 'react';
 import { View } from 'react-native';
-import Svg, { Path, Line, Rect } from 'react-native-svg';
+import type { ViewStyle } from 'react-native';
+import Svg, { Path, Line } from 'react-native-svg';
 
 // ─── Props ──────────────────────────────────────────────────────────────────
 
@@ -31,12 +34,12 @@ function MicOffIcon({ size = 14 }: { size?: number }) {
   );
 }
 
-function DeafenedIcon({ size = 14 }: { size?: number }) {
+function HeadphonesOffIcon({ size = 14 }: { size?: number }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <Path d="M11 5L6 9H2v6h4l5 4V5z" />
-      <Line x1={23} y1={9} x2={17} y2={15} />
-      <Line x1={17} y1={9} x2={23} y2={15} />
+      <Path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z" />
+      <Path d="M21 18v-6a9 9 0 0 0-9-9 8.98 8.98 0 0 0-6.36 2.64" />
+      <Line x1={1} y1={1} x2={23} y2={23} />
     </Svg>
   );
 }
@@ -49,6 +52,17 @@ function CameraOffIcon({ size = 14 }: { size?: number }) {
     </Svg>
   );
 }
+
+// ─── Shared Styles ──────────────────────────────────────────────────────────
+
+const iconBadge: ViewStyle = {
+  width: 24,
+  height: 24,
+  borderRadius: 12,
+  backgroundColor: 'rgba(0, 0, 0, 0.7)',
+  alignItems: 'center',
+  justifyContent: 'center',
+};
 
 // ─── Component ──────────────────────────────────────────────────────────────
 
@@ -68,38 +82,17 @@ export function VideoTileStatusIcons({ isMuted, isDeafened, isCameraOff }: Video
       }}
     >
       {isMuted && (
-        <View style={{
-          width: 24,
-          height: 24,
-          borderRadius: 12,
-          backgroundColor: 'rgba(239, 68, 68, 0.85)',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}>
+        <View style={iconBadge}>
           <MicOffIcon size={14} />
         </View>
       )}
       {isDeafened && (
-        <View style={{
-          width: 24,
-          height: 24,
-          borderRadius: 12,
-          backgroundColor: 'rgba(239, 68, 68, 0.85)',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}>
-          <DeafenedIcon size={14} />
+        <View style={iconBadge}>
+          <HeadphonesOffIcon size={14} />
         </View>
       )}
       {isCameraOff && (
-        <View style={{
-          width: 24,
-          height: 24,
-          borderRadius: 12,
-          backgroundColor: 'rgba(239, 68, 68, 0.85)',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}>
+        <View style={iconBadge}>
           <CameraOffIcon size={14} />
         </View>
       )}
