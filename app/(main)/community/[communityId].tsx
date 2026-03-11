@@ -21,12 +21,13 @@
 
 import React, { useMemo, useCallback, useState, useRef } from 'react';
 import { Platform, View, Image, Animated, Pressable } from 'react-native';
+// View kept for Animated.View; Image kept (Wisp incompatible API); Pressable kept for render-prop and backdrop usage
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { GestureResponderEvent } from 'react-native';
 import { useLocalSearchParams } from 'expo-router';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import {
-  useTheme, Text, Avatar,
+  useTheme, Text, Avatar, Box, Button,
   MessageInput,
   CombinedPicker, MemberList, MessageList, PinnedMessages,
 } from '@coexist/wisp-react-native';
@@ -82,14 +83,14 @@ function mapChannelType(type: string): string {
 function EmptyCommunity() {
   const { theme } = useTheme();
   return (
-    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40 }}>
+    <Box style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40 }}>
       <Text size="display-sm" weight="bold" style={{ color: theme.colors.text.primary, marginBottom: 8 }}>
         Select a channel
       </Text>
       <Text size="sm" style={{ color: theme.colors.text.muted, textAlign: 'center', maxWidth: 400 }}>
         Choose a channel from the sidebar to start chatting with your community.
       </Text>
-    </View>
+    </Box>
   );
 }
 
@@ -129,24 +130,24 @@ function VoiceChannelLobby({
   }, [channelDids, members]);
 
   return (
-    <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 20, padding: 40 }}>
+    <Box style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 20, padding: 40 }}>
       {/* Channel name */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+      <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
         <VolumeIcon size={20} color={colors.text.primary} />
         <Text size="lg" weight="semibold" style={{ color: colors.text.primary }}>
           {channelName}
         </Text>
-      </View>
+      </Box>
 
       {/* Connected users */}
       {connectedMembers.length > 0 ? (
-        <View style={{ alignItems: 'center', gap: 8 }}>
+        <Box style={{ alignItems: 'center', gap: 8 }}>
           <Text size="sm" style={{ color: colors.text.muted }}>
             {connectedMembers.length} {connectedMembers.length === 1 ? 'person' : 'people'} connected
           </Text>
-          <View style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 10 }}>
+          <Box style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 10 }}>
             {connectedMembers.map((m) => (
-              <View
+              <Box
                 key={m.did}
                 style={{
                   alignItems: 'center',
@@ -159,10 +160,10 @@ function VoiceChannelLobby({
               >
                 <Avatar name={m.name} size="sm" status="online" />
                 <Text size="xs" style={{ color: colors.text.secondary }}>{m.name}</Text>
-              </View>
+              </Box>
             ))}
-          </View>
-        </View>
+          </Box>
+        </Box>
       ) : (
         <Text size="sm" style={{ color: colors.text.muted }}>
           No one is in this channel yet
@@ -183,11 +184,11 @@ function VoiceChannelLobby({
         accessibilityRole="button"
         accessibilityLabel="Join voice channel"
       >
-        <Text size="sm" weight="semibold" style={{ color: '#fff' }}>
+        <Text size="sm" weight="semibold" style={{ color: theme.colors.text.inverse }}>
           {isConnecting ? 'Connecting…' : 'Join Voice Channel'}
         </Text>
       </Pressable>
-    </View>
+    </Box>
   );
 }
 
@@ -488,7 +489,7 @@ export default function CommunityPage() {
       // Ghost seat badge: show a subtle "via Discord" indicator for unclaimed seats
       const ghostBadge = isGhostSeat
         ? React.createElement(
-            View,
+            Box,
             {
               style: {
                 flexDirection: 'row',
@@ -504,7 +505,7 @@ export default function CommunityPage() {
             },
             React.createElement(
               Text,
-              { size: 'xs', style: { color: theme.colors.text.muted, fontSize: 10 } },
+              { size: 'xs', style: { color: theme.colors.text.muted } },
               '\uD83D\uDC7B via Discord \u2022 unclaimed seat',
             ),
           )
@@ -513,7 +514,7 @@ export default function CommunityPage() {
       const parsedContent = emojiMap.size > 0 && typeof msg.content === 'string'
         ? parseMessageContent(msg.content, emojiMap, undefined, {
             textColor: theme.colors.text.primary,
-            linkColor: theme.colors.text.link ?? '#5865F2',
+            linkColor: theme.colors.text.link ?? theme.colors.accent.primary,
             codeBgColor: theme.colors.background.sunken,
             codeTextColor: theme.colors.text.primary,
             spoilerBgColor: theme.colors.text.muted,
@@ -588,9 +589,9 @@ export default function CommunityPage() {
       .map((r: any) => ({
         id: r.id,
         name: r.name,
-        color: r.color ?? '#95a5a6',
+        color: r.color ?? theme.colors.text.muted,
       }));
-  }, [roles]);
+  }, [roles, theme]);
 
   // -- Context menu: long-press handler -------------------------------------
 
@@ -688,18 +689,16 @@ export default function CommunityPage() {
   // ---------------------------------------------------------------------------
 
   return (
-    <View style={{ flex: 1, flexDirection: 'row', backgroundColor: theme.colors.background.canvas }}>
+    <Box style={{ flex: 1, flexDirection: 'row', backgroundColor: theme.colors.background.canvas }}>
       {/* Center column: Channel content */}
-      <View style={{ flex: 1, flexDirection: 'column', minWidth: 0 }}>
+      <Box style={{ flex: 1, flexDirection: 'column', minWidth: 0 }}>
         {activeChannel && activeChannel.channelType === 'voice' && voiceActiveChannelId === activeChannelId ? (
           /* Voice channel — show call panel when connected */
           <>
             {isMobile && (
-              <View style={{ flexDirection: 'row', alignItems: 'center', height: 48, paddingHorizontal: 8, borderBottomWidth: 1, borderBottomColor: theme.colors.border.subtle }}>
-                <Pressable onPress={handleBackPress} style={{ width: 40, height: 40, borderRadius: 8, alignItems: 'center', justifyContent: 'center' }}>
-                  <ArrowLeftIcon size={20} color={theme.colors.text.secondary} />
-                </Pressable>
-              </View>
+              <Box style={{ flexDirection: 'row', alignItems: 'center', height: 48, paddingHorizontal: 8, borderBottomWidth: 1, borderBottomColor: theme.colors.border.subtle }}>
+                <Button variant="tertiary" size="sm" onPress={handleBackPress} iconLeft={<ArrowLeftIcon size={20} color={theme.colors.text.secondary} />} />
+              </Box>
             )}
             <VoiceCallPanel
               channelName={activeChannel.name}
@@ -712,11 +711,9 @@ export default function CommunityPage() {
           /* Voice channel selected but not connected — show lobby */
           <>
             {isMobile && (
-              <View style={{ flexDirection: 'row', alignItems: 'center', height: 48, paddingHorizontal: 8, borderBottomWidth: 1, borderBottomColor: theme.colors.border.subtle }}>
-                <Pressable onPress={handleBackPress} style={{ width: 40, height: 40, borderRadius: 8, alignItems: 'center', justifyContent: 'center' }}>
-                  <ArrowLeftIcon size={20} color={theme.colors.text.secondary} />
-                </Pressable>
-              </View>
+              <Box style={{ flexDirection: 'row', alignItems: 'center', height: 48, paddingHorizontal: 8, borderBottomWidth: 1, borderBottomColor: theme.colors.border.subtle }}>
+                <Button variant="tertiary" size="sm" onPress={handleBackPress} iconLeft={<ArrowLeftIcon size={20} color={theme.colors.text.secondary} />} />
+              </Box>
             )}
             <VoiceChannelLobby
               channelName={activeChannel.name}
@@ -758,17 +755,17 @@ export default function CommunityPage() {
             />
 
             {/* Messages — E2EE banner scrolls at the top of the message list */}
-            <View style={{ flex: 1 }}>
+            <Box style={{ flex: 1 }}>
               <MessageList
                 entries={messageEntries}
                 displayMode={displayMode}
                 skeleton={msgsLoading && messageEntries.length === 0}
                 stickyHeader={undefined}
               />
-            </View>
+            </Box>
 
             {/* Message Input */}
-            <View style={{ position: 'relative', padding: 12 }}>
+            <Box style={{ position: 'relative', padding: 12 }}>
               {/* Transparent backdrop — closes picker when tapping outside */}
               {emojiOpen && (
                 <Pressable
@@ -819,20 +816,20 @@ export default function CommunityPage() {
               />
               {/* Safe area spacing below the input */}
               {insets.bottom > 0 && (
-                <View style={{ height: insets.bottom }} />
+                <Box style={{ height: insets.bottom }} />
               )}
-            </View>
+            </Box>
           </>
         ) : (
           <EmptyCommunity />
         )}
-      </View>
+      </Box>
 
       {/* Right column: Members / Pins panel */}
       {isMobile ? (
         /* Mobile: Full-screen overlay when a panel is open */
         visiblePanel && (
-          <View
+          <Box
             style={{
               position: 'absolute',
               top: 0,
@@ -859,12 +856,12 @@ export default function CommunityPage() {
                 onUnpin={(msg) => unpinMessage(msg.id)}
               />
             )}
-          </View>
+          </Box>
         )
       ) : (
         /* Desktop: Animated side panel */
         <Animated.View style={{ width: panelWidth, overflow: 'hidden' }}>
-          <View style={{ width: PANEL_WIDTH, height: '100%', borderLeftWidth: 1, borderLeftColor: theme.colors.border.subtle }}>
+          <Box style={{ width: PANEL_WIDTH, height: '100%', borderLeftWidth: 1, borderLeftColor: theme.colors.border.subtle }}>
             {visiblePanel === 'members' && (
               <MemberList
                 sections={memberSections}
@@ -881,7 +878,7 @@ export default function CommunityPage() {
                 onUnpin={(msg) => unpinMessage(msg.id)}
               />
             )}
-          </View>
+          </Box>
         </Animated.View>
       )}
 
@@ -897,6 +894,6 @@ export default function CommunityPage() {
         onKick={handleKick}
         onBan={handleBan}
       />
-    </View>
+    </Box>
   );
 }
