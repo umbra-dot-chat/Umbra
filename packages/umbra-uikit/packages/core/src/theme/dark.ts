@@ -43,8 +43,8 @@ export const darkColors: ThemeColors = {
     onRaised: '#ECECEF',
     /** Secondary text on raised surfaces — readable muted gray. */
     onRaisedSecondary: '#9494A0',
-    /** Text on accent-colored backgrounds — white. */
-    onAccent: '#FFFFFF',
+    /** Text on accent-colored backgrounds — dark for contrast on white accent. */
+    onAccent: '#111113',
   },
 
   // ---------------------------------------------------------------------------
@@ -62,15 +62,15 @@ export const darkColors: ThemeColors = {
   },
 
   // ---------------------------------------------------------------------------
-  // Accent / interactive — muted gray on dark, not blinding
+  // Accent / interactive — pure white on dark
   // ---------------------------------------------------------------------------
   accent: {
-    /** Primary accent — soft gray, a few shades below white. */
-    primary: '#B8B8C0',
-    /** Primary hover — slightly brighter. */
-    primaryHover: '#B0B0B8',
-    /** Primary active / pressed — dimmed. */
-    primaryActive: '#8A8A92',
+    /** Primary accent — pure white for max contrast on dark. */
+    primary: '#FFFFFF',
+    /** Primary hover — slightly dimmed. */
+    primaryHover: '#E4E4E8',
+    /** Primary active / pressed — light gray. */
+    primaryActive: '#C8C8CE',
     /** Secondary accent — subdued gray. */
     secondary: '#707078',
     /** Selection / highlight tint — white at low opacity. */
