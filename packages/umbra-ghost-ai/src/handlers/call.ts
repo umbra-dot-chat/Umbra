@@ -311,6 +311,44 @@ export class CallHandler {
     this.log.debug(`[CALL] Remote state: ${payload.callId} → ${payload.state}`);
   }
 
+  async handleCallReoffer(rawPayload: any): Promise<void> {
+    const payload = this.decryptSignalPayload(rawPayload) as { callId: string; sdp: string; senderDid: string };
+    const call = this.activeCalls.get(payload.callId);
+    if (!call) {
+      this.log.debug(`[CALL] Ignoring reoffer for unknown call: ${payload.callId}`);
+      return;
+    }
+
+    try {
+      // If we have a pending local offer (glare), roll back first
+      if (call.peer.signalingState === 'have-local-offer') {
+        await call.peer.setLocalDescription({ type: 'rollback' } as RTCSessionDescriptionInit);
+      }
+      const offer = JSON.parse(payload.sdp);
+      await call.peer.setRemoteDescription(
+        new this.wrtc.RTCSessionDescription(offer),
+      );
+      const answer = await call.peer.createAnswer();
+      await call.peer.setLocalDescription(answer);
+
+      const friend = this.store.getFriend(call.peerDid);
+      if (friend) {
+        this.relay.sendEnvelope(friend.did, {
+          envelope: 'call_reanswer',
+          version: 1,
+          payload: {
+            callId: call.callId,
+            sdp: JSON.stringify({ sdp: answer.sdp, type: answer.type }),
+            senderDid: this.identity.did,
+          },
+        });
+      }
+      this.log.debug(`[CALL ${call.callId}] Processed reoffer and sent reanswer`);
+    } catch (err) {
+      this.log.error(`[CALL ${payload.callId}] Failed to handle reoffer:`, err);
+    }
+  }
+
   async handleCallReanswer(rawPayload: any): Promise<void> {
     const payload = this.decryptSignalPayload(rawPayload) as { callId: string; sdp: string };
     const call = this.activeCalls.get(payload.callId);

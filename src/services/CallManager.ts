@@ -702,6 +702,10 @@ export class CallManager {
    */
   async handleReoffer(offerSdp: string): Promise<string> {
     if (!this.pc) throw new Error('No peer connection');
+    // If we have a pending local offer (glare), roll back before applying the remote offer
+    if (this.pc.signalingState === 'have-local-offer') {
+      await this.pc.setLocalDescription({ type: 'rollback' } as RTCSessionDescriptionInit);
+    }
     const offer = JSON.parse(offerSdp);
     await this.pc.setRemoteDescription(new RTCSessionDescription({ sdp: offer.sdp, type: offer.type }));
     const answer = await this.pc.createAnswer();
