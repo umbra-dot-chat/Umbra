@@ -68,9 +68,9 @@ function injectControlsCSS(
   const existing = document.getElementById(cssId);
   if (existing) existing.remove();
 
-  // Sidebar uses theme-aware icon colors; call panel forces white on dark bg
-  const defaultIconColor = isSidebar ? opts.iconColor : '#FFFFFF';
-  const defaultBg = isSidebar ? opts.sunkenColor : 'rgba(255, 255, 255, 0.2)';
+  // Both variants use the same theme-aware colors (NavigationRail style)
+  const defaultIconColor = opts.iconColor;
+  const defaultBg = opts.sunkenColor;
 
   const s = document.createElement('style');
   s.id = cssId;

@@ -235,7 +235,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       setInstalledThemeIds(installed);
 
       const savedThemeId = await kvGet(KEY_THEME_ID);
-      const savedAccent = await kvGet(KEY_ACCENT_COLOR);
+      const savedAccent = null; // await kvGet(KEY_ACCENT_COLOR);
       const savedMode = await kvGet(KEY_DARK_MODE);
       const savedTextSize = await kvGet(KEY_TEXT_SIZE);
       const savedMotionPrefs = await kvGet(KEY_MOTION_PREFS);
