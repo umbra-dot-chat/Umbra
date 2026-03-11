@@ -11,12 +11,39 @@ import {
 } from '@coexist/wisp-react-native';
 import type { PendingGroupInvite } from '@umbra/service';
 import type { ActiveCall } from '@/types/call';
-import React, { useCallback, useRef, useState } from 'react';
-import { ScrollView, View } from 'react-native';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { Platform, ScrollView, View } from 'react-native';
 import { NewChatMenu } from './NewChatMenu';
 import { SidebarCallPanel } from '@/components/call/SidebarCallPanel';
 import { SlotRenderer } from '@/components/plugins/SlotRenderer';
 import { TEST_IDS } from '@/constants/test-ids';
+
+// ─── CSS injection for sidebar layout (web only) ────────────────────────────
+
+const SIDEBAR_CSS_ID = 'sidebar-layout-css';
+
+/**
+ * The Wisp Sidebar wraps children in a ScrollView. To push the call panel
+ * to the bottom, we make the ScrollView content container a flex column
+ * with min-height: 100%, then use margin-top: auto on the call footer.
+ */
+function injectSidebarLayoutCSS() {
+  if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+  if (document.getElementById(SIDEBAR_CSS_ID)) return;
+
+  const style = document.createElement('style');
+  style.id = SIDEBAR_CSS_ID;
+  style.textContent = `
+    /* Make the Sidebar ScrollView content container a flex column
+       so margin-top:auto pushes the call panel to the bottom. */
+    [role="menu"] > div:first-child > div {
+      min-height: 100%;
+      display: flex;
+      flex-direction: column;
+    }
+  `;
+  document.head.appendChild(style);
+}
 
 export interface ChatSidebarProps {
   search: string;
@@ -65,6 +92,11 @@ function ChatSidebarInner({
 }: ChatSidebarProps) {
   const { theme } = useTheme();
   const [menuOpen, setMenuOpen] = useState(false);
+
+  // Inject CSS to make sidebar ScrollView content a flex column (web only)
+  useEffect(() => {
+    injectSidebarLayoutCSS();
+  }, []);
 
   // Track unread counts to trigger shimmer on new messages
   const prevUnreadsRef = useRef<Record<string, number>>({});
@@ -327,9 +359,9 @@ function ChatSidebarInner({
           </ScrollView>
         </SidebarSection>
 
-        {/* Active call footer panel — sticky at the bottom of the sidebar */}
+        {/* Active call footer panel — pushed to the bottom via margin-top:auto */}
         {activeCall && activeCall.status === 'connected' && activeCall.conversationId !== activeId && onReturnToCall && onToggleMute && onToggleCamera && onEndCall && (
-          <View style={{ position: 'sticky' as any, bottom: 0, zIndex: 100, marginHorizontal: -8 }}>
+          <View style={{ marginTop: 'auto' as any, marginHorizontal: -4 }}>
             <SidebarCallPanel
               activeCall={activeCall}
               onReturnToCall={onReturnToCall}

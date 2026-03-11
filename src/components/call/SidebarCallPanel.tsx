@@ -1,10 +1,8 @@
 /**
- * SidebarCallPanel -- Fixed footer panel at the bottom of ChatSidebar.
+ * SidebarCallPanel -- Minimal footer section at the bottom of ChatSidebar.
  *
- * Shown when there is an active call and the user has navigated away from
- * the call conversation. Displays a video thumbnail (or avatar fallback),
- * caller info with a live timer, and compact call controls with no
- * button backgrounds (transparent) for a clean sidebar look.
+ * Matches the sidebar's visual language: no card background, separated by
+ * a full-width top border. Video preview preserves the stream's aspect ratio.
  */
 
 import React, { useEffect } from 'react';
@@ -69,76 +67,73 @@ export function SidebarCallPanel({
   return (
     <View
       style={{
-        height: 148,
-        backgroundColor: colors.background.raised,
         borderTopWidth: 1,
         borderTopColor: colors.border.subtle,
-        padding: 8,
-        justifyContent: 'space-between',
+        paddingTop: 10,
+        paddingBottom: 8,
+        paddingHorizontal: 12,
       }}
     >
-      {/* Top section: Video thumbnail + info */}
-      <View>
-        {/* Video thumbnail / avatar fallback -- tappable to return to call */}
-        <Pressable
-          onPress={onReturnToCall}
-          accessibilityRole="button"
-          accessibilityLabel="Return to call"
-          style={{ height: 40, borderRadius: 8, overflow: 'hidden' }}
-        >
-          {isVoiceOnly ? (
-            <View style={{
-              flex: 1,
-              backgroundColor: colors.background.sunken,
-              alignItems: 'center',
-              justifyContent: 'center',
-              borderRadius: 8,
-            }}>
-              <Avatar name={activeCall.remoteDisplayName} size="sm" />
-            </View>
-          ) : (
+      {/* Video preview — tappable to return to call */}
+      <Pressable
+        onPress={onReturnToCall}
+        accessibilityRole="button"
+        accessibilityLabel="Return to call"
+        style={{
+          borderRadius: 8,
+          overflow: 'hidden',
+          backgroundColor: colors.background.sunken,
+        }}
+      >
+        {isVoiceOnly ? (
+          <View style={{
+            height: 48,
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}>
+            <Avatar name={activeCall.remoteDisplayName} size="sm" />
+          </View>
+        ) : (
+          <View style={{ aspectRatio: 16 / 9, maxHeight: 120 }}>
             <VideoTile
               stream={activeCall.remoteStream}
               displayName={activeCall.remoteDisplayName}
               isMuted={false}
               isCameraOff={false}
-              size="sm"
+              isSpeaking={false}
+              size="full"
               fit="cover"
               showOverlay={false}
               style={{ flex: 1 }}
             />
-          )}
-        </Pressable>
+          </View>
+        )}
+      </Pressable>
 
-        {/* Info row: avatar + name + timer */}
-        <View style={{
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: 8,
-          marginTop: 4,
-          paddingHorizontal: 4,
-          height: 24,
-        }}>
-          <Avatar name={activeCall.remoteDisplayName} size="xs" />
-          <Text
-            size="xs"
-            weight="semibold"
-            numberOfLines={1}
-            style={{ flex: 1, color: colors.text.primary }}
-          >
-            {activeCall.remoteDisplayName}
-          </Text>
-          {activeCall.connectedAt && (
-            <CallTimer startedAt={activeCall.connectedAt} size="sm" color={colors.text.secondary} />
-          )}
-        </View>
+      {/* Info row: avatar + name + timer */}
+      <View style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        marginTop: 8,
+        height: 24,
+      }}>
+        <Avatar name={activeCall.remoteDisplayName} size="xs" />
+        <Text
+          size="xs"
+          weight="semibold"
+          numberOfLines={1}
+          style={{ flex: 1, color: colors.text.primary }}
+        >
+          {activeCall.remoteDisplayName}
+        </Text>
+        {activeCall.connectedAt && (
+          <CallTimer startedAt={activeCall.connectedAt} size="sm" color={colors.text.secondary} />
+        )}
       </View>
 
-      {/* Spacer pushes controls to bottom */}
-      <View style={{ flex: 1 }} />
-
-      {/* Compact controls row — pinned to bottom */}
-      <View nativeID="sidebar-call-controls">
+      {/* Compact controls */}
+      <View nativeID="sidebar-call-controls" style={{ marginTop: 4 }}>
         <CallControls
           isMuted={activeCall.isMuted}
           isVideoOff={activeCall.isCameraOff}
