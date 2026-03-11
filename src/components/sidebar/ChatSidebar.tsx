@@ -1,6 +1,6 @@
 import { BookOpenIcon, CheckIcon, PlusIcon, ShoppingBagIcon, UsersIcon, XIcon } from '@/components/ui';
 import {
-  Avatar, AvatarGroup, Button,
+  Avatar, AvatarGroup, Box, Button,
   ConversationListItem,
   GradientText,
   SearchInput,
@@ -12,7 +12,7 @@ import {
 import type { PendingGroupInvite } from '@umbra/service';
 import type { ActiveCall } from '@/types/call';
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Platform, ScrollView, View } from 'react-native';
+import { Platform, ScrollView } from 'react-native';
 import { NewChatMenu } from './NewChatMenu';
 import { SidebarCallPanel } from '@/components/call/SidebarCallPanel';
 import { SlotRenderer } from '@/components/plugins/SlotRenderer';
@@ -139,7 +139,7 @@ function ChatSidebarInner({
       <Sidebar testID={TEST_IDS.SIDEBAR.CONTAINER} width="wide" style={{ paddingHorizontal: 8, paddingTop: 20, width: '100%' }}>
         {/* Search bar */}
         <SidebarSection>
-          <View style={{ paddingHorizontal: 6 }}>
+          <Box style={{ paddingHorizontal: 6 }}>
             <SearchInput
               testID={TEST_IDS.SIDEBAR.SEARCH_INPUT}
               value={search}
@@ -151,12 +151,12 @@ function ChatSidebarInner({
               onClear={() => onSearchChange('')}
               gradientBorder
             />
-          </View>
+          </Box>
         </SidebarSection>
 
         {/* Navigation buttons */}
         <SidebarSection style={{ marginTop: 12 }}>
-          <View style={{ marginHorizontal: 6 }}>
+          <Box style={{ marginHorizontal: 6 }}>
               <Button
                 testID={TEST_IDS.SIDEBAR.FRIENDS_BUTTON}
                 variant={isFriendsActive ? 'secondary' : 'tertiary'}
@@ -170,10 +170,10 @@ function ChatSidebarInner({
                 onAccessibilityAction={(e: any) => { if (e.nativeEvent.actionName === 'activate') onFriendsPress?.(); }}
                 style={{ justifyContent: 'flex-start' }}
               >
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                   <Text size="sm">Friends</Text>
                   {!!pendingFriendRequests && pendingFriendRequests > 0 && (
-                    <View style={{
+                    <Box style={{
                       backgroundColor: theme.colors.status.danger,
                       borderRadius: 99,
                       paddingHorizontal: 4,
@@ -182,16 +182,16 @@ function ChatSidebarInner({
                       alignItems: 'center',
                       justifyContent: 'center',
                     }}>
-                      <Text style={{ fontSize: 9, lineHeight: 12, fontWeight: '700', color: '#FFFFFF', textAlign: 'center' }}>
+                      <Text size="xs" weight="bold" style={{ lineHeight: 12, color: theme.colors.text.inverse, textAlign: 'center' }}>
                         {pendingFriendRequests > 99 ? '99+' : pendingFriendRequests}
                       </Text>
-                    </View>
+                    </Box>
                   )}
-                </View>
+                </Box>
               </Button>
-          </View>
+          </Box>
           {onGuidePress && (
-            <View style={{ marginHorizontal: 6, marginTop: 2 }}>
+            <Box style={{ marginHorizontal: 6, marginTop: 2 }}>
               <Button
                 testID={TEST_IDS.SIDEBAR.GUIDE_BUTTON}
                 variant="tertiary"
@@ -205,10 +205,10 @@ function ChatSidebarInner({
               >
                 Guide
               </Button>
-            </View>
+            </Box>
           )}
           {onMarketplacePress && (
-            <View style={{ marginHorizontal: 6, marginTop: 2 }}>
+            <Box style={{ marginHorizontal: 6, marginTop: 2 }}>
               <Button
                 testID={TEST_IDS.SIDEBAR.MARKETPLACE_BUTTON}
                 variant="tertiary"
@@ -222,16 +222,16 @@ function ChatSidebarInner({
               >
                 Marketplace
               </Button>
-            </View>
+            </Box>
           )}
         </SidebarSection>
 
         {/* Group Invites Section — only shown when there are pending invites */}
         {pendingInvites && pendingInvites.length > 0 && (
           <SidebarSection title={`Group Invites (${pendingInvites.length})`}>
-            <View style={{ marginHorizontal: 6, gap: 6, marginBottom: 4 }}>
+            <Box style={{ marginHorizontal: 6, gap: 6, marginBottom: 4 }}>
               {pendingInvites.map((invite) => (
-                <View
+                <Box
                   key={invite.id}
                   style={{
                     borderRadius: 8,
@@ -241,18 +241,18 @@ function ChatSidebarInner({
                     padding: 10,
                   }}
                 >
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                  <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>
                     <UsersIcon size={14} color={theme.colors.text.onRaisedSecondary} />
-                    <View style={{ flex: 1 }}>
+                    <Box style={{ flex: 1 }}>
                       <Text size="xs" weight="semibold" style={{ color: theme.colors.text.onRaised }} numberOfLines={1}>
                         {invite.groupName}
                       </Text>
                       <Text size="xs" style={{ color: theme.colors.text.onRaisedSecondary }} numberOfLines={1}>
                         from {invite.inviterName}
                       </Text>
-                    </View>
-                  </View>
-                  <View style={{ flexDirection: 'row', gap: 6 }}>
+                    </Box>
+                  </Box>
+                  <Box style={{ flexDirection: 'row', gap: 6 }}>
                     <Button
                       variant="success"
                       size="xs"
@@ -271,22 +271,22 @@ function ChatSidebarInner({
                     >
                       Decline
                     </Button>
-                  </View>
-                </View>
+                  </Box>
+                </Box>
               ))}
-            </View>
+            </Box>
           </SidebarSection>
         )}
 
         <SlotRenderer slot="sidebar-section" />
         <SidebarSection style={{ marginTop: 12, flex: 1 }}>
           {/* Custom header row: "Conversations" title + inline + button */}
-          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, marginBottom: 8, zIndex: 200 }}>
+          <Box style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, marginBottom: 8, zIndex: 200 }}>
             <Text size="xs" weight="semibold" style={{ color: theme.colors.text.onRaisedSecondary, textTransform: 'uppercase', letterSpacing: 0.5 }}>
               Conversations
             </Text>
             {(onNewDm || onCreateGroup) && (
-              <View style={{ position: 'relative', zIndex: 200 }}>
+              <Box style={{ position: 'relative', zIndex: 200 }}>
                 <Button
                   testID={TEST_IDS.SIDEBAR.NEW_CHAT_BUTTON}
                   variant="tertiary"
@@ -304,15 +304,15 @@ function ChatSidebarInner({
                   onNewDm={onNewDm ?? (() => {})}
                   onNewGroup={onCreateGroup ?? (() => {})}
                 />
-              </View>
+              </Box>
             )}
-          </View>
+          </Box>
           <ScrollView testID={TEST_IDS.SIDEBAR.CONVERSATION_LIST} style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
             {loading ? (
               /* Skeleton conversation list items */
               <>
                 {[1, 2, 3, 4, 5].map((i) => (
-                  <View
+                  <Box
                     key={i}
                     style={{
                       flexDirection: 'row',
@@ -323,17 +323,17 @@ function ChatSidebarInner({
                     }}
                   >
                     <Skeleton variant="circular" width={36} height={36} />
-                    <View style={{ flex: 1, gap: 6 }}>
+                    <Box style={{ flex: 1, gap: 6 }}>
                       <Skeleton variant="rectangular" height={12} radius={4} width="60%" />
                       <Skeleton variant="rectangular" height={10} radius={4} width="85%" />
-                    </View>
-                  </View>
+                    </Box>
+                  </Box>
                 ))}
               </>
             ) : conversations.length === 0 ? (
-              <View testID={TEST_IDS.SIDEBAR.EMPTY_STATE} style={{ alignItems: 'center', paddingVertical: 24 }}>
+              <Box testID={TEST_IDS.SIDEBAR.EMPTY_STATE} style={{ alignItems: 'center', paddingVertical: 24 }}>
                 <GradientText animated speed={4000} style={{ fontSize: 13 }}>No conversations yet</GradientText>
-              </View>
+              </Box>
             ) : (
               conversations.map((c) => (
                 <ConversationListItem
@@ -368,7 +368,7 @@ function ChatSidebarInner({
 
         {/* Active call footer panel — pushed to the bottom via margin-top:auto */}
         {activeCall && activeCall.status === 'connected' && activeCall.conversationId !== activeId && onReturnToCall && onToggleMute && onToggleDeafen && onToggleCamera && onEndCall && (
-          <View style={{ marginTop: 'auto' as any, marginHorizontal: -4 }}>
+          <Box style={{ marginTop: 'auto' as any, marginHorizontal: -4 }}>
             <SidebarCallPanel
               activeCall={activeCall}
               onReturnToCall={onReturnToCall}
@@ -379,7 +379,7 @@ function ChatSidebarInner({
               isScreenSharing={isScreenSharing}
               onToggleScreenShare={onToggleScreenShare}
             />
-          </View>
+          </Box>
         )}
       </Sidebar>
   );
