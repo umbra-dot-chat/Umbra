@@ -172,15 +172,20 @@ export const Input = forwardRef<TextInput, InputProps>(function Input(
     opacity: disabled ? 0.5 : 1,
   }), [sizeConfig, colors, disabled, gradientBorder, focused, resolvedRadius]);
 
-  const inputStyle = useMemo<TextStyle>(() => ({
-    flex: 1,
-    fontSize: sizeConfig.fontSize,
-    color: colors.text,
-    padding: 0,
+  const inputStyle = useMemo<TextStyle>(() => {
+    const base: TextStyle = {
+      flex: 1,
+      fontSize: sizeConfig.fontSize,
+      color: colors.text,
+      padding: 0,
+    };
     // Suppress browser default focus outline on web — the component handles
     // focus visuals itself via border color or GradientBorder.
-    outlineStyle: 'none',
-  } as TextStyle), [sizeConfig, colors]);
+    if (Platform.OS === 'web') {
+      (base as any).outlineStyle = 'none';
+    }
+    return base;
+  }, [sizeConfig, colors]);
 
   const labelStyle = useMemo<TextStyle>(() => ({
     fontSize: sizeConfig.labelFontSize,
