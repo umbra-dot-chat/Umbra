@@ -235,9 +235,6 @@ export class CallHandler {
       return;
     }
 
-    // Send chat message that Ghost is about to join
-    this.sendChatNotification(friend, `📞 ${callType === 'video' ? 'Video' : 'Voice'} call received — joining in a moment...`);
-
     // Send ringing state
     this.sendCallState(senderDid, callId, 'ringing');
 
@@ -247,7 +244,6 @@ export class CallHandler {
     // Create and answer the call
     try {
       await this.createCallFromOffer(decrypted, friend);
-      this.sendChatNotification(friend, `✅ Call connected! Use /ghost help for call commands.`);
     } catch (err) {
       this.log.error(`[CALL] Failed to answer call ${callId}:`, err);
       // Clean up any partially created call to prevent crash from orphaned audio/video sources
@@ -300,10 +296,7 @@ export class CallHandler {
     this.log.info(`[CALL] Call ended: ${payload.callId} (${payload.reason})`);
     this.cleanupCall(call);
 
-    const friend = this.store.getFriend(call.peerDid);
-    if (friend) {
-      this.sendChatNotification(friend, `📞 Call ended (${payload.reason}).`);
-    }
+    // Call event message is now handled by the client UI inline
   }
 
   handleCallState(rawPayload: any): void {
