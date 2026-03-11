@@ -9,8 +9,8 @@
  */
 
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
-import { Platform, Pressable, ScrollView, View } from 'react-native';
-import { Text, Button, AnimatedCounter, useTheme } from '@coexist/wisp-react-native';
+import { Platform, Pressable, View } from 'react-native';
+import { Text, Button, AnimatedCounter, useTheme, Box, ScrollArea } from '@coexist/wisp-react-native';
 import { useFileTransfer } from '@/hooks/useFileTransfer';
 import { useSharedFolders } from '@/hooks/useSharedFolders';
 import { useStorageManager } from '@/hooks/useStorageManager';
@@ -50,7 +50,7 @@ function ActiveTransfersSection() {
   if (!hasActiveTransfers) return null;
 
   return (
-    <View style={{ marginBottom: 24 }}>
+    <Box style={{ marginBottom: 24 }}>
       <Text
         size="sm"
         weight="semibold"
@@ -64,7 +64,7 @@ function ActiveTransfersSection() {
         Active Transfers ({activeTransfers.length})
       </Text>
 
-      <View
+      <Box
         style={{
           borderRadius: 12,
           backgroundColor: theme.colors.background.surface,
@@ -82,7 +82,7 @@ function ActiveTransfersSection() {
                 : 0;
 
           return (
-            <View
+            <Box
               key={transfer.transferId}
               style={{
                 flexDirection: 'row',
@@ -94,14 +94,14 @@ function ActiveTransfersSection() {
               }}
             >
               {/* Direction icon */}
-              <View
+              <Box
                 style={{
                   width: 32,
                   height: 32,
                   borderRadius: 8,
                   backgroundColor: transfer.direction === 'upload'
                     ? theme.colors.accent.primary + '20'
-                    : '#10b98120',
+                    : theme.colors.status.success + '20',
                   alignItems: 'center',
                   justifyContent: 'center',
                 }}
@@ -110,17 +110,17 @@ function ActiveTransfersSection() {
                   size={16}
                   color={transfer.direction === 'upload'
                     ? theme.colors.accent.primary
-                    : '#10b981'}
+                    : theme.colors.status.success}
                 />
-              </View>
+              </Box>
 
               {/* Info */}
-              <View style={{ flex: 1 }}>
+              <Box style={{ flex: 1 }}>
                 <Text size="sm" weight="medium" style={{ color: theme.colors.text.primary }} numberOfLines={1}>
                   {transfer.filename}
                 </Text>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
+                <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 2 }}>
+                  <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 2 }}>
                     <Text size="xs" style={{ color: theme.colors.text.muted }}>
                       {progress}% &middot;{' '}
                     </Text>
@@ -130,8 +130,8 @@ function ActiveTransfersSection() {
                       formatValue={(v) => `${formatBytes(Math.round(v))}/s`}
                       style={{ fontSize: 11, color: theme.colors.text.muted }}
                     />
-                  </View>
-                  <View
+                  </Box>
+                  <Box
                     style={{
                       paddingHorizontal: 6,
                       paddingVertical: 1,
@@ -142,11 +142,11 @@ function ActiveTransfersSection() {
                     <Text size="xs" style={{ color: theme.colors.text.muted }}>
                       {transfer.transportType === 'webrtc' ? 'Direct' : transfer.transportType === 'relay' ? 'Relay' : 'P2P'}
                     </Text>
-                  </View>
-                </View>
+                  </Box>
+                </Box>
 
                 {/* Progress bar */}
-                <View
+                <Box
                   style={{
                     height: 3,
                     borderRadius: 2,
@@ -154,7 +154,7 @@ function ActiveTransfersSection() {
                     marginTop: 6,
                   }}
                 >
-                  <View
+                  <Box
                     style={{
                       height: 3,
                       borderRadius: 2,
@@ -162,11 +162,11 @@ function ActiveTransfersSection() {
                       width: `${progress}%`,
                     }}
                   />
-                </View>
-              </View>
+                </Box>
+              </Box>
 
               {/* Controls */}
-              <View style={{ flexDirection: 'row', gap: 4 }}>
+              <Box style={{ flexDirection: 'row', gap: 4 }}>
                 {transfer.state === 'transferring' && (
                   <Button
                     variant="tertiary"
@@ -192,16 +192,16 @@ function ActiveTransfersSection() {
                 >
                   Cancel
                 </Button>
-              </View>
-            </View>
+              </Box>
+            </Box>
           );
         })}
-      </View>
+      </Box>
 
       {/* Speed summary — odometer-style animated counter */}
-      <View style={{ flexDirection: 'row', gap: 16, marginTop: 8 }}>
+      <Box style={{ flexDirection: 'row', gap: 16, marginTop: 8 }}>
         {totalUploadSpeed > 0 && (
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+          <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
             <Text size="xs" style={{ color: theme.colors.text.muted }}>Upload:</Text>
             <AnimatedCounter
               value={totalUploadSpeed}
@@ -209,10 +209,10 @@ function ActiveTransfersSection() {
               formatValue={(v) => `${formatBytes(Math.round(v))}/s`}
               style={{ fontSize: 11, color: theme.colors.text.muted }}
             />
-          </View>
+          </Box>
         )}
         {totalDownloadSpeed > 0 && (
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+          <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
             <Text size="xs" style={{ color: theme.colors.text.muted }}>Download:</Text>
             <AnimatedCounter
               value={totalDownloadSpeed}
@@ -220,10 +220,10 @@ function ActiveTransfersSection() {
               formatValue={(v) => `${formatBytes(Math.round(v))}/s`}
               style={{ fontSize: 11, color: theme.colors.text.muted }}
             />
-          </View>
+          </Box>
         )}
-      </View>
-    </View>
+      </Box>
+    </Box>
   );
 }
 
@@ -259,8 +259,8 @@ function SharedFoldersSection({
   }
 
   return (
-    <View style={{ marginBottom: 24 }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+    <Box style={{ marginBottom: 24 }}>
+      <Box style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
         <Text
           size="sm"
           weight="semibold"
@@ -272,14 +272,14 @@ function SharedFoldersSection({
         >
           Shared Folders
         </Text>
-      </View>
+      </Box>
 
       {isLoading ? (
         <Text size="sm" style={{ color: theme.colors.text.muted }}>
           Loading shared folders...
         </Text>
       ) : sharedFolders.length === 0 ? (
-        <View
+        <Box
           style={{
             borderRadius: 12,
             backgroundColor: theme.colors.background.surface,
@@ -296,9 +296,9 @@ function SharedFoldersSection({
           <Text size="xs" style={{ color: theme.colors.text.muted, marginTop: 4, textAlign: 'center' }}>
             Create a shared folder from a DM conversation to start sharing files with friends.
           </Text>
-        </View>
+        </Box>
       ) : (
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
+        <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
           {sharedFolders.map((sf) => (
             <SharedFolderCard
               key={sf.folder.id}
@@ -307,9 +307,9 @@ function SharedFoldersSection({
               onSync={() => syncFolder(sf.folder.id)}
             />
           ))}
-        </View>
+        </Box>
       )}
-    </View>
+    </Box>
   );
 }
 
@@ -326,9 +326,9 @@ function SharedFolderCard({
 
   const syncColor = useMemo(() => {
     switch (folder.syncStatus) {
-      case 'synced': return '#10b981';
+      case 'synced': return theme.colors.status.success;
       case 'syncing': return theme.colors.accent.primary;
-      case 'error': return '#ef4444';
+      case 'error': return theme.colors.status.danger;
       case 'offline': return theme.colors.text.muted;
       default: return theme.colors.text.muted;
     }
@@ -348,9 +348,9 @@ function SharedFolderCard({
         padding: 16,
       })}
     >
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+      <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
         <FolderIcon size={20} color={syncColor} />
-        <View
+        <Box
           style={{
             width: 8,
             height: 8,
@@ -358,7 +358,7 @@ function SharedFolderCard({
             backgroundColor: syncColor,
           }}
         />
-      </View>
+      </Box>
 
       <Text size="sm" weight="medium" style={{ color: theme.colors.text.primary }} numberOfLines={1}>
         {folder.folder.name}
@@ -369,7 +369,7 @@ function SharedFolderCard({
       </Text>
 
       {folder.syncStatus === 'syncing' && (
-        <View
+        <Box
           style={{
             height: 3,
             borderRadius: 2,
@@ -377,7 +377,7 @@ function SharedFolderCard({
             marginTop: 8,
           }}
         >
-          <View
+          <Box
             style={{
               height: 3,
               borderRadius: 2,
@@ -385,7 +385,7 @@ function SharedFolderCard({
               width: `${folder.syncProgress}%`,
             }}
           />
-        </View>
+        </Box>
       )}
     </Pressable>
   );
@@ -597,9 +597,9 @@ function FolderDetailView({
     : 'Unknown';
 
   return (
-    <View ref={dropZoneRef} style={{ marginBottom: 24 }}>
+    <Box ref={dropZoneRef} style={{ marginBottom: 24 }}>
       {/* Header with back button + upload button */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+      <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 }}>
         <Button variant="tertiary" size="sm" onPress={onBack}>
           Back
         </Button>
@@ -607,18 +607,18 @@ function FolderDetailView({
         <Text size="md" weight="bold" style={{ color: theme.colors.text.primary, flex: 1 }}>
           {folder.folder.name}
         </Text>
-        <View
+        <Box
           style={{
             paddingHorizontal: 8,
             paddingVertical: 2,
             borderRadius: 6,
-            backgroundColor: folder.syncStatus === 'synced' ? '#10b98120' : theme.colors.background.sunken,
+            backgroundColor: folder.syncStatus === 'synced' ? theme.colors.status.success + '20' : theme.colors.background.sunken,
           }}
         >
-          <Text size="xs" style={{ color: folder.syncStatus === 'synced' ? '#10b981' : theme.colors.text.muted }}>
+          <Text size="xs" style={{ color: folder.syncStatus === 'synced' ? theme.colors.status.success : theme.colors.text.muted }}>
             {syncStatusLabel}
           </Text>
-        </View>
+        </Box>
         <Button
           variant="secondary"
           size="xs"
@@ -631,11 +631,11 @@ function FolderDetailView({
         <Button variant="secondary" size="xs" onPress={onSync}>
           Sync Now
         </Button>
-      </View>
+      </Box>
 
       {/* Drag-and-drop overlay — aurora gradient */}
       {isDragOver && (
-        <View
+        <Box
           style={{
             borderRadius: 12,
             borderWidth: 2,
@@ -662,14 +662,14 @@ function FolderDetailView({
           <Text size="sm" weight="medium" style={{ color: theme.colors.accent.primary, marginTop: 8 }}>
             Drop files to upload
           </Text>
-        </View>
+        </Box>
       )}
 
       {/* File list */}
       {loadingFiles ? (
         <Text size="sm" style={{ color: theme.colors.text.muted }}>Loading files...</Text>
       ) : files.length === 0 && !isDragOver ? (
-        <View
+        <Box
           style={{
             borderRadius: 12,
             backgroundColor: theme.colors.background.surface,
@@ -686,9 +686,9 @@ function FolderDetailView({
           <Text size="xs" style={{ color: theme.colors.text.muted, marginTop: 4, textAlign: 'center' }}>
             Drag and drop files here or click Upload above.
           </Text>
-        </View>
+        </Box>
       ) : files.length > 0 ? (
-        <View
+        <Box
           style={{
             borderRadius: 12,
             backgroundColor: theme.colors.background.surface,
@@ -712,39 +712,39 @@ function FolderDetailView({
               })}
             >
               <FileTextIcon size={20} color={theme.colors.text.secondary} />
-              <View style={{ flex: 1 }}>
+              <Box style={{ flex: 1 }}>
                 <Text size="sm" weight="medium" style={{ color: theme.colors.text.primary }} numberOfLines={1}>
                   {file.filename}
                 </Text>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
                   <Text size="xs" style={{ color: theme.colors.text.muted }}>
                     {formatBytes(file.fileSize)} &middot; v{file.version}
                   </Text>
                   {file.isEncrypted && (
                     <LockIcon size={10} color={theme.colors.accent.primary} />
                   )}
-                </View>
-              </View>
+                </Box>
+              </Box>
               <DownloadIcon size={16} color={theme.colors.text.muted} />
             </Pressable>
           ))}
-        </View>
+        </Box>
       ) : null}
 
       {/* Toast notification */}
       {toastMessage && (
-        <View
+        <Box
           style={{
             position: 'absolute' as any,
             bottom: 24,
             left: '50%' as any,
             transform: [{ translateX: -200 }] as any,
-            backgroundColor: '#1a1a2e',
+            backgroundColor: theme.colors.background.raised,
             padding: 12,
             paddingHorizontal: 24,
             borderRadius: 8,
             borderWidth: 1,
-            borderColor: '#333',
+            borderColor: theme.colors.border.subtle,
             maxWidth: 400,
             flexDirection: 'row',
             alignItems: 'center',
@@ -752,11 +752,11 @@ function FolderDetailView({
             zIndex: 10000,
           }}
         >
-          <Text size="sm" style={{ color: '#e0e0e0', flex: 1 }}>{toastMessage}</Text>
-          <Text size="sm" onPress={() => setToastMessage(null)} style={{ color: '#888', padding: 4 }}>✕</Text>
-        </View>
+          <Text size="sm" style={{ color: theme.colors.text.secondary, flex: 1 }}>{toastMessage}</Text>
+          <Text size="sm" onPress={() => setToastMessage(null)} style={{ color: theme.colors.text.muted, padding: 4 }}>✕</Text>
+        </Box>
       )}
-    </View>
+    </Box>
   );
 }
 
@@ -772,7 +772,7 @@ function CommunityFilesSection() {
   if (communities.length === 0) return null;
 
   return (
-    <View style={{ marginBottom: 24 }}>
+    <Box style={{ marginBottom: 24 }}>
       <Text
         size="sm"
         weight="semibold"
@@ -786,7 +786,7 @@ function CommunityFilesSection() {
         Community Files
       </Text>
 
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+      <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
         {communities.map((community) => (
           <Pressable
             key={community.id}
@@ -805,7 +805,7 @@ function CommunityFilesSection() {
               borderColor: theme.colors.border.subtle,
             })}
           >
-            <View
+            <Box
               style={{
                 width: 24,
                 height: 24,
@@ -815,17 +815,17 @@ function CommunityFilesSection() {
                 justifyContent: 'center',
               }}
             >
-              <Text size="xs" weight="bold" style={{ color: '#fff' }}>
+              <Text size="xs" weight="bold" style={{ color: theme.colors.text.inverse }}>
                 {community.name.charAt(0).toUpperCase()}
               </Text>
-            </View>
+            </Box>
             <Text size="sm" style={{ color: theme.colors.text.primary }}>
               {community.name}
             </Text>
           </Pressable>
         ))}
-      </View>
-    </View>
+      </Box>
+    </Box>
   );
 }
 
@@ -865,11 +865,11 @@ function StorageSection() {
 
   if (isLoading) {
     return (
-      <View style={{ marginBottom: 24 }}>
+      <Box style={{ marginBottom: 24 }}>
         <Text size="sm" style={{ color: theme.colors.text.muted }}>
           Loading storage info...
         </Text>
-      </View>
+      </Box>
     );
   }
 
@@ -882,7 +882,7 @@ function StorageSection() {
     : 0;
 
   return (
-    <View style={{ marginBottom: 24 }}>
+    <Box style={{ marginBottom: 24 }}>
       <Text
         size="sm"
         weight="semibold"
@@ -896,7 +896,7 @@ function StorageSection() {
         Storage
       </Text>
 
-      <View
+      <Box
         style={{
           borderRadius: 12,
           backgroundColor: theme.colors.background.surface,
@@ -906,16 +906,16 @@ function StorageSection() {
         }}
       >
         {/* Usage bar */}
-        <View style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
+        <Box style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
           <Text size="sm" weight="medium" style={{ color: theme.colors.text.primary }}>
             {formatBytes(storageUsage.total)} used
           </Text>
           <Text size="sm" style={{ color: theme.colors.text.muted }}>
             {formatBytes(limitBytes)} total
           </Text>
-        </View>
+        </Box>
 
-        <View
+        <Box
           style={{
             height: 8,
             borderRadius: 4,
@@ -924,15 +924,15 @@ function StorageSection() {
             overflow: 'hidden',
           }}
         >
-          <View
+          <Box
             style={{
               height: 8,
               borderRadius: 4,
               width: `${Math.min(usagePercent, 100)}%`,
               ...(usagePercent > 90
-                ? { backgroundColor: '#ef4444' }
+                ? { backgroundColor: theme.colors.status.danger }
                 : usagePercent > 70
-                  ? { backgroundColor: '#f59e0b' }
+                  ? { backgroundColor: theme.colors.status.warning }
                   : Platform.OS === 'web'
                     ? {
                         backgroundImage: 'linear-gradient(90deg, #8B5CF6, #EC4899, #3B82F6, #8B5CF6)',
@@ -942,30 +942,30 @@ function StorageSection() {
                         animationTimingFunction: 'linear',
                         animationIterationCount: 'infinite',
                       } as any
-                    : { backgroundColor: '#8B5CF6' }),
+                    : { backgroundColor: theme.colors.accent.primary }),
             }}
           />
-        </View>
+        </Box>
 
         {/* Breakdown */}
         {storageUsage.byContext && (
-          <View style={{ gap: 4, marginBottom: 12 }}>
+          <Box style={{ gap: 4, marginBottom: 12 }}>
             {Object.entries(storageUsage.byContext).map(([context, bytes]) => (
-              <View key={context} style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
+              <Box key={context} style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
                 <Text size="xs" style={{ color: theme.colors.text.muted }}>
                   {context}
                 </Text>
                 <Text size="xs" style={{ color: theme.colors.text.muted }}>
                   {formatBytes(bytes as number)}
                 </Text>
-              </View>
+              </Box>
             ))}
-          </View>
+          </Box>
         )}
 
         {/* Cleanup suggestions */}
         {cleanupSuggestions.length > 0 && (
-          <View style={{ marginBottom: 12 }}>
+          <Box style={{ marginBottom: 12 }}>
             <Text size="xs" weight="medium" style={{ color: theme.colors.text.secondary, marginBottom: 4 }}>
               Suggestions
             </Text>
@@ -974,7 +974,7 @@ function StorageSection() {
                 &bull; {s.description} ({formatBytes(s.bytesReclaimable)})
               </Text>
             ))}
-          </View>
+          </Box>
         )}
 
         {/* Cleanup button */}
@@ -995,17 +995,17 @@ function StorageSection() {
         )}
 
         {/* Auto-cleanup rules toggle */}
-        <Pressable
+        <Button
+          variant="tertiary"
+          size="xs"
           onPress={() => setShowRules((prev) => !prev)}
-          style={{ marginTop: 12, paddingVertical: 4 }}
+          style={{ marginTop: 12, alignSelf: 'flex-start' }}
         >
-          <Text size="xs" weight="medium" style={{ color: theme.colors.text.secondary }}>
-            {showRules ? 'Hide' : 'Show'} Auto-Cleanup Rules
-          </Text>
-        </Pressable>
+          {showRules ? 'Hide' : 'Show'} Auto-Cleanup Rules
+        </Button>
 
         {showRules && (
-          <View style={{ marginTop: 8, gap: 8 }}>
+          <Box style={{ marginTop: 8, gap: 8 }}>
             <AutoCleanupRuleRow
               label="Max storage"
               value={autoCleanupRules.maxTotalBytes
@@ -1043,10 +1043,10 @@ function StorageSection() {
               ]}
               onSelect={(v) => setAutoCleanupRules({ maxCacheAge: v })}
             />
-          </View>
+          </Box>
         )}
-      </View>
-    </View>
+      </Box>
+    </Box>
   );
 }
 
@@ -1068,16 +1068,16 @@ function AutoCleanupRuleRow({
   const { theme } = useTheme();
 
   return (
-    <View>
-      <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+    <Box>
+      <Box style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
         <Text size="xs" style={{ color: theme.colors.text.secondary }}>
           {label}
         </Text>
         <Text size="xs" weight="medium" style={{ color: theme.colors.text.primary }}>
           {value}
         </Text>
-      </View>
-      <View style={{ flexDirection: 'row', gap: 4, marginTop: 4 }}>
+      </Box>
+      <Box style={{ flexDirection: 'row', gap: 4, marginTop: 4 }}>
         {options.map((opt) => (
           <Pressable
             key={opt.value}
@@ -1096,8 +1096,8 @@ function AutoCleanupRuleRow({
             </Text>
           </Pressable>
         ))}
-      </View>
-    </View>
+      </Box>
+    </Box>
   );
 }
 
@@ -1112,9 +1112,9 @@ export default function FilesPage() {
   const [openFolderId, setOpenFolderId] = useState<string | null>(null);
 
   return (
-    <View style={{ flex: 1, backgroundColor: theme.colors.background.canvas }}>
+    <Box style={{ flex: 1, backgroundColor: theme.colors.background.canvas }}>
       {/* Header */}
-      <View
+      <Box
         style={{
           paddingHorizontal: 24,
           paddingVertical: 16,
@@ -1124,14 +1124,14 @@ export default function FilesPage() {
           alignItems: 'center',
         }}
       >
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+        <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
           <MobileBackButton onPress={() => router.back()} label="Back to conversations" />
           <FolderIcon size={24} color={theme.colors.text.primary} />
           <Text size="lg" weight="bold" style={{ color: theme.colors.text.primary }}>
             Files
           </Text>
           {hasActiveUploads && (
-            <View
+            <Box
               style={{
                 paddingHorizontal: 8,
                 paddingVertical: 2,
@@ -1142,13 +1142,13 @@ export default function FilesPage() {
               <Text size="xs" weight="medium" style={{ color: theme.colors.accent.primary }}>
                 {uploadRingProgress}%
               </Text>
-            </View>
+            </Box>
           )}
-        </View>
-      </View>
+        </Box>
+      </Box>
 
       {/* Content */}
-      <ScrollView
+      <ScrollArea
         style={{ flex: 1 }}
         contentContainerStyle={{ padding: 24 }}
         showsVerticalScrollIndicator={false}
@@ -1161,7 +1161,7 @@ export default function FilesPage() {
         />
         {!openFolderId && <CommunityFilesSection />}
         {!openFolderId && <StorageSection />}
-      </ScrollView>
-    </View>
+      </ScrollArea>
+    </Box>
   );
 }
