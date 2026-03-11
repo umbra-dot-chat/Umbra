@@ -1,7 +1,8 @@
-import React from 'react';
-import { Platform, Pressable, ScrollView, View } from 'react-native';
+import React, { useRef, useEffect } from 'react';
+import { Animated, Platform, Pressable, ScrollView, View } from 'react-native';
 import { Text, useTheme } from '@coexist/wisp-react-native';
 import type { SlashCommandDef } from '@/hooks/useSlashCommand';
+import { useAppTheme } from '@/contexts/ThemeContext';
 
 // ---------------------------------------------------------------------------
 // Props
@@ -14,6 +15,20 @@ export interface SlashCommandMenuProps {
   onActiveIndexChange: (index: number) => void;
   onSelect: (cmd: SlashCommandDef) => void;
   open: boolean;
+}
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/** Parse hex color to rgba with given alpha */
+function hexToRgba(hex: string, alpha: number): string {
+  const cleaned = hex.replace('#', '');
+  const r = parseInt(cleaned.substring(0, 2), 16);
+  const g = parseInt(cleaned.substring(2, 4), 16);
+  const b = parseInt(cleaned.substring(4, 6), 16);
+  if (isNaN(r) || isNaN(g) || isNaN(b)) return `rgba(128, 128, 255, ${alpha})`;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
 // ---------------------------------------------------------------------------
@@ -33,7 +48,7 @@ export function SlashCommandMenu({
 
   if (!open || commands.length === 0) return null;
 
-  // Group commands by category
+  // Group commands by category (for divider placement)
   const grouped = new Map<string, SlashCommandDef[]>();
   for (const cmd of commands) {
     const list = grouped.get(cmd.category) ?? [];
@@ -41,18 +56,36 @@ export function SlashCommandMenu({
     grouped.set(cmd.category, list);
   }
 
-  // Build flat index mapping for active highlight
+  // Build flat list with divider markers
+  const rows: { cmd: SlashCommandDef; flatIndex: number; showDivider: boolean }[] = [];
   let flatIndex = 0;
+  let isFirstGroup = true;
+  for (const [, cmds] of grouped.entries()) {
+    for (let i = 0; i < cmds.length; i++) {
+      rows.push({
+        cmd: cmds[i],
+        flatIndex,
+        // Show divider before the first item of each group (except the very first)
+        showDivider: i === 0 && !isFirstGroup,
+      });
+      flatIndex++;
+    }
+    isFirstGroup = false;
+  }
+
+  const accentColor = theme.colors.accent.primary;
+  // Max 6 rows visible: 6 * 36 = 216
+  const maxVisibleHeight = 6 * 36;
 
   return (
     <View
       style={{
         backgroundColor: isDark ? theme.colors.background.raised : theme.colors.background.surface,
-        borderRadius: 12,
+        borderRadius: 10,
         borderWidth: 1,
         borderColor: theme.colors.border.subtle,
         overflow: 'hidden',
-        maxHeight: 320,
+        maxHeight: maxVisibleHeight + 8, // +8 for vertical padding
         ...Platform.select({
           web: {
             boxShadow: isDark
@@ -71,67 +104,40 @@ export function SlashCommandMenu({
     >
       <ScrollView
         keyboardShouldPersistTaps="always"
-        style={{ maxHeight: 320 }}
+        style={{ maxHeight: maxVisibleHeight + 8 }}
       >
-        {/* Header */}
-        <View style={{ paddingHorizontal: 12, paddingTop: 8, paddingBottom: 4 }}>
-          <Text
-            style={{
-              fontSize: 11,
-              fontWeight: '600',
-              color: theme.colors.text.secondary,
-              textTransform: 'uppercase',
-              letterSpacing: 0.5,
-            }}
-          >
-            Commands {query ? `matching "${query}"` : ''}
-          </Text>
-        </View>
-
-        {Array.from(grouped.entries()).map(([category, cmds]) => (
-          <View key={category}>
-            {/* Category label */}
-            <View style={{ paddingHorizontal: 12, paddingTop: 6, paddingBottom: 2 }}>
-              <Text
-                style={{
-                  fontSize: 10,
-                  fontWeight: '700',
-                  color: theme.colors.accent.primary,
-                  textTransform: 'uppercase',
-                  letterSpacing: 0.8,
-                }}
-              >
-                {category}
-              </Text>
-            </View>
-
-            {/* Commands in this category */}
-            {cmds.map((cmd) => {
-              const isActive = flatIndex === activeIndex;
-              const currentIndex = flatIndex;
-              flatIndex++;
-
-              return (
-                <CommandRow
-                  key={cmd.id}
-                  cmd={cmd}
-                  isActive={isActive}
-                  isDark={isDark}
-                  theme={theme}
-                  onPress={() => onSelect(cmd)}
-                  onHover={() => onActiveIndexChange(currentIndex)}
+        <View style={{ paddingVertical: 4 }}>
+          {rows.map(({ cmd, flatIndex: idx, showDivider }) => (
+            <React.Fragment key={cmd.id}>
+              {showDivider && (
+                <View
+                  style={{
+                    height: 1,
+                    backgroundColor: theme.colors.border.subtle,
+                    marginHorizontal: 8,
+                    marginVertical: 2,
+                  }}
                 />
-              );
-            })}
-          </View>
-        ))}
+              )}
+              <CommandRow
+                cmd={cmd}
+                isActive={idx === activeIndex}
+                isDark={isDark}
+                theme={theme}
+                accentColor={accentColor}
+                onPress={() => onSelect(cmd)}
+                onHover={() => onActiveIndexChange(idx)}
+              />
+            </React.Fragment>
+          ))}
+        </View>
       </ScrollView>
     </View>
   );
 }
 
 // ---------------------------------------------------------------------------
-// CommandRow
+// CommandRow — Condensed single-line layout with gradient active accent
 // ---------------------------------------------------------------------------
 
 function CommandRow({
@@ -139,6 +145,7 @@ function CommandRow({
   isActive,
   isDark,
   theme,
+  accentColor,
   onPress,
   onHover,
 }: {
@@ -146,9 +153,52 @@ function CommandRow({
   isActive: boolean;
   isDark: boolean;
   theme: any;
+  accentColor: string;
   onPress: () => void;
   onHover: () => void;
 }) {
+  let motionEnabled = true;
+  try {
+    const appTheme = useAppTheme();
+    motionEnabled = appTheme.motionPreferences.enableAnimations;
+  } catch {
+    // ThemeProvider not available — skip animations
+  }
+
+  // Animated left-border width
+  const borderAnim = useRef(new Animated.Value(isActive ? 1 : 0)).current;
+
+  useEffect(() => {
+    if (motionEnabled) {
+      Animated.timing(borderAnim, {
+        toValue: isActive ? 1 : 0,
+        duration: 150,
+        useNativeDriver: false,
+      }).start();
+    } else {
+      borderAnim.setValue(isActive ? 1 : 0);
+    }
+  }, [isActive, motionEnabled]);
+
+  const animatedBorderWidth = borderAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 2],
+  });
+
+  const animatedBgOpacity = borderAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0, 1],
+  });
+
+  // Gradient-like background for web, solid fallback for native
+  const activeBg = Platform.OS === 'web'
+    ? {
+        backgroundImage: `linear-gradient(to right, ${hexToRgba(accentColor, 0.12)}, transparent)`,
+      } as any
+    : {
+        backgroundColor: hexToRgba(accentColor, 0.08),
+      };
+
   return (
     <Pressable
       onPress={onPress}
@@ -156,62 +206,91 @@ function CommandRow({
       style={{
         flexDirection: 'row',
         alignItems: 'center',
-        paddingVertical: 6,
-        paddingHorizontal: 12,
-        backgroundColor: isActive
-          ? isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)'
-          : 'transparent',
-        gap: 8,
+        height: 36,
+        paddingHorizontal: 8,
+        position: 'relative',
+        overflow: 'hidden',
       }}
     >
+      {/* Animated gradient background */}
+      <Animated.View
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          opacity: animatedBgOpacity,
+          ...activeBg,
+        }}
+        pointerEvents="none"
+      />
+
+      {/* Animated left accent border */}
+      <Animated.View
+        style={{
+          position: 'absolute',
+          left: 0,
+          top: 4,
+          bottom: 4,
+          width: animatedBorderWidth,
+          backgroundColor: accentColor,
+          borderRadius: 1,
+        }}
+        pointerEvents="none"
+      />
+
       {/* Icon */}
       {cmd.icon && (
-        <Text style={{ fontSize: 16, width: 24, textAlign: 'center' }}>
+        <Text style={{ fontSize: 14, width: 22, textAlign: 'center', marginRight: 6 }}>
           {cmd.icon}
         </Text>
       )}
 
-      {/* Command text and description */}
-      <View style={{ flex: 1, minWidth: 0 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-          <Text
-            style={{
-              fontSize: 13,
-              fontWeight: '600',
-              color: theme.colors.text.primary,
-              fontFamily: Platform.OS === 'web' ? 'monospace' : undefined,
-            }}
-            numberOfLines={1}
-          >
-            /{cmd.command}
-          </Text>
-          {cmd.args && (
-            <Text
-              style={{
-                fontSize: 12,
-                color: theme.colors.text.muted,
-                fontFamily: Platform.OS === 'web' ? 'monospace' : undefined,
-                fontStyle: 'italic',
-              }}
-              numberOfLines={1}
-            >
-              {cmd.args}
-            </Text>
-          )}
-        </View>
-        {cmd.description && (
-          <Text
-            style={{
-              fontSize: 11,
-              color: theme.colors.text.secondary,
-              marginTop: 1,
-            }}
-            numberOfLines={1}
-          >
-            {cmd.description}
-          </Text>
-        )}
-      </View>
+      {/* Command name (bold) */}
+      <Text
+        style={{
+          fontSize: 13,
+          fontWeight: '600',
+          color: theme.colors.text.primary,
+          fontFamily: Platform.OS === 'web' ? 'monospace' : undefined,
+        }}
+        numberOfLines={1}
+      >
+        /{cmd.command}
+      </Text>
+
+      {/* Args (muted, italic) */}
+      {cmd.args && (
+        <Text
+          style={{
+            fontSize: 12,
+            color: theme.colors.text.muted,
+            fontFamily: Platform.OS === 'web' ? 'monospace' : undefined,
+            fontStyle: 'italic',
+            marginLeft: 4,
+          }}
+          numberOfLines={1}
+        >
+          {cmd.args}
+        </Text>
+      )}
+
+      {/* Separator and description */}
+      {cmd.description && (
+        <Text
+          style={{
+            fontSize: 12,
+            color: theme.colors.text.muted,
+            marginLeft: 8,
+            flex: 1,
+            minWidth: 0,
+          }}
+          numberOfLines={1}
+        >
+          — {cmd.description}
+        </Text>
+      )}
 
       {/* Active hint */}
       {isActive && (
@@ -220,6 +299,7 @@ function CommandRow({
             fontSize: 10,
             color: theme.colors.text.muted,
             fontStyle: 'italic',
+            marginLeft: 8,
           }}
         >
           enter

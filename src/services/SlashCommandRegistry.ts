@@ -169,6 +169,38 @@ export const GHOST_COMMANDS: SlashCommandDef[] = [
     sendAsMessage: true,
   },
 
+  // Quality
+  {
+    id: 'ghost:quality',
+    command: 'ghost quality',
+    label: 'Stream Quality',
+    description: 'Set video quality (4k, 1080p, 720p, 480p, auto)',
+    icon: '📺',
+    category: 'Ghost',
+    sendAsMessage: true,
+    args: '<preset>',
+  },
+  {
+    id: 'ghost:resolution',
+    command: 'ghost resolution',
+    label: 'Custom Resolution',
+    description: 'Set custom video resolution (e.g. 1920x1080)',
+    icon: '🖥️',
+    category: 'Ghost',
+    sendAsMessage: true,
+    args: '<WxH>',
+  },
+  {
+    id: 'ghost:fps',
+    command: 'ghost fps',
+    label: 'Frame Rate',
+    description: 'Set video frame rate (1-120)',
+    icon: '🎞️',
+    category: 'Ghost',
+    sendAsMessage: true,
+    args: '<number>',
+  },
+
   // Files
   {
     id: 'ghost:files',
