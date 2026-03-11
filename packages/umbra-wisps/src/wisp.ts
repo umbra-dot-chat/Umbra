@@ -6,7 +6,10 @@
  */
 
 import { RelayClient, type ServerMessage } from './relay-client.js';
-import { encryptMessage, decryptMessage, computeConversationId, uuid } from './crypto.js';
+import {
+  encryptMessage, decryptMessage, computeConversationId, uuid,
+  decryptGroupKey,
+} from './crypto.js';
 import type { WispIdentity } from './identity-store.js';
 import type { WispPersona } from './personas.js';
 import { type ChatMessage, type WispLLMClient } from './llm-client.js';
@@ -20,12 +23,21 @@ export interface WispFriend {
   conversationId: string;
 }
 
+export interface WispGroup {
+  groupId: string;
+  groupName: string;
+  groupKey: string; // Shared AES-256 key (hex)
+  members: { did: string; displayName: string }[];
+  conversationId: string;
+}
+
 export class Wisp {
   readonly identity: WispIdentity;
   readonly persona: WispPersona;
   private relay: RelayClient;
   private llm: WispLLMClient;
   private friends: Map<string, WispFriend> = new Map();
+  private groups: Map<string, WispGroup> = new Map();
   private conversationHistory: Map<string, ChatMessage[]> = new Map();
   private systemPrompt: string;
   private allPersonaNames: string[];
@@ -86,6 +98,8 @@ export class Wisp {
   hasFriend(did: string): boolean { return this.friends.has(did); }
   addFriend(friend: WispFriend): void { this.friends.set(friend.did, friend); }
   getFriend(did: string): WispFriend | undefined { return this.friends.get(did); }
+  getGroup(groupId: string): WispGroup | undefined { return this.groups.get(groupId); }
+  getGroups(): WispGroup[] { return Array.from(this.groups.values()); }
 
   // -- Message Sending --
 
@@ -181,6 +195,9 @@ export class Wisp {
         case 'encrypted_message':
           void this.handleEncryptedMessage(envelope.payload);
           break;
+        case 'group_invite':
+          this.handleGroupInvite(envelope.payload);
+          break;
       }
     } catch { /* ignore parse errors */ }
   }
@@ -250,6 +267,40 @@ export class Wisp {
       }, delay);
     } catch (err) {
       console.warn(`[${this.persona.name}] Failed to decrypt message:`, err);
+    }
+  }
+
+  private handleGroupInvite(p: {
+    inviteId: string; groupId: string; groupName: string;
+    inviterDid: string; inviterName: string;
+    encryptedGroupKey: string; nonce: string;
+    membersJson: string; timestamp: number;
+  }): void {
+    try {
+      const inviter = this.friends.get(p.inviterDid);
+      if (!inviter) return; // Must be friends to accept group invites
+      const groupKey = decryptGroupKey(
+        p.encryptedGroupKey, p.nonce,
+        this.identity.encryptionPrivateKey, inviter.encryptionKey,
+      );
+      const members = JSON.parse(p.membersJson) as { did: string; displayName: string }[];
+      this.groups.set(p.groupId, {
+        groupId: p.groupId, groupName: p.groupName,
+        groupKey, members, conversationId: p.groupId,
+      });
+      // Send acceptance
+      this.relay.sendEnvelope(p.inviterDid, {
+        envelope: 'group_invite_response', version: 1,
+        payload: {
+          inviteId: p.inviteId, groupId: p.groupId, accepted: true,
+          fromDid: this.identity.did,
+          fromDisplayName: this.persona.name,
+          timestamp: Date.now(),
+        },
+      });
+      console.log(`[${this.persona.name}] Joined group "${p.groupName}"`);
+    } catch (err) {
+      console.warn(`[${this.persona.name}] Failed to handle group invite:`, err);
     }
   }
 }

@@ -74,6 +74,84 @@ export function decryptMessage(
 }
 
 /**
+ * Encrypt a raw key using ECDH shared secret (for group key exchange).
+ */
+export function encryptGroupKey(
+  groupKeyHex: string,
+  myEncryptionPrivateKey: string,
+  recipientEncryptionPublicKey: string,
+): { ciphertext: string; nonce: string } {
+  const sharedSecret = x25519.getSharedSecret(
+    hexToBytes(myEncryptionPrivateKey),
+    hexToBytes(recipientEncryptionPublicKey),
+  );
+  const salt = new TextEncoder().encode('umbra-group-key-exchange');
+  const aesKey = hkdf(sha256, sharedSecret, salt, 'umbra-group-key-v1', 32);
+  const nonce = randomBytes(12);
+  const cipher = gcm(aesKey, nonce);
+  const ciphertextBytes = cipher.encrypt(hexToBytes(groupKeyHex));
+  return {
+    ciphertext: Buffer.from(ciphertextBytes).toString('base64'),
+    nonce: bytesToHex(nonce),
+  };
+}
+
+/**
+ * Decrypt a raw key using ECDH shared secret (for group key exchange).
+ */
+export function decryptGroupKey(
+  ciphertextBase64: string,
+  nonceHex: string,
+  myEncryptionPrivateKey: string,
+  senderEncryptionPublicKey: string,
+): string {
+  const sharedSecret = x25519.getSharedSecret(
+    hexToBytes(myEncryptionPrivateKey),
+    hexToBytes(senderEncryptionPublicKey),
+  );
+  const salt = new TextEncoder().encode('umbra-group-key-exchange');
+  const aesKey = hkdf(sha256, sharedSecret, salt, 'umbra-group-key-v1', 32);
+  const nonce = hexToBytes(nonceHex);
+  const ciphertext = Buffer.from(ciphertextBase64, 'base64');
+  const cipher = gcm(aesKey, nonce);
+  const plaintext = cipher.decrypt(new Uint8Array(ciphertext));
+  return bytesToHex(plaintext);
+}
+
+/**
+ * Encrypt a message using a symmetric AES-256-GCM key (for group messages).
+ */
+export function encryptGroupMessage(
+  plaintext: string,
+  groupKeyHex: string,
+): { ciphertext: string; nonce: string } {
+  const key = hexToBytes(groupKeyHex);
+  const nonce = randomBytes(12);
+  const cipher = gcm(key, nonce);
+  const ciphertextBytes = cipher.encrypt(new TextEncoder().encode(plaintext));
+  return {
+    ciphertext: Buffer.from(ciphertextBytes).toString('base64'),
+    nonce: bytesToHex(nonce),
+  };
+}
+
+/**
+ * Decrypt a message using a symmetric AES-256-GCM key (for group messages).
+ */
+export function decryptGroupMessage(
+  ciphertextBase64: string,
+  nonceHex: string,
+  groupKeyHex: string,
+): string {
+  const key = hexToBytes(groupKeyHex);
+  const nonce = hexToBytes(nonceHex);
+  const ciphertext = Buffer.from(ciphertextBase64, 'base64');
+  const cipher = gcm(key, nonce);
+  const plaintext = cipher.decrypt(new Uint8Array(ciphertext));
+  return new TextDecoder().decode(plaintext);
+}
+
+/**
  * Deterministic conversation ID: SHA-256(sorted_did_a | sorted_did_b).
  */
 export function computeConversationId(didA: string, didB: string): string {
