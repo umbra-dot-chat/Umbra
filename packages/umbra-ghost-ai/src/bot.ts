@@ -11,7 +11,7 @@ import { join } from 'path';
 import { existsSync, mkdirSync } from 'fs';
 import type { GhostConfig, Logger } from './config.js';
 import { createLogger } from './config.js';
-import { computeConversationId, type GhostIdentity } from './crypto.js';
+import { computeConversationId, decryptGroupKey, decryptGroupMessage, type GhostIdentity } from './crypto.js';
 import { loadOrCreateIdentity } from './identity.js';
 import { RelayClient, type ServerMessage } from './relay.js';
 import { OllamaProvider } from './llm/ollama.js';
@@ -240,6 +240,20 @@ export class GhostBot {
         break;
       }
 
+      case 'group_invite':
+        this.handleGroupInviteEnvelope(payload);
+        break;
+
+      case 'group_message':
+        void this.handleGroupMessageEnvelope(payload);
+        break;
+
+      case 'group_invite_response':
+      case 'group_key_rotation':
+      case 'group_member_removed':
+        // Acknowledge but don't process
+        break;
+
       case 'typing_indicator':
       case 'message_status':
       case 'reaction_add':
@@ -311,6 +325,82 @@ export class GhostBot {
       this.log,
       this.callHandler,
     );
+  }
+
+  // ─── Group Handling ─────────────────────────────────────────────────────
+
+  private handleGroupInviteEnvelope(payload: any): void {
+    try {
+      const inviter = this.store.getFriend(payload.inviterDid);
+      if (!inviter) {
+        this.log.warn(`Group invite from unknown DID: ${payload.inviterDid?.slice(0, 24)}...`);
+        return;
+      }
+
+      const groupKey = decryptGroupKey(
+        payload.encryptedGroupKey,
+        payload.nonce,
+        this.identity.encryptionPrivateKey,
+        inviter.encryptionKey,
+        payload.groupId,
+      );
+
+      this.store.saveGroup({
+        groupId: payload.groupId,
+        groupName: payload.groupName,
+        groupKey,
+        conversationId: `group-${payload.groupId}`,
+        membersJson: payload.membersJson || '[]',
+        joinedAt: Date.now(),
+      });
+
+      // Send acceptance back to inviter
+      this.relay.sendEnvelope(payload.inviterDid, {
+        envelope: 'group_invite_response',
+        version: 1,
+        payload: {
+          inviteId: payload.inviteId,
+          groupId: payload.groupId,
+          accepted: true,
+          fromDid: this.identity.did,
+          fromDisplayName: this.identity.displayName,
+          timestamp: Date.now(),
+        },
+      });
+
+      this.log.info(`Joined group "${payload.groupName}"`);
+    } catch (err) {
+      this.log.warn('Failed to handle group invite:', err);
+    }
+  }
+
+  private async handleGroupMessageEnvelope(payload: any): Promise<void> {
+    const group = this.store.getGroup(payload.groupId);
+    if (!group) return;
+
+    try {
+      const plaintext = decryptGroupMessage(
+        payload.ciphertext,
+        payload.nonce,
+        group.groupKey,
+        payload.groupId,
+        payload.senderDid,
+        payload.timestamp,
+      );
+
+      this.store.saveMessage({
+        id: payload.messageId,
+        conversationId: group.conversationId,
+        role: 'user',
+        content: `${payload.senderName}: ${plaintext}`,
+        timestamp: payload.timestamp,
+      });
+
+      this.log.info(`Group "${group.groupName}" from ${payload.senderName}: "${plaintext.slice(0, 80)}${plaintext.length > 80 ? '...' : ''}"`);
+      // Ghost is a silent observer in groups — no auto-reply
+    } catch (err) {
+      this.log.warn(`Failed to decrypt group message in "${group.groupName}":`, err);
+    }
   }
 
   // ─── Call Handler ──────────────────────────────────────────────────────
