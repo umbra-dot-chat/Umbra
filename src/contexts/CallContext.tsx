@@ -689,8 +689,6 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       const stream = await manager.startScreenShare();
       setScreenShareStream(stream);
       setIsScreenSharing(true);
-      // Notify remote via data channel so their UI updates immediately
-      manager.sendDataChannelMessage({ type: 'screen-share-state', isScreenSharing: true });
     } catch (err) {
       console.warn('[CallContext] Failed to start screen share:', err);
     }
@@ -703,8 +701,6 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     manager.stopScreenShare();
     setScreenShareStream(null);
     setIsScreenSharing(false);
-    // Notify remote via data channel so their UI updates immediately
-    manager.sendDataChannelMessage({ type: 'screen-share-state', isScreenSharing: false });
   }, []);
 
   // ── Audio Processing ─────────────────────────────────────────────────────

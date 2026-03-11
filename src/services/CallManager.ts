@@ -743,6 +743,9 @@ export class CallManager {
       }
     }
 
+    // Notify remote peer that screen sharing has started
+    this.sendDataChannelMessage({ type: 'screen-share-state', isScreenSharing: true });
+
     return screenShareStream;
   }
 
