@@ -146,6 +146,23 @@ export class Wisp {
     });
   }
 
+  // -- Call Initiation (v1: stub, no real WebRTC) --
+
+  initiateCall(toDid: string, callType: 'voice' | 'video' = 'voice'): void {
+    const callId = uuid();
+    const friend = this.friends.get(toDid);
+    this.relay.sendEnvelope(toDid, {
+      envelope: 'call_offer', version: 1,
+      payload: {
+        callId, sdp: '', sdpType: 'offer', callType,
+        senderDid: this.identity.did,
+        senderDisplayName: this.persona.name,
+        conversationId: friend?.conversationId ?? '',
+      },
+    });
+    console.log(`[${this.persona.name}] Initiated ${callType} call to ${toDid.slice(0, 20)}...`);
+  }
+
   // -- Group Messaging --
 
   sendGroupMessage(groupId: string, text: string): void {
