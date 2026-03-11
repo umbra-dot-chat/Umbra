@@ -35,6 +35,20 @@ export function startHealthServer(
         json(res, result);
       } else if (req.method === 'GET' && url.pathname === '/wisps/scenarios') {
         json(res, { scenarios: orchestrator.getAvailableScenarios() });
+      } else if (req.method === 'GET' && url.pathname === '/wisps/groups') {
+        const wisps = orchestrator.getWisps();
+        const groups = wisps.map(w => ({
+          name: w.name,
+          groups: w.getGroups().map(g => ({ groupId: g.groupId, groupName: g.groupName, members: g.members.length })),
+        }));
+        json(res, { groups });
+      } else if (req.method === 'POST' && url.pathname === '/wisps/send-group-message') {
+        const body = await readBody(req);
+        const { wispName, groupId, text } = JSON.parse(body) as { wispName: string; groupId: string; text: string };
+        const wisp = orchestrator.getWisp(wispName);
+        if (!wisp) { res.writeHead(404); res.end('Wisp not found'); return; }
+        wisp.sendGroupMessage(groupId, text);
+        json(res, { ok: true });
       } else if (req.method === 'POST' && url.pathname === '/wisps/summon') {
         const body = await readBody(req);
         const { userDid } = JSON.parse(body) as { userDid: string };
