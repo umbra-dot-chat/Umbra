@@ -172,6 +172,11 @@ export class Wisp {
     this.groups.set(group.groupId, group);
   }
 
+  /** Send a raw envelope via this wisp's relay (used by orchestrator). */
+  sendRawEnvelope(toDid: string, envelope: object): void {
+    this.relay.sendEnvelope(toDid, envelope);
+  }
+
   // -- LLM Response --
 
   async generateResponse(senderName: string, text: string, conversationId: string): Promise<string> {

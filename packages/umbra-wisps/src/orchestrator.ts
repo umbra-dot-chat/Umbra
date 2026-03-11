@@ -5,12 +5,15 @@
  * a status summary for monitoring.
  */
 
-import { Wisp } from './wisp.js';
+import { Wisp, type WispGroup } from './wisp.js';
 import { WispLLMClient } from './llm-client.js';
 import { loadOrCreateWispIdentity } from './identity-store.js';
 import { DEFAULT_PERSONAS, type WispPersona } from './personas.js';
 import { ConversationLoop } from './conversation-loop.js';
 import { maybeReact } from './reactions.js';
+import { uuid, encryptGroupKey } from './crypto.js';
+import { randomBytes } from '@noble/ciphers/webcrypto';
+import { bytesToHex } from '@noble/curves/abstract/utils';
 
 const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
 
@@ -96,6 +99,48 @@ export class WispOrchestrator {
       }
     }
     console.log(`[Orchestrator] All wisps sent friend requests to ${userDid.slice(0, 24)}...`);
+  }
+
+  /** Create a group with all wisps. The named creator generates the key. */
+  async createGroup(name: string, creatorName: string): Promise<string> {
+    const creator = this.wisps.get(creatorName);
+    if (!creator) throw new Error(`Unknown wisp: ${creatorName}`);
+    const groupId = uuid();
+    const groupKeyBytes = randomBytes(32);
+    const groupKeyHex = bytesToHex(groupKeyBytes);
+    const allWisps = this.getWisps();
+    const members = allWisps.map(w => ({ did: w.did, displayName: w.name }));
+    const membersJson = JSON.stringify(members);
+
+    // Creator adds itself to the group directly
+    const group: WispGroup = {
+      groupId, groupName: name, groupKey: groupKeyHex,
+      members, conversationId: groupId,
+    };
+    creator.addGroup(group);
+
+    // Send encrypted group invites to all other wisps
+    for (const wisp of allWisps) {
+      if (wisp.name === creatorName) continue;
+      const friend = creator.getFriend(wisp.did);
+      if (!friend) continue;
+      const { ciphertext, nonce } = encryptGroupKey(
+        groupKeyHex, creator.identity.encryptionPrivateKey, friend.encryptionKey,
+      );
+      creator.sendRawEnvelope(wisp.did, {
+        envelope: 'group_invite', version: 1,
+        payload: {
+          inviteId: uuid(), groupId, groupName: name,
+          inviterDid: creator.did, inviterName: creator.name,
+          encryptedGroupKey: ciphertext, nonce, membersJson,
+          timestamp: Date.now(),
+        },
+      });
+      await sleep(300);
+    }
+    await sleep(2000); // Wait for invite processing
+    console.log(`[Orchestrator] Group "${name}" created (${groupId.slice(0, 12)}...)`);
+    return groupId;
   }
 
   getStatus() {
