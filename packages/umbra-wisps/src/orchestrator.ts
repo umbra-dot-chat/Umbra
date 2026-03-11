@@ -114,15 +114,22 @@ export class WispOrchestrator {
     console.log(`[Orchestrator] All wisps sent friend requests to ${userDid.slice(0, 24)}...`);
   }
 
-  /** Create a group with all wisps. The named creator generates the key. */
-  async createGroup(name: string, creatorName: string): Promise<string> {
+  /** Create a group with all wisps and optionally a real user. */
+  async createGroup(name: string, creatorName: string, userDid?: string): Promise<string> {
     const creator = this.wisps.get(creatorName);
     if (!creator) throw new Error(`Unknown wisp: ${creatorName}`);
     const groupId = uuid();
     const groupKeyBytes = randomBytes(32);
     const groupKeyHex = bytesToHex(groupKeyBytes);
     const allWisps = this.getWisps();
-    const members = allWisps.map(w => ({ did: w.did, displayName: w.name }));
+    const members: { did: string; displayName: string }[] =
+      allWisps.map(w => ({ did: w.did, displayName: w.name }));
+
+    // Include the real user in the member list
+    if (userDid) {
+      const userFriend = creator.getFriend(userDid);
+      members.push({ did: userDid, displayName: userFriend?.displayName ?? 'User' });
+    }
     const membersJson = JSON.stringify(members);
 
     // Creator adds itself to the group directly
@@ -151,6 +158,26 @@ export class WispOrchestrator {
       });
       await sleep(300);
     }
+
+    // Send group invite to the real user if specified
+    if (userDid) {
+      const userFriend = creator.getFriend(userDid);
+      if (userFriend) {
+        const { ciphertext, nonce } = encryptGroupKey(
+          groupKeyHex, creator.identity.encryptionPrivateKey, userFriend.encryptionKey,
+        );
+        creator.sendRawEnvelope(userDid, {
+          envelope: 'group_invite', version: 1,
+          payload: {
+            inviteId: uuid(), groupId, groupName: name,
+            inviterDid: creator.did, inviterName: creator.name,
+            encryptedGroupKey: ciphertext, nonce, membersJson,
+            timestamp: Date.now(),
+          },
+        });
+      }
+    }
+
     await sleep(2000); // Wait for invite processing
     console.log(`[Orchestrator] Group "${name}" created (${groupId.slice(0, 12)}...)`);
     return groupId;

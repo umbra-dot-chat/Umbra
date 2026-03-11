@@ -26,8 +26,7 @@ export function startHealthServer(
         const body = await readBody(req);
         const { name, userDid } = JSON.parse(body) as { name: string; userDid?: string };
         const creator = orchestrator.getWisps()[0];
-        const groupId = await orchestrator.createGroup(name, creator.name);
-        if (userDid) await orchestrator.befriendUser(userDid);
+        const groupId = await orchestrator.createGroup(name, creator.name, userDid);
         json(res, { ok: true, groupId });
       } else if (req.method === 'POST' && url.pathname === '/wisps/scenario') {
         const body = await readBody(req);
@@ -46,7 +45,7 @@ export function startHealthServer(
         }
         await orchestrator.befriendUser(userDid);
         const creator = orchestrator.getWisps()[0];
-        const groupId = await orchestrator.createGroup('Wisp Hangout', creator.name);
+        const groupId = await orchestrator.createGroup('Wisp Hangout', creator.name, userDid);
         json(res, { ok: true, groupId });
       } else {
         res.writeHead(404);
