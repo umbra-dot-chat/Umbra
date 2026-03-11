@@ -411,6 +411,21 @@ export async function sendGroupMessage(
     }
   }
 
+  // Overwrite stored message with plaintext so group messages survive page
+  // reloads. WASM DM decrypt can't re-decrypt group-encrypted messages, so
+  // we store the pre-decrypted text in content_encrypted for group convos.
+  try {
+    const overwriteJson = JSON.stringify({
+      message_id: raw.message.id,
+      conversation_id: raw.message.conversationId,
+      sender_did: raw.message.senderDid,
+      content_encrypted: text,
+      nonce: '',
+      timestamp: raw.message.timestamp,
+    });
+    wasm().umbra_wasm_messaging_store_incoming(overwriteJson);
+  } catch { /* not critical — real-time display still works */ }
+
   return {
     id: raw.message.id,
     conversationId: raw.message.conversationId,

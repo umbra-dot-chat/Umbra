@@ -207,15 +207,23 @@ export async function getMessages(
   return await Promise.all(mainMessages.map(async (m) => {
     let text = '';
     try {
-      // Rust now returns content_encrypted as base64 (converted from hex in WASM)
-      const decryptedJson = wasm().umbra_wasm_messaging_decrypt(
-        m.conversationId,
-        m.contentEncrypted,
-        m.nonce,
-        m.senderDid,
-        m.timestamp
-      );
-      text = await parseWasm<string>(decryptedJson);
+      if (m.conversationId.startsWith('group-')) {
+        // Group messages are stored with pre-decrypted plaintext
+        // (decrypted at receive time, since WASM DM decrypt doesn't
+        // know about group keys).
+        text = m.contentEncrypted;
+      } else {
+        // DM messages: decrypt using ECDH shared secret
+        // Rust now returns content_encrypted as base64 (converted from hex in WASM)
+        const decryptedJson = wasm().umbra_wasm_messaging_decrypt(
+          m.conversationId,
+          m.contentEncrypted,
+          m.nonce,
+          m.senderDid,
+          m.timestamp
+        );
+        text = await parseWasm<string>(decryptedJson);
+      }
     } catch (err) {
       // Fallback: show a user-friendly indicator instead of raw ciphertext
       console.warn('[getMessages] decrypt failed for msg', m.id, err);
@@ -319,15 +327,18 @@ export async function getThreadReplies(parentId: string): Promise<Message[]> {
   return await Promise.all(raw.map(async (m) => {
     let text = '';
     try {
-      // Rust now returns content_encrypted as base64 (converted from hex in WASM)
-      const decryptedJson = wasm().umbra_wasm_messaging_decrypt(
-        m.conversationId,
-        m.contentEncrypted || '',
-        m.nonce || '',
-        m.senderDid,
-        m.timestamp
-      );
-      text = await parseWasm<string>(decryptedJson);
+      if (m.conversationId?.startsWith('group-')) {
+        text = m.contentEncrypted || '';
+      } else {
+        const decryptedJson = wasm().umbra_wasm_messaging_decrypt(
+          m.conversationId,
+          m.contentEncrypted || '',
+          m.nonce || '',
+          m.senderDid,
+          m.timestamp
+        );
+        text = await parseWasm<string>(decryptedJson);
+      }
     } catch (err) {
       text = categorizeDecryptError(err);
     }
@@ -400,15 +411,18 @@ export async function getPinnedMessages(conversationId: string): Promise<Message
   return await Promise.all(raw.map(async (m) => {
     let text = '';
     try {
-      // Rust now returns content_encrypted as base64 (converted from hex in WASM)
-      const decryptedJson = wasm().umbra_wasm_messaging_decrypt(
-        m.conversationId,
-        m.contentEncrypted || '',
-        m.nonce || '',
-        m.senderDid,
-        m.timestamp
-      );
-      text = await parseWasm<string>(decryptedJson);
+      if (m.conversationId?.startsWith('group-')) {
+        text = m.contentEncrypted || '';
+      } else {
+        const decryptedJson = wasm().umbra_wasm_messaging_decrypt(
+          m.conversationId,
+          m.contentEncrypted || '',
+          m.nonce || '',
+          m.senderDid,
+          m.timestamp
+        );
+        text = await parseWasm<string>(decryptedJson);
+      }
     } catch (err) {
       text = categorizeDecryptError(err);
     }

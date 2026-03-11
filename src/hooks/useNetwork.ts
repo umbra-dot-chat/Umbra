@@ -640,7 +640,9 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
             const groupMsgPayload = envelope.payload as GroupMessagePayload;
             try {
               const plaintext = await service.decryptGroupMessage(groupMsgPayload.groupId, groupMsgPayload.ciphertext, groupMsgPayload.nonce, groupMsgPayload.keyVersion, groupMsgPayload.senderDid, groupMsgPayload.timestamp);
-              const storePayload: ChatMessagePayload = { messageId: groupMsgPayload.messageId, conversationId: groupMsgPayload.conversationId, senderDid: groupMsgPayload.senderDid, contentEncrypted: groupMsgPayload.ciphertext, nonce: groupMsgPayload.nonce, timestamp: groupMsgPayload.timestamp };
+              // Store plaintext (not ciphertext) for group messages — WASM DM decrypt
+              // can't re-decrypt group messages on reload, so we store pre-decrypted text.
+              const storePayload: ChatMessagePayload = { messageId: groupMsgPayload.messageId, conversationId: groupMsgPayload.conversationId, senderDid: groupMsgPayload.senderDid, contentEncrypted: plaintext, nonce: '', timestamp: groupMsgPayload.timestamp };
               await service.storeIncomingMessage(storePayload);
               service.dispatchMessageEvent({ type: 'messageReceived', message: { id: groupMsgPayload.messageId, conversationId: groupMsgPayload.conversationId, senderDid: groupMsgPayload.senderDid, content: { type: 'text', text: plaintext }, timestamp: groupMsgPayload.timestamp, read: false, delivered: true, status: 'delivered' } });
               await maybeRegisterIncomingFile(service, groupMsgPayload.conversationId, groupMsgPayload.senderDid, plaintext);
@@ -837,7 +839,8 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
               const groupMsgPayload = envelope.payload as GroupMessagePayload;
               try {
                 const plaintext = await service.decryptGroupMessage(groupMsgPayload.groupId, groupMsgPayload.ciphertext, groupMsgPayload.nonce, groupMsgPayload.keyVersion, groupMsgPayload.senderDid, groupMsgPayload.timestamp);
-                const storePayload: ChatMessagePayload = { messageId: groupMsgPayload.messageId, conversationId: groupMsgPayload.conversationId, senderDid: groupMsgPayload.senderDid, contentEncrypted: groupMsgPayload.ciphertext, nonce: groupMsgPayload.nonce, timestamp: groupMsgPayload.timestamp };
+                // Store plaintext for group messages (see live handler comment)
+                const storePayload: ChatMessagePayload = { messageId: groupMsgPayload.messageId, conversationId: groupMsgPayload.conversationId, senderDid: groupMsgPayload.senderDid, contentEncrypted: plaintext, nonce: '', timestamp: groupMsgPayload.timestamp };
                 await service.storeIncomingMessage(storePayload);
                 service.dispatchMessageEvent({ type: 'messageReceived', message: { id: groupMsgPayload.messageId, conversationId: groupMsgPayload.conversationId, senderDid: groupMsgPayload.senderDid, content: { type: 'text', text: plaintext }, timestamp: groupMsgPayload.timestamp, read: false, delivered: true, status: 'delivered' } });
                 await maybeRegisterIncomingFile(service, groupMsgPayload.conversationId, groupMsgPayload.senderDid, plaintext);
