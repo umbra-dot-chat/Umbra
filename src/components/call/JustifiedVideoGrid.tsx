@@ -195,18 +195,15 @@ export function JustifiedVideoGrid({
     ? tiles.find((t) => t.did === fullscreenDid)
     : null;
 
-  const containerStyle: ViewStyle = fullscreenParticipant
-    ? {
-        // Fullscreen: expand to fill parent
-        flex: 1,
-        backgroundColor: '#000000',
-      }
-    : {
-        // Normal grid: shrink-wrap to content height (parent caps via maxHeight)
-        alignSelf: 'stretch' as const,
-        height: contentHeight,
-        backgroundColor: '#000000',
-      };
+  // Use flex:1 to fill parent (allows onLayout measurement), then cap with
+  // maxHeight once we know the content height so the grid doesn't waste space.
+  const containerStyle: ViewStyle = {
+    flex: 1,
+    backgroundColor: '#000000',
+    ...(contentHeight !== undefined && !fullscreenParticipant
+      ? { maxHeight: contentHeight }
+      : {}),
+  };
 
   const gridStyle: ViewStyle = {
     flex: 1,
