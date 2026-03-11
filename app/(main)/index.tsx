@@ -140,7 +140,7 @@ export default function ChatPage() {
   }, [friends]);
 
   // Active conversation — shared with sidebar via context
-  const { activeId: activeConversationId, clearActiveId, searchPanelRequested, clearSearchPanelRequest } = useActiveConversation();
+  const { activeId: activeConversationId, setActiveId, clearActiveId, searchPanelRequested, clearSearchPanelRequest } = useActiveConversation();
 
   // Resolve active conversation: prefer explicitly selected, fall back to first
   const resolvedConversationId = activeConversationId ?? conversations[0]?.id ?? null;
@@ -530,15 +530,17 @@ export default function ChatPage() {
 
   const handleVoiceCall = useCallback(() => {
     if (resolvedConversationId && friendDid && friendDisplayName) {
+      setActiveId(resolvedConversationId);
       startCall(resolvedConversationId, friendDid, friendDisplayName, 'voice');
     }
-  }, [resolvedConversationId, friendDid, friendDisplayName, startCall]);
+  }, [resolvedConversationId, friendDid, friendDisplayName, startCall, setActiveId]);
 
   const handleVideoCall = useCallback(() => {
     if (resolvedConversationId && friendDid && friendDisplayName) {
+      setActiveId(resolvedConversationId);
       startCall(resolvedConversationId, friendDid, friendDisplayName, 'video');
     }
-  }, [resolvedConversationId, friendDid, friendDisplayName, startCall]);
+  }, [resolvedConversationId, friendDid, friendDisplayName, startCall, setActiveId]);
 
   // No conversations yet — show welcome
   if (!convsLoading && conversations.length === 0) {

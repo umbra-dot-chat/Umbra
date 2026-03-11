@@ -556,6 +556,10 @@ function MainLayoutInner() {
 
   const isFriendsActive = pathname === '/friends';
 
+  // When not on the main chat page, no conversation is "active" in the sidebar.
+  // This ensures the sidebar call panel shows when navigated away from the call.
+  const sidebarActiveId = pathname === '/' ? activeId : null;
+
   // Mobile: whether to show content instead of sidebar
   const mobileShowContent = isMobile && !!(
     activeId ||                                           // DM chat is open
@@ -690,7 +694,7 @@ function MainLayoutInner() {
                       search={search}
                       onSearchChange={setSearch}
                       conversations={filtered}
-                      activeId={activeId}
+                      activeId={sidebarActiveId}
                       onSelectConversation={(id) => {
                         setActiveId(id);
                         if (pathname !== '/') {
@@ -782,7 +786,7 @@ function MainLayoutInner() {
                     search={search}
                     onSearchChange={setSearch}
                     conversations={filtered}
-                    activeId={activeId}
+                    activeId={sidebarActiveId}
                     onSelectConversation={(id) => {
                       setActiveId(id);
                       if (pathname !== '/') {
