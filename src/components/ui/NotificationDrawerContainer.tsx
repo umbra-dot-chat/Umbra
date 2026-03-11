@@ -10,8 +10,9 @@
  */
 
 import React, { useMemo, useCallback, useRef, useEffect } from 'react';
-import { Animated, Pressable, View, useWindowDimensions } from 'react-native';
+import { Animated, Pressable, useWindowDimensions } from 'react-native';
 import {
+  Box,
   NotificationDrawer,
   NotificationGroup,
   NotificationItem,
@@ -198,7 +199,7 @@ export function NotificationDrawerContainer() {
           left: 0,
           right: 0,
           bottom: 0,
-          backgroundColor: 'rgba(0,0,0,0.15)',
+          backgroundColor: theme.colors.background.overlay,
           zIndex: 100,
         }}
       />
@@ -219,7 +220,7 @@ export function NotificationDrawerContainer() {
           opacity: fadeAnim,
           transform: [{ scale: scaleAnim }],
           // Shadow
-          shadowColor: '#000',
+          shadowColor: theme.colors.background.overlay,
           shadowOffset: { width: 0, height: 8 },
           shadowOpacity: 0.15,
           shadowRadius: 24,
@@ -235,11 +236,11 @@ export function NotificationDrawerContainer() {
           unreadCounts={unreadCounts}
           onMarkAllRead={markAllRead}
           emptyState={
-            <View style={{ padding: 40, alignItems: 'center' }}>
+            <Box style={{ padding: 40, alignItems: 'center' }}>
               <Text size="sm" style={{ color: theme.colors.text.muted }}>
                 No notifications yet
               </Text>
-            </View>
+            </Box>
           }
         >
           {grouped.map((group) => (
