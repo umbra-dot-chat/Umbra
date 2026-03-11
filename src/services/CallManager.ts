@@ -791,6 +791,13 @@ export class CallManager {
   }
 
   /**
+   * Get the underlying RTCPeerConnection for diagnostics. May be null if closed.
+   */
+  getPeerConnection(): RTCPeerConnection | null {
+    return this.pc;
+  }
+
+  /**
    * Get the current screen share stream, if any.
    */
   getScreenShareStream(): MediaStream | null {

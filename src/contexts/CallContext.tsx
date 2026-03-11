@@ -343,7 +343,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
         } : prev);
       } else if (state === 'failed' || state === 'closed') {
         if (state === 'failed') {
-          const pc = (manager as any).pc as RTCPeerConnection | undefined;
+          const pc = manager.getPeerConnection();
           if (pc) {
             console.error('[CallContext] Outgoing call FAILED — iceConnectionState:', pc.iceConnectionState,
               'iceGatheringState:', pc.iceGatheringState, 'signalingState:', pc.signalingState);
@@ -718,7 +718,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       });
       const newTrack = stream.getAudioTracks()[0];
       if (newTrack) {
-        const pc = (manager as any)._pc as RTCPeerConnection | undefined;
+        const pc = manager.getPeerConnection();
         if (pc) {
           const sender = pc.getSenders().find((s) => s.track?.kind === 'audio');
           if (sender) {
@@ -832,7 +832,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       // Replace the audio track on the peer connection sender with the gained track
       const manager = callManagerRef.current;
       if (manager) {
-        const pc = (manager as any).pc as RTCPeerConnection | undefined;
+        const pc = manager.getPeerConnection();
         if (pc) {
           const sender = pc.getSenders().find((s) => s.track?.kind === 'audio');
           const gainedTrack = dest.stream.getAudioTracks()[0];
@@ -1049,7 +1049,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
               } : prev);
             } else if (state === 'failed' || state === 'closed') {
               if (state === 'failed') {
-                const pc = (manager as any).pc as RTCPeerConnection | undefined;
+                const pc = manager.getPeerConnection();
                 if (pc) {
                   console.error('[CallContext] Connection FAILED — iceConnectionState:', pc.iceConnectionState,
                     'iceGatheringState:', pc.iceGatheringState, 'signalingState:', pc.signalingState);
