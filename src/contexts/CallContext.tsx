@@ -101,6 +101,8 @@ interface CallContextValue {
   selfViewVisible: boolean;
   /** Toggle self-view visibility */
   toggleSelfView: () => void;
+  /** Remote peer's screen share stream, if they are sharing */
+  remoteScreenShareStream: MediaStream | null;
 }
 
 const CallContext = createContext<CallContextValue | null>(null);
@@ -126,6 +128,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
   const [ghostMetadata, setGhostMetadata] = useState<any | null>(null);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [screenShareStream, setScreenShareStream] = useState<MediaStream | null>(null);
+  const [remoteScreenShareStream, setRemoteScreenShareStream] = useState<MediaStream | null>(null);
   const [noiseSuppression, setNoiseSuppressionState] = useState(true);
   const [echoCancellation, setEchoCancellationState] = useState(true);
   const [autoGainControl, setAutoGainControlState] = useState(true);
@@ -175,6 +178,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     setActiveCall(null);
     setIsScreenSharing(false);
     setScreenShareStream(null);
+    setRemoteScreenShareStream(null);
     VoiceStreamBridge.clear();
     try {
       sessionStorage.removeItem('umbra_active_call');
@@ -1230,6 +1234,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     ghostMetadata,
     selfViewVisible,
     toggleSelfView,
+    remoteScreenShareStream,
   };
 
   return (
