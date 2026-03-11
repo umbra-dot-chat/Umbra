@@ -217,7 +217,7 @@ class DebugLogger {
     } catch { /* ignore */ }
 
     // Auto-persist ring buffer on errors + unload
-    if (typeof window !== 'undefined') {
+    if (typeof window !== 'undefined' && typeof window.addEventListener === 'function') {
       window.addEventListener('error', () => this.ring.persist());
       window.addEventListener('unhandledrejection', () => this.ring.persist());
       window.addEventListener('beforeunload', () => this.ring.persist());
