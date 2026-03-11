@@ -8,8 +8,9 @@
  */
 
 import React, { useState, useCallback, useRef } from 'react';
-import { View, StyleSheet, Platform } from 'react-native';
+import { StyleSheet, Platform } from 'react-native';
 import {
+  Box,
   Dialog,
   QRCode,
   SegmentedControl,
@@ -160,10 +161,10 @@ export function QRCardDialog({
       title={title ?? defaultTitle}
       size="sm"
     >
-      <View style={{ gap: defaultSpacing.md, alignItems: 'center', minHeight: 320 }}>
+      <Box style={{ gap: defaultSpacing.md, alignItems: 'center', minHeight: 320 }}>
         {/* ── Share Tab ── */}
         {tab === 'share' && (
-          <View style={{ alignItems: 'center', gap: defaultSpacing.sm, paddingVertical: defaultSpacing.md }}>
+          <Box style={{ alignItems: 'center', gap: defaultSpacing.sm, paddingVertical: defaultSpacing.md }}>
             {value ? (
               <>
                 <QRCode
@@ -189,21 +190,21 @@ export function QRCardDialog({
                 </Text>
               </>
             ) : (
-              <View style={{ paddingVertical: defaultSpacing.xl, alignItems: 'center' }}>
+              <Box style={{ paddingVertical: defaultSpacing.xl, alignItems: 'center' }}>
                 <Text size="sm" style={{ color: tc.text.muted }}>
                   {mode === 'profile' ? 'Identity not available' : 'No invite link available'}
                 </Text>
-              </View>
+              </Box>
             )}
-          </View>
+          </Box>
         )}
 
         {/* ── Scan Tab ── */}
         {tab === 'scan' && (
-          <View style={{ alignItems: 'center', width: '100%', gap: defaultSpacing.sm }}>
+          <Box style={{ alignItems: 'center', width: '100%', gap: defaultSpacing.sm }}>
             {Platform.OS === 'web' ? (
               /* Web fallback: paste input */
-              <View style={{ width: '100%', gap: defaultSpacing.sm, paddingVertical: defaultSpacing.md }}>
+              <Box style={{ width: '100%', gap: defaultSpacing.sm, paddingVertical: defaultSpacing.md }}>
                 <Text size="sm" style={{ color: tc.text.muted, textAlign: 'center' }}>
                   Camera scanning is only available on mobile.{'\n'}Paste a DID or invite link below.
                 </Text>
@@ -224,15 +225,15 @@ export function QRCardDialog({
                 >
                   Submit
                 </Button>
-              </View>
+              </Box>
             ) : !permission ? (
-              <View style={{ paddingVertical: defaultSpacing.xl }}>
+              <Box style={{ paddingVertical: defaultSpacing.xl }}>
                 <Text size="sm" style={{ color: tc.text.muted }}>
                   Requesting camera permission...
                 </Text>
-              </View>
+              </Box>
             ) : !permission.granted ? (
-              <View style={{ alignItems: 'center', gap: defaultSpacing.sm, paddingVertical: defaultSpacing.md }}>
+              <Box style={{ alignItems: 'center', gap: defaultSpacing.sm, paddingVertical: defaultSpacing.md }}>
                 <Text size="sm" weight="bold" style={{ color: tc.text.primary, textAlign: 'center' }}>
                   Camera Access Required
                 </Text>
@@ -242,10 +243,10 @@ export function QRCardDialog({
                 <Button variant="primary" onPress={requestPermission}>
                   Grant Camera Access
                 </Button>
-              </View>
+              </Box>
             ) : (
               /* Camera scanner */
-              <View style={{ width: VIEWFINDER_SIZE + 20, height: VIEWFINDER_SIZE + 20, borderRadius: 12, overflow: 'hidden' }}>
+              <Box style={{ width: VIEWFINDER_SIZE + 20, height: VIEWFINDER_SIZE + 20, borderRadius: 12, overflow: 'hidden' }}>
                 <CameraView
                   style={StyleSheet.absoluteFill}
                   facing="back"
@@ -253,17 +254,17 @@ export function QRCardDialog({
                   onBarcodeScanned={scanned ? undefined : handleBarcodeScanned}
                 />
                 {/* Viewfinder overlay */}
-                <View style={[StyleSheet.absoluteFill, { justifyContent: 'center', alignItems: 'center' }]}>
-                  <View style={{ width: VIEWFINDER_SIZE, height: VIEWFINDER_SIZE }}>
-                    <View style={[styles.corner, styles.cornerTL]} />
-                    <View style={[styles.corner, styles.cornerTR]} />
-                    <View style={[styles.corner, styles.cornerBL]} />
-                    <View style={[styles.corner, styles.cornerBR]} />
-                  </View>
-                </View>
+                <Box style={{ ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center' }}>
+                  <Box style={{ width: VIEWFINDER_SIZE, height: VIEWFINDER_SIZE }}>
+                    <Box style={{ position: 'absolute', width: 24, height: 24, borderColor: tc.text.inverse, top: 0, left: 0, borderTopWidth: 3, borderLeftWidth: 3, borderTopLeftRadius: 8 }} />
+                    <Box style={{ position: 'absolute', width: 24, height: 24, borderColor: tc.text.inverse, top: 0, right: 0, borderTopWidth: 3, borderRightWidth: 3, borderTopRightRadius: 8 }} />
+                    <Box style={{ position: 'absolute', width: 24, height: 24, borderColor: tc.text.inverse, bottom: 0, left: 0, borderBottomWidth: 3, borderLeftWidth: 3, borderBottomLeftRadius: 8 }} />
+                    <Box style={{ position: 'absolute', width: 24, height: 24, borderColor: tc.text.inverse, bottom: 0, right: 0, borderBottomWidth: 3, borderRightWidth: 3, borderBottomRightRadius: 8 }} />
+                  </Box>
+                </Box>
                 {scanned && (
-                  <View style={[StyleSheet.absoluteFill, { justifyContent: 'center', alignItems: 'center', backgroundColor: 'rgba(0,0,0,0.5)' }]}>
-                    <Text size="sm" style={{ color: '#fff', marginBottom: 8 }}>
+                  <Box style={{ ...StyleSheet.absoluteFillObject, justifyContent: 'center', alignItems: 'center', backgroundColor: tc.background.overlay }}>
+                    <Text size="sm" style={{ color: tc.text.inverse, marginBottom: 8 }}>
                       QR code detected!
                     </Text>
                     <Button
@@ -275,64 +276,24 @@ export function QRCardDialog({
                     >
                       Scan Again
                     </Button>
-                  </View>
+                  </Box>
                 )}
-              </View>
+              </Box>
             )}
-          </View>
+          </Box>
         )}
 
         {/* ── Segmented Toggle ── */}
-        <View style={{ paddingTop: defaultSpacing.sm }}>
+        <Box style={{ paddingTop: defaultSpacing.sm }}>
           <SegmentedControl
             options={TAB_OPTIONS}
             value={tab}
             onChange={handleTabChange}
             size="sm"
           />
-        </View>
-      </View>
+        </Box>
+      </Box>
     </Dialog>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Styles
-// ---------------------------------------------------------------------------
-
-const styles = StyleSheet.create({
-  corner: {
-    position: 'absolute',
-    width: 24,
-    height: 24,
-    borderColor: '#fff',
-  },
-  cornerTL: {
-    top: 0,
-    left: 0,
-    borderTopWidth: 3,
-    borderLeftWidth: 3,
-    borderTopLeftRadius: 8,
-  },
-  cornerTR: {
-    top: 0,
-    right: 0,
-    borderTopWidth: 3,
-    borderRightWidth: 3,
-    borderTopRightRadius: 8,
-  },
-  cornerBL: {
-    bottom: 0,
-    left: 0,
-    borderBottomWidth: 3,
-    borderLeftWidth: 3,
-    borderBottomLeftRadius: 8,
-  },
-  cornerBR: {
-    bottom: 0,
-    right: 0,
-    borderBottomWidth: 3,
-    borderRightWidth: 3,
-    borderBottomRightRadius: 8,
-  },
-});
