@@ -10,6 +10,7 @@ import { VideoTile, Text, useTheme } from '@coexist/wisp-react-native';
 import type { CallParticipant } from '@/types/call';
 import { useFullscreen } from '@/hooks/useFullscreen';
 import { SpeakerBorder } from '@/components/call/SpeakerBorder';
+import { VideoTileStatusIcons } from '@/components/call/VideoTileStatusIcons';
 
 // ─── Props ──────────────────────────────────────────────────────────────────
 
@@ -21,6 +22,8 @@ export interface JustifiedVideoGridProps {
   speakingDids: Set<string>;
   gap?: number;
   aspectRatio?: number;
+  /** Maximum height the grid can occupy (from parent panel constraint). */
+  maxHeight?: number;
 }
 
 // ─── Layout Algorithm ───────────────────────────────────────────────────────
@@ -115,9 +118,10 @@ export function JustifiedVideoGrid({
   speakingDids,
   gap = 8,
   aspectRatio = 16 / 9,
+  maxHeight: parentMaxHeight,
 }: JustifiedVideoGridProps) {
   const { theme } = useTheme();
-  const [containerSize, setContainerSize] = useState({ w: 0, h: 0 });
+  const [containerWidth, setContainerWidth] = useState(0);
   const { fullscreenDid, enterFullscreen, exitFullscreen } = useFullscreen();
 
   // Inject CSS on mount
@@ -146,8 +150,8 @@ export function JustifiedVideoGrid({
   }, [fullscreenDid, enterFullscreen, exitFullscreen]);
 
   const handleLayout = useCallback((e: LayoutChangeEvent) => {
-    const { width, height } = e.nativeEvent.layout;
-    setContainerSize({ w: width, h: height });
+    const { width } = e.nativeEvent.layout;
+    setContainerWidth(width);
   }, []);
 
   // Build tile list: remote participants first, self-view last
@@ -166,17 +170,43 @@ export function JustifiedVideoGrid({
   // 1:1 layout: equal side-by-side for all 2-participant calls
   const isAdaptive1v1 = count === 2;
 
+  // Compute tile dimensions from the available width.
+  // Use the parent's maxHeight as a height constraint so computeLayout
+  // can pick a layout that fits. Falls back to a large value if unknown.
   const layout = useMemo(() => {
-    if (containerSize.w === 0 || containerSize.h === 0 || count === 0) {
-      return null;
-    }
-    return computeLayout(containerSize.w, containerSize.h, count, aspectRatio, gap);
-  }, [containerSize.w, containerSize.h, count, aspectRatio, gap]);
+    if (containerWidth === 0 || count === 0) return null;
+    const maxH = parentMaxHeight ?? 10000;
+    return computeLayout(containerWidth, maxH, count, aspectRatio, gap);
+  }, [containerWidth, count, aspectRatio, gap, parentMaxHeight]);
 
-  const containerStyle: ViewStyle = {
-    flex: 1,
-    backgroundColor: '#000000',
-  };
+  // Compute the content height: rows * tileH + gaps + padding
+  const contentHeight = useMemo(() => {
+    if (!layout) return undefined;
+    let tileH = layout.tileH;
+    if (isAdaptive1v1 && containerWidth > 0) {
+      const tileW = (containerWidth - gap * 3) / 2;
+      tileH = tileW / aspectRatio;
+    }
+    return layout.rows * tileH + gap * (layout.rows + 1);
+  }, [layout, isAdaptive1v1, containerWidth, gap, aspectRatio]);
+
+  // Find the fullscreen participant (if set)
+  const fullscreenParticipant = fullscreenDid
+    ? tiles.find((t) => t.did === fullscreenDid)
+    : null;
+
+  const containerStyle: ViewStyle = fullscreenParticipant
+    ? {
+        // Fullscreen: expand to fill parent
+        flex: 1,
+        backgroundColor: '#000000',
+      }
+    : {
+        // Normal grid: shrink-wrap to content height (parent caps via maxHeight)
+        alignSelf: 'stretch' as const,
+        height: contentHeight,
+        backgroundColor: '#000000',
+      };
 
   const gridStyle: ViewStyle = {
     flex: 1,
@@ -188,11 +218,6 @@ export function JustifiedVideoGrid({
     gap,
     padding: gap,
   };
-
-  // Find the fullscreen participant (if set)
-  const fullscreenParticipant = fullscreenDid
-    ? tiles.find((t) => t.did === fullscreenDid)
-    : null;
 
   return (
     <View style={containerStyle} onLayout={handleLayout}>
@@ -213,10 +238,15 @@ export function JustifiedVideoGrid({
             zIndex: 10,
           }}
         >
+          <VideoTileStatusIcons
+            isMuted={fullscreenParticipant.isMuted}
+            isDeafened={fullscreenParticipant.isDeafened}
+            isCameraOff={fullscreenParticipant.isCameraOff}
+          />
           <VideoTile
             stream={fullscreenParticipant.stream}
             displayName={fullscreenParticipant.displayName}
-            isMuted={fullscreenParticipant.isMuted}
+            isMuted={false}
             isCameraOff={fullscreenParticipant.isCameraOff}
             isSpeaking={false}
             mirror={fullscreenParticipant.did === localDid}
@@ -241,7 +271,7 @@ export function JustifiedVideoGrid({
         </Pressable>
       ) : (
         /* Normal grid mode */
-        layout && containerSize.w > 0 && (
+        layout && containerWidth > 0 && (
           <View nativeID="video-grid" style={gridStyle}>
             {tiles.map((participant) => {
               const isLocal = participant.did === localDid;
@@ -251,7 +281,7 @@ export function JustifiedVideoGrid({
               let tileWidth = layout.tileW;
               let tileHeight = layout.tileH;
               if (isAdaptive1v1) {
-                tileWidth = (containerSize.w - gap * 3) / 2;
+                tileWidth = (containerWidth - gap * 3) / 2;
                 tileHeight = tileWidth / aspectRatio;
               }
 
@@ -279,10 +309,15 @@ export function JustifiedVideoGrid({
                     delayLongPress={500}
                     style={innerStyle}
                   >
+                    <VideoTileStatusIcons
+                      isMuted={participant.isMuted}
+                      isDeafened={participant.isDeafened}
+                      isCameraOff={participant.isCameraOff}
+                    />
                     <VideoTile
                       stream={participant.stream}
                       displayName={participant.displayName}
-                      isMuted={participant.isMuted}
+                      isMuted={false}
                       isCameraOff={participant.isCameraOff}
                       isSpeaking={false}
                       mirror={isLocal}
