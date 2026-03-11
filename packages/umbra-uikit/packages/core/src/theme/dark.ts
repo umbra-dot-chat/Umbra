@@ -33,6 +33,8 @@ export const darkColors: ThemeColors = {
     primary: '#ECECEF',
     /** Secondary supporting text — muted warm gray. */
     secondary: '#9494A0',
+    /** Tertiary text — lower emphasis than secondary, for attribution and subtle labels. */
+    tertiary: '#707078',
     /** Muted / disabled text — dim gray (≥ 3:1 on canvas). */
     muted: '#5C5C66',
     /** Inverse text used on light-colored surfaces (e.g. white buttons). */

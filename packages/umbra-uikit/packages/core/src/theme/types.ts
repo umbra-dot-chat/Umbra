@@ -80,6 +80,8 @@ export interface TextColors {
   primary: string;
   /** Supporting / less-prominent text. */
   secondary: string;
+  /** Tertiary text — lower emphasis than secondary, used for attribution and subtle labels. */
+  tertiary: string;
   /** Disabled or placeholder text. */
   muted: string;
   /** Text rendered on the opposite-mode surface. */

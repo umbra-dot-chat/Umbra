@@ -33,8 +33,10 @@ export const lightColors: ThemeColors = {
     primary: '#0C0C0E',
     /** Secondary text on canvas — medium gray, clearly readable. */
     secondary: '#71717A',
+    /** Tertiary text — lower emphasis than secondary, for attribution and subtle labels. */
+    tertiary: '#8E8E96',
     /** Muted / disabled text — cool gray (≥ 3:1 on canvas). */
-    muted: '#8E8E96',
+    muted: '#A1A1AA',
     /** Inverse text — pure white, used on accent/dark surfaces. */
     inverse: '#FFFFFF',
     /** Link / interactive text — near-black on canvas. */
