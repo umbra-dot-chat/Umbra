@@ -867,8 +867,12 @@ export class CallManager {
     this.lastBytesReceived = 0;
 
     this.statsInterval = setInterval(async () => {
-      const stats = await this.getStats();
-      this.onStatsUpdate?.(stats);
+      try {
+        const stats = await this.getStats();
+        this.onStatsUpdate?.(stats);
+      } catch {
+        // PC may be closed or unavailable — silently skip this stats cycle
+      }
     }, intervalMs);
   }
 
@@ -1144,7 +1148,7 @@ export class CallManager {
         };
 
         // Start gathering
-        pc!.createOffer().then((offer) => pc!.setLocalDescription(offer));
+        pc!.createOffer().then((offer) => pc!.setLocalDescription(offer)).catch(() => {});
       });
 
       return result;
@@ -1193,7 +1197,7 @@ export class CallManager {
           }
         };
 
-        pc!.createOffer().then((offer) => pc!.setLocalDescription(offer));
+        pc!.createOffer().then((offer) => pc!.setLocalDescription(offer)).catch(() => {});
       });
 
       return result;
