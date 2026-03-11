@@ -42,6 +42,13 @@ export interface StoredTutorState {
   updatedAt: number;
 }
 
+export interface StoredTherapyState {
+  userDid: string;
+  active: boolean;
+  sessionCount: number;
+  updatedAt: number;
+}
+
 export class ContextStore {
   private db: Database.Database;
   private log: Logger;
@@ -96,6 +103,13 @@ export class ContextStore {
         user_did TEXT PRIMARY KEY,
         language TEXT NOT NULL,
         score REAL NOT NULL DEFAULT 0,
+        updated_at INTEGER NOT NULL
+      );
+
+      CREATE TABLE IF NOT EXISTS user_therapy_state (
+        user_did TEXT PRIMARY KEY,
+        active INTEGER NOT NULL DEFAULT 0,
+        session_count INTEGER NOT NULL DEFAULT 0,
         updated_at INTEGER NOT NULL
       );
     `);
@@ -222,6 +236,30 @@ export class ContextStore {
 
   clearUserTutorState(userDid: string): void {
     this.db.prepare('DELETE FROM user_tutor_state WHERE user_did = ?').run(userDid);
+  }
+
+  // ─── Therapy State ──────────────────────────────────────────────────
+
+  setUserTherapyState(state: StoredTherapyState): void {
+    this.db.prepare(`
+      INSERT OR REPLACE INTO user_therapy_state (user_did, active, session_count, updated_at)
+      VALUES (?, ?, ?, ?)
+    `).run(state.userDid, state.active ? 1 : 0, state.sessionCount, state.updatedAt);
+  }
+
+  getUserTherapyState(userDid: string): StoredTherapyState | null {
+    const row = this.db.prepare('SELECT * FROM user_therapy_state WHERE user_did = ?').get(userDid) as any;
+    if (!row) return null;
+    return {
+      userDid: row.user_did,
+      active: row.active === 1,
+      sessionCount: row.session_count,
+      updatedAt: row.updated_at,
+    };
+  }
+
+  clearUserTherapyState(userDid: string): void {
+    this.db.prepare('DELETE FROM user_therapy_state WHERE user_did = ?').run(userDid);
   }
 
   close(): void {
