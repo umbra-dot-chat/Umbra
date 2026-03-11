@@ -79,6 +79,10 @@ export interface ChatSidebarProps {
   onToggleCamera?: () => void;
   /** End the active call */
   onEndCall?: () => void;
+  /** Whether the local user is screen sharing */
+  isScreenSharing?: boolean;
+  /** Toggle screen sharing on/off */
+  onToggleScreenShare?: () => void;
 }
 
 export function ChatSidebar(props: ChatSidebarProps) {
@@ -91,6 +95,7 @@ function ChatSidebarInner({
   onFriendsPress, onNewDm, onCreateGroup, onGuidePress, onMarketplacePress, isFriendsActive,
   pendingInvites, onAcceptInvite, onDeclineInvite, loading, pendingFriendRequests,
   activeCall, onReturnToCall, onToggleMute, onToggleDeafen, onToggleCamera, onEndCall,
+  isScreenSharing, onToggleScreenShare,
 }: ChatSidebarProps) {
   const { theme } = useTheme();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -371,6 +376,8 @@ function ChatSidebarInner({
               onToggleDeafen={onToggleDeafen}
               onToggleCamera={onToggleCamera}
               onEndCall={onEndCall}
+              isScreenSharing={isScreenSharing}
+              onToggleScreenShare={onToggleScreenShare}
             />
           </View>
         )}

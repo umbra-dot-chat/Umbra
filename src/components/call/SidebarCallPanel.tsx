@@ -22,6 +22,10 @@ export interface SidebarCallPanelProps {
   onToggleDeafen: () => void;
   onToggleCamera: () => void;
   onEndCall: () => void;
+  /** Whether the local user is currently screen sharing */
+  isScreenSharing?: boolean;
+  /** Toggle screen sharing on/off */
+  onToggleScreenShare?: () => void;
 }
 
 // ─── Component ──────────────────────────────────────────────────────────────
@@ -33,6 +37,8 @@ export function SidebarCallPanel({
   onToggleDeafen,
   onToggleCamera,
   onEndCall,
+  isScreenSharing = false,
+  onToggleScreenShare,
 }: SidebarCallPanelProps) {
   const { theme } = useTheme();
   const colors = theme.colors;
@@ -113,11 +119,11 @@ export function SidebarCallPanel({
           isMuted={activeCall.isMuted}
           isDeafened={activeCall.isDeafened}
           isCameraOff={activeCall.isCameraOff}
-          isScreenSharing={false}
+          isScreenSharing={isScreenSharing}
           onToggleMute={onToggleMute}
           onToggleDeafen={onToggleDeafen}
           onToggleCamera={onToggleCamera}
-          onToggleScreenShare={() => {}}
+          onToggleScreenShare={onToggleScreenShare ?? (() => {})}
           onEndCall={onEndCall}
           variant="sidebar"
         />

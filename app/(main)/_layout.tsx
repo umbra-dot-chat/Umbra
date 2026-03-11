@@ -221,7 +221,7 @@ function MainLayoutInner() {
   const { uploadRingProgress } = useUploadProgress();
 
   // Call state for sidebar call panel
-  const { activeCall, toggleMute, toggleDeafen, toggleCamera, endCall } = useCallContext();
+  const { activeCall, toggleMute, toggleDeafen, toggleCamera, endCall, isScreenSharing, startScreenShare, stopScreenShare } = useCallContext();
 
   // Build a DID → friend map for efficient lookups, enriched with relay presence
   const friendMap = useMemo(() => {
@@ -718,6 +718,8 @@ function MainLayoutInner() {
                       onToggleDeafen={toggleDeafen}
                       onToggleCamera={toggleCamera}
                       onEndCall={() => endCall()}
+                      isScreenSharing={isScreenSharing}
+                      onToggleScreenShare={isScreenSharing ? stopScreenShare : startScreenShare}
                     />
                   )}
                 </View>
@@ -811,6 +813,8 @@ function MainLayoutInner() {
                     onToggleDeafen={toggleDeafen}
                     onToggleCamera={toggleCamera}
                     onEndCall={() => endCall()}
+                    isScreenSharing={isScreenSharing}
+                    onToggleScreenShare={isScreenSharing ? stopScreenShare : startScreenShare}
                   />
                 )}
               </View>
