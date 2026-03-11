@@ -29,11 +29,9 @@ import {
   Pressable,
   Animated,
   Platform,
-  Text as RNText,
-  View,
 } from 'react-native';
 import type { ViewStyle, GestureResponderEvent } from 'react-native';
-import { useTheme } from '@coexist/wisp-react-native';
+import { Box, Text, useTheme } from '@coexist/wisp-react-native';
 import { useHelp } from '@/contexts/HelpContext';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -149,7 +147,7 @@ export function HelpIndicator({
   const iconColor = viewed
     ? tc.text.secondary
     : showGradient
-      ? '#FFFFFF'
+      ? tc.text.inverse
       : tc.text.primary;
 
   const iconBg = viewed
@@ -184,7 +182,7 @@ export function HelpIndicator({
     : undefined;
 
   return (
-    <View style={[{ alignItems: 'center', justifyContent: 'center' }, style]}>
+    <Box style={{ alignItems: 'center', justifyContent: 'center', ...style }}>
       {showGradient && Platform.OS !== 'web' ? (
         /* Native: Animated.View with interpolated background color */
         <Animated.View
@@ -202,22 +200,22 @@ export function HelpIndicator({
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}
           >
-            <RNText
+            <Text
+              size="xs"
+              weight="bold"
               style={{
-                fontSize: size * 0.55,
-                fontWeight: '700',
-                color: '#FFFFFF',
+                color: tc.text.inverse,
                 lineHeight: size * 0.7,
                 textAlign: 'center',
               }}
             >
               {icon}
-            </RNText>
+            </Text>
           </Pressable>
         </Animated.View>
       ) : (
         /* Web + inactive/viewed states */
-        <View style={{ opacity: iconOpacity }}>
+        <Box style={{ opacity: iconOpacity }}>
           <Pressable
             onPress={handlePress}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -233,20 +231,20 @@ export function HelpIndicator({
               ...gradientStyle,
             })}
           >
-            <RNText
+            <Text
+              size="xs"
+              weight="bold"
               style={{
-                fontSize: size * 0.55,
-                fontWeight: '700',
                 color: iconColor,
                 lineHeight: size * 0.7,
                 textAlign: 'center',
               }}
             >
               {icon}
-            </RNText>
+            </Text>
           </Pressable>
-        </View>
+        </Box>
       )}
-    </View>
+    </Box>
   );
 }

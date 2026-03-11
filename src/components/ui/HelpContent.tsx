@@ -17,9 +17,8 @@
  */
 
 import React from 'react';
-import { View, Text as RNText } from 'react-native';
 import type { ViewStyle } from 'react-native';
-import { useTheme } from '@coexist/wisp-react-native';
+import { Box, Text, useTheme } from '@coexist/wisp-react-native';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HelpSection — Section with title header
@@ -36,20 +35,20 @@ export function HelpSection({ title, children, style }: HelpSectionProps) {
   const tc = theme.colors;
 
   return (
-    <View style={[{ gap: 6 }, style]}>
-      <RNText
+    <Box style={{ gap: 6, ...style }}>
+      <Text
+        size="xs"
+        weight="bold"
         style={{
-          fontSize: 10,
-          fontWeight: '700',
           color: tc.text.muted,
           textTransform: 'uppercase',
           letterSpacing: 0.8,
         }}
       >
         {title}
-      </RNText>
+      </Text>
       {children}
-    </View>
+    </Box>
   );
 }
 
@@ -67,17 +66,11 @@ export function HelpText({ children, style }: HelpTextProps) {
   const tc = theme.colors;
 
   return (
-    <View style={style}>
-      <RNText
-        style={{
-          fontSize: 13,
-          lineHeight: 20,
-          color: tc.text.secondary,
-        }}
-      >
+    <Box style={style}>
+      <Text size="sm" style={{ color: tc.text.secondary, lineHeight: 20 }}>
         {children}
-      </RNText>
-    </View>
+      </Text>
+    </Box>
   );
 }
 
@@ -98,41 +91,39 @@ export function HelpHighlight({ children, icon, color, style }: HelpHighlightPro
   const accentColor = color || theme.colors.accent.primary;
 
   return (
-    <View
-      style={[
-        {
-          flexDirection: 'row',
-          alignItems: 'flex-start',
-          gap: 8,
-          padding: 10,
-          borderRadius: 8,
-          backgroundColor: accentColor + '10',
-          borderLeftWidth: 3,
-          borderLeftColor: accentColor,
-        },
-        style,
-      ]}
+    <Box
+      style={{
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        gap: 8,
+        padding: 10,
+        borderRadius: 8,
+        backgroundColor: accentColor + '10',
+        borderLeftWidth: 3,
+        borderLeftColor: accentColor,
+        ...style,
+      }}
     >
       {icon && (
-        <View style={{ width: 28, height: 28, alignItems: 'center', justifyContent: 'center' }}>
+        <Box style={{ width: 28, height: 28, alignItems: 'center', justifyContent: 'center' }}>
           {typeof icon === 'string' ? (
-            <RNText style={{ fontSize: 20, lineHeight: 28 }}>{icon}</RNText>
+            <Text size="lg" style={{ lineHeight: 28 }}>{icon}</Text>
           ) : (
             icon
           )}
-        </View>
+        </Box>
       )}
-      <RNText
+      <Text
+        size="xs"
         style={{
-          fontSize: 12,
-          lineHeight: 18,
           color: theme.colors.text.primary,
           flex: 1,
+          lineHeight: 18,
         }}
       >
         {children}
-      </RNText>
-    </View>
+      </Text>
+    </Box>
   );
 }
 
@@ -151,39 +142,37 @@ export function HelpListItem({ children, icon, style }: HelpListItemProps) {
   const tc = theme.colors;
 
   return (
-    <View
-      style={[
-        {
-          flexDirection: 'row',
-          alignItems: 'flex-start',
-          gap: 8,
-          paddingLeft: 4,
-        },
-        style,
-      ]}
+    <Box
+      style={{
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        gap: 8,
+        paddingLeft: 4,
+        ...style,
+      }}
     >
-      <RNText
+      <Text
+        size="md"
         style={{
-          fontSize: 16,
-          lineHeight: 22,
           color: tc.text.muted,
           width: 20,
           textAlign: 'center',
+          lineHeight: 22,
         }}
       >
         {icon || '\u2022'}
-      </RNText>
-      <RNText
+      </Text>
+      <Text
+        size="xs"
         style={{
-          fontSize: 12,
-          lineHeight: 18,
           color: tc.text.secondary,
           flex: 1,
+          lineHeight: 18,
         }}
       >
         {children}
-      </RNText>
-    </View>
+      </Text>
+    </Box>
   );
 }
 
@@ -195,7 +184,7 @@ export function HelpDivider() {
   const { theme } = useTheme();
 
   return (
-    <View
+    <Box
       style={{
         height: 1,
         backgroundColor: theme.colors.border.subtle,

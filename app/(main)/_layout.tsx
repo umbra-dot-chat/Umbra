@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { Animated, Easing, PanResponder, Platform, View, useWindowDimensions } from 'react-native';
 import { Slot, usePathname, useRouter } from 'expo-router';
-import { HStack, useTheme, CommunityCreateDialog } from '@coexist/wisp-react-native';
+import { HStack, useTheme, CommunityCreateDialog, Box } from '@coexist/wisp-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useUmbra } from '@/contexts/UmbraContext';
@@ -622,7 +622,7 @@ function MainLayoutInner() {
   const showColumnInset = effectiveTopInset > 0 && !bannerVisible;
 
   return (
-    <View style={{ flex: 1, backgroundColor: theme.colors.background.canvas }}>
+    <Box style={{ flex: 1, backgroundColor: theme.colors.background.canvas }}>
       <InstallBanner topInset={effectiveTopInset} onVisibilityChange={setBannerVisible} />
       {/* Tauri overlay title bar: full-width drag region pinned to top */}
       {isTauriDesktop && (
@@ -655,9 +655,9 @@ function MainLayoutInner() {
             position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
             transform: [{ translateX: sidebarTranslateX }],
           }}>
-            <View style={{ flex: 1 }}>
+            <Box style={{ flex: 1 }}>
               {effectiveTopInset > 0 && (
-                <View style={{
+                <Box style={{
                   height: effectiveTopInset,
                   backgroundColor: theme.colors.background.surface,
                   borderBottomWidth: 1,
@@ -686,7 +686,7 @@ function MainLayoutInner() {
                   safeAreaTop={0}
                   safeAreaBottom={insets.bottom}
                 />
-                <View style={{ flex: 1 }}>
+                <Box style={{ flex: 1 }}>
                   {activeCommunityId ? (
                     <CommunityLayoutSidebar communityId={activeCommunityId} />
                   ) : (
@@ -722,9 +722,9 @@ function MainLayoutInner() {
                       onToggleScreenShare={isScreenSharing ? stopScreenShare : startScreenShare}
                     />
                   )}
-                </View>
+                </Box>
               </HStack>
-            </View>
+            </Box>
           </Animated.View>
 
           {/* Content layer */}
@@ -732,9 +732,9 @@ function MainLayoutInner() {
             position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
             transform: [{ translateX: contentTranslateX }],
           }}>
-            <View style={{ flex: 1 }}>
+            <Box style={{ flex: 1 }}>
               {effectiveTopInset > 0 && (
-                <View style={{
+                <Box style={{
                   height: effectiveTopInset,
                   backgroundColor: theme.colors.background.canvas,
                   borderBottomWidth: 1,
@@ -742,17 +742,17 @@ function MainLayoutInner() {
                 }} />
               )}
               <Slot />
-            </View>
+            </Box>
           </Animated.View>
         </View>
       ) : (
         /* ─── Desktop: side-by-side layout ─── */
         <HStack gap={0} style={{ flex: 1 }}>
-          <View style={{ flexDirection: 'column', width: 64 + sidebarWidth, flexShrink: 0 }}>
+          <Box style={{ flexDirection: 'column', width: 64 + sidebarWidth, flexShrink: 0 }}>
             {/* Safe area header — spans rail + sidebar, same surface color.
                 Skipped when the update banner is visible (it handles the inset). */}
             {showColumnInset && (
-              <View style={{
+              <Box style={{
                 height: effectiveTopInset,
                 backgroundColor: theme.colors.background.surface,
                 borderBottomWidth: 1,
@@ -781,7 +781,7 @@ function MainLayoutInner() {
                 safeAreaTop={0}
                 safeAreaBottom={insets.bottom}
               />
-              <View style={{ flex: 1 }}>
+              <Box style={{ flex: 1 }}>
                 {activeCommunityId ? (
                   <CommunityLayoutSidebar communityId={activeCommunityId} />
                 ) : (
@@ -817,13 +817,13 @@ function MainLayoutInner() {
                     onToggleScreenShare={isScreenSharing ? stopScreenShare : startScreenShare}
                   />
                 )}
-              </View>
+              </Box>
             </HStack>
-          </View>
+          </Box>
           <ResizeHandle onResize={handleSidebarResize} />
-          <View style={{ flex: 1 }}>
+          <Box style={{ flex: 1 }}>
             {showColumnInset && (
-              <View style={{
+              <Box style={{
                 height: effectiveTopInset,
                 backgroundColor: theme.colors.background.canvas,
                 borderBottomWidth: 1,
@@ -831,7 +831,7 @@ function MainLayoutInner() {
               }} />
             )}
             <Slot />
-          </View>
+          </Box>
         </HStack>
       )}
 
@@ -972,7 +972,7 @@ function MainLayoutInner() {
 
       <IncomingCallOverlay />
       <NotificationDrawerContainer />
-    </View>
+    </Box>
   );
 }
 
