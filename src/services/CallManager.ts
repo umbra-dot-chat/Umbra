@@ -107,6 +107,7 @@ export class CallManager {
   private statsInterval: ReturnType<typeof setInterval> | null = null;
   private lastBytesSent = 0;
   private lastBytesReceived = 0;
+  private lastAudioBytesSent = 0;
   private lastStatsTimestamp = 0;
   private _videoQuality: VideoQuality = 'auto';
   private _audioQuality: AudioQuality = 'opus-voice';
@@ -167,7 +168,7 @@ export class CallManager {
         } else {
           // Auto-resolve from relay or env var (cached)
           if (resolvedCreds === null) {
-            resolvedCreds = (await resolveTurnCredentials()) ?? undefined as any;
+            resolvedCreds = (await resolveTurnCredentials()) ?? null;
           }
           if (resolvedCreds) {
             servers.push({ urls: s.urls, username: resolvedCreds.username, credential: resolvedCreds.credential });
@@ -989,13 +990,13 @@ export class CallManager {
       });
 
       // Calculate audio bitrate from the last sample
-      if (audioBytesSent > 0 && (this as any)._lastAudioBytesSent > 0) {
+      if (audioBytesSent > 0 && this.lastAudioBytesSent > 0) {
         const elapsed = (now - this.lastStatsTimestamp) / 1000;
         if (elapsed > 0) {
-          result.audioBitrate = Math.round(((audioBytesSent - (this as any)._lastAudioBytesSent) * 8) / elapsed / 1000);
+          result.audioBitrate = Math.round(((audioBytesSent - this.lastAudioBytesSent) * 8) / elapsed / 1000);
         }
       }
-      (this as any)._lastAudioBytesSent = audioBytesSent;
+      this.lastAudioBytesSent = audioBytesSent;
 
       this.lastStatsTimestamp = now;
     } catch {
