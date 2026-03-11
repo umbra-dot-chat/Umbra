@@ -288,12 +288,17 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
 
     // Set up remote stream handler
     manager.onRemoteStream = (stream) => {
+      const hasVideoTrack = stream.getVideoTracks().length > 0;
       setActiveCall((prev) => {
         if (!prev) return prev;
         const updatedParticipants = new Map(prev.participants);
         const remote = updatedParticipants.get(remoteDid);
         if (remote) {
-          updatedParticipants.set(remoteDid, { ...remote, stream });
+          updatedParticipants.set(remoteDid, {
+            ...remote,
+            stream,
+            isCameraOff: hasVideoTrack ? false : remote.isCameraOff,
+          });
         }
         return { ...prev, remoteStream: stream, participants: updatedParticipants };
       });
@@ -909,12 +914,17 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
           };
 
           manager.onRemoteStream = (stream) => {
+            const hasVideoTrack = stream.getVideoTracks().length > 0;
             setActiveCall((prev) => {
               if (!prev) return prev;
               const updatedParticipants = new Map(prev.participants);
               const remote = updatedParticipants.get(payload.senderDid);
               if (remote) {
-                updatedParticipants.set(payload.senderDid, { ...remote, stream });
+                updatedParticipants.set(payload.senderDid, {
+                  ...remote,
+                  stream,
+                  isCameraOff: hasVideoTrack ? false : remote.isCameraOff,
+                });
               }
               return { ...prev, remoteStream: stream, participants: updatedParticipants };
             });
