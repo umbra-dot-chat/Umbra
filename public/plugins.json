@@ -77,12 +77,41 @@
         { "slot": "sidebar-section", "component": "MiniStats", "priority": 80 }
       ],
       "storage": { "kv": true }
+    },
+    {
+      "id": "com.umbra.questionable-therapy",
+      "name": "Questionable Therapy",
+      "description": "Transform Ghost into a warm, slightly unconventional therapist with ambient zen audio and calming visuals.",
+      "author": { "name": "Umbra Team", "url": "https://umbra.chat" },
+      "version": "1.0.0",
+      "branding": {
+        "emoji": "\uD83E\uDDD8",
+        "primaryColor": "#6B8F71",
+        "secondaryColor": "#A7C4A0",
+        "tagline": "Your AI therapist is in",
+        "featured": true
+      },
+      "downloadUrl": "/plugins/questionable-therapy/bundle.js",
+      "size": 45056,
+      "downloads": 0,
+      "rating": 0,
+      "tags": ["therapy", "wellness", "zen", "mental-health", "audio"],
+      "platforms": ["web", "desktop", "mobile"],
+      "permissions": ["messages:read", "messages:write", "storage:kv", "commands", "notifications"],
+      "slots": [
+        { "slot": "chat-header", "component": "TherapySessionBanner", "priority": 20 },
+        { "slot": "right-panel", "component": "ZenMediaControls", "priority": 50 },
+        { "slot": "message-decorator", "component": "TherapyMessageStyle", "priority": 35 }
+      ],
+      "storage": { "kv": true }
     }
   ],
   "categories": [
     "utility",
     "system",
     "education",
-    "languages"
+    "languages",
+    "wellness",
+    "audio"
   ]
 }
