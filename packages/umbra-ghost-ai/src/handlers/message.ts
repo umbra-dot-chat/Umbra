@@ -181,10 +181,10 @@ export async function handleMessage(
       ? responseText.replace(TUTOR_TAG_STRIP, '')
       : responseText;
 
-    // Send final update with clean text
-    sendMessageUpdate(responseMessageId, cleanedResponse, identity, relay, friend);
+    // Send final update with tags intact (client plugin parses them)
+    sendMessageUpdate(responseMessageId, responseText, identity, relay, friend);
 
-    // Save the clean final version to context store
+    // Save the stripped version to context store (clean LLM history)
     store.saveMessage({
       id: responseMessageId,
       conversationId: friend.conversationId,
@@ -206,7 +206,20 @@ export async function handleMessage(
       ? responseText.replace(TUTOR_TAG_STRIP, '')
       : responseText;
 
-    await sendResponse(cleanedResponse, identity, relay, store, friend, log);
+    // Send with tags intact (client plugin parses them), store stripped
+    const messageId = uuid();
+    const timestamp = Date.now();
+    sendEncryptedMessage(messageId, responseText, identity, relay, friend);
+
+    store.saveMessage({
+      id: messageId,
+      conversationId: friend.conversationId,
+      role: 'assistant',
+      content: cleanedResponse,
+      timestamp,
+    });
+
+    log.info(`Replied to ${friend.displayName}: "${cleanedResponse.slice(0, 100)}${cleanedResponse.length > 100 ? '...' : ''}"`);
   }
 }
 
