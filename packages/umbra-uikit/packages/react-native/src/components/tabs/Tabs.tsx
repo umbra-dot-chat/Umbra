@@ -34,6 +34,8 @@ export interface TabProps {
   /** Notification badge count. Renders a small count indicator next to the label. */
   badge?: number;
   style?: ViewStyle;
+  /** Test identifier for E2E and accessibility testing. */
+  testID?: string;
 }
 
 export interface TabPanelProps {

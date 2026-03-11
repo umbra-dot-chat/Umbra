@@ -45,6 +45,8 @@ export interface SidebarProps {
   /** Which edge the sidebar is anchored to. @default 'left' */
   position?: SidebarPosition;
   style?: object;
+  /** Test identifier for E2E and accessibility testing. */
+  testID?: string;
 }
 
 // ---------------------------------------------------------------------------

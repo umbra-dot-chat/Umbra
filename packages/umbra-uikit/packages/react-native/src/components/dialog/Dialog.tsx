@@ -26,6 +26,8 @@ export interface DialogProps {
   closeOnOverlayClick?: boolean;
   showCloseButton?: boolean;
   style?: ViewStyle;
+  /** Test identifier for E2E and accessibility testing. */
+  testID?: string;
 }
 
 export const Dialog = forwardRef<View, DialogProps>(function Dialog(

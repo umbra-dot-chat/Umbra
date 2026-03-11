@@ -13,6 +13,8 @@ export interface AlertProps {
   action?: React.ReactNode;
   children?: React.ReactNode;
   style?: object;
+  /** Test identifier for E2E and accessibility testing. */
+  testID?: string;
 }
 
 function resolveVariantColors(variant: AlertVariant, themeColors: ThemeColors) {
