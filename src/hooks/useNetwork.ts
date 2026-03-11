@@ -546,7 +546,27 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
             };
             let isNew = true;
             try { isNew = await service.storeIncomingRequest(friendRequest); } catch (e) { console.warn('[useNetwork] Failed to store incoming request:', e); }
-            if (isNew) service.dispatchFriendEvent({ type: 'requestReceived', request: friendRequest });
+            if (isNew) {
+              service.dispatchFriendEvent({ type: 'requestReceived', request: friendRequest });
+            } else {
+              // Reconnection: sender is already a friend but may have lost our keys.
+              // Re-send friend_response so they can re-establish the friendship.
+              try {
+                const pub = await service.getPublicIdentity();
+                const responseEnvelope = JSON.stringify({
+                  envelope: 'friend_response', version: 1,
+                  payload: {
+                    requestId: reqPayload.id, fromDid: pub.did,
+                    fromDisplayName: pub.displayName, fromAvatar: pub.avatar ?? '',
+                    fromSigningKey: pub.publicKeys.signing,
+                    fromEncryptionKey: pub.publicKeys.encryption,
+                    accepted: true, timestamp: Date.now(),
+                  },
+                });
+                ws.send(JSON.stringify({ type: 'send', to_did: reqPayload.fromDid, payload: responseEnvelope }));
+                console.log(`[useNetwork] Re-sent friend_response to already-friended ${reqPayload.fromDisplayName}`);
+              } catch (e) { console.warn('[useNetwork] Failed to re-send friend_response:', e); }
+            }
 
           } else if (envelope.envelope === 'friend_response' && envelope.version === 1) {
             const respPayload = envelope.payload as FriendResponsePayload;
@@ -757,7 +777,26 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
               const friendRequest: FriendRequest = { id: reqPayload.id, fromDid: reqPayload.fromDid, toDid: '', direction: 'incoming', message: reqPayload.message, fromDisplayName: reqPayload.fromDisplayName, fromAvatar: reqPayload.fromAvatar, fromSigningKey: reqPayload.fromSigningKey, fromEncryptionKey: reqPayload.fromEncryptionKey, createdAt: reqPayload.createdAt, status: 'pending' };
               let isNew = true;
               try { isNew = await service.storeIncomingRequest(friendRequest); } catch (e) { console.warn('[useNetwork] Failed to store offline incoming request:', e); }
-              if (isNew) service.dispatchFriendEvent({ type: 'requestReceived', request: friendRequest });
+              if (isNew) {
+                service.dispatchFriendEvent({ type: 'requestReceived', request: friendRequest });
+              } else {
+                // Reconnection: re-send friend_response for already-friended sender
+                try {
+                  const pub = await service.getPublicIdentity();
+                  const responseEnvelope = JSON.stringify({
+                    envelope: 'friend_response', version: 1,
+                    payload: {
+                      requestId: reqPayload.id, fromDid: pub.did,
+                      fromDisplayName: pub.displayName, fromAvatar: pub.avatar ?? '',
+                      fromSigningKey: pub.publicKeys.signing,
+                      fromEncryptionKey: pub.publicKeys.encryption,
+                      accepted: true, timestamp: Date.now(),
+                    },
+                  });
+                  ws.send(JSON.stringify({ type: 'send', to_did: reqPayload.fromDid, payload: responseEnvelope }));
+                  console.log(`[useNetwork] Re-sent offline friend_response to ${reqPayload.fromDisplayName}`);
+                } catch (e) { console.warn('[useNetwork] Failed to re-send offline friend_response:', e); }
+              }
             } else if (envelope.envelope === 'friend_response' && envelope.version === 1) {
               const respPayload = envelope.payload as FriendResponsePayload;
               if (respPayload.accepted) {
