@@ -324,10 +324,70 @@ export class VideoSource {
     );
 
     this.ffmpegProcess = spawn(this.ffmpegPath, args);
+    this.attachFfmpegHandlers(filePath);
+  }
 
+  /**
+   * Start playing from an FFmpeg filter source (e.g., testsrc2, smptebars).
+   * No input file needed — FFmpeg generates synthetic video.
+   */
+  startFromFilter(
+    filterSpec: string,
+    options?: {
+      width?: number;
+      height?: number;
+      fps?: number;
+      loop?: boolean;
+      onTrackEnded?: () => void;
+    },
+  ): void {
+    this.stop();
+
+    this.currentFilePath = `filter:${filterSpec}`;
+    this.width = options?.width ?? DEFAULT_WIDTH;
+    this.height = options?.height ?? DEFAULT_HEIGHT;
+    this.fps = options?.fps ?? DEFAULT_FPS;
+    this.frameIntervalMs = 1000 / this.fps;
+    this.looping = options?.loop ?? true;
+    this.onTrackEnded = options?.onTrackEnded ?? null;
+    this.stopped = false;
+    this.paused = false;
+    this.frameBuffer = [];
+    this.lastFrame = null;
+    this.preBuffering = true;
+    this._droppedFrames = 0;
+    this._framesDelivered = 0;
+
+    this.startFilterDecoding(filterSpec);
+
+    this.log.info(`[VIDEO] Started filter source: ${filterSpec} (${this.width}x${this.height} @ ${this.fps}fps)`);
+  }
+
+  private startFilterDecoding(filterSpec: string): void {
+    // No GPU needed for filter sources — they're CPU-generated
+    const args: string[] = [
+      '-f', 'lavfi',
+      '-i', filterSpec,
+      '-f', 'rawvideo',
+      '-pix_fmt', 'yuv420p',
+      '-s', `${this.width}x${this.height}`,
+      '-r', String(this.fps),
+      '-v', 'error',
+      'pipe:1',
+    ];
+
+    this.ffmpegProcess = spawn(this.ffmpegPath, args);
+    this.attachFfmpegHandlers(`filter:${filterSpec}`);
+  }
+
+  /**
+   * Shared stdout/stderr/close/error handler for FFmpeg processes.
+   * Used by both startDecoding() (file-based) and startFilterDecoding() (filter-based).
+   */
+  private attachFfmpegHandlers(sourceLabel: string): void {
     let partialBuffer = Buffer.alloc(0);
 
-    this.ffmpegProcess.stdout?.on('data', (chunk: Buffer) => {
+    this.ffmpegProcess!.stdout?.on('data', (chunk: Buffer) => {
       partialBuffer = Buffer.concat([partialBuffer, chunk]);
 
       while (partialBuffer.length >= this.frameSize) {
@@ -360,22 +420,22 @@ export class VideoSource {
       }
     });
 
-    this.ffmpegProcess.stderr?.on('data', (data: Buffer) => {
+    this.ffmpegProcess!.stderr?.on('data', (data: Buffer) => {
       const msg = data.toString().trim();
       if (msg) this.log.debug(`[FFMPEG-VIDEO] ${msg}`);
     });
 
-    this.ffmpegProcess.on('close', (code) => {
+    this.ffmpegProcess!.on('close', (code) => {
       if (this.stopped) return;
 
       if (code === 0 || code === null) {
-        this.log.debug(`[VIDEO] FFmpeg finished decoding: ${filePath}`);
+        this.log.debug(`[VIDEO] FFmpeg finished decoding: ${sourceLabel}`);
       } else {
         this.log.error(`[VIDEO] FFmpeg exited with code ${code}`);
       }
     });
 
-    this.ffmpegProcess.on('error', (err) => {
+    this.ffmpegProcess!.on('error', (err) => {
       this.log.error('[VIDEO] FFmpeg spawn error:', err);
     });
   }

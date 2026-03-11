@@ -210,6 +210,12 @@ export class GhostBot {
         // Ghost doesn't initiate calls, but handle for completeness
         break;
 
+      case 'call_reanswer': {
+        const parsed = typeof payload === 'string' ? JSON.parse(payload) : payload;
+        this.callHandler?.handleCallReanswer(parsed);
+        break;
+      }
+
       case 'call_ice_candidate': {
         const parsed = typeof payload === 'string' ? JSON.parse(payload) : payload;
         this.callHandler?.handleCallIceCandidate(parsed);

@@ -75,6 +75,10 @@ interface ActiveCall {
   videoWidth: number;
   videoHeight: number;
   videoFps: number;
+  // Screen share (second video source for test pattern)
+  screenVideoSource: VideoSource | null;
+  screenVideoSender: any | null; // RTCRtpSender for screen track
+  isScreenSharing: boolean;
   // Diagnostic tools
   capture: RawMediaCapture | null;
   degradation: DegradationDetector | null;
@@ -307,6 +311,25 @@ export class CallHandler {
     this.log.debug(`[CALL] Remote state: ${payload.callId} → ${payload.state}`);
   }
 
+  async handleCallReanswer(rawPayload: any): Promise<void> {
+    const payload = this.decryptSignalPayload(rawPayload) as { callId: string; sdp: string };
+    const call = this.activeCalls.get(payload.callId);
+    if (!call) {
+      this.log.debug(`[CALL] Ignoring reanswer for unknown call: ${payload.callId}`);
+      return;
+    }
+
+    try {
+      const answer = JSON.parse(payload.sdp);
+      await call.peer.setRemoteDescription(
+        new this.wrtc.RTCSessionDescription(answer),
+      );
+      this.log.debug(`[CALL ${call.callId}] Processed renegotiation answer`);
+    } catch (err) {
+      this.log.error(`[CALL ${payload.callId}] Failed to process reanswer:`, err);
+    }
+  }
+
   // ── Call creation ─────────────────────────────────────────────────────────
 
   private async createCallFromOffer(offer: CallOfferPayload, friend: StoredFriend): Promise<void> {
@@ -356,6 +379,9 @@ export class CallHandler {
       videoWidth: this.config.maxVideoWidth,
       videoHeight: this.config.maxVideoHeight,
       videoFps: this.config.maxVideoFps,
+      screenVideoSource: null,
+      screenVideoSender: null,
+      isScreenSharing: false,
       capture: null,
       degradation: null,
       audioTestSignal: null,
@@ -444,6 +470,32 @@ export class CallHandler {
 
     peer.onsignalingstatechange = () => {
       this.log.debug(`[CALL] Signaling state: ${peer.signalingState} for ${offer.callId}`);
+    };
+
+    // Handle renegotiation when tracks are added/removed (e.g., screen share)
+    peer.onnegotiationneeded = async () => {
+      try {
+        const reoffer = await peer.createOffer();
+        await peer.setLocalDescription(reoffer);
+        const renegFriend = this.store.getFriend(call.peerDid);
+        if (renegFriend) {
+          this.relay.sendEnvelope(renegFriend.did, {
+            envelope: 'call_reoffer',
+            version: 1,
+            payload: {
+              callId: call.callId,
+              sdp: JSON.stringify({ sdp: reoffer.sdp, type: reoffer.type }),
+              sdpType: 'offer',
+              callType: call.callType,
+              senderDid: this.identity.did,
+              conversationId: call.conversationId,
+            },
+          });
+          this.log.debug(`[CALL ${call.callId}] Sent renegotiation offer`);
+        }
+      } catch (err) {
+        this.log.error(`[CALL ${call.callId}] Renegotiation failed:`, err);
+      }
     };
 
     // Create a MediaStream so the client's ontrack handler receives
@@ -595,6 +647,17 @@ export class CallHandler {
     this.startMetadataBroadcast(call);
 
     this.log.info(`[CALL] Answered ${offer.callType} call: ${offer.callId}`);
+
+    // Auto-start screen share after a short delay so users see the feature
+    if (offer.callType === 'video') {
+      setTimeout(() => {
+        if (!call.cleanedUp && !call.isScreenSharing) {
+          this.startScreenShare(call).catch(err => {
+            this.log.error(`[CALL ${call.callId}] Auto screen-share failed:`, err);
+          });
+        }
+      }, 2000);
+    }
   }
 
   private createVideoTrack(call: ActiveCall, stream?: any): void {
@@ -699,6 +762,76 @@ export class CallHandler {
 
     call.callType = 'voice';
     return '🔊 Video removed. Audio-only call.';
+  }
+
+  // ── Screen share ───────────────────────────────────────────────────────
+
+  private async startScreenShare(call: ActiveCall): Promise<void> {
+    if (call.isScreenSharing || !call.peer) return;
+
+    // Create a second RTCVideoSource for screen share
+    const { nonstandard } = this.wrtc;
+    const screenSource = new nonstandard.RTCVideoSource();
+    const screenTrack = screenSource.createTrack();
+
+    // Add the screen track to the peer connection
+    call.screenVideoSender = call.peer.addTrack(screenTrack);
+
+    // Create VideoSource and start with FFmpeg test pattern
+    call.screenVideoSource = new VideoSource(screenSource, this.ffmpegPath, this.log);
+
+    // Use FFmpeg's testsrc2 filter — generates a test pattern with moving timestamps
+    call.screenVideoSource.startFromFilter(
+      `testsrc2=size=${call.videoWidth}x${call.videoHeight}:rate=${call.videoFps}`,
+      { width: call.videoWidth, height: call.videoHeight, fps: call.videoFps },
+    );
+
+    call.isScreenSharing = true;
+
+    // Notify client via data channel
+    if (call.dataChannel?.readyState === 'open') {
+      try {
+        call.dataChannel.send(JSON.stringify({
+          type: 'screen-share-state',
+          isScreenSharing: true,
+          source: 'test-pattern',
+        }));
+      } catch { /* ignore */ }
+    }
+
+    this.log.info(`[CALL ${call.callId}] Screen share started (test pattern)`);
+  }
+
+  private stopScreenShare(call: ActiveCall): void {
+    if (!call.isScreenSharing) return;
+
+    if (call.screenVideoSource) {
+      call.screenVideoSource.stop();
+      call.screenVideoSource = null;
+    }
+
+    if (call.screenVideoSender && call.peer) {
+      const track = call.screenVideoSender.track;
+      if (track) track.stop();
+      try {
+        call.peer.removeTrack(call.screenVideoSender);
+      } catch { /* may fail if already removed */ }
+      call.screenVideoSender = null;
+    }
+
+    call.isScreenSharing = false;
+
+    // Notify client via data channel
+    if (call.dataChannel?.readyState === 'open') {
+      try {
+        call.dataChannel.send(JSON.stringify({
+          type: 'screen-share-state',
+          isScreenSharing: false,
+        }));
+      } catch { /* ignore */ }
+    }
+
+    this.log.info(`[CALL ${call.callId}] Screen share stopped`);
   }
 
   // ── SDP diagnostics ─────────────────────────────────────────────────────
@@ -840,6 +973,12 @@ export class CallHandler {
             droppedFrames: call.videoSource.droppedFrames,
             framesDelivered: call.videoSource.framesDelivered,
           } : null,
+          screenShare: call.isScreenSharing ? {
+            playing: call.screenVideoSource?.isPlaying ?? false,
+            source: call.screenVideoSource?.currentFile ?? 'test-pattern',
+            bufferedFrames: call.screenVideoSource?.bufferedFrames ?? 0,
+            framesDelivered: call.screenVideoSource?.framesDelivered ?? 0,
+          } : null,
           stats: {
             bitrate: call.stats.audioBitrate,
             packetLoss: call.stats.packetLoss,
@@ -951,6 +1090,11 @@ export class CallHandler {
         return this.cmdFps(fpsStr, senderDid);
       }
 
+      case 'screen-share':
+      case 'screenshare':
+      case 'share-screen':
+        return this.cmdScreenShare(senderDid);
+
       case 'help':
         return this.cmdHelp();
 
@@ -971,6 +1115,9 @@ export class CallHandler {
       if (call.videoSource) {
         lines.push(`    Video: ${call.videoSource.currentFile ?? 'none'} (${call.videoSource.isPlaying ? 'playing' : 'paused'})`);
         lines.push(`    Quality: ${call.videoWidth}x${call.videoHeight}@${call.videoFps}fps`);
+      }
+      if (call.isScreenSharing) {
+        lines.push(`    Screen Share: active (test pattern)`);
       }
       lines.push(`    Bitrate: ${call.stats.audioBitrate}bps | RTT: ${(call.stats.roundTripTime * 1000).toFixed(0)}ms`);
     }
@@ -1077,6 +1224,19 @@ export class CallHandler {
     const call = this.findCallForPeer(senderDid);
     if (!call) return 'No active call.';
     return this.removeVideoFromCall(call);
+  }
+
+  private async cmdScreenShare(senderDid: string): Promise<string> {
+    const call = this.findCallForPeer(senderDid);
+    if (!call) return 'No active call.';
+
+    if (call.isScreenSharing) {
+      this.stopScreenShare(call);
+      return 'Screen share stopped.';
+    } else {
+      await this.startScreenShare(call);
+      return 'Screen share started (test pattern).';
+    }
   }
 
   private cmdEndCall(senderDid: string): string {
@@ -1278,6 +1438,9 @@ export class CallHandler {
       '  /ghost play-video <id> — Play specific video',
       '  /ghost next-video — Next video',
       '',
+      '🖥️ Screen Share:',
+      '  /ghost screen-share — Toggle screen share (test pattern)',
+      '',
       '📺 Quality:',
       '  /ghost quality <preset> — Change video quality',
       '    Presets: 4k, 2160p, 1440p, 1080p, 720p, 480p, auto',
@@ -1369,6 +1532,17 @@ export class CallHandler {
     call.videoSource?.stop();
     call.audioTestSignal?.stop();
     call.videoTestSignal?.stop();
+
+    // Clean up screen share
+    if (call.screenVideoSource) {
+      call.screenVideoSource.stop();
+      call.screenVideoSource = null;
+    }
+    if (call.screenVideoSender) {
+      const track = call.screenVideoSender.track;
+      if (track) track.stop();
+      call.screenVideoSender = null;
+    }
 
     if (call.statsInterval) { clearInterval(call.statsInterval); call.statsInterval = null; }
     if (call.metadataInterval) { clearInterval(call.metadataInterval); call.metadataInterval = null; }
