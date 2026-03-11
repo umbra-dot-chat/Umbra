@@ -1,7 +1,7 @@
 /**
  * 5-step Create Wallet flow:
  *
- * Step 0: Enter display name
+ * Step 0: Choose a username (used as both display name and discovery username)
  * Step 1: View recovery seed phrase (calls createIdentity)
  * Step 2: Confirm backup (checkbox acknowledgment)
  * Step 3: Configure a security PIN (optional — can skip)
@@ -49,11 +49,10 @@ import { TEST_IDS } from '@/constants/test-ids';
 // ---------------------------------------------------------------------------
 
 const STEPS: ProgressStep[] = [
-  { id: 'name', label: 'Display Name' },
+  { id: 'username', label: 'Username' },
   { id: 'seed', label: 'Recovery Phrase' },
   { id: 'confirm', label: 'Confirm Backup' },
   { id: 'pin', label: 'Security PIN' },
-  { id: 'username', label: 'Username' },
   { id: 'complete', label: 'Complete' },
 ];
 
@@ -83,11 +82,8 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
   const [error, setError] = useState<string | null>(null);
   const [rememberMe, setRememberMe] = useState(true);
 
-  // Username step state
-  const [usernameInput, setUsernameInput] = useState('');
+  // Username registration state (registered during identity creation)
   const [usernameResult, setUsernameResult] = useState<UsernameResponse | null>(null);
-  const [usernameError, setUsernameError] = useState<string | null>(null);
-  const [usernameLoading, setUsernameLoading] = useState(false);
 
   // Profile import state
   const [importedProfile, setImportedProfile] = useState<NormalizedProfile | null>(null);
@@ -100,7 +96,7 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
   const [syncOptIn, setSyncOptIn] = useState(true);
 
   const { currentStep, goNext, goBack, isFirstStep, reset } = useWalletFlow({
-    totalSteps: 6,
+    totalSteps: 5,
   });
 
   // Reset state when flow is closed
@@ -115,10 +111,7 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
       setIsLoading(false);
       setError(null);
       setImportedProfile(null);
-      setUsernameInput('');
       setUsernameResult(null);
-      setUsernameError(null);
-      setUsernameLoading(false);
       setShowDiscoveryOptIn(false);
       setAccountLinkedDuringCreation(false);
       setSyncOptIn(true);
@@ -191,6 +184,16 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
       }
 
       setIdentity(finalIdentity);
+
+      // Auto-register the username with the discovery service (non-blocking)
+      try {
+        const usernameRes = await registerUsername(result.identity.did, displayName.trim());
+        setUsernameResult(usernameRes);
+        console.log('[CreateWalletFlow] Username registered:', usernameRes.username);
+      } catch (usernameErr: any) {
+        // Non-fatal — username registration is best-effort
+        console.warn('[CreateWalletFlow] Failed to register username:', usernameErr);
+      }
     } catch (err: any) {
       setError(err.message ?? 'Failed to create account');
     } finally {
@@ -205,26 +208,6 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
     },
     [goNext],
   );
-
-  // Register username
-  const handleRegisterUsername = useCallback(async () => {
-    if (!identity || !usernameInput.trim()) return;
-    setUsernameLoading(true);
-    setUsernameError(null);
-    try {
-      const result = await registerUsername(identity.did, usernameInput.trim());
-      setUsernameResult(result);
-    } catch (err: any) {
-      setUsernameError(err.message ?? 'Failed to register username');
-    } finally {
-      setUsernameLoading(false);
-    }
-  }, [identity, usernameInput]);
-
-  // Skip username step
-  const handleSkipUsername = useCallback(() => {
-    goNext();
-  }, [goNext]);
 
   // Finalize login after identity switch decision (or when no old data exists)
   const doLogin = useCallback(() => {
@@ -327,22 +310,24 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
           <VStack gap="lg">
             <VStack gap="xs">
               <Text size="xl" weight="bold">
-                Choose Your Name
+                Choose a Username
               </Text>
               <Text size="sm" color="secondary">
-                This is how others will see you. You can change it anytime.
+                This is how others will see you and how friends can find you. You can change it anytime.
               </Text>
             </VStack>
             <Input
               icon={UserIcon}
-              label="Display Name"
-              placeholder="Enter your name"
+              label="Username"
+              placeholder="e.g., Matt"
               value={displayName}
               onChangeText={setDisplayName}
               fullWidth
               autoFocus
+              autoCapitalize="none"
+              autoCorrect={false}
               testID={TEST_IDS.CREATE.NAME_INPUT}
-              accessibilityLabel="Display name input"
+              accessibilityLabel="Username input"
               gradientBorder
             />
 
@@ -478,75 +463,6 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
 
       case 4:
         return (
-          <VStack gap="lg">
-            <VStack gap="xs">
-              <Text size="xl" weight="bold">
-                Choose a Username
-              </Text>
-              <Text size="sm" color="secondary">
-                Pick a unique username so friends can find you easily. A numeric tag will be assigned automatically (e.g., Matt#01283).
-              </Text>
-            </VStack>
-
-            {!usernameResult ? (
-              <VStack gap="md">
-                <Input
-                  icon={UserIcon}
-                  label="Username"
-                  placeholder="e.g., Matt"
-                  value={usernameInput}
-                  onChangeText={(text: string) => {
-                    setUsernameInput(text);
-                    setUsernameError(null);
-                  }}
-                  fullWidth
-                  autoFocus
-                  autoCapitalize="none"
-                  autoCorrect={false}
-                  testID={TEST_IDS.CREATE.USERNAME_INPUT}
-                  accessibilityLabel="Username input"
-                  gradientBorder
-                />
-
-                <Text size="xs" color="muted">
-                  1-32 characters. Letters, numbers, underscores, and hyphens only.
-                </Text>
-
-                {usernameError && (
-                  <Alert variant="danger" title="Error" description={usernameError} />
-                )}
-
-                {usernameLoading && (
-                  <View style={{ alignItems: 'center', paddingVertical: 8 }}>
-                    <Spinner />
-                  </View>
-                )}
-              </VStack>
-            ) : (
-              <VStack gap="md" style={{ alignItems: 'center' }}>
-                <Presence visible animation="scaleIn">
-                  <CheckCircleIcon size={48} color="#22c55e" />
-                </Presence>
-
-                <VStack gap="xs" style={{ alignItems: 'center' }}>
-                  <Text size="sm" color="secondary">Your username is</Text>
-                  <Text size="xl" weight="bold">
-                    {usernameResult.username}
-                  </Text>
-                </VStack>
-
-                <Card variant="filled" padding="sm" style={{ width: '100%' }}>
-                  <Text size="xs" color="muted" align="center">
-                    Share this with friends so they can find and add you on Umbra.
-                  </Text>
-                </Card>
-              </VStack>
-            )}
-          </VStack>
-        );
-
-      case 5:
-        return (
           <VStack gap="lg" style={{ paddingVertical: 16 }} testID={TEST_IDS.CREATE.SUCCESS_SCREEN} accessibilityLabel="Account created success screen">
             <View style={{ alignItems: 'center' }}>
               <Presence visible animation="scaleIn">
@@ -679,45 +595,7 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
       case 3:
         return null;
 
-      // Step 4 (Username)
       case 4:
-        return (
-          <HStack gap="md" style={{ justifyContent: 'space-between' }}>
-            {!usernameResult ? (
-              <>
-                <Button
-                  variant="tertiary"
-                  onPress={handleSkipUsername}
-                  testID={TEST_IDS.CREATE.USERNAME_SKIP}
-                  accessibilityLabel="Skip username registration"
-                >
-                  Skip for now
-                </Button>
-                <Button
-                  variant="primary"
-                  onPress={handleRegisterUsername}
-                  disabled={!usernameInput.trim() || usernameLoading}
-                  iconRight={<ArrowRightIcon size={16} color="#FFFFFF" />}
-                  testID={TEST_IDS.CREATE.USERNAME_REGISTER}
-                  accessibilityLabel="Register username"
-                >
-                  Claim Username
-                </Button>
-              </>
-            ) : (
-              <Button
-                variant="primary"
-                onPress={goNext}
-                fullWidth
-                iconRight={<ArrowRightIcon size={16} color="#FFFFFF" />}
-              >
-                Continue
-              </Button>
-            )}
-          </HStack>
-        );
-
-      case 5:
         return (
           <HStack gap="md" style={{ justifyContent: 'flex-end' }}>
             <Button
