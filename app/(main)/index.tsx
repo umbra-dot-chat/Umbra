@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { KeyboardAvoidingView, Platform, View, Image, useWindowDimensions } from 'react-native';
+import { KeyboardAvoidingView, Platform, Image, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Text, GradientText, useTheme } from '@coexist/wisp-react-native';
+import { Text, GradientText, useTheme, Box } from '@coexist/wisp-react-native';
 import { TEST_IDS } from '@/constants/test-ids';
 import { useHoverMessage } from '@/hooks/useHoverMessage';
 import { useRightPanel } from '@/hooks/useRightPanel';
@@ -56,7 +56,7 @@ function EmptyConversation() {
   const isCompact = width < 500;
   const ghostSize = isCompact ? 160 : 275;
   return (
-    <View testID={TEST_IDS.MAIN.EMPTY_STATE} style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: isCompact ? 24 : 40 }}>
+    <Box testID={TEST_IDS.MAIN.EMPTY_STATE} style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: isCompact ? 24 : 40 }}>
       <Image
         source={ghostSource}
         style={{ width: ghostSize, height: ghostSize, marginBottom: 16 }}
@@ -83,14 +83,14 @@ function EmptyConversation() {
         <HelpText>
           To start a conversation, go to the Friends page and add someone by their DID.
         </HelpText>
-        <HelpHighlight icon={<MessageIcon size={22} color="#6366f1" />}>
+        <HelpHighlight icon={<MessageIcon size={22} color={theme.colors.accent.primary} />}>
           Once you're friends, a conversation is created automatically. Messages are end-to-end encrypted — only you and the recipient can read them.
         </HelpHighlight>
         <HelpListItem>Navigate to Friends from the sidebar</HelpListItem>
         <HelpListItem>Paste a DID to send a friend request</HelpListItem>
         <HelpListItem>Once accepted, your conversation appears here</HelpListItem>
       </HelpIndicator>
-    </View>
+    </Box>
   );
 }
 
@@ -546,14 +546,14 @@ export default function ChatPage() {
   // No conversations yet — show welcome
   if (!convsLoading && conversations.length === 0) {
     return (
-      <View testID={TEST_IDS.MAIN.CONTAINER} style={{ flex: 1 }}>
+      <Box testID={TEST_IDS.MAIN.CONTAINER} style={{ flex: 1 }}>
         <EmptyConversation />
-      </View>
+      </Box>
     );
   }
 
   return (
-    <View testID={TEST_IDS.MAIN.CONTAINER} style={{ flex: 1, flexDirection: 'row' }}>
+    <Box testID={TEST_IDS.MAIN.CONTAINER} style={{ flex: 1, flexDirection: 'row' }}>
       <KeyboardAvoidingView
         style={{ flex: 1, flexDirection: 'column' }}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
@@ -655,7 +655,7 @@ export default function ChatPage() {
         />
         {/* Safe area spacing below the input */}
         {insets.bottom > 0 && (
-          <View style={{ height: insets.bottom }} />
+          <Box style={{ height: insets.bottom }} />
         )}
       </KeyboardAvoidingView>
 
@@ -709,6 +709,6 @@ export default function ChatPage() {
         onClose={() => setGroupSettingsOpen(false)}
         groupId={activeConversation?.groupId}
       />
-    </View>
+    </Box>
   );
 }
