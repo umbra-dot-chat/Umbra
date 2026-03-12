@@ -491,6 +491,20 @@ deploy_all_relays() {
 
 build_ghost() {
     log_info "Building Ghost AI bot..."
+    cd "$PROJECT_ROOT"
+
+    # Build wisps first (Ghost depends on @umbra/wisps)
+    log_info "Building Wisps package..."
+    cd "$PROJECT_ROOT/packages/umbra-wisps"
+    npx tsc
+    if [[ -d "dist" ]]; then
+        log_success "Wisps build complete: packages/umbra-wisps/dist/"
+    else
+        log_error "Wisps build failed - dist/ not created"
+        exit 1
+    fi
+
+    # Build Ghost AI
     cd "$PROJECT_ROOT/packages/umbra-ghost-ai"
     npm run build
     if [[ -d "dist" ]]; then
@@ -535,20 +549,49 @@ deploy_ghost() {
         "'$PROJECT_ROOT/packages/umbra-ghost-ai/dist/'" \
         "'$SSH_USER@$GHOST_HOST:$ghost_path/dist/'"
 
-    # Sync package.json and media config
-    log_info "Uploading package.json and media config..."
+    # Generate production package.json (replace workspace:* with file:./wisps)
+    log_info "Uploading production package.json..."
+    local prod_pkg
+    prod_pkg=$(mktemp)
+    sed 's/"file:\.\.\/umbra-wisps"/"file:.\/wisps"/' "$PROJECT_ROOT/packages/umbra-ghost-ai/package.json" > "$prod_pkg"
     eval rsync -avz \
         -e "'$ghost_rsync_ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=5'" \
-        "'$PROJECT_ROOT/packages/umbra-ghost-ai/package.json'" \
+        "'$prod_pkg'" \
         "'$SSH_USER@$GHOST_HOST:$ghost_path/package.json'"
+    rm -f "$prod_pkg"
+
+    # Sync media config
+    log_info "Uploading media config..."
     eval rsync -avz \
         -e "'$ghost_rsync_ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=5'" \
         "'$PROJECT_ROOT/packages/umbra-ghost-ai/media.config.json'" \
         "'$SSH_USER@$GHOST_HOST:$ghost_path/media.config.json'"
 
+    # Sync wisps package (used as file: dependency)
+    log_info "Uploading wisps package..."
+    eval "$ghost_ssh_cmd -o ServerAliveInterval=30 $SSH_USER@$GHOST_HOST 'mkdir -p $ghost_path/wisps/dist'"
+    eval rsync -avz --delete \
+        -e "'$ghost_rsync_ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=5'" \
+        "'$PROJECT_ROOT/packages/umbra-wisps/dist/'" \
+        "'$SSH_USER@$GHOST_HOST:$ghost_path/wisps/dist/'"
+    eval rsync -avz \
+        -e "'$ghost_rsync_ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=5'" \
+        "'$PROJECT_ROOT/packages/umbra-wisps/package.json'" \
+        "'$SSH_USER@$GHOST_HOST:$ghost_path/wisps/package.json'"
+
     # Install dependencies on server
     log_info "Installing dependencies on server..."
     eval "$ghost_ssh_cmd -o ServerAliveInterval=30 $SSH_USER@$GHOST_HOST 'cd $ghost_path && npm install --production 2>&1 | tail -5'"
+
+    # Configure wisps environment for the service
+    log_info "Configuring wisp swarm environment..."
+    eval "$ghost_ssh_cmd -o ServerAliveInterval=30 $SSH_USER@$GHOST_HOST 'mkdir -p /etc/systemd/system/$ghost_service.service.d && cat > /etc/systemd/system/$ghost_service.service.d/wisps.conf << EOC
+[Service]
+Environment=WISPS_ENABLED=true
+Environment=WISP_COUNT=4
+Environment=WISP_MODEL=llama3.2:1b
+EOC
+systemctl daemon-reload'"
 
     # Restart the systemd service
     log_info "Restarting $ghost_service service..."
