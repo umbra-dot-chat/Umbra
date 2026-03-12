@@ -25,6 +25,8 @@
 // to avoid loading sql.js on platforms that don't support WebAssembly (React Native).
 // The static import was causing Metro to bundle sql.js which then crashes on JSC.
 
+import { initTracer, isDebugActive, emit, setTraceContext, clearTraceContext, isVerbose } from './tracer';
+
 // ─────────────────────────────────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────────────────────────────────
@@ -678,6 +680,10 @@ async function doInitWasm(did?: string): Promise<UmbraWasmModule> {
   _dbg()?.info('lifecycle', 'doInitWasm START (web browser path)', { did: did?.slice(0, 16) }, LDR_SRC);
   console.log('[umbra-wasm] Initializing...');
 
+  // Initialize debug tracer early — probes for debug TUI on ws://localhost:9999.
+  // No-op when debug is not active (zero overhead).
+  initTracer();
+
   // Crash-stage diagnostics: write to localStorage before each step so we can
   // check where the crash happened from diag.html after an OOM kill.
   const _cs = (stage: string) => {
@@ -841,6 +847,120 @@ async function doInitWasm(did?: string): Promise<UmbraWasmModule> {
   // extended features not yet in Rust
   _cs('3-build-module');
   const wasm = buildModule(wasmPkg);
+
+  // Step 3b: If debug tracer is active, wrap all WASM functions with
+  // trace event emission for universal call tracing.
+  if (isDebugActive()) {
+    _cs('3b-debug-wrap');
+    const verbose = isVerbose();
+    const coreMem = (globalThis as any).__umbra_core_memory;
+    const fnKeys = Object.keys(wasm) as (keyof typeof wasm)[];
+    let wrapped = 0;
+    for (const key of fnKeys) {
+      const original = wasm[key];
+      if (typeof original !== 'function') continue;
+      (wasm as any)[key] = function (this: unknown, ...args: any[]) {
+        const fnName = key as string;
+        setTraceContext(fnName);
+
+        // Measure memory before
+        let memBefore = 0;
+        try {
+          memBefore = coreMem?.buffer?.byteLength ?? 0;
+        } catch { /* detached buffer */ }
+
+        // Compute arg bytes
+        let argBytes = 0;
+        for (const arg of args) {
+          if (typeof arg === 'string') argBytes += arg.length;
+          else if (arg instanceof Uint8Array) argBytes += arg.byteLength;
+          else if (arg != null) argBytes += String(arg).length;
+        }
+
+        const t0 = performance.now();
+        let result: any;
+        let errStr: string | undefined;
+        try {
+          result = (original as any).apply(this, args);
+        } catch (e: any) {
+          errStr = e?.message ?? String(e);
+          clearTraceContext();
+          // Still emit the trace event on error
+          let memAfter = 0;
+          try { memAfter = coreMem?.buffer?.byteLength ?? 0; } catch { /* detached */ }
+          emit({
+            cat: 'wasm',
+            fn: fnName,
+            argBytes,
+            durMs: performance.now() - t0,
+            memBefore,
+            memAfter,
+            memGrowth: memAfter - memBefore,
+            argPreview: verbose ? args.map(a => String(a)).join(', ').slice(0, 200) : undefined,
+            err: errStr,
+          });
+          throw e;
+        }
+
+        // Handle async results (some WASM fns return Promise)
+        if (result && typeof result.then === 'function') {
+          return result.then(
+            (val: any) => {
+              let memAfter = 0;
+              try { memAfter = coreMem?.buffer?.byteLength ?? 0; } catch { /* detached */ }
+              emit({
+                cat: 'wasm',
+                fn: fnName,
+                argBytes,
+                durMs: performance.now() - t0,
+                memBefore,
+                memAfter,
+                memGrowth: memAfter - memBefore,
+                argPreview: verbose ? args.map(a => String(a)).join(', ').slice(0, 200) : undefined,
+              });
+              clearTraceContext();
+              return val;
+            },
+            (err: any) => {
+              let memAfter = 0;
+              try { memAfter = coreMem?.buffer?.byteLength ?? 0; } catch { /* detached */ }
+              emit({
+                cat: 'wasm',
+                fn: fnName,
+                argBytes,
+                durMs: performance.now() - t0,
+                memBefore,
+                memAfter,
+                memGrowth: memAfter - memBefore,
+                argPreview: verbose ? args.map(a => String(a)).join(', ').slice(0, 200) : undefined,
+                err: err?.message ?? String(err),
+              });
+              clearTraceContext();
+              throw err;
+            },
+          );
+        }
+
+        // Synchronous result
+        let memAfter = 0;
+        try { memAfter = coreMem?.buffer?.byteLength ?? 0; } catch { /* detached */ }
+        emit({
+          cat: 'wasm',
+          fn: fnName,
+          argBytes,
+          durMs: performance.now() - t0,
+          memBefore,
+          memAfter,
+          memGrowth: memAfter - memBefore,
+          argPreview: verbose ? args.map(a => String(a)).join(', ').slice(0, 200) : undefined,
+        });
+        clearTraceContext();
+        return result;
+      };
+      wrapped++;
+    }
+    console.log(`[tracer] Wrapped ${wrapped} WASM functions for debug tracing`);
+  }
 
   // Step 4: Initialize Umbra (panic hooks, tracing)
   // NOTE: WASM tracing is now set to WARN level in wasm.rs, so console
