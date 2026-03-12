@@ -245,6 +245,10 @@ class DebugLogger {
   private _domMutationAdds = 0;
   private _domMutationRemoves = 0;
 
+  // TUI WebSocket bridge
+  private _tuiWs: WebSocket | null = null;
+  private _tuiReconnectId: any = null;
+
   constructor() {
     this.ring = new RingBuffer(500);
 
@@ -345,6 +349,9 @@ class DebugLogger {
         try {
           localStorage.setItem(VITALS_KEY, JSON.stringify(vitals));
         } catch { /* quota exceeded — ignore */ }
+
+        // Send to TUI if connected
+        this._sendVitalsToTui(vitals);
 
         // Console heartbeat (compact)
         const listenerStr = Object.keys(svcListeners).length > 0
@@ -568,6 +575,124 @@ class DebugLogger {
       const raw = localStorage.getItem(VITALS_KEY);
       return raw ? JSON.parse(raw) : null;
     } catch { return null; }
+  }
+
+  // ── TUI WebSocket Bridge ────────────────────────────────────────────────
+
+  /** Connect to the umbra-debug TUI via WebSocket */
+  connectToTui(port = 9999) {
+    if (typeof WebSocket === 'undefined') return;
+    if (this._tuiWs?.readyState === WebSocket.OPEN) {
+      console.log('%c[TUI] Already connected', 'color: #6366f1');
+      return;
+    }
+
+    try {
+      const ws = new WebSocket(`ws://localhost:${port}`);
+      ws.onopen = () => {
+        console.log(`%c[TUI] Connected to ws://localhost:${port}`, 'color: #4caf50; font-weight: bold');
+        // Send hello with browser info
+        ws.send(JSON.stringify({
+          seq: 0,
+          ts: performance.now(),
+          cat: 'browser',
+          fn: 'hello',
+          argBytes: 0,
+          durMs: 0,
+          memBefore: 0,
+          memAfter: 0,
+          memGrowth: 0,
+          meta: {
+            clientId: 'browser',
+            userAgent: navigator.userAgent,
+            deviceMemory: (navigator as any).deviceMemory,
+            heapLimit: (performance as any).memory?.jsHeapSizeLimit,
+          },
+        }));
+        this._tuiWs = ws;
+      };
+      ws.onclose = () => {
+        this._tuiWs = null;
+        console.log('%c[TUI] Disconnected', 'color: #ff9800');
+      };
+      ws.onerror = () => {
+        // Silently fail — TUI may not be running
+        this._tuiWs = null;
+      };
+    } catch { /* ignore */ }
+  }
+
+  /** Disconnect from TUI */
+  disconnectTui() {
+    if (this._tuiReconnectId) {
+      clearInterval(this._tuiReconnectId);
+      this._tuiReconnectId = null;
+    }
+    this._tuiWs?.close();
+    this._tuiWs = null;
+  }
+
+  /** Auto-connect to TUI (retries every 10s) */
+  autoConnectTui(port = 9999) {
+    this.connectToTui(port);
+    this._tuiReconnectId = setInterval(() => {
+      if (!this._tuiWs || this._tuiWs.readyState !== WebSocket.OPEN) {
+        this.connectToTui(port);
+      }
+    }, 10_000) as any;
+  }
+
+  /** Send vitals to TUI as a TraceEvent (called from heartbeat) */
+  private _sendVitalsToTui(vitals: CrashVitals) {
+    if (!this._tuiWs || this._tuiWs.readyState !== WebSocket.OPEN) return;
+    try {
+      this._tuiWs.send(JSON.stringify({
+        seq: vitals.heartbeatSeq,
+        ts: performance.now(),
+        cat: 'browser',
+        fn: 'heartbeat',
+        argBytes: vitals.domNodes,
+        durMs: 0,
+        memBefore: vitals.heap - vitals.heapDelta,
+        memAfter: vitals.heap,
+        memGrowth: vitals.heapDelta,
+        meta: {
+          domNodes: vitals.domNodes,
+          renderRate: vitals.renderRate,
+          msgRate: vitals.messageEventRate,
+          listeners: vitals.globalListenerBalance,
+          nonFriendFails: vitals.nonFriendFailures,
+          heapPct: vitals.heapLimit > 0 ? ((vitals.heap / vitals.heapLimit) * 100).toFixed(0) : '?',
+        },
+      }));
+    } catch { /* ignore send failures */ }
+  }
+
+  /** Export ring buffer as Chrome Trace Event format for chrome://tracing */
+  exportChromeTrace(): string {
+    const entries = this.ring.getEntries();
+    const events = entries.map((e, i) => ({
+      name: e.msg.slice(0, 80),
+      cat: e.cat,
+      ph: 'i', // instant event
+      ts: e.t * 1000, // microseconds
+      pid: 1,
+      tid: 1,
+      args: {
+        level: e.level,
+        src: e.src,
+        data: e.data,
+      },
+    }));
+    return JSON.stringify({ traceEvents: events });
+  }
+
+  /** Download ring buffer as Chrome Trace format */
+  downloadChromeTrace() {
+    const json = this.exportChromeTrace();
+    const blob = new Blob([json], { type: 'application/json' });
+    downloadBlob(blob, `umbra-trace-${formatFileTimestamp()}.json`);
+    console.log('%c[Umbra Debug]%c Downloaded Chrome trace', 'color: #6366f1; font-weight: bold', 'color: inherit');
   }
 
   // ── Timing (with performance.mark/measure integration) ───────────────
@@ -1018,6 +1143,14 @@ if (typeof window !== 'undefined') {
     listenerBalance: () => dbg.globalListenerBalance,
     nonFriendFailures: () => dbg.nonFriendFailureCount,
 
+    // TUI bridge
+    connectTui: (port?: number) => dbg.connectToTui(port),
+    autoConnectTui: (port?: number) => dbg.autoConnectTui(port),
+    disconnectTui: () => dbg.disconnectTui(),
+
+    // Export
+    downloadChromeTrace: () => dbg.downloadChromeTrace(),
+
     // Help
     help: () => {
       console.log(`
@@ -1058,6 +1191,11 @@ if (typeof window !== 'undefined') {
   __debug.vitals()                 Show last CrashVitals (prev session)
   __debug.listenerBalance()        Global addEventListener balance
   __debug.nonFriendFailures()      Non-friend message rejection count
+
+  __debug.connectTui(9999)         Connect to umbra-debug TUI
+  __debug.autoConnectTui(9999)     Auto-reconnect to TUI (10s retry)
+  __debug.disconnectTui()          Disconnect from TUI
+  __debug.downloadChromeTrace()    Export as Chrome trace format
 `,
         'color: #6366f1; font-weight: bold',
         'color: inherit',
