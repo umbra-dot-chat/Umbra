@@ -22,6 +22,20 @@
 
 import { saveDatabaseExport, loadDatabaseExport } from './indexed-db';
 
+// Debug tracer — lazy import to avoid circular dependency issues at init time.
+// tracer.ts imports getSqlBridgeStats() from this file; we import emit/isDebugActive from tracer.
+let _tracerModule: typeof import('./tracer') | null = null;
+function _tracer(): typeof import('./tracer') | null {
+  if (_tracerModule) return _tracerModule;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    _tracerModule = require('./tracer');
+    return _tracerModule;
+  } catch {
+    return null;
+  }
+}
+
 // Debug bridge
 const _dbg = (): any => (globalThis as any).__umbra_logger_instance;
 const SQL_SRC = 'sql-bridge';
@@ -150,8 +164,25 @@ function doSave(): void {
     const did = currentDid;
     _sqlExportCount++;
     console.log(`[sql-bridge] db.export() #${_sqlExportCount} starting (after ${_sqlExecuteCount} executes, ${_sqlQueryCount} queries)`);
+    const t0 = performance.now();
     const data = db.export();
+    const durMs = performance.now() - t0;
     console.log(`[sql-bridge] db.export() #${_sqlExportCount} done: ${(data.byteLength / 1024).toFixed(0)}KB`);
+
+    // Emit trace event for debug TUI
+    const tracer = _tracer();
+    if (tracer?.isDebugActive()) {
+      tracer.emit({
+        cat: 'sql',
+        fn: 'db_export',
+        argBytes: data.byteLength,
+        durMs,
+        memBefore: 0,
+        memAfter: 0,
+        memGrowth: 0,
+        argPreview: `export #${_sqlExportCount} ${(data.byteLength / 1024).toFixed(0)}KB`,
+      });
+    }
 
     saveDatabaseExport(did, data)
       .catch((err) => {
@@ -205,10 +236,27 @@ const bridge = {
     if (!db) throw new Error("Database not initialized");
 
     _sqlExecuteCount++;
+    const t0 = performance.now();
     const params = JSON.parse(paramsJson);
     db.run(sql, params);
     const rowsModified = db.getRowsModified();
+    const durMs = performance.now() - t0;
     _dbg()?.trace('service', `sql EXECUTE: ${sql.slice(0, 60)}… → ${rowsModified} rows`, undefined, SQL_SRC);
+
+    // Emit trace event for debug TUI
+    const tracer = _tracer();
+    if (tracer?.isDebugActive()) {
+      tracer.emit({
+        cat: 'sql',
+        fn: 'execute',
+        argBytes: sql.length + paramsJson.length,
+        durMs,
+        memBefore: 0,
+        memAfter: 0,
+        memGrowth: 0,
+        argPreview: tracer.isVerbose() ? `${sql.slice(0, 150)} | rows=${rowsModified}` : undefined,
+      });
+    }
 
     // Log every 50th execute for memory tracking during offline processing
     if (_sqlExecuteCount % 50 === 0) {
@@ -229,6 +277,7 @@ const bridge = {
     if (!db) throw new Error("Database not initialized");
 
     _sqlQueryCount++;
+    const t0 = performance.now();
     const params = JSON.parse(paramsJson);
 
     // sql.js exec() doesn't support params, so we need to use
@@ -243,7 +292,26 @@ const bridge = {
     }
     stmt.free();
 
+    const durMs = performance.now() - t0;
     _dbg()?.trace('service', `sql QUERY: ${sql.slice(0, 60)}… → ${results.length} rows`, undefined, SQL_SRC);
+
+    // Emit trace event for debug TUI
+    const tracer = _tracer();
+    if (tracer?.isDebugActive()) {
+      const resultJson = JSON.stringify(results);
+      tracer.emit({
+        cat: 'sql',
+        fn: 'query',
+        argBytes: sql.length + paramsJson.length,
+        durMs,
+        memBefore: 0,
+        memAfter: 0,
+        memGrowth: 0,
+        argPreview: tracer.isVerbose() ? `${sql.slice(0, 150)} | rows=${results.length}` : undefined,
+      });
+      return resultJson;
+    }
+
     return JSON.stringify(results);
   },
 
@@ -254,8 +322,25 @@ const bridge = {
   executeBatch(sql: string): boolean {
     if (!db) throw new Error("Database not initialized");
 
+    const t0 = performance.now();
     // sql.js exec() runs multiple statements
     db.exec(sql);
+    const durMs = performance.now() - t0;
+
+    // Emit trace event for debug TUI
+    const tracer = _tracer();
+    if (tracer?.isDebugActive()) {
+      tracer.emit({
+        cat: 'sql',
+        fn: 'executeBatch',
+        argBytes: sql.length,
+        durMs,
+        memBefore: 0,
+        memAfter: 0,
+        memGrowth: 0,
+        argPreview: tracer.isVerbose() ? sql.slice(0, 200) : undefined,
+      });
+    }
 
     // Persist after batch writes (schema creation, migrations)
     scheduleSave();
@@ -270,6 +355,7 @@ const bridge = {
   queryValue(sql: string, paramsJson: string): string {
     if (!db) throw new Error("Database not initialized");
 
+    const t0 = performance.now();
     const params = JSON.parse(paramsJson);
 
     const stmt = (db as any).prepare(sql);
@@ -283,6 +369,23 @@ const bridge = {
       }
     }
     stmt.free();
+
+    const durMs = performance.now() - t0;
+
+    // Emit trace event for debug TUI
+    const tracer = _tracer();
+    if (tracer?.isDebugActive()) {
+      tracer.emit({
+        cat: 'sql',
+        fn: 'queryValue',
+        argBytes: sql.length + paramsJson.length,
+        durMs,
+        memBefore: 0,
+        memAfter: 0,
+        memGrowth: 0,
+        argPreview: tracer.isVerbose() ? `${sql.slice(0, 150)} | result=${result.slice(0, 50)}` : undefined,
+      });
+    }
 
     return result;
   },
