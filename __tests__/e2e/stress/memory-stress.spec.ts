@@ -78,7 +78,7 @@ test.describe('Memory Stress Tests', () => {
   test('Scenario 1: Message flood — heap growth under threshold', async ({ page }) => {
     // Setup: create identity and wait for app ready
     await waitForAppReady(page);
-    await createIdentity(page);
+    await createIdentity(page, 'StressUser');
 
     // Connect CDP for memory monitoring
     const cdp = await page.context().newCDPSession(page);
@@ -133,7 +133,7 @@ test.describe('Memory Stress Tests', () => {
     // This test just monitors memory during normal idle operation
     // to establish a baseline and detect leaks from timers/intervals
     await waitForAppReady(page);
-    await createIdentity(page);
+    await createIdentity(page, 'StressUser');
 
     const cdp = await page.context().newCDPSession(page);
     await cdp.send('Performance.enable');
@@ -169,7 +169,7 @@ test.describe('Memory Stress Tests', () => {
   test('Scenario 3: Page navigation cycle — check for cleanup', async ({ page }) => {
     // Navigate between different pages to check for cleanup
     await waitForAppReady(page);
-    await createIdentity(page);
+    await createIdentity(page, 'StressUser');
 
     const cdp = await page.context().newCDPSession(page);
     await cdp.send('Performance.enable');
