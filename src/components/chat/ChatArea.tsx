@@ -392,6 +392,18 @@ export function ChatArea({
 
   // ── Scroll-to-message + highlight ──
   const messageRefs = useRef<Record<string, View | null>>({});
+
+  // Clean up stale messageRefs to prevent DOM node retention / memory leak.
+  // Only keep refs for messages currently in the array.
+  useEffect(() => {
+    const currentIds = new Set(messages.map((m) => m.id));
+    const refs = messageRefs.current;
+    for (const id in refs) {
+      if (!currentIds.has(id)) {
+        delete refs[id];
+      }
+    }
+  }, [messages]);
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const highlightAnim = useRef(new RNAnimated.Value(0)).current;
 

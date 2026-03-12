@@ -122,6 +122,9 @@ let saveInFlight = false;
 /** Whether another save was requested while one was in-flight. */
 let savePending = false;
 
+/** Timestamp of last successful doSave() — used for max-wait cap. */
+let lastSaveTime = 0;
+
 /**
  * Schedule a debounced save of the database to IndexedDB.
  *
@@ -131,11 +134,26 @@ let savePending = false;
  * causes OOM), we debounce: wait 5s after the last write, then save
  * once. WASM linear memory never shrinks, so each db.export() call
  * permanently grows the WASM heap via the Uint8Array allocation.
- * 5s is long enough to batch multiple message writes while still
- * persisting data before a user is likely to close the tab.
+ *
+ * Max-wait cap: if writes are continuous (e.g. group chat with bots),
+ * the debounce would slide indefinitely. We force a save after 30s
+ * regardless, so the database is persisted at least every 30s.
  */
 function scheduleSave(): void {
   if (!persistenceEnabled || !currentDid || !db) return;
+
+  const now = Date.now();
+  const timeSinceLastSave = now - lastSaveTime;
+
+  // Max-wait cap: force save if 30s+ since last persist
+  if (lastSaveTime > 0 && timeSinceLastSave >= 30_000) {
+    if (saveTimer !== null) {
+      clearTimeout(saveTimer);
+      saveTimer = null;
+    }
+    doSave();
+    return;
+  }
 
   // Clear any existing timer — restart the debounce window
   if (saveTimer !== null) {
@@ -159,6 +177,7 @@ function doSave(): void {
 
   saveInFlight = true;
   savePending = false;
+  lastSaveTime = Date.now();
 
   try {
     const did = currentDid;

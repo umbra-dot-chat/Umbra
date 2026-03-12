@@ -241,9 +241,10 @@ export function useMessages(conversationId: string | null, groupId?: string | nu
         const newMsgs = batch.filter((m) => !existingIds.has(m.id));
         if (newMsgs.length === 0) return prev;
         const next = [...prev, ...newMsgs];
-        // Cap at 500 messages to prevent unbounded memory growth.
-        if (next.length > 500) {
-          return next.slice(next.length - 500);
+        // Cap at 200 messages to prevent unbounded memory growth.
+        // Lower cap reduces DOM nodes + React fiber tree size in active group chats.
+        if (next.length > 200) {
+          return next.slice(next.length - 200);
         }
         return next;
       });
