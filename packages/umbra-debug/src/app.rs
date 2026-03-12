@@ -79,10 +79,11 @@ pub enum Tab {
     Mem,
     Err,
     Analysis,
+    Browser,
 }
 
 impl Tab {
-    pub const ALL: [Tab; 7] = [
+    pub const ALL: [Tab; 8] = [
         Tab::All,
         Tab::Wasm,
         Tab::Sql,
@@ -90,6 +91,7 @@ impl Tab {
         Tab::Mem,
         Tab::Err,
         Tab::Analysis,
+        Tab::Browser,
     ];
 
     pub fn label(self) -> &'static str {
@@ -101,6 +103,7 @@ impl Tab {
             Tab::Mem => "Mem",
             Tab::Err => "Err",
             Tab::Analysis => "Analysis",
+            Tab::Browser => "Browser",
         }
     }
 

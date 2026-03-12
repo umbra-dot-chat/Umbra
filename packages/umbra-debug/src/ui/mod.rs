@@ -5,6 +5,7 @@
 
 pub mod all_tab;
 pub mod analysis_tab;
+pub mod browser_tab;
 pub mod err_tab;
 pub mod mem_tab;
 pub mod net_tab;
@@ -52,6 +53,7 @@ pub fn render(frame: &mut Frame, app: &App) {
         Tab::Mem => mem_tab::render(frame, app, content_area),
         Tab::Err => err_tab::render(frame, app, content_area),
         Tab::Analysis => analysis_tab::render(frame, app, content_area),
+        Tab::Browser => browser_tab::render(frame, app, content_area),
     }
 
     // 3. Filter input bar (if active)
