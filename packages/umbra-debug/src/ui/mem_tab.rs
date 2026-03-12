@@ -45,11 +45,11 @@ pub fn render(frame: &mut Frame, app: &App, area: Rect) {
     let latest_ts = app.events.last().map(|e| e.ts).unwrap_or(0.0);
     let cutoff = latest_ts - window_ms;
 
-    // Collect memory data points within the window
+    // Collect only memory snapshot events (cat: "mem") within the window
     let mem_events: Vec<&crate::app::TraceEvent> = app
         .events
         .iter()
-        .filter(|e| e.ts > cutoff && e.mem_after > 0)
+        .filter(|e| e.ts > cutoff && e.cat == "mem" && e.mem_after > 0)
         .collect();
 
     // WASM Memory sparkline

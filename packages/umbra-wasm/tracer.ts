@@ -42,7 +42,7 @@ export interface TraceEvent {
 const WS_URL = 'ws://localhost:9999';
 const RECONNECT_INTERVAL_MS = 5000;
 const RING_BUFFER_MAX = 10_000;
-const MEMORY_MONITOR_INTERVAL_MS = 200;
+const MEMORY_MONITOR_INTERVAL_MS = 2000;
 const IDB_STORE_NAME = 'umbra_trace_events';
 const IDB_DB_NAME = 'umbra_debug_tracer';
 
