@@ -467,10 +467,17 @@ const SRC = 'useNetwork';
 // causing OOM / corrupted state.
 let _msgQueuePromise: Promise<void> = Promise.resolve();
 
+/** Yield to the event loop for a minimum duration, giving V8 idle time to GC. */
+const _gcYield = (ms: number = 16) => new Promise<void>(r => setTimeout(r, ms));
+
 function _enqueueRelayMessage(ws: WebSocket, event: MessageEvent): void {
   _msgQueuePromise = _msgQueuePromise.then(
-    () => _handleRelayMessage(ws, event),
-    () => _handleRelayMessage(ws, event), // continue after errors too
+    // Add a 50ms GC yield between each queued message so V8 can run
+    // mark-compact GC. Without this, rapid-fire messages (offline delivery,
+    // chatty bots) exhaust V8's GC budget → "Ineffective mark-compacts
+    // near heap limit" → renderer crash.
+    () => _gcYield(50).then(() => _handleRelayMessage(ws, event)),
+    () => _gcYield(50).then(() => _handleRelayMessage(ws, event)),
   );
 }
 
@@ -486,11 +493,22 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
     switch (msg.type) {
       case 'registered': {
         console.log('[useNetwork] Registered with relay as', msg.did);
-        service.relayFetchOffline().then((fetchMsg: string) => {
-          if (ws.readyState === WebSocket.OPEN) ws.send(fetchMsg);
-        }).catch((err: any) => console.error('[useNetwork] Failed to fetch offline messages:', err));
 
-        service.getFriends().then(async (friendsList: any[]) => {
+        // IMPORTANT: Process registration tasks SEQUENTIALLY with GC yields.
+        // Previously these ran as 3 parallel promise chains, each doing multiple
+        // WASM calls. Combined with the initial render cascade, this overwhelmed
+        // V8's GC → "Ineffective mark-compacts near heap limit" → crash.
+        try {
+          // 1. Request offline messages from relay
+          const fetchMsg = await service.relayFetchOffline();
+          if (ws.readyState === WebSocket.OPEN) ws.send(fetchMsg);
+        } catch (err) { console.error('[useNetwork] Failed to fetch offline messages:', err); }
+
+        await _gcYield(100);
+
+        // 2. Broadcast online presence to friends (sequential, with yields)
+        try {
+          const friendsList = await service.getFriends();
           const presenceEnvelope = JSON.stringify({
             envelope: 'presence_online', version: 1,
             payload: { timestamp: Date.now() },
@@ -502,29 +520,37 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
             } catch { /* Best-effort */ }
           }
           console.log('[useNetwork] Broadcast presence_online to', friendsList.length, 'friends');
-        }).catch((err: any) => console.warn('[useNetwork] Failed to broadcast presence:', err));
+        } catch (err) { console.warn('[useNetwork] Failed to broadcast presence:', err); }
 
+        await _gcYield(100);
+
+        // 3. Re-publish community invites (deferred, non-blocking)
         if (_lastRelayDid) {
           const myDid = _lastRelayDid;
-          service.getCommunities(myDid).then(async (communities: any[]) => {
-            let published = 0;
-            for (const community of communities) {
-              if (community.ownerDid !== myDid) continue;
-              try {
-                const invites = await service.getCommunityInvites(community.id);
-                const members = await service.getCommunityMembers(community.id);
-                let ownerNickname: string | undefined;
-                try { const ownerMember = await service.getCommunityMember(community.id, myDid); ownerNickname = ownerMember?.nickname; } catch { /* ignore */ }
-                for (const invite of invites) {
-                  if (ws.readyState !== WebSocket.OPEN) break;
-                  const invitePayload = JSON.stringify({ owner_did: myDid, owner_nickname: ownerNickname ?? null, owner_avatar: null });
-                  service.publishCommunityInviteToRelay(ws, invite, community.name, community.description, community.iconUrl, members.length, invitePayload);
-                  published++;
-                }
-              } catch { /* Best-effort */ }
-            }
-            if (published > 0) console.log('[useNetwork] Re-published', published, 'community invite(s) to relay');
-          }).catch((err: any) => console.warn('[useNetwork] Failed to re-publish invites:', err));
+          // Use setTimeout to defer this entirely — not urgent at startup
+          setTimeout(async () => {
+            try {
+              const communities = await service.getCommunities(myDid);
+              let published = 0;
+              for (const community of communities) {
+                if (community.ownerDid !== myDid) continue;
+                try {
+                  const invites = await service.getCommunityInvites(community.id);
+                  const members = await service.getCommunityMembers(community.id);
+                  let ownerNickname: string | undefined;
+                  try { const ownerMember = await service.getCommunityMember(community.id, myDid); ownerNickname = ownerMember?.nickname; } catch { /* ignore */ }
+                  for (const invite of invites) {
+                    if (ws.readyState !== WebSocket.OPEN) break;
+                    const invitePayload = JSON.stringify({ owner_did: myDid, owner_nickname: ownerNickname ?? null, owner_avatar: null });
+                    service.publishCommunityInviteToRelay(ws, invite, community.name, community.description, community.iconUrl, members.length, invitePayload);
+                    published++;
+                  }
+                  await _gcYield(50);
+                } catch { /* Best-effort */ }
+              }
+              if (published > 0) console.log('[useNetwork] Re-published', published, 'community invite(s) to relay');
+            } catch (err) { console.warn('[useNetwork] Failed to re-publish invites:', err); }
+          }, 3000); // Defer 3s after connection
         }
         break;
       }
@@ -773,15 +799,19 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
         console.log(`[BREADCRUMB] offline_messages START, chunk=${chunkIndex + 1}/${totalChunks}, count=${messages.length}, total=${totalMessages}`);
         const _backupEnvelopes: any[] = [];
 
-        const OFFLINE_BATCH_SIZE = 20;
+        // Process in small batches with generous GC yields.
+        // V8 crashes with "Ineffective mark-compacts near heap limit" when
+        // WASM calls create temporary objects faster than GC can collect them.
+        // A 50ms yield gives V8 idle time for mark-compact GC between batches.
+        const OFFLINE_BATCH_SIZE = 5;
         for (let batchStart = 0; batchStart < messages.length; batchStart += OFFLINE_BATCH_SIZE) {
           const batchEnd = Math.min(batchStart + OFFLINE_BATCH_SIZE, messages.length);
-          console.log(`[BREADCRUMB] processing offline batch ${batchStart + 1}-${batchEnd}/${messages.length} (chunk ${chunkIndex + 1}/${totalChunks})`);
 
-          // Yield to event loop between batches to allow GC and prevent OOM
+          // Yield to event loop between batches — 100ms gives V8 GC time
           if (batchStart > 0) {
-            await new Promise<void>(resolve => setTimeout(resolve, 0));
+            await _gcYield(100);
           }
+          console.log(`[useNetwork] offline batch ${batchStart + 1}-${batchEnd}/${messages.length} (chunk ${chunkIndex + 1}/${totalChunks})`);
 
           for (let i = batchStart; i < batchEnd; i++) {
           const offlineMsg = messages[i];

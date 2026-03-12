@@ -193,7 +193,21 @@ function parseInline(text: string, emojiMap: EmojiMap): InlineToken[] {
   return segments;
 }
 
+/**
+ * Maximum text length we'll run regex parsing on. Texts longer than this
+ * (e.g. raw ciphertext from failed decryption) are returned as a single
+ * text token. Without this guard, the INLINE_RE regex creates enough
+ * temporary objects to trigger V8 "Ineffective mark-compacts near heap
+ * limit" OOM crashes.
+ */
+const MAX_PARSEABLE_LENGTH = 2000;
+
 function parseInlineStandard(text: string, emojiMap: EmojiMap): InlineToken[] {
+  // Guard: skip regex parsing for oversized text to avoid V8 GC exhaustion
+  if (text.length > MAX_PARSEABLE_LENGTH) {
+    return [{ type: 'text', value: text.slice(0, MAX_PARSEABLE_LENGTH) + '…' }];
+  }
+
   const tokens: InlineToken[] = [];
   let lastIndex = 0;
   let match: RegExpExecArray | null;
@@ -825,6 +839,12 @@ export function parseMessageContent(
   },
 ): string | React.ReactNode {
   if (!content) return content;
+
+  // Guard: very large content (e.g. raw ciphertext from failed group decryption)
+  // is truncated early to avoid OOM from regex parsing and React element creation.
+  if (content.length > 5000) {
+    return content.slice(0, 2000) + '…';
+  }
 
   // Sticker message
   if (stickerMap && stickerMap.size > 0) {

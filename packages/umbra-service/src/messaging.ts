@@ -213,8 +213,15 @@ export async function getMessages(
         try {
           text = base64ToUtf8(m.contentEncrypted);
         } catch {
-          // Fallback: may be raw plaintext from before the encoding change
-          text = m.contentEncrypted;
+          // Fallback: may be raw plaintext from before the encoding change.
+          // Guard against raw ciphertext — if it looks like base64 gibberish
+          // (long string with no spaces), show a friendly indicator instead
+          // to prevent the markdown parser from OOM-crashing V8.
+          if (m.contentEncrypted.length > 500 && !m.contentEncrypted.includes(' ')) {
+            text = '[Unable to decode message]';
+          } else {
+            text = m.contentEncrypted;
+          }
         }
       } else {
         // DM messages: decrypt using ECDH shared secret

@@ -184,7 +184,7 @@ class RingBuffer {
 
 class DebugLogger {
   private enabled = new Set<LogCategory>();
-  private minLevel: LogLevel = 'trace';
+  private minLevel: LogLevel = 'info';
   private ring: RingBuffer;
   private renderCounts = new Map<string, number>();
   private _loafObserver: PerformanceObserver | null = null;
