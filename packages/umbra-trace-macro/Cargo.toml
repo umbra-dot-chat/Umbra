@@ -1,0 +1,13 @@
+[package]
+name = "umbra-trace-macro"
+version = "0.1.0"
+edition = "2021"
+description = "Proc macro for FFI tracing instrumentation in Umbra"
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2 = "1"
+quote = "1"
+syn = { version = "2", features = ["full", "parsing"] }
