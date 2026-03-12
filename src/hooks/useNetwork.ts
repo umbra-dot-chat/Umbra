@@ -764,15 +764,19 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
 
       case 'offline_messages': {
         const messages = msg.messages || [];
-        if (__DEV__) dbg.info('network', `offline_messages: ${messages.length}`, undefined, SRC);
-        console.log('[useNetwork] Received', messages.length, 'offline messages');
-        console.log('[BREADCRUMB] offline_messages START, count=' + messages.length);
+        const totalMessages = msg.total_messages ?? messages.length;
+        const chunkIndex = msg.chunk_index ?? 0;
+        const totalChunks = msg.total_chunks ?? 1;
+
+        if (__DEV__) dbg.info('network', `offline chunk ${chunkIndex + 1}/${totalChunks} (${messages.length} msgs, ${totalMessages} total)`, undefined, SRC);
+        console.log(`[useNetwork] Offline chunk ${chunkIndex + 1}/${totalChunks} (${messages.length} msgs, ${totalMessages} total)`);
+        console.log(`[BREADCRUMB] offline_messages START, chunk=${chunkIndex + 1}/${totalChunks}, count=${messages.length}, total=${totalMessages}`);
         const _backupEnvelopes: any[] = [];
 
         const OFFLINE_BATCH_SIZE = 20;
         for (let batchStart = 0; batchStart < messages.length; batchStart += OFFLINE_BATCH_SIZE) {
           const batchEnd = Math.min(batchStart + OFFLINE_BATCH_SIZE, messages.length);
-          console.log(`[BREADCRUMB] processing offline batch ${batchStart + 1}-${batchEnd}/${messages.length}`);
+          console.log(`[BREADCRUMB] processing offline batch ${batchStart + 1}-${batchEnd}/${messages.length} (chunk ${chunkIndex + 1}/${totalChunks})`);
 
           // Yield to event loop between batches to allow GC and prevent OOM
           if (batchStart > 0) {
