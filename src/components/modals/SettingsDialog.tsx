@@ -4639,6 +4639,122 @@ function DeveloperSection() {
           />
         </SettingRow>
       </Box>
+
+      {/* ── Danger Zone ────────────────────────────────────────────────── */}
+      <DangerZoneSubsection />
+    </Box>
+  );
+}
+
+function DangerZoneSubsection() {
+  const { theme } = useTheme();
+  const tc = theme.colors;
+  const [showConfirm, setShowConfirm] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
+
+  const handleReset = useCallback(async () => {
+    setIsResetting(true);
+    try {
+      // 1. Clear all localStorage
+      localStorage.clear();
+
+      // 2. Clear all sessionStorage
+      sessionStorage.clear();
+
+      // 3. Delete all IndexedDB databases
+      if ('databases' in indexedDB) {
+        const dbs = await indexedDB.databases();
+        await Promise.all(
+          dbs.map((db) => {
+            if (db.name) {
+              return new Promise<void>((resolve) => {
+                const req = indexedDB.deleteDatabase(db.name!);
+                req.onsuccess = () => resolve();
+                req.onerror = () => resolve();
+                req.onblocked = () => resolve();
+              });
+            }
+            return Promise.resolve();
+          }),
+        );
+      }
+
+      // 4. Clear all caches (Cache API)
+      if ('caches' in window) {
+        const cacheNames = await caches.keys();
+        await Promise.all(cacheNames.map((name) => caches.delete(name)));
+      }
+
+      // 5. Unregister all service workers
+      if ('serviceWorker' in navigator) {
+        const registrations = await navigator.serviceWorker.getRegistrations();
+        await Promise.all(registrations.map((r) => r.unregister()));
+      }
+
+      // Hard reload to start fresh
+      window.location.href = '/';
+    } catch (err) {
+      console.error('Browser reset failed:', err);
+      // Reload anyway — partial reset is better than none
+      window.location.href = '/';
+    }
+  }, []);
+
+  return (
+    <Box nativeID="sub-danger">
+      <Text style={{ fontSize: 14, fontWeight: '600', color: tc.status.danger, marginBottom: 12 }}>
+        Danger Zone
+      </Text>
+
+      <Card style={{ padding: 16, borderColor: tc.status.danger, borderWidth: 1 }}>
+        <Text style={{ fontSize: 14, fontWeight: '600', color: tc.text.primary, marginBottom: 4 }}>
+          Full Browser Reset
+        </Text>
+        <Text style={{ fontSize: 12, color: tc.text.secondary, lineHeight: 18, marginBottom: 12 }}>
+          Wipe all local data: databases, localStorage, sessionStorage, caches, and service workers.
+          You will be logged out and all local data will be permanently deleted.
+        </Text>
+        <Button variant="destructive" onPress={() => setShowConfirm(true)}>
+          Reset All Browser Data
+        </Button>
+      </Card>
+
+      <Dialog
+        open={showConfirm}
+        onClose={() => setShowConfirm(false)}
+        title="Confirm Full Reset"
+        icon={<TrashIcon size={24} color={tc.status.danger} />}
+        size="sm"
+        footer={
+          <HStack gap="sm" style={{ justifyContent: 'flex-end' }}>
+            <Button variant="tertiary" onPress={() => setShowConfirm(false)} disabled={isResetting}>
+              Cancel
+            </Button>
+            <Button
+              variant="secondary"
+              onPress={handleReset}
+              style={{ borderColor: tc.status.dangerBorder, backgroundColor: tc.status.dangerSurface }}
+              disabled={isResetting}
+            >
+              <Text style={{ color: tc.status.danger, fontWeight: '600', fontSize: 14 }}>
+                {isResetting ? 'Resetting...' : 'Yes, Delete Everything'}
+              </Text>
+            </Button>
+          </HStack>
+        }
+      >
+        <Box style={{ gap: 12 }}>
+          <Text style={{ fontSize: 13, color: tc.text.secondary, lineHeight: 18 }}>
+            This will permanently delete ALL local data including your wallet, messages,
+            contacts, and settings. You will need to re-import your wallet to use Umbra again.
+          </Text>
+          <Box style={{ backgroundColor: tc.status.dangerSurface, borderRadius: 8, padding: 12, borderWidth: 1, borderColor: tc.status.dangerBorder }}>
+            <Text style={{ fontSize: 12, color: tc.status.danger, fontWeight: '600' }}>
+              Warning: This action cannot be undone.
+            </Text>
+          </Box>
+        </Box>
+      </Dialog>
     </Box>
   );
 }
