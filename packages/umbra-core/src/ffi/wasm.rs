@@ -44,6 +44,9 @@ use std::sync::Arc;
 use wasm_bindgen::prelude::*;
 use wasm_bindgen_futures::future_to_promise;
 
+#[cfg(feature = "debug-trace")]
+use umbra_trace_macro::trace_ffi;
+
 use crate::community::CommunityService;
 use crate::discovery::ConnectionInfo;
 use crate::friends::FriendRequest;
@@ -120,13 +123,36 @@ fn get_state() -> Result<Arc<RwLock<WasmState>>, JsValue> {
 /// Initialize Umbra for web
 ///
 /// Sets up panic hook and tracing. Must be called before any other function.
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_init() -> Result<(), JsValue> {
     // Set up panic hook for better error messages
     console_error_panic_hook::set_once();
 
-    // Initialize tracing for wasm
-    tracing_wasm::set_as_global_default();
+    // Initialize tracing for wasm.
+    //
+    // Default: WARN level only. TRACE/DEBUG/INFO levels flood the WASM→JS
+    // boundary with thousands of log calls per second (especially from
+    // libp2p, sql.js, and crypto). Each formatted log string permanently
+    // grows WASM linear memory (which can never shrink), causing Chrome OOM
+    // crashes on data-heavy accounts.
+    //
+    // When debug-trace is enabled: raise to INFO so FFI_ENTER/FFI_EXIT
+    // events from #[trace_ffi] are captured.
+    #[cfg(not(feature = "debug-trace"))]
+    {
+        let config = tracing_wasm::WASMLayerConfigBuilder::new()
+            .set_max_level(tracing::Level::WARN)
+            .build();
+        tracing_wasm::set_as_global_default_with_config(config);
+    }
+    #[cfg(feature = "debug-trace")]
+    {
+        let config = tracing_wasm::WASMLayerConfigBuilder::new()
+            .set_max_level(tracing::Level::INFO)
+            .build();
+        tracing_wasm::set_as_global_default_with_config(config);
+    }
 
     if STATE.set(Arc::new(RwLock::new(WasmState::new()))).is_err() {
         return Err(JsValue::from_str("Already initialized"));
@@ -139,6 +165,7 @@ pub fn umbra_wasm_init() -> Result<(), JsValue> {
 ///
 /// Creates an in-memory SQLite database (via sql.js on WASM).
 /// Must be called after umbra_wasm_init() and before any data operations.
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_init_database() -> Promise {
     future_to_promise(async move {
@@ -155,6 +182,7 @@ pub fn umbra_wasm_init_database() -> Promise {
 }
 
 /// Get version
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_version() -> String {
     crate::version().to_string()
@@ -167,6 +195,7 @@ pub fn umbra_wasm_version() -> String {
 /// Create a new identity
 ///
 /// Returns JSON: { "did": "did:key:...", "recovery_phrase": "word1 word2 ..." }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_identity_create(display_name: &str) -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -198,6 +227,7 @@ pub fn umbra_wasm_identity_create(display_name: &str) -> Result<JsValue, JsValue
 /// Restore identity from recovery phrase
 ///
 /// Returns the DID string on success.
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_identity_restore(
     recovery_phrase: &str,
@@ -226,6 +256,7 @@ pub fn umbra_wasm_identity_restore(
 }
 
 /// Get current identity DID
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_identity_get_did() -> Result<String, JsValue> {
     let state = get_state()?;
@@ -240,6 +271,7 @@ pub fn umbra_wasm_identity_get_did() -> Result<String, JsValue> {
 /// Get current identity profile as JSON
 ///
 /// Returns JSON: { "did": "...", "display_name": "...", "status": "...", "avatar": "..." }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_identity_get_profile() -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -266,6 +298,7 @@ pub fn umbra_wasm_identity_get_profile() -> Result<JsValue, JsValue> {
 /// Update identity profile
 ///
 /// Accepts JSON with optional fields: display_name, status, avatar, banner
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_identity_update_profile(json: &str) -> Result<(), JsValue> {
     let updates: serde_json::Value = serde_json::from_str(json)
@@ -330,6 +363,7 @@ pub fn umbra_wasm_identity_update_profile(json: &str) -> Result<(), JsValue> {
 /// signing key, and builds relay envelopes to notify all friends.
 ///
 /// Returns JSON: `{ newEncryptionKey, relayMessages: [...], friendCount }`
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_identity_rotate_encryption_key() -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -412,6 +446,7 @@ pub fn umbra_wasm_identity_rotate_encryption_key() -> Result<JsValue, JsValue> {
 /// Generate connection info for sharing
 ///
 /// Returns JSON with link, json, base64, did, peer_id, addresses, display_name
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_discovery_get_connection_info() -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -445,6 +480,7 @@ pub fn umbra_wasm_discovery_get_connection_info() -> Result<JsValue, JsValue> {
 /// Parse connection info from string (link, base64, or JSON)
 ///
 /// Returns JSON with did, peer_id, addresses, display_name
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_discovery_parse_connection_info(info: &str) -> Result<JsValue, JsValue> {
     let connection_info = if info.starts_with("umbra://") {
@@ -477,6 +513,7 @@ pub fn umbra_wasm_discovery_parse_connection_info(info: &str) -> Result<JsValue,
 /// Creates a signed friend request, stores it in the database,
 /// and sends it over the P2P network if connected.
 /// Returns JSON: { "id": "...", "to_did": "...", "from_did": "...", "created_at": ... }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_friends_send_request(
     did: &str,
@@ -595,6 +632,7 @@ pub fn umbra_wasm_friends_send_request(
 /// Store an incoming friend request received via relay.
 /// Takes a JSON string with the request fields.
 /// Returns JSON: { "duplicate": false } or { "duplicate": true } if already stored.
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_friends_store_incoming(json: &str) -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -654,6 +692,7 @@ pub fn umbra_wasm_friends_store_incoming(json: &str) -> Result<JsValue, JsValue>
 /// This mirrors the logic in `handle_inbound_friend_request` for `FriendRequestType::Accept`.
 /// Takes JSON: { "from_did", "from_display_name", "from_signing_key", "from_encryption_key" }
 /// Returns JSON: { "friend_did", "conversation_id" }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_friends_accept_from_relay(json: &str) -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -757,6 +796,7 @@ pub fn umbra_wasm_friends_accept_from_relay(json: &str) -> Result<JsValue, JsVal
 /// 4. Sending an acceptance response over the network
 ///
 /// Returns JSON: { "request_id", "status", "conversation_id", "friend_did" }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_friends_accept_request(request_id: &str) -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -910,6 +950,7 @@ pub fn umbra_wasm_friends_accept_request(request_id: &str) -> Result<JsValue, Js
 /// Pure data construction — sends back to the accepter to confirm the handshake.
 /// Takes JSON: { "accepter_did": "...", "my_did": "..." }
 /// Returns JSON: { "to_did", "payload": "<stringified envelope>" }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_friends_build_accept_ack(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value =
@@ -944,6 +985,7 @@ pub fn umbra_wasm_friends_build_accept_ack(json: &str) -> Result<JsValue, JsValu
 /// then updates the X25519 encryption key in the database.
 ///
 /// Input JSON: `{ "from_did": "...", "new_encryption_key": "hex", "signature": "hex" }`
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_friends_update_encryption_key(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -1017,6 +1059,7 @@ pub fn umbra_wasm_friends_update_encryption_key(json: &str) -> Result<JsValue, J
 /// Reject a friend request
 ///
 /// Updates the request status to "rejected" in the database.
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_friends_reject_request(request_id: &str) -> Result<(), JsValue> {
     let state = get_state()?;
@@ -1038,6 +1081,7 @@ pub fn umbra_wasm_friends_reject_request(request_id: &str) -> Result<(), JsValue
 ///
 /// Each friend: { "did": "...", "display_name": "...", "status": "...", "signing_key": "...",
 ///                "encryption_key": "...", "created_at": ..., "updated_at": ... }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_friends_list() -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -1078,6 +1122,7 @@ pub fn umbra_wasm_friends_list() -> Result<JsValue, JsValue> {
 ///
 /// Each request: { "id": "...", "from_did": "...", "to_did": "...", "direction": "...",
 ///                 "message": "...", "from_display_name": "...", "created_at": ..., "status": "..." }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_friends_pending_requests(direction: &str) -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -1118,6 +1163,7 @@ pub fn umbra_wasm_friends_pending_requests(direction: &str) -> Result<JsValue, J
 }
 
 /// Remove a friend by DID
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_friends_remove(did: &str) -> Result<bool, JsValue> {
     let state = get_state()?;
@@ -1134,6 +1180,7 @@ pub fn umbra_wasm_friends_remove(did: &str) -> Result<bool, JsValue> {
 }
 
 /// Block a user by DID
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_friends_block(did: &str, reason: Option<String>) -> Result<(), JsValue> {
     let state = get_state()?;
@@ -1150,6 +1197,7 @@ pub fn umbra_wasm_friends_block(did: &str, reason: Option<String>) -> Result<(),
 }
 
 /// Unblock a user by DID
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_friends_unblock(did: &str) -> Result<bool, JsValue> {
     let state = get_state()?;
@@ -1166,6 +1214,7 @@ pub fn umbra_wasm_friends_unblock(did: &str) -> Result<bool, JsValue> {
 }
 
 /// Get all blocked users as JSON array
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_friends_get_blocked() -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -1204,6 +1253,7 @@ pub fn umbra_wasm_friends_get_blocked() -> Result<JsValue, JsValue> {
 ///
 /// Each conversation: { "id": "...", "friend_did": "...", "created_at": ...,
 ///                      "last_message_at": ..., "unread_count": ... }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_messaging_get_conversations() -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -1246,6 +1296,7 @@ pub fn umbra_wasm_messaging_get_conversations() -> Result<JsValue, JsValue> {
 /// is a no-op and the existing ID is returned.
 ///
 /// Returns JSON: `{ "conversation_id": "..." }`
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_messaging_create_dm_conversation(friend_did: &str) -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -1278,6 +1329,7 @@ pub fn umbra_wasm_messaging_create_dm_conversation(friend_did: &str) -> Result<J
 /// Each message: { "id": "...", "conversation_id": "...", "sender_did": "...",
 ///                 "content_encrypted": "...", "nonce": "...", "timestamp": ...,
 ///                 "delivered": bool, "read": bool }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_messaging_get_messages(
     conversation_id: &str,
@@ -1334,6 +1386,7 @@ pub fn umbra_wasm_messaging_get_messages(
 /// Encrypts the message with the friend's X25519 key (AES-256-GCM),
 /// stores it locally, and sends it over the P2P network if connected.
 /// Returns JSON: { "id", "conversation_id", "sender_did", "timestamp", "delivered", "read" }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_messaging_send(conversation_id: &str, content: &str) -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -1488,6 +1541,7 @@ pub fn umbra_wasm_messaging_send(conversation_id: &str, content: &str) -> Result
 /// Pure data construction — does not touch the database.
 /// Takes JSON: { "conversation_id", "recipient_did", "sender_did", "sender_name", "is_typing" }
 /// Returns JSON: { "to_did", "payload": "<stringified envelope>" }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_messaging_build_typing_envelope(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value =
@@ -1531,6 +1585,7 @@ pub fn umbra_wasm_messaging_build_typing_envelope(json: &str) -> Result<JsValue,
 /// Pure data construction — does not touch the database.
 /// Takes JSON: { "message_id", "conversation_id", "sender_did", "status" }
 /// Returns JSON: { "to_did", "payload": "<stringified envelope>" }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_messaging_build_receipt_envelope(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value =
@@ -1572,6 +1627,7 @@ pub fn umbra_wasm_messaging_build_receipt_envelope(json: &str) -> Result<JsValue
 /// Mark all messages in a conversation as read
 ///
 /// Returns the number of messages marked as read.
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_messaging_mark_read(conversation_id: &str) -> Result<i32, JsValue> {
     let state = get_state()?;
@@ -1600,6 +1656,7 @@ pub fn umbra_wasm_messaging_mark_read(conversation_id: &str) -> Result<i32, JsVa
 /// - timestamp: Message timestamp (used in AAD)
 ///
 /// Returns the decrypted plaintext string.
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_messaging_decrypt(
     conversation_id: &str,
@@ -1700,6 +1757,7 @@ pub fn umbra_wasm_messaging_decrypt(
 /// Takes JSON with message fields and stores them in the messages table.
 /// Validates sender is a known friend, ensures conversation exists (creating
 /// one with a deterministic ID if needed), and emits a messageReceived event.
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_messaging_store_incoming(json: &str) -> Result<(), JsValue> {
     let state = get_state()?;
@@ -1837,6 +1895,7 @@ pub fn umbra_wasm_messaging_store_incoming(json: &str) -> Result<(), JsValue> {
 ///
 /// Takes JSON: { "message_id": "...", "new_text": "..." }
 /// Returns JSON: { "message_id", "edited_at", "content_encrypted", "nonce" }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_messaging_edit(json: &str) -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -1937,6 +1996,7 @@ pub fn umbra_wasm_messaging_edit(json: &str) -> Result<JsValue, JsValue> {
 ///
 /// Takes JSON: { "message_id": "..." }
 /// Returns JSON: { "message_id", "deleted_at" }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_messaging_delete(json: &str) -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -1993,6 +2053,7 @@ pub fn umbra_wasm_messaging_delete(json: &str) -> Result<JsValue, JsValue> {
 ///
 /// Takes JSON: { "message_id": "..." }
 /// Returns JSON: { "message_id", "pinned_by", "pinned_at" }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_messaging_pin(json: &str) -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -2043,6 +2104,7 @@ pub fn umbra_wasm_messaging_pin(json: &str) -> Result<JsValue, JsValue> {
 ///
 /// Takes JSON: { "message_id": "..." }
 /// Returns JSON: { "message_id" }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_messaging_unpin(json: &str) -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -2084,6 +2146,7 @@ pub fn umbra_wasm_messaging_unpin(json: &str) -> Result<JsValue, JsValue> {
 ///
 /// Takes JSON: { "message_id": "...", "emoji": "..." }
 /// Returns JSON: { "reactions": [...] } — all reactions for the message
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_messaging_add_reaction(json: &str) -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -2152,6 +2215,7 @@ pub fn umbra_wasm_messaging_add_reaction(json: &str) -> Result<JsValue, JsValue>
 ///
 /// Takes JSON: { "message_id": "...", "emoji": "..." }
 /// Returns JSON: { "reactions": [...] } — remaining reactions
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_messaging_remove_reaction(json: &str) -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -2219,6 +2283,7 @@ pub fn umbra_wasm_messaging_remove_reaction(json: &str) -> Result<JsValue, JsVal
 ///
 /// Takes JSON: { "message_id": "...", "target_conversation_id": "..." }
 /// Returns JSON: { "new_message_id", "target_conversation_id" }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_messaging_forward(json: &str) -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -2386,6 +2451,7 @@ pub fn umbra_wasm_messaging_forward(json: &str) -> Result<JsValue, JsValue> {
 ///
 /// Takes JSON: { "parent_id": "..." }
 /// Returns JSON: [message, message, ...]
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_messaging_get_thread(json: &str) -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -2442,6 +2508,7 @@ pub fn umbra_wasm_messaging_get_thread(json: &str) -> Result<JsValue, JsValue> {
 ///
 /// Takes JSON: { "parent_id": "...", "text": "..." }
 /// Returns JSON: same as send_message, with thread_id set
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_messaging_reply_thread(json: &str) -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -2582,6 +2649,7 @@ pub fn umbra_wasm_messaging_reply_thread(json: &str) -> Result<JsValue, JsValue>
 ///
 /// Takes JSON: { "conversation_id": "..." }
 /// Returns JSON: [message, ...]
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_messaging_get_pinned(json: &str) -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -2635,6 +2703,7 @@ pub fn umbra_wasm_messaging_get_pinned(json: &str) -> Result<JsValue, JsValue> {
 ///
 /// Takes JSON: { "name": "...", "description": "..." (optional) }
 /// Returns JSON: { "group_id", "conversation_id", "name" }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_groups_create(json: &str) -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -2711,6 +2780,7 @@ pub fn umbra_wasm_groups_create(json: &str) -> Result<JsValue, JsValue> {
 ///
 /// Takes: group_id as string
 /// Returns JSON: { group fields }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_groups_get(group_id: &str) -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -2741,6 +2811,7 @@ pub fn umbra_wasm_groups_get(group_id: &str) -> Result<JsValue, JsValue> {
 /// List all groups.
 ///
 /// Returns JSON: [group, ...]
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_groups_list() -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -2779,6 +2850,7 @@ pub fn umbra_wasm_groups_list() -> Result<JsValue, JsValue> {
 ///
 /// Takes JSON: { "group_id": "...", "name": "...", "description": "..." }
 /// Returns JSON: { "group_id", "updated_at" }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_groups_update(json: &str) -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -2816,6 +2888,7 @@ pub fn umbra_wasm_groups_update(json: &str) -> Result<JsValue, JsValue> {
 ///
 /// Takes: group_id as string
 /// Returns JSON: { "group_id" }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_groups_delete(group_id: &str) -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -2855,6 +2928,7 @@ pub fn umbra_wasm_groups_delete(group_id: &str) -> Result<JsValue, JsValue> {
 ///
 /// Takes JSON: { "group_id": "...", "did": "...", "display_name": "..." (optional) }
 /// Returns JSON: { "group_id", "member_did" }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_groups_add_member(json: &str) -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -2892,6 +2966,7 @@ pub fn umbra_wasm_groups_add_member(json: &str) -> Result<JsValue, JsValue> {
 ///
 /// Takes JSON: { "group_id": "...", "did": "..." }
 /// Returns JSON: { "group_id", "member_did" }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_groups_remove_member(json: &str) -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -2927,6 +3002,7 @@ pub fn umbra_wasm_groups_remove_member(json: &str) -> Result<JsValue, JsValue> {
 ///
 /// Takes: group_id as string
 /// Returns JSON: [member, ...]
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_groups_get_members(group_id: &str) -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -2974,6 +3050,7 @@ pub fn umbra_wasm_groups_get_members(group_id: &str) -> Result<JsValue, JsValue>
 ///
 /// The raw_key_hex is returned so it can be encrypted per-member
 /// for relay distribution (ECDH with each invitee).
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_groups_generate_key(group_id: &str) -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -3023,6 +3100,7 @@ pub fn umbra_wasm_groups_generate_key(group_id: &str) -> Result<JsValue, JsValue
 ///
 /// Takes: group_id as string
 /// Returns JSON: { "group_id", "key_version", "raw_key_hex" }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_groups_rotate_key(group_id: &str) -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -3078,6 +3156,7 @@ pub fn umbra_wasm_groups_rotate_key(group_id: &str) -> Result<JsValue, JsValue> 
 ///
 /// Takes JSON: { "group_id", "key_version", "encrypted_key_hex", "nonce_hex", "sender_did" }
 /// Returns JSON: { "group_id", "key_version" }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_groups_import_key(json: &str) -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -3174,6 +3253,7 @@ pub fn umbra_wasm_groups_import_key(json: &str) -> Result<JsValue, JsValue> {
 ///
 /// Takes JSON: { "group_id", "plaintext" }
 /// Returns JSON: { "ciphertext_hex", "nonce_hex", "key_version" }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_groups_encrypt_message(json: &str) -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -3229,6 +3309,7 @@ pub fn umbra_wasm_groups_encrypt_message(json: &str) -> Result<JsValue, JsValue>
 ///
 /// Takes JSON: { "group_id", "ciphertext_hex", "nonce_hex", "key_version", "sender_did", "timestamp" }
 /// Returns JSON: the decrypted plaintext string
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_groups_decrypt_message(json: &str) -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -3299,6 +3380,7 @@ pub fn umbra_wasm_groups_decrypt_message(json: &str) -> Result<JsValue, JsValue>
 ///
 /// Takes JSON: { "group_id", "raw_key_hex", "key_version", "member_did" }
 /// Returns JSON: { "encrypted_key_hex", "nonce_hex" }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_groups_encrypt_key_for_member(json: &str) -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -3370,6 +3452,7 @@ pub fn umbra_wasm_groups_encrypt_key_for_member(json: &str) -> Result<JsValue, J
 ///
 /// Takes JSON: { "id", "group_id", "group_name", "description", "inviter_did",
 ///               "inviter_name", "encrypted_group_key", "nonce", "members_json" }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_groups_store_invite(json: &str) -> Result<(), JsValue> {
     let state = get_state()?;
@@ -3429,6 +3512,7 @@ pub fn umbra_wasm_groups_store_invite(json: &str) -> Result<(), JsValue> {
 /// Get pending group invites.
 ///
 /// Returns JSON: [invite, ...]
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_groups_get_pending_invites() -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -3473,6 +3557,7 @@ pub fn umbra_wasm_groups_get_pending_invites() -> Result<JsValue, JsValue> {
 ///
 /// Takes: invite_id as string
 /// Returns JSON: { "group_id", "conversation_id" }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_groups_accept_invite(invite_id: &str) -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -3570,6 +3655,7 @@ pub fn umbra_wasm_groups_accept_invite(invite_id: &str) -> Result<JsValue, JsVal
 /// Decline a group invite.
 ///
 /// Takes: invite_id as string
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_groups_decline_invite(invite_id: &str) -> Result<(), JsValue> {
     let state = get_state()?;
@@ -3594,6 +3680,7 @@ pub fn umbra_wasm_groups_decline_invite(invite_id: &str) -> Result<(), JsValue> 
 /// Update a specific message's delivery status.
 ///
 /// Takes JSON: { "message_id", "status" } where status is "delivered" or "read"
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_messaging_update_status(json: &str) -> Result<(), JsValue> {
     let state = get_state()?;
@@ -3659,6 +3746,7 @@ pub fn umbra_wasm_messaging_update_status(json: &str) -> Result<(), JsValue> {
 /// `canonical_community_id` is the origin/owner's community ID used in the envelope payload
 /// so that receivers can resolve it via `findCommunityByOrigin()`. If not provided, falls back
 /// to `community_id` (which is the local ID used for member lookup).
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_build_event_relay_batch(json: &str) -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -3725,6 +3813,7 @@ pub fn umbra_wasm_community_build_event_relay_batch(json: &str) -> Result<JsValu
 /// Pure data construction — no DB or crypto.
 /// Takes JSON: { "conversation_id", "sender_did", "event" (any JSON) }
 /// Returns JSON: { "payload": "<stringified envelope>" }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_build_dm_file_event_envelope(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value =
@@ -3762,6 +3851,7 @@ pub fn umbra_wasm_build_dm_file_event_envelope(json: &str) -> Result<JsValue, Js
 /// Pure data construction — no DB or crypto.
 /// Takes JSON: { "sender_did", "key", "value" }
 /// Returns JSON: { "to_did" (= sender_did), "payload": "<stringified envelope>" }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_build_metadata_envelope(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value =
@@ -3808,6 +3898,7 @@ pub fn umbra_wasm_build_metadata_envelope(json: &str) -> Result<JsValue, JsValue
 /// to the user's own DID.
 ///
 /// Returns JSON: { "relayMessages": [{ "to_did", "payload" }], "chunkCount": N, "totalSize": N }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_account_create_backup(_json: &str) -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -3914,6 +4005,7 @@ pub fn umbra_wasm_account_create_backup(_json: &str) -> Result<JsValue, JsValue>
 ///
 /// Takes JSON: { "chunks": ["base64...", ...], "nonce": "hex..." }
 /// Returns JSON: { "imported": { "settings": N, "friends": N, ... } }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_account_restore_backup(json: &str) -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -4001,6 +4093,7 @@ pub fn umbra_wasm_account_restore_backup(json: &str) -> Result<JsValue, JsValue>
 ///
 /// Takes JSON: { "section_versions"?: { "preferences": N, "friends": N, ... } }
 /// Returns JSON: { "blob": "base64...", "sections": { "name": version } }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_sync_create_blob(json: &str) -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -4054,6 +4147,7 @@ pub fn umbra_wasm_sync_create_blob(json: &str) -> Result<JsValue, JsValue> {
 ///
 /// Takes JSON: { "blob": "base64..." }
 /// Returns JSON: { "v": 1, "updated_at": N, "sections": { "friends": { "v": N, "count": N } } }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_sync_parse_blob(json: &str) -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -4088,6 +4182,7 @@ pub fn umbra_wasm_sync_parse_blob(json: &str) -> Result<JsValue, JsValue> {
 ///
 /// Takes JSON: { "blob": "base64..." }
 /// Returns JSON: { "imported": { "settings": N, "friends": N, "groups": N, "blocked_users": N } }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_sync_apply_blob(json: &str) -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -4172,6 +4267,7 @@ pub fn umbra_wasm_sync_apply_blob(json: &str) -> Result<JsValue, JsValue> {
 ///
 /// Takes JSON: { "nonce": "uuid-string" }
 /// Returns JSON: { "signature": "base64...", "public_key": "base64..." }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_sync_sign_challenge(json: &str) -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -4214,6 +4310,7 @@ pub fn umbra_wasm_sync_sign_challenge(json: &str) -> Result<JsValue, JsValue> {
 ///
 /// Takes JSON: { "group_id", "member_did" }
 /// Returns JSON: { "relay_messages": [{ "to_did", "payload" }] }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_groups_send_invite(json: &str) -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -4313,6 +4410,7 @@ pub fn umbra_wasm_groups_send_invite(json: &str) -> Result<JsValue, JsValue> {
 ///
 /// Takes JSON: { "invite_id", "group_id" }
 /// Returns JSON: { "relay_messages": [{ "to_did", "payload" }] }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_groups_build_invite_accept_envelope(json: &str) -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -4372,6 +4470,7 @@ pub fn umbra_wasm_groups_build_invite_accept_envelope(json: &str) -> Result<JsVa
 ///
 /// Takes JSON: { "invite_id" }
 /// Returns JSON: { "relay_messages": [{ "to_did", "payload" }] }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_groups_build_invite_decline_envelope(json: &str) -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -4429,6 +4528,7 @@ pub fn umbra_wasm_groups_build_invite_decline_envelope(json: &str) -> Result<JsV
 /// Takes JSON: { "group_id", "conversation_id", "text" }
 /// Returns JSON: { "message": { id, conversationId, senderDid, timestamp },
 ///                  "relay_messages": [{ "to_did", "payload" }, ...] }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_groups_send_message(json: &str) -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -4554,6 +4654,7 @@ pub fn umbra_wasm_groups_send_message(json: &str) -> Result<JsValue, JsValue> {
 ///
 /// Takes JSON: { "group_id", "member_did" }
 /// Returns JSON: { "key_version": number, "relay_messages": [{ "to_did", "payload" }, ...] }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_groups_remove_member_with_rotation(json: &str) -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -4801,6 +4902,7 @@ fn decrypt_stored_group_key(
 /// Get network status as JSON
 ///
 /// Returns JSON: { "is_running": bool, "peer_count": number, "listen_addresses": [...] }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_network_status() -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -4836,6 +4938,7 @@ pub fn umbra_wasm_network_status() -> Result<JsValue, JsValue> {
 ///
 /// Also starts a background task that listens for inbound network events
 /// (messages, friend requests) and processes them (decrypt, store, emit JS events).
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_network_start() -> Promise {
     future_to_promise(async move {
@@ -5178,6 +5281,7 @@ fn handle_inbound_friend_request(
 }
 
 /// Stop the network service
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_network_stop() -> Promise {
     future_to_promise(async move {
@@ -5207,6 +5311,7 @@ pub fn umbra_wasm_network_stop() -> Promise {
 ///
 /// Returns JSON string with SDP offer, ICE candidates, and our DID + PeerId.
 /// Share this with the other peer via QR code or connection link.
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_network_create_offer() -> Promise {
     future_to_promise(async move {
@@ -5242,6 +5347,7 @@ pub fn umbra_wasm_network_create_offer() -> Promise {
 /// Takes the offer JSON string from the other peer.
 /// Returns JSON string with SDP answer, ICE candidates, and our DID + PeerId.
 /// Share this answer back with the offerer.
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_network_accept_offer(offer_json: &str) -> Promise {
     let offer_json = offer_json.to_string();
@@ -5284,6 +5390,7 @@ pub fn umbra_wasm_network_accept_offer(offer_json: &str) -> Promise {
 /// After this, the WebRTC connection is injected into the libp2p swarm,
 /// triggering Noise handshake → Yamux multiplexing → protocol negotiation.
 /// The peer will appear in `connected_peers()` and messages can flow.
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_network_complete_handshake(answer_json: &str) -> Promise {
     let answer_json = answer_json.to_string();
@@ -5351,6 +5458,7 @@ pub fn umbra_wasm_network_complete_handshake(answer_json: &str) -> Promise {
 /// extracted from the offer that was passed to accept_offer().
 ///
 /// `offerer_did` is the DID from the original offer (used to derive PeerId).
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_network_complete_answerer(
     offerer_did: Option<String>,
@@ -5419,6 +5527,7 @@ pub fn umbra_wasm_network_complete_answerer(
 ///
 /// The callback receives JSON strings with event data:
 /// { "domain": "message"|"friend"|"discovery", "type": "...", "data": {...} }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_subscribe_events(callback: js_sys::Function) {
     EVENT_CALLBACK.with(|cb| {
@@ -5450,6 +5559,7 @@ fn emit_event(domain: &str, data: &serde_json::Value) {
 /// the WebSocket connection and register the DID.
 ///
 /// Returns JSON: { "connected": true, "relay_url": "...", "did": "..." }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_relay_connect(relay_url: &str) -> Promise {
     let relay_url = relay_url.to_string();
@@ -5493,6 +5603,7 @@ pub fn umbra_wasm_relay_connect(relay_url: &str) -> Promise {
 /// Disconnect from the relay server
 ///
 /// Signals the JS layer to close the WebSocket connection.
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_relay_disconnect() -> Promise {
     future_to_promise(async move {
@@ -5516,6 +5627,7 @@ pub fn umbra_wasm_relay_disconnect() -> Promise {
 /// 2. Generate a QR code/link with the session ID
 ///
 /// Returns JSON: { "relay_url": "...", "did": "...", "offer_payload": "...", "create_session_message": "..." }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_relay_create_session(relay_url: &str) -> Promise {
     let relay_url = relay_url.to_string();
@@ -5586,6 +5698,7 @@ pub fn umbra_wasm_relay_create_session(relay_url: &str) -> Promise {
 /// send back to the relay.
 ///
 /// Returns JSON: { "session_id": "...", "answer_payload": "...", "join_session_message": "..." }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_relay_accept_session(session_id: &str, offer_payload: &str) -> Promise {
     let session_id = session_id.to_string();
@@ -5657,6 +5770,7 @@ pub fn umbra_wasm_relay_accept_session(session_id: &str, offer_payload: &str) ->
 /// Send a message through the relay (for offline delivery).
 ///
 /// Returns the relay message for the JS layer to send via WebSocket.
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_relay_send(to_did: &str, payload: &str) -> Promise {
     let to_did = to_did.to_string();
@@ -5693,6 +5807,7 @@ pub fn umbra_wasm_relay_send(to_did: &str, payload: &str) -> Promise {
 /// Fetch offline messages from the relay.
 ///
 /// Returns the fetch_offline message for the JS layer to send via WebSocket.
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_relay_fetch_offline() -> Promise {
     future_to_promise(async move {
@@ -5713,6 +5828,7 @@ pub fn umbra_wasm_relay_fetch_offline() -> Promise {
 /// Sign data with the current identity's Ed25519 key
 ///
 /// Returns the 64-byte signature.
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_crypto_sign(data: &[u8]) -> Result<Vec<u8>, JsValue> {
     let state = get_state()?;
@@ -5730,6 +5846,7 @@ pub fn umbra_wasm_crypto_sign(data: &[u8]) -> Result<Vec<u8>, JsValue> {
 /// Verify a signature against a public key
 ///
 /// Returns true if valid, false otherwise.
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_crypto_verify(
     public_key_hex: &str,
@@ -5765,6 +5882,7 @@ pub fn umbra_wasm_crypto_verify(
 /// Returns JSON: { "ciphertext_b64": "...", "nonce_hex": "...", "timestamp": unix_ms }
 ///
 /// Uses X25519 ECDH + AES-256-GCM, same as message encryption but for generic data.
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_crypto_encrypt_for_peer(json: &str) -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -5843,6 +5961,7 @@ pub fn umbra_wasm_crypto_encrypt_for_peer(json: &str) -> Result<JsValue, JsValue
 /// Returns JSON: { "plaintext_b64": "..." }
 ///
 /// Uses X25519 ECDH + AES-256-GCM, same as message decryption but for generic data.
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_crypto_decrypt_from_peer(json: &str) -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -5936,6 +6055,7 @@ pub fn umbra_wasm_crypto_decrypt_from_peer(json: &str) -> Result<JsValue, JsValu
 // ============================================================================
 
 /// Get a value from the plugin KV store
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_plugin_kv_get(plugin_id: &str, key: &str) -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -5961,6 +6081,7 @@ pub fn umbra_wasm_plugin_kv_get(plugin_id: &str, key: &str) -> Result<JsValue, J
 }
 
 /// Set a value in the plugin KV store
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_plugin_kv_set(
     plugin_id: &str,
@@ -5982,6 +6103,7 @@ pub fn umbra_wasm_plugin_kv_set(
 }
 
 /// Delete a value from the plugin KV store
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_plugin_kv_delete(plugin_id: &str, key: &str) -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -6000,6 +6122,7 @@ pub fn umbra_wasm_plugin_kv_delete(plugin_id: &str, key: &str) -> Result<JsValue
 }
 
 /// List keys in the plugin KV store (optionally filtered by prefix)
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_plugin_kv_list(plugin_id: &str, prefix: &str) -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -6018,6 +6141,7 @@ pub fn umbra_wasm_plugin_kv_list(plugin_id: &str, prefix: &str) -> Result<JsValu
 }
 
 /// Save a plugin bundle to local storage
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_plugin_bundle_save(
     plugin_id: &str,
@@ -6040,6 +6164,7 @@ pub fn umbra_wasm_plugin_bundle_save(
 }
 
 /// Load a plugin bundle from local storage
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_plugin_bundle_load(plugin_id: &str) -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -6070,6 +6195,7 @@ pub fn umbra_wasm_plugin_bundle_load(plugin_id: &str) -> Result<JsValue, JsValue
 }
 
 /// Delete a plugin bundle from local storage
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_plugin_bundle_delete(plugin_id: &str) -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -6088,6 +6214,7 @@ pub fn umbra_wasm_plugin_bundle_delete(plugin_id: &str) -> Result<JsValue, JsVal
 }
 
 /// List all installed plugin bundles (manifests only)
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_plugin_bundle_list() -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -6127,6 +6254,7 @@ pub fn umbra_wasm_plugin_bundle_list() -> Result<JsValue, JsValue> {
 ///
 /// Creates a record with started_at = now (ms), status = "active".
 /// Returns JSON: { "id": "...", "started_at": ... }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_calls_store(json: &str) -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -6183,6 +6311,7 @@ pub fn umbra_wasm_calls_store(json: &str) -> Result<JsValue, JsValue> {
 ///
 /// Calculates duration_ms from started_at to now.
 /// Returns JSON: { "id": "...", "ended_at": ..., "duration_ms": ... }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_calls_end(json: &str) -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -6233,6 +6362,7 @@ pub fn umbra_wasm_calls_end(json: &str) -> Result<JsValue, JsValue> {
 ///
 /// Takes JSON: { "conversation_id": "...", "limit": 50, "offset": 0 }
 /// Returns JSON array of call records.
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_calls_get_history(json: &str) -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -6283,6 +6413,7 @@ pub fn umbra_wasm_calls_get_history(json: &str) -> Result<JsValue, JsValue> {
 ///
 /// Takes JSON: { "limit": 50, "offset": 0 }
 /// Returns JSON array of all call records.
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_calls_get_all_history(json: &str) -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -6337,6 +6468,7 @@ pub fn umbra_wasm_calls_get_all_history(json: &str) -> Result<JsValue, JsValue> 
 ///               "related_id": "...", "avatar": "..." }
 ///
 /// Returns JSON: { "id": "...", "created_at": ... }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_notifications_create(json: &str) -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -6381,6 +6513,7 @@ pub fn umbra_wasm_notifications_create(json: &str) -> Result<JsValue, JsValue> {
 ///
 /// Takes JSON: { "type": "...", "read": true|false, "limit": 100, "offset": 0 }
 /// All fields optional. Returns JSON array of notification records.
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_notifications_get(json: &str) -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -6432,6 +6565,7 @@ pub fn umbra_wasm_notifications_get(json: &str) -> Result<JsValue, JsValue> {
 ///
 /// Takes JSON: { "id": "..." }
 /// Returns JSON: { "success": true }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_notifications_mark_read(json: &str) -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -6460,6 +6594,7 @@ pub fn umbra_wasm_notifications_mark_read(json: &str) -> Result<JsValue, JsValue
 ///
 /// Takes JSON: { "type": "..." } (type is optional)
 /// Returns JSON: { "success": true, "count": N }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_notifications_mark_all_read(json: &str) -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -6492,6 +6627,7 @@ pub fn umbra_wasm_notifications_mark_all_read(json: &str) -> Result<JsValue, JsV
 ///
 /// Takes JSON: { "id": "..." }
 /// Returns JSON: { "success": true }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_notifications_dismiss(json: &str) -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -6520,6 +6656,7 @@ pub fn umbra_wasm_notifications_dismiss(json: &str) -> Result<JsValue, JsValue> 
 ///
 /// Takes JSON: {} (empty object)
 /// Returns JSON: { "all": N, "social": N, "calls": N, "mentions": N, "system": N }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_notifications_unread_counts(json: &str) -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -6562,6 +6699,7 @@ fn community_service() -> Result<CommunityService, JsValue> {
 ///
 /// Takes JSON: { "name": "...", "description"?: "...", "owner_did": "...", "owner_nickname"?: "..." }
 /// Returns JSON: { "community_id", "space_id", "welcome_channel_id", "general_channel_id", "role_ids": { ... } }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_create(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -6610,6 +6748,7 @@ pub fn umbra_wasm_community_create(json: &str) -> Result<JsValue, JsValue> {
 /// Find a community by its origin (remote) community ID.
 ///
 /// Returns JSON string of the local community ID, or null if not found.
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_find_by_origin(origin_id: &str) -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -6630,6 +6769,7 @@ pub fn umbra_wasm_community_find_by_origin(origin_id: &str) -> Result<JsValue, J
 /// Get a community by ID.
 ///
 /// Returns JSON: Community object
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_get(community_id: &str) -> Result<JsValue, JsValue> {
     let svc = community_service()?;
@@ -6658,6 +6798,7 @@ pub fn umbra_wasm_community_get(community_id: &str) -> Result<JsValue, JsValue> 
 /// Get all communities the user is a member of.
 ///
 /// Returns JSON: Community[]
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_get_mine(member_did: &str) -> Result<JsValue, JsValue> {
     let svc = community_service()?;
@@ -6694,6 +6835,7 @@ pub fn umbra_wasm_community_get_mine(member_did: &str) -> Result<JsValue, JsValu
 /// Update a community's name and/or description.
 ///
 /// Takes JSON: { "id": "...", "name": "...", "description": "...", "actor_did": "..." }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_update(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -6728,6 +6870,7 @@ pub fn umbra_wasm_community_update(json: &str) -> Result<JsValue, JsValue> {
 /// Delete a community (owner only).
 ///
 /// Takes JSON: { "id": "...", "actor_did": "..." }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_delete(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -6760,6 +6903,7 @@ pub fn umbra_wasm_community_delete(json: &str) -> Result<JsValue, JsValue> {
 /// Transfer community ownership.
 ///
 /// Takes JSON: { "community_id": "...", "current_owner_did": "...", "new_owner_did": "..." }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_transfer_ownership(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -6801,6 +6945,7 @@ pub fn umbra_wasm_community_transfer_ownership(json: &str) -> Result<JsValue, Js
 ///
 /// Takes JSON: { "community_id": "...", "name": "...", "position": 0, "actor_did": "..." }
 /// Returns JSON: CommunitySpace object
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_space_create(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -6846,6 +6991,7 @@ pub fn umbra_wasm_community_space_create(json: &str) -> Result<JsValue, JsValue>
 /// Get all spaces in a community.
 ///
 /// Returns JSON: CommunitySpace[]
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_space_list(community_id: &str) -> Result<JsValue, JsValue> {
     let svc = community_service()?;
@@ -6875,6 +7021,7 @@ pub fn umbra_wasm_community_space_list(community_id: &str) -> Result<JsValue, Js
 /// Update a space's name.
 ///
 /// Takes JSON: { "space_id": "...", "name": "...", "actor_did": "..." }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_space_update(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -6910,6 +7057,7 @@ pub fn umbra_wasm_community_space_update(json: &str) -> Result<JsValue, JsValue>
 /// Reorder spaces in a community.
 ///
 /// Takes JSON: { "community_id": "...", "space_ids": ["id1", "id2", ...] }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_space_reorder(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -6937,6 +7085,7 @@ pub fn umbra_wasm_community_space_reorder(json: &str) -> Result<JsValue, JsValue
 /// Delete a space and all its channels.
 ///
 /// Takes JSON: { "space_id": "...", "actor_did": "..." }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_space_delete(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -6974,6 +7123,7 @@ pub fn umbra_wasm_community_space_delete(json: &str) -> Result<JsValue, JsValue>
 ///
 /// Takes JSON: { "community_id", "space_id", "name", "channel_type", "topic"?, "position", "actor_did" }
 /// Returns JSON: CommunityChannel object
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_channel_create(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -7043,6 +7193,7 @@ pub fn umbra_wasm_community_channel_create(json: &str) -> Result<JsValue, JsValu
 /// Get all channels in a space.
 ///
 /// Returns JSON: CommunityChannel[]
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_channel_list(space_id: &str) -> Result<JsValue, JsValue> {
     let svc = community_service()?;
@@ -7079,6 +7230,7 @@ pub fn umbra_wasm_community_channel_list(space_id: &str) -> Result<JsValue, JsVa
 /// Get all channels in a community (across all spaces).
 ///
 /// Returns JSON: CommunityChannel[]
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_channel_list_all(community_id: &str) -> Result<JsValue, JsValue> {
     let svc = community_service()?;
@@ -7115,6 +7267,7 @@ pub fn umbra_wasm_community_channel_list_all(community_id: &str) -> Result<JsVal
 /// Get a single channel by ID.
 ///
 /// Returns JSON: CommunityChannel object
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_channel_get(channel_id: &str) -> Result<JsValue, JsValue> {
     let svc = community_service()?;
@@ -7143,6 +7296,7 @@ pub fn umbra_wasm_community_channel_get(channel_id: &str) -> Result<JsValue, JsV
 /// Update a channel's name and/or topic.
 ///
 /// Takes JSON: { "channel_id": "...", "name"?: "...", "topic"?: "...", "actor_did": "..." }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_channel_update(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -7177,6 +7331,7 @@ pub fn umbra_wasm_community_channel_update(json: &str) -> Result<JsValue, JsValu
 /// Set slow mode for a channel.
 ///
 /// Takes JSON: { "channel_id": "...", "seconds": 0, "actor_did": "..." }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_channel_set_slow_mode(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -7204,6 +7359,7 @@ pub fn umbra_wasm_community_channel_set_slow_mode(json: &str) -> Result<JsValue,
 /// Toggle E2EE for a channel.
 ///
 /// Takes JSON: { "channel_id": "...", "enabled": true, "actor_did": "..." }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_channel_set_e2ee(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -7231,6 +7387,7 @@ pub fn umbra_wasm_community_channel_set_e2ee(json: &str) -> Result<JsValue, JsVa
 /// Delete a channel.
 ///
 /// Takes JSON: { "channel_id": "...", "actor_did": "..." }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_channel_delete(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -7263,6 +7420,7 @@ pub fn umbra_wasm_community_channel_delete(json: &str) -> Result<JsValue, JsValu
 /// Reorder channels within a space.
 ///
 /// Takes JSON: { "space_id": "...", "channel_ids": ["id1", "id2", ...] }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_channel_reorder(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -7294,6 +7452,7 @@ pub fn umbra_wasm_community_channel_reorder(json: &str) -> Result<JsValue, JsVal
 /// Join a community.
 ///
 /// Takes JSON: { "community_id": "...", "member_did": "...", "nickname"?: "..." }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_join(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -7328,6 +7487,7 @@ pub fn umbra_wasm_community_join(json: &str) -> Result<JsValue, JsValue> {
 /// Leave a community.
 ///
 /// Takes JSON: { "community_id": "...", "member_did": "..." }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_leave(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -7361,6 +7521,7 @@ pub fn umbra_wasm_community_leave(json: &str) -> Result<JsValue, JsValue> {
 /// Kick a member from a community.
 ///
 /// Takes JSON: { "community_id": "...", "target_did": "...", "actor_did": "..." }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_kick(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -7397,6 +7558,7 @@ pub fn umbra_wasm_community_kick(json: &str) -> Result<JsValue, JsValue> {
 /// Ban a member from a community.
 ///
 /// Takes JSON: { "community_id", "target_did", "reason"?, "expires_at"?, "device_fingerprint"?, "actor_did" }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_ban(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -7443,6 +7605,7 @@ pub fn umbra_wasm_community_ban(json: &str) -> Result<JsValue, JsValue> {
 /// Unban a member.
 ///
 /// Takes JSON: { "community_id": "...", "target_did": "...", "actor_did": "..." }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_unban(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -7479,6 +7642,7 @@ pub fn umbra_wasm_community_unban(json: &str) -> Result<JsValue, JsValue> {
 /// Get all members of a community.
 ///
 /// Returns JSON: CommunityMember[]
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_member_list(community_id: &str) -> Result<JsValue, JsValue> {
     let svc = community_service()?;
@@ -7508,6 +7672,7 @@ pub fn umbra_wasm_community_member_list(community_id: &str) -> Result<JsValue, J
 /// Get a single member record.
 ///
 /// Returns JSON: CommunityMember object
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_member_get(
     community_id: &str,
@@ -7532,6 +7697,7 @@ pub fn umbra_wasm_community_member_get(
 /// Update a member's community profile.
 ///
 /// Takes JSON: { "community_id", "member_did", "nickname"?, "avatar_url"?, "bio"? }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_member_update_profile(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -7559,6 +7725,7 @@ pub fn umbra_wasm_community_member_update_profile(json: &str) -> Result<JsValue,
 /// Get all bans for a community.
 ///
 /// Returns JSON: CommunityBan[]
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_ban_list(community_id: &str) -> Result<JsValue, JsValue> {
     let svc = community_service()?;
@@ -7593,6 +7760,7 @@ pub fn umbra_wasm_community_ban_list(community_id: &str) -> Result<JsValue, JsVa
 /// Get all roles for a community.
 ///
 /// Returns JSON: CommunityRole[]
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_role_list(community_id: &str) -> Result<JsValue, JsValue> {
     let svc = community_service()?;
@@ -7629,6 +7797,7 @@ pub fn umbra_wasm_community_role_list(community_id: &str) -> Result<JsValue, JsV
 /// Get roles assigned to a specific member.
 ///
 /// Returns JSON: CommunityRole[]
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_member_roles(
     community_id: &str,
@@ -7668,6 +7837,7 @@ pub fn umbra_wasm_community_member_roles(
 /// Assign a role to a member.
 ///
 /// Takes JSON: { "community_id", "member_did", "role_id", "actor_did" }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_role_assign(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -7708,6 +7878,7 @@ pub fn umbra_wasm_community_role_assign(json: &str) -> Result<JsValue, JsValue> 
 /// Unassign a role from a member.
 ///
 /// Takes JSON: { "community_id", "member_did", "role_id", "actor_did" }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_role_unassign(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -7753,6 +7924,7 @@ pub fn umbra_wasm_community_role_unassign(json: &str) -> Result<JsValue, JsValue
 ///
 /// Takes JSON: { "community_id", "creator_did", "max_uses"?, "expires_at"? }
 /// Returns JSON: CommunityInvite object
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_invite_create(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -7790,6 +7962,7 @@ pub fn umbra_wasm_community_invite_create(json: &str) -> Result<JsValue, JsValue
 ///
 /// Takes JSON: { "code": "...", "member_did": "..." }
 /// Returns JSON: { "community_id": "..." }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_invite_use(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -7826,6 +7999,7 @@ pub fn umbra_wasm_community_invite_use(json: &str) -> Result<JsValue, JsValue> {
 /// Get all invites for a community.
 ///
 /// Returns JSON: CommunityInvite[]
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_invite_list(community_id: &str) -> Result<JsValue, JsValue> {
     let svc = community_service()?;
@@ -7858,6 +8032,7 @@ pub fn umbra_wasm_community_invite_list(community_id: &str) -> Result<JsValue, J
 /// Delete an invite.
 ///
 /// Takes JSON: { "invite_id": "...", "actor_did": "..." }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_invite_delete(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -7883,6 +8058,7 @@ pub fn umbra_wasm_community_invite_delete(json: &str) -> Result<JsValue, JsValue
 ///
 /// Takes JSON: { "community_id": "...", "vanity_code": "...", "creator_did": "..." }
 /// Returns JSON: CommunityInvite object
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_invite_set_vanity(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -7925,6 +8101,7 @@ pub fn umbra_wasm_community_invite_set_vanity(json: &str) -> Result<JsValue, JsV
 ///
 /// Takes JSON: { "community_id": "...", "limit": 50, "offset": 0 }
 /// Returns JSON: AuditLogEntry[]
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_audit_log(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -7978,6 +8155,7 @@ pub fn umbra_wasm_community_audit_log(json: &str) -> Result<JsValue, JsValue> {
 /// Takes JSON: { "channel_id": "...", "sender_did": "...", "content": "...",
 ///               "reply_to_id": null, "thread_id": null, "content_warning": null }
 /// Returns JSON: CommunityMessage object
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_message_send(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -8030,6 +8208,7 @@ pub fn umbra_wasm_community_message_send(json: &str) -> Result<JsValue, JsValue>
 /// Takes JSON: { "channel_id": "...", "sender_did": "...", "content_encrypted_b64": "...",
 ///               "nonce": "...", "key_version": 1, "reply_to_id": null, "thread_id": null }
 /// Returns JSON: { "message_id": "..." }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_message_send_encrypted(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -8093,6 +8272,7 @@ pub fn umbra_wasm_community_message_send_encrypted(json: &str) -> Result<JsValue
 ///
 /// Takes JSON: { "id": "...", "channel_id": "...", "sender_did": "...",
 ///               "content": "...", "created_at": 1234567890 }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_message_store_received(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -8135,6 +8315,7 @@ pub fn umbra_wasm_community_message_store_received(json: &str) -> Result<JsValue
 ///
 /// Takes JSON: { "channel_id": "...", "limit": 50, "before_timestamp": null }
 /// Returns JSON: CommunityMessage[]
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_message_list(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -8160,6 +8341,7 @@ pub fn umbra_wasm_community_message_list(json: &str) -> Result<JsValue, JsValue>
 /// Get a single message by ID.
 ///
 /// Returns JSON: CommunityMessage object
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_message_get(message_id: &str) -> Result<JsValue, JsValue> {
     let svc = community_service()?;
@@ -8173,6 +8355,7 @@ pub fn umbra_wasm_community_message_get(message_id: &str) -> Result<JsValue, JsV
 ///
 /// Takes JSON: { "message_id": "...", "new_content": "...", "editor_did": "..." }
 /// Returns JSON: { "success": true }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_message_edit(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -8206,6 +8389,7 @@ pub fn umbra_wasm_community_message_edit(json: &str) -> Result<JsValue, JsValue>
 /// Delete a message for everyone.
 ///
 /// Returns JSON: { "success": true }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_message_delete(message_id: &str) -> Result<JsValue, JsValue> {
     let svc = community_service()?;
@@ -8227,6 +8411,7 @@ pub fn umbra_wasm_community_message_delete(message_id: &str) -> Result<JsValue, 
 ///
 /// Takes JSON: { "message_id": "...", "member_did": "..." }
 /// Returns JSON: { "success": true }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_message_delete_for_me(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -8254,6 +8439,7 @@ pub fn umbra_wasm_community_message_delete_for_me(json: &str) -> Result<JsValue,
 ///
 /// Takes JSON: { "message_id": "...", "member_did": "...", "emoji": "...", "is_custom": false }
 /// Returns JSON: { "success": true }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_reaction_add(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -8291,6 +8477,7 @@ pub fn umbra_wasm_community_reaction_add(json: &str) -> Result<JsValue, JsValue>
 ///
 /// Takes JSON: { "message_id": "...", "member_did": "...", "emoji": "..." }
 /// Returns JSON: { "success": true }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_reaction_remove(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -8326,6 +8513,7 @@ pub fn umbra_wasm_community_reaction_remove(json: &str) -> Result<JsValue, JsVal
 /// Get reactions for a message.
 ///
 /// Returns JSON: CommunityReaction[]
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_reaction_list(message_id: &str) -> Result<JsValue, JsValue> {
     let svc = community_service()?;
@@ -8360,6 +8548,7 @@ pub fn umbra_wasm_community_reaction_list(message_id: &str) -> Result<JsValue, J
 ///
 /// Takes JSON: { "channel_id": "...", "member_did": "...", "last_read_message_id": "..." }
 /// Returns JSON: { "success": true }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_mark_read(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -8385,6 +8574,7 @@ pub fn umbra_wasm_community_mark_read(json: &str) -> Result<JsValue, JsValue> {
 /// Get read receipts for a channel.
 ///
 /// Returns JSON: ReadReceipt[]
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_read_receipts(channel_id: &str) -> Result<JsValue, JsValue> {
     let svc = community_service()?;
@@ -8417,6 +8607,7 @@ pub fn umbra_wasm_community_read_receipts(channel_id: &str) -> Result<JsValue, J
 ///
 /// Takes JSON: { "channel_id": "...", "message_id": "...", "pinned_by": "..." }
 /// Returns JSON: { "success": true }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_pin_message(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -8452,6 +8643,7 @@ pub fn umbra_wasm_community_pin_message(json: &str) -> Result<JsValue, JsValue> 
 ///
 /// Takes JSON: { "channel_id": "...", "message_id": "..." }
 /// Returns JSON: { "success": true }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_unpin_message(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -8483,6 +8675,7 @@ pub fn umbra_wasm_community_unpin_message(json: &str) -> Result<JsValue, JsValue
 /// Get pinned messages for a channel.
 ///
 /// Returns JSON: CommunityPin[]
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_pin_list(channel_id: &str) -> Result<JsValue, JsValue> {
     let svc = community_service()?;
@@ -8515,6 +8708,7 @@ pub fn umbra_wasm_community_pin_list(channel_id: &str) -> Result<JsValue, JsValu
 ///
 /// Takes JSON: { "channel_id": "...", "key_version": 1, "encrypted_key_b64": "..." }
 /// Returns JSON: { "success": true }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_channel_key_store(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -8544,6 +8738,7 @@ pub fn umbra_wasm_community_channel_key_store(json: &str) -> Result<JsValue, JsV
 /// Get the latest channel encryption key.
 ///
 /// Returns JSON: ChannelKey object or null
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_channel_key_latest(channel_id: &str) -> Result<JsValue, JsValue> {
     let svc = community_service()?;
@@ -8574,6 +8769,7 @@ pub fn umbra_wasm_community_channel_key_latest(channel_id: &str) -> Result<JsVal
 ///
 /// Takes JSON: { "channel_id": "...", "parent_message_id": "...", "name": null, "created_by": "..." }
 /// Returns JSON: CommunityThread object
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_thread_create(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -8612,6 +8808,7 @@ pub fn umbra_wasm_community_thread_create(json: &str) -> Result<JsValue, JsValue
 /// Get a thread by ID.
 ///
 /// Returns JSON: CommunityThread object
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_thread_get(thread_id: &str) -> Result<JsValue, JsValue> {
     let svc = community_service()?;
@@ -8624,6 +8821,7 @@ pub fn umbra_wasm_community_thread_get(thread_id: &str) -> Result<JsValue, JsVal
 /// Get all threads in a channel.
 ///
 /// Returns JSON: CommunityThread[]
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_thread_list(channel_id: &str) -> Result<JsValue, JsValue> {
     let svc = community_service()?;
@@ -8641,6 +8839,7 @@ pub fn umbra_wasm_community_thread_list(channel_id: &str) -> Result<JsValue, JsV
 ///
 /// Takes JSON: { "thread_id": "...", "limit": 50, "before_timestamp": null }
 /// Returns JSON: CommunityMessage[]
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_thread_messages(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -8671,6 +8870,7 @@ pub fn umbra_wasm_community_thread_messages(json: &str) -> Result<JsValue, JsVal
 ///
 /// Takes JSON: { "channel_id": "...", "query": "...", "limit": 50 }
 /// Returns JSON: CommunityMessage[]
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_search_channel(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -8699,6 +8899,7 @@ pub fn umbra_wasm_community_search_channel(json: &str) -> Result<JsValue, JsValu
 ///
 /// Takes JSON: { "community_id": "...", "query": "...", "limit": 50 }
 /// Returns JSON: CommunityMessage[]
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_search(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -8732,6 +8933,7 @@ pub fn umbra_wasm_community_search(json: &str) -> Result<JsValue, JsValue> {
 /// Takes JSON: { "community_id": "...", "member_did": "...", "reason": "...",
 ///               "warned_by": "...", "expires_at": null }
 /// Returns JSON: CommunityWarning object
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_warn_member(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -8775,6 +8977,7 @@ pub fn umbra_wasm_community_warn_member(json: &str) -> Result<JsValue, JsValue> 
 ///
 /// Takes JSON: { "community_id": "...", "member_did": "..." }
 /// Returns JSON: CommunityWarning[]
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_member_warnings(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -8802,6 +9005,7 @@ pub fn umbra_wasm_community_member_warnings(json: &str) -> Result<JsValue, JsVal
 ///
 /// Takes JSON: { "community_id": "...", "limit": 50, "offset": 0 }
 /// Returns JSON: CommunityWarning[]
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_warnings(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -8828,6 +9032,7 @@ pub fn umbra_wasm_community_warnings(json: &str) -> Result<JsValue, JsValue> {
 ///
 /// Takes JSON: { "community_id": "...", "member_did": "..." }
 /// Returns JSON: { "count": N }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_active_warning_count(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -8854,6 +9059,7 @@ pub fn umbra_wasm_community_active_warning_count(json: &str) -> Result<JsValue, 
 ///
 /// Takes JSON: { "warning_id": "...", "actor_did": "..." }
 /// Returns JSON: { "success": true }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_warning_delete(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -8877,6 +9083,7 @@ pub fn umbra_wasm_community_warning_delete(json: &str) -> Result<JsValue, JsValu
 ///
 /// Takes JSON: { "community_id": "...", "member_did": "...", "timeout_threshold": null, "ban_threshold": null }
 /// Returns JSON: { "action": "timeout" | "ban" | null }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_check_escalation(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -8905,6 +9112,7 @@ pub fn umbra_wasm_community_check_escalation(json: &str) -> Result<JsValue, JsVa
 ///
 /// Takes JSON: { "content": "...", "filters": [{"pattern": "...", "action": "delete"}] }
 /// Returns JSON: { "action": "delete" | "warn" | "timeout" | null }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_check_keyword_filter(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -8943,6 +9151,7 @@ pub fn umbra_wasm_community_check_keyword_filter(json: &str) -> Result<JsValue, 
 ///
 /// Takes JSON: { "community_id": "...", "device_fingerprint": "..." }
 /// Returns JSON: { "banned_did": "..." | null }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_check_ban_evasion(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -8975,6 +9184,7 @@ pub fn umbra_wasm_community_check_ban_evasion(json: &str) -> Result<JsValue, JsV
 ///               "description": null, "file_size": 1024, "mime_type": null,
 ///               "storage_chunks_json": "...", "uploaded_by": "..." }
 /// Returns JSON: CommunityFile object
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_file_upload(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -9032,6 +9242,7 @@ pub fn umbra_wasm_community_file_upload(json: &str) -> Result<JsValue, JsValue> 
 ///
 /// Takes JSON: { "channel_id": "...", "folder_id": null, "limit": 50, "offset": 0 }
 /// Returns JSON: CommunityFile[]
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_file_list(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -9058,6 +9269,7 @@ pub fn umbra_wasm_community_file_list(json: &str) -> Result<JsValue, JsValue> {
 /// Get a file by ID.
 ///
 /// Returns JSON: CommunityFile object
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_file_get(file_id: &str) -> Result<JsValue, JsValue> {
     let svc = community_service()?;
@@ -9070,6 +9282,7 @@ pub fn umbra_wasm_community_file_get(file_id: &str) -> Result<JsValue, JsValue> 
 /// Record a file download (increment count).
 ///
 /// Returns JSON: { "success": true }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_file_download(file_id: &str) -> Result<JsValue, JsValue> {
     let svc = community_service()?;
@@ -9082,6 +9295,7 @@ pub fn umbra_wasm_community_file_download(file_id: &str) -> Result<JsValue, JsVa
 ///
 /// Takes JSON: { "file_id": "...", "actor_did": "..." }
 /// Returns JSON: { "success": true }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_file_delete(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -9117,6 +9331,7 @@ pub fn umbra_wasm_community_file_delete(json: &str) -> Result<JsValue, JsValue> 
 ///
 /// Takes JSON: { "channel_id": "...", "parent_folder_id": null, "name": "...", "created_by": "..." }
 /// Returns JSON: CommunityFileFolder object
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_folder_create(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -9154,6 +9369,7 @@ pub fn umbra_wasm_community_folder_create(json: &str) -> Result<JsValue, JsValue
 ///
 /// Takes JSON: { "channel_id": "...", "parent_folder_id": null }
 /// Returns JSON: CommunityFileFolder[]
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_folder_list(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -9191,6 +9407,7 @@ pub fn umbra_wasm_community_folder_list(json: &str) -> Result<JsValue, JsValue> 
 /// Delete a folder.
 ///
 /// Returns JSON: { "success": true }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_folder_delete(folder_id: &str) -> Result<JsValue, JsValue> {
     let svc = community_service()?;
@@ -9208,6 +9425,7 @@ pub fn umbra_wasm_community_folder_delete(folder_id: &str) -> Result<JsValue, Js
 /// Takes JSON: { "community_id": "...", "icon_url": null, "banner_url": null,
 ///               "splash_url": null, "accent_color": null, "custom_css": null, "actor_did": "..." }
 /// Returns JSON: { "success": true }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_update_branding(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -9252,6 +9470,7 @@ pub fn umbra_wasm_community_update_branding(json: &str) -> Result<JsValue, JsVal
 ///
 /// Takes JSON: { "community_id": "...", "vanity_url": "...", "actor_did": "..." }
 /// Returns JSON: { "success": true }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_set_vanity_url(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -9283,6 +9502,7 @@ pub fn umbra_wasm_community_set_vanity_url(json: &str) -> Result<JsValue, JsValu
 /// Takes JSON: { "community_id": "...", "name": "...", "image_url": "...",
 ///               "animated": false, "uploaded_by": "..." }
 /// Returns JSON: CommunityEmoji object
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_emoji_create(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -9332,6 +9552,7 @@ pub fn umbra_wasm_community_emoji_create(json: &str) -> Result<JsValue, JsValue>
 /// Get all custom emoji for a community.
 ///
 /// Returns JSON: CommunityEmoji[]
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_emoji_list(community_id: &str) -> Result<JsValue, JsValue> {
     let svc = community_service()?;
@@ -9363,6 +9584,7 @@ pub fn umbra_wasm_community_emoji_list(community_id: &str) -> Result<JsValue, Js
 ///
 /// Takes JSON: { "emoji_id": "...", "actor_did": "..." }
 /// Returns JSON: { "success": true }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_emoji_delete(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -9386,6 +9608,7 @@ pub fn umbra_wasm_community_emoji_delete(json: &str) -> Result<JsValue, JsValue>
 ///
 /// Takes JSON: { "emoji_id": "...", "new_name": "..." }
 /// Returns JSON: { "success": true }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_emoji_rename(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -9414,6 +9637,7 @@ pub fn umbra_wasm_community_emoji_rename(json: &str) -> Result<JsValue, JsValue>
 /// Takes JSON: { "community_id": "...", "pack_id": null, "name": "...",
 ///               "image_url": "...", "animated": false, "format": "png", "uploaded_by": "..." }
 /// Returns JSON: CommunitySticker object
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_sticker_create(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -9466,6 +9690,7 @@ pub fn umbra_wasm_community_sticker_create(json: &str) -> Result<JsValue, JsValu
 /// Get all stickers for a community.
 ///
 /// Returns JSON: CommunitySticker[]
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_sticker_list(community_id: &str) -> Result<JsValue, JsValue> {
     let svc = community_service()?;
@@ -9498,6 +9723,7 @@ pub fn umbra_wasm_community_sticker_list(community_id: &str) -> Result<JsValue, 
 /// Delete a custom sticker.
 ///
 /// Returns JSON: { "success": true }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_sticker_delete(sticker_id: &str) -> Result<JsValue, JsValue> {
     let svc = community_service()?;
@@ -9515,6 +9741,7 @@ pub fn umbra_wasm_community_sticker_delete(sticker_id: &str) -> Result<JsValue, 
 /// Takes JSON: { "community_id": "...", "name": "...", "description": null,
 ///               "cover_sticker_id": null, "created_by": "..." }
 /// Returns JSON: StickerPack object
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_sticker_pack_create(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -9559,6 +9786,7 @@ pub fn umbra_wasm_community_sticker_pack_create(json: &str) -> Result<JsValue, J
 /// Get all sticker packs for a community.
 ///
 /// Returns JSON: StickerPack[]
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_sticker_pack_list(community_id: &str) -> Result<JsValue, JsValue> {
     let svc = community_service()?;
@@ -9589,6 +9817,7 @@ pub fn umbra_wasm_community_sticker_pack_list(community_id: &str) -> Result<JsVa
 /// Delete a sticker pack.
 ///
 /// Returns JSON: { "success": true }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_sticker_pack_delete(pack_id: &str) -> Result<JsValue, JsValue> {
     let svc = community_service()?;
@@ -9601,6 +9830,7 @@ pub fn umbra_wasm_community_sticker_pack_delete(pack_id: &str) -> Result<JsValue
 ///
 /// Takes JSON: { "pack_id": "...", "new_name": "..." }
 /// Returns JSON: { "success": true }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_sticker_pack_rename(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -9627,6 +9857,7 @@ pub fn umbra_wasm_community_sticker_pack_rename(json: &str) -> Result<JsValue, J
 ///
 /// Takes JSON: { "channel_id": "...", "name": "...", "avatar_url": null, "creator_did": "..." }
 /// Returns JSON: CommunityWebhook object
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_webhook_create(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -9665,6 +9896,7 @@ pub fn umbra_wasm_community_webhook_create(json: &str) -> Result<JsValue, JsValu
 /// Get webhooks for a channel.
 ///
 /// Returns JSON: CommunityWebhook[]
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_webhook_list(channel_id: &str) -> Result<JsValue, JsValue> {
     let svc = community_service()?;
@@ -9681,6 +9913,7 @@ pub fn umbra_wasm_community_webhook_list(channel_id: &str) -> Result<JsValue, Js
 /// Get a webhook by ID.
 ///
 /// Returns JSON: CommunityWebhook object
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_webhook_get(webhook_id: &str) -> Result<JsValue, JsValue> {
     let svc = community_service()?;
@@ -9694,6 +9927,7 @@ pub fn umbra_wasm_community_webhook_get(webhook_id: &str) -> Result<JsValue, JsV
 ///
 /// Takes JSON: { "webhook_id": "...", "name": null, "avatar_url": null }
 /// Returns JSON: { "success": true }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_webhook_update(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -9716,6 +9950,7 @@ pub fn umbra_wasm_community_webhook_update(json: &str) -> Result<JsValue, JsValu
 ///
 /// Takes JSON: { "webhook_id": "...", "actor_did": "..." }
 /// Returns JSON: { "success": true }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_webhook_delete(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -9752,6 +9987,7 @@ pub fn umbra_wasm_community_webhook_delete(json: &str) -> Result<JsValue, JsValu
 /// Takes JSON: { "channel_id": "...", "target_type": "role"|"member",
 ///               "target_id": "...", "allow_bitfield": "...", "deny_bitfield": "...", "actor_did": "..." }
 /// Returns JSON: { "success": true }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_channel_override_set(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -9793,6 +10029,7 @@ pub fn umbra_wasm_community_channel_override_set(json: &str) -> Result<JsValue, 
 /// Get all permission overrides for a channel.
 ///
 /// Returns JSON: ChannelPermissionOverride[]
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_channel_override_list(channel_id: &str) -> Result<JsValue, JsValue> {
     let svc = community_service()?;
@@ -9822,6 +10059,7 @@ pub fn umbra_wasm_community_channel_override_list(channel_id: &str) -> Result<Js
 /// Remove a permission override.
 ///
 /// Returns JSON: { "success": true }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_channel_override_remove(override_id: &str) -> Result<JsValue, JsValue> {
     let svc = community_service()?;
@@ -9840,6 +10078,7 @@ pub fn umbra_wasm_community_channel_override_remove(override_id: &str) -> Result
 ///               "position": 10, "hoisted": false, "mentionable": false,
 ///               "permissions_bitfield": "...", "actor_did": "..." }
 /// Returns JSON: CommunityRole object
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_custom_role_create(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -9909,6 +10148,7 @@ pub fn umbra_wasm_community_custom_role_create(json: &str) -> Result<JsValue, Js
 /// Takes JSON: { "role_id": "...", "name": null, "color": null,
 ///               "hoisted": null, "mentionable": null, "position": null, "actor_did": "..." }
 /// Returns JSON: { "success": true }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_role_update(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -9953,6 +10193,7 @@ pub fn umbra_wasm_community_role_update(json: &str) -> Result<JsValue, JsValue> 
 ///
 /// Takes JSON: { "role_id": "...", "permissions_bitfield": "...", "actor_did": "..." }
 /// Returns JSON: { "success": true }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_role_update_permissions(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -9987,6 +10228,7 @@ pub fn umbra_wasm_community_role_update_permissions(json: &str) -> Result<JsValu
 ///
 /// Takes JSON: { "role_id": "...", "actor_did": "..." }
 /// Returns JSON: { "success": true }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_role_delete(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -10022,6 +10264,7 @@ pub fn umbra_wasm_community_role_delete(json: &str) -> Result<JsValue, JsValue> 
 ///
 /// Takes JSON: { "community_id": "...", "space_id": "...", "name": "...", "position": 0, "actor_did": "..." }
 /// Returns JSON: CommunityCategory object
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_category_create(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -10071,6 +10314,7 @@ pub fn umbra_wasm_community_category_create(json: &str) -> Result<JsValue, JsVal
 /// Get all categories in a space.
 ///
 /// Returns JSON: CommunityCategory[]
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_category_list(space_id: &str) -> Result<JsValue, JsValue> {
     let svc = community_service()?;
@@ -10101,6 +10345,7 @@ pub fn umbra_wasm_community_category_list(space_id: &str) -> Result<JsValue, JsV
 /// Get all categories in a community (across all spaces).
 ///
 /// Returns JSON: CommunityCategory[]
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_category_list_all(community_id: &str) -> Result<JsValue, JsValue> {
     let svc = community_service()?;
@@ -10132,6 +10377,7 @@ pub fn umbra_wasm_community_category_list_all(community_id: &str) -> Result<JsVa
 ///
 /// Takes JSON: { "category_id": "...", "name": "...", "actor_did": "..." }
 /// Returns JSON: { "success": true }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_category_update(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -10166,6 +10412,7 @@ pub fn umbra_wasm_community_category_update(json: &str) -> Result<JsValue, JsVal
 ///
 /// Takes JSON: { "space_id": "...", "category_ids": ["...", "..."] }
 /// Returns JSON: { "success": true }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_category_reorder(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -10192,6 +10439,7 @@ pub fn umbra_wasm_community_category_reorder(json: &str) -> Result<JsValue, JsVa
 ///
 /// Takes JSON: { "category_id": "...", "actor_did": "..." }
 /// Returns JSON: { "success": true }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_category_delete(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -10223,6 +10471,7 @@ pub fn umbra_wasm_community_category_delete(json: &str) -> Result<JsValue, JsVal
 ///
 /// Takes JSON: { "channel_id": "...", "category_id": "..." or null, "actor_did": "..." }
 /// Returns JSON: { "success": true }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_channel_move_category(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -10263,6 +10512,7 @@ pub fn umbra_wasm_community_channel_move_category(json: &str) -> Result<JsValue,
 ///               "auto_start": true, "prioritized_communities": null,
 ///               "pairing_token": null, "remote_address": null }
 /// Returns JSON: BoostNode object
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_boost_node_register(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -10325,6 +10575,7 @@ pub fn umbra_wasm_community_boost_node_register(json: &str) -> Result<JsValue, J
 /// Get all boost nodes for a user.
 ///
 /// Returns JSON: BoostNode[]
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_boost_node_list(owner_did: &str) -> Result<JsValue, JsValue> {
     let svc = community_service()?;
@@ -10341,6 +10592,7 @@ pub fn umbra_wasm_community_boost_node_list(owner_did: &str) -> Result<JsValue, 
 /// Get a specific boost node.
 ///
 /// Returns JSON: BoostNode object
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_boost_node_get(node_id: &str) -> Result<JsValue, JsValue> {
     let svc = community_service()?;
@@ -10356,6 +10608,7 @@ pub fn umbra_wasm_community_boost_node_get(node_id: &str) -> Result<JsValue, JsV
 ///               "max_storage_bytes": null, "max_bandwidth_mbps": null,
 ///               "auto_start": null, "prioritized_communities": null }
 /// Returns JSON: { "success": true }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_boost_node_update(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -10397,6 +10650,7 @@ pub fn umbra_wasm_community_boost_node_update(json: &str) -> Result<JsValue, JsV
 /// Update boost node heartbeat (last seen).
 ///
 /// Returns JSON: { "success": true }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_boost_node_heartbeat(node_id: &str) -> Result<JsValue, JsValue> {
     let svc = community_service()?;
@@ -10408,6 +10662,7 @@ pub fn umbra_wasm_community_boost_node_heartbeat(node_id: &str) -> Result<JsValu
 /// Delete a boost node.
 ///
 /// Returns JSON: { "success": true }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_boost_node_delete(node_id: &str) -> Result<JsValue, JsValue> {
     let svc = community_service()?;
@@ -10430,6 +10685,7 @@ pub fn umbra_wasm_community_boost_node_delete(node_id: &str) -> Result<JsValue, 
 // ============================================================================
 
 /// Timeout a member (mute or restrict).
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_timeout_member(json: &str) -> Result<JsValue, JsValue> {
     let v: serde_json::Value = serde_json::from_str(json)
@@ -10474,6 +10730,7 @@ pub fn umbra_wasm_community_timeout_member(json: &str) -> Result<JsValue, JsValu
 }
 
 /// Remove a timeout early.
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_remove_timeout(
     timeout_id: &str,
@@ -10495,6 +10752,7 @@ pub fn umbra_wasm_community_remove_timeout(
 }
 
 /// Get active timeouts for a member.
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_get_active_timeouts(
     community_id: &str,
@@ -10512,6 +10770,7 @@ pub fn umbra_wasm_community_get_active_timeouts(
 }
 
 /// Get all timeouts for a community.
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_get_timeouts(community_id: &str) -> Result<JsValue, JsValue> {
     let svc = community_service()?;
@@ -10526,6 +10785,7 @@ pub fn umbra_wasm_community_get_timeouts(community_id: &str) -> Result<JsValue, 
 }
 
 /// Check if a member is muted.
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_is_member_muted(
     community_id: &str,
@@ -10546,6 +10806,7 @@ pub fn umbra_wasm_community_is_member_muted(
 // ============================================================================
 
 /// Follow a thread.
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_follow_thread(
     thread_id: &str,
@@ -10568,6 +10829,7 @@ pub fn umbra_wasm_community_follow_thread(
 }
 
 /// Unfollow a thread.
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_unfollow_thread(
     thread_id: &str,
@@ -10590,6 +10852,7 @@ pub fn umbra_wasm_community_unfollow_thread(
 }
 
 /// Get thread followers.
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_get_thread_followers(thread_id: &str) -> Result<JsValue, JsValue> {
     let svc = community_service()?;
@@ -10613,6 +10876,7 @@ pub fn umbra_wasm_community_get_thread_followers(thread_id: &str) -> Result<JsVa
 }
 
 /// Check if following a thread.
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_is_following_thread(
     thread_id: &str,
@@ -10633,6 +10897,7 @@ pub fn umbra_wasm_community_is_following_thread(
 // ============================================================================
 
 /// Advanced search with filters.
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_search_advanced(json: &str) -> Result<JsValue, JsValue> {
     let v: serde_json::Value = serde_json::from_str(json)
@@ -10665,6 +10930,7 @@ pub fn umbra_wasm_community_search_advanced(json: &str) -> Result<JsValue, JsVal
 // ============================================================================
 
 /// Set a custom member status.
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_set_member_status(json: &str) -> Result<JsValue, JsValue> {
     let v: serde_json::Value = serde_json::from_str(json)
@@ -10696,6 +10962,7 @@ pub fn umbra_wasm_community_set_member_status(json: &str) -> Result<JsValue, JsV
 }
 
 /// Get a member's custom status.
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_get_member_status(
     community_id: &str,
@@ -10713,6 +10980,7 @@ pub fn umbra_wasm_community_get_member_status(
 }
 
 /// Clear a member's custom status.
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_clear_member_status(
     community_id: &str,
@@ -10739,6 +11007,7 @@ pub fn umbra_wasm_community_clear_member_status(
 // ============================================================================
 
 /// Set notification settings.
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_set_notification_settings(json: &str) -> Result<JsValue, JsValue> {
     let v: serde_json::Value = serde_json::from_str(json)
@@ -10764,6 +11033,7 @@ pub fn umbra_wasm_community_set_notification_settings(json: &str) -> Result<JsVa
 }
 
 /// Get notification settings for a member.
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_get_notification_settings(
     community_id: &str,
@@ -10784,6 +11054,7 @@ pub fn umbra_wasm_community_get_notification_settings(
 }
 
 /// Delete a notification setting.
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_delete_notification_setting(
     setting_id: &str,
@@ -10800,6 +11071,7 @@ pub fn umbra_wasm_community_delete_notification_setting(
 // ============================================================================
 
 /// Parse mentions from message content.
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_parse_mentions(content: &str) -> Result<JsValue, JsValue> {
     let mentions = crate::community::parse_mentions(content);
@@ -10823,6 +11095,7 @@ pub fn umbra_wasm_community_parse_mentions(content: &str) -> Result<JsValue, JsV
 }
 
 /// Send a system message to a channel.
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_send_system_message(
     channel_id: &str,
@@ -10853,6 +11126,7 @@ pub fn umbra_wasm_community_send_system_message(
 ///
 /// Takes JSON: { channel_id, folder_id?, filename, description?, file_size, mime_type?, storage_chunks_json, uploaded_by }
 /// Returns JSON: CommunityFileRecord
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_upload_file(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -10909,6 +11183,7 @@ pub fn umbra_wasm_community_upload_file(json: &str) -> Result<JsValue, JsValue> 
 ///
 /// Takes JSON: { channel_id, folder_id?, limit, offset }
 /// Returns JSON: CommunityFileRecord[]
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_get_files(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -10936,6 +11211,7 @@ pub fn umbra_wasm_community_get_files(json: &str) -> Result<JsValue, JsValue> {
 ///
 /// Takes JSON: { id }
 /// Returns JSON: CommunityFileRecord
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_get_file(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -10958,6 +11234,7 @@ pub fn umbra_wasm_community_get_file(json: &str) -> Result<JsValue, JsValue> {
 /// Delete a community file.
 ///
 /// Takes JSON: { id, actor_did }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_delete_file(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -10988,6 +11265,7 @@ pub fn umbra_wasm_community_delete_file(json: &str) -> Result<JsValue, JsValue> 
 /// Record a file download (increments download count).
 ///
 /// Takes JSON: { id }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_record_file_download(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -11008,6 +11286,7 @@ pub fn umbra_wasm_community_record_file_download(json: &str) -> Result<JsValue, 
 ///
 /// Takes JSON: { channel_id, parent_folder_id?, name, created_by }
 /// Returns JSON: CommunityFileFolderRecord
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_create_folder(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -11047,6 +11326,7 @@ pub fn umbra_wasm_community_create_folder(json: &str) -> Result<JsValue, JsValue
 ///
 /// Takes JSON: { channel_id, parent_folder_id? }
 /// Returns JSON: CommunityFileFolderRecord[]
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_get_folders(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -11071,6 +11351,7 @@ pub fn umbra_wasm_community_get_folders(json: &str) -> Result<JsValue, JsValue> 
 /// Delete a community folder.
 ///
 /// Takes JSON: { id }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_delete_folder(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -11115,6 +11396,7 @@ fn dm_file_service() -> Result<crate::messaging::files::DmFileService, JsValue> 
 ///
 /// Takes JSON: { conversation_id, folder_id?, filename, description?, file_size, mime_type?, storage_chunks_json, uploaded_by, encrypted_metadata?, encryption_nonce? }
 /// Returns JSON: DmSharedFileRecord
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_dm_upload_file(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -11165,6 +11447,7 @@ pub fn umbra_wasm_dm_upload_file(json: &str) -> Result<JsValue, JsValue> {
 ///
 /// Takes JSON: { conversation_id, folder_id?, limit, offset }
 /// Returns JSON: DmSharedFileRecord[]
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_dm_get_files(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -11192,6 +11475,7 @@ pub fn umbra_wasm_dm_get_files(json: &str) -> Result<JsValue, JsValue> {
 ///
 /// Takes JSON: { id }
 /// Returns JSON: DmSharedFileRecord
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_dm_get_file(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -11212,6 +11496,7 @@ pub fn umbra_wasm_dm_get_file(json: &str) -> Result<JsValue, JsValue> {
 /// Delete a DM shared file.
 ///
 /// Takes JSON: { id }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_dm_delete_file(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -11231,6 +11516,7 @@ pub fn umbra_wasm_dm_delete_file(json: &str) -> Result<JsValue, JsValue> {
 /// Record a DM file download.
 ///
 /// Takes JSON: { id }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_dm_record_file_download(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -11250,6 +11536,7 @@ pub fn umbra_wasm_dm_record_file_download(json: &str) -> Result<JsValue, JsValue
 /// Move a DM file to a different folder.
 ///
 /// Takes JSON: { id, target_folder_id? }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_dm_move_file(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -11271,6 +11558,7 @@ pub fn umbra_wasm_dm_move_file(json: &str) -> Result<JsValue, JsValue> {
 ///
 /// Takes JSON: { conversation_id, parent_folder_id?, name, created_by }
 /// Returns JSON: DmSharedFolderRecord
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_dm_create_folder(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -11300,6 +11588,7 @@ pub fn umbra_wasm_dm_create_folder(json: &str) -> Result<JsValue, JsValue> {
 ///
 /// Takes JSON: { conversation_id, parent_folder_id? }
 /// Returns JSON: DmSharedFolderRecord[]
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_dm_get_folders(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -11324,6 +11613,7 @@ pub fn umbra_wasm_dm_get_folders(json: &str) -> Result<JsValue, JsValue> {
 /// Delete a DM shared folder.
 ///
 /// Takes JSON: { id }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_dm_delete_folder(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -11343,6 +11633,7 @@ pub fn umbra_wasm_dm_delete_folder(json: &str) -> Result<JsValue, JsValue> {
 /// Rename a DM shared folder.
 ///
 /// Takes JSON: { id, name }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_dm_rename_folder(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -11370,6 +11661,7 @@ pub fn umbra_wasm_dm_rename_folder(json: &str) -> Result<JsValue, JsValue> {
 ///
 /// Takes JSON: { file_id, filename, data_b64, chunk_size? }
 /// Returns JSON: ChunkManifest
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_chunk_file(json: &str) -> Result<JsValue, JsValue> {
     use crate::storage::chunking;
@@ -11453,6 +11745,7 @@ pub fn umbra_wasm_chunk_file(json: &str) -> Result<JsValue, JsValue> {
 ///
 /// Parameters: file_id (string), filename (string), data (&[u8]), chunk_size (optional u32)
 /// Returns JSON: ChunkManifest
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_chunk_file_bytes(
     file_id: &str,
@@ -11520,6 +11813,7 @@ pub fn umbra_wasm_chunk_file_bytes(
 ///
 /// Takes JSON: { file_id } (manifest must be stored)
 /// Returns JSON: { data_b64: string }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_reassemble_file(json: &str) -> Result<JsValue, JsValue> {
     use crate::storage::chunking;
@@ -11594,6 +11888,7 @@ pub fn umbra_wasm_reassemble_file(json: &str) -> Result<JsValue, JsValue> {
 ///
 /// Takes JSON: { file_id }
 /// Returns JSON: FileManifestRecord or null
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_get_file_manifest(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -11643,6 +11938,7 @@ pub fn umbra_wasm_get_file_manifest(json: &str) -> Result<JsValue, JsValue> {
 /// Takes JSON: { file_id, peer_did, manifest_json }
 /// Returns JSON: { transfer_id, relay_message } — relay_message is the serialized
 /// FileTransferMessage for JS to send via relay/WebRTC.
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_transfer_initiate(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -11694,6 +11990,7 @@ pub fn umbra_wasm_transfer_initiate(json: &str) -> Result<JsValue, JsValue> {
 ///
 /// Takes JSON: { transfer_id, existing_chunks?: number[] }
 /// Returns JSON: { message } — the TransferAccept message to send back.
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_transfer_accept(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -11740,6 +12037,7 @@ pub fn umbra_wasm_transfer_accept(json: &str) -> Result<JsValue, JsValue> {
 ///
 /// Takes: transfer_id (string)
 /// Returns JSON: { message } — the PauseTransfer message to send.
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_transfer_pause(transfer_id: &str) -> Result<JsValue, JsValue> {
     let now = js_sys::Date::now() as i64;
@@ -11768,6 +12066,7 @@ pub fn umbra_wasm_transfer_pause(transfer_id: &str) -> Result<JsValue, JsValue> 
 ///
 /// Takes: transfer_id (string)
 /// Returns JSON: { message } — the ResumeTransfer message to send.
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_transfer_resume(transfer_id: &str) -> Result<JsValue, JsValue> {
     let now = js_sys::Date::now() as i64;
@@ -11796,6 +12095,7 @@ pub fn umbra_wasm_transfer_resume(transfer_id: &str) -> Result<JsValue, JsValue>
 ///
 /// Takes JSON: { transfer_id, reason? }
 /// Returns JSON: { message } — the CancelTransfer message to send.
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_transfer_cancel(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -11832,6 +12132,7 @@ pub fn umbra_wasm_transfer_cancel(json: &str) -> Result<JsValue, JsValue> {
 ///
 /// Takes JSON: { from_did, message } where message is a serialized FileTransferMessage.
 /// Returns JSON: { response_message? } — optional response to send back.
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_transfer_on_message(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -11879,6 +12180,7 @@ pub fn umbra_wasm_transfer_on_message(json: &str) -> Result<JsValue, JsValue> {
 /// List all transfer sessions.
 ///
 /// Returns JSON: TransferSession[]
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_transfer_list() -> Result<JsValue, JsValue> {
     TRANSFER_MANAGER.with(|mgr| {
@@ -11898,6 +12200,7 @@ pub fn umbra_wasm_transfer_list() -> Result<JsValue, JsValue> {
 ///
 /// Takes: transfer_id (string)
 /// Returns JSON: TransferSession | null
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_transfer_get(transfer_id: &str) -> Result<JsValue, JsValue> {
     TRANSFER_MANAGER.with(|mgr| {
@@ -11915,6 +12218,7 @@ pub fn umbra_wasm_transfer_get(transfer_id: &str) -> Result<JsValue, JsValue> {
 /// Get incomplete transfer sessions (for resume on restart).
 ///
 /// Returns JSON: TransferSession[]
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_transfer_get_incomplete() -> Result<JsValue, JsValue> {
     TRANSFER_MANAGER.with(|mgr| {
@@ -11934,6 +12238,7 @@ pub fn umbra_wasm_transfer_get_incomplete() -> Result<JsValue, JsValue> {
 ///
 /// Takes: transfer_id (string)
 /// Returns JSON: { chunks: number[], transfer_id }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_transfer_chunks_to_send(transfer_id: &str) -> Result<JsValue, JsValue> {
     TRANSFER_MANAGER.with(|mgr| {
@@ -11950,6 +12255,7 @@ pub fn umbra_wasm_transfer_chunks_to_send(transfer_id: &str) -> Result<JsValue, 
 /// Mark a chunk as sent (for RTT tracking).
 ///
 /// Takes JSON: { transfer_id, chunk_index }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_transfer_mark_chunk_sent(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -11978,6 +12284,7 @@ pub fn umbra_wasm_transfer_mark_chunk_sent(json: &str) -> Result<JsValue, JsValu
 ///
 /// Takes JSON: { "file_id": "..." }
 /// Returns JSON: { "ok": true }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_dht_start_providing(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -12013,6 +12320,7 @@ pub fn umbra_wasm_dht_start_providing(json: &str) -> Result<JsValue, JsValue> {
 /// Results arrive asynchronously as "file_transfer" domain events
 /// with a "FileProviders" sub-type.
 /// Returns JSON: { "ok": true }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_dht_get_providers(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -12045,6 +12353,7 @@ pub fn umbra_wasm_dht_get_providers(json: &str) -> Result<JsValue, JsValue> {
 ///
 /// Takes JSON: { "file_id": "..." }
 /// Returns JSON: { "ok": true }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_dht_stop_providing(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -12292,6 +12601,7 @@ fn boost_node_to_json(n: &crate::storage::BoostNodeRecord) -> serde_json::Value 
 /// Returns JSON: { "key_hex": "64-char hex string" }
 ///
 /// Both conversation participants independently derive the same key.
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_file_derive_key(json: &str) -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -12361,6 +12671,7 @@ pub fn umbra_wasm_file_derive_key(json: &str) -> Result<JsValue, JsValue> {
 ///
 /// Input JSON: { "key_hex": "...", "chunk_data_b64": "...", "file_id": "...", "chunk_index": 0 }
 /// Returns JSON: { "nonce_hex": "...", "encrypted_data_b64": "..." }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_file_encrypt_chunk(json: &str) -> Result<JsValue, JsValue> {
     let input: serde_json::Value = serde_json::from_str(json)
@@ -12408,6 +12719,7 @@ pub fn umbra_wasm_file_encrypt_chunk(json: &str) -> Result<JsValue, JsValue> {
 ///
 /// Input JSON: { "key_hex": "...", "nonce_hex": "...", "encrypted_data_b64": "...", "file_id": "...", "chunk_index": 0 }
 /// Returns JSON: { "chunk_data_b64": "..." }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_file_decrypt_chunk(json: &str) -> Result<JsValue, JsValue> {
     let input: serde_json::Value = serde_json::from_str(json)
@@ -12469,6 +12781,7 @@ pub fn umbra_wasm_file_decrypt_chunk(json: &str) -> Result<JsValue, JsValue> {
 /// Returns JSON: { "key_hex": "64-char hex string" }
 ///
 /// Uses HKDF(channel_group_key, file_id || key_version) for domain separation.
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_channel_file_derive_key(json: &str) -> Result<JsValue, JsValue> {
     let input: serde_json::Value = serde_json::from_str(json)
@@ -12510,6 +12823,7 @@ pub fn umbra_wasm_channel_file_derive_key(json: &str) -> Result<JsValue, JsValue
 ///
 /// Input JSON: { "key_hex": "64-char hex" }
 /// Returns JSON: { "fingerprint": "16-char hex string" }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_compute_key_fingerprint(json: &str) -> Result<JsValue, JsValue> {
     let input: serde_json::Value = serde_json::from_str(json)
@@ -12541,6 +12855,7 @@ pub fn umbra_wasm_compute_key_fingerprint(json: &str) -> Result<JsValue, JsValue
 ///
 /// Input JSON: { "key_hex": "64-char hex", "remote_fingerprint": "16-char hex" }
 /// Returns JSON: { "verified": true/false }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_verify_key_fingerprint(json: &str) -> Result<JsValue, JsValue> {
     let input: serde_json::Value = serde_json::from_str(json)
@@ -12575,6 +12890,7 @@ pub fn umbra_wasm_verify_key_fingerprint(json: &str) -> Result<JsValue, JsValue>
 ///
 /// Input JSON: { "channel_id": "ch-uuid", "new_key_version": 2 }
 /// Returns JSON: { "files_marked": 5 }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_mark_files_for_reencryption(json: &str) -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -12610,6 +12926,7 @@ pub fn umbra_wasm_mark_files_for_reencryption(json: &str) -> Result<JsValue, JsV
 ///
 /// Input JSON: { "channel_id": "ch-uuid", "limit": 10 }
 /// Returns JSON: [{ file record }, ...]
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_get_files_needing_reencryption(json: &str) -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -12654,6 +12971,7 @@ pub fn umbra_wasm_get_files_needing_reencryption(json: &str) -> Result<JsValue, 
 ///
 /// Input JSON: { "file_id": "file-uuid", "fingerprint": "optional-16-char-hex" }
 /// Returns JSON: { "ok": true }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_clear_reencryption_flag(json: &str) -> Result<JsValue, JsValue> {
     let state = get_state()?;
@@ -12685,6 +13003,7 @@ pub fn umbra_wasm_clear_reencryption_flag(json: &str) -> Result<JsValue, JsValue
 /// Get all seats for a community.
 ///
 /// Returns JSON: CommunitySeat[]
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_seat_list(community_id: &str) -> Result<JsValue, JsValue> {
     let svc = community_service()?;
@@ -12716,6 +13035,7 @@ pub fn umbra_wasm_community_seat_list(community_id: &str) -> Result<JsValue, JsV
 /// Get unclaimed seats for a community.
 ///
 /// Returns JSON: CommunitySeat[]
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_seat_list_unclaimed(community_id: &str) -> Result<JsValue, JsValue> {
     let svc = community_service()?;
@@ -12748,6 +13068,7 @@ pub fn umbra_wasm_community_seat_list_unclaimed(community_id: &str) -> Result<Js
 ///
 /// Takes JSON: { "community_id": "...", "platform": "discord", "platform_user_id": "..." }
 /// Returns JSON: CommunitySeat | null
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_seat_find_match(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -12793,6 +13114,7 @@ pub fn umbra_wasm_community_seat_find_match(json: &str) -> Result<JsValue, JsVal
 ///
 /// Takes JSON: { "seat_id": "...", "claimer_did": "..." }
 /// Returns JSON: CommunitySeat (updated)
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_seat_claim(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -12842,6 +13164,7 @@ pub fn umbra_wasm_community_seat_claim(json: &str) -> Result<JsValue, JsValue> {
 ///
 /// Takes JSON: { "seat_id": "...", "actor_did": "..." }
 /// Returns JSON: { "success": true }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_seat_delete(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -12875,6 +13198,7 @@ pub fn umbra_wasm_community_seat_delete(json: &str) -> Result<JsValue, JsValue> 
 ///
 /// Takes JSON: { "community_id": "...", "seats": [{ "platform", "platform_user_id", "platform_username", "nickname"?, "avatar_url"?, "role_ids": string[] }] }
 /// Returns JSON: { "created": number }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_seat_create_batch(json: &str) -> Result<JsValue, JsValue> {
     let data: serde_json::Value = serde_json::from_str(json)
@@ -12929,6 +13253,7 @@ pub fn umbra_wasm_community_seat_create_batch(json: &str) -> Result<JsValue, JsV
 /// Count seats for a community.
 ///
 /// Returns JSON: { "total": number, "unclaimed": number }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
 #[wasm_bindgen]
 pub fn umbra_wasm_community_seat_count(community_id: &str) -> Result<JsValue, JsValue> {
     let svc = community_service()?;
