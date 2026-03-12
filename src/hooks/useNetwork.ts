@@ -1450,21 +1450,28 @@ export function useNetwork(): UseNetworkResult {
       // reason to block the relay WebSocket on libp2p startup.
       const tasks: Promise<void>[] = [];
 
-      // P2P network
-      tasks.push(
-        (async () => {
-          try {
-            if (__DEV__) dbg.info('network', 'P2P startNetwork START', undefined, SRC);
-            console.log('[useNetwork] Auto-starting network...');
-            await service!.startNetwork();
-            if (__DEV__) dbg.info('network', 'P2P startNetwork DONE', undefined, SRC);
-            console.log('[useNetwork] Network started');
-          } catch (err) {
-            if (__DEV__) dbg.error('network', 'P2P startNetwork FAILED', err, SRC);
-            console.error('[useNetwork] Auto-start network failed:', err);
-          }
-        })()
-      );
+      // P2P network — only start if explicitly enabled.
+      // The libp2p swarm runs a continuous WASM event loop that accumulates
+      // linear memory (never shrinks), causing eventual OOM tab crash.
+      // All messaging works via the relay WebSocket without P2P.
+      if (NETWORK_CONFIG.autoStartP2P) {
+        tasks.push(
+          (async () => {
+            try {
+              if (__DEV__) dbg.info('network', 'P2P startNetwork START', undefined, SRC);
+              console.log('[useNetwork] Auto-starting network...');
+              await service!.startNetwork();
+              if (__DEV__) dbg.info('network', 'P2P startNetwork DONE', undefined, SRC);
+              console.log('[useNetwork] Network started');
+            } catch (err) {
+              if (__DEV__) dbg.error('network', 'P2P startNetwork FAILED', err, SRC);
+              console.error('[useNetwork] Auto-start network failed:', err);
+            }
+          })()
+        );
+      } else {
+        console.log('[useNetwork] P2P network disabled (autoStartP2P=false), relay-only mode');
+      }
 
       // Relay server
       if (NETWORK_CONFIG.autoConnectRelay) {
@@ -1558,13 +1565,15 @@ export function useNetwork(): UseNetworkResult {
           // Relay still open — restart keep-alive in case it lapsed
           _startKeepAlive();
         }
-        // Check P2P network too
-        service.getNetworkStatus().then((status: NetworkStatus) => {
-          if (!status.isRunning) {
-            console.log('[AppState] P2P network not running, restarting...');
-            service.startNetwork().catch(() => {});
-          }
-        }).catch(() => {});
+        // Check P2P network too (only if enabled)
+        if (NETWORK_CONFIG.autoStartP2P) {
+          service.getNetworkStatus().then((status: NetworkStatus) => {
+            if (!status.isRunning) {
+              console.log('[AppState] P2P network not running, restarting...');
+              service.startNetwork().catch(() => {});
+            }
+          }).catch(() => {});
+        }
       } else if (nextState === 'background') {
         // Background: stop keep-alive to save battery
         _clearKeepAlive();

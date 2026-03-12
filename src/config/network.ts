@@ -196,6 +196,13 @@ export const NETWORK_CONFIG = {
   /** Enable DHT-based peer discovery */
   enableDht: false,
 
+  /** Auto-start the libp2p P2P network on app launch.
+   *  When false, only the relay WebSocket is used for messaging.
+   *  The P2P swarm runs a continuous event loop in WASM that accumulates
+   *  linear memory (DHT state, trace logs, connection buffers) which
+   *  never shrinks and eventually OOM-crashes the browser tab. */
+  autoStartP2P: false,
+
   /** Enable relay server for signaling and offline messages */
   enableRelay: true,
 

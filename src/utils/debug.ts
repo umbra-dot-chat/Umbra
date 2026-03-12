@@ -230,7 +230,19 @@ class DebugLogger {
         heartbeatCount++;
         const mem = (performance as any).memory;
         const heap = mem ? `${(mem.usedJSHeapSize / 1024 / 1024).toFixed(1)}MB` : '?';
-        console.log(`[HEARTBEAT #${heartbeatCount}] alive | heap=${heap} | renders=${JSON.stringify(Object.fromEntries([...this.renderCounts.entries()].filter(([, v]) => v > 5)))}`);
+        // Track WASM linear memory — it can only grow, never shrink
+        let wasmMem = '?';
+        try {
+          const wasmMemories = (performance as any).measureUserAgentSpecificMemory
+            ? '?'  // not available synchronously
+            : '?';
+          // Try to read the wasm memory from the global module
+          const wasmInstance = (globalThis as any).__umbra_wasm_memory;
+          if (wasmInstance?.buffer) {
+            wasmMem = `${(wasmInstance.buffer.byteLength / 1024 / 1024).toFixed(1)}MB`;
+          }
+        } catch { /* ignore */ }
+        console.log(`[HEARTBEAT #${heartbeatCount}] alive | heap=${heap} | wasm=${wasmMem} | renders=${JSON.stringify(Object.fromEntries([...this.renderCounts.entries()].filter(([, v]) => v > 5)))}`);
       }, 2000) as any;
 
       // ── Auto-start long task detection ──

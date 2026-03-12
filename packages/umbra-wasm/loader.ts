@@ -706,6 +706,18 @@ async function doInitWasm(did?: string): Promise<UmbraWasmModule> {
   migrateLocalStorageKV(wasm);
 
   wasmModule = wasm;
+
+  // Expose WASM memory on globalThis for the heartbeat monitor.
+  // WASM linear memory can only grow, never shrink — tracking its size
+  // is critical for diagnosing OOM crashes that don't show up in JS heap.
+  try {
+    const wasmExports = (wasmPkg as any).memory ?? (wasmPkg as any).__wbg_memory;
+    if (wasmExports?.buffer) {
+      (globalThis as any).__umbra_wasm_memory = wasmExports;
+      console.log(`[umbra-wasm] WASM memory: ${(wasmExports.buffer.byteLength / 1024 / 1024).toFixed(1)}MB`);
+    }
+  } catch { /* non-critical */ }
+
   console.log(`[umbra-wasm] Ready! Version: ${wasm.umbra_wasm_version()}`);
 
   return wasm;

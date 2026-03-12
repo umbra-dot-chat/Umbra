@@ -104,8 +104,11 @@ let savePending = false;
  * During bulk operations (e.g. importing 10k seats), hundreds of writes
  * happen in quick succession. Instead of exporting + saving on every
  * single write (which allocates a full-size Uint8Array each time and
- * causes OOM), we debounce: wait 500ms after the last write, then save
- * once. For isolated writes the delay is imperceptible.
+ * causes OOM), we debounce: wait 5s after the last write, then save
+ * once. WASM linear memory never shrinks, so each db.export() call
+ * permanently grows the WASM heap via the Uint8Array allocation.
+ * 5s is long enough to batch multiple message writes while still
+ * persisting data before a user is likely to close the tab.
  */
 function scheduleSave(): void {
   if (!persistenceEnabled || !currentDid || !db) return;
@@ -118,7 +121,7 @@ function scheduleSave(): void {
   saveTimer = setTimeout(() => {
     saveTimer = null;
     doSave();
-  }, 500);
+  }, 5000);
 }
 
 /** Actually export and persist the database. */
