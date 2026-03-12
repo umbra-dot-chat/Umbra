@@ -47,6 +47,7 @@ export class Wisp {
   private allPersonaNames: string[];
   private dataDir: string;
   private _running = false;
+  private presenceInterval: ReturnType<typeof setInterval> | null = null;
 
   /** Callback invoked on user messages (for reactions/LLM). */
   onUserMessage?: (senderDid: string, messageId: string, conversationId: string) => void;
@@ -82,12 +83,37 @@ export class Wisp {
     this.relay.fetchOffline();
     this._running = true;
     console.log(`[${this.persona.name}] Connected as ${this.identity.did.slice(0, 24)}...`);
+    // Broadcast presence to all friends and re-broadcast every 60s
+    this.broadcastPresence();
+    this.presenceInterval = setInterval(() => this.broadcastPresence(), 60_000);
   }
 
   stop(): void {
     this._running = false;
+    if (this.presenceInterval) {
+      clearInterval(this.presenceInterval);
+      this.presenceInterval = null;
+    }
     this.callHandler.cleanup();
     this.relay.disconnect();
+  }
+
+  // -- Presence --
+
+  private broadcastPresence(): void {
+    for (const friend of this.friends.values()) {
+      this.relay.sendEnvelope(friend.did, {
+        envelope: 'presence_online', version: 1,
+        payload: { timestamp: Date.now() },
+      });
+    }
+  }
+
+  private sendPresenceAck(toDid: string): void {
+    this.relay.sendEnvelope(toDid, {
+      envelope: 'presence_ack', version: 1,
+      payload: { timestamp: Date.now() },
+    });
   }
 
   // -- Friend Management --
@@ -125,11 +151,11 @@ export class Wisp {
       this.identity.did, toDid, timestamp, friend.conversationId,
     );
     this.relay.sendEnvelope(toDid, {
-      envelope: 'encrypted_message', version: 1,
+      envelope: 'chat_message', version: 1,
       payload: {
-        id: uuid(), conversationId: friend.conversationId,
-        from: this.identity.did, to: toDid, timestamp,
-        ciphertext, nonce, senderDisplayName: this.persona.name,
+        messageId: uuid(), conversationId: friend.conversationId,
+        senderDid: this.identity.did, timestamp,
+        contentEncrypted: ciphertext, nonce,
       },
     });
     this.appendHistory(friend.conversationId, 'assistant', text);
@@ -248,13 +274,13 @@ export class Wisp {
 
   private handleRelayMessage(msg: ServerMessage): void {
     if (msg.type === 'message') {
-      this.handleIncomingEnvelope(msg.payload);
+      this.handleIncomingEnvelope(msg.payload, msg.from_did);
     } else if (msg.type === 'offline_messages') {
-      for (const m of msg.messages) this.handleIncomingEnvelope(m.payload);
+      for (const m of msg.messages) this.handleIncomingEnvelope(m.payload, m.from_did);
     }
   }
 
-  private handleIncomingEnvelope(payloadStr: string): void {
+  private handleIncomingEnvelope(payloadStr: string, fromDid?: string): void {
     try {
       const envelope = JSON.parse(payloadStr);
       switch (envelope.envelope) {
@@ -264,6 +290,7 @@ export class Wisp {
         case 'friend_response':
           this.handleFriendResponse(envelope.payload);
           break;
+        case 'chat_message':
         case 'encrypted_message':
           void this.handleEncryptedMessage(envelope.payload);
           break;
@@ -284,6 +311,11 @@ export class Wisp {
         case 'call_end':
           this.callHandler.handleEnd(envelope.payload);
           break;
+        case 'presence_online':
+          if (fromDid) this.sendPresenceAck(fromDid);
+          break;
+        case 'presence_ack':
+          break; // No action needed, client already marks sender online
       }
     } catch { /* ignore parse errors */ }
   }
@@ -326,29 +358,35 @@ export class Wisp {
   }
 
   private async handleEncryptedMessage(payload: {
-    id: string; from: string; conversationId: string;
-    ciphertext: string; nonce: string; timestamp: number;
+    messageId?: string; id?: string;
+    senderDid?: string; from?: string;
+    conversationId: string;
+    contentEncrypted?: string; ciphertext?: string;
+    nonce: string; timestamp: number;
   }): Promise<void> {
-    const friend = this.friends.get(payload.from);
+    const senderDid = payload.senderDid ?? payload.from ?? '';
+    const messageId = payload.messageId ?? payload.id ?? '';
+    const ciphertext = payload.contentEncrypted ?? payload.ciphertext ?? '';
+    const friend = this.friends.get(senderDid);
     if (!friend) return;
     try {
       const plaintext = decryptMessage(
-        payload.ciphertext, payload.nonce,
+        ciphertext, payload.nonce,
         this.identity.encryptionPrivateKey, friend.encryptionKey,
-        payload.from, this.identity.did, payload.timestamp, payload.conversationId,
+        senderDid, this.identity.did, payload.timestamp, payload.conversationId,
       );
       console.log(`[${this.persona.name}] From ${friend.displayName}: ${plaintext.slice(0, 50)}...`);
-      this.onUserMessage?.(payload.from, payload.id, payload.conversationId);
+      this.onUserMessage?.(senderDid, messageId, payload.conversationId);
       // Generate LLM response after natural delay (1-3s)
       const delay = 1000 + Math.random() * 2000;
       setTimeout(async () => {
         try {
-          this.sendTypingIndicator(payload.from, true);
+          this.sendTypingIndicator(senderDid, true);
           const response = await this.generateResponse(
             friend.displayName, plaintext, payload.conversationId,
           );
-          this.sendTypingIndicator(payload.from, false);
-          await this.sendMessage(payload.from, response);
+          this.sendTypingIndicator(senderDid, false);
+          await this.sendMessage(senderDid, response);
         } catch (err) {
           console.warn(`[${this.persona.name}] Failed to respond:`, err);
         }
