@@ -138,7 +138,7 @@ async fn run_tui(port: u16, replay_path: Option<String>, _verbose: bool) -> Resu
     let mut terminal = tui::init()?;
 
     // Tick interval for UI refresh
-    let tick_rate = Duration::from_millis(200);
+    let mut tick_interval = tokio::time::interval(Duration::from_millis(200));
 
     loop {
         // Render
@@ -148,24 +148,34 @@ async fn run_tui(port: u16, replay_path: Option<String>, _verbose: bool) -> Resu
             break;
         }
 
-        // Event loop: terminal events, WebSocket messages, or tick timeout
-        tokio::select! {
-            // Terminal input (poll with tick_rate timeout)
-            _ = tokio::time::sleep(tick_rate) => {
-                // Check for crossterm events (non-blocking)
-                while event::poll(Duration::ZERO)? {
-                    if let Event::Key(key) = event::read()? {
-                        if key.kind == KeyEventKind::Press {
-                            app.handle_key(key.code, key.modifiers);
-                        }
-                    }
+        // Always check for terminal key events first (non-blocking)
+        while event::poll(Duration::ZERO)? {
+            if let Event::Key(key) = event::read()? {
+                if key.kind == KeyEventKind::Press {
+                    app.handle_key(key.code, key.modifiers);
                 }
+            }
+        }
+
+        if app.should_quit {
+            break;
+        }
+
+        // Wait for either: WS events (drain up to 100 per cycle) or tick
+        tokio::select! {
+            _ = tick_interval.tick() => {
                 app.tick();
             }
-            // WebSocket trace events
             msg = ws_rx.recv() => {
-                if let Some(event) = msg {
-                    app.handle_ws_event(event);
+                if let Some(evt) = msg {
+                    app.handle_ws_event(evt);
+                }
+                // Drain buffered WS events (up to 100 to avoid starving render)
+                for _ in 0..100 {
+                    match ws_rx.try_recv() {
+                        Ok(evt) => app.handle_ws_event(evt),
+                        Err(_) => break,
+                    }
                 }
             }
         }
