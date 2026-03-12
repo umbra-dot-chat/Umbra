@@ -480,6 +480,11 @@ export function useMessages(conversationId: string | null, groupId?: string | nu
       // Always mark locally so unread badges update (cheap DB op)
       await service.markAsRead(conversationId);
 
+      // Skip per-message read receipts for group chats — they generate N
+      // build_receipt_envelope WASM calls per member, which freezes the UI
+      // when bots send messages rapidly. DMs still get individual receipts.
+      if (groupId) return;
+
       // Debounce the relay receipt sends — skip if a flush is already scheduled
       if (markAsReadReceiptTimerRef.current) return;
 
