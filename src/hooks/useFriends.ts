@@ -95,6 +95,20 @@ export function useFriends(): UseFriendsResult {
   const fetchAllRef = useRef(fetchAll);
   fetchAllRef.current = fetchAll;
 
+  // Debounced version for event-triggered refreshes — prevents 188+
+  // pending_requests / 95 friends_list / 94 blocked calls when events
+  // fire rapidly (e.g. group chat message bursts triggering friend events).
+  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const debouncedFetch = useCallback(() => {
+    if (debounceTimerRef.current) {
+      clearTimeout(debounceTimerRef.current);
+    }
+    debounceTimerRef.current = setTimeout(() => {
+      debounceTimerRef.current = null;
+      fetchAllRef.current();
+    }, 2000);
+  }, []);
+
   // Initial fetch
   useEffect(() => {
     if (isReady && service) {
@@ -103,18 +117,27 @@ export function useFriends(): UseFriendsResult {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isReady, service]);
 
+  // Clean up debounce timer on unmount
+  useEffect(() => {
+    return () => {
+      if (debounceTimerRef.current) {
+        clearTimeout(debounceTimerRef.current);
+      }
+    };
+  }, []);
+
   // Subscribe to friend events for real-time updates
   useEffect(() => {
     if (!service) return;
 
     const unsubscribe = service.onFriendEvent((_event: FriendEvent) => {
-      // Refresh all friend data on any friend event — use ref to avoid dep cycle
-      fetchAllRef.current();
+      // Debounced refresh — coalesce rapid friend events into a single fetch
+      debouncedFetch();
     });
 
     return unsubscribe;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [service]);
+  }, [service, debouncedFetch]);
 
   const sendRequest = useCallback(
     async (did: string, message?: string): Promise<FriendRequest | null> => {
