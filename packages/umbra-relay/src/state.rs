@@ -10,6 +10,7 @@ use dashmap::DashMap;
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
+use crate::debug::DebugState;
 use crate::federation::Federation;
 use crate::protocol::{CallRoom, OfflineMessage, PublishedInvite, ServerMessage, SignalingSession};
 
@@ -108,6 +109,9 @@ pub struct RelayState {
     /// Federation manager for relay-to-relay mesh networking.
     /// None if federation is disabled (no peer URLs configured).
     pub federation: Option<Federation>,
+
+    /// Debug event emitter. None if debug endpoint is not configured.
+    pub debug: Option<DebugState>,
 }
 
 impl RelayState {
@@ -121,6 +125,7 @@ impl RelayState {
             published_invites: Arc::new(DashMap::new()),
             config,
             federation: None,
+            debug: None,
         }
     }
 
@@ -134,6 +139,19 @@ impl RelayState {
             published_invites: Arc::new(DashMap::new()),
             config,
             federation: Some(federation),
+            debug: None,
+        }
+    }
+
+    /// Attach a debug state for event emission.
+    pub fn set_debug(&mut self, debug_state: DebugState) {
+        self.debug = Some(debug_state);
+    }
+
+    /// Emit a debug event if the debug endpoint is configured.
+    pub fn emit_debug(&self, fn_name: &str, arg_bytes: usize, extra: serde_json::Value) {
+        if let Some(ref debug) = self.debug {
+            debug.emit(fn_name, arg_bytes, 0.0, extra);
         }
     }
 

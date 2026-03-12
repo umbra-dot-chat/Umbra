@@ -95,6 +95,17 @@ pub async fn handle_websocket(socket: WebSocket, state: RelayState) {
     state.register_client(&client_did, &session_id, tx);
     tracing::info!(did = client_did.as_str(), session_id = session_id.as_str(), "WebSocket registered");
 
+    // Emit debug event for client connection
+    let did_prefix = if client_did.len() > 20 {
+        format!("{}...", &client_did[..20])
+    } else {
+        client_did.clone()
+    };
+    state.emit_debug("client_connect", 0, serde_json::json!({
+        "did_prefix": did_prefix,
+        "session_id": session_id,
+    }));
+
     // ── Step 3: Spawn Sender Task ─────────────────────────────────────────
 
     let sender_task = tokio::spawn(async move {
@@ -170,6 +181,16 @@ pub async fn handle_websocket(socket: WebSocket, state: RelayState) {
             );
         }
     }
+
+    // Emit debug event for client disconnection
+    state.emit_debug("client_disconnect", 0, serde_json::json!({
+        "did_prefix": if client_did.len() > 20 {
+            format!("{}...", &client_did[..20])
+        } else {
+            client_did.clone()
+        },
+        "session_id": session_id,
+    }));
 
     state.unregister_client(&client_did, &session_id);
     sender_task.abort();
@@ -319,17 +340,28 @@ fn handle_signal(state: &RelayState, from_did: &str, to_did: &str, payload: &str
 /// they will fetch offline messages from *this* relay when they reconnect.
 fn handle_send(state: &RelayState, from_did: &str, to_did: &str, payload: &str) {
     let timestamp = Utc::now().timestamp();
+    let payload_bytes = payload.len();
 
     // Try local + federation routing
     match state.route_message(from_did, to_did, payload, timestamp) {
         RouteResult::DeliveredLocally => {
             // Message delivered directly — no need to queue
+            state.emit_debug("msg_route", payload_bytes, serde_json::json!({
+                "from": from_did, "to": to_did, "route": "local"
+            }));
         }
         RouteResult::ForwardedToPeer => {
             // Forwarded to a federated peer, but delivery is not guaranteed
             // (the recipient may go offline on the peer before it's delivered).
             // Queue locally as a safety net — the client will deduplicate.
             state.queue_offline_message(to_did, from_did, payload, timestamp);
+
+            state.emit_debug("msg_route", payload_bytes, serde_json::json!({
+                "from": from_did, "to": to_did, "route": "federation"
+            }));
+            state.emit_debug("msg_queue", payload_bytes, serde_json::json!({
+                "to": to_did, "reason": "federation_safety_net"
+            }));
 
             tracing::debug!(
                 from = from_did,
@@ -340,6 +372,10 @@ fn handle_send(state: &RelayState, from_did: &str, to_did: &str, payload: &str) 
         RouteResult::Unreachable => {
             // Peer is unreachable everywhere — queue for later delivery
             state.queue_offline_message(to_did, from_did, payload, timestamp);
+
+            state.emit_debug("msg_queue", payload_bytes, serde_json::json!({
+                "to": to_did, "reason": "recipient_offline"
+            }));
 
             tracing::debug!(
                 from = from_did,
@@ -438,6 +474,14 @@ fn handle_join_session(
 fn handle_fetch_offline(state: &RelayState, did: &str) {
     let messages = state.drain_offline_messages(did);
     let total = messages.len();
+
+    // Emit debug event for message dequeue
+    if total > 0 {
+        let total_bytes: usize = messages.iter().map(|m| m.payload.len()).sum();
+        state.emit_debug("msg_dequeue", total_bytes, serde_json::json!({
+            "did": did, "count": total
+        }));
+    }
 
     tracing::info!(
         did = did,

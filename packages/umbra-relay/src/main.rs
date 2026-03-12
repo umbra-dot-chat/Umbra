@@ -134,7 +134,7 @@ async fn main() {
         .filter(|url| !url.trim().is_empty())
         .collect();
 
-    let state = if !peer_urls.is_empty() {
+    let mut state = if !peer_urls.is_empty() {
         let relay_id = args
             .relay_id
             .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
@@ -251,6 +251,9 @@ async fn main() {
 
     // ── Debug Endpoint Setup ──────────────────────────────────────────────
     let debug_state = DebugState::new();
+    if debug_state.is_enabled() {
+        state.set_debug(debug_state.clone());
+    }
 
     // ── Sync Blob Store Setup ──────────────────────────────────────────────
     let sync_store = match sync::blob_store::SyncBlobStore::new(data_dir.as_deref()) {
