@@ -4,7 +4,7 @@
  * @packageDocumentation
  */
 
-import { wasm, parseWasm } from './helpers';
+import { wasm, parseWasm, utf8ToBase64 } from './helpers';
 import type {
   Group,
   GroupMember,
@@ -419,7 +419,7 @@ export async function sendGroupMessage(
       message_id: raw.message.id,
       conversation_id: raw.message.conversationId,
       sender_did: raw.message.senderDid,
-      content_encrypted: btoa(text),
+      content_encrypted: utf8ToBase64(text),
       nonce: '000000000000000000000000',
       timestamp: raw.message.timestamp,
     });

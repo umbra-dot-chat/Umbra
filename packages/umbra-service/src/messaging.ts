@@ -4,7 +4,7 @@
  * @packageDocumentation
  */
 
-import { wasm, parseWasm } from './helpers';
+import { wasm, parseWasm, base64ToUtf8 } from './helpers';
 import type {
   Message,
   MessageContent,
@@ -208,10 +208,14 @@ export async function getMessages(
     let text = '';
     try {
       if (m.conversationId.startsWith('group-')) {
-        // Group messages are stored with pre-decrypted plaintext
-        // (decrypted at receive time, since WASM DM decrypt doesn't
-        // know about group keys).
-        text = m.contentEncrypted;
+        // Group messages store pre-decrypted plaintext as UTF-8-safe base64.
+        // WASM stores the raw bytes and returns them as base64 on load.
+        try {
+          text = base64ToUtf8(m.contentEncrypted);
+        } catch {
+          // Fallback: may be raw plaintext from before the encoding change
+          text = m.contentEncrypted;
+        }
       } else {
         // DM messages: decrypt using ECDH shared secret
         // Rust now returns content_encrypted as base64 (converted from hex in WASM)

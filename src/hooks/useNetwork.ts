@@ -57,6 +57,7 @@ import {
   parseBackupManifest,
   parseBackupChunks,
   restoreFromChunks,
+  utf8ToBase64,
 } from '@umbra/service';
 import { PRIMARY_RELAY_URL, DEFAULT_RELAY_SERVERS, NETWORK_CONFIG } from '@/config';
 import { dbg } from '@/utils/debug';
@@ -645,7 +646,7 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
               await maybeRegisterIncomingFile(service, groupMsgPayload.conversationId, groupMsgPayload.senderDid, plaintext);
               // Store as base64 so WASM can handle it (storeIncomingMessage expects base64 ciphertext)
               try {
-                const storePayload: ChatMessagePayload = { messageId: groupMsgPayload.messageId, conversationId: groupMsgPayload.conversationId, senderDid: groupMsgPayload.senderDid, contentEncrypted: btoa(plaintext), nonce: '000000000000000000000000', timestamp: groupMsgPayload.timestamp };
+                const storePayload: ChatMessagePayload = { messageId: groupMsgPayload.messageId, conversationId: groupMsgPayload.conversationId, senderDid: groupMsgPayload.senderDid, contentEncrypted: utf8ToBase64(plaintext), nonce: '000000000000000000000000', timestamp: groupMsgPayload.timestamp };
                 await service.storeIncomingMessage(storePayload);
               } catch { /* Storage is best-effort for group messages */ }
             } catch (err) { console.warn('[useNetwork] Failed to process group message:', err); }
@@ -846,7 +847,7 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
                 await maybeRegisterIncomingFile(service, groupMsgPayload.conversationId, groupMsgPayload.senderDid, plaintext);
                 // Store as base64 so WASM can handle it (storeIncomingMessage expects base64 ciphertext)
                 try {
-                  const storePayload: ChatMessagePayload = { messageId: groupMsgPayload.messageId, conversationId: groupMsgPayload.conversationId, senderDid: groupMsgPayload.senderDid, contentEncrypted: btoa(plaintext), nonce: '000000000000000000000000', timestamp: groupMsgPayload.timestamp };
+                  const storePayload: ChatMessagePayload = { messageId: groupMsgPayload.messageId, conversationId: groupMsgPayload.conversationId, senderDid: groupMsgPayload.senderDid, contentEncrypted: utf8ToBase64(plaintext), nonce: '000000000000000000000000', timestamp: groupMsgPayload.timestamp };
                   await service.storeIncomingMessage(storePayload);
                 } catch { /* Storage is best-effort for group messages */ }
               } catch (err) { console.warn('[useNetwork] Failed to process offline group message:', err); }

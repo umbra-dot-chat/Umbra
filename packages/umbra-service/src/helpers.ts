@@ -93,3 +93,29 @@ export function wrapWasmError(fn: () => unknown): unknown {
     throw new UmbraError(ErrorCode.Internal, message);
   }
 }
+
+/**
+ * Encode a UTF-8 string to base64, safely handling Unicode characters
+ * (emoji, accented chars, CJK, etc.) that would cause `btoa()` to throw
+ * `DOMException: The string contains characters outside of the Latin1 range`.
+ */
+export function utf8ToBase64(str: string): string {
+  return btoa(
+    encodeURIComponent(str).replace(
+      /%([0-9A-F]{2})/g,
+      (_, p1) => String.fromCharCode(parseInt(p1, 16)),
+    ),
+  );
+}
+
+/**
+ * Decode a base64 string back to a UTF-8 string.
+ * Reverse of `utf8ToBase64`.
+ */
+export function base64ToUtf8(b64: string): string {
+  return decodeURIComponent(
+    Array.from(atob(b64), (c) =>
+      '%' + c.charCodeAt(0).toString(16).padStart(2, '0'),
+    ).join(''),
+  );
+}

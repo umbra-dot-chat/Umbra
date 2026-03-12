@@ -305,6 +305,9 @@ export { updateFriendEncryptionKey } from './friends';
 
 // Messaging helpers
 export { createDmConversation } from './messaging';
+
+// Base64 encoding helpers (UTF-8 safe)
+export { utf8ToBase64, base64ToUtf8 } from './helpers';
 export type { FileMessagePayload } from './messaging';
 
 // Instance coordinator (multi-instance detection)
