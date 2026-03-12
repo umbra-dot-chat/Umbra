@@ -640,12 +640,14 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
             const groupMsgPayload = envelope.payload as GroupMessagePayload;
             try {
               const plaintext = await service.decryptGroupMessage(groupMsgPayload.groupId, groupMsgPayload.ciphertext, groupMsgPayload.nonce, groupMsgPayload.keyVersion, groupMsgPayload.senderDid, groupMsgPayload.timestamp);
-              // Store plaintext (not ciphertext) for group messages — WASM DM decrypt
-              // can't re-decrypt group messages on reload, so we store pre-decrypted text.
-              const storePayload: ChatMessagePayload = { messageId: groupMsgPayload.messageId, conversationId: groupMsgPayload.conversationId, senderDid: groupMsgPayload.senderDid, contentEncrypted: plaintext, nonce: '', timestamp: groupMsgPayload.timestamp };
-              await service.storeIncomingMessage(storePayload);
+              // Dispatch first so message appears immediately in the UI
               service.dispatchMessageEvent({ type: 'messageReceived', message: { id: groupMsgPayload.messageId, conversationId: groupMsgPayload.conversationId, senderDid: groupMsgPayload.senderDid, content: { type: 'text', text: plaintext }, timestamp: groupMsgPayload.timestamp, read: false, delivered: true, status: 'delivered' } });
               await maybeRegisterIncomingFile(service, groupMsgPayload.conversationId, groupMsgPayload.senderDid, plaintext);
+              // Store as base64 so WASM can handle it (storeIncomingMessage expects base64 ciphertext)
+              try {
+                const storePayload: ChatMessagePayload = { messageId: groupMsgPayload.messageId, conversationId: groupMsgPayload.conversationId, senderDid: groupMsgPayload.senderDid, contentEncrypted: btoa(plaintext), nonce: '000000000000000000000000', timestamp: groupMsgPayload.timestamp };
+                await service.storeIncomingMessage(storePayload);
+              } catch { /* Storage is best-effort for group messages */ }
             } catch (err) { console.warn('[useNetwork] Failed to process group message:', err); }
 
           } else if (envelope.envelope === 'group_key_rotation' && envelope.version === 1) {
@@ -839,11 +841,14 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
               const groupMsgPayload = envelope.payload as GroupMessagePayload;
               try {
                 const plaintext = await service.decryptGroupMessage(groupMsgPayload.groupId, groupMsgPayload.ciphertext, groupMsgPayload.nonce, groupMsgPayload.keyVersion, groupMsgPayload.senderDid, groupMsgPayload.timestamp);
-                // Store plaintext for group messages (see live handler comment)
-                const storePayload: ChatMessagePayload = { messageId: groupMsgPayload.messageId, conversationId: groupMsgPayload.conversationId, senderDid: groupMsgPayload.senderDid, contentEncrypted: plaintext, nonce: '', timestamp: groupMsgPayload.timestamp };
-                await service.storeIncomingMessage(storePayload);
+                // Dispatch first so message appears immediately in the UI
                 service.dispatchMessageEvent({ type: 'messageReceived', message: { id: groupMsgPayload.messageId, conversationId: groupMsgPayload.conversationId, senderDid: groupMsgPayload.senderDid, content: { type: 'text', text: plaintext }, timestamp: groupMsgPayload.timestamp, read: false, delivered: true, status: 'delivered' } });
                 await maybeRegisterIncomingFile(service, groupMsgPayload.conversationId, groupMsgPayload.senderDid, plaintext);
+                // Store as base64 so WASM can handle it (storeIncomingMessage expects base64 ciphertext)
+                try {
+                  const storePayload: ChatMessagePayload = { messageId: groupMsgPayload.messageId, conversationId: groupMsgPayload.conversationId, senderDid: groupMsgPayload.senderDid, contentEncrypted: btoa(plaintext), nonce: '000000000000000000000000', timestamp: groupMsgPayload.timestamp };
+                  await service.storeIncomingMessage(storePayload);
+                } catch { /* Storage is best-effort for group messages */ }
               } catch (err) { console.warn('[useNetwork] Failed to process offline group message:', err); }
             } else if (envelope.envelope === 'group_key_rotation' && envelope.version === 1) {
               const keyPayload = envelope.payload as GroupKeyRotationPayload;

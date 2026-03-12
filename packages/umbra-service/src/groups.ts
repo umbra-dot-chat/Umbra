@@ -419,8 +419,8 @@ export async function sendGroupMessage(
       message_id: raw.message.id,
       conversation_id: raw.message.conversationId,
       sender_did: raw.message.senderDid,
-      content_encrypted: text,
-      nonce: '',
+      content_encrypted: btoa(text),
+      nonce: '000000000000000000000000',
       timestamp: raw.message.timestamp,
     });
     wasm().umbra_wasm_messaging_store_incoming(overwriteJson);
