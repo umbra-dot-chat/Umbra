@@ -116,6 +116,7 @@ export function useMessages(conversationId: string | null, groupId?: string | nu
   const offsetRef = useRef(0);
   const eventCountRef = useRef(0);
   const lastSoundRef = useRef<number>(0);
+  const markAsReadReceiptTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Stable refs for functions used inside the event subscription effect.
   // This prevents the effect from re-subscribing (and causing an infinite
@@ -372,6 +373,9 @@ export function useMessages(conversationId: string | null, groupId?: string | nu
       if (debouncedFetchTimerRef.current) {
         clearTimeout(debouncedFetchTimerRef.current);
       }
+      if (markAsReadReceiptTimerRef.current) {
+        clearTimeout(markAsReadReceiptTimerRef.current);
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [service, conversationId]);
@@ -466,31 +470,42 @@ export function useMessages(conversationId: string | null, groupId?: string | nu
     [service, conversationId, groupId, getRelayWs, playSound, myDid]
   );
 
+  // Debounce read-receipt relay sends — when messages stream in rapidly the
+  // caller (useEffect on messages.length) fires markAsRead on every arrival.
+  // We mark locally immediately but coalesce the expensive relay receipts
+  // into a single batch every 2 seconds.
   const markAsRead = useCallback(async () => {
     if (!service || !conversationId) return;
     try {
-      // Always mark locally so unread badges update
+      // Always mark locally so unread badges update (cheap DB op)
       await service.markAsRead(conversationId);
 
-      // Only send read receipts over relay if user hasn't opted out
-      const enabled = await isReadReceiptsEnabled();
-      if (!enabled) return;
+      // Debounce the relay receipt sends — skip if a flush is already scheduled
+      if (markAsReadReceiptTimerRef.current) return;
 
-      const relayWs = getRelayWs();
-      if (relayWs) {
-        // Read from ref to avoid depending on `messages` (which changes every
-        // render and would give markAsRead a new identity each time).
-        const unreadFromOthers = messagesRef.current.filter(
-          (m) => m.status !== 'read' && m.senderDid !== myDid
-        );
-        for (const msg of unreadFromOthers) {
-          service.sendDeliveryReceipt(
-            msg.id, conversationId, msg.senderDid, 'read', relayWs
-          ).catch((err) =>
-            console.warn('[useMessages] Failed to send read receipt:', err)
-          );
+      markAsReadReceiptTimerRef.current = setTimeout(async () => {
+        markAsReadReceiptTimerRef.current = null;
+        try {
+          const enabled = await isReadReceiptsEnabled();
+          if (!enabled) return;
+
+          const relayWs = getRelayWs();
+          if (relayWs) {
+            const unreadFromOthers = messagesRef.current.filter(
+              (m) => m.status !== 'read' && m.senderDid !== myDid
+            );
+            for (const msg of unreadFromOthers) {
+              service.sendDeliveryReceipt(
+                msg.id, conversationId, msg.senderDid, 'read', relayWs
+              ).catch((err) =>
+                console.warn('[useMessages] Failed to send read receipt:', err)
+              );
+            }
+          }
+        } catch (err) {
+          console.error('[useMessages] Failed to send read receipts:', err);
         }
-      }
+      }, 2000);
     } catch (err) {
       console.error('[useMessages] Failed to mark as read:', err);
     }
