@@ -17,6 +17,7 @@
 
 mod asset;
 mod bridge;
+mod debug;
 mod discovery;
 mod gif;
 mod federation;
@@ -40,6 +41,7 @@ use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
 
 use bridge::BridgeStore;
+use debug::DebugState;
 use discovery::{DiscoveryConfig, DiscoveryStore};
 use federation::Federation;
 use state::{RelayConfig, RelayState};
@@ -246,6 +248,9 @@ async fn main() {
     if bridge_loaded > 0 {
         tracing::info!(bridges = bridge_loaded, "Loaded bridge configs from disk");
     }
+
+    // ── Debug Endpoint Setup ──────────────────────────────────────────────
+    let debug_state = DebugState::new();
 
     // ── Sync Blob Store Setup ──────────────────────────────────────────────
     let sync_store = match sync::blob_store::SyncBlobStore::new(data_dir.as_deref()) {
@@ -472,6 +477,33 @@ async fn main() {
         .route("/api/gif/trending", get(gif::api::trending))
         .with_state(gif_config);
 
+    // Build debug router
+    let debug_router = Router::new()
+        .route("/debug", get(debug::debug_ws_handler))
+        .with_state(debug_state.clone());
+
+    // Spawn periodic debug queue_size snapshot (every 5s)
+    if debug_state.is_enabled() {
+        let debug_periodic = debug_state.clone();
+        let state_periodic = state.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(Duration::from_secs(5));
+            loop {
+                interval.tick().await;
+                if debug_periodic.client_count().await == 0 {
+                    continue; // Skip if no debug clients
+                }
+                let total = state_periodic.offline_queue_size();
+                debug_periodic.emit(
+                    "queue_size",
+                    0,
+                    0.0,
+                    serde_json::json!({ "total_queued": total }),
+                );
+            }
+        });
+    }
+
     // Build main router
     let cors = CorsLayer::new()
         .allow_origin(Any)
@@ -491,6 +523,7 @@ async fn main() {
         .merge(asset_router)
         .merge(gif_router)
         .merge(sync_router)
+        .merge(debug_router)
         .layer(cors)
         .layer(TraceLayer::new_for_http());
 
