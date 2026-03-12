@@ -474,6 +474,13 @@ export class SoundEngine {
     } catch (err) {
       console.warn('[SoundEngine] Failed to play sound:', name, err);
     }
+
+    // Disconnect GainNode after sound finishes to prevent memory leak.
+    // Web Audio nodes connected to the graph are NOT garbage collected.
+    // 3 seconds is generous for any UI sound effect.
+    setTimeout(() => {
+      try { soundGain.disconnect(); } catch { /* already disconnected */ }
+    }, 3000);
   }
 
   private playSynth(name: SoundName, ctx: AudioContext, gain: GainNode): void {
@@ -497,6 +504,9 @@ export class SoundEngine {
       const src = ctx.createBufferSource();
       src.buffer = cached;
       src.connect(gain);
+      src.onended = () => {
+        try { gain.disconnect(); } catch { /* already disconnected */ }
+      };
       src.start(ctx.currentTime);
     } else {
       // Fetch and decode in background, play when ready.

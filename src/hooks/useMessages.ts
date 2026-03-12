@@ -108,6 +108,7 @@ export function useMessages(conversationId: string | null, groupId?: string | nu
   const [pinnedMessages, setPinnedMessages] = useState<Message[]>([]);
   const offsetRef = useRef(0);
   const eventCountRef = useRef(0);
+  const lastSoundRef = useRef<number>(0);
 
   // Track the first new message received after the initial fetch so we can
   // render a "New messages" divider in the chat area.
@@ -205,15 +206,30 @@ export function useMessages(conversationId: string | null, groupId?: string | nu
             || msg.content?.type === 'text'
             || msg.content?.type === 'file';
           if (!hasContent) return;
-          // Play receive sound for messages from others
+          // Play receive sound for messages from others (throttled: max 1 per 2s)
           if (event.type === 'messageReceived' && msg.senderDid !== myDid) {
-            playSound('message_receive');
+            const now = Date.now();
+            if (now - lastSoundRef.current >= 2000) {
+              lastSoundRef.current = now;
+              playSound('message_receive');
+            }
             // Mark the first incoming message after initial load as the unread boundary
             if (initialLoadDoneRef.current) {
               setFirstUnreadMessageId((prev) => prev ?? msg.id);
             }
           }
-          setMessages((prev) => [...prev, msg]);
+          setMessages((prev) => {
+            // Deduplicate: don't add if message ID already exists
+            if (prev.some((m) => m.id === msg.id)) return prev;
+            const next = [...prev, msg];
+            // Cap at 500 messages to prevent unbounded memory growth.
+            // The initial page load only fetches 50; user can still
+            // load older messages via pagination (loadMore).
+            if (next.length > 500) {
+              return next.slice(next.length - 500);
+            }
+            return next;
+          });
         }
       } else if (event.type === 'threadReplyReceived') {
         // Thread reply received from relay — don't add to main chat,

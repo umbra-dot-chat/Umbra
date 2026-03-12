@@ -27,6 +27,7 @@ export function useMessageNotifications(activeConversationId: string | null): vo
   const { playSound } = useSound();
   const myDid = identity?.did ?? '';
   const mountedAtRef = useRef<number>(0);
+  const lastSoundRef = useRef<number>(0);
 
   useEffect(() => {
     // Record mount time for the 1-second guard
@@ -58,6 +59,11 @@ export function useMessageNotifications(activeConversationId: string | null): vo
       // Don't play sound if this is the active conversation
       // (useMessages handles that case)
       if (msg.conversationId === activeConversationId) return;
+
+      // Throttle: max 1 notification sound per 5 seconds
+      const now = Date.now();
+      if (now - lastSoundRef.current < 5000) return;
+      lastSoundRef.current = now;
 
       // Play notification sound for messages in other conversations
       playSound('message_receive');
