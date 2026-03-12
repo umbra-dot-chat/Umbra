@@ -122,6 +122,26 @@ export class UmbraService {
   private constructor() {}
 
   // ===========================================================================
+  // DEBUG: LISTENER COUNTS
+  // ===========================================================================
+
+  /** Returns the count of registered listeners per event type (for debug vitals) */
+  getListenerCounts(): Record<string, number> {
+    return {
+      message: this._messageListeners.length,
+      friend: this._friendListeners.length,
+      discovery: this._discoveryListeners.length,
+      relay: this._relayListeners.length,
+      group: this._groupListeners.length,
+      call: this._callListeners.length,
+      community: this._communityListeners.length,
+      dmFile: this._dmFileListeners.length,
+      metadata: this._metadataListeners.length,
+      fileTransfer: this._fileTransferListeners.length,
+    };
+  }
+
+  // ===========================================================================
   // INITIALIZATION
   // ===========================================================================
 
@@ -157,6 +177,9 @@ export class UmbraService {
 
     this._instance = instance;
     this._initialized = true;
+
+    // Expose on globalThis for debug vitals (listener count tracking)
+    (globalThis as any).__umbra_service = instance;
 
     initTimer?.();
     console.log(
@@ -536,6 +559,7 @@ export class UmbraService {
 
   dispatchMessageEvent(event: MessageEvent): void {
     _dbg()?.info('messages', `dispatchMessageEvent: ${event.type} to ${this._messageListeners.length} listeners`, undefined, SRC);
+    _dbg()?.trackMessageEvent();
     for (const listener of this._messageListeners) {
       try {
         listener(event);

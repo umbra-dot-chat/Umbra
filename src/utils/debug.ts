@@ -38,6 +38,40 @@
 
 export type LogLevel = 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal';
 
+/** Persisted to localStorage every heartbeat — survives OOM crashes */
+export interface CrashVitals {
+  /** Wall-clock timestamp */
+  ts: number;
+  /** JS heap used bytes */
+  heap: number;
+  /** JS heap limit bytes */
+  heapLimit: number;
+  /** Total DOM node count */
+  domNodes: number;
+  /** DOM nodes added since last heartbeat */
+  domDelta: number;
+  /** UmbraService listener counts by type */
+  listenerCounts: Record<string, number>;
+  /** Global addEventListener/removeEventListener balance */
+  globalListenerBalance: number;
+  /** Per-component render counts */
+  renderCounts: Record<string, number>;
+  /** Total renders in last 2s window */
+  renderRate: number;
+  /** Per-component render rates (renders/sec) */
+  renderRates: Record<string, number>;
+  /** Message events dispatched in last heartbeat window */
+  messageEventRate: number;
+  /** "Not a known friend" failures since boot */
+  nonFriendFailures: number;
+  /** GC pressure: heap delta since last heartbeat */
+  heapDelta: number;
+  /** Most recent error/warning message */
+  lastError: string | null;
+  /** Heartbeat sequence number */
+  heartbeatSeq: number;
+}
+
 // Layer categories
 // Feature categories
 export type LogCategory =
@@ -198,6 +232,19 @@ class DebugLogger {
   private _catWindowStart = performance.now();
   private _totalCount = 0;
 
+  // Render rate: rolling window of timestamps per component
+  private _renderWindow = new Map<string, number[]>();
+
+  // Vitals: last known DOM count for delta calculation
+  private _lastDomNodes = 0;
+  private _lastHeapBytes = 0;
+  private _lastError: string | null = null;
+
+  // MutationObserver for real-time DOM tracking
+  private _mutationObserver: MutationObserver | null = null;
+  private _domMutationAdds = 0;
+  private _domMutationRemoves = 0;
+
   constructor() {
     this.ring = new RingBuffer(500);
 
@@ -222,28 +269,120 @@ class DebugLogger {
       window.addEventListener('unhandledrejection', () => this.ring.persist());
       window.addEventListener('beforeunload', () => this.ring.persist());
 
-      // ── Main-thread heartbeat ──
-      // Logs every 2s so we can see exactly when the main thread blocks.
-      // If the heartbeat stops appearing in console logs, the thread is frozen.
+      // ── Main-thread heartbeat (2s) ──
+      // Logs vitals and persists CrashVitals to localStorage every heartbeat.
+      // If the heartbeat stops appearing, the main thread is frozen or crashed.
       let heartbeatCount = 0;
       this._heartbeatId = setInterval(() => {
         heartbeatCount++;
         const mem = (performance as any).memory;
-        const heap = mem ? `${(mem.usedJSHeapSize / 1024 / 1024).toFixed(1)}MB` : '?';
-        // Track WASM linear memory — it can only grow, never shrink
+        const heapBytes = mem ? mem.usedJSHeapSize : 0;
+        const heapLimit = mem ? mem.jsHeapSizeLimit : 0;
+        const heap = mem ? `${(heapBytes / 1024 / 1024).toFixed(1)}MB` : '?';
+        const heapPct = heapLimit > 0 ? ((heapBytes / heapLimit) * 100).toFixed(0) : '?';
+        const heapDelta = heapBytes - this._lastHeapBytes;
+        this._lastHeapBytes = heapBytes;
+
+        // WASM linear memory
         let wasmMem = '?';
         try {
-          const wasmMemories = (performance as any).measureUserAgentSpecificMemory
-            ? '?'  // not available synchronously
-            : '?';
-          // Try to read the wasm memory from the global module
           const wasmInstance = (globalThis as any).__umbra_wasm_memory;
           if (wasmInstance?.buffer) {
             wasmMem = `${(wasmInstance.buffer.byteLength / 1024 / 1024).toFixed(1)}MB`;
           }
         } catch { /* ignore */ }
-        console.log(`[HEARTBEAT #${heartbeatCount}] alive | heap=${heap} | wasm=${wasmMem} | renders=${JSON.stringify(Object.fromEntries([...this.renderCounts.entries()].filter(([, v]) => v > 5)))}`);
+
+        // DOM node count
+        const domNodes = typeof document !== 'undefined' ? document.querySelectorAll('*').length : 0;
+        const domDelta = domNodes - this._lastDomNodes;
+        this._lastDomNodes = domNodes;
+
+        // UmbraService listener counts (if exposed on globalThis)
+        const svcListeners: Record<string, number> = {};
+        try {
+          const svc = (globalThis as any).__umbra_service;
+          if (svc?.getListenerCounts) {
+            Object.assign(svcListeners, svc.getListenerCounts());
+          }
+        } catch { /* ignore */ }
+
+        // Render rate: total renders/sec across all components
+        const now = performance.now();
+        let totalRenderRate = 0;
+        const componentRates: Record<string, number> = {};
+        for (const [comp, timestamps] of this._renderWindow) {
+          // Trim entries older than 2s
+          while (timestamps.length > 0 && timestamps[0] < now - 2000) timestamps.shift();
+          const rate = timestamps.length / 2; // renders per second
+          if (rate > 0) componentRates[comp] = Math.round(rate * 10) / 10;
+          totalRenderRate += rate;
+        }
+
+        // Message event rate (reset counter)
+        const msgRate = _messageEventCount;
+        _messageEventCount = 0;
+
+        // Build and persist CrashVitals
+        const vitals: CrashVitals = {
+          ts: Date.now(),
+          heap: heapBytes,
+          heapLimit,
+          domNodes,
+          domDelta,
+          listenerCounts: svcListeners,
+          globalListenerBalance: _globalListenerBalance,
+          renderCounts: Object.fromEntries(this.renderCounts),
+          renderRate: Math.round(totalRenderRate * 10) / 10,
+          renderRates: componentRates,
+          messageEventRate: msgRate,
+          nonFriendFailures: _nonFriendFailures,
+          heapDelta,
+          lastError: this._lastError,
+          heartbeatSeq: heartbeatCount,
+        };
+
+        // Persist to localStorage (synchronous — survives OOM)
+        try {
+          localStorage.setItem(VITALS_KEY, JSON.stringify(vitals));
+        } catch { /* quota exceeded — ignore */ }
+
+        // Console heartbeat (compact)
+        const listenerStr = Object.keys(svcListeners).length > 0
+          ? ` | listeners=${JSON.stringify(svcListeners)}`
+          : '';
+        const hotRenders = Object.entries(componentRates)
+          .filter(([, r]) => r > 2)
+          .map(([c, r]) => `${c}=${r}/s`)
+          .join(',');
+        console.log(
+          `[HEARTBEAT #${heartbeatCount}] heap=${heap}(${heapPct}%) | dom=${domNodes}(${domDelta >= 0 ? '+' : ''}${domDelta}) | wasm=${wasmMem} | renders=${totalRenderRate.toFixed(0)}/s${hotRenders ? ` [${hotRenders}]` : ''} | msgs=${msgRate}/2s | gListeners=${_globalListenerBalance}${listenerStr}`,
+        );
+
+        // Warn on dangerous thresholds
+        if (heapLimit > 0 && heapBytes / heapLimit > 0.85) {
+          this._log('fatal', 'perf', `HEAP CRITICAL: ${heap} / ${(heapLimit / 1024 / 1024).toFixed(0)}MB (${heapPct}%)`, undefined, 'heartbeat');
+        }
+        if (domNodes > 10000) {
+          this._log('error', 'perf', `DOM BLOAT: ${domNodes} nodes`, undefined, 'heartbeat');
+        }
+        if (_globalListenerBalance > 500) {
+          this._log('warn', 'perf', `LISTENER LEAK? globalBalance=${_globalListenerBalance}`, undefined, 'heartbeat');
+        }
       }, 2000) as any;
+
+      // ── MutationObserver for real-time DOM growth ──
+      if (typeof MutationObserver !== 'undefined' && typeof document !== 'undefined') {
+        this._mutationObserver = new MutationObserver((mutations) => {
+          for (const m of mutations) {
+            this._domMutationAdds += m.addedNodes.length;
+            this._domMutationRemoves += m.removedNodes.length;
+          }
+        });
+        this._mutationObserver.observe(document.documentElement, {
+          childList: true,
+          subtree: true,
+        });
+      }
 
       // ── Auto-start long task detection ──
       this.startLongTaskDetection();
@@ -336,12 +475,27 @@ class DebugLogger {
 
   // ── Render tracking ──────────────────────────────────────────────────
 
-  /** Call at the top of a component to track render counts. Warn at 20, error at 50. */
+  /** Call at the top of a component to track render counts + render rate. */
   trackRender(componentName: string) {
     const count = (this.renderCounts.get(componentName) || 0) + 1;
     this.renderCounts.set(componentName, count);
 
-    if (count > 50 && count % 10 === 0) {
+    // Rolling 2s window for rate calculation
+    const now = performance.now();
+    let timestamps = this._renderWindow.get(componentName);
+    if (!timestamps) {
+      timestamps = [];
+      this._renderWindow.set(componentName, timestamps);
+    }
+    timestamps.push(now);
+    // Trim entries older than 2s
+    while (timestamps.length > 0 && timestamps[0] < now - 2000) timestamps.shift();
+
+    // Render storm detection: >10 renders/sec = 20+ entries in 2s window
+    if (timestamps.length > 20) {
+      const rate = (timestamps.length / 2).toFixed(1);
+      this._log('fatal', 'render', `RENDER STORM: ${componentName} at ${rate}/sec (${count} total)`, undefined, componentName);
+    } else if (count > 50 && count % 10 === 0) {
       this._log('error', 'render', `RENDER LOOP? ${componentName} rendered ${count} times`, undefined, componentName);
     } else if (count > 20 && count % 5 === 0) {
       this._log('warn', 'render', `${componentName} rendered ${count} times`, undefined, componentName);
@@ -381,6 +535,39 @@ class DebugLogger {
     this._catCounts.clear();
     this._totalCount = 0;
     this._catWindowStart = performance.now();
+  }
+
+  // ── External event tracking ────────────────────────────────────────────
+
+  /** Call from service.dispatchMessageEvent to track message throughput */
+  trackMessageEvent() {
+    _messageEventCount++;
+  }
+
+  /** Call when a "not a known friend" WASM error occurs */
+  trackNonFriendFailure(senderDid?: string) {
+    _nonFriendFailures++;
+    if (_nonFriendFailures <= 3 || _nonFriendFailures % 10 === 0) {
+      this._log('warn', 'messages',
+        `Non-friend message rejected (#${_nonFriendFailures})`,
+        { sender: senderDid?.slice(0, 20) },
+        'WASM',
+      );
+    }
+  }
+
+  /** Get current non-friend failure count */
+  get nonFriendFailureCount() { return _nonFriendFailures; }
+
+  /** Get current global listener balance */
+  get globalListenerBalance() { return _globalListenerBalance; }
+
+  /** Get last persisted CrashVitals (from previous session) */
+  getLastCrashVitals(): CrashVitals | null {
+    try {
+      const raw = localStorage.getItem(VITALS_KEY);
+      return raw ? JSON.parse(raw) : null;
+    } catch { return null; }
   }
 
   // ── Timing (with performance.mark/measure integration) ───────────────
@@ -535,6 +722,8 @@ class DebugLogger {
     // Stack traces on error + fatal
     if (level === 'error' || level === 'fatal') {
       entry.stack = new Error().stack;
+      // Track last error for CrashVitals
+      this._lastError = `[${cat}] ${msg}`.slice(0, 200);
     }
 
     // Always push to ring buffer regardless of enabled state
@@ -584,6 +773,48 @@ class DebugLogger {
   }
 }
 
+// ─── Vitals Persistence Keys ─────────────────────────────────────────────────
+
+const VITALS_KEY = '__umbra_vitals__';
+const VITALS_HISTORY_KEY = '__umbra_vitals_history__'; // IndexedDB key (future)
+
+// ─── Global addEventListener Monkey-Patch ────────────────────────────────────
+// Tracks the balance of addEventListener vs removeEventListener calls globally.
+// A rising balance indicates listener leaks.
+
+let _globalListenerBalance = 0;
+
+if (typeof window !== 'undefined' && typeof EventTarget !== 'undefined') {
+  const origAdd = EventTarget.prototype.addEventListener;
+  const origRemove = EventTarget.prototype.removeEventListener;
+
+  EventTarget.prototype.addEventListener = function (
+    this: EventTarget,
+    ...args: Parameters<typeof origAdd>
+  ) {
+    _globalListenerBalance++;
+    return origAdd.apply(this, args);
+  };
+
+  EventTarget.prototype.removeEventListener = function (
+    this: EventTarget,
+    ...args: Parameters<typeof origRemove>
+  ) {
+    _globalListenerBalance--;
+    return origRemove.apply(this, args);
+  };
+}
+
+// ─── Message Event Rate Tracking ─────────────────────────────────────────────
+// Incremented externally via dbg.trackMessageEvent(), reset each heartbeat.
+
+let _messageEventCount = 0;
+
+// ─── Non-Friend Failure Tracking ─────────────────────────────────────────────
+// Incremented externally via dbg.trackNonFriendFailure()
+
+let _nonFriendFailures = 0;
+
 // ─── Crash Guard ────────────────────────────────────────────────────────────
 
 const CRASH_KEY = '__umbra_crash_count__';
@@ -594,6 +825,51 @@ const CRASH_WINDOW_MS = 30_000;
 
 export function initCrashGuard(): { isSafeMode: boolean; crashCount: number } {
   try {
+    // ── Post-crash report: read vitals from previous session ──
+    const prevVitals = dbg.getLastCrashVitals();
+    if (prevVitals) {
+      const deathTime = new Date(prevVitals.ts);
+      const heapMB = (prevVitals.heap / 1024 / 1024).toFixed(0);
+      const limitMB = (prevVitals.heapLimit / 1024 / 1024).toFixed(0);
+      const heapPct = prevVitals.heapLimit > 0
+        ? ((prevVitals.heap / prevVitals.heapLimit) * 100).toFixed(0)
+        : '?';
+      const oomLikely = prevVitals.heapLimit > 0 && prevVitals.heap / prevVitals.heapLimit > 0.8;
+
+      const hotRenders = Object.entries(prevVitals.renderRates || {})
+        .filter(([, r]) => r > 2)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 5)
+        .map(([c, r]) => `    ${c}=${r}/sec`)
+        .join('\n');
+
+      const listeners = Object.entries(prevVitals.listenerCounts || {})
+        .map(([k, v]) => `${k}=${v}`)
+        .join(', ');
+
+      console.log(
+        `%c\n${'═'.repeat(55)}\n  CRASH REPORT — Previous session died at ${formatAbsTime(prevVitals.ts)}\n${'═'.repeat(55)}%c\n` +
+        `  Heap: ${heapMB}MB / ${limitMB}MB (${heapPct}%${oomLikely ? ' — OOM LIKELY' : ''})\n` +
+        `  Heap delta: ${prevVitals.heapDelta >= 0 ? '+' : ''}${(prevVitals.heapDelta / 1024 / 1024).toFixed(1)}MB/2s\n` +
+        `  DOM nodes: ${prevVitals.domNodes} (${prevVitals.domDelta >= 0 ? '+' : ''}${prevVitals.domDelta}/2s)\n` +
+        `  Service listeners: ${listeners || 'unknown'}\n` +
+        `  Global listener balance: ${prevVitals.globalListenerBalance}\n` +
+        `  Render rate: ${prevVitals.renderRate}/sec\n` +
+        (hotRenders ? `  Hot components:\n${hotRenders}\n` : '') +
+        `  Message event rate: ${prevVitals.messageEventRate}/2s\n` +
+        `  Non-friend failures: ${prevVitals.nonFriendFailures}\n` +
+        `  Last error: ${prevVitals.lastError || 'none'}\n` +
+        `  Heartbeat #: ${prevVitals.heartbeatSeq}\n` +
+        `  Time of death: ${deathTime.toLocaleTimeString()}\n` +
+        `${'═'.repeat(55)}\n`,
+        'color: #f44336; font-weight: bold; font-size: 14px',
+        'color: #ff9800',
+      );
+
+      // Also push to ring buffer so it shows up in __debug.dump()
+      dbg.fatal('lifecycle', `CRASH REPORT: heap=${heapMB}MB(${heapPct}%) dom=${prevVitals.domNodes} renders=${prevVitals.renderRate}/s lastErr=${prevVitals.lastError || 'none'}`, undefined, 'CrashGuard');
+    }
+
     const now = Date.now();
     const lastCrashTime = parseInt(localStorage.getItem(CRASH_TIME_KEY) || '0', 10);
     let crashCount = parseInt(localStorage.getItem(CRASH_KEY) || '0', 10);
@@ -737,6 +1013,11 @@ if (typeof window !== 'undefined') {
     // Timing
     time: (label: string) => dbg.time(label),
 
+    // Crash diagnostics
+    vitals: () => dbg.getLastCrashVitals(),
+    listenerBalance: () => dbg.globalListenerBalance,
+    nonFriendFailures: () => dbg.nonFriendFailureCount,
+
     // Help
     help: () => {
       console.log(`
@@ -773,6 +1054,10 @@ if (typeof window !== 'undefined') {
   __debug.startLongTasks()         Start long frame detection
   __debug.stopLongTasks()          Stop long frame detection
   __debug.time('label')            Start timer (returns stop function)
+
+  __debug.vitals()                 Show last CrashVitals (prev session)
+  __debug.listenerBalance()        Global addEventListener balance
+  __debug.nonFriendFailures()      Non-friend message rejection count
 `,
         'color: #6366f1; font-weight: bold',
         'color: inherit',
