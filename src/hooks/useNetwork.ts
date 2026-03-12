@@ -61,7 +61,19 @@ import {
 } from '@umbra/service';
 import { PRIMARY_RELAY_URL, DEFAULT_RELAY_SERVERS, NETWORK_CONFIG } from '@/config';
 import { getWasmMemoryStats } from '@umbra/wasm/loader';
+import { emit as traceEmit, isDebugActive as isTraceActive } from '@umbra/wasm/tracer';
 import { dbg } from '@/utils/debug';
+
+// ── WS debug stats for tracer memory monitor ────────────────────────
+// Exposes active WS count and bufferedAmount on globalThis for the tracer.
+let _wsSendCount = 0;
+let _wsSendBytes = 0;
+(globalThis as any).__umbra_ws_debug_stats = () => ({
+  activeCount: _relayWs && _relayWs.readyState === WebSocket.OPEN ? 1 : 0,
+  bufferedAmount: _relayWs?.bufferedAmount ?? 0,
+  sendCount: _wsSendCount,
+  sendBytes: _wsSendBytes,
+});
 
 // Module-level singletons to prevent duplicate auto-starts and relay
 // connections when multiple components call useNetwork(). Unlike useRef,
@@ -129,6 +141,11 @@ export function sendSyncPush(sections: Record<string, number>): void {
         encrypted_data: '',
       });
       _relayWs.send(msg);
+      _wsSendCount++;
+      _wsSendBytes += msg.length;
+    }
+    if (isTraceActive()) {
+      traceEmit({ cat: 'net', fn: 'ws_send', argBytes: 0, durMs: 0, memBefore: 0, memAfter: 0, memGrowth: 0, argPreview: `sync_push ${entries.length} sections` });
     }
   } catch (err) {
     console.error('[sendSyncPush] Failed to send:', err);
@@ -231,6 +248,21 @@ const _relayListeners = new Set<RelayListener>();
 function _notifyRelayState(connected: boolean, url: string | null) {
   _relayConnected = connected;
   _relayUrl = url;
+
+  // Trace WS connection state change
+  if (isTraceActive()) {
+    traceEmit({
+      cat: 'net',
+      fn: 'ws_state',
+      argBytes: 0,
+      durMs: 0,
+      memBefore: 0,
+      memAfter: 0,
+      memGrowth: 0,
+      argPreview: `connected=${connected} url=${url ?? 'null'}`,
+    });
+  }
+
   for (const listener of _relayListeners) {
     listener(connected, url);
   }
@@ -318,7 +350,10 @@ function _startKeepAlive(): void {
   _keepAliveTimer = setInterval(() => {
     if (_relayWs && _relayWs.readyState === WebSocket.OPEN) {
       try {
-        _relayWs.send(JSON.stringify({ type: 'ping' }));
+        const msg = JSON.stringify({ type: 'ping' });
+        _relayWs.send(msg);
+        _wsSendCount++;
+        _wsSendBytes += msg.length;
       } catch {
         // If send fails, the onclose handler will trigger reconnect
       }
@@ -495,6 +530,20 @@ function _enqueueRelayMessage(ws: WebSocket, event: MessageEvent): void {
 async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<void> {
   const service = _lastService;
   if (!service) return;
+
+  // Trace WS receive event
+  if (isTraceActive()) {
+    const dataLen = typeof event.data === 'string' ? event.data.length : (event.data?.byteLength ?? 0);
+    traceEmit({
+      cat: 'net',
+      fn: 'ws_recv',
+      argBytes: dataLen,
+      durMs: 0,
+      memBefore: 0,
+      memAfter: 0,
+      memGrowth: 0,
+    });
+  }
 
   try {
     const msg = JSON.parse(event.data);
@@ -824,6 +873,20 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
         console.log(`[WASM-TRACE] offline START: ${_memBefore.summary}`);
         let _wasmCallCount = 0;
 
+        // Trace offline batch start
+        if (isTraceActive()) {
+          traceEmit({
+            cat: 'net',
+            fn: 'offline_batch_start',
+            argBytes: 0,
+            durMs: 0,
+            memBefore: _memBefore.totalWasmBytes,
+            memAfter: _memBefore.totalWasmBytes,
+            memGrowth: 0,
+            argPreview: `chunk=${chunkIndex + 1}/${totalChunks} msgs=${messages.length} total=${totalMessages}`,
+          });
+        }
+
         const OFFLINE_BATCH_SIZE = 5;
         for (let batchStart = 0; batchStart < messages.length; batchStart += OFFLINE_BATCH_SIZE) {
           const batchEnd = Math.min(batchStart + OFFLINE_BATCH_SIZE, messages.length);
@@ -986,6 +1049,20 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
         const _memAfter = getWasmMemoryStats();
         const _wasmGrowthMB = ((_memAfter.totalWasmBytes - _memBefore.totalWasmBytes) / 1024 / 1024).toFixed(1);
         console.log(`[WASM-TRACE] offline END: ${_memAfter.summary} | growth=${_wasmGrowthMB}MB over ${_wasmCallCount} WASM calls`);
+
+        // Trace offline batch end
+        if (isTraceActive()) {
+          traceEmit({
+            cat: 'net',
+            fn: 'offline_batch_end',
+            argBytes: 0,
+            durMs: 0,
+            memBefore: _memBefore.totalWasmBytes,
+            memAfter: _memAfter.totalWasmBytes,
+            memGrowth: _memAfter.totalWasmBytes - _memBefore.totalWasmBytes,
+            argPreview: `chunk=${chunkIndex + 1}/${totalChunks} wasmCalls=${_wasmCallCount} growth=${_wasmGrowthMB}MB`,
+          });
+        }
         // Per-module growth breakdown
         for (const mod of _memAfter.modules) {
           const before = _memBefore.modules.find(m => m.label === mod.label);
@@ -1126,6 +1203,11 @@ _attemptReconnect = async function(serverUrl: string): Promise<void> {
     ws.onopen = () => {
       console.log('[Reconnect] Connected to', serverUrl);
       ws.send(registerMessage);
+      _wsSendCount++;
+      _wsSendBytes += registerMessage.length;
+      if (isTraceActive()) {
+        traceEmit({ cat: 'net', fn: 'ws_send', argBytes: registerMessage.length, durMs: 0, memBefore: 0, memAfter: 0, memGrowth: 0, argPreview: 'register' });
+      }
       _registeredRelayDid = _lastRelayDid;
       _notifyRelayState(true, serverUrl);
       _reconnectAttempt = 0;
@@ -1428,6 +1510,11 @@ export function useNetwork(): UseNetworkResult {
             if (__DEV__) dbg.info('network', 'relay WS OPEN, sending register', undefined, SRC);
             console.log('[useNetwork] Sending register message to relay');
             ws.send(registerMessage);
+            _wsSendCount++;
+            _wsSendBytes += registerMessage.length;
+            if (isTraceActive()) {
+              traceEmit({ cat: 'net', fn: 'ws_send', argBytes: registerMessage.length, durMs: 0, memBefore: 0, memAfter: 0, memGrowth: 0, argPreview: 'register' });
+            }
             _registeredRelayDid = identity?.did ?? null;
           } else {
             if (__DEV__) dbg.warn('network', 'relay WS OPEN but no register message!', undefined, SRC);
