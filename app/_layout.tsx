@@ -1,10 +1,9 @@
 import 'react-native-gesture-handler';
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
-import { View } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Slot, useSegments, useRouter, useNavigationContainerRef } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { WispProvider, ToastProvider, useTheme } from '@coexist/wisp-react-native';
+import { WispProvider, ToastProvider, useTheme, Box } from '@coexist/wisp-react-native';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { UmbraProvider, useUmbra } from '@/contexts/UmbraContext';
 import { PluginProvider } from '@/contexts/PluginContext';
@@ -22,6 +21,7 @@ import type { LoadingStep } from '@/components/ui/LoadingScreen';
 import { usePendingInvite } from '@/hooks/usePendingInvite';
 import * as Linking from 'expo-linking';
 import { dbg, initCrashGuard, markBootSuccess } from '@/utils/debug';
+import { DebugVitalsOverlay } from '@/components/debug/DebugVitalsOverlay';
 
 // ── Debug infrastructure init ──────────────────────────────────────────────
 const { isSafeMode: __safeMode, crashCount: __crashCount } = initCrashGuard();
@@ -197,7 +197,7 @@ function AuthGate() {
   }, [initStage]);
 
   return (
-    <View style={{ flex: 1 }}>
+    <Box style={{ flex: 1 }}>
       <Slot />
       {showPinLock && <PinLockScreen accountName={identity?.displayName} />}
       {(showLoading || isSwitching) && (
@@ -208,7 +208,7 @@ function AuthGate() {
           onComplete={isSwitching ? undefined : handleLoadingComplete}
         />
       )}
-    </View>
+    </Box>
   );
 }
 
@@ -230,6 +230,7 @@ export default function RootLayout() {
                       <DynamicStatusBar />
                       <AuthGate />
                       <HelpPopoverHost />
+                      <DebugVitalsOverlay />
                     </HelpProvider>
                   </ConversationsProvider>
                   </PluginProvider>
