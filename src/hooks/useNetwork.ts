@@ -769,10 +769,18 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
         console.log('[BREADCRUMB] offline_messages START, count=' + messages.length);
         const _backupEnvelopes: any[] = [];
 
-        let msgIdx = 0;
-        for (const offlineMsg of messages) {
-          msgIdx++;
-          console.log(`[BREADCRUMB] processing offline msg ${msgIdx}/${messages.length}, envelope=${offlineMsg?.payload?.slice?.(0, 60) || '?'}`);
+        const OFFLINE_BATCH_SIZE = 20;
+        for (let batchStart = 0; batchStart < messages.length; batchStart += OFFLINE_BATCH_SIZE) {
+          const batchEnd = Math.min(batchStart + OFFLINE_BATCH_SIZE, messages.length);
+          console.log(`[BREADCRUMB] processing offline batch ${batchStart + 1}-${batchEnd}/${messages.length}`);
+
+          // Yield to event loop between batches to allow GC and prevent OOM
+          if (batchStart > 0) {
+            await new Promise<void>(resolve => setTimeout(resolve, 0));
+          }
+
+          for (let i = batchStart; i < batchEnd; i++) {
+          const offlineMsg = messages[i];
 
           try {
             const envelope = JSON.parse(offlineMsg.payload) as RelayEnvelope;
@@ -923,6 +931,7 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
             }
           } catch (parseErr) {
             console.log('[useNetwork] Offline message parse error:', parseErr);
+          }
           }
         }
 
