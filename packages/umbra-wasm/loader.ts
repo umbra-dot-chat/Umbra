@@ -528,11 +528,11 @@ export function getWasmMemoryStats(): {
   const jsHeapTotalMB = mem ? (mem.totalJSHeapSize / 1024 / 1024).toFixed(1) : '?';
   const totalWasmMB = (totalWasmBytes / 1024 / 1024).toFixed(1);
 
-  // Include allocation stats if available
+  // Include memory.grow stats if available
   const allocStats = typeof (globalThis as any).__umbra_wasm_alloc_stats === 'function'
     ? (globalThis as any).__umbra_wasm_alloc_stats() : null;
   const allocStr = allocStats
-    ? ` alloc=${allocStats.mallocMB}MB free=${allocStats.freeMB}MB leaked=${allocStats.leakedMB}MB (${allocStats.mallocCount}/${allocStats.freeCount} calls)`
+    ? ` grows=${allocStats.growCount} grown=${allocStats.totalGrownMB}MB`
     : '';
 
   const moduleParts = modules.map(m => `${m.label}=${m.mb}MB`).join(' ');
@@ -802,31 +802,29 @@ async function doInitWasm(did?: string): Promise<UmbraWasmModule> {
         (globalThis as any).__umbra_core_memory = wasmExports.memory;
         console.log(`[WASM-MEM] umbra-core memory (direct): ${(wasmExports.memory.buffer.byteLength / 1024 / 1024).toFixed(1)}MB`);
       }
-      // Track malloc/free calls to detect allocation leaks in Rust WASM
-      if (wasmExports?.__wbindgen_malloc && wasmExports?.__wbindgen_free) {
-        let mallocCount = 0;
-        let mallocBytes = 0;
-        let freeCount = 0;
-        let freeBytes = 0;
-        const origMalloc = wasmExports.__wbindgen_malloc;
-        const origFree = wasmExports.__wbindgen_free;
-        wasmExports.__wbindgen_malloc = function(size: number, align: number) {
-          mallocCount++;
-          mallocBytes += size;
-          return origMalloc.call(this, size, align);
+      // Track memory.grow events by polling buffer size changes.
+      // WASM exports are frozen (read-only) so we can't wrap __wbindgen_malloc
+      // directly. Instead we track linear memory growth via buffer.byteLength.
+      if (wasmExports?.memory?.buffer) {
+        let lastSize = wasmExports.memory.buffer.byteLength;
+        let growCount = 0;
+        let totalGrown = 0;
+        (globalThis as any).__umbra_wasm_alloc_stats = () => {
+          const currentSize = wasmExports.memory.buffer.byteLength;
+          if (currentSize > lastSize) {
+            const delta = currentSize - lastSize;
+            growCount++;
+            totalGrown += delta;
+            lastSize = currentSize;
+          }
+          return {
+            currentMB: (currentSize / 1024 / 1024).toFixed(1),
+            growCount,
+            totalGrownMB: (totalGrown / 1024 / 1024).toFixed(1),
+            initialMB: ((currentSize - totalGrown) / 1024 / 1024).toFixed(1),
+          };
         };
-        wasmExports.__wbindgen_free = function(ptr: number, size: number, align: number) {
-          freeCount++;
-          freeBytes += size;
-          return origFree.call(this, ptr, size, align);
-        };
-        (globalThis as any).__umbra_wasm_alloc_stats = () => ({
-          mallocCount, mallocBytes, freeCount, freeBytes,
-          mallocMB: (mallocBytes / 1024 / 1024).toFixed(1),
-          freeMB: (freeBytes / 1024 / 1024).toFixed(1),
-          leakedMB: ((mallocBytes - freeBytes) / 1024 / 1024).toFixed(1),
-        });
-        console.log('[WASM-MEM] malloc/free tracking installed on umbra-core');
+        console.log('[WASM-MEM] memory.grow tracking installed on umbra-core');
       }
     }
     _cs('2c-wasm-loaded');
@@ -919,10 +917,10 @@ async function doInitWasm(did?: string): Promise<UmbraWasmModule> {
         }
 
         const wasmStr = parts.length > 0 ? parts.join(' ') : `total=${(totalWasm / 1024 / 1024).toFixed(1)}MB`;
-        // Include allocation stats
+        // Include memory.grow stats
         const allocFn = (globalThis as any).__umbra_wasm_alloc_stats;
         const alloc = typeof allocFn === 'function' ? allocFn() : null;
-        const allocStr = alloc ? ` alloc=${alloc.mallocMB}MB free=${alloc.freeMB}MB leaked=${alloc.leakedMB}MB` : '';
+        const allocStr = alloc ? ` grows=${alloc.growCount} grown=${alloc.totalGrownMB}MB` : '';
         const tMs = watchdogTick * WATCHDOG_MS;
         const snap = `t+${(tMs / 1000).toFixed(1)}s: heap=${heap}/${heapTotal}MB ${wasmStr}${allocStr}`;
         snapshots.push(snap);
