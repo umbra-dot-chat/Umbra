@@ -6,7 +6,7 @@
  * StickerPickerPack[] for the StickerPicker / CombinedPicker `stickerPacks` prop.
  */
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useUmbra } from '@/contexts/UmbraContext';
 import { useAuth } from '@/contexts/AuthContext';
 import type { EmojiItem } from '@coexist/wisp-core/types/EmojiPicker.types';
@@ -66,11 +66,17 @@ export function useAllCustomEmoji() {
     }
   }, [service, identity?.did]);
 
+  // Stable ref for fetchAll — used in the event subscription to
+  // avoid including it in the effect deps (which causes infinite loops).
+  const fetchAllRef = useRef(fetchAll);
+  fetchAllRef.current = fetchAll;
+
   useEffect(() => {
     if (isReady && service && identity?.did) {
       fetchAll();
     }
-  }, [isReady, service, identity?.did, fetchAll]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isReady, service, identity?.did]);
 
   // Listen for emoji/sticker create/delete events to stay in sync
   useEffect(() => {
@@ -84,11 +90,12 @@ export function useAllCustomEmoji() {
         event.type === 'stickerPackCreated' ||
         event.type === 'stickerPackDeleted'
       ) {
-        fetchAll();
+        fetchAllRef.current();
       }
     });
     return unsubscribe;
-  }, [service, fetchAll]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [service]);
 
   // Built-in emoji (always available)
   const builtInItems = useMemo(() => getBuiltInEmojiItems(), []);

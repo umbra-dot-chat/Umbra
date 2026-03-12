@@ -15,7 +15,7 @@
  * ```
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useUmbra } from '@/contexts/UmbraContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNetwork } from '@/hooks/useNetwork';
@@ -90,24 +90,31 @@ export function useFriends(): UseFriendsResult {
     }
   }, [service]);
 
+  // Stable ref for fetchAll — used in the event subscription to avoid
+  // including fetchAll in the effect deps (which causes infinite loops).
+  const fetchAllRef = useRef(fetchAll);
+  fetchAllRef.current = fetchAll;
+
   // Initial fetch
   useEffect(() => {
     if (isReady && service) {
       fetchAll();
     }
-  }, [isReady, service, fetchAll]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isReady, service]);
 
   // Subscribe to friend events for real-time updates
   useEffect(() => {
     if (!service) return;
 
     const unsubscribe = service.onFriendEvent((_event: FriendEvent) => {
-      // Refresh all friend data on any friend event
-      fetchAll();
+      // Refresh all friend data on any friend event — use ref to avoid dep cycle
+      fetchAllRef.current();
     });
 
     return unsubscribe;
-  }, [service, fetchAll]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [service]);
 
   const sendRequest = useCallback(
     async (did: string, message?: string): Promise<FriendRequest | null> => {

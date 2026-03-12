@@ -11,7 +11,7 @@
  * ```
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useUmbra } from '@/contexts/UmbraContext';
 import { useAuth } from '@/contexts/AuthContext';
 import type { Community, CommunityCreateResult, CommunityEvent } from '@umbra/service';
@@ -53,12 +53,18 @@ export function useCommunities(): UseCommunititesResult {
     }
   }, [service, identity?.did]);
 
+  // Stable ref for fetchCommunities — used in the event subscription to
+  // avoid including it in the effect deps (which causes infinite loops).
+  const fetchCommunitiesRef = useRef(fetchCommunities);
+  fetchCommunitiesRef.current = fetchCommunities;
+
   // Initial fetch
   useEffect(() => {
     if (isReady && service && identity?.did) {
       fetchCommunities();
     }
-  }, [isReady, service, identity?.did, fetchCommunities]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isReady, service, identity?.did]);
 
   // Subscribe to community events for real-time updates
   useEffect(() => {
@@ -72,12 +78,13 @@ export function useCommunities(): UseCommunititesResult {
         event.type === 'memberJoined' ||
         event.type === 'memberLeft'
       ) {
-        fetchCommunities();
+        fetchCommunitiesRef.current();
       }
     });
 
     return unsubscribe;
-  }, [service, fetchCommunities]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [service]);
 
   const createCommunity = useCallback(
     async (name: string, description?: string): Promise<CommunityCreateResult | null> => {

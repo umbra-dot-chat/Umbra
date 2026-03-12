@@ -68,7 +68,13 @@ export function ConversationsProvider({ children }: { children: React.ReactNode 
     }
   }, [service]);
 
-  // Debounced version for event-triggered refreshes
+  // Stable ref for fetchConversations — used in the debounced fetch and event
+  // subscriptions to avoid including it in effect deps (which causes infinite loops).
+  const fetchConversationsRef = useRef(fetchConversations);
+  fetchConversationsRef.current = fetchConversations;
+
+  // Debounced version for event-triggered refreshes.
+  // Uses ref to avoid depending on fetchConversations identity.
   const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const debouncedFetch = useCallback(() => {
     if (debounceTimerRef.current) {
@@ -76,9 +82,9 @@ export function ConversationsProvider({ children }: { children: React.ReactNode 
     }
     debounceTimerRef.current = setTimeout(() => {
       debounceTimerRef.current = null;
-      fetchConversations();
+      fetchConversationsRef.current();
     }, FETCH_DEBOUNCE_MS);
-  }, [fetchConversations]);
+  }, []);
 
   // Clean up debounce timer on unmount
   useEffect(() => {
@@ -95,7 +101,8 @@ export function ConversationsProvider({ children }: { children: React.ReactNode 
       if (__DEV__) dbg.info('conversations', 'initial fetch triggered', undefined, SRC);
       fetchConversations();
     }
-  }, [isReady, service, fetchConversations]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isReady, service]);
 
   // Subscribe to message events — ONE listener for the whole app
   useEffect(() => {

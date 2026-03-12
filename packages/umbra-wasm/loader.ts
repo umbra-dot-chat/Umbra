@@ -620,23 +620,41 @@ async function doInitWasm(did?: string): Promise<UmbraWasmModule> {
   _dbg()?.info('lifecycle', 'doInitWasm START (web browser path)', { did: did?.slice(0, 16) }, LDR_SRC);
   console.log('[umbra-wasm] Initializing...');
 
+  // Crash-stage diagnostics: write to localStorage before each step so we can
+  // check where the crash happened from diag.html after an OOM kill.
+  const _cs = (stage: string) => {
+    try {
+      const mem = (performance as any).memory;
+      const heap = mem ? `${(mem.usedJSHeapSize / 1024 / 1024).toFixed(1)}MB` : '?';
+      localStorage.setItem('__crash_stage', `${stage} | heap=${heap} | t=${Date.now()}`);
+      console.log(`[CRASH-DIAG] ${stage} | heap=${heap}`);
+    } catch { /* ignore */ }
+  };
+  _cs('0-start');
+
   // Step 1: Initialize sql.js bridge (must happen before WASM DB init)
   // Dynamic import to avoid loading sql.js on non-web platforms
+  _cs('1-import-sql-bridge');
   const { initSqlBridge, initSqlBridgeWithPersistence } = await import('./sql-bridge');
 
   // If a DID is provided, enable IndexedDB persistence (restore from saved state)
   if (did) {
+    _cs('1b-initSqlBridgeWithPersistence');
     console.log('[umbra-wasm] Loading sql.js with IndexedDB persistence...');
     await initSqlBridgeWithPersistence(did);
   } else {
+    _cs('1b-initSqlBridge-noPeristence');
     console.log('[umbra-wasm] Loading sql.js (in-memory, no persistence)...');
     await initSqlBridge();
   }
+  _cs('1c-sql-bridge-done');
 
   // Step 1.5: Initialize OPFS bridge (sets globalThis.__umbra_opfs for Rust WASM)
+  _cs('1.5-opfs-bridge');
   const { initOpfsBridge } = await import('../umbra-service/src/opfs-bridge');
   const opfsReady = initOpfsBridge();
   console.log(`[umbra-wasm] OPFS bridge: ${opfsReady ? 'initialized' : 'not available (non-web or unsupported)'}`);
+  _cs('1.5-opfs-done');
 
   // Step 2: Load the real compiled WASM module
   //
@@ -651,6 +669,7 @@ async function doInitWasm(did?: string): Promise<UmbraWasmModule> {
   //   cp packages/umbra-wasm/pkg/umbra_core.js public/
   //   cp packages/umbra-wasm/pkg/umbra_core_bg.wasm public/
   //
+  _cs('2-load-wasm-module');
   console.log('[umbra-wasm] Loading WASM module...');
   let wasmPkg: any;
 
@@ -666,14 +685,17 @@ async function doInitWasm(did?: string): Promise<UmbraWasmModule> {
     // to runtime, and this code path only runs on web where import() works.
     const dynamicImport = new Function('url', 'return import(url)');
     const wasmVersion = '0.1.1';
+    _cs('2a-dynamic-import-glue');
     wasmPkg = await dynamicImport(`/umbra_core.js?v=${wasmVersion}`);
 
     // Initialize the WASM binary with an explicit URL to avoid import.meta.url
     // issues. The wasm-bindgen init function accepts a URL/string path.
     // Cache-bust with a version param so browser doesn't serve stale WASM.
     if (typeof wasmPkg.default === 'function') {
+      _cs('2b-load-wasm-binary');
       await wasmPkg.default(`/umbra_core_bg.wasm?v=${wasmVersion}`);
     }
+    _cs('2c-wasm-loaded');
   } catch (err) {
     const msg =
       'Failed to load WASM module. Ensure WASM is compiled and copied to public/.\n' +
@@ -685,24 +707,32 @@ async function doInitWasm(did?: string): Promise<UmbraWasmModule> {
 
   // Step 3: Build the module interface with real WASM + JS stubs for
   // extended features not yet in Rust
+  _cs('3-build-module');
   const wasm = buildModule(wasmPkg);
 
   // Step 4: Initialize Umbra (panic hooks, tracing)
+  // NOTE: WASM tracing is now set to WARN level in wasm.rs, so console
+  // flooding from TRACE-level Rust logging is no longer an issue.
   // Skip if already called — tracing-wasm's global subscriber persists across
   // reinits and panics on double-set.
   if (!wasmInitCalled) {
+    _cs('4-umbra-wasm-init');
     console.log('[umbra-wasm] Calling umbra_wasm_init()...');
     wasm.umbra_wasm_init();
     wasmInitCalled = true;
   } else {
     console.log('[umbra-wasm] Skipping umbra_wasm_init() (already called)');
   }
+  _cs('4b-wasm-init-done');
 
   // Step 5: Initialize the database schema
+  _cs('5-init-database');
   console.log('[umbra-wasm] Initializing database...');
   await wasm.umbra_wasm_init_database();
+  _cs('5b-database-done');
 
   // Step 6: Migrate old localStorage plugin_kv entries to SQLite
+  _cs('6-migrate-kv');
   migrateLocalStorageKV(wasm);
 
   wasmModule = wasm;
@@ -718,7 +748,36 @@ async function doInitWasm(did?: string): Promise<UmbraWasmModule> {
     }
   } catch { /* non-critical */ }
 
+  _cs('7-init-complete');
   console.log(`[umbra-wasm] Ready! Version: ${wasm.umbra_wasm_version()}`);
+
+  // === OOM Memory Watchdog ===
+  // Writes memory snapshots to localStorage every 200ms to catch rapid OOM.
+  // After a crash, read __mem_watchdog from diag.html to see the growth pattern.
+  if (typeof localStorage !== 'undefined' && typeof setInterval !== 'undefined') {
+    let watchdogTick = 0;
+    const snapshots: string[] = [];
+    const WATCHDOG_MS = 200;
+    setInterval(() => {
+      try {
+        watchdogTick++;
+        const mem = (performance as any).memory;
+        const heap = mem ? (mem.usedJSHeapSize / 1024 / 1024).toFixed(1) : '?';
+        const heapTotal = mem ? (mem.totalJSHeapSize / 1024 / 1024).toFixed(1) : '?';
+        let wasmMem = '?';
+        const wasmInstance = (globalThis as any).__umbra_wasm_memory;
+        if (wasmInstance?.buffer) {
+          wasmMem = (wasmInstance.buffer.byteLength / 1024 / 1024).toFixed(1);
+        }
+        const tMs = watchdogTick * WATCHDOG_MS;
+        const snap = `t+${(tMs / 1000).toFixed(1)}s: heap=${heap}/${heapTotal}MB wasm=${wasmMem}MB`;
+        snapshots.push(snap);
+        // Keep last 100 snapshots (20 seconds of data at 200ms interval)
+        if (snapshots.length > 100) snapshots.shift();
+        localStorage.setItem('__mem_watchdog', snapshots.join('\n'));
+      } catch { /* ignore */ }
+    }, WATCHDOG_MS);
+  }
 
   return wasm;
 }

@@ -14,7 +14,7 @@
  * ```
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useUmbra } from '@/contexts/UmbraContext';
 import { useAuth } from '@/contexts/AuthContext';
 import type { CommunityInvite, CommunityEvent } from '@umbra/service';
@@ -59,12 +59,18 @@ export function useCommunityInvites(communityId: string | null): UseCommunityInv
     }
   }, [service, communityId]);
 
+  // Stable ref for fetchInvites — used in the event subscription to
+  // avoid including it in the effect deps (which causes infinite loops).
+  const fetchInvitesRef = useRef(fetchInvites);
+  fetchInvitesRef.current = fetchInvites;
+
   // Initial fetch
   useEffect(() => {
     if (isReady && service && communityId) {
       fetchInvites();
     }
-  }, [isReady, service, communityId, fetchInvites]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isReady, service, communityId]);
 
   // Reset when community changes
   useEffect(() => {
@@ -84,12 +90,13 @@ export function useCommunityInvites(communityId: string | null): UseCommunityInv
         'communityId' in event &&
         event.communityId === communityId
       ) {
-        fetchInvites();
+        fetchInvitesRef.current();
       }
     });
 
     return unsubscribe;
-  }, [service, communityId, fetchInvites]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [service, communityId]);
 
   const createInvite = useCallback(
     async (maxUses?: number, expiresAt?: number): Promise<CommunityInvite | null> => {

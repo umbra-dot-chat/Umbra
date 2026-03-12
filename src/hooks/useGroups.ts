@@ -16,7 +16,7 @@
  * ```
  */
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useUmbra } from '@/contexts/UmbraContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNetwork } from '@/hooks/useNetwork';
@@ -100,6 +100,13 @@ export function useGroups(): UseGroupsResult {
     }
   }, [service]);
 
+  // Stable refs for fetch functions — used in the event subscription to
+  // avoid including them in the effect deps (which causes infinite loops).
+  const fetchGroupsRef = useRef(fetchGroups);
+  fetchGroupsRef.current = fetchGroups;
+  const fetchPendingInvitesRef = useRef(fetchPendingInvites);
+  fetchPendingInvitesRef.current = fetchPendingInvites;
+
   // Initial fetch
   useEffect(() => {
     if (isReady && service) {
@@ -110,7 +117,8 @@ export function useGroups(): UseGroupsResult {
       setPendingInvites([]);
       setIsLoading(false);
     }
-  }, [isReady, service, fetchGroups, fetchPendingInvites]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isReady, service]);
 
   // Subscribe to group events for real-time updates
   useEffect(() => {
@@ -118,20 +126,17 @@ export function useGroups(): UseGroupsResult {
 
     const unsubscribe = service.onGroupEvent((event: GroupEvent) => {
       if (event.type === 'inviteReceived') {
-        // Refresh pending invites when a new one arrives
-        fetchPendingInvites();
+        fetchPendingInvitesRef.current();
       } else if (event.type === 'inviteAccepted' || event.type === 'memberRemoved' || event.type === 'keyRotated') {
-        // Refresh groups when membership changes
-        fetchGroups();
-      } else if (event.type === 'inviteDeclined') {
-        // No-op for the inviter side, but good to know
-      } else if (event.type === 'groupMessageReceived') {
-        // Messages are handled by useMessages; no group refresh needed
+        fetchGroupsRef.current();
       }
+      // inviteDeclined: no-op for the inviter side
+      // groupMessageReceived: handled by useMessages
     });
 
     return unsubscribe;
-  }, [service, fetchGroups, fetchPendingInvites]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [service]);
 
   const createGroup = useCallback(
     async (name: string, description?: string) => {
