@@ -1,3 +1,4 @@
+import '@/utils/wdyr'; // Must be before React — patches React for render profiling
 import 'react-native-gesture-handler';
 import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
