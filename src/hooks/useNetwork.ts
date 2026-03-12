@@ -60,6 +60,7 @@ import {
   utf8ToBase64,
 } from '@umbra/service';
 import { PRIMARY_RELAY_URL, DEFAULT_RELAY_SERVERS, NETWORK_CONFIG } from '@/config';
+import { getWasmMemoryStats } from '@umbra/wasm/loader';
 import { dbg } from '@/utils/debug';
 
 // Module-level singletons to prevent duplicate auto-starts and relay
@@ -470,6 +471,16 @@ let _msgQueuePromise: Promise<void> = Promise.resolve();
 /** Yield to the event loop for a minimum duration, giving V8 idle time to GC. */
 const _gcYield = (ms: number = 16) => new Promise<void>(r => setTimeout(r, ms));
 
+// ── Deferred offline message queue ──────────────────────────────────
+// Offline messages (1400+) each require WASM calls that grow the V8
+// cage (WASM linear memory never shrinks). Processing them all during
+// startup fills the 4GB V8 cage and crashes the renderer. Instead, we
+// queue offline chunks and process them one message at a time with
+// generous GC yields, starting AFTER the app has fully rendered.
+let _offlineMsgQueue: any[] = [];
+let _offlineProcessing = false;
+let _offlineWs: WebSocket | null = null;
+
 function _enqueueRelayMessage(ws: WebSocket, event: MessageEvent): void {
   _msgQueuePromise = _msgQueuePromise.then(
     // Add a 50ms GC yield between each queued message so V8 can run
@@ -808,6 +819,11 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
         // V8 crashes with "Ineffective mark-compacts near heap limit" when
         // WASM calls create temporary objects faster than GC can collect them.
         // A 50ms yield gives V8 idle time for mark-compact GC between batches.
+        // Log WASM memory baseline before offline processing starts
+        const _memBefore = getWasmMemoryStats();
+        console.log(`[WASM-TRACE] offline START: ${_memBefore.summary}`);
+        let _wasmCallCount = 0;
+
         const OFFLINE_BATCH_SIZE = 5;
         for (let batchStart = 0; batchStart < messages.length; batchStart += OFFLINE_BATCH_SIZE) {
           const batchEnd = Math.min(batchStart + OFFLINE_BATCH_SIZE, messages.length);
@@ -816,7 +832,9 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
           if (batchStart > 0) {
             await _gcYield(100);
           }
-          console.log(`[useNetwork] offline batch ${batchStart + 1}-${batchEnd}/${messages.length} (chunk ${chunkIndex + 1}/${totalChunks})`);
+          // Log WASM memory at each batch boundary to track growth
+          const _memBatch = getWasmMemoryStats();
+          console.log(`[WASM-TRACE] batch ${batchStart + 1}-${batchEnd}/${messages.length}: ${_memBatch.summary} (${_wasmCallCount} WASM calls so far)`);
 
           for (let i = batchStart; i < batchEnd; i++) {
           const offlineMsg = messages[i];
@@ -828,7 +846,7 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
               const reqPayload = envelope.payload as FriendRequestPayload;
               const friendRequest: FriendRequest = { id: reqPayload.id, fromDid: reqPayload.fromDid, toDid: '', direction: 'incoming', message: reqPayload.message, fromDisplayName: reqPayload.fromDisplayName, fromAvatar: reqPayload.fromAvatar, fromSigningKey: reqPayload.fromSigningKey, fromEncryptionKey: reqPayload.fromEncryptionKey, createdAt: reqPayload.createdAt, status: 'pending' };
               let isNew = true;
-              try { isNew = await service.storeIncomingRequest(friendRequest); } catch (e) { console.warn('[useNetwork] Failed to store offline incoming request:', e); }
+              try { isNew = await service.storeIncomingRequest(friendRequest); _wasmCallCount++; } catch (e) { console.warn('[useNetwork] Failed to store offline incoming request:', e); }
               if (isNew) {
                 service.dispatchFriendEvent({ type: 'requestReceived', request: friendRequest });
               } else {
@@ -852,7 +870,7 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
             } else if (envelope.envelope === 'friend_response' && envelope.version === 1) {
               const respPayload = envelope.payload as FriendResponsePayload;
               if (respPayload.accepted) {
-                try { await service.processAcceptedFriendResponse({ fromDid: respPayload.fromDid, fromDisplayName: respPayload.fromDisplayName, fromAvatar: respPayload.fromAvatar, fromSigningKey: respPayload.fromSigningKey, fromEncryptionKey: respPayload.fromEncryptionKey }); } catch (e) { console.warn('[useNetwork] Failed to process offline acceptance:', e); }
+                try { await service.processAcceptedFriendResponse({ fromDid: respPayload.fromDid, fromDisplayName: respPayload.fromDisplayName, fromAvatar: respPayload.fromAvatar, fromSigningKey: respPayload.fromSigningKey, fromEncryptionKey: respPayload.fromEncryptionKey }); _wasmCallCount++; } catch (e) { console.warn('[useNetwork] Failed to process offline acceptance:', e); }
                 service.dispatchFriendEvent({ type: 'requestAccepted', did: respPayload.fromDid });
                 try { const myDid = _lastRelayDid ?? ''; if (myDid) await service.sendFriendAcceptAck(respPayload.fromDid, myDid, ws); } catch (e) { console.warn('[useNetwork] Failed to send offline friend_accept_ack:', e); }
               } else {
@@ -864,13 +882,8 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
             } else if (envelope.envelope === 'chat_message' && envelope.version === 1) {
               const chatPayload = envelope.payload as ChatMessagePayload;
               try {
-                try { await service.createDmConversation(chatPayload.senderDid); } catch { /* friend may not exist yet */ }
-                await service.storeIncomingMessage(chatPayload);
-                // SKIP decryptIncomingMessage + dispatchMessageEvent during offline
-                // processing. Messages are stored in DB and will be fetched once
-                // via offlineBatchComplete after all offline messages are processed.
-                // This prevents 1400+ individual React re-renders that cause V8
-                // GC exhaustion ("Ineffective mark-compacts near heap limit").
+                try { await service.createDmConversation(chatPayload.senderDid); _wasmCallCount++; } catch { /* friend may not exist yet */ }
+                await service.storeIncomingMessage(chatPayload); _wasmCallCount++;
                 _offlineConversationIds.add(chatPayload.conversationId);
               } catch (err) { console.warn('[useNetwork] Failed to store offline chat message:', err); }
             } else if (envelope.envelope === 'chat_message_update' && envelope.version === 1) {
@@ -879,29 +892,27 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
               if (updatePayload.conversationId) _offlineConversationIds.add(updatePayload.conversationId);
             } else if (envelope.envelope === 'group_invite' && envelope.version === 1) {
               const invitePayload = envelope.payload as GroupInvitePayload;
-              try { await service.storeGroupInvite(invitePayload); service.dispatchGroupEvent({ type: 'inviteReceived', invite: { id: invitePayload.inviteId, groupId: invitePayload.groupId, groupName: invitePayload.groupName, description: invitePayload.description, inviterDid: invitePayload.inviterDid, inviterName: invitePayload.inviterName, encryptedGroupKey: invitePayload.encryptedGroupKey, nonce: invitePayload.nonce, membersJson: invitePayload.membersJson, status: 'pending', createdAt: invitePayload.timestamp } }); } catch (err) { console.warn('[useNetwork] Failed to store offline group invite:', err); }
+              try { await service.storeGroupInvite(invitePayload); _wasmCallCount++; service.dispatchGroupEvent({ type: 'inviteReceived', invite: { id: invitePayload.inviteId, groupId: invitePayload.groupId, groupName: invitePayload.groupName, description: invitePayload.description, inviterDid: invitePayload.inviterDid, inviterName: invitePayload.inviterName, encryptedGroupKey: invitePayload.encryptedGroupKey, nonce: invitePayload.nonce, membersJson: invitePayload.membersJson, status: 'pending', createdAt: invitePayload.timestamp } }); } catch (err) { console.warn('[useNetwork] Failed to store offline group invite:', err); }
             } else if (envelope.envelope === 'group_invite_accept' && envelope.version === 1) {
               const acceptPayload = envelope.payload as GroupInviteResponsePayload;
-              try { await service.addGroupMember(acceptPayload.groupId, acceptPayload.fromDid, acceptPayload.fromDisplayName); service.dispatchGroupEvent({ type: 'inviteAccepted', groupId: acceptPayload.groupId, fromDid: acceptPayload.fromDid }); } catch (err) { console.warn('[useNetwork] Failed to process offline group invite acceptance:', err); }
+              try { await service.addGroupMember(acceptPayload.groupId, acceptPayload.fromDid, acceptPayload.fromDisplayName); _wasmCallCount++; service.dispatchGroupEvent({ type: 'inviteAccepted', groupId: acceptPayload.groupId, fromDid: acceptPayload.fromDid }); } catch (err) { console.warn('[useNetwork] Failed to process offline group invite acceptance:', err); }
             } else if (envelope.envelope === 'group_message' && envelope.version === 1) {
               const groupMsgPayload = envelope.payload as GroupMessagePayload;
               try {
-                const plaintext = await service.decryptGroupMessage(groupMsgPayload.groupId, groupMsgPayload.ciphertext, groupMsgPayload.nonce, groupMsgPayload.keyVersion, groupMsgPayload.senderDid, groupMsgPayload.timestamp);
-                // Skip dispatchMessageEvent — covered by offlineBatchComplete refresh.
-                // Store as base64 so WASM can handle it (storeIncomingMessage expects base64 ciphertext)
+                const plaintext = await service.decryptGroupMessage(groupMsgPayload.groupId, groupMsgPayload.ciphertext, groupMsgPayload.nonce, groupMsgPayload.keyVersion, groupMsgPayload.senderDid, groupMsgPayload.timestamp); _wasmCallCount++;
                 try {
                   const storePayload: ChatMessagePayload = { messageId: groupMsgPayload.messageId, conversationId: groupMsgPayload.conversationId, senderDid: groupMsgPayload.senderDid, contentEncrypted: utf8ToBase64(plaintext), nonce: '000000000000000000000000', timestamp: groupMsgPayload.timestamp };
-                  await service.storeIncomingMessage(storePayload);
+                  await service.storeIncomingMessage(storePayload); _wasmCallCount++;
                 } catch { /* Storage is best-effort for group messages */ }
                 _offlineConversationIds.add(groupMsgPayload.conversationId);
               } catch (err) { console.warn('[useNetwork] Failed to process offline group message:', err); }
             } else if (envelope.envelope === 'group_key_rotation' && envelope.version === 1) {
               const keyPayload = envelope.payload as GroupKeyRotationPayload;
-              try { await service.importGroupKey(keyPayload.encryptedKey, keyPayload.nonce, keyPayload.senderDid, keyPayload.groupId, keyPayload.keyVersion); service.dispatchGroupEvent({ type: 'keyRotated', groupId: keyPayload.groupId, keyVersion: keyPayload.keyVersion }); } catch (err) { console.warn('[useNetwork] Failed to import offline rotated group key:', err); }
+              try { await service.importGroupKey(keyPayload.encryptedKey, keyPayload.nonce, keyPayload.senderDid, keyPayload.groupId, keyPayload.keyVersion); _wasmCallCount++; service.dispatchGroupEvent({ type: 'keyRotated', groupId: keyPayload.groupId, keyVersion: keyPayload.keyVersion }); } catch (err) { console.warn('[useNetwork] Failed to import offline rotated group key:', err); }
             } else if (envelope.envelope === 'key_rotation' && envelope.version === 1) {
               const keyPayload = envelope.payload as KeyRotationPayload;
               try {
-                await service.updateFriendEncryptionKey(keyPayload.fromDid, keyPayload.newEncryptionKey, keyPayload.signature);
+                await service.updateFriendEncryptionKey(keyPayload.fromDid, keyPayload.newEncryptionKey, keyPayload.signature); _wasmCallCount++;
                 service.dispatchFriendEvent({ type: 'friendKeyRotated', did: keyPayload.fromDid });
               } catch (err) { console.warn('[useNetwork] Failed to process offline key rotation:', err); }
             } else if (envelope.envelope === 'group_member_removed' && envelope.version === 1) {
@@ -909,7 +920,7 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
               service.dispatchGroupEvent({ type: 'memberRemoved', groupId: removePayload.groupId, removedDid: removePayload.removedDid });
             } else if (envelope.envelope === 'message_status' && envelope.version === 1) {
               const statusPayload = envelope.payload as MessageStatusPayload;
-              try { await service.updateMessageStatus(statusPayload.messageId, statusPayload.status); } catch (err) { console.warn('[useNetwork] Failed to update offline message status:', err); }
+              try { await service.updateMessageStatus(statusPayload.messageId, statusPayload.status); _wasmCallCount++; } catch (err) { console.warn('[useNetwork] Failed to update offline message status:', err); }
             } else if (envelope.envelope === 'community_event' && envelope.version === 1) {
               const communityPayload = envelope.payload as CommunityEventPayload;
               const offlineEvent = communityPayload.event;
@@ -969,6 +980,17 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
             console.log('[useNetwork] Offline message parse error:', parseErr);
           }
           }
+        }
+
+        // Log final WASM memory after all offline messages processed
+        const _memAfter = getWasmMemoryStats();
+        const _wasmGrowthMB = ((_memAfter.totalWasmBytes - _memBefore.totalWasmBytes) / 1024 / 1024).toFixed(1);
+        console.log(`[WASM-TRACE] offline END: ${_memAfter.summary} | growth=${_wasmGrowthMB}MB over ${_wasmCallCount} WASM calls`);
+        // Per-module growth breakdown
+        for (const mod of _memAfter.modules) {
+          const before = _memBefore.modules.find(m => m.label === mod.label);
+          const growth = before ? ((mod.bytes - before.bytes) / 1024 / 1024).toFixed(1) : '?';
+          console.log(`[WASM-TRACE]   ${mod.label}: ${mod.mb}MB (growth: ${growth}MB)`);
         }
 
         // Fire a single batch refresh for all conversations that received

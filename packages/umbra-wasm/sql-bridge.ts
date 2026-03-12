@@ -26,6 +26,16 @@ import { saveDatabaseExport, loadDatabaseExport } from './indexed-db';
 const _dbg = (): any => (globalThis as any).__umbra_logger_instance;
 const SQL_SRC = 'sql-bridge';
 
+// SQL operation counters for WASM memory leak diagnosis
+let _sqlExecuteCount = 0;
+let _sqlQueryCount = 0;
+let _sqlExportCount = 0;
+
+/** Get SQL bridge operation stats for memory leak diagnosis. */
+export function getSqlBridgeStats(): { executes: number; queries: number; exports: number } {
+  return { executes: _sqlExecuteCount, queries: _sqlQueryCount, exports: _sqlExportCount };
+}
+
 // sql.js types — we keep these lightweight to avoid a hard dep on @types/sql.js
 interface SqlJsDatabase {
   run(sql: string, params?: any[]): void;
@@ -138,7 +148,10 @@ function doSave(): void {
 
   try {
     const did = currentDid;
+    _sqlExportCount++;
+    console.log(`[sql-bridge] db.export() #${_sqlExportCount} starting (after ${_sqlExecuteCount} executes, ${_sqlQueryCount} queries)`);
     const data = db.export();
+    console.log(`[sql-bridge] db.export() #${_sqlExportCount} done: ${(data.byteLength / 1024).toFixed(0)}KB`);
 
     saveDatabaseExport(did, data)
       .catch((err) => {
@@ -191,10 +204,16 @@ const bridge = {
   execute(sql: string, paramsJson: string): number {
     if (!db) throw new Error("Database not initialized");
 
+    _sqlExecuteCount++;
     const params = JSON.parse(paramsJson);
     db.run(sql, params);
     const rowsModified = db.getRowsModified();
     _dbg()?.trace('service', `sql EXECUTE: ${sql.slice(0, 60)}… → ${rowsModified} rows`, undefined, SQL_SRC);
+
+    // Log every 50th execute for memory tracking during offline processing
+    if (_sqlExecuteCount % 50 === 0) {
+      console.log(`[sql-bridge] EXECUTE #${_sqlExecuteCount}: ${sql.slice(0, 40)}…`);
+    }
 
     // Persist after every write
     scheduleSave();
@@ -209,6 +228,7 @@ const bridge = {
   query(sql: string, paramsJson: string): string {
     if (!db) throw new Error("Database not initialized");
 
+    _sqlQueryCount++;
     const params = JSON.parse(paramsJson);
 
     // sql.js exec() doesn't support params, so we need to use

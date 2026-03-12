@@ -484,6 +484,64 @@ export function isWasmReady(): boolean {
 }
 
 /**
+ * Get per-module WASM linear memory stats.
+ *
+ * Returns the byte size of each captured WASM module's linear memory,
+ * plus the JS heap size. Use this for per-call tracing during offline
+ * message processing to identify which module is leaking.
+ */
+export function getWasmMemoryStats(): {
+  modules: Array<{ label: string; bytes: number; mb: string }>;
+  totalWasmBytes: number;
+  totalWasmMB: string;
+  jsHeapMB: string;
+  jsHeapTotalMB: string;
+  summary: string;
+} {
+  const modules: Array<{ label: string; bytes: number; mb: string }> = [];
+  let totalWasmBytes = 0;
+
+  // Check captured memories from instantiate hook
+  const captured: Array<{ label: string; memory: WebAssembly.Memory }> =
+    (globalThis as any).__umbra_wasm_memories || [];
+  for (const { label, memory } of captured) {
+    try {
+      const bytes = memory.buffer.byteLength;
+      totalWasmBytes += bytes;
+      const shortLabel = label.includes('sql') ? 'sql.js'
+        : label.includes('umbra_core') ? 'umbra-core'
+        : label.split('/').pop()?.split('?')[0] || label;
+      modules.push({ label: shortLabel, bytes, mb: (bytes / 1024 / 1024).toFixed(1) });
+    } catch { /* detached */ }
+  }
+
+  // Fallback: direct umbra-core memory reference
+  const coreMem = (globalThis as any).__umbra_core_memory;
+  if (coreMem?.buffer && !modules.some(m => m.label === 'umbra-core')) {
+    const bytes = coreMem.buffer.byteLength;
+    totalWasmBytes += bytes;
+    modules.push({ label: 'umbra-core', bytes, mb: (bytes / 1024 / 1024).toFixed(1) });
+  }
+
+  const mem = typeof performance !== 'undefined' ? (performance as any).memory : null;
+  const jsHeapMB = mem ? (mem.usedJSHeapSize / 1024 / 1024).toFixed(1) : '?';
+  const jsHeapTotalMB = mem ? (mem.totalJSHeapSize / 1024 / 1024).toFixed(1) : '?';
+  const totalWasmMB = (totalWasmBytes / 1024 / 1024).toFixed(1);
+
+  // Include allocation stats if available
+  const allocStats = typeof (globalThis as any).__umbra_wasm_alloc_stats === 'function'
+    ? (globalThis as any).__umbra_wasm_alloc_stats() : null;
+  const allocStr = allocStats
+    ? ` alloc=${allocStats.mallocMB}MB free=${allocStats.freeMB}MB leaked=${allocStats.leakedMB}MB (${allocStats.mallocCount}/${allocStats.freeCount} calls)`
+    : '';
+
+  const moduleParts = modules.map(m => `${m.label}=${m.mb}MB`).join(' ');
+  const summary = `wasm=[${moduleParts}] total=${totalWasmMB}MB heap=${jsHeapMB}/${jsHeapTotalMB}MB${allocStr}`;
+
+  return { modules, totalWasmBytes, totalWasmMB, jsHeapMB, jsHeapTotalMB, summary };
+}
+
+/**
  * Reset the WASM module state to allow re-initialization with a different DID.
  *
  * Must be called before `initUmbraWasm()` when switching accounts. This clears
@@ -632,6 +690,51 @@ async function doInitWasm(did?: string): Promise<UmbraWasmModule> {
   };
   _cs('0-start');
 
+  // === WASM Memory Interception ===
+  // Install WebAssembly.instantiate/instantiateStreaming hooks BEFORE any WASM
+  // modules load (sql.js + umbra-core). This lets us capture every WASM Memory
+  // object and label it by source URL for per-module memory tracking.
+  _cs('0a-install-wasm-hooks');
+  const capturedWasmMemories: Array<{ label: string; memory: WebAssembly.Memory; capturedAt: number }> = [];
+  (globalThis as any).__umbra_wasm_memories = capturedWasmMemories;
+
+  try {
+    const origInstantiate = WebAssembly.instantiate;
+    const origStreaming = typeof WebAssembly.instantiateStreaming === 'function'
+      ? WebAssembly.instantiateStreaming : null;
+
+    const captureMemory = (result: any, label: string) => {
+      const instance = result?.instance ?? result;
+      const mem = instance?.exports?.memory;
+      if (mem?.buffer) {
+        const sizeMB = (mem.buffer.byteLength / 1024 / 1024).toFixed(1);
+        capturedWasmMemories.push({ label, memory: mem as WebAssembly.Memory, capturedAt: Date.now() });
+        console.log(`[WASM-MEM] Captured "${label}" memory: ${sizeMB}MB (${capturedWasmMemories.length} total modules)`);
+      }
+    };
+
+    (WebAssembly as any).instantiate = async function(moduleOrBuffer: any, imports?: any) {
+      const label = moduleOrBuffer instanceof URL ? moduleOrBuffer.toString()
+        : moduleOrBuffer instanceof Response ? moduleOrBuffer.url
+        : `wasm-module-${capturedWasmMemories.length}`;
+      const result = await origInstantiate.call(this, moduleOrBuffer, imports);
+      captureMemory(result, label);
+      return result;
+    };
+
+    if (origStreaming) {
+      (WebAssembly as any).instantiateStreaming = async function(source: any, imports?: any) {
+        const resp = source instanceof Response ? source : await source;
+        const label = resp?.url || `wasm-streaming-${capturedWasmMemories.length}`;
+        const result = await origStreaming!.call(this, source, imports);
+        captureMemory(result, label);
+        return result;
+      };
+    }
+  } catch (e) {
+    console.warn('[WASM-MEM] Failed to install hooks:', e);
+  }
+
   // Step 1: Initialize sql.js bridge (must happen before WASM DB init)
   // Dynamic import to avoid loading sql.js on non-web platforms
   _cs('1-import-sql-bridge');
@@ -693,7 +796,38 @@ async function doInitWasm(did?: string): Promise<UmbraWasmModule> {
     // Cache-bust with a version param so browser doesn't serve stale WASM.
     if (typeof wasmPkg.default === 'function') {
       _cs('2b-load-wasm-binary');
-      await wasmPkg.default(`/umbra_core_bg.wasm?v=${wasmVersion}`);
+      const wasmExports = await wasmPkg.default(`/umbra_core_bg.wasm?v=${wasmVersion}`);
+      // wasmPkg.default() returns the raw WASM exports (including memory)
+      if (wasmExports?.memory?.buffer) {
+        (globalThis as any).__umbra_core_memory = wasmExports.memory;
+        console.log(`[WASM-MEM] umbra-core memory (direct): ${(wasmExports.memory.buffer.byteLength / 1024 / 1024).toFixed(1)}MB`);
+      }
+      // Track malloc/free calls to detect allocation leaks in Rust WASM
+      if (wasmExports?.__wbindgen_malloc && wasmExports?.__wbindgen_free) {
+        let mallocCount = 0;
+        let mallocBytes = 0;
+        let freeCount = 0;
+        let freeBytes = 0;
+        const origMalloc = wasmExports.__wbindgen_malloc;
+        const origFree = wasmExports.__wbindgen_free;
+        wasmExports.__wbindgen_malloc = function(size: number, align: number) {
+          mallocCount++;
+          mallocBytes += size;
+          return origMalloc.call(this, size, align);
+        };
+        wasmExports.__wbindgen_free = function(ptr: number, size: number, align: number) {
+          freeCount++;
+          freeBytes += size;
+          return origFree.call(this, ptr, size, align);
+        };
+        (globalThis as any).__umbra_wasm_alloc_stats = () => ({
+          mallocCount, mallocBytes, freeCount, freeBytes,
+          mallocMB: (mallocBytes / 1024 / 1024).toFixed(1),
+          freeMB: (freeBytes / 1024 / 1024).toFixed(1),
+          leakedMB: ((mallocBytes - freeBytes) / 1024 / 1024).toFixed(1),
+        });
+        console.log('[WASM-MEM] malloc/free tracking installed on umbra-core');
+      }
     }
     _cs('2c-wasm-loaded');
   } catch (err) {
@@ -737,43 +871,63 @@ async function doInitWasm(did?: string): Promise<UmbraWasmModule> {
 
   wasmModule = wasm;
 
-  // Expose WASM memory on globalThis for the heartbeat monitor.
-  // WASM linear memory can only grow, never shrink — tracking its size
-  // is critical for diagnosing OOM crashes that don't show up in JS heap.
-  try {
-    const wasmExports = (wasmPkg as any).memory ?? (wasmPkg as any).__wbg_memory;
-    if (wasmExports?.buffer) {
-      (globalThis as any).__umbra_wasm_memory = wasmExports;
-      console.log(`[umbra-wasm] WASM memory: ${(wasmExports.buffer.byteLength / 1024 / 1024).toFixed(1)}MB`);
-    }
-  } catch { /* non-critical */ }
+  // Log all captured WASM memories at init completion
+  _cs('7-wasm-memory-summary');
+  console.log(`[WASM-MEM] === Init complete: ${capturedWasmMemories.length} WASM modules captured ===`);
+  for (const { label, memory } of capturedWasmMemories) {
+    try {
+      console.log(`[WASM-MEM]   ${label}: ${(memory.buffer.byteLength / 1024 / 1024).toFixed(1)}MB`);
+    } catch { /* detached */ }
+  }
 
   _cs('7-init-complete');
   console.log(`[umbra-wasm] Ready! Version: ${wasm.umbra_wasm_version()}`);
 
   // === OOM Memory Watchdog ===
-  // Writes memory snapshots to localStorage every 200ms to catch rapid OOM.
-  // After a crash, read __mem_watchdog from diag.html to see the growth pattern.
+  // Writes per-module WASM memory snapshots to localStorage every 500ms.
+  // After a crash, read __mem_watchdog from diag.html to see which module grew.
   if (typeof localStorage !== 'undefined' && typeof setInterval !== 'undefined') {
     let watchdogTick = 0;
     const snapshots: string[] = [];
-    const WATCHDOG_MS = 200;
+    const WATCHDOG_MS = 500;
     setInterval(() => {
       try {
         watchdogTick++;
         const mem = (performance as any).memory;
         const heap = mem ? (mem.usedJSHeapSize / 1024 / 1024).toFixed(1) : '?';
         const heapTotal = mem ? (mem.totalJSHeapSize / 1024 / 1024).toFixed(1) : '?';
-        let wasmMem = '?';
-        const wasmInstance = (globalThis as any).__umbra_wasm_memory;
-        if (wasmInstance?.buffer) {
-          wasmMem = (wasmInstance.buffer.byteLength / 1024 / 1024).toFixed(1);
+
+        // Measure each WASM module separately
+        const parts: string[] = [];
+        let totalWasm = 0;
+        for (const { label, memory: wasmMem } of capturedWasmMemories) {
+          try {
+            const bytes = wasmMem.buffer.byteLength;
+            totalWasm += bytes;
+            const shortLabel = label.includes('sql') ? 'sql.js'
+              : label.includes('umbra_core') ? 'umbra-core'
+              : label.split('/').pop()?.split('?')[0] || label;
+            parts.push(`${shortLabel}=${(bytes / 1024 / 1024).toFixed(1)}MB`);
+          } catch { /* detached */ }
         }
+        // Also check direct umbra-core memory reference
+        const coreMem = (globalThis as any).__umbra_core_memory;
+        if (coreMem?.buffer && !parts.some(p => p.startsWith('umbra-core'))) {
+          const bytes = coreMem.buffer.byteLength;
+          totalWasm += bytes;
+          parts.push(`umbra-core=${(bytes / 1024 / 1024).toFixed(1)}MB`);
+        }
+
+        const wasmStr = parts.length > 0 ? parts.join(' ') : `total=${(totalWasm / 1024 / 1024).toFixed(1)}MB`;
+        // Include allocation stats
+        const allocFn = (globalThis as any).__umbra_wasm_alloc_stats;
+        const alloc = typeof allocFn === 'function' ? allocFn() : null;
+        const allocStr = alloc ? ` alloc=${alloc.mallocMB}MB free=${alloc.freeMB}MB leaked=${alloc.leakedMB}MB` : '';
         const tMs = watchdogTick * WATCHDOG_MS;
-        const snap = `t+${(tMs / 1000).toFixed(1)}s: heap=${heap}/${heapTotal}MB wasm=${wasmMem}MB`;
+        const snap = `t+${(tMs / 1000).toFixed(1)}s: heap=${heap}/${heapTotal}MB ${wasmStr}${allocStr}`;
         snapshots.push(snap);
-        // Keep last 100 snapshots (20 seconds of data at 200ms interval)
-        if (snapshots.length > 100) snapshots.shift();
+        // Keep last 60 snapshots (30 seconds of data at 500ms interval)
+        if (snapshots.length > 60) snapshots.shift();
         localStorage.setItem('__mem_watchdog', snapshots.join('\n'));
       } catch { /* ignore */ }
     }, WATCHDOG_MS);
