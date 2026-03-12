@@ -101,6 +101,14 @@ let _lastService: any = null;
 /** The index into DEFAULT_RELAY_SERVERS currently being tried. */
 let _currentServerIndex = 0;
 
+// ── Failed Group Key Cache ───────────────────────────────────────────
+// Tracks group key versions that are known to be missing locally.
+// When a group_message decrypt fails with "key version … not found",
+// we record "groupId:keyVersion" here so subsequent messages with the
+// same missing key skip the expensive WASM call entirely.
+// Cleared per-group when a group_key_rotation envelope arrives.
+const _failedGroupKeys = new Set<string>();
+
 // ── Sync update callback registration ────────────────────────────────
 // SyncContext registers a callback to receive real-time sync deltas
 // from the relay WebSocket.
@@ -725,20 +733,42 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
 
           } else if (envelope.envelope === 'group_message' && envelope.version === 1) {
             const groupMsgPayload = envelope.payload as GroupMessagePayload;
-            try {
-              const plaintext = await service.decryptGroupMessage(groupMsgPayload.groupId, groupMsgPayload.ciphertext, groupMsgPayload.nonce, groupMsgPayload.keyVersion, groupMsgPayload.senderDid, groupMsgPayload.timestamp);
-              // Dispatch first so message appears immediately in the UI
-              service.dispatchMessageEvent({ type: 'messageReceived', message: { id: groupMsgPayload.messageId, conversationId: groupMsgPayload.conversationId, senderDid: groupMsgPayload.senderDid, content: { type: 'text', text: plaintext }, timestamp: groupMsgPayload.timestamp, read: false, delivered: true, status: 'delivered' } });
-              await maybeRegisterIncomingFile(service, groupMsgPayload.conversationId, groupMsgPayload.senderDid, plaintext);
-              // Store as base64 so WASM can handle it (storeIncomingMessage expects base64 ciphertext)
+            const groupKeyId = `${groupMsgPayload.groupId}:${groupMsgPayload.keyVersion}`;
+
+            // Skip WASM decrypt if this key version is already known to be missing.
+            // This prevents hundreds of repeated failing WASM calls (e.g. 726/745
+            // failures when bots send messages with a key version the client lacks).
+            if (_failedGroupKeys.has(groupKeyId)) {
+              // Silently skip — key rotation will clear this entry
+            } else {
               try {
-                const storePayload: ChatMessagePayload = { messageId: groupMsgPayload.messageId, conversationId: groupMsgPayload.conversationId, senderDid: groupMsgPayload.senderDid, contentEncrypted: utf8ToBase64(plaintext), nonce: '000000000000000000000000', timestamp: groupMsgPayload.timestamp };
-                await service.storeIncomingMessage(storePayload);
-              } catch { /* Storage is best-effort for group messages */ }
-            } catch (err) { console.warn('[useNetwork] Failed to process group message:', err); }
+                const plaintext = await service.decryptGroupMessage(groupMsgPayload.groupId, groupMsgPayload.ciphertext, groupMsgPayload.nonce, groupMsgPayload.keyVersion, groupMsgPayload.senderDid, groupMsgPayload.timestamp);
+                // Dispatch first so message appears immediately in the UI
+                service.dispatchMessageEvent({ type: 'messageReceived', message: { id: groupMsgPayload.messageId, conversationId: groupMsgPayload.conversationId, senderDid: groupMsgPayload.senderDid, content: { type: 'text', text: plaintext }, timestamp: groupMsgPayload.timestamp, read: false, delivered: true, status: 'delivered' } });
+                await maybeRegisterIncomingFile(service, groupMsgPayload.conversationId, groupMsgPayload.senderDid, plaintext);
+                // Store as base64 so WASM can handle it (storeIncomingMessage expects base64 ciphertext)
+                try {
+                  const storePayload: ChatMessagePayload = { messageId: groupMsgPayload.messageId, conversationId: groupMsgPayload.conversationId, senderDid: groupMsgPayload.senderDid, contentEncrypted: utf8ToBase64(plaintext), nonce: '000000000000000000000000', timestamp: groupMsgPayload.timestamp };
+                  await service.storeIncomingMessage(storePayload);
+                } catch { /* Storage is best-effort for group messages */ }
+              } catch (err) {
+                const errStr = String(err);
+                if (errStr.includes('key version') || errStr.includes('not found')) {
+                  _failedGroupKeys.add(groupKeyId);
+                }
+                console.warn('[useNetwork] Failed to process group message:', err);
+              }
+            }
 
           } else if (envelope.envelope === 'group_key_rotation' && envelope.version === 1) {
             const keyPayload = envelope.payload as GroupKeyRotationPayload;
+            // Clear all cached failures for this group — the new key may
+            // resolve previously-missing versions.
+            for (const key of _failedGroupKeys) {
+              if (key.startsWith(keyPayload.groupId + ':')) {
+                _failedGroupKeys.delete(key);
+              }
+            }
             try { await service.importGroupKey(keyPayload.encryptedKey, keyPayload.nonce, keyPayload.senderDid, keyPayload.groupId, keyPayload.keyVersion); service.dispatchGroupEvent({ type: 'keyRotated', groupId: keyPayload.groupId, keyVersion: keyPayload.keyVersion }); } catch (err) { console.warn('[useNetwork] Failed to import rotated group key:', err); }
 
           } else if (envelope.envelope === 'key_rotation' && envelope.version === 1) {
