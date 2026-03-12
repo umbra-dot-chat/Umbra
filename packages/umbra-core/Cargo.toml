@@ -109,6 +109,9 @@ hex = "0.4"
 base64 = "0.22"
 miniz_oxide = "0.8"
 
+# FFI tracing (proc macro, optional — only pulled in with debug-trace feature)
+umbra-trace-macro = { path = "../umbra-trace-macro", optional = true }
+
 # ============================================================================
 # PLATFORM-SPECIFIC DEPENDENCIES
 # ============================================================================
@@ -238,6 +241,9 @@ ffi = []
 
 # Enable WASM exports
 wasm = []
+
+# Enable FFI tracing instrumentation (zero-cost when disabled)
+debug-trace = ["umbra-trace-macro"]
 
 # ============================================================================
 # BUILD CONFIGURATION
