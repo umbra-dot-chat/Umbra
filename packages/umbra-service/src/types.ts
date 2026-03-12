@@ -388,7 +388,10 @@ export type MessageEvent =
   | { type: 'sharedFolderCreated'; conversationId: string; folder: DmSharedFolderRecord }
   | { type: 'sharedFolderDeleted'; conversationId: string; folderId: string }
   | { type: 'sharedFileUploaded'; conversationId: string; file: DmSharedFileRecord }
-  | { type: 'sharedFileDeleted'; conversationId: string; fileId: string };
+  | { type: 'sharedFileDeleted'; conversationId: string; fileId: string }
+  // Batch event: signals that offline processing is complete and all
+  // conversations should re-fetch from DB instead of applying individual updates
+  | { type: 'offlineBatchComplete'; conversationIds: string[] };
 
 /**
  * Network status

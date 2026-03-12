@@ -323,6 +323,13 @@ export function useMessages(conversationId: string | null, groupId?: string | nu
           })
         );
         fetchPinnedRef.current?.();
+      } else if (event.type === 'offlineBatchComplete') {
+        // Offline messages were stored in DB without individual dispatches.
+        // Re-fetch from DB if this conversation received any offline messages.
+        if (event.conversationIds.includes(conversationId)) {
+          if (__DEV__) dbg.info('messages', 'offlineBatchComplete → fetchMessages()', { conversationId: conversationId?.slice(0, 12) }, SRC);
+          fetchMessagesRef.current?.();
+        }
       }
     });
 

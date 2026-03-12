@@ -798,6 +798,11 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
         console.log(`[useNetwork] Offline chunk ${chunkIndex + 1}/${totalChunks} (${messages.length} msgs, ${totalMessages} total)`);
         console.log(`[BREADCRUMB] offline_messages START, chunk=${chunkIndex + 1}/${totalChunks}, count=${messages.length}, total=${totalMessages}`);
         const _backupEnvelopes: any[] = [];
+        // Track affected conversation IDs so we can fire a single batch
+        // refresh event at the end instead of 1400 individual dispatchMessageEvent
+        // calls (each of which triggers a React re-render → parseMessageContent
+        // on all visible messages → V8 GC exhaustion → crash).
+        const _offlineConversationIds = new Set<string>();
 
         // Process in small batches with generous GC yields.
         // V8 crashes with "Ineffective mark-compacts near heap limit" when
@@ -861,19 +866,17 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
               try {
                 try { await service.createDmConversation(chatPayload.senderDid); } catch { /* friend may not exist yet */ }
                 await service.storeIncomingMessage(chatPayload);
-                const decryptedText = await service.decryptIncomingMessage(chatPayload);
-                if (!decryptedText) { console.warn('[useNetwork] Offline decryption failed for', chatPayload.messageId);
-                } else if (chatPayload.threadId) { service.dispatchMessageEvent({ type: 'threadReplyReceived', message: { id: chatPayload.messageId, conversationId: chatPayload.conversationId, senderDid: chatPayload.senderDid, content: { type: 'text', text: decryptedText }, timestamp: chatPayload.timestamp, read: false, delivered: true, status: 'delivered', threadId: chatPayload.threadId }, parentId: chatPayload.threadId });
-                } else { service.dispatchMessageEvent({ type: 'messageReceived', message: { id: chatPayload.messageId, conversationId: chatPayload.conversationId, senderDid: chatPayload.senderDid, content: { type: 'text', text: decryptedText }, timestamp: chatPayload.timestamp, read: false, delivered: true, status: 'delivered' } }); await maybeRegisterIncomingFile(service, chatPayload.conversationId, chatPayload.senderDid, decryptedText); }
+                // SKIP decryptIncomingMessage + dispatchMessageEvent during offline
+                // processing. Messages are stored in DB and will be fetched once
+                // via offlineBatchComplete after all offline messages are processed.
+                // This prevents 1400+ individual React re-renders that cause V8
+                // GC exhaustion ("Ineffective mark-compacts near heap limit").
+                _offlineConversationIds.add(chatPayload.conversationId);
               } catch (err) { console.warn('[useNetwork] Failed to store offline chat message:', err); }
             } else if (envelope.envelope === 'chat_message_update' && envelope.version === 1) {
+              // Skip individual dispatch — covered by offlineBatchComplete refresh
               const updatePayload = envelope.payload as ChatMessageUpdatePayload;
-              try {
-                const decryptedText = await service.decryptIncomingMessage(updatePayload as ChatMessagePayload);
-                if (decryptedText) {
-                  service.dispatchMessageEvent({ type: 'messageContentUpdated', messageId: updatePayload.messageId, newText: decryptedText });
-                }
-              } catch (err) { console.warn('[useNetwork] Failed to process offline chat_message_update:', err); }
+              if (updatePayload.conversationId) _offlineConversationIds.add(updatePayload.conversationId);
             } else if (envelope.envelope === 'group_invite' && envelope.version === 1) {
               const invitePayload = envelope.payload as GroupInvitePayload;
               try { await service.storeGroupInvite(invitePayload); service.dispatchGroupEvent({ type: 'inviteReceived', invite: { id: invitePayload.inviteId, groupId: invitePayload.groupId, groupName: invitePayload.groupName, description: invitePayload.description, inviterDid: invitePayload.inviterDid, inviterName: invitePayload.inviterName, encryptedGroupKey: invitePayload.encryptedGroupKey, nonce: invitePayload.nonce, membersJson: invitePayload.membersJson, status: 'pending', createdAt: invitePayload.timestamp } }); } catch (err) { console.warn('[useNetwork] Failed to store offline group invite:', err); }
@@ -884,14 +887,13 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
               const groupMsgPayload = envelope.payload as GroupMessagePayload;
               try {
                 const plaintext = await service.decryptGroupMessage(groupMsgPayload.groupId, groupMsgPayload.ciphertext, groupMsgPayload.nonce, groupMsgPayload.keyVersion, groupMsgPayload.senderDid, groupMsgPayload.timestamp);
-                // Dispatch first so message appears immediately in the UI
-                service.dispatchMessageEvent({ type: 'messageReceived', message: { id: groupMsgPayload.messageId, conversationId: groupMsgPayload.conversationId, senderDid: groupMsgPayload.senderDid, content: { type: 'text', text: plaintext }, timestamp: groupMsgPayload.timestamp, read: false, delivered: true, status: 'delivered' } });
-                await maybeRegisterIncomingFile(service, groupMsgPayload.conversationId, groupMsgPayload.senderDid, plaintext);
+                // Skip dispatchMessageEvent — covered by offlineBatchComplete refresh.
                 // Store as base64 so WASM can handle it (storeIncomingMessage expects base64 ciphertext)
                 try {
                   const storePayload: ChatMessagePayload = { messageId: groupMsgPayload.messageId, conversationId: groupMsgPayload.conversationId, senderDid: groupMsgPayload.senderDid, contentEncrypted: utf8ToBase64(plaintext), nonce: '000000000000000000000000', timestamp: groupMsgPayload.timestamp };
                   await service.storeIncomingMessage(storePayload);
                 } catch { /* Storage is best-effort for group messages */ }
+                _offlineConversationIds.add(groupMsgPayload.conversationId);
               } catch (err) { console.warn('[useNetwork] Failed to process offline group message:', err); }
             } else if (envelope.envelope === 'group_key_rotation' && envelope.version === 1) {
               const keyPayload = envelope.payload as GroupKeyRotationPayload;
@@ -907,7 +909,7 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
               service.dispatchGroupEvent({ type: 'memberRemoved', groupId: removePayload.groupId, removedDid: removePayload.removedDid });
             } else if (envelope.envelope === 'message_status' && envelope.version === 1) {
               const statusPayload = envelope.payload as MessageStatusPayload;
-              try { await service.updateMessageStatus(statusPayload.messageId, statusPayload.status); service.dispatchMessageEvent({ type: 'messageStatusChanged', messageId: statusPayload.messageId, status: statusPayload.status }); } catch (err) { console.warn('[useNetwork] Failed to update offline message status:', err); }
+              try { await service.updateMessageStatus(statusPayload.messageId, statusPayload.status); } catch (err) { console.warn('[useNetwork] Failed to update offline message status:', err); }
             } else if (envelope.envelope === 'community_event' && envelope.version === 1) {
               const communityPayload = envelope.payload as CommunityEventPayload;
               const offlineEvent = communityPayload.event;
@@ -967,6 +969,18 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
             console.log('[useNetwork] Offline message parse error:', parseErr);
           }
           }
+        }
+
+        // Fire a single batch refresh for all conversations that received
+        // offline messages. This replaces 1400+ individual dispatchMessageEvent
+        // calls with a single event, preventing V8 GC exhaustion.
+        if (_offlineConversationIds.size > 0) {
+          console.log(`[useNetwork] Offline batch complete: ${_offlineConversationIds.size} conversations affected`);
+          await _gcYield(100); // Give V8 GC time before triggering render
+          service.dispatchMessageEvent({
+            type: 'offlineBatchComplete',
+            conversationIds: Array.from(_offlineConversationIds),
+          });
         }
 
         // Process backup envelopes if any were collected
