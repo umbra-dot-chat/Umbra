@@ -138,7 +138,20 @@ pub enum ServerMessage {
     },
 
     /// All queued offline messages, delivered in response to FetchOffline.
-    OfflineMessages { messages: Vec<OfflineMessage> },
+    /// Messages are delivered in chunks to avoid OOM on large queues.
+    /// Old clients ignore the new metadata fields (serde(default)).
+    OfflineMessages {
+        messages: Vec<OfflineMessage>,
+        /// Total number of messages across all chunks.
+        #[serde(default)]
+        total_messages: usize,
+        /// Zero-based index of this chunk.
+        #[serde(default)]
+        chunk_index: usize,
+        /// Total number of chunks being delivered.
+        #[serde(default)]
+        total_chunks: usize,
+    },
 
     /// Pong response to keep connection alive.
     Pong,
@@ -501,10 +514,38 @@ mod tests {
                 timestamp: 1234567890,
                 queued_at: Utc::now(),
             }],
+            total_messages: 1,
+            chunk_index: 0,
+            total_chunks: 1,
         };
         let json = serde_json::to_string(&msg).unwrap();
         assert!(json.contains("\"type\":\"offline_messages\""));
         assert!(json.contains("msg-1"));
+        assert!(json.contains("\"total_messages\":1"));
+        assert!(json.contains("\"chunk_index\":0"));
+        assert!(json.contains("\"total_chunks\":1"));
+    }
+
+    #[test]
+    fn test_offline_messages_backward_compat_deserialization() {
+        // Old clients send OfflineMessages without metadata fields.
+        // Verify serde(default) allows parsing without them.
+        let old_json = r#"{"type":"offline_messages","messages":[]}"#;
+        let parsed: ServerMessage = serde_json::from_str(old_json).unwrap();
+        match parsed {
+            ServerMessage::OfflineMessages {
+                messages,
+                total_messages,
+                chunk_index,
+                total_chunks,
+            } => {
+                assert!(messages.is_empty());
+                assert_eq!(total_messages, 0);
+                assert_eq!(chunk_index, 0);
+                assert_eq!(total_chunks, 0);
+            }
+            _ => panic!("Wrong variant"),
+        }
     }
 
     #[test]

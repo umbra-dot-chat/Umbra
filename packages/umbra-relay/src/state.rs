@@ -387,6 +387,28 @@ impl RelayState {
             .sum()
     }
 
+    /// Get the top DIDs by offline queue size (for stats/debugging).
+    /// DID strings are truncated to the last 12 characters for privacy.
+    /// Returns at most 20 entries, sorted by queue size descending.
+    pub fn offline_queue_details(&self) -> Vec<(String, usize)> {
+        let mut details: Vec<(String, usize)> = self
+            .offline_queue
+            .iter()
+            .map(|entry| {
+                let did = entry.key().clone();
+                let suffix = if did.len() > 12 {
+                    format!("...{}", &did[did.len() - 12..])
+                } else {
+                    did
+                };
+                (suffix, entry.value().len())
+            })
+            .collect();
+        details.sort_by(|a, b| b.1.cmp(&a.1));
+        details.truncate(20);
+        details
+    }
+
     // ── Signaling Sessions ────────────────────────────────────────────────
 
     /// Create a new signaling session for single-scan friend adding.

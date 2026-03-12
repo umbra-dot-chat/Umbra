@@ -10,7 +10,7 @@ use tokio::sync::mpsc;
 
 use uuid::Uuid;
 
-use crate::protocol::{ClientMessage, PeerMessage, ServerMessage};
+use crate::protocol::{ClientMessage, OfflineMessage, PeerMessage, ServerMessage};
 use crate::state::{RelayState, RouteResult};
 
 /// Handle a single WebSocket connection.
@@ -431,17 +431,58 @@ fn handle_join_session(
     state.consume_session(session_id);
 }
 
-/// Deliver all queued offline messages.
+/// Deliver all queued offline messages in chunks to avoid OOM on large queues.
+/// Each chunk is sent as a separate WebSocket frame (~50 messages, ~50-100KB).
+/// The client's offline_messages handler fires once per chunk and processes it
+/// with existing batching logic.
 fn handle_fetch_offline(state: &RelayState, did: &str) {
     let messages = state.drain_offline_messages(did);
+    let total = messages.len();
 
-    tracing::debug!(
+    tracing::info!(
         did = did,
-        count = messages.len(),
-        "Delivering offline messages"
+        count = total,
+        "Delivering offline messages (chunked)"
     );
 
-    state.send_to_client(did, ServerMessage::OfflineMessages { messages });
+    if total == 0 {
+        state.send_to_client(
+            did,
+            ServerMessage::OfflineMessages {
+                messages: vec![],
+                total_messages: 0,
+                chunk_index: 0,
+                total_chunks: 0,
+            },
+        );
+        return;
+    }
+
+    let chunk_size = 50;
+    let chunks: Vec<Vec<OfflineMessage>> = messages
+        .chunks(chunk_size)
+        .map(|c| c.to_vec())
+        .collect();
+    let total_chunks = chunks.len();
+
+    for (i, chunk) in chunks.into_iter().enumerate() {
+        tracing::debug!(
+            did = did,
+            chunk = i,
+            total_chunks = total_chunks,
+            chunk_msgs = chunk.len(),
+            "Sending offline chunk"
+        );
+        state.send_to_client(
+            did,
+            ServerMessage::OfflineMessages {
+                messages: chunk,
+                total_messages: total,
+                chunk_index: i,
+                total_chunks,
+            },
+        );
+    }
 }
 
 // ── Invite Handlers ──────────────────────────────────────────────────────────

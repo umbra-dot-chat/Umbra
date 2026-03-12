@@ -530,10 +530,19 @@ async fn health_handler() -> impl IntoResponse {
 
 /// Statistics endpoint.
 async fn stats_handler(State(state): State<RelayState>) -> impl IntoResponse {
+    let queue_details: Vec<serde_json::Value> = state
+        .offline_queue_details()
+        .into_iter()
+        .map(|(did_suffix, count)| {
+            json!({ "did_suffix": did_suffix, "count": count })
+        })
+        .collect();
+
     Json(json!({
         "online_clients": state.online_count(),
         "mesh_online_clients": state.mesh_online_count(),
         "offline_queue_size": state.offline_queue_size(),
+        "offline_queue_details": queue_details,
         "active_sessions": state.sessions.len(),
         "published_invites": state.published_invites.len(),
         "connected_peers": state.connected_peers(),
