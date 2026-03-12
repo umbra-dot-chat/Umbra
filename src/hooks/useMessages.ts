@@ -28,6 +28,13 @@ import { dbg } from '@/utils/debug';
 
 const PAGE_SIZE = 50;
 
+/** Stable ref wrapper — keeps a ref in sync with the latest value. */
+function useLatest<T>(value: T): React.MutableRefObject<T> {
+  const ref = useRef(value);
+  ref.current = value;
+  return ref;
+}
+
 /**
  * Check if the user has opted out of sending read receipts.
  * Reads the `privacy_read_receipts` key from the KV store.
@@ -110,6 +117,14 @@ export function useMessages(conversationId: string | null, groupId?: string | nu
   const eventCountRef = useRef(0);
   const lastSoundRef = useRef<number>(0);
 
+  // Stable refs for functions used inside the event subscription effect.
+  // This prevents the effect from re-subscribing (and causing an infinite
+  // render loop) every time these callbacks get new identities.
+  const fetchMessagesRef = useLatest<(() => Promise<void>) | null>(null);
+  const fetchPinnedRef = useLatest<(() => Promise<void>) | null>(null);
+  const playSoundRef = useLatest(playSound);
+  const messagesRef = useLatest(messages);
+
   // Track the first new message received after the initial fetch so we can
   // render a "New messages" divider in the chat area.
   const [firstUnreadMessageId, setFirstUnreadMessageId] = useState<string | null>(null);
@@ -161,7 +176,15 @@ export function useMessages(conversationId: string | null, groupId?: string | nu
     }
   }, [service, conversationId]);
 
+  // Keep refs in sync so the event subscription can call the latest version
+  // without needing them in its dependency array.
+  fetchMessagesRef.current = fetchMessages;
+  fetchPinnedRef.current = fetchPinned;
+
   // Initial fetch when conversation changes
+  // NOTE: We intentionally omit fetchMessages/fetchPinned from deps —
+  // they depend on the same [service, conversationId] already listed,
+  // and including them caused cascading re-subscriptions.
   useEffect(() => {
     if (isReady && service && conversationId) {
       fetchMessages();
@@ -171,9 +194,18 @@ export function useMessages(conversationId: string | null, groupId?: string | nu
       setPinnedMessages([]);
       setIsLoading(false);
     }
-  }, [isReady, service, conversationId, fetchMessages, fetchPinned]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isReady, service, conversationId]);
 
-  // Subscribe to real-time message events
+  // Subscribe to real-time message events.
+  //
+  // IMPORTANT: This effect must NOT depend on fetchMessages, fetchPinned,
+  // playSound, or myDid. Those caused an infinite render loop:
+  //   fetchMessages has new identity → effect re-subscribes → event fires →
+  //   calls fetchMessages() → sets state → re-render → new fetchMessages →
+  //   effect re-subscribes → … (OOM crash in ~2 seconds on Chrome)
+  //
+  // Instead, we read the latest versions from refs inside the event handler.
   useEffect(() => {
     if (!service || !conversationId) return;
 
@@ -211,7 +243,7 @@ export function useMessages(conversationId: string | null, groupId?: string | nu
             const now = Date.now();
             if (now - lastSoundRef.current >= 2000) {
               lastSoundRef.current = now;
-              playSound('message_receive');
+              playSoundRef.current('message_receive');
             }
             // Mark the first incoming message after initial load as the unread boundary
             if (initialLoadDoneRef.current) {
@@ -277,9 +309,9 @@ export function useMessages(conversationId: string | null, groupId?: string | nu
           )
         );
       } else if (event.type === 'reactionAdded' || event.type === 'reactionRemoved') {
-        // Refresh messages to get updated reactions
+        // Refresh messages to get updated reactions — use ref to avoid dep cycle
         if (__DEV__) dbg.debug('messages', 'reaction event → full fetchMessages()', undefined, SRC);
-        fetchMessages();
+        fetchMessagesRef.current?.();
       } else if (event.type === 'messagePinned' || event.type === 'messageUnpinned') {
         setMessages((prev) =>
           prev.map((m) => {
@@ -290,12 +322,13 @@ export function useMessages(conversationId: string | null, groupId?: string | nu
             return { ...m, pinned: false, pinnedBy: undefined, pinnedAt: undefined };
           })
         );
-        fetchPinned();
+        fetchPinnedRef.current?.();
       }
     });
 
     return unsubscribe;
-  }, [service, conversationId, fetchMessages, fetchPinned, playSound, myDid]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [service, conversationId]);
 
   const loadMore = useCallback(async () => {
     if (!service || !conversationId || !hasMore) return;
@@ -399,7 +432,9 @@ export function useMessages(conversationId: string | null, groupId?: string | nu
 
       const relayWs = getRelayWs();
       if (relayWs) {
-        const unreadFromOthers = messages.filter(
+        // Read from ref to avoid depending on `messages` (which changes every
+        // render and would give markAsRead a new identity each time).
+        const unreadFromOthers = messagesRef.current.filter(
           (m) => m.status !== 'read' && m.senderDid !== myDid
         );
         for (const msg of unreadFromOthers) {
@@ -413,7 +448,7 @@ export function useMessages(conversationId: string | null, groupId?: string | nu
     } catch (err) {
       console.error('[useMessages] Failed to mark as read:', err);
     }
-  }, [service, conversationId, messages, getRelayWs, myDid]);
+  }, [service, conversationId, getRelayWs, myDid]);
 
   const editMessage = useCallback(async (messageId: string, newText: string) => {
     if (!service) return;
