@@ -58,7 +58,22 @@ export function ConversationsProvider({ children }: { children: React.ReactNode 
       const result = await service.getConversations();
       if (__DEV__) endTimer?.();
       if (__DEV__) dbg.info('conversations', `getConversations DONE (#${fetchNum})`, { count: result.length }, SRC);
-      setConversations(result);
+      // Only update state if conversations actually changed — prevents
+      // unnecessary re-renders of every conversation-dependent component
+      // when the data is identical (e.g. repeated event-triggered fetches).
+      setConversations(prev => {
+        if (
+          prev.length === result.length &&
+          prev.every((c, i) =>
+            c.id === result[i].id &&
+            c.lastMessageAt === result[i].lastMessageAt &&
+            c.unreadCount === result[i].unreadCount,
+          )
+        ) {
+          return prev; // Same reference — no re-render
+        }
+        return result;
+      });
       setError(null);
     } catch (err) {
       if (__DEV__) dbg.error('conversations', `getConversations FAILED (#${fetchNum})`, err, SRC);
