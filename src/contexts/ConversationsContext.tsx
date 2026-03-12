@@ -18,8 +18,10 @@ import { dbg } from '@/utils/debug';
 
 const SRC = 'ConversationsProvider';
 
-/** Minimum interval between event-triggered fetches (ms). */
-const FETCH_DEBOUNCE_MS = 300;
+/** Minimum interval between event-triggered fetches (ms).
+ *  Increased from 300ms to 1000ms to prevent excessive getConversations
+ *  WASM calls during rapid message bursts (e.g. bots in group chat). */
+const FETCH_DEBOUNCE_MS = 1000;
 
 export interface ConversationsContextValue {
   conversations: Conversation[];
