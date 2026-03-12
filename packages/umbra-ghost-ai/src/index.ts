@@ -26,6 +26,11 @@ const program = new Command()
   .option('--codebase-path <path>', 'Path to Umbra codebase for RAG')
   .option('--http-port <port>', 'HTTP port for health/webhook endpoints')
   .option('--log-level <level>', 'Log level (debug | info | warn | error)')
+  .option('--wisps', 'Enable wisp swarm co-process')
+  .option('--wisp-count <n>', 'Number of wisps (default: 4)')
+  .option('--wisp-model <name>', 'Ollama model for wisps')
+  .option('--wisp-data-dir <path>', 'Wisp data directory')
+  .option('--wisp-http-port <port>', 'Wisp HTTP control port')
   .parse();
 
 const config = loadConfig(program.opts());
@@ -34,20 +39,17 @@ const bot = new GhostBot(config);
 // Graceful shutdown
 process.on('SIGINT', () => {
   console.log('\nShutting down Ghost...');
-  bot.stop();
-  process.exit(0);
+  bot.stop().then(() => process.exit(0));
 });
 
 process.on('SIGTERM', () => {
-  bot.stop();
-  process.exit(0);
+  bot.stop().then(() => process.exit(0));
 });
 
 // Handle uncaught errors
 process.on('uncaughtException', (err) => {
   console.error('[FATAL] Uncaught exception:', err);
-  bot.stop();
-  process.exit(1);
+  bot.stop().then(() => process.exit(1));
 });
 
 process.on('unhandledRejection', (err) => {

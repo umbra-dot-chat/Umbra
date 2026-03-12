@@ -42,6 +42,7 @@ export class GhostBot {
   private reminderInterval: ReturnType<typeof setInterval> | null = null;
   private httpServer: ReturnType<typeof createServer> | null = null;
   private running = false;
+  private wispOrchestrator: any = null;
 
   constructor(config: GhostConfig) {
     this.config = config;
@@ -132,16 +133,22 @@ export class GhostBot {
     // 10. Start HTTP health endpoint
     this.startHealthServer();
 
+    // 11. Start wisp swarm (if enabled)
+    if (this.config.wispsEnabled) {
+      await this.startWisps();
+    }
+
     this.running = true;
     this.log.info(`Ghost is running! 👻`);
     this.log.info(`Language: ${this.config.language}`);
     this.log.info(`Relay: ${this.config.relayUrl}`);
     this.log.info(`Model: ${this.config.model}`);
     this.log.info(`Calls: ${this.callHandler ? 'enabled' : 'disabled'}`);
+    this.log.info(`Wisps: ${this.wispOrchestrator ? `${this.config.wispCount} active` : 'disabled'}`);
     this.log.info('Waiting for messages...\n');
   }
 
-  stop(): void {
+  async stop(): Promise<void> {
     this.running = false;
     if (this.reminderInterval) {
       clearInterval(this.reminderInterval);
@@ -152,6 +159,10 @@ export class GhostBot {
     this.store?.close();
     this.knowledgeDb?.close();
     this.httpServer?.close();
+    if (this.wispOrchestrator) {
+      await this.wispOrchestrator.stop();
+      this.wispOrchestrator = null;
+    }
     this.log.info('Ghost stopped');
   }
 
@@ -498,5 +509,26 @@ export class GhostBot {
     this.httpServer.listen(this.config.httpPort, '0.0.0.0', () => {
       this.log.info(`Health server listening on port ${this.config.httpPort}`);
     });
+  }
+
+  // ─── Wisp Swarm ────────────────────────────────────────────────────
+
+  private async startWisps(): Promise<void> {
+    try {
+      const { WispOrchestrator } = await import('@umbra/wisps');
+      this.wispOrchestrator = new WispOrchestrator({
+        relayUrl: this.config.relayUrl,
+        ollamaUrl: this.config.ollamaUrl,
+        model: this.config.wispModel,
+        count: this.config.wispCount,
+        dataDir: this.config.wispDataDir,
+        httpPort: this.config.wispHttpPort,
+      });
+      await this.wispOrchestrator.start();
+      await this.wispOrchestrator.befriendAll();
+      this.log.info(`Wisp swarm started (${this.config.wispCount} wisps on port ${this.config.wispHttpPort})`);
+    } catch (err) {
+      this.log.warn('Failed to start wisp swarm:', err);
+    }
   }
 }

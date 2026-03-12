@@ -64,6 +64,18 @@ export interface GhostConfig {
   /** Max video FPS for WebRTC encoding */
   maxVideoFps: number;
 
+  // ── Wisp swarm ──────────────────────────────────────────────────────
+  /** Enable co-located wisp swarm */
+  wispsEnabled: boolean;
+  /** Number of wisps to spawn */
+  wispCount: number;
+  /** Ollama model for wisp LLM */
+  wispModel: string;
+  /** Data directory for wisp identities */
+  wispDataDir: string;
+  /** HTTP port for wisp control API */
+  wispHttpPort: number;
+
   // ── Diagnostics ──────────────────────────────────────────────────────
   /** Enable frame timing alerts (lightweight) */
   diagFrameTiming: boolean;
@@ -105,6 +117,13 @@ export function loadConfig(opts: Record<string, string | undefined>): GhostConfi
     maxVideoWidth: parseInt(process.env.MAX_VIDEO_WIDTH || '1280', 10),
     maxVideoHeight: parseInt(process.env.MAX_VIDEO_HEIGHT || '720', 10),
     maxVideoFps: parseInt(process.env.MAX_VIDEO_FPS || '24', 10),
+
+    // Wisp swarm defaults
+    wispsEnabled: (opts.wisps || process.env.WISPS_ENABLED || 'false') === 'true',
+    wispCount: parseInt(opts.wispCount || process.env.WISP_COUNT || '4', 10),
+    wispModel: opts.wispModel || process.env.WISP_MODEL || 'llama3.2:1b',
+    wispDataDir: opts.wispDataDir || process.env.WISP_DATA_DIR || './wisp-data',
+    wispHttpPort: parseInt(opts.wispHttpPort || process.env.WISP_HTTP_PORT || '3334', 10),
 
     // Diagnostic defaults (lightweight ones on by default)
     diagFrameTiming: (process.env.GHOST_DIAG_FRAME_TIMING || 'true') === 'true',
