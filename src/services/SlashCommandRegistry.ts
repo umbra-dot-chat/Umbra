@@ -290,9 +290,14 @@ const KNOWN_GHOST_DIDS = new Set([
   'did:key:z6MkhSo7UBSqfsnF6dM2iw5qbPbKoKBHQ6XnAGGMo7XV5Fyd', // Ghost EN
 ]);
 
-export function isGhostBot(did: string | null | undefined): boolean {
-  if (!did) return false;
-  return KNOWN_GHOST_DIDS.has(did);
+export function isGhostBot(did: string | null | undefined, displayName?: string | null): boolean {
+  if (did && KNOWN_GHOST_DIDS.has(did)) return true;
+  // Fallback: match by display name (for dev/local Ghost with different DID)
+  if (displayName) {
+    const lower = displayName.toLowerCase();
+    if (lower === 'ghost' || lower.includes('ghost')) return true;
+  }
+  return false;
 }
 
 /**

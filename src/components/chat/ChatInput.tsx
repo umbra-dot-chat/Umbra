@@ -67,6 +67,8 @@ export interface ChatInputProps {
   onGifSelect?: (gif: GifItem) => void;
   /** DID of the friend in this conversation (for bot detection) */
   friendDid?: string | null;
+  /** Display name of the friend (for bot detection fallback) */
+  friendDisplayName?: string | null;
   /** Callback to clear chat messages */
   onClearChat?: () => void;
 }
@@ -76,7 +78,7 @@ export function ChatInput({
   replyingTo, onClearReply, onSubmit,
   editing, onCancelEdit, onAttachmentClick,
   customEmojis, relayUrl, onGifSelect,
-  friendDid, onClearChat,
+  friendDid, friendDisplayName, onClearChat,
 }: ChatInputProps) {
   const { theme } = useTheme();
   const { motionPreferences } = useAppTheme();
@@ -127,7 +129,7 @@ export function ChatInput({
     }));
 
     // Ghost commands (when chatting with a Ghost bot)
-    if (isGhostBot(friendDid)) {
+    if (isGhostBot(friendDid, friendDisplayName)) {
       commands.push(...GHOST_COMMANDS);
       commands.push(...SWARM_COMMANDS);
     }
@@ -136,7 +138,7 @@ export function ChatInput({
     commands.push(...pluginSlashCommands);
 
     return commands;
-  }, [friendDid, pluginSlashCommands, onClearChat]);
+  }, [friendDid, friendDisplayName, pluginSlashCommands, onClearChat]);
 
   const {
     slashOpen,

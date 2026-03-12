@@ -657,6 +657,7 @@ export default function ChatPage() {
             }
           }}
           friendDid={friendDid}
+          friendDisplayName={friendDisplayName}
         />
         {/* Safe area spacing below the input */}
         {insets.bottom > 0 && (
