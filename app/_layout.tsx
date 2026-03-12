@@ -22,6 +22,7 @@ import type { LoadingStep } from '@/components/ui/LoadingScreen';
 import { usePendingInvite } from '@/hooks/usePendingInvite';
 import * as Linking from 'expo-linking';
 import { dbg, initCrashGuard, markBootSuccess } from '@/utils/debug';
+import { initSentry, SentryErrorBoundary } from '@/utils/sentry';
 import { DebugVitalsOverlay } from '@/components/debug/DebugVitalsOverlay';
 
 // ── Debug infrastructure init ──────────────────────────────────────────────
@@ -30,6 +31,7 @@ if (__crashCount > 1) {
   console.warn(`[CrashGuard] Crash count: ${__crashCount}/3`);
 }
 dbg.startLongTaskDetection();
+initSentry();
 
 /** Dynamic iOS status bar: light text on dark themes, dark text on light themes. */
 function DynamicStatusBar() {
@@ -213,8 +215,23 @@ function AuthGate() {
   );
 }
 
+/** Sentry crash fallback — shown when the React tree throws an uncaught error */
+function SentryCrashFallback() {
+  // Using a plain div for the fallback since the component tree (including Wisp) is dead
+  if (typeof document !== 'undefined') {
+    return React.createElement('div', {
+      style: { display: 'flex', alignItems: 'center', justifyContent: 'center', height: '100vh', flexDirection: 'column', fontFamily: 'monospace', background: '#111', color: '#e0e0e0' },
+    },
+      React.createElement('div', { style: { fontSize: 24, fontWeight: 'bold', color: '#f44336', marginBottom: 12 } }, 'Umbra crashed'),
+      React.createElement('div', { style: { fontSize: 14, color: '#999' } }, 'Check console for CRASH REPORT. Refresh to restart.'),
+    );
+  }
+  return null;
+}
+
 export default function RootLayout() {
   return (
+    <SentryErrorBoundary fallback={<SentryCrashFallback />}>
     <SafeAreaProvider>
       <WispProvider mode="light">
         <ToastProvider maxToasts={3}>
@@ -245,5 +262,6 @@ export default function RootLayout() {
         </ToastProvider>
       </WispProvider>
     </SafeAreaProvider>
+    </SentryErrorBoundary>
   );
 }
