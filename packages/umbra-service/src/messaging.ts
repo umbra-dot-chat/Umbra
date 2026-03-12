@@ -505,6 +505,10 @@ export async function storeIncomingMessage(payload: ChatMessagePayload): Promise
   if (payload.threadId) {
     data.thread_id = payload.threadId;
   }
+  // Skip friend validation for group messages (members authenticated via group key)
+  if (payload.isGroup) {
+    data.is_group = true;
+  }
   const json = JSON.stringify(data);
   await wasm().umbra_wasm_messaging_store_incoming(json);
 }

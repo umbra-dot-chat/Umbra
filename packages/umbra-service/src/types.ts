@@ -618,6 +618,8 @@ export interface ChatMessagePayload {
   timestamp: number;
   /** Thread parent ID (present when this is a thread reply) */
   threadId?: string;
+  /** Whether this is a group message (skips friend validation in WASM) */
+  isGroup?: boolean;
 }
 
 /**

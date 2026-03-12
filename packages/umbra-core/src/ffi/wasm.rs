@@ -1792,14 +1792,18 @@ pub fn umbra_wasm_messaging_store_incoming(json: &str) -> Result<(), JsValue> {
         .as_str()
         .ok_or_else(|| JsValue::from_str("Missing nonce"))?;
     let timestamp = data["timestamp"].as_i64().unwrap_or(0);
+    let is_group = data["is_group"].as_bool().unwrap_or(false);
 
-    // Validate sender is a known friend
-    let _friend = database
-        .get_friend(sender_did)
-        .map_err(|e| JsValue::from_str(&format!("DB error looking up friend: {}", e)))?
-        .ok_or_else(|| {
-            JsValue::from_str(&format!("Sender {} is not a known friend", sender_did))
-        })?;
+    // Validate sender is a known friend (skip for group messages —
+    // group members are authenticated via the group key, not friendship)
+    if !is_group {
+        let _friend = database
+            .get_friend(sender_did)
+            .map_err(|e| JsValue::from_str(&format!("DB error looking up friend: {}", e)))?
+            .ok_or_else(|| {
+                JsValue::from_str(&format!("Sender {} is not a known friend", sender_did))
+            })?;
+    }
 
     // Ensure conversation exists — if not, create one with deterministic ID
     let actual_conversation_id = match database.get_conversation(conversation_id) {

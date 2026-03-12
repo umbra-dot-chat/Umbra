@@ -109,6 +109,11 @@ let _currentServerIndex = 0;
 // Cleared per-group when a group_key_rotation envelope arrives.
 const _failedGroupKeys = new Set<string>();
 
+/** Throttle typing indicator dispatches to max 1 per 500ms per conversation.
+ *  Prevents 20/sec re-renders from rapid bot typing events. */
+const _lastTypingDispatch = new Map<string, number>();
+const TYPING_DISPATCH_THROTTLE_MS = 500;
+
 // ── Sync update callback registration ────────────────────────────────
 // SyncContext registers a callback to receive real-time sync deltas
 // from the relay WebSocket.
@@ -748,7 +753,7 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
                 await maybeRegisterIncomingFile(service, groupMsgPayload.conversationId, groupMsgPayload.senderDid, plaintext);
                 // Store as base64 so WASM can handle it (storeIncomingMessage expects base64 ciphertext)
                 try {
-                  const storePayload: ChatMessagePayload = { messageId: groupMsgPayload.messageId, conversationId: groupMsgPayload.conversationId, senderDid: groupMsgPayload.senderDid, contentEncrypted: utf8ToBase64(plaintext), nonce: '000000000000000000000000', timestamp: groupMsgPayload.timestamp };
+                  const storePayload: ChatMessagePayload = { messageId: groupMsgPayload.messageId, conversationId: groupMsgPayload.conversationId, senderDid: groupMsgPayload.senderDid, contentEncrypted: utf8ToBase64(plaintext), nonce: '000000000000000000000000', timestamp: groupMsgPayload.timestamp, isGroup: true };
                   await service.storeIncomingMessage(storePayload);
                 } catch { /* Storage is best-effort for group messages */ }
               } catch (err) {
@@ -788,7 +793,16 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
 
           } else if (envelope.envelope === 'typing_indicator' && envelope.version === 1) {
             const typingPayload = envelope.payload as TypingIndicatorPayload;
-            service.dispatchMessageEvent({ type: typingPayload.isTyping ? 'typingStarted' : 'typingStopped', conversationId: typingPayload.conversationId, did: typingPayload.senderDid, senderName: typingPayload.senderName });
+            // Throttle typing dispatches to prevent render cascade (bots send typing at ~20/sec)
+            const typingKey = `${typingPayload.conversationId}:${typingPayload.senderDid}`;
+            const now = performance.now();
+            const lastDispatch = _lastTypingDispatch.get(typingKey) || 0;
+            if (typingPayload.isTyping && now - lastDispatch < TYPING_DISPATCH_THROTTLE_MS) {
+              // Skip — already dispatched recently for this user/conversation
+            } else {
+              _lastTypingDispatch.set(typingKey, now);
+              service.dispatchMessageEvent({ type: typingPayload.isTyping ? 'typingStarted' : 'typingStopped', conversationId: typingPayload.conversationId, did: typingPayload.senderDid, senderName: typingPayload.senderName });
+            }
 
           } else if (envelope.envelope === 'call_offer' && envelope.version === 1) { service.dispatchCallEvent({ type: 'callOffer', payload: envelope.payload as any });
           } else if (envelope.envelope === 'call_answer' && envelope.version === 1) { service.dispatchCallEvent({ type: 'callAnswer', payload: envelope.payload as any });
@@ -994,7 +1008,7 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
               try {
                 const plaintext = await service.decryptGroupMessage(groupMsgPayload.groupId, groupMsgPayload.ciphertext, groupMsgPayload.nonce, groupMsgPayload.keyVersion, groupMsgPayload.senderDid, groupMsgPayload.timestamp); _wasmCallCount++;
                 try {
-                  const storePayload: ChatMessagePayload = { messageId: groupMsgPayload.messageId, conversationId: groupMsgPayload.conversationId, senderDid: groupMsgPayload.senderDid, contentEncrypted: utf8ToBase64(plaintext), nonce: '000000000000000000000000', timestamp: groupMsgPayload.timestamp };
+                  const storePayload: ChatMessagePayload = { messageId: groupMsgPayload.messageId, conversationId: groupMsgPayload.conversationId, senderDid: groupMsgPayload.senderDid, contentEncrypted: utf8ToBase64(plaintext), nonce: '000000000000000000000000', timestamp: groupMsgPayload.timestamp, isGroup: true };
                   await service.storeIncomingMessage(storePayload); _wasmCallCount++;
                 } catch { /* Storage is best-effort for group messages */ }
                 _offlineConversationIds.add(groupMsgPayload.conversationId);

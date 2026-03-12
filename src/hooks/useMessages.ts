@@ -197,6 +197,12 @@ export function useMessages(conversationId: string | null, groupId?: string | nu
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isReady, service, conversationId]);
 
+  // Batch incoming messages to prevent render cascade from rapid arrivals.
+  // Messages are collected in a buffer and flushed in a single setState
+  // call on the next animation frame (max ~60 flushes/sec instead of 20+).
+  const pendingMessagesRef = useRef<Message[]>([]);
+  const flushScheduledRef = useRef(false);
+
   // Subscribe to real-time message events.
   //
   // IMPORTANT: This effect must NOT depend on fetchMessages, fetchPinned,
@@ -208,6 +214,26 @@ export function useMessages(conversationId: string | null, groupId?: string | nu
   // Instead, we read the latest versions from refs inside the event handler.
   useEffect(() => {
     if (!service || !conversationId) return;
+
+    /** Flush batched messages into state in a single update. */
+    const flushPendingMessages = () => {
+      flushScheduledRef.current = false;
+      const batch = pendingMessagesRef.current;
+      if (batch.length === 0) return;
+      pendingMessagesRef.current = [];
+
+      setMessages((prev) => {
+        const existingIds = new Set(prev.map((m) => m.id));
+        const newMsgs = batch.filter((m) => !existingIds.has(m.id));
+        if (newMsgs.length === 0) return prev;
+        const next = [...prev, ...newMsgs];
+        // Cap at 500 messages to prevent unbounded memory growth.
+        if (next.length > 500) {
+          return next.slice(next.length - 500);
+        }
+        return next;
+      });
+    };
 
     if (__DEV__) dbg.info('messages', 'subscribing to onMessageEvent', { conversationId: conversationId?.slice(0, 12) }, SRC);
     const unsubscribe = service.onMessageEvent((event: MessageEvent) => {
@@ -250,18 +276,12 @@ export function useMessages(conversationId: string | null, groupId?: string | nu
               setFirstUnreadMessageId((prev) => prev ?? msg.id);
             }
           }
-          setMessages((prev) => {
-            // Deduplicate: don't add if message ID already exists
-            if (prev.some((m) => m.id === msg.id)) return prev;
-            const next = [...prev, msg];
-            // Cap at 500 messages to prevent unbounded memory growth.
-            // The initial page load only fetches 50; user can still
-            // load older messages via pagination (loadMore).
-            if (next.length > 500) {
-              return next.slice(next.length - 500);
-            }
-            return next;
-          });
+          // Batch message into pending buffer and schedule a single flush
+          pendingMessagesRef.current.push(msg);
+          if (!flushScheduledRef.current) {
+            flushScheduledRef.current = true;
+            requestAnimationFrame(flushPendingMessages);
+          }
         }
       } else if (event.type === 'threadReplyReceived') {
         // Thread reply received from relay — don't add to main chat,
