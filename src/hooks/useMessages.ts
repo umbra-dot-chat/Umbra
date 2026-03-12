@@ -203,6 +203,19 @@ export function useMessages(conversationId: string | null, groupId?: string | nu
   const pendingMessagesRef = useRef<Message[]>([]);
   const flushScheduledRef = useRef(false);
 
+  // Debounced fetchMessages — prevents 22+ concurrent refetches from
+  // offline batch completions. Only the last request within 500ms fires.
+  const debouncedFetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const debouncedFetch = useCallback(() => {
+    if (debouncedFetchTimerRef.current) {
+      clearTimeout(debouncedFetchTimerRef.current);
+    }
+    debouncedFetchTimerRef.current = setTimeout(() => {
+      debouncedFetchTimerRef.current = null;
+      fetchMessagesRef.current?.();
+    }, 500);
+  }, []);
+
   // Subscribe to real-time message events.
   //
   // IMPORTANT: This effect must NOT depend on fetchMessages, fetchPinned,
@@ -329,9 +342,9 @@ export function useMessages(conversationId: string | null, groupId?: string | nu
           )
         );
       } else if (event.type === 'reactionAdded' || event.type === 'reactionRemoved') {
-        // Refresh messages to get updated reactions — use ref to avoid dep cycle
-        if (__DEV__) dbg.debug('messages', 'reaction event → full fetchMessages()', undefined, SRC);
-        fetchMessagesRef.current?.();
+        // Refresh messages to get updated reactions — debounced to prevent flood
+        if (__DEV__) dbg.debug('messages', 'reaction event → debounced fetchMessages()', undefined, SRC);
+        debouncedFetch();
       } else if (event.type === 'messagePinned' || event.type === 'messageUnpinned') {
         setMessages((prev) =>
           prev.map((m) => {
@@ -346,14 +359,20 @@ export function useMessages(conversationId: string | null, groupId?: string | nu
       } else if (event.type === 'offlineBatchComplete') {
         // Offline messages were stored in DB without individual dispatches.
         // Re-fetch from DB if this conversation received any offline messages.
+        // Debounced to prevent 22+ concurrent refetches from rapid batch completions.
         if (event.conversationIds.includes(conversationId)) {
-          if (__DEV__) dbg.info('messages', 'offlineBatchComplete → fetchMessages()', { conversationId: conversationId?.slice(0, 12) }, SRC);
-          fetchMessagesRef.current?.();
+          if (__DEV__) dbg.info('messages', 'offlineBatchComplete → debounced fetchMessages()', { conversationId: conversationId?.slice(0, 12) }, SRC);
+          debouncedFetch();
         }
       }
     });
 
-    return unsubscribe;
+    return () => {
+      unsubscribe();
+      if (debouncedFetchTimerRef.current) {
+        clearTimeout(debouncedFetchTimerRef.current);
+      }
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [service, conversationId]);
 
