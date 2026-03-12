@@ -699,7 +699,14 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
                 await maybeRegisterIncomingFile(service, chatPayload.conversationId, chatPayload.senderDid, decryptedText);
               }
               service.sendDeliveryReceipt(chatPayload.messageId, chatPayload.conversationId, chatPayload.senderDid, 'delivered', ws).catch((err: any) => console.warn('[useNetwork] Failed to send delivery receipt:', err));
-            } catch (err) { console.warn('[useNetwork] Failed to store incoming chat message:', err); }
+            } catch (err) {
+              const errStr = String(err);
+              if (errStr.includes('not a known friend')) {
+                dbg.trackNonFriendFailure(chatPayload.senderDid);
+              } else {
+                console.warn('[useNetwork] Failed to store incoming chat message:', err);
+              }
+            }
 
           } else if (envelope.envelope === 'chat_message_update' && envelope.version === 1) {
             // Streaming/progressive update — decrypt and update existing message in-place
@@ -992,7 +999,14 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
                 try { await service.createDmConversation(chatPayload.senderDid); _wasmCallCount++; } catch { /* friend may not exist yet */ }
                 await service.storeIncomingMessage(chatPayload); _wasmCallCount++;
                 _offlineConversationIds.add(chatPayload.conversationId);
-              } catch (err) { console.warn('[useNetwork] Failed to store offline chat message:', err); }
+              } catch (err) {
+                const errStr = String(err);
+                if (errStr.includes('not a known friend')) {
+                  dbg.trackNonFriendFailure(chatPayload.senderDid);
+                } else {
+                  console.warn('[useNetwork] Failed to store offline chat message:', err);
+                }
+              }
             } else if (envelope.envelope === 'chat_message_update' && envelope.version === 1) {
               // Skip individual dispatch — covered by offlineBatchComplete refresh
               const updatePayload = envelope.payload as ChatMessageUpdatePayload;
