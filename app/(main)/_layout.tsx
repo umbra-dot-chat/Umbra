@@ -33,7 +33,7 @@ import { useCommunities } from '@/hooks/useCommunities';
 import { NavigationRail } from '@/components/navigation/NavigationRail';
 import { AccountSwitcher } from '@/components/navigation/AccountSwitcher';
 import { CommunityLayoutSidebar } from '@/components/sidebar/CommunityLayoutSidebar';
-import type { Community, Friend, MessageEvent, MappedCommunityStructure, CommunityImportResult } from '@umbra/service';
+import type { Community, Friend, MappedCommunityStructure, CommunityImportResult } from '@umbra/service';
 import { createCommunityFromDiscordImport } from '@umbra/service';
 import { useAuth } from '@/contexts/AuthContext';
 import { useUploadProgress } from '@/hooks/useUploadProgress';
@@ -44,7 +44,9 @@ import { useSound } from '@/contexts/SoundContext';
 import { ResizeHandle } from '@/components/ui/ResizeHandle';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import { useNetwork } from '@/hooks/useNetwork';
+import { dbg } from '@/utils/debug';
 
+const SRC = 'MainLayout';
 
 /** Format a relative time string from a Unix timestamp. */
 function formatRelativeTime(ts?: number): string {
@@ -66,6 +68,7 @@ function formatRelativeTime(ts?: number): string {
 }
 
 function MainLayoutInner() {
+  if (__DEV__) dbg.trackRender('MainLayoutInner');
   const { theme } = useTheme();
   const router = useRouter();
   const pathname = usePathname();
@@ -75,6 +78,15 @@ function MainLayoutInner() {
   const { width: screenWidth } = useWindowDimensions();
   const { activeChannelId: communityActiveChannelId } = useCommunityContext();
   const insets = Platform.OS !== 'web' ? useSafeAreaInsets() : { top: 0, bottom: 0, left: 0, right: 0 };
+
+  // Log route changes for debugging
+  const prevPathRef = useRef(pathname);
+  useEffect(() => {
+    if (__DEV__ && pathname !== prevPathRef.current) {
+      dbg.info('lifecycle', `route: ${prevPathRef.current} → ${pathname}`, undefined, SRC);
+      prevPathRef.current = pathname;
+    }
+  }, [pathname]);
 
   // Mobile sidebar ↔ content swipe gesture
   // swipeProgress: 0 = sidebar visible, 1 = content visible
@@ -243,7 +255,8 @@ function MainLayoutInner() {
 
   // Last message previews for sidebar
   const [lastMessages, setLastMessages] = useState<Record<string, string>>({});
-  const lastMessagesLoadedRef = useRef<Set<string>>(new Set());
+  // Track lastMessageAt per conversation so we only refetch when a new message arrived
+  const lastMessageAtRef = useRef<Record<string, number | undefined>>({});
 
   // Transform Conversation[] to sidebar-compatible shape
   const sidebarConversations = useMemo(() => {
@@ -312,14 +325,17 @@ function MainLayoutInner() {
   const [communityError, setCommunityError] = useState<string | undefined>();
   const { open: cmdOpen, setOpen: setCmdOpen } = useCommandPalette();
 
-  // Load last messages for all conversations
+  // Load/refresh last messages when conversations change.
+  // Only re-fetches for conversations whose lastMessageAt has changed,
+  // so this is cheap even though it runs on every conversations update.
   useEffect(() => {
     if (!service || conversations.length === 0) return;
 
     const loadLastMessages = async () => {
       const updates: Record<string, string> = {};
       for (const c of conversations) {
-        if (lastMessagesLoadedRef.current.has(c.id)) continue;
+        // Skip if lastMessageAt hasn't changed since our last fetch
+        if (lastMessageAtRef.current[c.id] === c.lastMessageAt) continue;
         try {
           const msgs = await service.getMessages(c.id, { limit: 1 });
           if (msgs.length > 0) {
@@ -328,7 +344,7 @@ function MainLayoutInner() {
               updates[c.id] = content.text;
             }
           }
-          lastMessagesLoadedRef.current.add(c.id);
+          lastMessageAtRef.current[c.id] = c.lastMessageAt;
         } catch {
           // Ignore errors for individual conversations
         }
@@ -340,26 +356,11 @@ function MainLayoutInner() {
     loadLastMessages();
   }, [service, conversations]);
 
-  // Listen for new messages to update last message in real-time
-  useEffect(() => {
-    if (!service) return;
-
-    const unsubscribe = service.onMessageEvent((event: MessageEvent) => {
-      if (
-        (event.type === 'messageReceived' || event.type === 'messageSent')
-      ) {
-        const content = event.message?.content;
-        if (content?.type === 'text') {
-          setLastMessages((prev) => ({
-            ...prev,
-            [event.message.conversationId]: content.text,
-          }));
-        }
-      }
-    });
-
-    return unsubscribe;
-  }, [service]);
+  // Last message previews are refreshed when the `conversations` array
+  // changes (driven by ConversationsProvider's debounced refetch).
+  // We no longer keep a separate onMessageEvent listener here because
+  // it caused the ENTIRE layout tree to re-render on every single
+  // incoming message — the #1 contributor to the OOM render cascade.
 
   // Handle group created — auto-select the new conversation
   const handleGroupCreated = useCallback((groupId: string, conversationId: string) => {
