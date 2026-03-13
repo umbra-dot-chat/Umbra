@@ -21,6 +21,36 @@ import { Image, Pressable, Linking, type TextStyle, type ViewStyle } from 'react
 import { Box, Text, useTheme } from '@coexist/wisp-react-native';
 import type { CommunityEmoji, CommunitySticker } from '@umbra/service';
 import { resolveShortcode } from '@/constants/emojiShortcodes';
+import { dbg } from '@/utils/debug';
+
+// ── Parse stats for per-render-cycle tracking ──
+let _parseCallCount = 0;
+let _parseTotalMs = 0;
+
+export function resetParseStats() { _parseCallCount = 0; _parseTotalMs = 0; }
+export function getParseStats() { return { calls: _parseCallCount, totalMs: _parseTotalMs }; }
+
+// ---------------------------------------------------------------------------
+// Startup guard — defer parsing to avoid V8 GC exhaustion during app init
+// ---------------------------------------------------------------------------
+
+let _parsingEnabled = false;
+const _STARTUP_DELAY_MS = 5000;
+
+// Enable parsing after the startup window. During the first 5s, the V8
+// cage is near-full from WASM modules and compiled JS. Deferring regex
+// parsing avoids the "Ineffective mark-compacts near heap limit" crash.
+if (typeof setTimeout !== 'undefined') {
+  setTimeout(() => {
+    _parsingEnabled = true;
+    console.log('[parseMessageContent] Markdown parsing enabled (startup guard lifted)');
+  }, _STARTUP_DELAY_MS);
+}
+
+/** Allow tests or other code to enable/disable parsing imperatively. */
+export function setParsingEnabled(enabled: boolean): void {
+  _parsingEnabled = enabled;
+}
 
 // ---------------------------------------------------------------------------
 // Patterns
@@ -202,10 +232,19 @@ function parseInline(text: string, emojiMap: EmojiMap): InlineToken[] {
  */
 const MAX_PARSEABLE_LENGTH = 2000;
 
+// Detect undecrypted ciphertext (base64 blobs) — skip regex to avoid GC pressure
+const BASE64_CIPHERTEXT_RE = /^[A-Za-z0-9+/]{20,}={0,2}$/;
+
 function parseInlineStandard(text: string, emojiMap: EmojiMap): InlineToken[] {
   // Guard: skip regex parsing for oversized text to avoid V8 GC exhaustion
   if (text.length > MAX_PARSEABLE_LENGTH) {
+    if (__DEV__) dbg.trace('messages', `parseInlineStandard SKIP (size guard len=${text.length})`, undefined, 'parseInlineStandard');
     return [{ type: 'text', value: text.slice(0, MAX_PARSEABLE_LENGTH) + '…' }];
+  }
+  // Guard: skip regex for undecrypted ciphertext (base64 blobs from failed decryption)
+  if (text.length > 30 && BASE64_CIPHERTEXT_RE.test(text)) {
+    if (__DEV__) dbg.trace('messages', `parseInlineStandard SKIP (ciphertext guard len=${text.length})`, undefined, 'parseInlineStandard');
+    return [{ type: 'text', value: text }];
   }
 
   const tokens: InlineToken[] = [];
@@ -840,11 +879,25 @@ export function parseMessageContent(
 ): string | React.ReactNode {
   if (!content) return content;
 
+  // STARTUP GUARD: During the first seconds after app load, V8's main cage
+  // is under extreme pressure (~3.9GB used from WASM modules, compiled code,
+  // and the dev bundle). Any allocation in parseInlineStandard triggers
+  // "Ineffective mark-compacts near heap limit" and crashes the renderer.
+  // Return plain text during startup to avoid creating parse tokens and
+  // React elements. After the cage stabilizes, parsing resumes normally.
+  if (!_parsingEnabled) {
+    if (__DEV__) dbg.trace('messages', 'parseMessageContent SKIP (startup guard)', undefined, 'parseMessageContent');
+    return content;
+  }
+
   // Guard: very large content (e.g. raw ciphertext from failed group decryption)
   // is truncated early to avoid OOM from regex parsing and React element creation.
   if (content.length > 5000) {
+    if (__DEV__) dbg.trace('messages', `parseMessageContent SKIP (size guard len=${content.length})`, undefined, 'parseMessageContent');
     return content.slice(0, 2000) + '…';
   }
+
+  const _t0 = __DEV__ ? performance.now() : 0;
 
   // Sticker message
   if (stickerMap && stickerMap.size > 0) {
@@ -852,6 +905,7 @@ export function parseMessageContent(
     if (stickerId) {
       const sticker = stickerMap.get(stickerId);
       if (sticker) {
+        if (__DEV__) { const dur = performance.now() - _t0; _parseCallCount++; _parseTotalMs += dur; dbg.tracePerf('messages', 'parseMessageContent len=' + content.length, dur, 'parseMessageContent'); }
         return (
           <Box style={{ alignItems: 'flex-start' }}>
             <Image
@@ -869,6 +923,7 @@ export function parseMessageContent(
   // GIF message
   const gifUrl = extractGifUrl(content);
   if (gifUrl) {
+    if (__DEV__) { const dur = performance.now() - _t0; _parseCallCount++; _parseTotalMs += dur; dbg.tracePerf('messages', 'parseMessageContent len=' + content.length, dur, 'parseMessageContent'); }
     return (
       <Box style={{ alignItems: 'flex-start' }}>
         <Image
@@ -895,7 +950,10 @@ export function parseMessageContent(
     content.includes('{{');
 
   // If no formatting markers and no emoji, return plain string
-  if (!hasFormatting && emojiMap.size === 0) return content;
+  if (!hasFormatting && emojiMap.size === 0) {
+    if (__DEV__) { const dur = performance.now() - _t0; _parseCallCount++; _parseTotalMs += dur; dbg.tracePerf('messages', 'parseMessageContent len=' + content.length, dur, 'parseMessageContent'); }
+    return content;
+  }
 
   // Check if content has any block-level formatting
   const hasBlocks =
@@ -917,6 +975,12 @@ export function parseMessageContent(
     const blocks = parseBlocks(content);
     const rendered = renderBlocks(blocks, opts);
 
+    if (__DEV__) {
+      const dur = performance.now() - _t0; _parseCallCount++; _parseTotalMs += dur;
+      if (dur > 5) dbg.tracePerf('messages', 'parseMessageContent SLOW len=' + content.length, dur, 'parseMessageContent');
+      else dbg.tracePerf('messages', 'parseMessageContent len=' + content.length, dur, 'parseMessageContent');
+    }
+
     // If there's only one paragraph block, unwrap it
     if (blocks.length === 1 && blocks[0].type === 'paragraph') {
       return rendered[0];
@@ -937,6 +1001,12 @@ export function parseMessageContent(
     const uSz = Math.round(baseFontSize * unicodeEmojiMultiplier(emojiInfo.total));
     const gap = cSz > 40 ? 4 : 2;
 
+    if (__DEV__) {
+      const dur = performance.now() - _t0; _parseCallCount++; _parseTotalMs += dur;
+      if (dur > 5) dbg.tracePerf('messages', 'parseMessageContent SLOW len=' + content.length, dur, 'parseMessageContent');
+      else dbg.tracePerf('messages', 'parseMessageContent len=' + content.length, dur, 'parseMessageContent');
+    }
+
     return (
       <Box style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap }}>
         {renderEmojiOnlyTokens(tokens, opts, cSz, uSz, 'emoji-only')}
@@ -946,7 +1016,14 @@ export function parseMessageContent(
 
   // If all tokens are plain text, return the original string
   if (tokens.every((t) => t.type === 'text')) {
+    if (__DEV__) { const dur = performance.now() - _t0; _parseCallCount++; _parseTotalMs += dur; dbg.tracePerf('messages', 'parseMessageContent len=' + content.length, dur, 'parseMessageContent'); }
     return content;
+  }
+
+  if (__DEV__) {
+    const dur = performance.now() - _t0; _parseCallCount++; _parseTotalMs += dur;
+    if (dur > 5) dbg.tracePerf('messages', 'parseMessageContent SLOW len=' + content.length, dur, 'parseMessageContent');
+    else dbg.tracePerf('messages', 'parseMessageContent len=' + content.length, dur, 'parseMessageContent');
   }
 
   return (

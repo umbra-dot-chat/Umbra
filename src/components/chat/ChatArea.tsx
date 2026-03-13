@@ -13,7 +13,8 @@ import { DmFileMessage } from '@/components/chat/DmFileMessage';
 import { SlotRenderer } from '@/components/plugins/SlotRenderer';
 import { usePlugins } from '@/contexts/PluginContext';
 import { useMessaging } from '@/contexts/MessagingContext';
-import { parseMessageContent, buildEmojiMap, isEmojiOnlyMessage, type EmojiMap } from '@/utils/parseMessageContent';
+import { parseMessageContent, buildEmojiMap, isEmojiOnlyMessage, resetParseStats, getParseStats, type EmojiMap } from '@/utils/parseMessageContent';
+import { dbg } from '@/utils/debug';
 import type { Message, CommunityEmoji } from '@umbra/service';
 import type { ActiveCall } from '@/types/call';
 import { InlineCallCardMessage } from '@/components/call/InlineCallCardMessage';
@@ -313,7 +314,7 @@ function LoadingSkeleton() {
 // Component
 // ─────────────────────────────────────────────────────────────────────────────
 
-export function ChatArea({
+export const ChatArea = React.memo(function ChatArea({
   messages, myDid, myDisplayName, myAvatar, friendNames, friendAvatars,
   isLoading, isGroupChat, typingUser,
   hoveredMessage, onHoverIn, onHoverOut,
@@ -332,10 +333,24 @@ export function ChatArea({
   onEndCall,
   onCallBack,
 }: ChatAreaProps) {
+  if (__DEV__) resetParseStats();
+
   const { theme } = useTheme();
   const themeColors = theme.colors;
   const { displayMode } = useMessaging();
   const { applyTextTransforms } = usePlugins();
+
+  useEffect(() => {
+    if (__DEV__) {
+      const stats = getParseStats();
+      if (stats.calls > 0) {
+        dbg.debug('messages', `ChatArea render: ${stats.calls} parses in ${stats.totalMs.toFixed(1)}ms`, stats, 'ChatArea');
+        if (stats.totalMs > 50) {
+          dbg.warn('messages', `ChatArea SLOW: ${stats.calls} parses took ${stats.totalMs.toFixed(1)}ms`, stats, 'ChatArea');
+        }
+      }
+    }
+  });
 
   // ── Download state ──
   const [downloadingFileId, setDownloadingFileId] = useState<string | null>(null);
@@ -455,6 +470,9 @@ export function ChatArea({
     outputRange: ['transparent', themeColors.accent.primary + '22'],
   });
 
+  // Memoize message grouping — must be before early returns (rules of hooks).
+  const groups = useMemo(() => groupMessages(messages), [messages]);
+
   if (isLoading) {
     return <LoadingSkeleton />;
   }
@@ -462,8 +480,6 @@ export function ChatArea({
   if (messages.length === 0) {
     return <EmptyMessages />;
   }
-
-  const groups = groupMessages(messages);
 
   const getSenderName = (did: string): string => {
     if (did === myDid) return myDisplayName || did.slice(0, 16) + '...';
@@ -829,4 +845,4 @@ export function ChatArea({
       )}
     </ScrollView>
   );
-}
+});
