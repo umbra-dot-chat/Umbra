@@ -12,8 +12,11 @@ use regex::Regex;
 use serde::{Deserialize, Serialize};
 
 use crate::server::WsEvent;
+use crate::store::compare::SessionComparison;
+use crate::store::replay::{ReplaySession, ReplaySpeed};
 use crate::store::SessionWriter;
 use crate::ui;
+use crate::ui::breakpoint::Breakpoint;
 
 /// Maximum events kept in memory (circular buffer behavior).
 const MAX_EVENTS: usize = 100_000;
@@ -149,10 +152,12 @@ pub enum Tab {
     Analysis,
     Browser,
     Log,
+    Compare,
+    Replay,
 }
 
 impl Tab {
-    pub const ALL: [Tab; 10] = [
+    pub const ALL: [Tab; 12] = [
         Tab::Dashboard,
         Tab::All,
         Tab::Wasm,
@@ -163,6 +168,8 @@ impl Tab {
         Tab::Analysis,
         Tab::Browser,
         Tab::Log,
+        Tab::Compare,
+        Tab::Replay,
     ];
 
     pub fn label(self) -> &'static str {
@@ -177,6 +184,8 @@ impl Tab {
             Tab::Analysis => "Analysis",
             Tab::Browser => "Browser",
             Tab::Log => "Log",
+            Tab::Compare => "Compare",
+            Tab::Replay => "Replay",
         }
     }
 
@@ -256,6 +265,37 @@ pub struct App {
     pub log_source_input_mode: bool,
     /// Current source filter text being typed.
     pub log_source_input: String,
+
+    // -- Compare tab state --
+
+    /// Loaded session comparison (populated via `C` key or `--compare`).
+    pub comparison: Option<SessionComparison>,
+
+    // -- Replay tab state --
+
+    /// Interactive replay session for time-travel debugging.
+    pub replay_session: Option<ReplaySession>,
+    /// Whether the replay filter input mode is active.
+    pub replay_filter_mode: bool,
+    /// Current replay filter text being typed.
+    pub replay_filter_input: String,
+
+    // -- Breakpoint state --
+
+    /// Active breakpoints that can pause event ingestion.
+    pub breakpoints: Vec<Breakpoint>,
+    /// Whether event ingestion is paused by a breakpoint.
+    pub bp_paused: bool,
+    /// Reason why the breakpoint paused (human-readable).
+    pub bp_pause_reason: Option<String>,
+    /// Whether the breakpoint input dialog is visible.
+    pub bp_input_mode: bool,
+    /// Current breakpoint input text being typed.
+    pub bp_input: String,
+    /// Event index where the breakpoint pause occurred.
+    pub bp_pause_index: Option<usize>,
+    /// Whether to advance exactly one event (step mode).
+    pub bp_step_one: bool,
 }
 
 impl App {
@@ -291,6 +331,17 @@ impl App {
             log_auto_scroll: true,
             log_source_input_mode: false,
             log_source_input: String::new(),
+            comparison: None,
+            replay_session: None,
+            replay_filter_mode: false,
+            replay_filter_input: String::new(),
+            breakpoints: Vec::new(),
+            bp_paused: false,
+            bp_pause_reason: None,
+            bp_input_mode: false,
+            bp_input: String::new(),
+            bp_pause_index: None,
+            bp_step_one: false,
         }
     }
 
@@ -353,6 +404,141 @@ impl App {
                 _ => {}
             }
             return;
+        }
+
+        // Replay filter input mode
+        if self.replay_filter_mode {
+            match code {
+                KeyCode::Esc => {
+                    self.replay_filter_mode = false;
+                    self.replay_filter_input.clear();
+                    if let Some(ref mut session) = self.replay_session {
+                        session.set_filter(None);
+                    }
+                }
+                KeyCode::Enter => {
+                    self.replay_filter_mode = false;
+                    if let Some(ref mut session) = self.replay_session {
+                        if self.replay_filter_input.is_empty() {
+                            session.set_filter(None);
+                        } else {
+                            session.set_filter(Some(self.replay_filter_input.clone()));
+                        }
+                    }
+                }
+                KeyCode::Backspace => {
+                    self.replay_filter_input.pop();
+                }
+                KeyCode::Char(c) => {
+                    self.replay_filter_input.push(c);
+                }
+                _ => {}
+            }
+            return;
+        }
+
+        // In breakpoint input mode
+        if self.bp_input_mode {
+            match code {
+                KeyCode::Esc => {
+                    self.bp_input_mode = false;
+                    self.bp_input.clear();
+                }
+                KeyCode::Enter => {
+                    self.bp_input_mode = false;
+                    if let Some(bp) = breakpoint::parse_condition(&self.bp_input) {
+                        self.breakpoints.push(bp);
+                    }
+                    self.bp_input.clear();
+                }
+                KeyCode::Backspace => {
+                    self.bp_input.pop();
+                }
+                KeyCode::Char(c) => {
+                    self.bp_input.push(c);
+                }
+                _ => {}
+            }
+            return;
+        }
+
+        // Replay tab-specific keybindings
+        if self.tab == Tab::Replay {
+            if let Some(ref mut session) = self.replay_session {
+                match code {
+                    KeyCode::Right => {
+                        session.step_forward();
+                        return;
+                    }
+                    KeyCode::Left => {
+                        session.step_backward();
+                        return;
+                    }
+                    KeyCode::Char('1') => {
+                        session.set_speed(ReplaySpeed::X1);
+                        return;
+                    }
+                    KeyCode::Char('2') => {
+                        session.set_speed(ReplaySpeed::X2);
+                        return;
+                    }
+                    KeyCode::Char('5') => {
+                        session.set_speed(ReplaySpeed::X5);
+                        return;
+                    }
+                    KeyCode::Char('0') => {
+                        session.set_speed(ReplaySpeed::X10);
+                        return;
+                    }
+                    KeyCode::Char('p') => {
+                        let new_speed = if session.speed == ReplaySpeed::Paused {
+                            ReplaySpeed::X1
+                        } else {
+                            ReplaySpeed::Paused
+                        };
+                        session.set_speed(new_speed);
+                        return;
+                    }
+                    KeyCode::Char('m') => {
+                        session.toggle_bookmark();
+                        return;
+                    }
+                    KeyCode::Char('n') => {
+                        session.goto_next_bookmark();
+                        return;
+                    }
+                    KeyCode::Char('N') => {
+                        session.goto_prev_bookmark();
+                        return;
+                    }
+                    KeyCode::Enter => {
+                        session.detail_expanded = !session.detail_expanded;
+                        return;
+                    }
+                    KeyCode::Home => {
+                        session.goto_start();
+                        return;
+                    }
+                    KeyCode::End => {
+                        session.goto_end();
+                        return;
+                    }
+                    _ => {} // Fall through to global keys
+                }
+            }
+
+            // 'l' loads latest session (works even with no session)
+            if code == KeyCode::Char('l') {
+                self.load_replay_from_latest();
+                return;
+            }
+
+            // '/' enters replay filter mode
+            if code == KeyCode::Char('/') {
+                self.replay_filter_mode = true;
+                self.replay_filter_input.clear();
+                return;
+            }
         }
 
         // Log tab-specific keybindings
@@ -424,7 +610,31 @@ impl App {
                 self.scroll_offset = 0;
             }
             KeyCode::Char(' ') => {
-                self.paused = !self.paused;
+                if self.bp_paused {
+                    // Resume from breakpoint pause
+                    self.bp_paused = false;
+                    self.bp_pause_reason = None;
+                    self.paused = false;
+                } else {
+                    self.paused = !self.paused;
+                }
+            }
+            KeyCode::Char('b') => {
+                // Toggle breakpoint input dialog
+                self.bp_input_mode = true;
+                self.bp_input.clear();
+            }
+            KeyCode::Char('n') if self.bp_paused => {
+                // Step one event while breakpoint-paused
+                self.bp_step_one = true;
+                self.bp_paused = false;
+                self.paused = false;
+            }
+            KeyCode::Char('c') if !modifiers.contains(KeyModifiers::CONTROL) && self.bp_paused => {
+                // Continue until next breakpoint
+                self.bp_paused = false;
+                self.bp_pause_reason = None;
+                self.paused = false;
             }
             KeyCode::Char('/') => {
                 self.filter_mode = true;
@@ -456,6 +666,12 @@ impl App {
             KeyCode::Char('-') => {
                 self.mem_graph_window_secs =
                     self.mem_graph_window_secs.saturating_sub(10).max(10);
+            }
+            KeyCode::Char('C') => {
+                // Load comparison from the two most recent sessions
+                self.load_comparison_from_recent();
+                self.tab = Tab::Compare;
+                self.scroll_offset = 0;
             }
             _ => {}
         }
@@ -647,6 +863,64 @@ impl App {
     fn generate_crash_report(&self, client_id: &str) {
         if let Err(e) = crate::crash_report::generate(self, client_id) {
             eprintln!("Failed to generate crash report: {e}");
+        }
+    }
+
+    /// Load a comparison from the two most recent session files.
+    pub fn load_comparison_from_recent(&mut self) {
+        let log_dir = crate::store::log_dir();
+        match crate::store::list_sessions(&log_dir) {
+            Ok(sessions) if sessions.len() >= 2 => {
+                match crate::store::compare::compare_sessions(
+                    &sessions[1], // older = A
+                    &sessions[0], // newer = B
+                ) {
+                    Ok(comp) => self.comparison = Some(comp),
+                    Err(e) => eprintln!("Comparison failed: {e}"),
+                }
+            }
+            Ok(_) => {
+                eprintln!("Need at least 2 sessions for comparison");
+            }
+            Err(e) => eprintln!("Failed to list sessions: {e}"),
+        }
+    }
+
+    /// Load a comparison from two specific session file paths.
+    pub fn load_comparison_from_files(
+        &mut self,
+        path_a: &std::path::Path,
+        path_b: &std::path::Path,
+    ) {
+        match crate::store::compare::compare_sessions(path_a, path_b) {
+            Ok(comp) => self.comparison = Some(comp),
+            Err(e) => eprintln!("Comparison failed: {e}"),
+        }
+    }
+
+    /// Load a replay session from the latest saved session file.
+    pub fn load_replay_from_latest(&mut self) {
+        let log_dir = crate::store::log_dir();
+        match crate::store::list_sessions(&log_dir) {
+            Ok(sessions) if !sessions.is_empty() => {
+                let path = sessions[0].clone();
+                self.load_replay_from_file(&path);
+            }
+            Ok(_) => {
+                eprintln!("No session files found for replay");
+            }
+            Err(e) => eprintln!("Failed to list sessions: {e}"),
+        }
+    }
+
+    /// Load a replay session from a specific file path.
+    pub fn load_replay_from_file(&mut self, path: &std::path::Path) {
+        match ReplaySession::load(path) {
+            Ok(session) => {
+                self.replay_session = Some(session);
+                self.tab = Tab::Replay;
+            }
+            Err(e) => eprintln!("Failed to load replay session: {e}"),
         }
     }
 

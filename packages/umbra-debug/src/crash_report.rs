@@ -115,6 +115,108 @@ pub fn generate(app: &App, client_id: &str) -> Result<()> {
     }
     writeln!(file)?;
 
+    // Render storm report — components exceeding high render rates
+    writeln!(file, "## Render Storm Report")?;
+    writeln!(file)?;
+    let render_storms: Vec<&crate::app::TraceEvent> = app
+        .events
+        .iter()
+        .filter(|e| e.func.contains("RENDER STORM") || e.func.contains("RENDER LOOP"))
+        .collect();
+    if render_storms.is_empty() {
+        writeln!(file, "_No render storms detected._")?;
+    } else {
+        writeln!(file, "| Timestamp | Component | Details |")?;
+        writeln!(file, "|-----------|-----------|---------|")?;
+        for ev in render_storms.iter().take(20) {
+            writeln!(file, "| {:.1}ms | {} | {} |", ev.ts, ev.cat, ev.func)?;
+        }
+    }
+    writeln!(file)?;
+
+    // WASM call chain — last 50 WASM calls with timing
+    writeln!(file, "## Last 50 WASM Calls")?;
+    writeln!(file)?;
+    let wasm_calls: Vec<&crate::app::TraceEvent> = app
+        .events
+        .iter()
+        .filter(|e| e.cat == "wasm" || e.func.contains("wasm."))
+        .collect();
+    let wasm_start = wasm_calls.len().saturating_sub(50);
+    writeln!(file, "```")?;
+    for ev in &wasm_calls[wasm_start..] {
+        writeln!(
+            file,
+            "[{:.1}ms] {} dur={:.1}ms mem_growth={}",
+            ev.ts, ev.func, ev.dur_ms, ev.mem_growth
+        )?;
+    }
+    writeln!(file, "```")?;
+    writeln!(file)?;
+
+    // Structured log context — last 200 log entries (from browser/log category)
+    writeln!(file, "## Last 200 Structured Log Entries")?;
+    writeln!(file)?;
+    let log_count = app.log_entries.len();
+    let log_start = log_count.saturating_sub(200);
+    writeln!(file, "```")?;
+    for entry in app.log_entries.iter().skip(log_start) {
+        let data_str = if entry.data.is_empty() { String::new() } else { format!(" | {}", entry.data) };
+        writeln!(
+            file,
+            "[{:.1}ms] [{}] [{}] [{}] {}{}",
+            entry.timestamp, entry.level, entry.category, entry.source, entry.message, data_str
+        )?;
+    }
+    writeln!(file, "```")?;
+    writeln!(file)?;
+
+    // Budget violations
+    writeln!(file, "## Budget Violations")?;
+    writeln!(file)?;
+    let budget_violations_events: Vec<&crate::app::TraceEvent> = app
+        .events
+        .iter()
+        .filter(|e| e.func.contains("BUDGET EXCEEDED"))
+        .collect();
+    let budget_violations_logs: Vec<&crate::app::LogEntry> = app
+        .log_entries
+        .iter()
+        .filter(|e| e.message.contains("BUDGET EXCEEDED"))
+        .collect();
+    let budget_violation_count = budget_violations_events.len() + budget_violations_logs.len();
+    if budget_violations_events.is_empty() {
+        writeln!(file, "_No budget violations detected._")?;
+    } else {
+        for ev in budget_violations_events.iter().take(50) {
+            writeln!(file, "- [{:.1}ms] {}", ev.ts, ev.func)?;
+        }
+    }
+    writeln!(file)?;
+
+    // Network timeline — last 30s of relay/network events
+    writeln!(file, "## Network Timeline (last 30s)")?;
+    writeln!(file)?;
+    let net_events: Vec<&crate::app::TraceEvent> = app
+        .events
+        .iter()
+        .filter(|e| e.ts > cutoff && (e.cat == "net" || e.cat == "network"))
+        .collect();
+    if net_events.is_empty() {
+        writeln!(file, "_No network events in last 30s._")?;
+    } else {
+        writeln!(file, "```")?;
+        for ev in net_events.iter().take(100) {
+            writeln!(
+                file,
+                "[{:.1}ms] {} dur={:.1}ms bytes={}",
+                ev.ts, ev.func, ev.dur_ms, ev.arg_bytes
+            )?;
+        }
+        writeln!(file, "```")?;
+    }
+    writeln!(file)?;
+
     // Session stats
     writeln!(file, "## Session Statistics")?;
     writeln!(file)?;
@@ -130,6 +232,9 @@ pub fn generate(app: &App, client_id: &str) -> Result<()> {
     writeln!(file, "- **Total Memory Growth**: {}", format_bytes(total_growth))?;
     writeln!(file, "- **SQL Operations**: {sql_writes}")?;
     writeln!(file, "- **Events/sec (last)**: {:.0}", app.events_per_sec)?;
+    writeln!(file, "- **Log Entries**: {}", app.log_entries.len())?;
+    writeln!(file, "- **Render Storms**: {}", render_storms.len())?;
+    writeln!(file, "- **Budget Violations**: {budget_violation_count}")?;
 
     Ok(())
 }
