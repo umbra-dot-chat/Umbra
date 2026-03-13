@@ -19,6 +19,7 @@ import { View, StyleSheet, Platform } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { Button, Text, useTheme } from '@coexist/wisp-react-native';
 import { defaultSpacing } from '@coexist/wisp-core/theme/create-theme';
+import { dbg } from '@/utils/debug';
 
 // ---------------------------------------------------------------------------
 // Props
@@ -61,6 +62,7 @@ function extractInviteCode(value: string): string | null {
 // ---------------------------------------------------------------------------
 
 export function QRCodeScanner({ onScanned, onClose }: QRCodeScannerProps) {
+  if (__DEV__) dbg.trackRender('QRCodeScanner');
   const { theme } = useTheme();
   const tc = theme.colors;
   const [permission, requestPermission] = useCameraPermissions();

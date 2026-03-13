@@ -27,6 +27,7 @@ import { useUmbra } from '@/contexts/UmbraContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCommunitySync } from '@/hooks/useCommunitySync';
 import type { CommunityEmoji } from '@umbra/service';
+import { dbg } from '@/utils/debug';
 
 // ---------------------------------------------------------------------------
 // Icons
@@ -93,6 +94,7 @@ const RELAY_URL = process.env.EXPO_PUBLIC_RELAY_URL || 'https://relay.umbra.chat
 // ---------------------------------------------------------------------------
 
 export function CommunityEmojiPanel({ communityId, emoji }: CommunityEmojiPanelProps) {
+  if (__DEV__) dbg.trackRender('CommunityEmojiPanel');
   const { service } = useUmbra();
   const { identity } = useAuth();
   const { syncEvent } = useCommunitySync(communityId);

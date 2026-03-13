@@ -8,6 +8,7 @@ import React, { useState, useCallback, useEffect } from 'react';
 import { View } from 'react-native';
 import { Input, TextArea, Button, Text, useTheme } from '@coexist/wisp-react-native';
 import { defaultSpacing, defaultRadii } from '@coexist/wisp-core/theme/create-theme';
+import { dbg } from '@/utils/debug';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -27,6 +28,7 @@ export interface CommunityOverviewPanelProps {
 // ---------------------------------------------------------------------------
 
 export function CommunityOverviewPanel({ name, description, onSave }: CommunityOverviewPanelProps) {
+  if (__DEV__) dbg.trackRender('CommunityOverviewPanel');
   const { theme } = useTheme();
   const tc = theme.colors;
 

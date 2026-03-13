@@ -9,6 +9,7 @@
 import React from 'react';
 import { View, Pressable } from 'react-native';
 import { Dialog, Button, Text, useTheme } from '@coexist/wisp-react-native';
+import { dbg } from '@/utils/debug';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -41,6 +42,7 @@ export function MoveToCategoryDialog({
   currentCategoryId,
   onSelect,
 }: MoveToCategoryDialogProps) {
+  if (__DEV__) dbg.trackRender('MoveToCategoryDialog');
   const { theme } = useTheme();
 
   if (!channel) return null;

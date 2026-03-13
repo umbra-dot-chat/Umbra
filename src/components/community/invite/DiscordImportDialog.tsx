@@ -1403,6 +1403,7 @@ export function DiscordImportDialog({
   onImportComplete,
   onCreateCommunity,
 }: DiscordImportDialogProps) {
+  if (__DEV__) dbg.trackRender('DiscordImportDialog');
   const {
     phase,
     guilds,

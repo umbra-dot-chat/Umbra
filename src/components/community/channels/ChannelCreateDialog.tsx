@@ -12,6 +12,7 @@ import type { ViewStyle, TextStyle } from 'react-native';
 import { Dialog, Input, Button, Text, useTheme } from '@coexist/wisp-react-native';
 import { defaultSpacing, defaultRadii } from '@coexist/wisp-core/theme/create-theme';
 import Svg, { Path, Circle, Line, Polyline, Rect } from 'react-native-svg';
+import { dbg } from '@/utils/debug';
 
 // ---------------------------------------------------------------------------
 // Channel type definitions
@@ -138,6 +139,7 @@ export function ChannelCreateDialog({
   onSubmit,
   submitting = false,
 }: ChannelCreateDialogProps) {
+  if (__DEV__) dbg.trackRender('ChannelCreateDialog');
   const { theme } = useTheme();
   const tc = theme.colors;
   const [name, setName] = useState('');

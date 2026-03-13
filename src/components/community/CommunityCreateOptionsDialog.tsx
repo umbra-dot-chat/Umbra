@@ -11,6 +11,7 @@ import { View, Pressable, Image } from 'react-native';
 import { Dialog, Text, useTheme } from '@coexist/wisp-react-native';
 import { defaultSpacing, defaultRadii } from '@coexist/wisp-core/theme/create-theme';
 import Svg, { Path, Circle, Line, Polyline } from 'react-native-svg';
+import { dbg } from '@/utils/debug';
 
 // Community chat ghost illustrations — theme-aware
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -87,6 +88,7 @@ export function CommunityCreateOptionsDialog({
   onSelectDiscord,
   onSelectJoin,
 }: CommunityCreateOptionsDialogProps) {
+  if (__DEV__) dbg.trackRender('CommunityCreateOptionsDialog');
   const { theme, mode } = useTheme();
   const tc = theme.colors;
   const isDark = mode === 'dark';

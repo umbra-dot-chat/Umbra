@@ -12,6 +12,7 @@
 import React, { useMemo } from 'react';
 import { MemberList } from '@coexist/wisp-react-native';
 import type { MemberListSection, MemberListMember } from '@coexist/wisp-react-native';
+import { dbg } from '@/utils/debug';
 
 // ---------------------------------------------------------------------------
 // Community data types (mirrors WASM JSON output shapes)
@@ -158,6 +159,7 @@ export function CommunityMemberListPanel({
   skeleton = false,
   title = 'Members',
 }: CommunityMemberListPanelProps) {
+  if (__DEV__) dbg.trackRender('CommunityMemberListPanel');
   const sections = useMemo(
     () => buildSections(members, roles, memberRoles),
     [members, roles, memberRoles],

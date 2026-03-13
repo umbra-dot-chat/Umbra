@@ -13,6 +13,7 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
 } from '@coexist/wisp-react-native';
+import { dbg } from '@/utils/debug';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -48,6 +49,7 @@ export function ChannelContextMenu({
   onDelete,
   onMoveToCategory,
 }: ChannelContextMenuProps) {
+  if (__DEV__) dbg.trackRender('ChannelContextMenu');
   if (!channel) return null;
 
   return (

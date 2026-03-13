@@ -14,6 +14,7 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
 } from '@coexist/wisp-react-native';
+import { dbg } from '@/utils/debug';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -64,6 +65,7 @@ export function CategoryContextMenu({
   isLast,
   onDelete,
 }: CategoryContextMenuProps) {
+  if (__DEV__) dbg.trackRender('CategoryContextMenu');
   if (!category) return null;
 
   return (

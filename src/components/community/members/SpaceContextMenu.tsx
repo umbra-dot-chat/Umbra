@@ -13,6 +13,7 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
 } from '@coexist/wisp-react-native';
+import { dbg } from '@/utils/debug';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -51,6 +52,7 @@ export function SpaceContextMenu({
   onCreateChannel,
   onCreateCategory,
 }: SpaceContextMenuProps) {
+  if (__DEV__) dbg.trackRender('SpaceContextMenu');
   if (!space) return null;
 
   return (

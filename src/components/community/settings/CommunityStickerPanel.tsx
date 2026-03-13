@@ -14,6 +14,7 @@ import { useUmbra } from '@/contexts/UmbraContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useCommunitySync } from '@/hooks/useCommunitySync';
 import type { CommunitySticker, StickerPack } from '@umbra/service';
+import { dbg } from '@/utils/debug';
 
 const RELAY_URL = process.env.EXPO_PUBLIC_RELAY_URL || 'https://relay.umbra.chat';
 
@@ -28,6 +29,7 @@ export function CommunityStickerPanel({
   stickers,
   stickerPacks,
 }: CommunityStickerPanelProps) {
+  if (__DEV__) dbg.trackRender('CommunityStickerPanel');
   const { service } = useUmbra();
   const { identity } = useAuth();
   const { theme } = useTheme();

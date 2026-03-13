@@ -13,6 +13,7 @@ import { QRCode, Text, useTheme, InviteManager } from '@coexist/wisp-react-nativ
 import type { InviteLink, InviteCreateOptions } from '@coexist/wisp-react-native';
 import { defaultSpacing } from '@coexist/wisp-core/theme/create-theme';
 import * as Clipboard from 'expo-clipboard';
+import { dbg } from '@/utils/debug';
 
 // ---------------------------------------------------------------------------
 // Community data types (mirrors WASM JSON output shapes)
@@ -116,6 +117,7 @@ export function CommunityInvitePanel({
   skeleton = false,
   title = 'Invite People',
 }: CommunityInvitePanelProps) {
+  if (__DEV__) dbg.trackRender('CommunityInvitePanel');
   const { theme } = useTheme();
   const tc = theme.colors;
   const links = useMemo(() => toInviteLinks(invites), [invites]);

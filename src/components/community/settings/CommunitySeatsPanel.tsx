@@ -14,6 +14,7 @@ import { defaultSpacing, defaultRadii } from '@coexist/wisp-core/theme/create-th
 import Svg, { Path, Circle, Line, Polyline } from 'react-native-svg';
 
 import type { CommunitySeat, CommunityRole } from '@umbra/service';
+import { dbg } from '@/utils/debug';
 
 const PAGE_SIZE = 50;
 
@@ -173,6 +174,7 @@ export function CommunitySeatsPanel({
   onFetchUsers,
   fetchingUsers,
 }: CommunitySeatsPanelProps) {
+  if (__DEV__) dbg.trackRender('CommunitySeatsPanel');
   const { theme } = useTheme();
   const tc = theme.colors;
 

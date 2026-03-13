@@ -12,6 +12,7 @@ import React, { useMemo, useCallback } from 'react';
 import type { ViewStyle } from 'react-native';
 import { RoleManagementPanel } from '@coexist/wisp-react-native';
 import type { ManagedRole, RolePermissionCategory, RoleMember } from '@coexist/wisp-react-native';
+import { dbg } from '@/utils/debug';
 
 // ---------------------------------------------------------------------------
 // Community data types (mirrors WASM JSON output shapes)
@@ -240,6 +241,7 @@ export function CommunityRolePanel({
   onMemberRemove,
   style,
 }: CommunityRolePanelProps) {
+  if (__DEV__) dbg.trackRender('CommunityRolePanel');
   const managedRoles = useMemo(
     () => toManagedRoles(roles, memberCounts),
     [roles, memberCounts],
