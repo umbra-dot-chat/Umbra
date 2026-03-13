@@ -709,8 +709,8 @@ describe('T11.6.27-28 — DB Error Handling', () => {
     });
 
     expect(warnSpy).toHaveBeenCalledWith(
-      '[NotificationContext] Failed to refresh:',
-      expect.any(Error),
+      expect.stringContaining('Failed to refresh notifications'),
+      expect.any(String),
     );
 
     // State remains at defaults after error
@@ -739,8 +739,8 @@ describe('T11.6.27-28 — DB Error Handling', () => {
     });
 
     expect(warnSpy).toHaveBeenCalledWith(
-      '[NotificationContext] Failed to create notification:',
-      expect.any(Error),
+      expect.stringContaining('Failed to create notification'),
+      expect.any(String),
     );
 
     // Notification should NOT have been added to local state since the DB call failed
