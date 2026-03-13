@@ -12,9 +12,10 @@
  */
 
 import React from 'react';
-import { View, Pressable, Linking } from 'react-native';
+import { Linking } from 'react-native';
 import type { ViewStyle, TextStyle } from 'react-native';
-import { Text, useTheme } from '@coexist/wisp-react-native';
+import { Box, Button, Text, useTheme } from '@coexist/wisp-react-native';
+import { dbg } from '@/utils/debug';
 
 export interface FlowStep {
   /** Label for this step */
@@ -52,7 +53,7 @@ function FlowBlock({ label, icon, color = '#3B82F6', description }: FlowStep & {
   const isDark = mode === 'dark';
 
   return (
-    <View
+    <Box
       style={{
         backgroundColor: color + '15',
         borderWidth: 1,
@@ -85,7 +86,7 @@ function FlowBlock({ label, icon, color = '#3B82F6', description }: FlowStep & {
       >
         {label}
       </Text>
-    </View>
+    </Box>
   );
 }
 
@@ -95,8 +96,8 @@ function Arrow({ direction, color }: { direction: 'horizontal' | 'vertical'; col
 
   if (direction === 'horizontal') {
     return (
-      <View style={{ alignItems: 'center', justifyContent: 'center', marginHorizontal: 2 }}>
-        <View
+      <Box style={{ alignItems: 'center', justifyContent: 'center', marginHorizontal: 2 }}>
+        <Box
           style={{
             width: 16,
             height: 2,
@@ -104,7 +105,7 @@ function Arrow({ direction, color }: { direction: 'horizontal' | 'vertical'; col
             borderRadius: 1,
           }}
         />
-        <View
+        <Box
           style={{
             position: 'absolute',
             right: 0,
@@ -118,12 +119,12 @@ function Arrow({ direction, color }: { direction: 'horizontal' | 'vertical'; col
             borderBottomColor: 'transparent',
           }}
         />
-      </View>
+      </Box>
     );
   }
   return (
-    <View style={{ alignItems: 'center', justifyContent: 'center', marginVertical: 2 }}>
-      <View
+    <Box style={{ alignItems: 'center', justifyContent: 'center', marginVertical: 2 }}>
+      <Box
         style={{
           width: 2,
           height: 12,
@@ -131,7 +132,7 @@ function Arrow({ direction, color }: { direction: 'horizontal' | 'vertical'; col
           borderRadius: 1,
         }}
       />
-      <View
+      <Box
         style={{
           width: 0,
           height: 0,
@@ -143,7 +144,7 @@ function Arrow({ direction, color }: { direction: 'horizontal' | 'vertical'; col
           borderRightColor: 'transparent',
         }}
       />
-    </View>
+    </Box>
   );
 }
 
@@ -154,6 +155,7 @@ export function FlowDiagram({
   description,
   sourceLink,
 }: FlowDiagramProps) {
+  if (__DEV__) dbg.trackRender('FlowDiagram');
   const { theme, mode } = useTheme();
   const tc = theme.colors;
   const isDark = mode === 'dark';
@@ -225,31 +227,31 @@ export function FlowDiagram({
   );
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <View style={styles.titleContainer}>
+    <Box style={styles.container}>
+      <Box style={styles.header}>
+        <Box style={styles.titleContainer}>
           <Text style={styles.title}>{title}</Text>
           {description && <Text style={styles.description}>{description}</Text>}
-        </View>
+        </Box>
         {sourceLink && (
-          <Pressable onPress={() => openLink(sourceLink)} style={{ cursor: 'pointer' }}>
+          <Button variant="tertiary" onPress={() => openLink(sourceLink)} size="sm" accessibilityLabel="View source code">
             <Text style={styles.sourceLink}>View Code</Text>
-          </Pressable>
+          </Button>
         )}
-      </View>
-      <View style={styles.flow}>
+      </Box>
+      <Box style={styles.flow}>
         {steps.map((step, i) => (
           <React.Fragment key={i}>
-            <View style={{ position: 'relative' }}>
+            <Box style={{ position: 'relative' }}>
               <FlowBlock {...step} />
-            </View>
+            </Box>
             {i < steps.length - 1 && (
               <Arrow direction={direction} color={step.color ? `${step.color}60` : undefined} />
             )}
           </React.Fragment>
         ))}
-      </View>
-    </View>
+      </Box>
+    </Box>
   );
 }
 

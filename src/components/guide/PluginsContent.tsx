@@ -3,17 +3,20 @@
  */
 
 import React from 'react';
-import { View } from 'react-native';
 
+
+import { Box } from '@coexist/wisp-react-native';
 import { FeatureCard } from '@/components/guide/FeatureCard';
 import { TechSpec } from '@/components/guide/TechSpec';
 import {
   PuzzleIcon, SettingsIcon, CodeIcon, ShieldIcon, DatabaseIcon, ZapIcon,
 } from '@/components/ui';
+import { dbg } from '@/utils/debug';
 
 export default function PluginsContent() {
+  if (__DEV__) dbg.trackRender('PluginsContent');
   return (
-    <View style={{ gap: 12 }}>
+    <Box style={{ gap: 12 }}>
       <FeatureCard
         icon={<PuzzleIcon size={16} color="#8B5CF6" />}
         title="Plugin System Overview"
@@ -162,6 +165,6 @@ export default function PluginsContent() {
           { label: 'E2E Playwright', value: '2 tests (plugins-section.spec.ts — enable/disable)' },
         ]}
       />
-    </View>
+    </Box>
   );
 }

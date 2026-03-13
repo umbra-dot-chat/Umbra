@@ -3,17 +3,20 @@
  */
 
 import React from 'react';
-import { View } from 'react-native';
 
+
+import { Box } from '@coexist/wisp-react-native';
 import { FeatureCard } from '@/components/guide/FeatureCard';
 import { TechSpec } from '@/components/guide/TechSpec';
 import {
   UsersIcon, LockIcon, PlusIcon, UserMinusIcon, SettingsIcon, CrownIcon,
 } from '@/components/ui';
+import { dbg } from '@/utils/debug';
 
 export default function GroupsContent() {
+  if (__DEV__) dbg.trackRender('GroupsContent');
   return (
-    <View style={{ gap: 12 }}>
+    <Box style={{ gap: 12 }}>
       <FeatureCard
         icon={<UsersIcon size={16} color="#EC4899" />}
         title="Create Groups"
@@ -199,6 +202,6 @@ export default function GroupsContent() {
           { label: 'group-header.spec.ts', value: '2 tests (header UI)' },
         ]}
       />
-    </View>
+    </Box>
   );
 }

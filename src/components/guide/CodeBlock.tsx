@@ -6,10 +6,11 @@
  */
 
 import React, { useState, useCallback } from 'react';
-import { View, Pressable, Platform } from 'react-native';
+import { Pressable, Platform } from 'react-native';
 import type { ViewStyle, TextStyle } from 'react-native';
-import { Text, useTheme } from '@coexist/wisp-react-native';
+import { Box, Text, useTheme } from '@coexist/wisp-react-native';
 import { CopyIcon, CheckIcon } from '@/components/ui';
+import { dbg } from '@/utils/debug';
 
 export interface CodeBlockProps {
   /** Code to display */
@@ -31,6 +32,7 @@ export function CodeBlock({
   description,
   showLineNumbers = false,
 }: CodeBlockProps) {
+  if (__DEV__) dbg.trackRender('CodeBlock');
   const { theme, mode } = useTheme();
   const tc = theme.colors;
   const isDark = mode === 'dark';
@@ -160,17 +162,17 @@ export function CodeBlock({
   };
 
   return (
-    <View style={styles.container}>
+    <Box style={styles.container}>
       {(title || language) && (
-        <View style={styles.header}>
-          <View style={styles.headerLeft}>
+        <Box style={styles.header}>
+          <Box style={styles.headerLeft}>
             {title && <Text style={styles.title}>{title}</Text>}
             {description && <Text style={styles.description}>{description}</Text>}
-          </View>
-          <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-            <View style={styles.languageBadge}>
+          </Box>
+          <Box style={{ flexDirection: 'row', alignItems: 'center' }}>
+            <Box style={styles.languageBadge}>
               <Text style={styles.languageText}>{language}</Text>
-            </View>
+            </Box>
             <Pressable
               onPress={handleCopy}
               style={({ pressed }) => [
@@ -185,28 +187,28 @@ export function CodeBlock({
                 <CopyIcon size={14} color={tc.text.muted} />
               )}
             </Pressable>
-          </View>
-        </View>
+          </Box>
+        </Box>
       )}
-      <View style={styles.codeContainer}>
+      <Box style={styles.codeContainer}>
         {showLineNumbers && (
-          <View style={styles.lineNumbers}>
+          <Box style={styles.lineNumbers}>
             {lines.map((_, i) => (
               <Text key={i} style={styles.lineNumber}>
                 {i + 1}
               </Text>
             ))}
-          </View>
+          </Box>
         )}
-        <View style={styles.codeContent}>
+        <Box style={styles.codeContent}>
           {lines.map((line, i) => (
-            <View key={i} style={{ flexDirection: 'row' }}>
+            <Box key={i} style={{ flexDirection: 'row' }}>
               {highlightLine(line)}
-            </View>
+            </Box>
           ))}
-        </View>
-      </View>
-    </View>
+        </Box>
+      </Box>
+    </Box>
   );
 }
 
@@ -243,7 +245,7 @@ export function TestResultsBlock({
   const totalFailed = results.reduce((acc, r) => acc + r.failed, 0);
 
   return (
-    <View
+    <Box
       style={{
         borderRadius: 10,
         borderWidth: 1,
@@ -252,7 +254,7 @@ export function TestResultsBlock({
         overflow: 'hidden',
       }}
     >
-      <View
+      <Box
         style={{
           flexDirection: 'row',
           alignItems: 'center',
@@ -275,10 +277,10 @@ export function TestResultsBlock({
         >
           {title}
         </Text>
-        <View style={{ flexDirection: 'row', gap: 12 }}>
+        <Box style={{ flexDirection: 'row', gap: 12 }}>
           {overallCoverage !== undefined && (
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-              <View
+            <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <Box
                 style={{
                   width: 8,
                   height: 8,
@@ -289,7 +291,7 @@ export function TestResultsBlock({
               <Text style={{ fontSize: 11, fontWeight: '600', color: tc.text.muted }}>
                 {overallCoverage}% coverage
               </Text>
-            </View>
+            </Box>
           )}
           <Text style={{ fontSize: 11, color: '#22C55E', fontWeight: '600' }}>
             {totalPassed} passed
@@ -299,11 +301,11 @@ export function TestResultsBlock({
               {totalFailed} failed
             </Text>
           )}
-        </View>
-      </View>
-      <View style={{ padding: 12, gap: 8 }}>
+        </Box>
+      </Box>
+      <Box style={{ padding: 12, gap: 8 }}>
         {results.map((result, i) => (
-          <View
+          <Box
             key={i}
             style={{
               flexDirection: 'row',
@@ -326,7 +328,7 @@ export function TestResultsBlock({
             >
               {result.name}
             </Text>
-            <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
+            <Box style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
               {result.coverage !== undefined && (
                 <Text
                   style={{
@@ -338,7 +340,7 @@ export function TestResultsBlock({
                   {result.coverage}%
                 </Text>
               )}
-              <View
+              <Box
                 style={{
                   paddingHorizontal: 6,
                   paddingVertical: 2,
@@ -355,11 +357,11 @@ export function TestResultsBlock({
                 >
                   {result.passed}/{result.passed + result.failed}
                 </Text>
-              </View>
-            </View>
-          </View>
+              </Box>
+            </Box>
+          </Box>
         ))}
-      </View>
-    </View>
+      </Box>
+    </Box>
   );
 }

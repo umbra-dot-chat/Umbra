@@ -4,8 +4,9 @@
  */
 
 import React from 'react';
-import { View } from 'react-native';
 
+
+import { Box } from '@coexist/wisp-react-native';
 import { FeatureCard } from '@/components/guide/FeatureCard';
 import { TechSpec } from '@/components/guide/TechSpec';
 import {
@@ -13,10 +14,12 @@ import {
   SmileIcon, ThreadIcon, ForwardIcon, AtSignIcon, PaperclipIcon,
   FileIcon, ImageIcon,
 } from '@/components/ui';
+import { dbg } from '@/utils/debug';
 
 export default function MessagingContent() {
+  if (__DEV__) dbg.trackRender('MessagingContent');
   return (
-    <View style={{ gap: 12 }}>
+    <Box style={{ gap: 12 }}>
 <FeatureCard
         icon={<SendIcon size={16} color="#3B82F6" />}
         title="Send Messages"
@@ -340,6 +343,6 @@ export default function MessagingContent() {
           { label: 'E2E iOS (Detox)', value: '185+ tests (DM flows, two-device sync)' },
         ]}
       />
-    </View>
+    </Box>
   );
 }

@@ -4,17 +4,20 @@
  */
 
 import React from 'react';
-import { View } from 'react-native';
 
+
+import { Box } from '@coexist/wisp-react-native';
 import { FeatureCard } from '@/components/guide/FeatureCard';
 import { TechSpec } from '@/components/guide/TechSpec';
 import {
   LockIcon, ShieldIcon, KeyIcon, GlobeIcon, AlertTriangleIcon, DatabaseIcon,
 } from '@/components/ui';
+import { dbg } from '@/utils/debug';
 
 export default function SecurityContent() {
+  if (__DEV__) dbg.trackRender('SecurityContent');
   return (
-    <View style={{ gap: 12 }}>
+    <Box style={{ gap: 12 }}>
 <FeatureCard
         icon={<LockIcon size={16} color="#22C55E" />}
         title="End-to-End Encryption"
@@ -198,6 +201,6 @@ export default function SecurityContent() {
           { label: 'decrypt-errors.spec.ts', value: '3 E2E tests (decryption error categories)' },
         ]}
       />
-    </View>
+    </Box>
   );
 }

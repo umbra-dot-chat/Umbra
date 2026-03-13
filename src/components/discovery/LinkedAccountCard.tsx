@@ -5,12 +5,13 @@
  */
 
 import React, { useMemo } from 'react';
-import { View, Pressable } from 'react-native';
+import { Pressable } from 'react-native';
 import type { ViewStyle } from 'react-native';
-import { HStack, VStack, Text, Card, useTheme } from '@coexist/wisp-react-native';
+import { Box, HStack, VStack, Text, Card, useTheme } from '@coexist/wisp-react-native';
 import Svg, { Path } from 'react-native-svg';
 
 import type { DiscoveryPlatform as Platform } from '@umbra/service';
+import { dbg } from '@/utils/debug';
 
 // Platform icons (filled brand logos — same as LinkAccountButton)
 function DiscordIcon({ size = 24, color }: { size?: number; color: string }) {
@@ -154,6 +155,7 @@ export function LinkedAccountCard({
   unlinking = false,
   style,
 }: LinkedAccountCardProps) {
+  if (__DEV__) dbg.trackRender('LinkedAccountCard');
   const { theme, mode } = useTheme();
   const isDark = mode === 'dark';
 
@@ -179,9 +181,9 @@ export function LinkedAccountCard({
     <Card variant="outlined" padding="md" style={style}>
       <HStack gap="md" style={{ alignItems: 'center' }}>
         {/* Platform icon */}
-        <View style={iconBgStyle}>
+        <Box style={iconBgStyle}>
           <PlatformIcon platform={platform} size={24} color={platformColor} />
-        </View>
+        </Box>
 
         {/* Account info */}
         <VStack gap="xs" style={{ flex: 1 }}>

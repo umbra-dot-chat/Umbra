@@ -6,9 +6,9 @@
  */
 
 import React from 'react';
-import { View } from 'react-native';
 import type { ViewStyle, TextStyle } from 'react-native';
-import { Text, useTheme } from '@coexist/wisp-react-native';
+import { Box, Text, useTheme } from '@coexist/wisp-react-native';
+import { dbg } from '@/utils/debug';
 
 export interface TechSpecEntry {
   label: string;
@@ -25,6 +25,7 @@ export interface TechSpecProps {
 }
 
 export function TechSpec({ title, entries, accentColor = '#3B82F6' }: TechSpecProps) {
+  if (__DEV__) dbg.trackRender('TechSpec');
   const { theme, mode } = useTheme();
   const tc = theme.colors;
   const isDark = mode === 'dark';
@@ -87,22 +88,22 @@ export function TechSpec({ title, entries, accentColor = '#3B82F6' }: TechSpecPr
   );
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
-        <View style={styles.headerDot} />
+    <Box style={styles.container}>
+      <Box style={styles.header}>
+        <Box style={styles.headerDot} />
         <Text style={styles.title}>{title}</Text>
-      </View>
+      </Box>
       {entries.map((entry, i) => (
-        <View
+        <Box
           key={i}
-          style={[styles.row, i === entries.length - 1 && { borderBottomWidth: 0 }]}
+          style={{ ...styles.row, ...(i === entries.length - 1 ? { borderBottomWidth: 0 } : {}) }}
         >
           <Text style={styles.label}>{entry.label}</Text>
           <Text style={styles.value} numberOfLines={1}>
             {entry.value}
           </Text>
-        </View>
+        </Box>
       ))}
-    </View>
+    </Box>
   );
 }

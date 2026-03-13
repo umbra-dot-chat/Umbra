@@ -16,6 +16,7 @@ import type { DiscoveryPlatform as Platform } from '@umbra/service';
 import { LinkedAccountCard } from './LinkedAccountCard';
 import { LinkAccountButton } from './LinkAccountButton';
 import { DiscoveryOptInDialog } from './DiscoveryOptInDialog';
+import { dbg } from '@/utils/debug';
 
 // Icon component
 function LinkIcon({ size = 14, color }: { size?: number; color: string }) {
@@ -35,6 +36,7 @@ export interface LinkedAccountsPanelProps {
 }
 
 export function LinkedAccountsPanel({ did, style }: LinkedAccountsPanelProps) {
+  if (__DEV__) dbg.trackRender('LinkedAccountsPanel');
   const { theme } = useTheme();
   const textMuted = theme.colors.text.muted;
 

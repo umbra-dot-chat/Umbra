@@ -16,6 +16,7 @@ import { LinkedAccountCard } from './LinkedAccountCard';
 import { LinkAccountButton } from './LinkAccountButton';
 import { DiscoveryToggle } from './DiscoveryToggle';
 import { DiscoveryOptInDialog } from './DiscoveryOptInDialog';
+import { dbg } from '@/utils/debug';
 
 // Icon components
 function LinkIcon({ size = 14, color }: { size?: number; color: string }) {
@@ -46,6 +47,7 @@ export interface LinkedAccountsSettingsProps {
 }
 
 export function LinkedAccountsSettings({ did, style }: LinkedAccountsSettingsProps) {
+  if (__DEV__) dbg.trackRender('LinkedAccountsSettings');
   const { theme } = useTheme();
 
   const textPrimary = theme.colors.text.primary;

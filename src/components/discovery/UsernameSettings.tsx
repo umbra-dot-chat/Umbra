@@ -6,9 +6,10 @@
  */
 
 import React, { useState, useCallback } from 'react';
-import { View, Pressable } from 'react-native';
+import { Pressable } from 'react-native';
 import type { ViewStyle } from 'react-native';
 import {
+  Box,
   VStack,
   HStack,
   Text,
@@ -22,6 +23,7 @@ import {
 import Svg, { Path } from 'react-native-svg';
 
 import { useUsername } from '../../../packages/umbra-service/src/discovery/hooks';
+import { dbg } from '@/utils/debug';
 
 // Icons
 function UserTagIcon({ size = 18, color }: { size?: number; color: string }) {
@@ -86,6 +88,7 @@ export interface UsernameSettingsProps {
 }
 
 export function UsernameSettings({ did, style }: UsernameSettingsProps) {
+  if (__DEV__) dbg.trackRender('UsernameSettings');
   const { theme } = useTheme();
   const tc = theme.colors;
 
@@ -171,9 +174,9 @@ export function UsernameSettings({ did, style }: UsernameSettingsProps) {
 
         {/* Loading state */}
         {isLoading && !editing && (
-          <View style={{ alignItems: 'center', paddingVertical: 8 }}>
+          <Box style={{ alignItems: 'center', paddingVertical: 8 }}>
             <Spinner size="sm" />
-          </View>
+          </Box>
         )}
 
         {/* Error */}
@@ -281,7 +284,7 @@ export function UsernameSettings({ did, style }: UsernameSettingsProps) {
                   Remove Username
                 </Button>
               )}
-              <View style={{ flex: 1 }} />
+              <Box style={{ flex: 1 }} />
               <Button
                 variant="tertiary"
                 size="sm"

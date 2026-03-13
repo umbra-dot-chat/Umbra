@@ -7,9 +7,10 @@
  */
 
 import React, { useState, useCallback } from 'react';
-import { View, Pressable, LayoutAnimation, Platform, UIManager } from 'react-native';
+import { Pressable, LayoutAnimation, Platform, UIManager } from 'react-native';
 import type { ViewStyle, TextStyle } from 'react-native';
-import { Text, useTheme } from '@coexist/wisp-react-native';
+import { Box, Text, useTheme } from '@coexist/wisp-react-native';
+import { dbg } from '@/utils/debug';
 
 // Enable LayoutAnimation on Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -42,6 +43,7 @@ export function GuideSection({
   headerExtra,
   children,
 }: GuideSectionProps) {
+  if (__DEV__) dbg.trackRender('GuideSection');
   const { theme, mode } = useTheme();
   const tc = theme.colors;
   const isDark = mode === 'dark';
@@ -103,23 +105,23 @@ export function GuideSection({
   );
 
   return (
-    <View style={styles.container}>
+    <Box style={styles.container}>
       <Pressable
         onPress={toggleExpanded}
         style={styles.header}
         accessibilityRole="button"
         accessibilityLabel={`${title} section, ${expanded ? 'collapse' : 'expand'}`}
       >
-        <View style={styles.iconContainer}>{icon}</View>
-        <View style={styles.titleContainer}>
+        <Box style={styles.iconContainer}>{icon}</Box>
+        <Box style={styles.titleContainer}>
           <Text style={styles.title}>{title}</Text>
           {subtitle && <Text style={styles.subtitle}>{subtitle}</Text>}
           {headerExtra}
-        </View>
+        </Box>
         <Text style={styles.chevron}>{expanded ? '\u25B2' : '\u25BC'}</Text>
       </Pressable>
 
-      {expanded && <View style={styles.content}>{children}</View>}
-    </View>
+      {expanded && <Box style={styles.content}>{children}</Box>}
+    </Box>
   );
 }

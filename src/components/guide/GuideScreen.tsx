@@ -8,8 +8,9 @@
  */
 
 import React, { useState, useMemo, useCallback } from 'react';
-import { View, ScrollView, StyleSheet, TextInput, Pressable } from 'react-native';
-import { Text, useTheme } from '@coexist/wisp-react-native';
+import { ScrollView, TextInput } from 'react-native';
+import type { ViewStyle, TextStyle } from 'react-native';
+import { Box, Button, Text, useTheme } from '@coexist/wisp-react-native';
 
 import { GuideSection } from './GuideSection';
 import { StatCard } from './StatCard';
@@ -32,6 +33,7 @@ import LimitationsContent from './LimitationsContent';
 import TechnicalReferenceContent from './TechnicalReferenceContent';
 import PluginsContent from './PluginsContent';
 import CommunitiesContent from './CommunitiesContent';
+import { dbg } from '@/utils/debug';
 
 // ── Development stage definitions ──────────────────────────────────────
 
@@ -302,7 +304,7 @@ function SearchBar({
   const isDark = mode === 'dark';
 
   return (
-    <View
+    <Box
       style={{
         flexDirection: 'row',
         alignItems: 'center',
@@ -331,11 +333,9 @@ function SearchBar({
         autoCorrect={false}
       />
       {value.length > 0 && (
-        <Pressable onPress={onClear} hitSlop={8}>
-          <XIcon size={16} color={tc.text.muted} />
-        </Pressable>
+        <Button variant="tertiary" onPress={onClear} size="sm" accessibilityLabel="Clear search" iconLeft={<XIcon size={16} color={tc.text.muted} />} />
       )}
-    </View>
+    </Box>
   );
 }
 
@@ -349,7 +349,7 @@ function SectionMeta({ section }: { section: SectionDef }) {
   const totalTests = section.testCoverage.testFiles.length + section.testCoverage.integrationTests.length;
 
   return (
-    <View
+    <Box
       style={{
         flexDirection: 'row',
         alignItems: 'center',
@@ -359,7 +359,7 @@ function SectionMeta({ section }: { section: SectionDef }) {
       }}
     >
       {/* Stage badge */}
-      <View
+      <Box
         style={{
           backgroundColor: stageCfg.bgColor,
           paddingHorizontal: 8,
@@ -374,11 +374,11 @@ function SectionMeta({ section }: { section: SectionDef }) {
         <Text style={{ fontSize: 10, fontWeight: '600', color: stageCfg.color }}>
           {stageCfg.label}
         </Text>
-      </View>
+      </Box>
 
       {/* Test coverage badge */}
       {totalTests > 0 && (
-        <View
+        <Box
           style={{
             backgroundColor: isDark ? '#1E293B' : '#E0F2FE',
             paddingHorizontal: 8,
@@ -393,12 +393,12 @@ function SectionMeta({ section }: { section: SectionDef }) {
           <Text style={{ fontSize: 10, fontWeight: '600', color: '#0EA5E9' }}>
             {section.testCoverage.percentage}% coverage
           </Text>
-        </View>
+        </Box>
       )}
 
       {/* Test count badge */}
       {totalTests > 0 && (
-        <View
+        <Box
           style={{
             backgroundColor: isDark ? '#1C1917' : '#FEF3C7',
             paddingHorizontal: 8,
@@ -413,15 +413,16 @@ function SectionMeta({ section }: { section: SectionDef }) {
           <Text style={{ fontSize: 10, fontWeight: '600', color: '#D97706' }}>
             {totalTests} test {totalTests === 1 ? 'file' : 'files'}
           </Text>
-        </View>
+        </Box>
       )}
-    </View>
+    </Box>
   );
 }
 
 // ── Main component ────────────────────────────────────────────────────
 
 export function GuideScreen() {
+  if (__DEV__) dbg.trackRender('GuideScreen');
   const { theme, mode } = useTheme();
   const tc = theme.colors;
   const isDark = mode === 'dark';
@@ -464,29 +465,29 @@ export function GuideScreen() {
       showsVerticalScrollIndicator={false}
     >
       {/* Header */}
-      <View style={styles.header}>
-        <View style={styles.headerIcon}>
+      <Box style={styles.header}>
+        <Box style={styles.headerIcon}>
           <BookOpenIcon size={28} color="#FAFAFA" />
-        </View>
+        </Box>
         <Text style={[styles.headerTitle, { color: tc.text.primary }]}>Umbra User Guide</Text>
         <Text style={[styles.headerSubtitle, { color: tc.text.muted }]}>
           End-to-end encrypted, decentralized messaging
         </Text>
-      </View>
+      </Box>
 
       {/* Search Bar */}
       <SearchBar value={search} onChangeText={setSearch} onClear={handleClearSearch} />
 
       {/* Quick Stats */}
-      <View style={styles.statsRow}>
+      <Box style={styles.statsRow}>
         <StatCard label="Encryption" value="E2E" color="#22C55E" icon={<LockIcon size={20} color="#22C55E" />} />
         <StatCard label="Protocol" value="DID" color="#8B5CF6" icon={<KeyIcon size={20} color="#8B5CF6" />} />
         <StatCard label="Relay" value="Mesh" color="#06B6D4" icon={<NetworkIcon size={20} color="#06B6D4" />} />
         <StatCard label="Storage" value="Local" color="#3B82F6" icon={<DatabaseIcon size={20} color="#3B82F6" />} />
-      </View>
+      </Box>
 
       {/* Development Stats */}
-      <View
+      <Box
         style={{
           flexDirection: 'row',
           gap: 12,
@@ -494,7 +495,7 @@ export function GuideScreen() {
           flexWrap: 'wrap',
         }}
       >
-        <View
+        <Box
           style={{
             flex: 1,
             minWidth: 100,
@@ -512,8 +513,8 @@ export function GuideScreen() {
           <Text style={{ fontSize: 11, color: tc.text.muted, marginTop: 2 }}>
             Stable Sections
           </Text>
-        </View>
-        <View
+        </Box>
+        <Box
           style={{
             flex: 1,
             minWidth: 100,
@@ -531,8 +532,8 @@ export function GuideScreen() {
           <Text style={{ fontSize: 11, color: tc.text.muted, marginTop: 2 }}>
             Avg Test Coverage
           </Text>
-        </View>
-        <View
+        </Box>
+        <Box
           style={{
             flex: 1,
             minWidth: 100,
@@ -550,16 +551,16 @@ export function GuideScreen() {
           <Text style={{ fontSize: 11, color: tc.text.muted, marginTop: 2 }}>
             Test Files
           </Text>
-        </View>
-      </View>
+        </Box>
+      </Box>
 
       {/* Search results info */}
       {search.trim() && (
-        <View style={{ paddingVertical: 4 }}>
+        <Box style={{ paddingVertical: 4 }}>
           <Text style={{ fontSize: 13, color: tc.text.muted }}>
             Found {filteredSections.length} {filteredSections.length === 1 ? 'section' : 'sections'} matching "{search}"
           </Text>
-        </View>
+        </Box>
       )}
 
       {/* Sections */}
@@ -583,7 +584,7 @@ export function GuideScreen() {
 
       {/* No results */}
       {filteredSections.length === 0 && search.trim() && (
-        <View
+        <Box
           style={{
             alignItems: 'center',
             paddingVertical: 40,
@@ -594,42 +595,42 @@ export function GuideScreen() {
           <Text style={{ fontSize: 15, color: tc.text.muted, textAlign: 'center' }}>
             No sections found for "{search}"
           </Text>
-          <Pressable onPress={handleClearSearch}>
+          <Button variant="tertiary" onPress={handleClearSearch} size="sm" accessibilityLabel="Clear search">
             <Text style={{ fontSize: 13, color: tc.status.info }}>Clear search</Text>
-          </Pressable>
-        </View>
+          </Button>
+        </Box>
       )}
 
       {/* Footer */}
-      <View style={styles.footer}>
+      <Box style={styles.footer}>
         <Text style={[styles.footerText, { color: tc.text.muted }]}>
           Umbra v1.5.0 — Built with privacy in mind
         </Text>
         <Text style={[styles.footerSub, { color: isDark ? '#3F3F46' : tc.text.muted }]}>
           All data is encrypted locally. No servers can read your messages.
         </Text>
-      </View>
+      </Box>
     </ScrollView>
   );
 }
 
 // ── Styles ────────────────────────────────────────────────────────────
 
-const styles = StyleSheet.create({
+const styles = {
   container: {
     flex: 1,
-  },
+  } as ViewStyle,
   content: {
     padding: 24,
     gap: 16,
     maxWidth: 800,
     alignSelf: 'center' as const,
-  },
+  } as ViewStyle,
   header: {
     alignItems: 'center' as const,
     gap: 8,
     paddingVertical: 16,
-  },
+  } as ViewStyle,
   headerIcon: {
     width: 56,
     height: 56,
@@ -638,30 +639,30 @@ const styles = StyleSheet.create({
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
     marginBottom: 4,
-  },
+  } as ViewStyle,
   headerTitle: {
     fontSize: 28,
     fontWeight: '700' as const,
     textAlign: 'center' as const,
-  },
+  } as TextStyle,
   headerSubtitle: {
     fontSize: 15,
     textAlign: 'center' as const,
-  },
+  } as TextStyle,
   statsRow: {
     flexDirection: 'row' as const,
     gap: 12,
-  },
+  } as ViewStyle,
   footer: {
     alignItems: 'center' as const,
     paddingVertical: 32,
     gap: 4,
-  },
+  } as ViewStyle,
   footerText: {
     fontSize: 13,
     fontWeight: '500' as const,
-  },
+  } as TextStyle,
   footerSub: {
     fontSize: 12,
-  },
-});
+  } as TextStyle,
+};

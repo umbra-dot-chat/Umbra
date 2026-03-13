@@ -3,10 +3,11 @@
  */
 
 import React from 'react';
-import { View, Pressable, Linking } from 'react-native';
-import { Text, useTheme } from '@coexist/wisp-react-native';
+import { Linking } from 'react-native';
+import { Box, Button, Text, useTheme } from '@coexist/wisp-react-native';
 
 import { TechSpec } from '@/components/guide/TechSpec';
+import { dbg } from '@/utils/debug';
 
 const REPO_BASE = 'https://github.com/InfamousVague/Umbra';
 
@@ -15,14 +16,15 @@ function openLink(path: string) {
 }
 
 export default function LimitationsContent() {
+  if (__DEV__) dbg.trackRender('LimitationsContent');
   const { theme, mode } = useTheme();
   const tc = theme.colors;
   const isDark = mode === 'dark';
 
   return (
-    <View style={{ gap: 12 }}>
+    <Box style={{ gap: 12 }}>
       {/* Development Overview */}
-      <View
+      <Box
         style={{
           backgroundColor: isDark ? '#18181B' : tc.background.sunken,
           borderRadius: 12,
@@ -54,15 +56,18 @@ export default function LimitationsContent() {
           over 1,400 tests across three test frameworks. See the test coverage
           breakdown for each section in the sidebar.
         </Text>
-        <Pressable
+        <Button
+          variant="tertiary"
           onPress={() => openLink('/tree/main/__tests__')}
-          style={{ marginTop: 8, cursor: 'pointer' }}
+          size="sm"
+          style={{ marginTop: 8, alignSelf: 'flex-start' }}
+          accessibilityLabel="View all tests on GitHub"
         >
           <Text style={{ fontSize: 12, color: tc.status.info }}>
             View all tests on GitHub
           </Text>
-        </Pressable>
-      </View>
+        </Button>
+      </Box>
 
       <TechSpec
         title="Core Features (Stable)"
@@ -190,6 +195,6 @@ export default function LimitationsContent() {
           { label: 'Plugin Tests', value: 'No unit tests (2 E2E only)' },
         ]}
       />
-    </View>
+    </Box>
   );
 }

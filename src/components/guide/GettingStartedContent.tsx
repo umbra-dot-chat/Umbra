@@ -3,15 +3,18 @@
  */
 
 import React from 'react';
-import { View } from 'react-native';
 
+
+import { Box } from '@coexist/wisp-react-native';
 import { FeatureCard } from '@/components/guide/FeatureCard';
 import { TechSpec } from '@/components/guide/TechSpec';
 import { KeyIcon, LockIcon, ShieldIcon, ExternalLinkIcon, GlobeIcon } from '@/components/ui';
+import { dbg } from '@/utils/debug';
 
 export default function GettingStartedContent() {
+  if (__DEV__) dbg.trackRender('GettingStartedContent');
   return (
-    <View style={{ gap: 12 }}>
+    <Box style={{ gap: 12 }}>
       <FeatureCard
         icon={<KeyIcon size={16} color="#22C55E" />}
         title="Create Identity"
@@ -207,6 +210,6 @@ export default function GettingStartedContent() {
           { label: 'E2E iOS (Detox)', value: '100+ tests across 17 files (full auth flow on native iOS)' },
         ]}
       />
-    </View>
+    </Box>
   );
 }

@@ -7,8 +7,8 @@
  */
 
 import React from 'react';
-import { View } from 'react-native';
 
+import { Box } from '@coexist/wisp-react-native';
 import { FeatureCard } from '@/components/guide/FeatureCard';
 import { TechSpec } from '@/components/guide/TechSpec';
 import {
@@ -17,10 +17,12 @@ import {
   SearchIcon, BellIcon, PaletteIcon, ZapIcon, DatabaseIcon,
   EditIcon, UserMinusIcon, KeyIcon, GlobeIcon,
 } from '@/components/ui';
+import { dbg } from '@/utils/debug';
 
 export default function CommunitiesContent() {
+  if (__DEV__) dbg.trackRender('CommunitiesContent');
   return (
-    <View style={{ gap: 12 }}>
+    <Box style={{ gap: 12 }}>
       {/* ── Core Infrastructure ──────────────────────────────── */}
 
       <FeatureCard
@@ -422,6 +424,6 @@ export default function CommunitiesContent() {
           { label: 'integrations.rs', value: 'Needs tests — webhooks, overrides' },
         ]}
       />
-    </View>
+    </Box>
   );
 }

@@ -12,6 +12,7 @@ import { VStack, Text, Card } from '@coexist/wisp-react-native';
 import { useLinkedAccounts, useDiscovery } from '@umbra/service';
 
 import { DiscoveryToggle } from './DiscoveryToggle';
+import { dbg } from '@/utils/debug';
 
 export interface FriendDiscoveryPanelProps {
   /** The user's Umbra DID. */
@@ -21,6 +22,7 @@ export interface FriendDiscoveryPanelProps {
 }
 
 export function FriendDiscoveryPanel({ did, style }: FriendDiscoveryPanelProps) {
+  if (__DEV__) dbg.trackRender('FriendDiscoveryPanel');
   const { accounts } = useLinkedAccounts(did);
 
   const {

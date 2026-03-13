@@ -5,8 +5,8 @@
  */
 
 import React from 'react';
-import { View, Pressable, Linking } from 'react-native';
-import { Text, useTheme } from '@coexist/wisp-react-native';
+import { Linking } from 'react-native';
+import { Box, Button, Text, useTheme } from '@coexist/wisp-react-native';
 
 import { FeatureCard } from '@/components/guide/FeatureCard';
 import { TechSpec } from '@/components/guide/TechSpec';
@@ -14,6 +14,7 @@ import {
   ExternalLinkIcon, NetworkIcon, CodeIcon, ServerIcon, DatabaseIcon,
   ZapIcon, GlobeIcon, PuzzleIcon, SettingsIcon, KeyIcon, LockIcon, ShieldIcon,
 } from '@/components/ui';
+import { dbg } from '@/utils/debug';
 
 const REPO_BASE = 'https://github.com/InfamousVague/Umbra/blob/main';
 
@@ -25,8 +26,10 @@ function SourceLink({ label, path }: { label: string; path: string }) {
   };
 
   return (
-    <Pressable
+    <Button
+      variant="tertiary"
       onPress={openLink}
+      size="sm"
       style={{
         flexDirection: 'row',
         alignItems: 'center',
@@ -37,8 +40,8 @@ function SourceLink({ label, path }: { label: string; path: string }) {
         borderRadius: 6,
         borderWidth: 1,
         borderColor: theme.colors.border.subtle,
-        cursor: 'pointer',
       }}
+      accessibilityLabel={`View source: ${label}`}
     >
       <ExternalLinkIcon size={10} color={theme.colors.status.info} />
       <Text
@@ -50,7 +53,7 @@ function SourceLink({ label, path }: { label: string; path: string }) {
       >
         {label}
       </Text>
-    </Pressable>
+    </Button>
   );
 }
 
@@ -59,7 +62,7 @@ function SectionHeader({ title, color }: { title: string; color: string }) {
   const isDark = mode === 'dark';
 
   return (
-    <View
+    <Box
       style={{
         flexDirection: 'row',
         alignItems: 'center',
@@ -68,7 +71,7 @@ function SectionHeader({ title, color }: { title: string; color: string }) {
         marginBottom: 4,
       }}
     >
-      <View style={{ width: 4, height: 20, backgroundColor: color, borderRadius: 2 }} />
+      <Box style={{ width: 4, height: 20, backgroundColor: color, borderRadius: 2 }} />
       <Text
         style={{
           fontSize: 14,
@@ -79,19 +82,20 @@ function SectionHeader({ title, color }: { title: string; color: string }) {
       >
         {title}
       </Text>
-    </View>
+    </Box>
   );
 }
 
 export default function TechnicalReferenceContent() {
+  if (__DEV__) dbg.trackRender('TechnicalReferenceContent');
   const { theme, mode } = useTheme();
   const tc = theme.colors;
   const isDark = mode === 'dark';
 
   return (
-    <View style={{ gap: 12 }}>
+    <Box style={{ gap: 12 }}>
       {/* Quick links */}
-      <View
+      <Box
         style={{
           backgroundColor: isDark ? '#18181B' : tc.background.sunken,
           borderRadius: 10,
@@ -112,7 +116,7 @@ export default function TechnicalReferenceContent() {
         >
           Source Code Reference
         </Text>
-        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+        <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
           <SourceLink label="umbra-core/lib.rs" path="packages/umbra-core/src/lib.rs" />
           <SourceLink label="ffi/wasm.rs" path="packages/umbra-core/src/ffi/wasm.rs" />
           <SourceLink label="crypto/mod.rs" path="packages/umbra-core/src/crypto/mod.rs" />
@@ -122,8 +126,8 @@ export default function TechnicalReferenceContent() {
           <SourceLink label="service.ts" path="packages/umbra-service/src/service.ts" />
           <SourceLink label="loader.ts" path="packages/umbra-wasm/loader.ts" />
           <SourceLink label="sql-bridge.ts" path="packages/umbra-wasm/sql-bridge.ts" />
-        </View>
-      </View>
+        </Box>
+      </Box>
 
       {/* ═══════════════════════════════════════════════════════════════════════ */}
       <SectionHeader title="Rust Core (umbra-core)" color="#F97316" />
@@ -610,6 +614,6 @@ export default function TechnicalReferenceContent() {
           { label: 'UI Library', value: 'Wisp React Native' },
         ]}
       />
-    </View>
+    </Box>
   );
 }

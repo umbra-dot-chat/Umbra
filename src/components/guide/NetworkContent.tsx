@@ -4,17 +4,20 @@
  */
 
 import React from 'react';
-import { View } from 'react-native';
 
+
+import { Box } from '@coexist/wisp-react-native';
 import { FeatureCard } from '@/components/guide/FeatureCard';
 import { TechSpec } from '@/components/guide/TechSpec';
 import {
   ServerIcon, ActivityIcon, ZapIcon, DatabaseIcon, NetworkIcon, MapPinIcon,
 } from '@/components/ui';
+import { dbg } from '@/utils/debug';
 
 export default function NetworkContent() {
+  if (__DEV__) dbg.trackRender('NetworkContent');
   return (
-    <View style={{ gap: 12 }}>
+    <Box style={{ gap: 12 }}>
 <FeatureCard
         icon={<ServerIcon size={16} color="#EAB308" />}
         title="Relay Server"
@@ -223,6 +226,6 @@ export default function NetworkContent() {
           { label: 'E2E iOS (Detox)', value: '95+ tests (two-device sync, relay connectivity)' },
         ]}
       />
-    </View>
+    </Box>
   );
 }

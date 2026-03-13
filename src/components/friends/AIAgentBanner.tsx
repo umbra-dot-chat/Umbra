@@ -7,14 +7,15 @@
  */
 
 import React, { useCallback, useState } from 'react';
-import { View, Pressable } from 'react-native';
+import { Pressable } from 'react-native';
 import {
-  Text, Button, Card, GradientBorder, Avatar, HStack, VStack,
+  Box, Text, Button, Card, GradientBorder, Avatar, HStack, VStack,
   useTheme,
 } from '@coexist/wisp-react-native';
 import Svg, { Path, Circle } from 'react-native-svg';
 import { AI_AGENTS, type AIAgentConfig } from '@/config/network';
 import { MessageIcon } from '@/components/ui';
+import { dbg } from '@/utils/debug';
 
 // ─── Icons ──────────────────────────────────────────────────────────────────
 
@@ -89,6 +90,7 @@ export function AIAgentBanner({
   addingDid,
   onDismiss,
 }: AIAgentBannerProps) {
+  if (__DEV__) dbg.trackRender('AIAgentBanner');
   const { theme } = useTheme();
   const tc = theme.colors;
 
@@ -169,7 +171,7 @@ function AIAgentRow({
       }}
     >
       {/* Bot Avatar */}
-      <View
+      <Box
         style={{
           width: 36,
           height: 36,
@@ -180,7 +182,7 @@ function AIAgentRow({
         }}
       >
         <BotIcon size={20} color={tc.accent.primary ?? '#6366f1'} />
-      </View>
+      </Box>
 
       {/* Info */}
       <VStack style={{ flex: 1, gap: 1 }}>
@@ -188,7 +190,7 @@ function AIAgentRow({
           <Text size="sm" weight="medium">
             {agent.displayName}
           </Text>
-          <View
+          <Box
             style={{
               paddingHorizontal: 6,
               paddingVertical: 1,
@@ -199,7 +201,7 @@ function AIAgentRow({
             <Text size="xs" weight="medium" style={{ color: tc.accent.primary ?? '#6366f1' }}>
               AI
             </Text>
-          </View>
+          </Box>
         </HStack>
         <Text size="xs" style={{ color: tc.text.muted }}>
           {agent.description}

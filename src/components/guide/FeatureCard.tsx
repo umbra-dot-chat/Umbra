@@ -7,10 +7,11 @@
  */
 
 import React from 'react';
-import { View, Pressable, Linking } from 'react-native';
+import { Pressable, Linking } from 'react-native';
 import type { ViewStyle, TextStyle } from 'react-native';
-import { Text, useTheme } from '@coexist/wisp-react-native';
+import { Box, Text, useTheme } from '@coexist/wisp-react-native';
 import { ExternalLinkIcon, CheckCircleIcon, CodeIcon } from '@/components/ui';
+import { dbg } from '@/utils/debug';
 
 export type FeatureStatus = 'working' | 'beta' | 'coming-soon';
 
@@ -72,6 +73,7 @@ export function FeatureCard({
   sourceLinks,
   testLinks,
 }: FeatureCardProps) {
+  if (__DEV__) dbg.trackRender('FeatureCard');
   const { theme, mode } = useTheme();
   const tc = theme.colors;
   const isDark = mode === 'dark';
@@ -171,43 +173,43 @@ export function FeatureCard({
   );
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
+    <Box style={styles.container}>
+      <Box style={styles.header}>
         {icon}
-        <View style={styles.titleRow}>
+        <Box style={styles.titleRow}>
           <Text style={styles.title}>{title}</Text>
-          <View style={styles.badge}>
+          <Box style={styles.badge}>
             <Text style={styles.badgeText}>{statusCfg.label}</Text>
-          </View>
-        </View>
-      </View>
+          </Box>
+        </Box>
+      </Box>
 
       <Text style={styles.description}>{description}</Text>
 
       {howTo && howTo.length > 0 && (
-        <View>
+        <Box>
           <Text style={styles.sectionLabel}>How to Use</Text>
           {howTo.map((step, i) => (
             <Text key={i} style={styles.step}>
               {i + 1}. {step}
             </Text>
           ))}
-        </View>
+        </Box>
       )}
 
       {limitations && limitations.length > 0 && (
-        <View>
+        <Box>
           <Text style={styles.sectionLabel}>Limitations</Text>
           {limitations.map((lim, i) => (
             <Text key={i} style={styles.limitation}>
               {'\u26A0'} {lim}
             </Text>
           ))}
-        </View>
+        </Box>
       )}
 
       {sourceLinks && sourceLinks.length > 0 && (
-        <View style={styles.sourceRow}>
+        <Box style={styles.sourceRow}>
           <CodeIcon size={10} color={tc.text.muted} />
           <Text style={{ fontSize: 10, color: tc.text.muted, marginRight: 2 }}>Source:</Text>
           {sourceLinks.map((link, i) => (
@@ -223,11 +225,11 @@ export function FeatureCard({
               <Text style={styles.sourceLabel}>{link.label}</Text>
             </Pressable>
           ))}
-        </View>
+        </Box>
       )}
 
       {testLinks && testLinks.length > 0 && (
-        <View style={styles.sourceRow}>
+        <Box style={styles.sourceRow}>
           <CheckCircleIcon size={10} color="#22C55E" />
           <Text style={{ fontSize: 10, color: tc.text.muted, marginRight: 2 }}>Tests:</Text>
           {testLinks.map((link, i) => (
@@ -244,8 +246,8 @@ export function FeatureCard({
               <Text style={[styles.sourceLabel, { color: '#22C55E' }]}>{link.label}</Text>
             </Pressable>
           ))}
-        </View>
+        </Box>
       )}
-    </View>
+    </Box>
   );
 }

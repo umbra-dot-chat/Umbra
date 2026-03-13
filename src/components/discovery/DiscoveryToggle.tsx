@@ -5,10 +5,10 @@
  */
 
 import React from 'react';
-import { View } from 'react-native';
 import type { ViewStyle } from 'react-native';
-import { HStack, VStack, Text, Card, Toggle, Separator, useTheme } from '@coexist/wisp-react-native';
+import { Box, HStack, VStack, Text, Card, Toggle, Separator, useTheme } from '@coexist/wisp-react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
+import { dbg } from '@/utils/debug';
 
 // Icon components
 function EyeIcon({ size = 24, color }: { size?: number; color: string }) {
@@ -59,6 +59,7 @@ export function DiscoveryToggle({
   disabled = false,
   style,
 }: DiscoveryToggleProps) {
+  if (__DEV__) dbg.trackRender('DiscoveryToggle');
   const { theme, mode } = useTheme();
   const isDark = mode === 'dark';
 
@@ -84,13 +85,13 @@ export function DiscoveryToggle({
     <Card variant="outlined" padding="md" style={style}>
       <HStack gap="md" style={{ alignItems: 'flex-start' }}>
         {/* Icon */}
-        <View style={iconBgStyle}>
+        <Box style={iconBgStyle}>
           {enabled ? (
             <EyeIcon size={24} color={successColor} />
           ) : (
             <EyeOffIcon size={24} color={mutedColor} />
           )}
-        </View>
+        </Box>
 
         {/* Content */}
         <VStack gap="sm" style={{ flex: 1 }}>

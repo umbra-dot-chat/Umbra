@@ -3,15 +3,18 @@
  */
 
 import React from 'react';
-import { View } from 'react-native';
 
+
+import { Box } from '@coexist/wisp-react-native';
 import { FeatureCard } from '@/components/guide/FeatureCard';
 import { TechSpec } from '@/components/guide/TechSpec';
 import { DatabaseIcon, SettingsIcon, ShieldIcon, ZapIcon, DownloadIcon, KeyIcon, AlertTriangleIcon } from '@/components/ui';
+import { dbg } from '@/utils/debug';
 
 export default function DataManagementContent() {
+  if (__DEV__) dbg.trackRender('DataManagementContent');
   return (
-    <View style={{ gap: 12 }}>
+    <Box style={{ gap: 12 }}>
       <FeatureCard
         icon={<DatabaseIcon size={16} color="#F59E0B" />}
         title="Local Data Storage"
@@ -254,6 +257,6 @@ export default function DataManagementContent() {
           { label: 'multi-instance.spec.ts', value: '2 tests (tab detection)' },
         ]}
       />
-    </View>
+    </Box>
   );
 }

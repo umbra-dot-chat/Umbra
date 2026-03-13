@@ -3,18 +3,21 @@
  */
 
 import React from 'react';
-import { View } from 'react-native';
 
+
+import { Box } from '@coexist/wisp-react-native';
 import { FeatureCard } from '@/components/guide/FeatureCard';
 import { TechSpec } from '@/components/guide/TechSpec';
 import {
   UserPlusIcon, UserCheckIcon, KeyIcon, BlockIcon, HandshakeIcon,
   QrCodeIcon, GlobeIcon, SearchIcon, ExternalLinkIcon, ClipboardIcon,
 } from '@/components/ui';
+import { dbg } from '@/utils/debug';
 
 export default function FriendsContent() {
+  if (__DEV__) dbg.trackRender('FriendsContent');
   return (
-    <View style={{ gap: 12 }}>
+    <Box style={{ gap: 12 }}>
       <FeatureCard
         icon={<UserPlusIcon size={16} color="#8B5CF6" />}
         title="Add Friends"
@@ -255,6 +258,6 @@ export default function FriendsContent() {
           { label: 'E2E iOS (Detox)', value: '80+ tests (friend flows on native iOS)' },
         ]}
       />
-    </View>
+    </Box>
   );
 }

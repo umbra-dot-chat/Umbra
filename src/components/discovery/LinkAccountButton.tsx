@@ -5,12 +5,13 @@
  */
 
 import React from 'react';
-import { View, Pressable } from 'react-native';
+import { Pressable } from 'react-native';
 import type { ViewStyle } from 'react-native';
-import { HStack, VStack, Text, Card, Spinner, useTheme } from '@coexist/wisp-react-native';
+import { Box, HStack, VStack, Text, Card, Spinner, useTheme } from '@coexist/wisp-react-native';
 import Svg, { Path } from 'react-native-svg';
 
 import type { DiscoveryPlatform as Platform } from '@umbra/service';
+import { dbg } from '@/utils/debug';
 
 // Platform icons (filled style to match ProfileImportSelector)
 function DiscordIcon({ size = 24, color }: { size?: number; color: string }) {
@@ -146,6 +147,7 @@ export function LinkAccountButton({
   disabled = false,
   style,
 }: LinkAccountButtonProps) {
+  if (__DEV__) dbg.trackRender('LinkAccountButton');
   const { theme, mode } = useTheme();
   const isDark = mode === 'dark';
 
@@ -171,7 +173,7 @@ export function LinkAccountButton({
         >
           <HStack gap="md" style={{ alignItems: 'center' }}>
             {/* Platform icon with colored background */}
-            <View
+            <Box
               style={{
                 width: 44,
                 height: 44,
@@ -182,7 +184,7 @@ export function LinkAccountButton({
               }}
             >
               <PlatformIcon platform={platform} size={24} color={platformColor} />
-            </View>
+            </Box>
 
             {/* Text content */}
             <VStack gap="xs" style={{ flex: 1 }}>

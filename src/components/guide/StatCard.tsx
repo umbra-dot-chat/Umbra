@@ -6,9 +6,9 @@
  */
 
 import React from 'react';
-import { View } from 'react-native';
 import type { ViewStyle, TextStyle } from 'react-native';
-import { Text, useTheme } from '@coexist/wisp-react-native';
+import { Box, Text, useTheme } from '@coexist/wisp-react-native';
+import { dbg } from '@/utils/debug';
 
 export interface StatCardProps {
   /** Stat label */
@@ -22,6 +22,7 @@ export interface StatCardProps {
 }
 
 export function StatCard({ label, value, icon, color = '#3B82F6' }: StatCardProps) {
+  if (__DEV__) dbg.trackRender('StatCard');
   const { theme, mode } = useTheme();
   const tc = theme.colors;
   const isDark = mode === 'dark';
@@ -60,12 +61,12 @@ export function StatCard({ label, value, icon, color = '#3B82F6' }: StatCardProp
   );
 
   return (
-    <View style={styles.container}>
-      <View style={styles.iconRow}>
+    <Box style={styles.container}>
+      <Box style={styles.iconRow}>
         {icon}
         <Text style={styles.value}>{value}</Text>
-      </View>
+      </Box>
       <Text style={styles.label}>{label}</Text>
-    </View>
+    </Box>
   );
 }

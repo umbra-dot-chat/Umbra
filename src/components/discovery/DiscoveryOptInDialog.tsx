@@ -6,9 +6,9 @@
  */
 
 import React, { useCallback, useState } from 'react';
-import { View } from 'react-native';
-import { Dialog, Button, Text, HStack, VStack, Separator, useTheme } from '@coexist/wisp-react-native';
+import { Dialog, Button, Text, Box, HStack, VStack, Separator, useTheme } from '@coexist/wisp-react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
+import { dbg } from '@/utils/debug';
 
 // ---------------------------------------------------------------------------
 // Icons
@@ -80,6 +80,7 @@ export function DiscoveryOptInDialog({
   platform,
   onEnableDiscovery,
 }: DiscoveryOptInDialogProps) {
+  if (__DEV__) dbg.trackRender('DiscoveryOptInDialog');
   const { theme, mode } = useTheme();
   const isDark = mode === 'dark';
   const [enabling, setEnabling] = useState(false);
@@ -119,8 +120,8 @@ export function DiscoveryOptInDialog({
     >
       <VStack gap="md">
         {/* Hero icon */}
-        <View style={{ alignItems: 'center', paddingVertical: 8 }}>
-          <View
+        <Box style={{ alignItems: 'center', paddingVertical: 8 }}>
+          <Box
             style={{
               width: 64,
               height: 64,
@@ -131,8 +132,8 @@ export function DiscoveryOptInDialog({
             }}
           >
             <UsersIcon size={32} color={successColor} />
-          </View>
-        </View>
+          </Box>
+        </Box>
 
         {/* Description */}
         <Text size="sm" style={{ color: theme.colors.text.secondary, textAlign: 'center' }}>

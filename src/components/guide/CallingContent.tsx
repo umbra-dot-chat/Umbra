@@ -8,8 +8,8 @@
  */
 
 import React from 'react';
-import { View } from 'react-native';
 
+import { Box } from '@coexist/wisp-react-native';
 import { FeatureCard } from '@/components/guide/FeatureCard';
 import { TechSpec } from '@/components/guide/TechSpec';
 import {
@@ -18,10 +18,12 @@ import {
   NetworkIcon, SmileIcon, MicOffIcon, MinimizeIcon, DatabaseIcon,
   AudioWaveIcon,
 } from '@/components/ui';
+import { dbg } from '@/utils/debug';
 
 export default function CallingContent() {
+  if (__DEV__) dbg.trackRender('CallingContent');
   return (
-    <View style={{ gap: 12 }}>
+    <Box style={{ gap: 12 }}>
 {/* ── Core Calling ────────────────────────────────────────────── */}
 
       <FeatureCard
@@ -491,6 +493,6 @@ export default function CallingContent() {
           { label: 'Covered Areas', value: 'Quality presets, codecs, noise suppression, device selection, video effects, filters' },
         ]}
       />
-    </View>
+    </Box>
   );
 }
