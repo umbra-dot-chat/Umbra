@@ -12,6 +12,10 @@
 
 import { wasm, parseWasm } from './helpers';
 
+// Debug bridge — optional-chained since logger may not be initialized
+function _dbg(): any { return (globalThis as any).__umbra_logger_instance; }
+const SRC = 'svc:metadata';
+
 /**
  * Send an account metadata update via relay to own DID.
  *
@@ -27,5 +31,5 @@ export async function syncMetadataViaRelay(
   _value: string,
 ): Promise<void> {
   // No-op: replaced by SyncContext + uploadSyncBlob()
-  console.warn('[metadata] syncMetadataViaRelay is deprecated. Use SyncContext / uploadSyncBlob() instead.');
+  _dbg()?.warn?.('service', 'syncMetadataViaRelay is deprecated — use SyncContext / uploadSyncBlob() instead', undefined, SRC);
 }

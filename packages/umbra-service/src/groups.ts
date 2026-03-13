@@ -16,6 +16,10 @@ import type {
 } from './types';
 import type { FileMessagePayload } from './messaging';
 
+// Debug bridge — optional-chained since logger may not be initialized
+function _dbg(): any { return (globalThis as any).__umbra_logger_instance; }
+const SRC = 'svc:groups';
+
 // =============================================================================
 // GROUP CRUD
 // =============================================================================
@@ -328,7 +332,7 @@ export async function acceptGroupInvite(
         relayWs.send(JSON.stringify({ type: 'send', to_did: rm.toDid, payload: rm.payload }));
       }
     } catch (err) {
-      console.warn('[UmbraService] Failed to send invite acceptance via relay:', err);
+      _dbg()?.warn?.('groups', 'Failed to send invite acceptance via relay', { err }, SRC);
     }
   }
 
@@ -359,7 +363,7 @@ export async function declineGroupInvite(
       }>(envResultJson);
       relayMessages = envResult.relayMessages ?? [];
     } catch (err) {
-      console.warn('[UmbraService] Failed to build decline envelope:', err);
+      _dbg()?.warn?.('groups', 'Failed to build decline envelope', { err }, SRC);
     }
   }
 
@@ -508,7 +512,7 @@ export async function removeGroupMemberWithRotation(
       try {
         relayWs.send(JSON.stringify({ type: 'send', to_did: rm.toDid, payload: rm.payload }));
       } catch (err) {
-        console.warn('[UmbraService] Failed to send relay message:', err);
+        _dbg()?.warn?.('groups', 'Failed to send relay message', { err }, SRC);
       }
     }
   }

@@ -5,6 +5,10 @@
  */
 
 import { wasm, parseWasm } from './helpers';
+
+// Debug bridge — optional-chained since logger may not be initialized
+function _dbg(): any { return (globalThis as any).__umbra_logger_instance; }
+const SRC = 'svc:community';
 import type {
   Community,
   CommunityCreateResult,
@@ -845,11 +849,7 @@ export function publishInviteToRelay(
   invitePayload?: string,
 ): void {
   if (!relayWs || relayWs.readyState !== WebSocket.OPEN) {
-    console.warn(
-      '[publishInviteToRelay] Relay WS not connected — invite not published:',
-      invite.code,
-      relayWs ? `readyState=${relayWs.readyState}` : 'ws=null',
-    );
+    _dbg()?.warn?.('community', 'Relay WS not connected — invite not published', { code: invite.code, readyState: relayWs ? relayWs.readyState : null }, SRC);
     return;
   }
 
@@ -866,7 +866,7 @@ export function publishInviteToRelay(
     invite_payload: invitePayload ?? '{}',
   };
 
-  console.log('[publishInviteToRelay] Publishing invite to relay:', invite.code);
+  _dbg()?.info?.('community', 'Publishing invite to relay', { code: invite.code }, SRC);
   relayWs.send(JSON.stringify(msg));
 }
 
@@ -1309,9 +1309,9 @@ export async function broadcastCommunityEvent(
   senderDid: string,
   relayWs: WebSocket | null,
 ): Promise<void> {
-  console.log('[broadcastCommunityEvent]', event.type, 'ws=', relayWs ? `readyState=${relayWs.readyState}` : 'null');
+  _dbg()?.debug?.('community', 'broadcastCommunityEvent', { eventType: event.type, wsReady: relayWs ? relayWs.readyState : null }, SRC);
   if (!relayWs || relayWs.readyState !== WebSocket.OPEN) {
-    console.warn('[broadcastCommunityEvent] SKIPPED — relay WS not open');
+    _dbg()?.warn?.('community', 'broadcastCommunityEvent SKIPPED — relay WS not open', undefined, SRC);
     return;
   }
 
@@ -1337,9 +1337,9 @@ export async function broadcastCommunityEvent(
   const resultJson = wasm().umbra_wasm_community_build_event_relay_batch(json);
   const relayMessages = await parseWasm<Array<{ toDid: string; payload: string }>>(resultJson);
 
-  console.log('[broadcastCommunityEvent] Sending to', relayMessages.length, 'members, canonical=', canonicalCommunityId);
+  _dbg()?.debug?.('community', `broadcastCommunityEvent sending to ${relayMessages.length} members`, { canonical: canonicalCommunityId }, SRC);
   for (const rm of relayMessages) {
-    console.log('[broadcastCommunityEvent] → to_did:', rm.toDid.substring(0, 20) + '...');
+    _dbg()?.trace?.('community', `broadcastCommunityEvent → to_did: ${rm.toDid.substring(0, 20)}...`, undefined, SRC);
     relayWs.send(JSON.stringify({ type: 'send', to_did: rm.toDid, payload: rm.payload }));
   }
 }
@@ -1711,7 +1711,7 @@ export async function createCommunityFromDiscordImport(
         });
       } catch (err) {
         // Audit log storage may not be implemented yet - log count anyway
-        console.warn('[Import] Audit log storage not yet implemented:', err);
+        _dbg()?.warn?.('community', 'Audit log storage not yet implemented', { err }, SRC);
         auditLogImported = totalAuditEntries; // Count entries even if storage fails
         warnings.push(`Audit log entries fetched (${totalAuditEntries}) but storage not yet implemented`);
 

@@ -43,6 +43,10 @@
  * @packageDocumentation
  */
 
+// Debug bridge — optional-chained since logger may not be initialized
+function _dbg(): any { return (globalThis as any).__umbra_logger_instance; }
+const SRC = 'svc:opfs';
+
 const ROOT_DIR_NAME = 'umbra-chunks';
 
 // ── Helpers ──────────────────────────────────────────────────────────────
@@ -241,7 +245,7 @@ export function initOpfsBridge(): boolean {
   if (typeof globalThis === 'undefined') return false;
   if (typeof navigator === 'undefined') return false;
   if (!navigator.storage || !('getDirectory' in navigator.storage)) {
-    console.warn('[opfs-bridge] OPFS not supported in this browser');
+    _dbg()?.warn?.('service', 'OPFS not supported in this browser', undefined, SRC);
     return false;
   }
 

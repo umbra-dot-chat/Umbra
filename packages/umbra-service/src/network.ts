@@ -7,6 +7,10 @@
 import { wasm, parseWasm } from './helpers';
 import type { NetworkStatus, ConnectionInfo, DiscoveryResult, DiscoveryEvent } from './types';
 
+// Debug bridge — optional-chained since logger may not be initialized
+function _dbg(): any { return (globalThis as any).__umbra_logger_instance; }
+const SRC = 'svc:network';
+
 /**
  * Start the network service
  *
@@ -14,18 +18,18 @@ import type { NetworkStatus, ConnectionInfo, DiscoveryResult, DiscoveryEvent } f
  * Must be called after identity creation.
  */
 export async function startNetwork(): Promise<void> {
-  console.log('[UmbraService] Starting network...');
+  _dbg()?.info?.('network', 'Starting network...', undefined, SRC);
   await wasm().umbra_wasm_network_start();
-  console.log('[UmbraService] Network started');
+  _dbg()?.info?.('network', 'Network started', undefined, SRC);
 }
 
 /**
  * Stop the network service
  */
 export async function stopNetwork(): Promise<void> {
-  console.log('[UmbraService] Stopping network...');
+  _dbg()?.info?.('network', 'Stopping network...', undefined, SRC);
   await wasm().umbra_wasm_network_stop();
-  console.log('[UmbraService] Network stopped');
+  _dbg()?.info?.('network', 'Network stopped', undefined, SRC);
 }
 
 /**
@@ -112,7 +116,7 @@ export async function parseConnectionInfo(info: string): Promise<ConnectionInfo>
  * @param info - Connection info (from QR code or link)
  */
 export async function connectDirect(info: ConnectionInfo): Promise<void> {
-  console.log('[UmbraService] Direct connect requested for:', info.did);
+  _dbg()?.info?.('network', 'Direct connect requested', { did: info.did }, SRC);
   // TODO: Extract WebRTC offer from connection info and complete handshake
 }
 

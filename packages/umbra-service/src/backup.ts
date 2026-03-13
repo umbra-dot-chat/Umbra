@@ -16,6 +16,10 @@
 
 import { wasm, parseWasm } from './helpers';
 
+// Debug bridge — optional-chained since logger may not be initialized
+function _dbg(): any { return (globalThis as any).__umbra_logger_instance; }
+const SRC = 'svc:backup';
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────────────────────────────────────
@@ -119,7 +123,7 @@ export async function restoreAccountBackup(
   // The caller should pass the offline messages to parseBackupManifest/parseBackupChunks
   // and then call restoreFromChunks directly.
   // This is a convenience wrapper that does nothing if there's no pending data.
-  console.warn('[backup] Use parseBackupManifest + restoreFromChunks for offline message flow');
+  _dbg()?.warn?.('sync', 'Use parseBackupManifest + restoreFromChunks for offline message flow', undefined, SRC);
   return null;
 }
 

@@ -47,7 +47,7 @@ export async function sendFriendRequest(
         relayWs.send(JSON.stringify({ type: 'send', to_did: rm.toDid, payload: rm.payload }));
         relayDelivered = true;
       } catch (err) {
-        console.error('[UmbraService] Failed to send friend request via relay:', err);
+        _dbg()?.error?.('friends', 'Failed to send friend request via relay', { err }, SRC);
       }
     }
   }
@@ -102,7 +102,7 @@ export async function acceptFriendRequest(
         relayWs.send(JSON.stringify({ type: 'send', to_did: rm.toDid, payload: rm.payload }));
         relayDelivered = true;
       } catch (err) {
-        console.error('[UmbraService] Failed to send friend acceptance via relay:', err);
+        _dbg()?.error?.('friends', 'Failed to send friend acceptance via relay', { err }, SRC);
       }
     }
   }
@@ -174,7 +174,7 @@ export async function getBlockedUsers(): Promise<BlockedUser[]> {
       reason: u.reason ?? undefined,
     }));
   } catch (err) {
-    console.warn('[friends] getBlockedUsers failed:', err);
+    _dbg()?.warn?.('friends', 'getBlockedUsers failed', { err }, SRC);
     return [];
   }
 }

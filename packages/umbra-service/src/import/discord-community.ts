@@ -8,6 +8,10 @@
 
 import { translateDiscordPermissions } from './discord-permissions';
 
+// Debug bridge — optional-chained since logger may not be initialized
+function _dbg(): any { return (globalThis as any).__umbra_logger_instance; }
+const SRC = 'svc:discord-import';
+
 /**
  * Discord guild (server) information.
  */
@@ -532,7 +536,7 @@ export async function downloadAndStoreAsset(
     // Download the image from the source URL
     const response = await fetch(sourceUrl);
     if (!response.ok) {
-      console.warn(`[downloadAndStoreAsset] Failed to download from ${sourceUrl}: ${response.status}`);
+      _dbg()?.warn?.('community', `Failed to download from ${sourceUrl}: ${response.status}`, undefined, SRC);
       return null;
     }
 
@@ -554,20 +558,20 @@ export async function downloadAndStoreAsset(
 
     if (!uploadResponse.ok) {
       const errorText = await uploadResponse.text();
-      console.warn(`[downloadAndStoreAsset] Failed to upload to relay: ${uploadResponse.status} - ${errorText}`);
+      _dbg()?.warn?.('community', `Failed to upload to relay: ${uploadResponse.status} - ${errorText}`, undefined, SRC);
       return null;
     }
 
     const result = await uploadResponse.json();
     if (!result.ok || !result.data?.url) {
-      console.warn('[downloadAndStoreAsset] Upload failed:', result.error);
+      _dbg()?.warn?.('community', 'Upload failed', { error: result.error }, SRC);
       return null;
     }
 
     // Return the full URL to the asset
     return `${relay}${result.data.url}`;
   } catch (error) {
-    console.warn('[downloadAndStoreAsset] Error:', error);
+    _dbg()?.warn?.('community', 'downloadAndStoreAsset error', { error }, SRC);
     return null;
   }
 }

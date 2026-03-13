@@ -206,7 +206,7 @@ export async function rotateEncryptionKey(
       try {
         relayWs.send(JSON.stringify({ type: 'send', to_did: rm.toDid, payload: rm.payload }));
       } catch (err) {
-        console.error('[rotateEncryptionKey] Failed to send key rotation notification:', err);
+        _dbg()?.error?.('auth', 'Failed to send key rotation notification', { err }, SRC);
       }
     }
   }

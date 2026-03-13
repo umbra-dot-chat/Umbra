@@ -13,6 +13,10 @@
 import { getTransfers, getIncompleteTransfers } from './file-transfer';
 import { isOpfsBridgeReady } from './opfs-bridge';
 
+// Debug bridge — optional-chained since logger may not be initialized
+function _dbg(): any { return (globalThis as any).__umbra_logger_instance; }
+const SRC = 'svc:storage';
+
 // ── Types ──────────────────────────────────────────────────────────────────
 
 /**
@@ -212,7 +216,7 @@ export async function smartCleanup(): Promise<CleanupResult> {
     // Transfer cleanup failed
   }
 
-  console.log('[StorageManager] Smart cleanup complete:', result);
+  _dbg()?.info?.('service', 'Smart cleanup complete', result, SRC);
   return result;
 }
 
@@ -225,7 +229,7 @@ export async function smartCleanup(): Promise<CleanupResult> {
  */
 export function setAutoCleanupRules(rules: Partial<AutoCleanupRules>): void {
   cleanupRules = { ...DEFAULT_RULES, ...rules };
-  console.log('[StorageManager] Cleanup rules updated:', cleanupRules);
+  _dbg()?.info?.('service', 'Cleanup rules updated', cleanupRules, SRC);
 }
 
 /**
