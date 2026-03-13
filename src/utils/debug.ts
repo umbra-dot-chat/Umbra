@@ -86,7 +86,10 @@ export type LogCategory =
   | 'friends'       // Friend requests, list, block/unblock
   | 'sync'          // Cross-device sync, KV operations
   | 'auth'          // Authentication, identity, PIN
-  | 'plugins';      // Plugin loading, lifecycle, commands
+  | 'plugins'       // Plugin loading, lifecycle, commands
+  | 'call'          // Voice/video calls, WebRTC
+  | 'groups'        // Group chat operations
+  | 'community';    // Community channels, roles, settings
 
 export interface LogEntry {
   /** performance.now() for relative timing */
@@ -114,6 +117,7 @@ const LOG_LEVELS: Record<LogLevel, number> = {
 const ALL_CATEGORIES: LogCategory[] = [
   'render', 'service', 'network', 'state', 'lifecycle', 'perf',
   'conversations', 'messages', 'friends', 'sync', 'auth', 'plugins',
+  'call', 'groups', 'community',
 ];
 
 // Standard severity colors
@@ -249,8 +253,12 @@ class DebugLogger {
   private _tuiWs: WebSocket | null = null;
   private _tuiReconnectId: any = null;
 
+  // High-frequency trace buffer (hot-path perf, no console output)
+  private traceRing: RingBuffer;
+
   constructor() {
     this.ring = new RingBuffer(500);
+    this.traceRing = new RingBuffer(2000);
 
     // Enable all categories by default in dev mode
     ALL_CATEGORIES.forEach(c => this.enabled.add(c));
@@ -642,6 +650,30 @@ class DebugLogger {
     }, 10_000) as any;
   }
 
+  /** Stream individual log entries to TUI in real-time */
+  private _sendLogToTui(entry: LogEntry) {
+    if (!this._tuiWs || this._tuiWs.readyState !== WebSocket.OPEN) return;
+    try {
+      this._tuiWs.send(JSON.stringify({
+        seq: this._totalCount,
+        ts: entry.t,
+        cat: entry.cat,
+        fn: entry.msg.slice(0, 120),
+        argBytes: 0,
+        durMs: 0,
+        memBefore: 0,
+        memAfter: 0,
+        memGrowth: 0,
+        meta: {
+          level: entry.level,
+          src: entry.src || '',
+          data: entry.data?.slice(0, 200) || '',
+          stack: entry.stack?.slice(0, 300) || '',
+        },
+      }));
+    } catch { /* ignore send failures */ }
+  }
+
   /** Send vitals to TUI as a TraceEvent (called from heartbeat) */
   private _sendVitalsToTui(vitals: CrashVitals) {
     if (!this._tuiWs || this._tuiWs.readyState !== WebSocket.OPEN) return;
@@ -715,6 +747,48 @@ class DebugLogger {
       }
       return dur;
     };
+  }
+
+  /**
+   * High-frequency perf trace — writes to trace buffer + TUI stream only.
+   * NO console output. Use for hot-path instrumentation (parseMessageContent, etc).
+   */
+  tracePerf(cat: LogCategory, msg: string, durationMs: number, src?: string) {
+    const entry: LogEntry = {
+      t: performance.now(),
+      ts: Date.now(),
+      level: durationMs > 50 ? 'warn' : 'trace',
+      cat,
+      msg: `${msg} dur=${durationMs.toFixed(1)}ms`,
+      src,
+    };
+    this.traceRing.push(entry);
+    this._sendLogToTui(entry);
+  }
+
+  /** Get trace buffer entries (for __debug console) */
+  getTraceEntries(): LogEntry[] {
+    return this.traceRing.getEntries();
+  }
+
+  /** Get trace stats: count per category, avg/max duration from trace buffer */
+  getTraceStats(): Record<string, { count: number; avgMs: number; maxMs: number }> {
+    const entries = this.traceRing.getEntries();
+    const stats: Record<string, { count: number; totalMs: number; maxMs: number }> = {};
+    for (const e of entries) {
+      const m = e.msg.match(/dur=([\d.]+)ms/);
+      if (!m) continue;
+      const dur = parseFloat(m[1]);
+      if (!stats[e.cat]) stats[e.cat] = { count: 0, totalMs: 0, maxMs: 0 };
+      stats[e.cat].count++;
+      stats[e.cat].totalMs += dur;
+      if (dur > stats[e.cat].maxMs) stats[e.cat].maxMs = dur;
+    }
+    const result: Record<string, { count: number; avgMs: number; maxMs: number }> = {};
+    for (const [cat, s] of Object.entries(stats)) {
+      result[cat] = { count: s.count, avgMs: s.totalMs / s.count, maxMs: s.maxMs };
+    }
+    return result;
   }
 
   // ── Long task / Long Animation Frame detection ───────────────────────
@@ -853,6 +927,9 @@ class DebugLogger {
 
     // Always push to ring buffer regardless of enabled state
     this.ring.push(entry);
+
+    // Stream to TUI WebSocket in real-time
+    this._sendLogToTui(entry);
 
     // Console output gating
     if (!this.enabled.has(cat)) return;
@@ -1151,6 +1228,14 @@ if (typeof window !== 'undefined') {
     // Export
     downloadChromeTrace: () => dbg.downloadChromeTrace(),
 
+    // Trace buffer (high-frequency perf)
+    traceEntries: () => dbg.getTraceEntries(),
+    traceStats: () => {
+      const stats = dbg.getTraceStats();
+      console.table(stats);
+      return stats;
+    },
+
     // Help
     help: () => {
       console.log(`
@@ -1159,7 +1244,7 @@ if (typeof window !== 'undefined') {
 └─────────────────────────────────────────┘%c
 
 %cCategories%c (layer):   render, service, network, state, lifecycle, perf
-%cCategories%c (feature): conversations, messages, friends, sync, auth, plugins
+%cCategories%c (feature): conversations, messages, friends, sync, auth, plugins, call, groups, community
 %cLevels%c:              trace, debug, info, warn, error, fatal
 
 %cCommands:%c
@@ -1196,6 +1281,9 @@ if (typeof window !== 'undefined') {
   __debug.autoConnectTui(9999)     Auto-reconnect to TUI (10s retry)
   __debug.disconnectTui()          Disconnect from TUI
   __debug.downloadChromeTrace()    Export as Chrome trace format
+
+  __debug.traceEntries()           Get high-freq trace buffer entries
+  __debug.traceStats()             Per-category trace timing stats
 `,
         'color: #6366f1; font-weight: bold',
         'color: inherit',
