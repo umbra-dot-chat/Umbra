@@ -3,7 +3,7 @@
 //! The `App` struct owns all trace events, per-client state,
 //! computed statistics, and UI mode (active tab, filter, scroll).
 
-use std::collections::HashMap;
+use std::collections::{HashMap, VecDeque};
 use std::time::Instant;
 
 use crossterm::event::{KeyCode, KeyModifiers};
@@ -17,6 +17,9 @@ use crate::ui;
 
 /// Maximum events kept in memory (circular buffer behavior).
 const MAX_EVENTS: usize = 100_000;
+
+/// Maximum log entries kept in the Log tab.
+const MAX_LOG_ENTRIES: usize = 2_000;
 
 /// A single trace event received from the browser.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -57,7 +60,71 @@ pub struct TraceEvent {
     /// Error message if this event represents a failure.
     #[serde(default)]
     pub err: Option<String>,
+    /// Optional metadata (present on log entries and vitals heartbeats).
+    #[serde(default)]
+    pub meta: Option<TraceMeta>,
 }
+
+/// Metadata attached to trace events from the browser debug bridge.
+///
+/// When `level` is non-empty, this is a log entry.
+/// When `level` is empty/absent, this is a vitals heartbeat.
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct TraceMeta {
+    /// Log level: trace, debug, info, warn, error, fatal.
+    #[serde(default)]
+    pub level: String,
+    /// Source hook/module name (e.g. "useMessages").
+    #[serde(default)]
+    pub src: String,
+    /// Serialized data payload.
+    #[serde(default)]
+    pub data: String,
+    /// Stack trace (if available).
+    #[serde(default)]
+    pub stack: String,
+}
+
+/// A parsed log entry for the Log tab.
+#[derive(Debug, Clone)]
+pub struct LogEntry {
+    /// Browser timestamp (performance.now() in ms).
+    pub timestamp: f64,
+    /// Log level (trace, debug, info, warn, error, fatal).
+    pub level: String,
+    /// Event category (e.g. "messages", "sync", "auth").
+    pub category: String,
+    /// Source hook/module (e.g. "useMessages").
+    pub source: String,
+    /// Log message (from the fn field).
+    pub message: String,
+    /// Data payload.
+    pub data: String,
+}
+
+/// All log categories for cycling the category filter.
+pub const LOG_CATEGORIES: &[&str] = &[
+    "render",
+    "service",
+    "network",
+    "state",
+    "lifecycle",
+    "perf",
+    "conversations",
+    "messages",
+    "friends",
+    "sync",
+    "auth",
+    "plugins",
+    "call",
+    "groups",
+    "community",
+];
+
+/// All log levels in ascending severity order for cycling.
+pub const LOG_LEVELS: &[&str] = &[
+    "trace", "debug", "info", "warn", "error", "fatal",
+];
 
 /// Connected client info from the hello handshake.
 #[derive(Debug, Clone)]
@@ -80,10 +147,11 @@ pub enum Tab {
     Err,
     Analysis,
     Browser,
+    Log,
 }
 
 impl Tab {
-    pub const ALL: [Tab; 8] = [
+    pub const ALL: [Tab; 9] = [
         Tab::All,
         Tab::Wasm,
         Tab::Sql,
@@ -92,6 +160,7 @@ impl Tab {
         Tab::Err,
         Tab::Analysis,
         Tab::Browser,
+        Tab::Log,
     ];
 
     pub fn label(self) -> &'static str {
@@ -104,6 +173,7 @@ impl Tab {
             Tab::Err => "Err",
             Tab::Analysis => "Analysis",
             Tab::Browser => "Browser",
+            Tab::Log => "Log",
         }
     }
 
@@ -164,6 +234,25 @@ pub struct App {
     events_at_last_tick: usize,
     /// Tick counter for events/sec smoothing.
     tick_count: u64,
+
+    // -- Log tab state --
+
+    /// Log entries for the Log tab (capped at MAX_LOG_ENTRIES).
+    pub log_entries: VecDeque<LogEntry>,
+    /// Filter by log level (only show entries >= this level).
+    pub log_level_filter: Option<String>,
+    /// Filter by category (exact match).
+    pub log_category_filter: Option<String>,
+    /// Filter by source (exact match).
+    pub log_source_filter: Option<String>,
+    /// Scroll offset for the Log tab.
+    pub log_scroll_offset: usize,
+    /// Whether the Log tab auto-scrolls to latest entries.
+    pub log_auto_scroll: bool,
+    /// Whether the Log tab is in source-filter input mode.
+    pub log_source_input_mode: bool,
+    /// Current source filter text being typed.
+    pub log_source_input: String,
 }
 
 impl App {
@@ -191,6 +280,14 @@ impl App {
             auto_scroll: true,
             events_at_last_tick: 0,
             tick_count: 0,
+            log_entries: VecDeque::with_capacity(MAX_LOG_ENTRIES),
+            log_level_filter: None,
+            log_category_filter: None,
+            log_source_filter: None,
+            log_scroll_offset: 0,
+            log_auto_scroll: true,
+            log_source_input_mode: false,
+            log_source_input: String::new(),
         }
     }
 
@@ -227,6 +324,86 @@ impl App {
                 _ => {}
             }
             return;
+        }
+
+        // In log source filter input mode
+        if self.log_source_input_mode {
+            match code {
+                KeyCode::Esc => {
+                    self.log_source_input_mode = false;
+                    self.log_source_input.clear();
+                }
+                KeyCode::Enter => {
+                    self.log_source_input_mode = false;
+                    if self.log_source_input.is_empty() {
+                        self.log_source_filter = None;
+                    } else {
+                        self.log_source_filter = Some(self.log_source_input.clone());
+                    }
+                }
+                KeyCode::Backspace => {
+                    self.log_source_input.pop();
+                }
+                KeyCode::Char(c) => {
+                    self.log_source_input.push(c);
+                }
+                _ => {}
+            }
+            return;
+        }
+
+        // Log tab-specific keybindings
+        if self.tab == Tab::Log {
+            match code {
+                KeyCode::Char('c') if !modifiers.contains(KeyModifiers::CONTROL) => {
+                    self.cycle_log_category_filter();
+                    return;
+                }
+                KeyCode::Char('l') => {
+                    self.cycle_log_level_filter();
+                    return;
+                }
+                KeyCode::Char('s') => {
+                    if self.log_source_filter.is_some() {
+                        // Clear existing source filter
+                        self.log_source_filter = None;
+                    } else {
+                        // Enter source filter input mode
+                        self.log_source_input_mode = true;
+                        self.log_source_input.clear();
+                    }
+                    return;
+                }
+                KeyCode::Char('x') => {
+                    self.log_entries.clear();
+                    self.log_scroll_offset = 0;
+                    self.log_auto_scroll = true;
+                    return;
+                }
+                KeyCode::Char('j') | KeyCode::Down => {
+                    self.log_scroll_offset = self.log_scroll_offset.saturating_add(1);
+                    self.log_auto_scroll = false;
+                    return;
+                }
+                KeyCode::Char('k') | KeyCode::Up => {
+                    self.log_scroll_offset = self.log_scroll_offset.saturating_sub(1);
+                    if self.log_scroll_offset == 0 {
+                        self.log_auto_scroll = true;
+                    }
+                    return;
+                }
+                KeyCode::Char('G') => {
+                    self.log_auto_scroll = true;
+                    self.log_scroll_offset = 0;
+                    return;
+                }
+                KeyCode::Char('g') => {
+                    self.log_auto_scroll = false;
+                    self.log_scroll_offset = 0;
+                    return;
+                }
+                _ => {} // Fall through to global keys
+            }
         }
 
         // Normal mode key handling
@@ -281,6 +458,81 @@ impl App {
         }
     }
 
+    /// Cycle the log category filter through all categories (and None).
+    fn cycle_log_category_filter(&mut self) {
+        self.log_category_filter = match &self.log_category_filter {
+            None => Some(LOG_CATEGORIES[0].to_string()),
+            Some(current) => {
+                let idx = LOG_CATEGORIES.iter().position(|&c| c == current);
+                match idx {
+                    Some(i) if i + 1 < LOG_CATEGORIES.len() => {
+                        Some(LOG_CATEGORIES[i + 1].to_string())
+                    }
+                    _ => None, // Wrap around to None
+                }
+            }
+        };
+    }
+
+    /// Cycle the log level filter through all levels (and None).
+    fn cycle_log_level_filter(&mut self) {
+        self.log_level_filter = match &self.log_level_filter {
+            None => Some(LOG_LEVELS[0].to_string()),
+            Some(current) => {
+                let idx = LOG_LEVELS.iter().position(|&l| l == current);
+                match idx {
+                    Some(i) if i + 1 < LOG_LEVELS.len() => {
+                        Some(LOG_LEVELS[i + 1].to_string())
+                    }
+                    _ => None, // Wrap around to None
+                }
+            }
+        };
+    }
+
+    /// Get the numeric severity for a log level (higher = more severe).
+    pub fn level_severity(level: &str) -> u8 {
+        match level {
+            "trace" => 0,
+            "debug" => 1,
+            "info" => 2,
+            "warn" => 3,
+            "error" => 4,
+            "fatal" => 5,
+            _ => 2, // Default to info
+        }
+    }
+
+    /// Get log entries filtered by the current filters.
+    pub fn filtered_log_entries(&self) -> Vec<&LogEntry> {
+        self.log_entries
+            .iter()
+            .filter(|entry| {
+                // Level filter: only show entries >= the filter level
+                if let Some(ref min_level) = self.log_level_filter {
+                    if Self::level_severity(&entry.level)
+                        < Self::level_severity(min_level)
+                    {
+                        return false;
+                    }
+                }
+                // Category filter: exact match
+                if let Some(ref cat) = self.log_category_filter {
+                    if entry.category != *cat {
+                        return false;
+                    }
+                }
+                // Source filter: substring match
+                if let Some(ref src) = self.log_source_filter {
+                    if !entry.source.contains(src.as_str()) {
+                        return false;
+                    }
+                }
+                true
+            })
+            .collect()
+    }
+
     /// Handle a WebSocket event from the server.
     pub fn handle_ws_event(&mut self, event: WsEvent) {
         match event {
@@ -301,6 +553,16 @@ impl App {
             }
             WsEvent::Trace(trace) => {
                 if !self.paused {
+                    // Check if this is a log entry (meta.level is non-empty)
+                    let is_log_entry = trace
+                        .meta
+                        .as_ref()
+                        .is_some_and(|m| !m.level.is_empty());
+
+                    if is_log_entry {
+                        self.ingest_log_entry(&trace);
+                    }
+
                     self.ingest_event(trace);
                 }
             }
@@ -333,6 +595,28 @@ impl App {
         }
 
         self.events.push(event);
+    }
+
+    /// Ingest a trace event as a log entry into the Log tab.
+    fn ingest_log_entry(&mut self, event: &TraceEvent) {
+        let meta = match &event.meta {
+            Some(m) => m,
+            None => return,
+        };
+
+        let entry = LogEntry {
+            timestamp: event.ts,
+            level: meta.level.clone(),
+            category: event.cat.clone(),
+            source: meta.src.clone(),
+            message: event.func.clone(),
+            data: meta.data.clone(),
+        };
+
+        if self.log_entries.len() >= MAX_LOG_ENTRIES {
+            self.log_entries.pop_front();
+        }
+        self.log_entries.push_back(entry);
     }
 
     /// Periodic tick — update computed metrics.
