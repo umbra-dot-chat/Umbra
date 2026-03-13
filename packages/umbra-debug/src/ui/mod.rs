@@ -5,12 +5,15 @@
 
 pub mod all_tab;
 pub mod analysis_tab;
+pub mod breakpoint;
 pub mod browser_tab;
+pub mod compare_tab;
 pub mod dashboard_tab;
 pub mod err_tab;
 pub mod log_tab;
 pub mod mem_tab;
 pub mod net_tab;
+pub mod replay_tab;
 pub mod sql_tab;
 pub mod wasm_tab;
 
@@ -24,7 +27,7 @@ pub fn render(frame: &mut Frame, app: &App) {
     let area = frame.area();
 
     // Vertical layout: tab bar | content | filter bar? | status bar
-    let has_filter = app.filter_mode || app.log_source_input_mode;
+    let has_filter = app.filter_mode || app.log_source_input_mode || app.replay_filter_mode;
     let constraints = if has_filter {
         vec![
             Constraint::Length(1), // Tab bar
@@ -58,6 +61,12 @@ pub fn render(frame: &mut Frame, app: &App) {
         Tab::Analysis => analysis_tab::render(frame, app, content_area),
         Tab::Browser => browser_tab::render(frame, app, content_area),
         Tab::Log => log_tab::render(frame, app, content_area),
+        Tab::Compare => compare_tab::render(
+            frame,
+            app.comparison.as_ref(),
+            content_area,
+        ),
+        Tab::Replay => replay_tab::render(frame, app, content_area),
     }
 
     // 3. Filter input bar (if active)
@@ -65,6 +74,8 @@ pub fn render(frame: &mut Frame, app: &App) {
         render_filter_bar(frame, &app.filter_input, chunks[2]);
     } else if app.log_source_input_mode {
         render_filter_bar(frame, &format!("src:{}", app.log_source_input), chunks[2]);
+    } else if app.replay_filter_mode {
+        render_filter_bar(frame, &format!("replay:{}", app.replay_filter_input), chunks[2]);
     }
 
     // 4. Status bar

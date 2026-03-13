@@ -16,6 +16,7 @@ use crate::store::compare::SessionComparison;
 use crate::store::replay::{ReplaySession, ReplaySpeed};
 use crate::store::SessionWriter;
 use crate::ui;
+use crate::ui::breakpoint;
 use crate::ui::breakpoint::Breakpoint;
 
 /// Maximum events kept in memory (circular buffer behavior).

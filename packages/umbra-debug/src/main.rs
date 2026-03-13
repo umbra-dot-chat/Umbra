@@ -23,6 +23,15 @@
 //! umbra-debug query --grep "store_incoming"
 //! umbra-debug query --tail
 //! umbra-debug query --memory-timeline
+//! umbra-debug query --slow-wasm 50
+//! umbra-debug query --render-storms
+//! umbra-debug query --state-changes AuthContext
+//! umbra-debug query --timeline 12:00 12:05
+//! umbra-debug query --errors-only
+//! umbra-debug query --budget-violations
+//!
+//! # Compare two sessions side-by-side
+//! umbra-debug --compare session1.jsonl session2.jsonl
 //! ```
 
 mod app;
@@ -51,6 +60,10 @@ struct Cli {
     /// Enable verbose logging
     #[arg(long)]
     verbose: bool,
+
+    /// Compare two session files side-by-side
+    #[arg(long, num_args = 2, value_names = ["SESSION_A", "SESSION_B"])]
+    compare: Option<Vec<String>>,
 
     /// CLI query subcommand (skip TUI)
     #[command(subcommand)]
@@ -84,6 +97,30 @@ enum Commands {
         /// Print ASCII memory timeline from last session
         #[arg(long)]
         memory_timeline: bool,
+
+        /// Print WASM calls exceeding threshold in ms
+        #[arg(long, value_name = "MS")]
+        slow_wasm: Option<f64>,
+
+        /// Print components with render storms (>100/s)
+        #[arg(long)]
+        render_storms: bool,
+
+        /// Print state changes matching a context name
+        #[arg(long, value_name = "CONTEXT")]
+        state_changes: Option<String>,
+
+        /// Print events within a time range (two HH:MM args)
+        #[arg(long, num_args = 2, value_names = ["START", "END"])]
+        timeline: Option<Vec<String>>,
+
+        /// Print only error and fatal events
+        #[arg(long)]
+        errors_only: bool,
+
+        /// Print budget violation events
+        #[arg(long)]
+        budget_violations: bool,
     },
 }
 
@@ -100,6 +137,12 @@ async fn main() -> Result<()> {
         grep,
         tail,
         memory_timeline,
+        slow_wasm,
+        render_storms,
+        state_changes,
+        timeline,
+        errors_only,
+        budget_violations,
     }) = cli.command
     {
         return run_query(
@@ -109,18 +152,30 @@ async fn main() -> Result<()> {
             grep,
             tail,
             memory_timeline,
+            slow_wasm,
+            render_storms,
+            state_changes,
+            timeline,
+            errors_only,
+            budget_violations,
         )
         .await;
     }
 
-    // TUI mode (default or --replay)
-    run_tui(cli.port, cli.replay, cli.verbose).await
+    // TUI mode (default or --replay or --compare)
+    run_tui(cli.port, cli.replay, cli.compare, cli.verbose).await
 }
 
 /// Run the interactive TUI.
-async fn run_tui(port: u16, replay_path: Option<String>, _verbose: bool) -> Result<()> {
+async fn run_tui(
+    port: u16,
+    replay_path: Option<String>,
+    compare_paths: Option<Vec<String>>,
+    _verbose: bool,
+) -> Result<()> {
     use app::App;
     use crossterm::event::{self, Event, KeyEventKind};
+    use std::path::PathBuf;
     use std::time::Duration;
     use tokio::sync::mpsc;
 
@@ -128,6 +183,16 @@ async fn run_tui(port: u16, replay_path: Option<String>, _verbose: bool) -> Resu
     let (ws_tx, mut ws_rx) = mpsc::unbounded_channel();
 
     let mut app = App::new();
+
+    // If --compare was given, load the comparison and switch to Compare tab
+    if let Some(paths) = compare_paths {
+        if paths.len() == 2 {
+            let path_a = PathBuf::from(&paths[0]);
+            let path_b = PathBuf::from(&paths[1]);
+            app.load_comparison_from_files(&path_a, &path_b);
+            app.tab = app::Tab::Compare;
+        }
+    }
 
     // Start WebSocket server (unless in replay mode)
     if replay_path.is_none() {
@@ -187,6 +252,7 @@ async fn run_tui(port: u16, replay_path: Option<String>, _verbose: bool) -> Resu
 }
 
 /// Run CLI query mode — prints to stdout and exits.
+#[allow(clippy::too_many_arguments)]
 async fn run_query(
     last_crash: bool,
     memory_suspects: bool,
@@ -194,6 +260,12 @@ async fn run_query(
     grep: Option<String>,
     _tail: bool,
     memory_timeline: bool,
+    slow_wasm: Option<f64>,
+    render_storms: bool,
+    state_changes: Option<String>,
+    timeline: Option<Vec<String>>,
+    errors_only: bool,
+    budget_violations: bool,
 ) -> Result<()> {
     let log_dir = store::log_dir();
 
@@ -207,6 +279,20 @@ async fn run_query(
         store::query::print_grep(&log_dir, &pattern)?;
     } else if memory_timeline {
         store::query::print_memory_timeline(&log_dir)?;
+    } else if let Some(threshold) = slow_wasm {
+        store::query::print_slow_wasm(&log_dir, threshold)?;
+    } else if render_storms {
+        store::query::print_render_storms(&log_dir)?;
+    } else if let Some(context) = state_changes {
+        store::query::print_state_changes(&log_dir, &context)?;
+    } else if let Some(range) = timeline {
+        if range.len() == 2 {
+            store::query::print_timeline(&log_dir, &range[0], &range[1])?;
+        }
+    } else if errors_only {
+        store::query::print_errors_only(&log_dir)?;
+    } else if budget_violations {
+        store::query::print_budget_violations(&log_dir)?;
     } else {
         println!("No query flag provided. Use --help for options.");
     }

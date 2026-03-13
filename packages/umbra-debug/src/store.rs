@@ -4,7 +4,9 @@
 //! `~/.umbra/debug-logs/`. Handles session rotation (max 20)
 //! and provides query functions for CLI mode.
 
+pub mod compare;
 pub mod query;
+pub mod replay;
 
 use std::fs;
 use std::io::Write;
