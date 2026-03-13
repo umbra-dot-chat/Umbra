@@ -38,6 +38,32 @@
 
 export type LogLevel = 'trace' | 'debug' | 'info' | 'warn' | 'error' | 'fatal';
 
+/** Web Vitals metrics */
+export interface WebVitalsData {
+  /** Interaction to Next Paint (ms) */
+  inp: number | null;
+  /** Cumulative Layout Shift */
+  cls: number;
+  /** Largest Contentful Paint (ms) */
+  lcp: number | null;
+  /** First Contentful Paint (ms) */
+  fcp: number | null;
+}
+
+/** Performance budget thresholds */
+export interface PerfBudgets {
+  /** Max component render duration (ms) — default 16 */
+  renderMs: number;
+  /** Max WASM call duration (ms) — default 100 */
+  wasmMs: number;
+  /** Max heap usage percent — default 80 */
+  heapPct: number;
+  /** Max relay message size (bytes) — default 1_000_000 */
+  messageSizeBytes: number;
+  /** Max component renders/sec — default 60 */
+  renderRatePerSec: number;
+}
+
 /** Persisted to localStorage every heartbeat — survives OOM crashes */
 export interface CrashVitals {
   /** Wall-clock timestamp */
@@ -70,6 +96,10 @@ export interface CrashVitals {
   lastError: string | null;
   /** Heartbeat sequence number */
   heartbeatSeq: number;
+  /** Web Vitals at time of crash */
+  webVitals?: WebVitalsData;
+  /** Budget violations at time of crash */
+  budgetViolations?: string[];
 }
 
 // Layer categories
@@ -256,6 +286,22 @@ class DebugLogger {
   // High-frequency trace buffer (hot-path perf, no console output)
   private traceRing: RingBuffer;
 
+  // Web Vitals
+  private _webVitals: WebVitalsData = { inp: null, cls: 0, lcp: null, fcp: null };
+
+  // React Profiler stats
+  private _profilerStats = new Map<string, { count: number; totalMs: number; maxMs: number; mounts: number; updates: number }>();
+
+  // Performance budgets
+  private _budgets: PerfBudgets = {
+    renderMs: 16,
+    wasmMs: 100,
+    heapPct: 80,
+    messageSizeBytes: 1_000_000,
+    renderRatePerSec: 60,
+  };
+  private _budgetViolations: string[] = [];
+
   constructor() {
     this.ring = new RingBuffer(500);
     this.traceRing = new RingBuffer(2000);
@@ -334,6 +380,17 @@ class DebugLogger {
         const msgRate = _messageEventCount;
         _messageEventCount = 0;
 
+        // Check heap budget
+        if (heapLimit > 0) {
+          const heapPctNum = (heapBytes / heapLimit) * 100;
+          this.checkBudget('heap', heapPctNum);
+        }
+
+        // Check render rate budgets
+        for (const [comp, rate] of Object.entries(componentRates)) {
+          this.checkBudget('renderRate', rate, comp);
+        }
+
         // Build and persist CrashVitals
         const vitals: CrashVitals = {
           ts: Date.now(),
@@ -351,6 +408,8 @@ class DebugLogger {
           heapDelta,
           lastError: this._lastError,
           heartbeatSeq: heartbeatCount,
+          webVitals: { ...this._webVitals },
+          budgetViolations: this._budgetViolations.slice(-10),
         };
 
         // Persist to localStorage (synchronous — survives OOM)
@@ -401,6 +460,9 @@ class DebugLogger {
 
       // ── Auto-start long task detection ──
       this.startLongTaskDetection();
+
+      // ── Web Vitals tracking ──
+      this._startWebVitals();
 
       // ── Auto-persist ring buffer every 5s ──
       this._persistId = setInterval(() => {
@@ -831,6 +893,153 @@ class DebugLogger {
     this._loafObserver = null;
   }
 
+  // ── Web Vitals ────────────────────────────────────────────────────────
+
+  /** Start tracking Web Vitals via PerformanceObserver */
+  private _startWebVitals() {
+    if (typeof PerformanceObserver === 'undefined') return;
+
+    // INP — Interaction to Next Paint
+    try {
+      const inpObs = new PerformanceObserver((list) => {
+        for (const entry of list.getEntries()) {
+          const dur = (entry as any).duration ?? entry.duration;
+          if (this._webVitals.inp === null || dur > this._webVitals.inp) {
+            this._webVitals.inp = dur;
+          }
+        }
+      });
+      inpObs.observe({ type: 'event', buffered: true, durationThreshold: 40 } as any);
+    } catch { /* unsupported */ }
+
+    // CLS — Cumulative Layout Shift
+    try {
+      const clsObs = new PerformanceObserver((list) => {
+        for (const entry of list.getEntries()) {
+          if (!(entry as any).hadRecentInput) {
+            this._webVitals.cls += (entry as any).value ?? 0;
+          }
+        }
+      });
+      clsObs.observe({ type: 'layout-shift', buffered: true } as any);
+    } catch { /* unsupported */ }
+
+    // LCP — Largest Contentful Paint
+    try {
+      const lcpObs = new PerformanceObserver((list) => {
+        const entries = list.getEntries();
+        if (entries.length > 0) {
+          this._webVitals.lcp = entries[entries.length - 1].startTime;
+        }
+      });
+      lcpObs.observe({ type: 'largest-contentful-paint', buffered: true } as any);
+    } catch { /* unsupported */ }
+
+    // FCP — First Contentful Paint
+    try {
+      const fcpObs = new PerformanceObserver((list) => {
+        for (const entry of list.getEntries()) {
+          if (entry.name === 'first-contentful-paint') {
+            this._webVitals.fcp = entry.startTime;
+          }
+        }
+      });
+      fcpObs.observe({ type: 'paint', buffered: true } as any);
+    } catch { /* unsupported */ }
+  }
+
+  /** Get current Web Vitals snapshot */
+  getWebVitals(): WebVitalsData {
+    return { ...this._webVitals };
+  }
+
+  // ── React Profiler Integration ────────────────────────────────────────
+
+  /**
+   * Callback for React <Profiler onRender={dbg.onProfilerRender}>
+   * Tracks per-component commit timing and warns on slow commits.
+   */
+  onProfilerRender = (
+    id: string,
+    phase: 'mount' | 'update' | 'nested-update',
+    actualDuration: number,
+    baseDuration: number,
+    startTime: number,
+    commitTime: number,
+  ) => {
+    // Update per-component stats
+    let stats = this._profilerStats.get(id);
+    if (!stats) {
+      stats = { count: 0, totalMs: 0, maxMs: 0, mounts: 0, updates: 0 };
+      this._profilerStats.set(id, stats);
+    }
+    stats.count++;
+    stats.totalMs += actualDuration;
+    if (actualDuration > stats.maxMs) stats.maxMs = actualDuration;
+    if (phase === 'mount') stats.mounts++;
+    else stats.updates++;
+
+    // Feed into trace buffer for TUI visibility
+    this.tracePerf('render', `profiler ${id} ${phase} actual=${actualDuration.toFixed(1)}ms base=${baseDuration.toFixed(1)}ms`, actualDuration, 'Profiler');
+
+    // Warn on slow commits
+    if (actualDuration > this._budgets.renderMs) {
+      this._log('warn', 'perf', `Slow commit: ${id} ${phase} took ${actualDuration.toFixed(1)}ms (budget: ${this._budgets.renderMs}ms)`, { baseDuration: baseDuration.toFixed(1) }, 'Profiler');
+      this._recordBudgetViolation(`render: ${id} ${actualDuration.toFixed(1)}ms > ${this._budgets.renderMs}ms`);
+    }
+  };
+
+  /** Get React Profiler stats for all tracked components */
+  getProfilerStats(): Record<string, { count: number; avgMs: number; maxMs: number; mounts: number; updates: number }> {
+    const result: Record<string, { count: number; avgMs: number; maxMs: number; mounts: number; updates: number }> = {};
+    for (const [id, s] of this._profilerStats) {
+      result[id] = { count: s.count, avgMs: s.totalMs / s.count, maxMs: s.maxMs, mounts: s.mounts, updates: s.updates };
+    }
+    return result;
+  }
+
+  // ── Performance Budgets ───────────────────────────────────────────────
+
+  /** Set performance budget thresholds (partial update) */
+  setBudgets(partial: Partial<PerfBudgets>) {
+    Object.assign(this._budgets, partial);
+    console.log('%c[Umbra Debug]%c Budgets updated:', 'color: #6366f1; font-weight: bold', 'color: inherit', this._budgets);
+  }
+
+  /** Get current performance budgets */
+  getBudgets(): PerfBudgets {
+    return { ...this._budgets };
+  }
+
+  /** Get recent budget violations */
+  getBudgetViolations(): string[] {
+    return [...this._budgetViolations];
+  }
+
+  /** Check a value against a budget and warn if exceeded */
+  checkBudget(type: 'render' | 'wasm' | 'heap' | 'messageSize' | 'renderRate', value: number, context?: string) {
+    let threshold: number;
+    let label: string;
+    switch (type) {
+      case 'render': threshold = this._budgets.renderMs; label = `render ${context || ''}`; break;
+      case 'wasm': threshold = this._budgets.wasmMs; label = `wasm ${context || ''}`; break;
+      case 'heap': threshold = this._budgets.heapPct; label = 'heap'; break;
+      case 'messageSize': threshold = this._budgets.messageSizeBytes; label = `message ${context || ''}`; break;
+      case 'renderRate': threshold = this._budgets.renderRatePerSec; label = `renderRate ${context || ''}`; break;
+    }
+    if (value > threshold) {
+      const msg = `BUDGET EXCEEDED: ${label} ${value.toFixed(1)} > ${threshold}`;
+      this._log('warn', 'perf', msg, undefined, 'Budget');
+      this._recordBudgetViolation(msg);
+    }
+  }
+
+  private _recordBudgetViolation(msg: string) {
+    this._budgetViolations.push(`${formatAbsTime(Date.now())} ${msg}`);
+    // Keep last 100 violations
+    if (this._budgetViolations.length > 100) this._budgetViolations.shift();
+  }
+
   // ── Ring buffer access ───────────────────────────────────────────────
 
   dump() {
@@ -1236,6 +1445,32 @@ if (typeof window !== 'undefined') {
       return stats;
     },
 
+    // Web Vitals
+    webVitals: () => {
+      const v = dbg.getWebVitals();
+      console.log(
+        `%c[Web Vitals]%c INP=${v.inp?.toFixed(0) ?? '—'}ms | CLS=${v.cls.toFixed(3)} | LCP=${v.lcp?.toFixed(0) ?? '—'}ms | FCP=${v.fcp?.toFixed(0) ?? '—'}ms`,
+        'color: #6366f1; font-weight: bold', 'color: inherit',
+      );
+      return v;
+    },
+
+    // React Profiler
+    profilerStats: () => {
+      const stats = dbg.getProfilerStats();
+      console.table(stats);
+      return stats;
+    },
+
+    // Performance budgets
+    budgets: () => dbg.getBudgets(),
+    setBudgets: (partial: Partial<PerfBudgets>) => dbg.setBudgets(partial),
+    budgetViolations: () => {
+      const v = dbg.getBudgetViolations();
+      v.forEach(msg => console.log(`  ${msg}`));
+      return v;
+    },
+
     // Help
     help: () => {
       console.log(`
@@ -1284,6 +1519,12 @@ if (typeof window !== 'undefined') {
 
   __debug.traceEntries()           Get high-freq trace buffer entries
   __debug.traceStats()             Per-category trace timing stats
+
+  __debug.webVitals()              Show Web Vitals (INP, CLS, LCP, FCP)
+  __debug.profilerStats()          React Profiler commit stats
+  __debug.budgets()                Show performance budget thresholds
+  __debug.setBudgets({renderMs:10})  Configure budget thresholds
+  __debug.budgetViolations()       Show recent budget violations
 `,
         'color: #6366f1; font-weight: bold',
         'color: inherit',
