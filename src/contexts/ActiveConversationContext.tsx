@@ -1,4 +1,7 @@
 import React, { createContext, useContext, useState, useCallback } from 'react';
+import { dbg } from '@/utils/debug';
+
+const SRC = 'ActiveConversationContext';
 
 interface ActiveConversationState {
   activeId: string | null;
@@ -27,18 +30,22 @@ export function ActiveConversationProvider({ children }: { children: React.React
   const [searchPanelRequested, setSearchPanelRequested] = useState(false);
 
   const setActiveId = useCallback((id: string) => {
+    if (__DEV__) dbg.debug('conversations', 'conversation switch', { id }, SRC);
     setActiveIdRaw(id);
   }, []);
 
   const clearActiveId = useCallback(() => {
+    if (__DEV__) dbg.debug('conversations', 'conversation cleared', {}, SRC);
     setActiveIdRaw(null);
   }, []);
 
   const requestSearchPanel = useCallback(() => {
+    if (__DEV__) dbg.debug('conversations', 'search panel opened', {}, SRC);
     setSearchPanelRequested(true);
   }, []);
 
   const clearSearchPanelRequest = useCallback(() => {
+    if (__DEV__) dbg.debug('conversations', 'search panel closed', {}, SRC);
     setSearchPanelRequested(false);
   }, []);
 

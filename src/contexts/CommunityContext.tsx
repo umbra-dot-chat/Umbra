@@ -8,6 +8,9 @@
  */
 
 import React, { createContext, useContext, useState, useCallback } from 'react';
+import { dbg } from '@/utils/debug';
+
+const SRC = 'CommunityContext';
 
 interface CommunityContextState {
   /** Currently active community ID */
@@ -49,6 +52,7 @@ export function CommunityProvider({ children }: { children: React.ReactNode }) {
   const [showMemberList, setShowMemberList] = useState(true);
 
   const setActiveCommunityId = useCallback((id: string | null) => {
+    if (__DEV__) dbg.debug('community', id ? 'community join' : 'community leave', { id }, SRC);
     setActiveCommunityIdRaw(id);
     // Reset space and channel when community changes
     setActiveSpaceIdRaw(null);
@@ -60,6 +64,7 @@ export function CommunityProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const setActiveChannelId = useCallback((id: string | null) => {
+    if (__DEV__) dbg.debug('community', 'channel switch', { channelId: id }, SRC);
     setActiveChannelIdRaw(id);
   }, []);
 

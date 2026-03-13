@@ -32,6 +32,9 @@ import React, {
   useMemo,
 } from 'react';
 import { Platform } from 'react-native';
+import { dbg } from '@/utils/debug';
+
+const SRC = 'HelpContext';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -163,10 +166,12 @@ export function HelpProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const openPopover = useCallback((config: PopoverConfig) => {
+    if (__DEV__) dbg.debug('lifecycle', 'help panel open', { hintId: config.hintId, title: config.title }, SRC);
     setPopoverState(config);
   }, []);
 
   const closePopover = useCallback(() => {
+    if (__DEV__) dbg.debug('lifecycle', 'help panel close', { hintId: popoverState?.hintId }, SRC);
     if (popoverState) {
       dismissHint(popoverState.hintId);
     }

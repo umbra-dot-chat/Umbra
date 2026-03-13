@@ -5,6 +5,9 @@
 
 import React, { createContext, useContext, useCallback, useState } from 'react';
 import type { SettingsSection } from '@/components/modals/SettingsDialog';
+import { dbg } from '@/utils/debug';
+
+const SRC = 'SettingsDialogContext';
 
 interface SettingsDialogContextValue {
   /** Open the settings dialog, optionally jumping to a specific section. */
@@ -29,11 +32,13 @@ export function SettingsDialogProvider({ children }: { children: React.ReactNode
   const [initialSection, setInitialSection] = useState<SettingsSection | undefined>(undefined);
 
   const openSettings = useCallback((section?: SettingsSection) => {
+    if (__DEV__) dbg.debug('lifecycle', 'settings dialog open', { section }, SRC);
     setInitialSection(section);
     setIsOpen(true);
   }, []);
 
   const closeSettings = useCallback(() => {
+    if (__DEV__) dbg.debug('lifecycle', 'settings dialog close', {}, SRC);
     setIsOpen(false);
     setInitialSection(undefined);
   }, []);
