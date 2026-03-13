@@ -1,6 +1,6 @@
 import '@/utils/wdyr'; // Must be before React — patches React for render profiling
 import 'react-native-gesture-handler';
-import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react';
+import React, { Profiler, useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Slot, useSegments, useRouter, useNavigationContainerRef } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -246,7 +246,13 @@ export default function RootLayout() {
                   <ConversationsProvider>
                     <HelpProvider>
                       <DynamicStatusBar />
-                      <AuthGate />
+                      {__DEV__ ? (
+                        <Profiler id="App" onRender={dbg.onProfilerRender}>
+                          <AuthGate />
+                        </Profiler>
+                      ) : (
+                        <AuthGate />
+                      )}
                       <HelpPopoverHost />
                       <DebugVitalsOverlay />
                     </HelpProvider>
