@@ -25,7 +25,7 @@
 // to avoid loading sql.js on platforms that don't support WebAssembly (React Native).
 // The static import was causing Metro to bundle sql.js which then crashes on JSC.
 
-import { initTracer, isDebugActive, emit, setTraceContext, clearTraceContext, isVerbose } from './tracer';
+import { initTracer, isDebugActive, emit, setTraceContext, clearTraceContext, isVerbose, startRustTracePoller } from './tracer';
 
 // ─────────────────────────────────────────────────────────────────────────
 // Types
@@ -43,6 +43,9 @@ export interface UmbraWasmModule {
   umbra_wasm_init(): void;
   umbra_wasm_init_database(): Promise<boolean>;
   umbra_wasm_version(): string;
+
+  // Debug tracing bridge (Rust ring buffer → JS)
+  umbra_wasm_flush_trace_events(): string;
 
   // Identity
   umbra_wasm_identity_create(display_name: string): string;
@@ -977,6 +980,14 @@ async function doInitWasm(did?: string): Promise<UmbraWasmModule> {
   }
   _cs('4b-wasm-init-done');
 
+  // Step 4c: Start Rust trace bridge poller (if debug active).
+  // This polls flush_trace_events() every 500ms to drain the Rust ring
+  // buffer and feed events into the debug TUI WebSocket pipeline.
+  if (isDebugActive()) {
+    _cs('4c-rust-trace-poller');
+    startRustTracePoller(() => wasm.umbra_wasm_flush_trace_events());
+  }
+
   // Step 5: Initialize the database schema
   _cs('5-init-database');
   console.log('[umbra-wasm] Initializing database...');
@@ -1123,6 +1134,14 @@ function buildModule(wasmPkg: any): UmbraWasmModule {
     umbra_wasm_init: () => wasmPkg.umbra_wasm_init(),
     umbra_wasm_init_database: () => wasmPkg.umbra_wasm_init_database(),
     umbra_wasm_version: () => wasmPkg.umbra_wasm_version(),
+
+    // Debug tracing bridge
+    umbra_wasm_flush_trace_events: () => {
+      if (typeof wasmPkg.umbra_wasm_flush_trace_events === 'function') {
+        return wasmPkg.umbra_wasm_flush_trace_events();
+      }
+      return '[]';
+    },
 
     // Identity
     umbra_wasm_identity_create: (dn: string) => wasmPkg.umbra_wasm_identity_create(dn),

@@ -468,3 +468,85 @@ export function clearTraceContext(): void {
 export function isVerbose(): boolean {
   return _verbose;
 }
+
+// ─────────────────────────────────────────────────────────────────────────
+// Rust trace bridge poller
+// ─────────────────────────────────────────────────────────────────────────
+
+/** Rust TraceEvent shape returned by umbra_wasm_flush_trace_events(). */
+interface RustTraceEvent {
+  level: string;
+  target: string;
+  message: string;
+  fields: string;
+  timestamp_ms: number;
+}
+
+const RUST_POLL_INTERVAL_MS = 500;
+let _rustPollTimer: ReturnType<typeof setInterval> | null = null;
+let _flushFn: (() => string) | null = null;
+
+/**
+ * Start polling the Rust tracing ring buffer for events.
+ *
+ * Call this after WASM init when debug mode is active. Provide the
+ * `umbra_wasm_flush_trace_events` function from the WASM module.
+ * Events are converted to TraceEvents and sent to the debug TUI
+ * via the existing WebSocket transport.
+ *
+ * No-op when debug is not active or already polling.
+ */
+export function startRustTracePoller(flushTraceEvents: () => string): void {
+  if (!_active || _rustPollTimer !== null) return;
+  _flushFn = flushTraceEvents;
+
+  _rustPollTimer = setInterval(() => {
+    if (!_active || !_flushFn) return;
+
+    let json: string;
+    try {
+      json = _flushFn();
+    } catch {
+      return; // WASM not ready or function unavailable
+    }
+
+    if (json === '[]' || !json) return;
+
+    let events: RustTraceEvent[];
+    try {
+      events = JSON.parse(json);
+    } catch {
+      return; // Malformed JSON
+    }
+
+    for (const re of events) {
+      const preview = re.fields
+        ? `[${re.level}] ${re.target}: ${re.message} { ${re.fields} }`
+        : `[${re.level}] ${re.target}: ${re.message}`;
+
+      emit({
+        cat: 'wasm',
+        fn: `rust::${re.target}`,
+        argBytes: 0,
+        durMs: 0,
+        memBefore: 0,
+        memAfter: 0,
+        memGrowth: 0,
+        argPreview: preview,
+      });
+    }
+  }, RUST_POLL_INTERVAL_MS);
+
+  console.log('[tracer] Rust trace bridge poller started (500ms interval)');
+}
+
+/**
+ * Stop the Rust trace bridge poller.
+ */
+export function stopRustTracePoller(): void {
+  if (_rustPollTimer !== null) {
+    clearInterval(_rustPollTimer);
+    _rustPollTimer = null;
+  }
+  _flushFn = null;
+}
