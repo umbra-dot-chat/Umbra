@@ -9,6 +9,7 @@ pub mod breakpoint;
 pub mod browser_tab;
 pub mod compare_tab;
 pub mod dashboard_tab;
+pub mod deps_tab;
 pub mod err_tab;
 pub mod log_tab;
 pub mod mem_tab;
@@ -67,6 +68,7 @@ pub fn render(frame: &mut Frame, app: &App) {
             content_area,
         ),
         Tab::Replay => replay_tab::render(frame, app, content_area),
+        Tab::Deps => deps_tab::render(frame, app, content_area),
     }
 
     // 2b. Breakpoint input dialog overlay (renders on top of content)

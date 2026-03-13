@@ -18,6 +18,7 @@ use crate::store::SessionWriter;
 use crate::ui;
 use crate::ui::breakpoint;
 use crate::ui::breakpoint::Breakpoint;
+use crate::ui::deps_tab::DepsState;
 
 /// Maximum events kept in memory (circular buffer behavior).
 const MAX_EVENTS: usize = 100_000;
@@ -155,10 +156,11 @@ pub enum Tab {
     Log,
     Compare,
     Replay,
+    Deps,
 }
 
 impl Tab {
-    pub const ALL: [Tab; 12] = [
+    pub const ALL: [Tab; 13] = [
         Tab::Dashboard,
         Tab::All,
         Tab::Wasm,
@@ -171,6 +173,7 @@ impl Tab {
         Tab::Log,
         Tab::Compare,
         Tab::Replay,
+        Tab::Deps,
     ];
 
     pub fn label(self) -> &'static str {
@@ -187,6 +190,7 @@ impl Tab {
             Tab::Log => "Log",
             Tab::Compare => "Compare",
             Tab::Replay => "Replay",
+            Tab::Deps => "Deps",
         }
     }
 
@@ -297,6 +301,11 @@ pub struct App {
     pub bp_pause_index: Option<usize>,
     /// Whether to advance exactly one event (step mode).
     pub bp_step_one: bool,
+
+    // -- Deps tab state --
+
+    /// Dependency graph state for event chain visualization.
+    pub deps_state: Option<DepsState>,
 }
 
 impl App {
@@ -343,6 +352,7 @@ impl App {
             bp_input: String::new(),
             bp_pause_index: None,
             bp_step_one: false,
+            deps_state: None,
         }
     }
 
@@ -539,6 +549,53 @@ impl App {
                 self.replay_filter_mode = true;
                 self.replay_filter_input.clear();
                 return;
+            }
+        }
+
+        // Deps tab-specific keybindings
+        if self.tab == Tab::Deps {
+            match code {
+                KeyCode::Enter => {
+                    if let Some(ref mut deps) = self.deps_state {
+                        deps.toggle_selected();
+                    }
+                    return;
+                }
+                KeyCode::Char('f') => {
+                    if let Some(ref mut deps) = self.deps_state {
+                        deps.filter_subtree();
+                    }
+                    return;
+                }
+                KeyCode::Char('t') => {
+                    if let Some(ref mut deps) = self.deps_state {
+                        deps.show_timing = !deps.show_timing;
+                    }
+                    return;
+                }
+                KeyCode::Char('c') if !modifiers.contains(KeyModifiers::CONTROL) => {
+                    if let Some(ref mut deps) = self.deps_state {
+                        deps.show_counts = !deps.show_counts;
+                    }
+                    return;
+                }
+                KeyCode::Char('j') | KeyCode::Down => {
+                    if let Some(ref mut deps) = self.deps_state {
+                        deps.select_down();
+                    }
+                    return;
+                }
+                KeyCode::Char('k') | KeyCode::Up => {
+                    if let Some(ref mut deps) = self.deps_state {
+                        deps.select_up();
+                    }
+                    return;
+                }
+                KeyCode::Char('r') => {
+                    self.build_deps_graph();
+                    return;
+                }
+                _ => {} // Fall through to global keys
             }
         }
 
@@ -953,6 +1010,13 @@ impl App {
             }
             Err(e) => eprintln!("Failed to load replay session: {e}"),
         }
+    }
+
+    /// Build or rebuild the dependency graph from current events.
+    pub fn build_deps_graph(&mut self) {
+        let mut state = DepsState::new();
+        state.build_from_events(&self.events);
+        self.deps_state = Some(state);
     }
 
     /// Render the full UI.
