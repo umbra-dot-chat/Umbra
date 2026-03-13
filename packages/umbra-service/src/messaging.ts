@@ -92,7 +92,11 @@ export async function sendMessage(
   relayWs?: WebSocket | null
 ): Promise<Message> {
   _dbg()?.info('messages', `sendMessage cid=${conversationId.slice(0, 8)}… len=${text.length}`, undefined, SRC);
+  const _t0 = performance.now();
   const resultJson = wasm().umbra_wasm_messaging_send(conversationId, text);
+  const _dur = performance.now() - _t0;
+  _dbg()?.tracePerf?.('service', `wasm.messaging_send dur=${_dur.toFixed(1)}ms`, _dur, 'messaging');
+  if (_dur > 50) _dbg()?.warn?.('service', `SLOW wasm.messaging_send: ${_dur.toFixed(1)}ms`, { cid: conversationId.slice(0, 8), textLen: text.length }, 'messaging');
   const raw = await parseWasm<{
     id: string;
     conversationId: string;
@@ -182,11 +186,15 @@ export async function getMessages(
   const offset = options?.offset ?? 0;
 
   _dbg()?.debug('messages', `getMessages START cid=${conversationId.slice(0, 8)}… limit=${limit} offset=${offset}`, undefined, SRC);
+  const _t0 = performance.now();
   const resultJson = wasm().umbra_wasm_messaging_get_messages(
     conversationId,
     limit,
     offset
   );
+  const _dur = performance.now() - _t0;
+  _dbg()?.tracePerf?.('service', `wasm.messaging_get_messages dur=${_dur.toFixed(1)}ms`, _dur, 'messaging');
+  if (_dur > 50) _dbg()?.warn?.('service', `SLOW wasm.messaging_get_messages: ${_dur.toFixed(1)}ms`, { cid: conversationId.slice(0, 8), limit, offset }, 'messaging');
 
   const raw = await parseWasm<Array<{
     id: string;
@@ -204,7 +212,14 @@ export async function getMessages(
   // Filter out thread replies — they belong in the thread panel, not the main chat
   const mainMessages = raw.filter((m) => !m.threadId);
 
-  return await Promise.all(mainMessages.map(async (m) => {
+  // Decrypt messages sequentially to avoid overwhelming V8 with concurrent
+  // WASM calls. Promise.all(50 decrypts) previously exhausted the GC budget
+  // during startup, causing "Ineffective mark-compacts" → renderer crash.
+  const results: Message[] = [];
+  let _decryptOk = 0;
+  let _decryptFail = 0;
+  let _decryptTotalMs = 0;
+  for (const m of mainMessages) {
     let text = '';
     try {
       if (m.conversationId.startsWith('group-')) {
@@ -226,6 +241,7 @@ export async function getMessages(
       } else {
         // DM messages: decrypt using ECDH shared secret
         // Rust now returns content_encrypted as base64 (converted from hex in WASM)
+        const _t0d = performance.now();
         const decryptedJson = wasm().umbra_wasm_messaging_decrypt(
           m.conversationId,
           m.contentEncrypted,
@@ -233,14 +249,20 @@ export async function getMessages(
           m.senderDid,
           m.timestamp
         );
+        const _durD = performance.now() - _t0d;
+        _decryptTotalMs += _durD;
+        _dbg()?.tracePerf?.('service', `wasm.messaging_decrypt dur=${_durD.toFixed(1)}ms`, _durD, 'messaging');
+        if (_durD > 50) _dbg()?.warn?.('service', `SLOW wasm.messaging_decrypt: ${_durD.toFixed(1)}ms`, { mid: m.id.slice(0, 8) }, 'messaging');
         text = await parseWasm<string>(decryptedJson);
+        _decryptOk++;
       }
     } catch (err) {
       // Fallback: show a user-friendly indicator instead of raw ciphertext
       console.warn('[getMessages] decrypt failed for msg', m.id, err);
       text = categorizeDecryptError(err);
+      _decryptFail++;
     }
-    return {
+    results.push({
       id: m.id,
       conversationId: m.conversationId,
       senderDid: m.senderDid,
@@ -251,8 +273,11 @@ export async function getMessages(
       status: m.read ? ('read' as const) : m.delivered ? ('delivered' as const) : ('sent' as const),
       threadReplyCount: m.threadReplyCount ?? 0,
       threadId: m.threadId,
-    };
-  }));
+    });
+  }
+  const _avgMs = _decryptOk > 0 ? _decryptTotalMs / _decryptOk : 0;
+  _dbg()?.info?.('service', `getMessages DECRYPT DONE: total=${mainMessages.length}, decrypted=${_decryptOk}, failed=${_decryptFail}, totalMs=${_decryptTotalMs.toFixed(1)}, avgMs=${_avgMs.toFixed(1)}`, { cid: conversationId.slice(0, 8) }, 'messaging');
+  return results;
 }
 
 /**
@@ -270,7 +295,11 @@ export async function markAsRead(conversationId: string): Promise<number> {
  */
 export async function editMessage(messageId: string, newText: string): Promise<Message> {
   const json = JSON.stringify({ message_id: messageId, new_text: newText });
+  const _t0 = performance.now();
   const resultJson = wasm().umbra_wasm_messaging_edit(json);
+  const _dur = performance.now() - _t0;
+  _dbg()?.tracePerf?.('service', `wasm.messaging_edit dur=${_dur.toFixed(1)}ms`, _dur, 'messaging');
+  if (_dur > 50) _dbg()?.warn?.('service', `SLOW wasm.messaging_edit: ${_dur.toFixed(1)}ms`, { mid: messageId.slice(0, 8) }, 'messaging');
   return await parseWasm<Message>(resultJson);
 }
 
@@ -279,7 +308,11 @@ export async function editMessage(messageId: string, newText: string): Promise<M
  */
 export async function deleteMessage(messageId: string): Promise<void> {
   const json = JSON.stringify({ message_id: messageId });
+  const _t0 = performance.now();
   wasm().umbra_wasm_messaging_delete(json);
+  const _dur = performance.now() - _t0;
+  _dbg()?.tracePerf?.('service', `wasm.messaging_delete dur=${_dur.toFixed(1)}ms`, _dur, 'messaging');
+  if (_dur > 50) _dbg()?.warn?.('service', `SLOW wasm.messaging_delete: ${_dur.toFixed(1)}ms`, { mid: messageId.slice(0, 8) }, 'messaging');
 }
 
 /**
@@ -335,7 +368,8 @@ export async function getThreadReplies(parentId: string): Promise<Message[]> {
   const json = JSON.stringify({ parent_id: parentId });
   const resultJson = wasm().umbra_wasm_messaging_get_thread(json);
   const raw = await parseWasm<Array<any>>(resultJson);
-  return await Promise.all(raw.map(async (m) => {
+  const results: Message[] = [];
+  for (const m of raw) {
     let text = '';
     try {
       if (m.conversationId?.startsWith('group-')) {
@@ -353,7 +387,7 @@ export async function getThreadReplies(parentId: string): Promise<Message[]> {
     } catch (err) {
       text = categorizeDecryptError(err);
     }
-    return {
+    results.push({
       id: m.id,
       conversationId: m.conversationId,
       senderDid: m.senderDid,
@@ -363,8 +397,9 @@ export async function getThreadReplies(parentId: string): Promise<Message[]> {
       delivered: m.delivered ?? false,
       status: 'sent' as const,
       threadId: m.threadId,
-    };
-  }));
+    });
+  }
+  return results;
 }
 
 /**
@@ -376,7 +411,11 @@ export async function sendThreadReply(
   relayWs?: WebSocket | null
 ): Promise<Message> {
   const json = JSON.stringify({ parent_id: parentId, text });
+  const _t0 = performance.now();
   const resultJson = wasm().umbra_wasm_messaging_reply_thread(json);
+  const _dur = performance.now() - _t0;
+  _dbg()?.tracePerf?.('service', `wasm.messaging_reply_thread dur=${_dur.toFixed(1)}ms`, _dur, 'messaging');
+  if (_dur > 50) _dbg()?.warn?.('service', `SLOW wasm.messaging_reply_thread: ${_dur.toFixed(1)}ms`, { parentId: parentId.slice(0, 8) }, 'messaging');
   const raw = await parseWasm<{
     id: string;
     conversationId: string;
@@ -417,9 +456,14 @@ export async function sendThreadReply(
  */
 export async function getPinnedMessages(conversationId: string): Promise<Message[]> {
   const json = JSON.stringify({ conversation_id: conversationId });
+  const _t0 = performance.now();
   const resultJson = wasm().umbra_wasm_messaging_get_pinned(json);
+  const _dur = performance.now() - _t0;
+  _dbg()?.tracePerf?.('service', `wasm.messaging_get_pinned dur=${_dur.toFixed(1)}ms`, _dur, 'messaging');
+  if (_dur > 50) _dbg()?.warn?.('service', `SLOW wasm.messaging_get_pinned: ${_dur.toFixed(1)}ms`, { cid: conversationId.slice(0, 8) }, 'messaging');
   const raw = await parseWasm<Array<any>>(resultJson);
-  return await Promise.all(raw.map(async (m) => {
+  const results: Message[] = [];
+  for (const m of raw) {
     let text = '';
     try {
       if (m.conversationId?.startsWith('group-')) {
@@ -437,7 +481,7 @@ export async function getPinnedMessages(conversationId: string): Promise<Message
     } catch (err) {
       text = categorizeDecryptError(err);
     }
-    return {
+    results.push({
       id: m.id,
       conversationId: m.conversationId,
       senderDid: m.senderDid,
@@ -449,8 +493,9 @@ export async function getPinnedMessages(conversationId: string): Promise<Message
       pinned: true,
       pinnedBy: m.pinnedBy,
       pinnedAt: m.pinnedAt,
-    };
-  }));
+    });
+  }
+  return results;
 }
 
 /**
@@ -510,7 +555,11 @@ export async function storeIncomingMessage(payload: ChatMessagePayload): Promise
     data.is_group = true;
   }
   const json = JSON.stringify(data);
+  const _t0 = performance.now();
   await wasm().umbra_wasm_messaging_store_incoming(json);
+  const _dur = performance.now() - _t0;
+  _dbg()?.tracePerf?.('service', `wasm.messaging_store_incoming dur=${_dur.toFixed(1)}ms`, _dur, 'messaging');
+  if (_dur > 50) _dbg()?.warn?.('service', `SLOW wasm.messaging_store_incoming: ${_dur.toFixed(1)}ms`, { mid: payload.messageId?.slice(0, 8) }, 'messaging');
 }
 
 /**
@@ -523,6 +572,7 @@ export async function storeIncomingMessage(payload: ChatMessagePayload): Promise
 export async function decryptIncomingMessage(payload: ChatMessagePayload): Promise<string | null> {
   try {
     // Rust now accepts f64 for timestamp (no BigInt needed)
+    const _t0 = performance.now();
     const decryptedJson = wasm().umbra_wasm_messaging_decrypt(
       payload.conversationId,
       payload.contentEncrypted,
@@ -530,6 +580,9 @@ export async function decryptIncomingMessage(payload: ChatMessagePayload): Promi
       payload.senderDid,
       payload.timestamp
     );
+    const _dur = performance.now() - _t0;
+    _dbg()?.tracePerf?.('service', `wasm.messaging_decrypt(incoming) dur=${_dur.toFixed(1)}ms`, _dur, 'messaging');
+    if (_dur > 50) _dbg()?.warn?.('service', `SLOW wasm.messaging_decrypt(incoming): ${_dur.toFixed(1)}ms`, { mid: payload.messageId?.slice(0, 8) }, 'messaging');
     const text = await parseWasm<string>(decryptedJson);
     // Guard against empty string from WASM (shouldn't happen, but be safe)
     return text || null;
