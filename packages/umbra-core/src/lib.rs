@@ -103,6 +103,8 @@ pub mod storage;
 pub mod sync;
 /// Platform-aware time utilities for native and WASM targets.
 pub mod time;
+/// Tracing bridge: ring buffer subscriber for debug observability.
+pub mod tracing_bridge;
 
 #[cfg(any(feature = "ffi", feature = "wasm"))]
 pub mod ffi;
