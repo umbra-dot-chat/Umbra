@@ -137,12 +137,12 @@ export function unregisterSyncUpdateCallback(cb: SyncUpdateCallback): void {
  */
 export function sendSyncPush(sections: Record<string, number>): void {
   if (!_relayWs || _relayWs.readyState !== WebSocket.OPEN) {
-    console.warn('[sendSyncPush] WS not open, cannot notify other sessions. ws:', !!_relayWs, 'readyState:', _relayWs?.readyState);
+    if (__DEV__) dbg.warn('network', 'sendSyncPush: WS not open, cannot notify other sessions', { ws: !!_relayWs, readyState: _relayWs?.readyState }, SRC);
     return;
   }
   const entries = Object.entries(sections);
   if (entries.length === 0) {
-    console.warn('[sendSyncPush] No sections to push');
+    if (__DEV__) dbg.warn('network', 'sendSyncPush: no sections to push', undefined, SRC);
     return;
   }
   try {
@@ -161,7 +161,7 @@ export function sendSyncPush(sections: Record<string, number>): void {
       traceEmit({ cat: 'net', fn: 'ws_send', argBytes: 0, durMs: 0, memBefore: 0, memAfter: 0, memGrowth: 0, argPreview: `sync_push ${entries.length} sections` });
     }
   } catch (err) {
-    console.error('[sendSyncPush] Failed to send:', err);
+    if (__DEV__) dbg.error('network', 'sendSyncPush: failed to send', { error: String(err) }, SRC);
   }
 }
 
@@ -561,11 +561,11 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
   try {
     const msg = JSON.parse(event.data);
     if (__DEV__) dbg.debug('network', `relay msg: ${msg.type}`, undefined, SRC);
-    console.log('[useNetwork] Relay message:', msg.type);
+    if (__DEV__) dbg.info('network', 'relay message', { type: msg.type }, SRC);
 
     switch (msg.type) {
       case 'registered': {
-        console.log('[useNetwork] Registered with relay as', msg.did);
+        if (__DEV__) dbg.info('network', 'registered with relay', { did: msg.did }, SRC);
 
         // IMPORTANT: Process registration tasks SEQUENTIALLY with GC yields.
         // Previously these ran as 3 parallel promise chains, each doing multiple
@@ -575,7 +575,7 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
           // 1. Request offline messages from relay
           const fetchMsg = await service.relayFetchOffline();
           if (ws.readyState === WebSocket.OPEN) ws.send(fetchMsg);
-        } catch (err) { console.error('[useNetwork] Failed to fetch offline messages:', err); }
+        } catch (err) { if (__DEV__) dbg.error('network', 'failed to fetch offline messages', { error: String(err) }, SRC); }
 
         await _gcYield(100);
 
@@ -592,8 +592,8 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
               if (ws.readyState === WebSocket.OPEN) ws.send(relayMessage);
             } catch { /* Best-effort */ }
           }
-          console.log('[useNetwork] Broadcast presence_online to', friendsList.length, 'friends');
-        } catch (err) { console.warn('[useNetwork] Failed to broadcast presence:', err); }
+          if (__DEV__) dbg.info('network', 'broadcast presence_online', { friendCount: friendsList.length }, SRC);
+        } catch (err) { if (__DEV__) dbg.warn('network', 'failed to broadcast presence', { error: String(err) }, SRC); }
 
         await _gcYield(100);
 
@@ -621,8 +621,8 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
                   await _gcYield(50);
                 } catch { /* Best-effort */ }
               }
-              if (published > 0) console.log('[useNetwork] Re-published', published, 'community invite(s) to relay');
-            } catch (err) { console.warn('[useNetwork] Failed to re-publish invites:', err); }
+              if (published > 0 && __DEV__) dbg.info('network', 're-published community invites to relay', { count: published }, SRC);
+            } catch (err) { if (__DEV__) dbg.warn('network', 'failed to re-publish invites', { error: String(err) }, SRC); }
           }, 3000); // Defer 3s after connection
         }
         break;
@@ -630,7 +630,7 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
 
       case 'message': {
         const { from_did, payload } = msg;
-        console.log('[useNetwork] Message from', from_did);
+        if (__DEV__) dbg.info('network', 'message from peer', { fromDid: from_did }, SRC);
         if (from_did) _markDidOnline(from_did);
 
         try {
@@ -645,7 +645,7 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
               fromEncryptionKey: reqPayload.fromEncryptionKey, createdAt: reqPayload.createdAt, status: 'pending',
             };
             let isNew = true;
-            try { isNew = await service.storeIncomingRequest(friendRequest); } catch (e) { console.warn('[useNetwork] Failed to store incoming request:', e); }
+            try { isNew = await service.storeIncomingRequest(friendRequest); } catch (e) { if (__DEV__) dbg.warn('network', 'failed to store incoming request', { error: String(e) }, SRC); }
             if (isNew) {
               service.dispatchFriendEvent({ type: 'requestReceived', request: friendRequest });
             } else {
@@ -664,16 +664,16 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
                   },
                 });
                 ws.send(JSON.stringify({ type: 'send', to_did: reqPayload.fromDid, payload: responseEnvelope }));
-                console.log(`[useNetwork] Re-sent friend_response to already-friended ${reqPayload.fromDisplayName}`);
-              } catch (e) { console.warn('[useNetwork] Failed to re-send friend_response:', e); }
+                if (__DEV__) dbg.info('network', 're-sent friend_response to already-friended peer', { displayName: reqPayload.fromDisplayName }, SRC);
+              } catch (e) { if (__DEV__) dbg.warn('network', 'failed to re-send friend_response', { error: String(e) }, SRC); }
             }
 
           } else if (envelope.envelope === 'friend_response' && envelope.version === 1) {
             const respPayload = envelope.payload as FriendResponsePayload;
             if (respPayload.accepted) {
-              try { await service.processAcceptedFriendResponse({ fromDid: respPayload.fromDid, fromDisplayName: respPayload.fromDisplayName, fromAvatar: respPayload.fromAvatar, fromSigningKey: respPayload.fromSigningKey, fromEncryptionKey: respPayload.fromEncryptionKey }); } catch (e) { console.warn('[useNetwork] Failed to process acceptance:', e); }
+              try { await service.processAcceptedFriendResponse({ fromDid: respPayload.fromDid, fromDisplayName: respPayload.fromDisplayName, fromAvatar: respPayload.fromAvatar, fromSigningKey: respPayload.fromSigningKey, fromEncryptionKey: respPayload.fromEncryptionKey }); } catch (e) { if (__DEV__) dbg.warn('network', 'failed to process acceptance', { error: String(e) }, SRC); }
               service.dispatchFriendEvent({ type: 'requestAccepted', did: respPayload.fromDid });
-              try { const myDid = _lastRelayDid ?? ''; if (myDid) await service.sendFriendAcceptAck(respPayload.fromDid, myDid, ws); } catch (e) { console.warn('[useNetwork] Failed to send friend_accept_ack:', e); }
+              try { const myDid = _lastRelayDid ?? ''; if (myDid) await service.sendFriendAcceptAck(respPayload.fromDid, myDid, ws); } catch (e) { if (__DEV__) dbg.warn('network', 'failed to send friend_accept_ack', { error: String(e) }, SRC); }
             } else {
               service.dispatchFriendEvent({ type: 'requestRejected', did: respPayload.fromDid });
             }
@@ -691,20 +691,20 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
               await service.storeIncomingMessage(chatPayload);
               const decryptedText = await service.decryptIncomingMessage(chatPayload);
               if (!decryptedText) {
-                console.warn('[useNetwork] Decryption failed, skipping dispatch for', chatPayload.messageId);
+                if (__DEV__) dbg.warn('network', 'decryption failed, skipping dispatch', { messageId: chatPayload.messageId }, SRC);
               } else if (chatPayload.threadId) {
                 service.dispatchMessageEvent({ type: 'threadReplyReceived', message: { id: chatPayload.messageId, conversationId: chatPayload.conversationId, senderDid: chatPayload.senderDid, content: { type: 'text', text: decryptedText }, timestamp: chatPayload.timestamp, read: false, delivered: true, status: 'delivered', threadId: chatPayload.threadId }, parentId: chatPayload.threadId });
               } else {
                 service.dispatchMessageEvent({ type: 'messageReceived', message: { id: chatPayload.messageId, conversationId: chatPayload.conversationId, senderDid: chatPayload.senderDid, content: { type: 'text', text: decryptedText }, timestamp: chatPayload.timestamp, read: false, delivered: true, status: 'delivered' } });
                 await maybeRegisterIncomingFile(service, chatPayload.conversationId, chatPayload.senderDid, decryptedText);
               }
-              service.sendDeliveryReceipt(chatPayload.messageId, chatPayload.conversationId, chatPayload.senderDid, 'delivered', ws).catch((err: any) => console.warn('[useNetwork] Failed to send delivery receipt:', err));
+              service.sendDeliveryReceipt(chatPayload.messageId, chatPayload.conversationId, chatPayload.senderDid, 'delivered', ws).catch((err: any) => { if (__DEV__) dbg.warn('network', 'failed to send delivery receipt', { error: String(err) }, SRC); });
             } catch (err) {
               const errStr = String(err);
               if (errStr.includes('not a known friend')) {
                 dbg.trackNonFriendFailure(chatPayload.senderDid);
               } else {
-                console.warn('[useNetwork] Failed to store incoming chat message:', err);
+                if (__DEV__) dbg.warn('network', 'failed to store incoming chat message', { error: String(err) }, SRC);
               }
             }
 
@@ -723,21 +723,21 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
                 });
                 // Persist streamed content to storage so it survives page reload
                 service.editMessage(updatePayload.messageId, decryptedText).catch((err: any) =>
-                  console.warn('[useNetwork] Failed to persist streaming update:', err)
+                  { if (__DEV__) dbg.warn('network', 'failed to persist streaming update', { error: String(err) }, SRC); }
                 );
               }
-            } catch (err) { console.warn('[useNetwork] Failed to process chat_message_update:', err); }
+            } catch (err) { if (__DEV__) dbg.warn('network', 'failed to process chat_message_update', { error: String(err) }, SRC); }
 
           } else if (envelope.envelope === 'group_invite' && envelope.version === 1) {
             const invitePayload = envelope.payload as GroupInvitePayload;
             try {
               await service.storeGroupInvite(invitePayload);
               service.dispatchGroupEvent({ type: 'inviteReceived', invite: { id: invitePayload.inviteId, groupId: invitePayload.groupId, groupName: invitePayload.groupName, description: invitePayload.description, inviterDid: invitePayload.inviterDid, inviterName: invitePayload.inviterName, encryptedGroupKey: invitePayload.encryptedGroupKey, nonce: invitePayload.nonce, membersJson: invitePayload.membersJson, status: 'pending', createdAt: invitePayload.timestamp } });
-            } catch (err) { console.warn('[useNetwork] Failed to store group invite:', err); }
+            } catch (err) { if (__DEV__) dbg.warn('network', 'failed to store group invite', { error: String(err) }, SRC); }
 
           } else if (envelope.envelope === 'group_invite_accept' && envelope.version === 1) {
             const acceptPayload = envelope.payload as GroupInviteResponsePayload;
-            try { await service.addGroupMember(acceptPayload.groupId, acceptPayload.fromDid, acceptPayload.fromDisplayName); service.dispatchGroupEvent({ type: 'inviteAccepted', groupId: acceptPayload.groupId, fromDid: acceptPayload.fromDid }); } catch (err) { console.warn('[useNetwork] Failed to process group invite acceptance:', err); }
+            try { await service.addGroupMember(acceptPayload.groupId, acceptPayload.fromDid, acceptPayload.fromDisplayName); service.dispatchGroupEvent({ type: 'inviteAccepted', groupId: acceptPayload.groupId, fromDid: acceptPayload.fromDid }); } catch (err) { if (__DEV__) dbg.warn('network', 'failed to process group invite acceptance', { error: String(err) }, SRC); }
 
           } else if (envelope.envelope === 'group_invite_decline' && envelope.version === 1) {
             const declinePayload = envelope.payload as GroupInviteResponsePayload;
@@ -753,22 +753,28 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
             if (_failedGroupKeys.has(groupKeyId)) {
               // Silently skip — key rotation will clear this entry
             } else {
+              // Separate decrypt from dispatch/store — only decrypt errors
+              // should poison _failedGroupKeys. Errors from dispatchMessageEvent
+              // or storeIncomingMessage must NOT mark the key as failed.
+              let plaintext: string | null = null;
               try {
-                const plaintext = await service.decryptGroupMessage(groupMsgPayload.groupId, groupMsgPayload.ciphertext, groupMsgPayload.nonce, groupMsgPayload.keyVersion, groupMsgPayload.senderDid, groupMsgPayload.timestamp);
-                // Dispatch first so message appears immediately in the UI
-                service.dispatchMessageEvent({ type: 'messageReceived', message: { id: groupMsgPayload.messageId, conversationId: groupMsgPayload.conversationId, senderDid: groupMsgPayload.senderDid, content: { type: 'text', text: plaintext }, timestamp: groupMsgPayload.timestamp, read: false, delivered: true, status: 'delivered' } });
-                await maybeRegisterIncomingFile(service, groupMsgPayload.conversationId, groupMsgPayload.senderDid, plaintext);
-                // Store as base64 so WASM can handle it (storeIncomingMessage expects base64 ciphertext)
-                try {
-                  const storePayload: ChatMessagePayload = { messageId: groupMsgPayload.messageId, conversationId: groupMsgPayload.conversationId, senderDid: groupMsgPayload.senderDid, contentEncrypted: utf8ToBase64(plaintext), nonce: '000000000000000000000000', timestamp: groupMsgPayload.timestamp, isGroup: true };
-                  await service.storeIncomingMessage(storePayload);
-                } catch { /* Storage is best-effort for group messages */ }
+                plaintext = await service.decryptGroupMessage(groupMsgPayload.groupId, groupMsgPayload.ciphertext, groupMsgPayload.nonce, groupMsgPayload.keyVersion, groupMsgPayload.senderDid, groupMsgPayload.timestamp);
               } catch (err) {
                 const errStr = String(err);
                 if (errStr.includes('key version') || errStr.includes('not found')) {
                   _failedGroupKeys.add(groupKeyId);
                 }
-                console.warn('[useNetwork] Failed to process group message:', err);
+                if (__DEV__) dbg.warn('network', 'failed to decrypt group message', { error: String(err) }, SRC);
+              }
+              if (plaintext !== null) {
+                try {
+                  service.dispatchMessageEvent({ type: 'messageReceived', message: { id: groupMsgPayload.messageId, conversationId: groupMsgPayload.conversationId, senderDid: groupMsgPayload.senderDid, content: { type: 'text', text: plaintext }, timestamp: groupMsgPayload.timestamp, read: false, delivered: true, status: 'delivered' } });
+                  await maybeRegisterIncomingFile(service, groupMsgPayload.conversationId, groupMsgPayload.senderDid, plaintext);
+                } catch (err) { if (__DEV__) dbg.warn('network', 'failed to dispatch group message', { error: String(err) }, SRC); }
+                try {
+                  const storePayload: ChatMessagePayload = { messageId: groupMsgPayload.messageId, conversationId: groupMsgPayload.conversationId, senderDid: groupMsgPayload.senderDid, contentEncrypted: utf8ToBase64(plaintext), nonce: '000000000000000000000000', timestamp: groupMsgPayload.timestamp, isGroup: true };
+                  await service.storeIncomingMessage(storePayload);
+                } catch { /* Storage is best-effort for group messages */ }
               }
             }
 
@@ -781,14 +787,14 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
                 _failedGroupKeys.delete(key);
               }
             }
-            try { await service.importGroupKey(keyPayload.encryptedKey, keyPayload.nonce, keyPayload.senderDid, keyPayload.groupId, keyPayload.keyVersion); service.dispatchGroupEvent({ type: 'keyRotated', groupId: keyPayload.groupId, keyVersion: keyPayload.keyVersion }); } catch (err) { console.warn('[useNetwork] Failed to import rotated group key:', err); }
+            try { await service.importGroupKey(keyPayload.encryptedKey, keyPayload.nonce, keyPayload.senderDid, keyPayload.groupId, keyPayload.keyVersion); service.dispatchGroupEvent({ type: 'keyRotated', groupId: keyPayload.groupId, keyVersion: keyPayload.keyVersion }); } catch (err) { if (__DEV__) dbg.warn('network', 'failed to import rotated group key', { error: String(err) }, SRC); }
 
           } else if (envelope.envelope === 'key_rotation' && envelope.version === 1) {
             const keyPayload = envelope.payload as KeyRotationPayload;
             try {
               await service.updateFriendEncryptionKey(keyPayload.fromDid, keyPayload.newEncryptionKey, keyPayload.signature);
               service.dispatchFriendEvent({ type: 'friendKeyRotated', did: keyPayload.fromDid });
-            } catch (err) { console.warn('[useNetwork] Failed to process key rotation:', err); }
+            } catch (err) { if (__DEV__) dbg.warn('network', 'failed to process key rotation', { error: String(err) }, SRC); }
 
           } else if (envelope.envelope === 'group_member_removed' && envelope.version === 1) {
             const removePayload = envelope.payload as GroupMemberRemovedPayload;
@@ -796,7 +802,7 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
 
           } else if (envelope.envelope === 'message_status' && envelope.version === 1) {
             const statusPayload = envelope.payload as MessageStatusPayload;
-            try { await service.updateMessageStatus(statusPayload.messageId, statusPayload.status); service.dispatchMessageEvent({ type: 'messageStatusChanged', messageId: statusPayload.messageId, status: statusPayload.status }); } catch (err) { console.warn('[useNetwork] Failed to update message status:', err); }
+            try { await service.updateMessageStatus(statusPayload.messageId, statusPayload.status); service.dispatchMessageEvent({ type: 'messageStatusChanged', messageId: statusPayload.messageId, status: statusPayload.status }); } catch (err) { if (__DEV__) dbg.warn('network', 'failed to update message status', { error: String(err) }, SRC); }
 
           } else if (envelope.envelope === 'typing_indicator' && envelope.version === 1) {
             const typingPayload = envelope.payload as TypingIndicatorPayload;
@@ -883,7 +889,7 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
 
           } else if (envelope.envelope === 'account_backup_manifest' || envelope.envelope === 'account_backup_chunk') {
             // Backup envelopes are collected during offline fetch, not processed in real-time
-            console.log('[useNetwork] Ignoring live backup envelope (only processed during offline fetch)');
+            if (__DEV__) dbg.info('network', 'ignoring live backup envelope (only processed during offline fetch)', undefined, SRC);
 
           } else if (envelope.envelope === 'presence_online') {
             if (from_did) {
@@ -894,7 +900,7 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
             // Already handled via _markDidOnline(from_did) above
           }
         } catch (parseErr) {
-          console.log('[useNetwork] Message payload is not a relay envelope:', parseErr);
+          if (__DEV__) dbg.info('network', 'message payload is not a relay envelope', { error: String(parseErr) }, SRC);
         }
         break;
       }
@@ -906,8 +912,8 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
         const totalChunks = msg.total_chunks ?? 1;
 
         if (__DEV__) dbg.info('network', `offline chunk ${chunkIndex + 1}/${totalChunks} (${messages.length} msgs, ${totalMessages} total)`, undefined, SRC);
-        console.log(`[useNetwork] Offline chunk ${chunkIndex + 1}/${totalChunks} (${messages.length} msgs, ${totalMessages} total)`);
-        console.log(`[BREADCRUMB] offline_messages START, chunk=${chunkIndex + 1}/${totalChunks}, count=${messages.length}, total=${totalMessages}`);
+        if (__DEV__) dbg.info('network', `offline chunk ${chunkIndex + 1}/${totalChunks}`, { msgCount: messages.length, total: totalMessages }, SRC);
+        if (__DEV__) dbg.info('network', `offline_messages START, chunk=${chunkIndex + 1}/${totalChunks}`, { count: messages.length, total: totalMessages }, SRC);
         const _backupEnvelopes: any[] = [];
         // Track affected conversation IDs so we can fire a single batch
         // refresh event at the end instead of 1400 individual dispatchMessageEvent
@@ -921,7 +927,7 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
         // A 50ms yield gives V8 idle time for mark-compact GC between batches.
         // Log WASM memory baseline before offline processing starts
         const _memBefore = getWasmMemoryStats();
-        console.log(`[WASM-TRACE] offline START: ${_memBefore.summary}`);
+        if (__DEV__) dbg.info('network', `WASM-TRACE offline START: ${_memBefore.summary}`, undefined, SRC);
         let _wasmCallCount = 0;
 
         // Trace offline batch start
@@ -948,7 +954,7 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
           }
           // Log WASM memory at each batch boundary to track growth
           const _memBatch = getWasmMemoryStats();
-          console.log(`[WASM-TRACE] batch ${batchStart + 1}-${batchEnd}/${messages.length}: ${_memBatch.summary} (${_wasmCallCount} WASM calls so far)`);
+          if (__DEV__) dbg.info('network', `WASM-TRACE batch ${batchStart + 1}-${batchEnd}/${messages.length}: ${_memBatch.summary}`, { wasmCalls: _wasmCallCount }, SRC);
 
           for (let i = batchStart; i < batchEnd; i++) {
           const offlineMsg = messages[i];
@@ -960,7 +966,7 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
               const reqPayload = envelope.payload as FriendRequestPayload;
               const friendRequest: FriendRequest = { id: reqPayload.id, fromDid: reqPayload.fromDid, toDid: '', direction: 'incoming', message: reqPayload.message, fromDisplayName: reqPayload.fromDisplayName, fromAvatar: reqPayload.fromAvatar, fromSigningKey: reqPayload.fromSigningKey, fromEncryptionKey: reqPayload.fromEncryptionKey, createdAt: reqPayload.createdAt, status: 'pending' };
               let isNew = true;
-              try { isNew = await service.storeIncomingRequest(friendRequest); _wasmCallCount++; } catch (e) { console.warn('[useNetwork] Failed to store offline incoming request:', e); }
+              try { isNew = await service.storeIncomingRequest(friendRequest); _wasmCallCount++; } catch (e) { if (__DEV__) dbg.warn('network', 'failed to store offline incoming request', { error: String(e) }, SRC); }
               if (isNew) {
                 service.dispatchFriendEvent({ type: 'requestReceived', request: friendRequest });
               } else {
@@ -978,15 +984,15 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
                     },
                   });
                   ws.send(JSON.stringify({ type: 'send', to_did: reqPayload.fromDid, payload: responseEnvelope }));
-                  console.log(`[useNetwork] Re-sent offline friend_response to ${reqPayload.fromDisplayName}`);
-                } catch (e) { console.warn('[useNetwork] Failed to re-send offline friend_response:', e); }
+                  if (__DEV__) dbg.info('network', 're-sent offline friend_response', { displayName: reqPayload.fromDisplayName }, SRC);
+                } catch (e) { if (__DEV__) dbg.warn('network', 'failed to re-send offline friend_response', { error: String(e) }, SRC); }
               }
             } else if (envelope.envelope === 'friend_response' && envelope.version === 1) {
               const respPayload = envelope.payload as FriendResponsePayload;
               if (respPayload.accepted) {
-                try { await service.processAcceptedFriendResponse({ fromDid: respPayload.fromDid, fromDisplayName: respPayload.fromDisplayName, fromAvatar: respPayload.fromAvatar, fromSigningKey: respPayload.fromSigningKey, fromEncryptionKey: respPayload.fromEncryptionKey }); _wasmCallCount++; } catch (e) { console.warn('[useNetwork] Failed to process offline acceptance:', e); }
+                try { await service.processAcceptedFriendResponse({ fromDid: respPayload.fromDid, fromDisplayName: respPayload.fromDisplayName, fromAvatar: respPayload.fromAvatar, fromSigningKey: respPayload.fromSigningKey, fromEncryptionKey: respPayload.fromEncryptionKey }); _wasmCallCount++; } catch (e) { if (__DEV__) dbg.warn('network', 'failed to process offline acceptance', { error: String(e) }, SRC); }
                 service.dispatchFriendEvent({ type: 'requestAccepted', did: respPayload.fromDid });
-                try { const myDid = _lastRelayDid ?? ''; if (myDid) await service.sendFriendAcceptAck(respPayload.fromDid, myDid, ws); } catch (e) { console.warn('[useNetwork] Failed to send offline friend_accept_ack:', e); }
+                try { const myDid = _lastRelayDid ?? ''; if (myDid) await service.sendFriendAcceptAck(respPayload.fromDid, myDid, ws); } catch (e) { if (__DEV__) dbg.warn('network', 'failed to send offline friend_accept_ack', { error: String(e) }, SRC); }
               } else {
                 service.dispatchFriendEvent({ type: 'requestRejected', did: respPayload.fromDid });
               }
@@ -1004,7 +1010,7 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
                 if (errStr.includes('not a known friend')) {
                   dbg.trackNonFriendFailure(chatPayload.senderDid);
                 } else {
-                  console.warn('[useNetwork] Failed to store offline chat message:', err);
+                  if (__DEV__) dbg.warn('network', 'failed to store offline chat message', { error: String(err) }, SRC);
                 }
               }
             } else if (envelope.envelope === 'chat_message_update' && envelope.version === 1) {
@@ -1013,35 +1019,46 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
               if (updatePayload.conversationId) _offlineConversationIds.add(updatePayload.conversationId);
             } else if (envelope.envelope === 'group_invite' && envelope.version === 1) {
               const invitePayload = envelope.payload as GroupInvitePayload;
-              try { await service.storeGroupInvite(invitePayload); _wasmCallCount++; service.dispatchGroupEvent({ type: 'inviteReceived', invite: { id: invitePayload.inviteId, groupId: invitePayload.groupId, groupName: invitePayload.groupName, description: invitePayload.description, inviterDid: invitePayload.inviterDid, inviterName: invitePayload.inviterName, encryptedGroupKey: invitePayload.encryptedGroupKey, nonce: invitePayload.nonce, membersJson: invitePayload.membersJson, status: 'pending', createdAt: invitePayload.timestamp } }); } catch (err) { console.warn('[useNetwork] Failed to store offline group invite:', err); }
+              try { await service.storeGroupInvite(invitePayload); _wasmCallCount++; service.dispatchGroupEvent({ type: 'inviteReceived', invite: { id: invitePayload.inviteId, groupId: invitePayload.groupId, groupName: invitePayload.groupName, description: invitePayload.description, inviterDid: invitePayload.inviterDid, inviterName: invitePayload.inviterName, encryptedGroupKey: invitePayload.encryptedGroupKey, nonce: invitePayload.nonce, membersJson: invitePayload.membersJson, status: 'pending', createdAt: invitePayload.timestamp } }); } catch (err) { if (__DEV__) dbg.warn('network', 'failed to store offline group invite', { error: String(err) }, SRC); }
             } else if (envelope.envelope === 'group_invite_accept' && envelope.version === 1) {
               const acceptPayload = envelope.payload as GroupInviteResponsePayload;
-              try { await service.addGroupMember(acceptPayload.groupId, acceptPayload.fromDid, acceptPayload.fromDisplayName); _wasmCallCount++; service.dispatchGroupEvent({ type: 'inviteAccepted', groupId: acceptPayload.groupId, fromDid: acceptPayload.fromDid }); } catch (err) { console.warn('[useNetwork] Failed to process offline group invite acceptance:', err); }
+              try { await service.addGroupMember(acceptPayload.groupId, acceptPayload.fromDid, acceptPayload.fromDisplayName); _wasmCallCount++; service.dispatchGroupEvent({ type: 'inviteAccepted', groupId: acceptPayload.groupId, fromDid: acceptPayload.fromDid }); } catch (err) { if (__DEV__) dbg.warn('network', 'failed to process offline group invite acceptance', { error: String(err) }, SRC); }
             } else if (envelope.envelope === 'group_message' && envelope.version === 1) {
               const groupMsgPayload = envelope.payload as GroupMessagePayload;
-              try {
-                const plaintext = await service.decryptGroupMessage(groupMsgPayload.groupId, groupMsgPayload.ciphertext, groupMsgPayload.nonce, groupMsgPayload.keyVersion, groupMsgPayload.senderDid, groupMsgPayload.timestamp); _wasmCallCount++;
+              const groupKeyId = `${groupMsgPayload.groupId}:${groupMsgPayload.keyVersion}`;
+              if (_failedGroupKeys.has(groupKeyId)) {
+                // Skip — key version already known to be missing (prevents WASM/SQL flood)
+              } else {
                 try {
-                  const storePayload: ChatMessagePayload = { messageId: groupMsgPayload.messageId, conversationId: groupMsgPayload.conversationId, senderDid: groupMsgPayload.senderDid, contentEncrypted: utf8ToBase64(plaintext), nonce: '000000000000000000000000', timestamp: groupMsgPayload.timestamp, isGroup: true };
-                  await service.storeIncomingMessage(storePayload); _wasmCallCount++;
-                } catch { /* Storage is best-effort for group messages */ }
-                _offlineConversationIds.add(groupMsgPayload.conversationId);
-              } catch (err) { console.warn('[useNetwork] Failed to process offline group message:', err); }
+                  const plaintext = await service.decryptGroupMessage(groupMsgPayload.groupId, groupMsgPayload.ciphertext, groupMsgPayload.nonce, groupMsgPayload.keyVersion, groupMsgPayload.senderDid, groupMsgPayload.timestamp); _wasmCallCount++;
+                  try {
+                    const storePayload: ChatMessagePayload = { messageId: groupMsgPayload.messageId, conversationId: groupMsgPayload.conversationId, senderDid: groupMsgPayload.senderDid, contentEncrypted: utf8ToBase64(plaintext), nonce: '000000000000000000000000', timestamp: groupMsgPayload.timestamp, isGroup: true };
+                    await service.storeIncomingMessage(storePayload); _wasmCallCount++;
+                  } catch { /* Storage is best-effort for group messages */ }
+                  _offlineConversationIds.add(groupMsgPayload.conversationId);
+                } catch (err) {
+                  const errStr = String(err);
+                  if (errStr.includes('key version') || errStr.includes('not found')) {
+                    _failedGroupKeys.add(groupKeyId);
+                  }
+                  if (__DEV__) dbg.warn('network', 'failed to process offline group message', { error: String(err) }, SRC);
+                }
+              }
             } else if (envelope.envelope === 'group_key_rotation' && envelope.version === 1) {
               const keyPayload = envelope.payload as GroupKeyRotationPayload;
-              try { await service.importGroupKey(keyPayload.encryptedKey, keyPayload.nonce, keyPayload.senderDid, keyPayload.groupId, keyPayload.keyVersion); _wasmCallCount++; service.dispatchGroupEvent({ type: 'keyRotated', groupId: keyPayload.groupId, keyVersion: keyPayload.keyVersion }); } catch (err) { console.warn('[useNetwork] Failed to import offline rotated group key:', err); }
+              try { await service.importGroupKey(keyPayload.encryptedKey, keyPayload.nonce, keyPayload.senderDid, keyPayload.groupId, keyPayload.keyVersion); _wasmCallCount++; service.dispatchGroupEvent({ type: 'keyRotated', groupId: keyPayload.groupId, keyVersion: keyPayload.keyVersion }); } catch (err) { if (__DEV__) dbg.warn('network', 'failed to import offline rotated group key', { error: String(err) }, SRC); }
             } else if (envelope.envelope === 'key_rotation' && envelope.version === 1) {
               const keyPayload = envelope.payload as KeyRotationPayload;
               try {
                 await service.updateFriendEncryptionKey(keyPayload.fromDid, keyPayload.newEncryptionKey, keyPayload.signature); _wasmCallCount++;
                 service.dispatchFriendEvent({ type: 'friendKeyRotated', did: keyPayload.fromDid });
-              } catch (err) { console.warn('[useNetwork] Failed to process offline key rotation:', err); }
+              } catch (err) { if (__DEV__) dbg.warn('network', 'failed to process offline key rotation', { error: String(err) }, SRC); }
             } else if (envelope.envelope === 'group_member_removed' && envelope.version === 1) {
               const removePayload = envelope.payload as GroupMemberRemovedPayload;
               service.dispatchGroupEvent({ type: 'memberRemoved', groupId: removePayload.groupId, removedDid: removePayload.removedDid });
             } else if (envelope.envelope === 'message_status' && envelope.version === 1) {
               const statusPayload = envelope.payload as MessageStatusPayload;
-              try { await service.updateMessageStatus(statusPayload.messageId, statusPayload.status); _wasmCallCount++; } catch (err) { console.warn('[useNetwork] Failed to update offline message status:', err); }
+              try { await service.updateMessageStatus(statusPayload.messageId, statusPayload.status); _wasmCallCount++; } catch (err) { if (__DEV__) dbg.warn('network', 'failed to update offline message status', { error: String(err) }, SRC); }
             } else if (envelope.envelope === 'community_event' && envelope.version === 1) {
               const communityPayload = envelope.payload as CommunityEventPayload;
               const offlineEvent = communityPayload.event;
@@ -1098,7 +1115,7 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
               // Stale presence from when we were offline — ignore silently
             }
           } catch (parseErr) {
-            console.log('[useNetwork] Offline message parse error:', parseErr);
+            if (__DEV__) dbg.info('network', 'offline message parse error', { error: String(parseErr) }, SRC);
           }
           }
         }
@@ -1106,7 +1123,7 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
         // Log final WASM memory after all offline messages processed
         const _memAfter = getWasmMemoryStats();
         const _wasmGrowthMB = ((_memAfter.totalWasmBytes - _memBefore.totalWasmBytes) / 1024 / 1024).toFixed(1);
-        console.log(`[WASM-TRACE] offline END: ${_memAfter.summary} | growth=${_wasmGrowthMB}MB over ${_wasmCallCount} WASM calls`);
+        if (__DEV__) dbg.info('network', `WASM-TRACE offline END: ${_memAfter.summary}`, { growthMB: _wasmGrowthMB, wasmCalls: _wasmCallCount }, SRC);
 
         // Trace offline batch end
         if (isTraceActive()) {
@@ -1125,14 +1142,14 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
         for (const mod of _memAfter.modules) {
           const before = _memBefore.modules.find(m => m.label === mod.label);
           const growth = before ? ((mod.bytes - before.bytes) / 1024 / 1024).toFixed(1) : '?';
-          console.log(`[WASM-TRACE]   ${mod.label}: ${mod.mb}MB (growth: ${growth}MB)`);
+          if (__DEV__) dbg.info('network', `WASM-TRACE module: ${mod.label}`, { mb: mod.mb, growthMB: growth }, SRC);
         }
 
         // Fire a single batch refresh for all conversations that received
         // offline messages. This replaces 1400+ individual dispatchMessageEvent
         // calls with a single event, preventing V8 GC exhaustion.
         if (_offlineConversationIds.size > 0) {
-          console.log(`[useNetwork] Offline batch complete: ${_offlineConversationIds.size} conversations affected`);
+          if (__DEV__) dbg.info('network', 'offline batch complete', { conversationsAffected: _offlineConversationIds.size }, SRC);
           await _gcYield(100); // Give V8 GC time before triggering render
           service.dispatchMessageEvent({
             type: 'offlineBatchComplete',
@@ -1147,19 +1164,19 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
             if (manifest) {
               const chunks = parseBackupChunks(_backupEnvelopes, manifest.backupId);
               if (chunks.length === manifest.totalChunks) {
-                console.log(`[useNetwork] Found complete backup (${manifest.totalChunks} chunks), restoring...`);
+                if (__DEV__) dbg.info('network', 'found complete backup, restoring', { totalChunks: manifest.totalChunks }, SRC);
                 const result = await restoreFromChunks(chunks, manifest.nonce);
-                console.log('[useNetwork] Backup restored:', result.imported);
+                if (__DEV__) dbg.info('network', 'backup restored', { imported: result.imported }, SRC);
                 service.dispatchMetadataEvent({
                   type: 'backupRestored',
                   imported: result.imported,
                 });
               } else {
-                console.warn(`[useNetwork] Incomplete backup: ${chunks.length}/${manifest.totalChunks} chunks`);
+                if (__DEV__) dbg.warn('network', 'incomplete backup', { chunks: chunks.length, totalChunks: manifest.totalChunks }, SRC);
               }
             }
           } catch (backupErr) {
-            console.warn('[useNetwork] Backup restore error:', backupErr);
+            if (__DEV__) dbg.warn('network', 'backup restore error', { error: String(backupErr) }, SRC);
           }
         }
         break;
@@ -1171,8 +1188,8 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
           try {
             await service.updateMessageStatus(pendingMsgId, 'sent');
             service.dispatchMessageEvent({ type: 'messageStatusChanged', messageId: pendingMsgId, status: 'sent' });
-            console.log('[useNetwork] Message ack: sending→sent for', pendingMsgId);
-          } catch (err) { console.warn('[useNetwork] Failed to update message status on ack:', err); }
+            if (__DEV__) dbg.info('network', 'message ack: sending→sent', { messageId: pendingMsgId }, SRC);
+          } catch (err) { if (__DEV__) dbg.warn('network', 'failed to update message status on ack', { error: String(err) }, SRC); }
         }
         break;
       }
@@ -1183,7 +1200,7 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
       case 'call_signal_forward': { service.dispatchCallEvent({ type: 'callSignalForward', payload: { roomId: msg.room_id, fromDid: msg.from_did, payload: msg.payload } }); break; }
       case 'pong': break;
       case 'session_created': case 'session_joined': case 'signal': break;
-      case 'error': console.error('[useNetwork] Relay error:', msg.message); break;
+      case 'error': if (__DEV__) dbg.error('network', 'relay error', { message: msg.message }, SRC); break;
       case 'sync_update': {
         // Real-time sync delta from another session of the same DID
         // Forward sync_update to registered callbacks (SyncContext)
@@ -1195,16 +1212,15 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
               encryptedData: msg.encrypted_data,
             });
           } catch (e) {
-            console.error('[useNetwork] Sync update callback error:', e);
+            if (__DEV__) dbg.error('network', 'sync update callback error', { error: String(e) }, SRC);
           }
         }
         break;
       }
-      default: console.log('[useNetwork] Unknown relay message type:', msg.type);
+      default: if (__DEV__) dbg.info('network', 'unknown relay message type', { type: msg.type }, SRC);
     }
   } catch (err) {
-    if (__DEV__) dbg.error('network', 'Failed to parse relay message', err, SRC);
-    console.error('[useNetwork] Failed to parse relay message:', err);
+    if (__DEV__) dbg.error('network', 'failed to parse relay message', { error: String(err) }, SRC);
   }
 }
 
@@ -1220,7 +1236,7 @@ _scheduleReconnect = function(): void {
   const totalMaxAttempts = maxPerServer * totalServers;
 
   if (_reconnectAttempt >= totalMaxAttempts) {
-    console.warn('[Reconnect] All servers exhausted after', _reconnectAttempt, 'attempts. Will retry on foreground.');
+    if (__DEV__) dbg.warn('network', 'reconnect: all servers exhausted, will retry on foreground', { attempts: _reconnectAttempt }, SRC);
     return;
   }
 
@@ -1228,7 +1244,7 @@ _scheduleReconnect = function(): void {
   const serverUrl = DEFAULT_RELAY_SERVERS[_currentServerIndex];
   const delay = _computeBackoffDelay(_reconnectAttempt % maxPerServer);
   if (__DEV__) dbg.info('network', `reconnect attempt ${_reconnectAttempt + 1}/${totalMaxAttempts} → ${serverUrl} in ${delay}ms`, undefined, SRC);
-  console.log(`[Reconnect] Attempt ${_reconnectAttempt + 1}/${totalMaxAttempts} to ${serverUrl} in ${delay}ms`);
+  if (__DEV__) dbg.info('network', `reconnect: attempt ${_reconnectAttempt + 1}/${totalMaxAttempts}`, { serverUrl, delayMs: delay }, SRC);
 
   _clearReconnectTimer();
   _reconnectTimer = setTimeout(() => {
@@ -1240,11 +1256,11 @@ _scheduleReconnect = function(): void {
 _attemptReconnect = async function(serverUrl: string): Promise<void> {
   if (_intentionalDisconnect || !_lastService || !_lastRelayDid) return;
   if (_relayWs && _relayWs.readyState === WebSocket.OPEN) {
-    console.log('[Reconnect] Already connected, aborting attempt');
+    if (__DEV__) dbg.info('network', 'reconnect: already connected, aborting attempt', undefined, SRC);
     return;
   }
 
-  console.log('[Reconnect] Attempting connection to', serverUrl);
+  if (__DEV__) dbg.info('network', 'reconnect: attempting connection', { serverUrl }, SRC);
   _reconnectAttempt++;
 
   try {
@@ -1259,7 +1275,7 @@ _attemptReconnect = async function(serverUrl: string): Promise<void> {
     _lastService.setRelayWs(ws);
 
     ws.onopen = () => {
-      console.log('[Reconnect] Connected to', serverUrl);
+      if (__DEV__) dbg.info('network', 'reconnect: connected', { serverUrl }, SRC);
       ws.send(registerMessage);
       _wsSendCount++;
       _wsSendBytes += registerMessage.length;
@@ -1276,11 +1292,11 @@ _attemptReconnect = async function(serverUrl: string): Promise<void> {
     ws.onmessage = (event) => _enqueueRelayMessage(ws, event);
 
     ws.onerror = (event) => {
-      console.error('[Reconnect] WebSocket error:', event);
+      if (__DEV__) dbg.error('network', 'reconnect: WebSocket error', { event: String(event) }, SRC);
     };
 
     ws.onclose = (event) => {
-      console.log('[Reconnect] WebSocket closed — code:', event.code);
+      if (__DEV__) dbg.info('network', 'reconnect: WebSocket closed', { code: event.code }, SRC);
       if (_relayWs === ws) {
         _relayWs = null;
         _notifyRelayState(false, null);
@@ -1290,7 +1306,7 @@ _attemptReconnect = async function(serverUrl: string): Promise<void> {
       }
     };
   } catch (err) {
-    console.error('[Reconnect] Failed:', err);
+    if (__DEV__) dbg.error('network', 'reconnect: failed', { error: String(err) }, SRC);
     _scheduleReconnect();
   }
 };
@@ -1489,14 +1505,14 @@ export function useNetwork(): UseNetworkResult {
       // If DID changed, close old WS and fall through to open a fresh one
       // (the relay doesn't support re-registration on the same connection)
       if (identity?.did && _registeredRelayDid && _registeredRelayDid !== identity.did) {
-        console.log('[useNetwork] DID changed — closing old relay WS to reconnect with new DID');
+        if (__DEV__) dbg.info('network', 'DID changed — closing old relay WS to reconnect with new DID', undefined, SRC);
         _relayWs.close();
         _relayWs = null;
         _registeredRelayDid = null;
         _clearKeepAlive();
         // Fall through to create a new connection below
       } else {
-        console.log('[useNetwork] Relay already connected, syncing to current service');
+        if (__DEV__) dbg.info('network', 'relay already connected, syncing to current service', undefined, SRC);
         relayWsRef.current = _relayWs;
         service.setRelayWs(_relayWs);
         _lastService = service;
@@ -1505,7 +1521,7 @@ export function useNetwork(): UseNetworkResult {
       }
     }
     if (_relayConnectPromise) {
-      console.log('[useNetwork] Relay connection already in progress, waiting...');
+      if (__DEV__) dbg.info('network', 'relay connection already in progress, waiting', undefined, SRC);
       await _relayConnectPromise;
       // After waiting, ensure this service instance has the WS reference
       if (_relayWs && _relayWs.readyState === WebSocket.OPEN) {
@@ -1534,20 +1550,20 @@ export function useNetwork(): UseNetworkResult {
         let registerMessage: string | undefined;
         if (identity?.did) {
           registerMessage = JSON.stringify({ type: 'register', did: identity.did });
-          console.log('[useNetwork] Using frontend DID for relay register:', identity.did.slice(0, 24) + '...');
+          if (__DEV__) dbg.info('network', 'using frontend DID for relay register', { did: identity.did.slice(0, 24) + '...' }, SRC);
         }
 
         // Still call the backend to notify it about the relay connection
-        console.log('[useNetwork] Connecting to relay:', url);
+        if (__DEV__) dbg.info('network', 'connecting to relay', { url }, SRC);
         try {
           const result = await service.connectRelay(url);
-          console.log('[useNetwork] connectRelay result:', result ? 'got register message from backend' : 'no result');
+          if (__DEV__) dbg.info('network', 'connectRelay result', { hasResult: !!result }, SRC);
           // Use backend register message as fallback if frontend identity not available
           if (!registerMessage && result?.registerMessage) {
             registerMessage = result.registerMessage;
           }
         } catch (backendErr) {
-          console.warn('[useNetwork] Backend connectRelay failed (non-fatal, using frontend DID):', backendErr);
+          if (__DEV__) dbg.warn('network', 'backend connectRelay failed (non-fatal, using frontend DID)', { error: String(backendErr) }, SRC);
         }
 
         // Close any existing WebSocket before creating a new one
@@ -1566,7 +1582,6 @@ export function useNetwork(): UseNetworkResult {
           // Send the register message
           if (registerMessage) {
             if (__DEV__) dbg.info('network', 'relay WS OPEN, sending register', undefined, SRC);
-            console.log('[useNetwork] Sending register message to relay');
             ws.send(registerMessage);
             _wsSendCount++;
             _wsSendBytes += registerMessage.length;
@@ -1575,8 +1590,7 @@ export function useNetwork(): UseNetworkResult {
             }
             _registeredRelayDid = identity?.did ?? null;
           } else {
-            if (__DEV__) dbg.warn('network', 'relay WS OPEN but no register message!', undefined, SRC);
-            console.warn('[useNetwork] No register message available — relay may not know our DID');
+            if (__DEV__) dbg.warn('network', 'relay WS OPEN but no register message — relay may not know our DID', undefined, SRC);
           }
           // Notify ALL useNetwork() instances via shared state
           _notifyRelayState(true, url);
@@ -1584,21 +1598,18 @@ export function useNetwork(): UseNetworkResult {
           _reconnectAttempt = 0;
           _currentServerIndex = 0;
           _startKeepAlive();
-          console.log('[useNetwork] Relay WebSocket connected to', url);
+          if (__DEV__) dbg.info('network', 'relay WebSocket connected', { url }, SRC);
         };
 
         ws.onmessage = (event) => _enqueueRelayMessage(ws, event);
 
         ws.onerror = (event) => {
-          if (__DEV__) dbg.error('network', `relay WS ERROR, readyState=${ws.readyState}`, event, SRC);
-          console.error('[useNetwork] Relay WebSocket error:', event);
-          console.error('[useNetwork] WebSocket readyState:', ws.readyState);
+          if (__DEV__) dbg.error('network', 'relay WS ERROR', { readyState: ws.readyState, event: String(event) }, SRC);
           setError(new Error('Relay connection error'));
         };
 
         ws.onclose = (event) => {
-          if (__DEV__) dbg.warn('network', `relay WS CLOSED code=${event.code} clean=${event.wasClean}`, { reason: event.reason }, SRC);
-          console.log('[useNetwork] Relay WebSocket closed — code:', event.code, 'reason:', event.reason, 'clean:', event.wasClean);
+          if (__DEV__) dbg.warn('network', 'relay WS CLOSED', { code: event.code, reason: event.reason, clean: event.wasClean }, SRC);
           // Only clear state if this is still the active WebSocket
           if (_relayWs === ws) {
             _relayWs = null;
@@ -1670,18 +1681,15 @@ export function useNetwork(): UseNetworkResult {
           (async () => {
             try {
               if (__DEV__) dbg.info('network', 'P2P startNetwork START', undefined, SRC);
-              console.log('[useNetwork] Auto-starting network...');
               await service!.startNetwork();
               if (__DEV__) dbg.info('network', 'P2P startNetwork DONE', undefined, SRC);
-              console.log('[useNetwork] Network started');
             } catch (err) {
-              if (__DEV__) dbg.error('network', 'P2P startNetwork FAILED', err, SRC);
-              console.error('[useNetwork] Auto-start network failed:', err);
+              if (__DEV__) dbg.error('network', 'P2P startNetwork FAILED', { error: String(err) }, SRC);
             }
           })()
         );
       } else {
-        console.log('[useNetwork] P2P network disabled (autoStartP2P=false), relay-only mode');
+        if (__DEV__) dbg.info('network', 'P2P network disabled (autoStartP2P=false), relay-only mode', undefined, SRC);
       }
 
       // Relay server
@@ -1689,14 +1697,11 @@ export function useNetwork(): UseNetworkResult {
         tasks.push(
           (async () => {
             if (__DEV__) dbg.info('network', `auto-connecting relay → ${PRIMARY_RELAY_URL}`, undefined, SRC);
-            console.log('[useNetwork] Auto-connecting to relay:', PRIMARY_RELAY_URL);
             try {
               await connectRelay(PRIMARY_RELAY_URL);
               if (__DEV__) dbg.info('network', 'relay auto-connect DONE', undefined, SRC);
-              console.log('[useNetwork] Relay connected successfully');
             } catch (err) {
-              if (__DEV__) dbg.error('network', 'relay auto-connect FAILED', err, SRC);
-              console.error('[useNetwork] Auto-connect to relay failed:', err);
+              if (__DEV__) dbg.error('network', 'relay auto-connect FAILED', { error: String(err) }, SRC);
             }
           })()
         );
@@ -1733,7 +1738,7 @@ export function useNetwork(): UseNetworkResult {
       // Account switched — the relay doesn't support re-registration on the
       // same WS, so we must close the old connection and open a fresh one
       // registered to the new DID.
-      console.log('[useNetwork] Account switched — closing old relay WS and reconnecting for new DID:', identity.did.slice(0, 24) + '...');
+      if (__DEV__) dbg.info('network', 'account switched — closing old relay WS and reconnecting for new DID', { did: identity.did.slice(0, 24) + '...' }, SRC);
 
       // Mark as intentional so onclose won't trigger the reconnect manager
       _intentionalDisconnect = true;
@@ -1754,7 +1759,7 @@ export function useNetwork(): UseNetworkResult {
       setTimeout(() => {
         _intentionalDisconnect = false;
         connectRelay(PRIMARY_RELAY_URL).catch((err: any) => {
-          console.warn('[useNetwork] Post-switch relay reconnect failed:', err);
+          if (__DEV__) dbg.warn('network', 'post-switch relay reconnect failed', { error: String(err) }, SRC);
           // Fall back to reconnect manager
           _resetReconnectState();
           _scheduleReconnect();
@@ -1769,7 +1774,7 @@ export function useNetwork(): UseNetworkResult {
       if (nextState === 'active') {
         // Foreground: check relay and reconnect if needed
         if (!_relayWs || _relayWs.readyState !== WebSocket.OPEN) {
-          console.log('[AppState] Foregrounded — relay disconnected, scheduling reconnect');
+          if (__DEV__) dbg.info('network', 'foregrounded — relay disconnected, scheduling reconnect', undefined, SRC);
           _resetReconnectState();
           _scheduleReconnect();
         } else {
@@ -1780,7 +1785,7 @@ export function useNetwork(): UseNetworkResult {
         if (NETWORK_CONFIG.autoStartP2P) {
           service.getNetworkStatus().then((status: NetworkStatus) => {
             if (!status.isRunning) {
-              console.log('[AppState] P2P network not running, restarting...');
+              if (__DEV__) dbg.info('network', 'P2P network not running, restarting', undefined, SRC);
               service.startNetwork().catch(() => {});
             }
           }).catch(() => {});
