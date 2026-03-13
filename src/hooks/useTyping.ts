@@ -14,10 +14,13 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { dbg } from '@/utils/debug';
 import { useUmbra } from '@/contexts/UmbraContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNetwork } from '@/hooks/useNetwork';
 import type { MessageEvent } from '@umbra/service';
+
+const SRC = 'useTyping';
 
 /** How long before a typing indicator expires (no refresh received) */
 const TYPING_TIMEOUT_MS = 4000;
@@ -61,6 +64,7 @@ export function useTyping(
       if (event.type === 'typingStarted' && event.conversationId === conversationId) {
         const did = event.did;
         if (did === myDid) return; // Ignore our own typing
+        if (__DEV__) dbg.trace('messages', 'typing started (remote)', { did: did.slice(0, 12) }, SRC);
 
         setTypingUsers((prev) => {
           const next = new Map(prev);
@@ -123,6 +127,7 @@ export function useTyping(
 
     lastSentRef.current = now;
     isSendingRef.current = true;
+    if (__DEV__) dbg.trace('messages', 'sendTyping', { conversationId }, SRC);
 
     const relayWs = getRelayWs();
     // Send to each participant

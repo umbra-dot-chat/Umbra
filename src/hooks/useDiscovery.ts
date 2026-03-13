@@ -12,8 +12,11 @@
  */
 
 import { useState, useCallback } from 'react';
+import { dbg } from '@/utils/debug';
 import { useUmbra } from '@/contexts/UmbraContext';
 import type { ConnectionInfo, DiscoveryResult } from '@umbra/service';
+
+const SRC = 'useDiscovery';
 
 export interface UseDiscoveryResult {
   /** Our connection info (null until fetched) */
@@ -43,6 +46,7 @@ export function useDiscovery(): UseDiscoveryResult {
       if (!service) return { status: 'notFound' };
       try {
         setIsLoading(true);
+        if (__DEV__) dbg.info('network', 'lookupPeer', { did: did.slice(0, 16) + '...' }, SRC);
         return await service.lookupPeer(did);
       } catch (err) {
         setError(err instanceof Error ? err : new Error(String(err)));
@@ -61,6 +65,7 @@ export function useDiscovery(): UseDiscoveryResult {
       const info = await service.getConnectionInfo();
       setConnectionInfo(info);
       setError(null);
+      if (__DEV__) dbg.info('network', 'getConnectionInfo: fetched', undefined, SRC);
       return info;
     } catch (err) {
       setError(err instanceof Error ? err : new Error(String(err)));
@@ -88,6 +93,7 @@ export function useDiscovery(): UseDiscoveryResult {
       if (!service) return;
       try {
         setIsLoading(true);
+        if (__DEV__) dbg.info('network', 'connectDirect: connecting', undefined, SRC);
         await service.connectDirect(info);
       } catch (err) {
         setError(err instanceof Error ? err : new Error(String(err)));

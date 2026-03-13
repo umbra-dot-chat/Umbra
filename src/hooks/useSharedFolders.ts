@@ -15,9 +15,12 @@
  */
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { dbg } from '@/utils/debug';
 import { useUmbra } from '@/contexts/UmbraContext';
 import { useAuth } from '@/contexts/AuthContext';
 import type { DmSharedFolderRecord, DmSharedFileRecord } from '@umbra/service';
+
+const SRC = 'useSharedFolders';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -92,6 +95,7 @@ export function useSharedFolders(): UseSharedFoldersResult {
     if (!service) return;
     try {
       setIsLoading(true);
+      if (__DEV__) dbg.debug('service', 'fetchSharedFolders: loading all folders', undefined, SRC);
 
       // Get all conversations
       const conversations = await service.getConversations();
@@ -121,8 +125,11 @@ export function useSharedFolders(): UseSharedFoldersResult {
 
       setSharedFolders(allFolders);
       setError(null);
+      if (__DEV__) dbg.info('service', 'fetchSharedFolders: loaded', { folderCount: allFolders.length }, SRC);
     } catch (err) {
-      setError(err instanceof Error ? err : new Error(String(err)));
+      const e = err instanceof Error ? err : new Error(String(err));
+      setError(e);
+      if (__DEV__) dbg.error('service', 'fetchSharedFolders: failed', { error: e.message }, SRC);
     } finally {
       setIsLoading(false);
     }
@@ -141,6 +148,7 @@ export function useSharedFolders(): UseSharedFoldersResult {
   const syncFolder = useCallback(
     async (folderId: string): Promise<void> => {
       if (!service) return;
+      if (__DEV__) dbg.info('service', 'syncFolder: starting', { folderId }, SRC);
 
       // Mark as syncing
       setSharedFolders((prev) =>
@@ -176,6 +184,7 @@ export function useSharedFolders(): UseSharedFoldersResult {
                 : sf,
             ),
           );
+          if (__DEV__) dbg.info('service', 'syncFolder: complete', { folderId, fileCount: files.length }, SRC);
         }
       } catch (err) {
         setSharedFolders((prev) =>
@@ -207,6 +216,7 @@ export function useSharedFolders(): UseSharedFoldersResult {
 
   const resolveConflict = useCallback(
     async (fileId: string, resolution: 'keepLocal' | 'keepRemote' | 'keepBoth'): Promise<void> => {
+      if (__DEV__) dbg.info('service', 'resolveConflict', { fileId, resolution }, SRC);
       // In the future, this will:
       // - keepLocal: upload local version, overwrite remote
       // - keepRemote: download remote version, overwrite local

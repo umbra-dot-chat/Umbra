@@ -16,7 +16,10 @@
  */
 
 import { useEffect, useState, useRef } from 'react';
+import { dbg } from '@/utils/debug';
 import { startInstanceCoordinator, type InstanceCoordinator } from '@umbra/service';
+
+const SRC = 'useInstanceDetection';
 
 export interface InstanceDetectionState {
   /** Whether this tab is the primary (first) instance */
@@ -37,6 +40,7 @@ export function useInstanceDetection(): InstanceDetectionState {
     setIsPrimary(coordinator.isPrimary);
 
     coordinator.onConflict(() => {
+      if (__DEV__) dbg.warn('lifecycle', 'duplicate instance detected', { isPrimary: coordinator.isPrimary }, SRC);
       setHasConflict(true);
       setIsPrimary(coordinator.isPrimary);
     });

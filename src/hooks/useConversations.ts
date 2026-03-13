@@ -12,8 +12,11 @@
  * ```
  */
 
+import { dbg } from '@/utils/debug';
 import { useConversationsContext } from '@/contexts/ConversationsContext';
 import type { ConversationsContextValue } from '@/contexts/ConversationsContext';
+
+const SRC = 'useConversations';
 
 export type UseConversationsResult = ConversationsContextValue;
 

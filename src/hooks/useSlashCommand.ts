@@ -1,4 +1,7 @@
 import { useState, useCallback, useMemo, useRef } from 'react';
+import { dbg } from '@/utils/debug';
+
+const SRC = 'useSlashCommand';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -156,6 +159,8 @@ export function useSlashCommand({
       const argsText = currentText.startsWith('/')
         ? currentText.slice(1 + cmd.command.length).trim()
         : '';
+
+      if (__DEV__) dbg.info('messages', 'selectCommand', { id: cmd.id, sendAsMessage: cmd.sendAsMessage }, SRC);
 
       if (cmd.sendAsMessage) {
         // Always call onExecute for local state changes (e.g. therapy session activation)

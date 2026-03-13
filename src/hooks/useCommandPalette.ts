@@ -1,5 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Platform } from 'react-native';
+import { dbg } from '@/utils/debug';
+
+const SRC = 'useCommandPalette';
 
 export function useCommandPalette() {
   const [open, setOpen] = useState(false);
@@ -18,7 +21,10 @@ export function useCommandPalette() {
     return () => document.removeEventListener('keydown', handler);
   }, []);
 
-  const openPalette = useCallback(() => setOpen(true), []);
+  const openPalette = useCallback(() => {
+    if (__DEV__) dbg.debug('lifecycle', 'command palette opened', undefined, SRC);
+    setOpen(true);
+  }, []);
   const closePalette = useCallback(() => setOpen(false), []);
 
   return { open, setOpen, openPalette, closePalette };

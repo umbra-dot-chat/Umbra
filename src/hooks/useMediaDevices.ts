@@ -9,6 +9,9 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { Platform } from 'react-native';
+import { dbg } from '@/utils/debug';
+
+const SRC = 'useMediaDevices';
 
 export interface MediaDeviceInfo {
   deviceId: string;
@@ -103,6 +106,7 @@ export function useMediaDevices(): UseMediaDevicesResult {
       setAudioInputs(inputs);
       setVideoInputs(cameras);
       setAudioOutputs(outputs);
+      if (__DEV__) dbg.debug('call', 'enumerate: devices found', { audioInputs: inputs.length, videoInputs: cameras.length, audioOutputs: outputs.length }, SRC);
     } catch {
       // Device enumeration not available
     }
@@ -141,6 +145,7 @@ export function useMediaDevices(): UseMediaDevicesResult {
     enumerate();
 
     const handleChange = () => {
+      if (__DEV__) dbg.info('call', 'devicechange: device hot-swap detected', undefined, SRC);
       setDeviceChanged(true);
       enumerate();
       // Reset the flag after a short delay so consumers can show a toast
