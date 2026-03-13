@@ -558,21 +558,38 @@ impl Database {
         Ok(messages)
     }
 
-    /// Get the thread reply count for a list of message IDs
+    /// Get the thread reply count for a list of message IDs.
+    ///
+    /// Uses a single `SELECT … IN (…) GROUP BY` query instead of N
+    /// individual queries — eliminates the N+1 problem that was
+    /// crashing Chrome/Firefox on conversations with 50+ messages.
     pub fn get_thread_reply_counts(
         &self,
         message_ids: &[String],
     ) -> Result<std::collections::HashMap<String, i64>> {
+        if message_ids.is_empty() {
+            return Ok(std::collections::HashMap::new());
+        }
+
+        let placeholders: String = message_ids.iter().map(|_| "?").collect::<Vec<_>>().join(",");
+        let sql = format!(
+            "SELECT thread_id, COUNT(*) as cnt FROM messages WHERE thread_id IN ({}) GROUP BY thread_id",
+            placeholders
+        );
+
+        let params = serde_json::Value::Array(
+            message_ids.iter().map(|id| json!(id)).collect(),
+        );
+
+        let rows = self.query(&sql, params)?;
         let mut counts = std::collections::HashMap::new();
-        for id in message_ids {
-            let rows = self.query(
-                "SELECT COUNT(*) as cnt FROM messages WHERE thread_id = ?",
-                json!([id]),
-            )?;
-            if let Some(row) = rows.first() {
-                let cnt = row.get("cnt").and_then(|v| v.as_i64()).unwrap_or(0);
+        for row in rows {
+            if let (Some(thread_id), Some(cnt)) = (
+                row.get("thread_id").and_then(|v| v.as_str()),
+                row.get("cnt").and_then(|v| v.as_i64()),
+            ) {
                 if cnt > 0 {
-                    counts.insert(id.clone(), cnt);
+                    counts.insert(thread_id.to_string(), cnt);
                 }
             }
         }
