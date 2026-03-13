@@ -75,6 +75,7 @@ export interface CreateWalletFlowProps {
 // ---------------------------------------------------------------------------
 
 export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
+  if (__DEV__) dbg.trackRender('CreateWalletFlow');
   const { login, setPin, setRememberMe: setAuthRememberMe, setRecoveryPhrase, addAccount } = useAuth();
   const { theme } = useTheme();
   const colors = theme.colors;

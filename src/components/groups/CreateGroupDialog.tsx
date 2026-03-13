@@ -38,6 +38,7 @@ export interface CreateGroupDialogProps {
 }
 
 export function CreateGroupDialog({ open, onClose, onCreated }: CreateGroupDialogProps) {
+  if (__DEV__) dbg.trackRender('CreateGroupDialog');
   const theme = useTheme();
   const { friends } = useFriends();
   const { onlineDids } = useNetwork();

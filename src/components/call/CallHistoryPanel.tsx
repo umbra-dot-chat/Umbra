@@ -6,10 +6,10 @@
  */
 
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, ScrollView, Pressable } from 'react-native';
-import { Text, Separator, useTheme } from '@coexist/wisp-react-native';
+import { Box, Button, Text, ScrollArea, Separator, useTheme } from '@coexist/wisp-react-native';
 import { useUmbra } from '@/contexts/UmbraContext';
 import { PhoneIcon, VideoIcon } from '@/components/ui';
+import { dbg } from '@/utils/debug';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -112,6 +112,7 @@ function statusColor(status: string, colors: Record<string, any>): string {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function CallHistoryPanel({ conversationId, onCallBack }: CallHistoryPanelProps) {
+  if (__DEV__) dbg.trackRender('CallHistoryPanel');
   const { service } = useUmbra();
   const theme = useTheme();
   const colors = (theme as any).colors ?? {};
@@ -146,17 +147,17 @@ export function CallHistoryPanel({ conversationId, onCallBack }: CallHistoryPane
   // ── Empty state ──────────────────────────────────────────────────────────
   if (!loading && calls.length === 0) {
     return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32 }}>
-        <Text style={{ color: colors.mutedForeground ?? '#888', fontSize: 14 }}>
+      <Box p={32} style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+        <Text size="sm" style={{ color: colors.mutedForeground ?? '#888' }}>
           No call history
         </Text>
-      </View>
+      </Box>
     );
   }
 
   // ── List ──────────────────────────────────────────────────────────────────
   return (
-    <ScrollView
+    <ScrollArea
       style={{ flex: 1 }}
       contentContainerStyle={{ paddingVertical: 8 }}
       showsVerticalScrollIndicator={false}
@@ -167,21 +168,21 @@ export function CallHistoryPanel({ conversationId, onCallBack }: CallHistoryPane
             <Separator style={{ marginHorizontal: 16 }} />
           )}
 
-          <View
+          <Box
+            px={16}
+            py={12}
             style={{
               flexDirection: 'row',
               alignItems: 'center',
-              paddingHorizontal: 16,
-              paddingVertical: 12,
               gap: 12,
             }}
           >
             {/* Call type icon */}
-            <View
+            <Box
+              width={36}
+              height={36}
+              radius={18}
               style={{
-                width: 36,
-                height: 36,
-                borderRadius: 18,
                 backgroundColor: colors.muted ?? '#2a2a2a',
                 justifyContent: 'center',
                 alignItems: 'center',
@@ -192,12 +193,12 @@ export function CallHistoryPanel({ conversationId, onCallBack }: CallHistoryPane
               ) : (
                 <PhoneIcon size={18} color={colors.foreground ?? '#fff'} />
               )}
-            </View>
+            </Box>
 
             {/* Details */}
-            <View style={{ flex: 1, gap: 2 }}>
+            <Box style={{ flex: 1, gap: 2 }}>
               {/* Top row: direction + status */}
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                 <Text style={{ fontSize: 14 }}>
                   {directionArrow(call.direction)}
                 </Text>
@@ -215,10 +216,10 @@ export function CallHistoryPanel({ conversationId, onCallBack }: CallHistoryPane
                     {' '}{formatDuration(call.durationMs)}
                   </Text>
                 )}
-              </View>
+              </Box>
 
               {/* Bottom row: participants + timestamp */}
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                 <Text
                   numberOfLines={1}
                   style={{
@@ -232,29 +233,31 @@ export function CallHistoryPanel({ conversationId, onCallBack }: CallHistoryPane
                 <Text style={{ fontSize: 12, color: colors.mutedForeground ?? '#888' }}>
                   {formatRelativeTimestamp(call.startedAt)}
                 </Text>
-              </View>
-            </View>
+              </Box>
+            </Box>
 
             {/* Call-back button */}
             {onCallBack && (
-              <Pressable
+              <Button
+                variant="tertiary"
+                size="sm"
+                accessibilityLabel="Call back"
                 onPress={() => onCallBack(call.conversationId, call.callType)}
-                style={({ pressed }) => ({
-                  opacity: pressed ? 0.6 : 1,
+                iconLeft={<PhoneIcon size={16} color={colors.primary ?? '#58A6FF'} />}
+                style={{
                   width: 36,
                   height: 36,
                   borderRadius: 18,
                   backgroundColor: colors.muted ?? '#2a2a2a',
                   justifyContent: 'center',
                   alignItems: 'center',
-                })}
-              >
-                <PhoneIcon size={16} color={colors.primary ?? '#58A6FF'} />
-              </Pressable>
+                  paddingHorizontal: 0,
+                }}
+              />
             )}
-          </View>
+          </Box>
         </React.Fragment>
       ))}
-    </ScrollView>
+    </ScrollArea>
   );
 }

@@ -5159,6 +5159,7 @@ function MessagingSection() {
 // ---------------------------------------------------------------------------
 
 export function SettingsDialog({ open, onClose, onOpenMarketplace, initialSection }: SettingsDialogProps) {
+  if (__DEV__) dbg.trackRender('SettingsDialog');
   const { theme, mode } = useTheme();
   const tc = theme.colors;
   const isDark = mode === 'dark';

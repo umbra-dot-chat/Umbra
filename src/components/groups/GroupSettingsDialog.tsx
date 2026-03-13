@@ -6,12 +6,13 @@
  */
 
 import React, { useMemo } from 'react';
-import { Pressable, View, useWindowDimensions } from 'react-native';
+import { useWindowDimensions } from 'react-native';
 import type { ViewStyle, TextStyle } from 'react-native';
-import { Overlay, HStack, Text, useTheme } from '@coexist/wisp-react-native';
+import { Box, Button, Overlay, HStack, Text, useTheme } from '@coexist/wisp-react-native';
 import { SettingsIcon, XIcon } from '@/components/ui';
 import { GroupSettingsPanel } from './GroupSettingsPanel';
 import { useIsMobile } from '@/hooks/useIsMobile';
+import { dbg } from '@/utils/debug';
 
 export interface GroupSettingsDialogProps {
   open: boolean;
@@ -20,6 +21,7 @@ export interface GroupSettingsDialogProps {
 }
 
 export function GroupSettingsDialog({ open, onClose, groupId }: GroupSettingsDialogProps) {
+  if (__DEV__) dbg.trackRender('GroupSettingsDialog');
   const { theme } = useTheme();
   const tc = theme.colors;
   const isDark = theme.mode === 'dark';
@@ -69,23 +71,21 @@ export function GroupSettingsDialog({ open, onClose, groupId }: GroupSettingsDia
       animationType="fade"
       useModal={!isMobile}
     >
-      <View style={modalStyle}>
+      <Box style={modalStyle}>
         {/* Header */}
-        <View style={headerStyle}>
+        <Box style={headerStyle}>
           <HStack style={{ alignItems: 'center', gap: 8 }}>
             <SettingsIcon size={18} color={tc.text.primary} />
             <Text style={{ fontSize: 16, fontWeight: '600', color: tc.text.primary } as TextStyle}>
               Group Settings
             </Text>
           </HStack>
-          <Pressable onPress={onClose} hitSlop={8} accessibilityLabel="Close group settings">
-            <XIcon size={18} color={tc.text.secondary} />
-          </Pressable>
-        </View>
+          <Button variant="tertiary" onPress={onClose} accessibilityLabel="Close group settings" iconLeft={<XIcon size={18} color={tc.text.secondary} />} size="sm" />
+        </Box>
 
         {/* Content — reuse existing panel */}
         <GroupSettingsPanel groupId={groupId} onClose={onClose} />
-      </View>
+      </Box>
     </Overlay>
   );
 }

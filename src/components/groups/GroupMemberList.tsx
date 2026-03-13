@@ -5,9 +5,10 @@
  */
 
 import React, { useEffect, useState, useCallback } from 'react';
-import { View, ScrollView, Pressable } from 'react-native';
+import { ScrollView, Pressable } from 'react-native';
 import type { ViewStyle, TextStyle } from 'react-native';
 import {
+  Box,
   Text,
   HStack,
   VStack,
@@ -16,6 +17,7 @@ import {
 import { UsersIcon, ShieldIcon, UserIcon, CrownIcon } from '@/components/ui';
 import { useGroups } from '@/hooks/useGroups';
 import type { GroupMember } from '@umbra/service';
+import { dbg } from '@/utils/debug';
 
 export interface GroupMemberListProps {
   groupId: string;
@@ -23,6 +25,7 @@ export interface GroupMemberListProps {
 }
 
 export function GroupMemberList({ groupId, onMemberPress }: GroupMemberListProps) {
+  if (__DEV__) dbg.trackRender('GroupMemberList');
   const theme = useTheme();
   const { getMembers } = useGroups();
   const [members, setMembers] = useState<GroupMember[]>([]);
@@ -96,9 +99,9 @@ export function GroupMemberList({ groupId, onMemberPress }: GroupMemberListProps
 
   if (isLoading) {
     return (
-      <View style={styles.container}>
+      <Box style={styles.container}>
         <Text style={styles.emptyText}>Loading members...</Text>
-      </View>
+      </Box>
     );
   }
 
@@ -110,8 +113,8 @@ export function GroupMemberList({ groupId, onMemberPress }: GroupMemberListProps
   });
 
   return (
-    <View style={styles.container}>
-      <View style={styles.header}>
+    <Box style={styles.container}>
+      <Box style={styles.header}>
         <HStack style={{ alignItems: 'center', justifyContent: 'space-between' }}>
           <HStack style={{ alignItems: 'center', gap: 6 }}>
             <UsersIcon size={14} color={theme.colors.text.secondary} />
@@ -119,7 +122,7 @@ export function GroupMemberList({ groupId, onMemberPress }: GroupMemberListProps
           </HStack>
           <Text style={styles.count}>{members.length}</Text>
         </HStack>
-      </View>
+      </Box>
 
       <ScrollView>
         {sorted.length === 0 ? (
@@ -131,13 +134,13 @@ export function GroupMemberList({ groupId, onMemberPress }: GroupMemberListProps
               style={styles.memberRow}
               onPress={() => onMemberPress?.(member.memberDid)}
             >
-              <View style={styles.avatar}>
+              <Box style={styles.avatar}>
                 {member.role === 'admin' ? (
                   <ShieldIcon size={16} color={theme.colors.accent.primary} />
                 ) : (
                   <UserIcon size={16} color={theme.colors.accent.primary} />
                 )}
-              </View>
+              </Box>
               <VStack style={{ flex: 1 }}>
                 <HStack style={{ alignItems: 'center', gap: 4 }}>
                   <Text style={styles.name} numberOfLines={1}>
@@ -152,6 +155,6 @@ export function GroupMemberList({ groupId, onMemberPress }: GroupMemberListProps
           ))
         )}
       </ScrollView>
-    </View>
+    </Box>
   );
 }

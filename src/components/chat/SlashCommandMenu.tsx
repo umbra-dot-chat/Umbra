@@ -1,8 +1,9 @@
 import React, { useRef, useEffect } from 'react';
-import { Animated, Platform, Pressable, ScrollView, View } from 'react-native';
-import { Text, useTheme } from '@coexist/wisp-react-native';
+import { Animated, Platform, Pressable, ScrollView } from 'react-native';
+import { Box, Text, useTheme } from '@coexist/wisp-react-native';
 import type { SlashCommandDef } from '@/hooks/useSlashCommand';
 import { useAppTheme } from '@/contexts/ThemeContext';
+import { dbg } from '@/utils/debug';
 
 // ---------------------------------------------------------------------------
 // Props
@@ -43,6 +44,7 @@ export function SlashCommandMenu({
   onSelect,
   open,
 }: SlashCommandMenuProps) {
+  if (__DEV__) dbg.trackRender('SlashCommandMenu');
   const { theme, mode } = useTheme();
   const isDark = mode === 'dark';
 
@@ -78,7 +80,7 @@ export function SlashCommandMenu({
   const maxVisibleHeight = 6 * 36;
 
   return (
-    <View
+    <Box
       style={{
         backgroundColor: isDark ? theme.colors.background.raised : theme.colors.background.surface,
         borderRadius: 10,
@@ -106,11 +108,11 @@ export function SlashCommandMenu({
         keyboardShouldPersistTaps="always"
         style={{ maxHeight: maxVisibleHeight + 8 }}
       >
-        <View style={{ paddingVertical: 4 }}>
+        <Box style={{ paddingVertical: 4 }}>
           {rows.map(({ cmd, flatIndex: idx, showDivider }) => (
             <React.Fragment key={cmd.id}>
               {showDivider && (
-                <View
+                <Box
                   style={{
                     height: 1,
                     backgroundColor: theme.colors.border.subtle,
@@ -130,9 +132,9 @@ export function SlashCommandMenu({
               />
             </React.Fragment>
           ))}
-        </View>
+        </Box>
       </ScrollView>
-    </View>
+    </Box>
   );
 }
 

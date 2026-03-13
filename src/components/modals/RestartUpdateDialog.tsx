@@ -1,6 +1,6 @@
 import React from 'react';
-import { View } from 'react-native';
-import { Dialog, Button, Text, useTheme } from '@coexist/wisp-react-native';
+import { Dialog, Button, Text, useTheme, Box } from '@coexist/wisp-react-native';
+import { dbg } from '@/utils/debug';
 
 export interface RestartUpdateDialogProps {
   open: boolean;
@@ -15,6 +15,7 @@ export function RestartUpdateDialog({
   version,
   onRestart,
 }: RestartUpdateDialogProps) {
+  if (__DEV__) dbg.trackRender('RestartUpdateDialog');
   const { theme } = useTheme();
 
   return (
@@ -34,12 +35,12 @@ export function RestartUpdateDialog({
         </>
       }
     >
-      <View style={{ gap: 8 }}>
+      <Box style={{ gap: 8 }}>
         <Text size="sm" style={{ color: theme.colors.text.secondary }}>
           Umbra v{version} has been downloaded and is ready to install. The app
           will restart to apply the update.
         </Text>
-      </View>
+      </Box>
     </Dialog>
   );
 }

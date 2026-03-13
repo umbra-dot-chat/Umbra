@@ -111,6 +111,7 @@ function SettingRow({ label, description, children, vertical = false }: {
 // ─── Main Component ──────────────────────────────────────────────────────────
 
 export function GroupSettingsPanel({ groupId, onClose }: GroupSettingsPanelProps) {
+  if (__DEV__) dbg.trackRender('GroupSettingsPanel');
   const { theme } = useTheme();
   const tc = theme.colors;
   const { identity } = useAuth();

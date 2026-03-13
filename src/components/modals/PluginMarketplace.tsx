@@ -1357,6 +1357,7 @@ function ComingSoonContent({ title, description, icon: Icon, color }: { title: s
 const MOBILE_BREAKPOINT = 600;
 
 export function PluginMarketplace({ open, onClose }: PluginMarketplaceProps) {
+  if (__DEV__) dbg.trackRender('PluginMarketplace');
   const { theme, mode } = useTheme();
   const tc = theme.colors;
   const isDark = mode === 'dark';

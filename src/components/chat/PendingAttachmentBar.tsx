@@ -7,10 +7,11 @@
  */
 
 import React from 'react';
-import { Pressable, View } from 'react-native';
-import { Text, useTheme } from '@coexist/wisp-react-native';
+import { Box, Text, useTheme } from '@coexist/wisp-react-native';
+import { Pressable } from 'react-native';
 import { getFileTypeIcon, formatFileSize } from '@/utils/fileIcons';
 import { XIcon, SendIcon } from '@/components/ui';
+import { dbg } from '@/utils/debug';
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -34,6 +35,7 @@ export interface PendingAttachmentBarProps {
 // ── Component ────────────────────────────────────────────────────────────
 
 export function PendingAttachmentBar({ attachment, onRemove, onSend }: PendingAttachmentBarProps) {
+  if (__DEV__) dbg.trackRender('PendingAttachmentBar');
   const { theme, mode } = useTheme();
   const tc = theme.colors;
   const isDark = mode === 'dark';
@@ -45,19 +47,19 @@ export function PendingAttachmentBar({ attachment, onRemove, onSend }: PendingAt
   const progressPct = Math.round(attachment.progress * 100);
 
   return (
-    <View
+    <Box
       style={{
         marginHorizontal: 12,
         marginBottom: 4,
         borderRadius: 10,
         overflow: 'hidden',
-        backgroundColor: isDark ? '#18181B' : tc.background.surface,
+        backgroundColor: isDark ? tc.background.sunken : tc.background.surface,
         borderWidth: 1,
-        borderColor: isDark ? '#27272A' : tc.border.subtle,
+        borderColor: tc.border.subtle,
       }}
     >
       {/* File info row */}
-      <View
+      <Box
         style={{
           flexDirection: 'row',
           alignItems: 'center',
@@ -67,7 +69,7 @@ export function PendingAttachmentBar({ attachment, onRemove, onSend }: PendingAt
         }}
       >
         {/* File type icon */}
-        <View
+        <Box
           style={{
             width: 32,
             height: 32,
@@ -79,10 +81,10 @@ export function PendingAttachmentBar({ attachment, onRemove, onSend }: PendingAt
           }}
         >
           <typeIcon.IconComponent size={16} color={typeIcon.color} />
-        </View>
+        </Box>
 
         {/* Filename + size */}
-        <View style={{ flex: 1, minWidth: 0 }}>
+        <Box style={{ flex: 1, minWidth: 0 }}>
           <Text
             size="sm"
             weight="medium"
@@ -95,7 +97,7 @@ export function PendingAttachmentBar({ attachment, onRemove, onSend }: PendingAt
             {formatFileSize(attachment.size)}
             {isProcessing ? ` · Processing ${progressPct}%` : ' · Ready to send'}
           </Text>
-        </View>
+        </Box>
 
         {/* Send button — visible when ready */}
         {isReady && onSend && (
@@ -112,7 +114,7 @@ export function PendingAttachmentBar({ attachment, onRemove, onSend }: PendingAt
               flexShrink: 0,
             }}
           >
-            <SendIcon size={14} color="#FFFFFF" />
+            <SendIcon size={14} color={tc.text.inverse} />
           </Pressable>
         )}
 
@@ -124,7 +126,7 @@ export function PendingAttachmentBar({ attachment, onRemove, onSend }: PendingAt
             width: 24,
             height: 24,
             borderRadius: 12,
-            backgroundColor: isDark ? '#27272A' : tc.background.sunken,
+            backgroundColor: tc.background.sunken,
             alignItems: 'center',
             justifyContent: 'center',
             flexShrink: 0,
@@ -132,25 +134,25 @@ export function PendingAttachmentBar({ attachment, onRemove, onSend }: PendingAt
         >
           <XIcon size={12} color={tc.text.muted} />
         </Pressable>
-      </View>
+      </Box>
 
       {/* Progress bar */}
-      <View
+      <Box
         style={{
           height: 3,
-          backgroundColor: isDark ? '#27272A' : tc.border.subtle,
+          backgroundColor: tc.border.subtle,
           overflow: 'hidden',
         }}
       >
-        <View
+        <Box
           style={{
             width: isProcessing ? `${progressPct}%` : '100%',
             height: '100%',
-            backgroundColor: isProcessing ? accentColor : '#22C55E',
+            backgroundColor: isProcessing ? accentColor : tc.status.success,
             borderRadius: 2,
           }}
         />
-      </View>
-    </View>
+      </Box>
+    </Box>
   );
 }

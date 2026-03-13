@@ -6,8 +6,10 @@
  */
 
 import React, { useRef, useCallback, useState, useEffect } from 'react';
-import { View, Platform } from 'react-native';
-import { useTheme } from '@coexist/wisp-react-native';
+import { Platform } from 'react-native';
+import type { View } from 'react-native';
+import { Box, useTheme } from '@coexist/wisp-react-native';
+import { dbg } from '@/utils/debug';
 
 export interface ResizeHandleProps {
   /** Called continuously while dragging, with the incremental X delta. */
@@ -17,6 +19,7 @@ export interface ResizeHandleProps {
 }
 
 export function ResizeHandle({ onResize, onResizeEnd }: ResizeHandleProps) {
+  if (__DEV__) dbg.trackRender('ResizeHandle');
   const { theme } = useTheme();
   const [dragging, setDragging] = useState(false);
   const lastXRef = useRef(0);
@@ -66,7 +69,7 @@ export function ResizeHandle({ onResize, onResizeEnd }: ResizeHandleProps) {
   }, [handleMouseDown]);
 
   return (
-    <View
+    <Box
       ref={handleRef}
       style={{
         width: 5,
@@ -78,7 +81,7 @@ export function ResizeHandle({ onResize, onResizeEnd }: ResizeHandleProps) {
       }}
     >
       {/* Visual indicator — thicker when dragging */}
-      <View
+      <Box
         style={{
           width: dragging ? 2 : 1,
           height: '100%',
@@ -86,6 +89,6 @@ export function ResizeHandle({ onResize, onResizeEnd }: ResizeHandleProps) {
           borderRadius: 1,
         }}
       />
-    </View>
+    </Box>
   );
 }

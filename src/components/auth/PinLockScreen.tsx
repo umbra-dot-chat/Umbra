@@ -12,9 +12,11 @@
  */
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { Image, View, Animated, Platform, Pressable, type ViewStyle } from 'react-native';
+import { Image, Animated, Platform, type ViewStyle } from 'react-native';
 import {
   Text,
+  Box,
+  Button,
   VStack,
   Presence,
   useTheme,
@@ -23,6 +25,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { GrowablePinInput } from './GrowablePinInput';
 import { ArrowLeftIcon } from '@/components/ui';
 import { TEST_IDS } from '@/constants/test-ids';
+import { dbg } from '@/utils/debug';
 
 // eslint-disable-next-line @typescript-eslint/no-var-requires
 const lockMascot = require('@/assets/images/lock-mascot.png');
@@ -58,6 +61,7 @@ interface PinLockScreenProps {
 // ---------------------------------------------------------------------------
 
 export function PinLockScreen({ onVerify, subtitle, onBack, accountName }: PinLockScreenProps) {
+  if (__DEV__) dbg.trackRender('PinLockScreen');
   const { verifyPin } = useAuth();
   const { theme } = useTheme();
 
@@ -136,7 +140,8 @@ export function PinLockScreen({ onVerify, subtitle, onBack, accountName }: PinLo
     <Animated.View style={[containerStyle, { backgroundColor: theme.colors.background.canvas, opacity: overlayOpacity }]} testID={TEST_IDS.PIN.LOCK_SCREEN}>
       {/* Optional back button */}
       {onBack && (
-        <Pressable
+        <Button
+          variant="tertiary"
           onPress={onBack}
           style={{
             position: 'absolute',
@@ -148,12 +153,17 @@ export function PinLockScreen({ onVerify, subtitle, onBack, accountName }: PinLo
             alignItems: 'center',
             justifyContent: 'center',
             zIndex: 1,
+            paddingHorizontal: 0,
+            paddingVertical: 0,
+            minWidth: 0,
+            minHeight: 0,
           }}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
           testID={TEST_IDS.PIN.LOCK_BACK}
+          accessibilityLabel="Go back"
         >
           <ArrowLeftIcon size={24} color={theme.colors.text.primary} />
-        </Pressable>
+        </Button>
       )}
 
       <Presence visible animation="scaleIn">

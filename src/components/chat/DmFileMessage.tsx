@@ -8,11 +8,12 @@
  */
 
 import React, { useEffect, useRef } from 'react';
-import { Animated, Easing, Platform, View, Image, Pressable } from 'react-native';
-import { Text, useTheme } from '@coexist/wisp-react-native';
+import { Animated, Easing, Platform, Image, Pressable } from 'react-native';
+import { Box, Text, useTheme } from '@coexist/wisp-react-native';
 import Svg, { Circle } from 'react-native-svg';
 import { getFileTypeIcon, formatFileSize } from '@/utils/fileIcons';
 import { DownloadIcon, LockIcon } from '@/components/ui';
+import { dbg } from '@/utils/debug';
 
 // ---------------------------------------------------------------------------
 // Props
@@ -76,6 +77,7 @@ export function DmFileMessage({
   isUploading = false,
   uploadProgress = 0,
 }: DmFileMessageProps) {
+  if (__DEV__) dbg.trackRender('DmFileMessage');
   const { theme } = useTheme();
   const colors = theme.colors;
   const typeIcon = getFileTypeIcon(mimeType);
@@ -144,7 +146,7 @@ export function DmFileMessage({
   }
 
   return (
-    <View
+    <Box
       style={{
         backgroundColor: cardBg,
         borderRadius: 10,
@@ -169,7 +171,7 @@ export function DmFileMessage({
       )}
 
       {/* File info bar */}
-      <View
+      <Box
         style={{
           flexDirection: 'row',
           alignItems: 'center',
@@ -178,7 +180,7 @@ export function DmFileMessage({
         }}
       >
         {/* File type icon */}
-        <View
+        <Box
           style={{
             width: 36,
             height: 36,
@@ -190,10 +192,10 @@ export function DmFileMessage({
           }}
         >
           <Text size="lg">{typeIcon.icon}</Text>
-        </View>
+        </Box>
 
         {/* File info */}
-        <View style={{ flex: 1, minWidth: 0 }}>
+        <Box style={{ flex: 1, minWidth: 0 }}>
           <Text
             size="sm"
             weight="medium"
@@ -202,7 +204,7 @@ export function DmFileMessage({
           >
             {filename}
           </Text>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 1 }}>
+          <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 1 }}>
             <Text size="xs" style={{ color: textMuted }}>
               {formatFileSize(size)}
               {isUploading
@@ -212,8 +214,8 @@ export function DmFileMessage({
             {isEncrypted && (
               <LockIcon size={10} color={accentColor} />
             )}
-          </View>
-        </View>
+          </Box>
+        </Box>
 
         {/* Download button / spinning progress ring */}
         {onDownload && !isUploading && (
@@ -231,7 +233,7 @@ export function DmFileMessage({
             }}
           >
             {isDownloading ? (
-              <View style={{ width: 28, height: 28, alignItems: 'center', justifyContent: 'center' }}>
+              <Box style={{ width: 28, height: 28, alignItems: 'center', justifyContent: 'center' }}>
                 {/* Spinning arc ring */}
                 <Animated.View
                   style={{
@@ -266,17 +268,17 @@ export function DmFileMessage({
                 </Animated.View>
                 {/* Center icon (dimmed) */}
                 <DownloadIcon size={11} color={accentColor} />
-              </View>
+              </Box>
             ) : (
               <DownloadIcon size={14} color={accentColor} />
             )}
           </Pressable>
         )}
-      </View>
+      </Box>
 
       {/* P2P upload progress bar — visible when recipient is downloading */}
       {isUploading && (
-        <View
+        <Box
           style={{
             height: 3,
             backgroundColor: needsInverse
@@ -285,7 +287,7 @@ export function DmFileMessage({
             overflow: 'hidden',
           }}
         >
-          <View
+          <Box
             style={{
               width: `${Math.round(uploadProgress * 100)}%`,
               height: '100%',
@@ -293,8 +295,8 @@ export function DmFileMessage({
               borderRadius: 2,
             }}
           />
-        </View>
+        </Box>
       )}
-    </View>
+    </Box>
   );
 }

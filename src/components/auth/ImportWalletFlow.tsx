@@ -84,6 +84,7 @@ function createEmptyWords(): string[] {
 // ---------------------------------------------------------------------------
 
 export function ImportWalletFlow({ open, onClose }: ImportWalletFlowProps) {
+  if (__DEV__) dbg.trackRender('ImportWalletFlow');
   const { login, setPin, setRecoveryPhrase, setRememberMe, addAccount } = useAuth();
   const { theme } = useTheme();
   const colors = theme.colors;

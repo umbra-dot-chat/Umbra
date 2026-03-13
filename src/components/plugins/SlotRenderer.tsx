@@ -11,8 +11,9 @@
  */
 
 import React from 'react';
-import { View } from 'react-native';
+import { Box } from '@coexist/wisp-react-native';
 import type { SlotName } from '@umbra/plugin-sdk';
+import { dbg } from '@/utils/debug';
 import { SlotPropsContext } from '@umbra/plugin-sdk';
 import { usePlugins } from '@/contexts/PluginContext';
 import { PluginErrorBoundary } from './PluginErrorBoundary';
@@ -27,13 +28,14 @@ export interface SlotRendererProps {
 }
 
 export function SlotRenderer({ slot, props, style }: SlotRendererProps) {
+  if (__DEV__) dbg.trackRender('SlotRenderer');
   const { getSlotComponents } = usePlugins();
   const entries = getSlotComponents(slot);
 
   if (entries.length === 0) return null;
 
   return (
-    <View style={style}>
+    <Box style={style}>
       {entries.map((entry) => (
         <PluginErrorBoundary key={entry.pluginId} pluginId={entry.pluginId} slot={slot}>
           <SlotPropsContext.Provider value={props ?? {}}>
@@ -41,6 +43,6 @@ export function SlotRenderer({ slot, props, style }: SlotRendererProps) {
           </SlotPropsContext.Provider>
         </PluginErrorBoundary>
       ))}
-    </View>
+    </Box>
   );
 }

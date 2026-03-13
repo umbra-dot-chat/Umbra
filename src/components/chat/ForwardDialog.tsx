@@ -6,13 +6,16 @@
  */
 
 import React, { useState, useMemo, useCallback } from 'react';
-import { View, ScrollView, Pressable, Text as RNText } from 'react-native';
+import { ScrollView, Pressable } from 'react-native';
+import { dbg } from '@/utils/debug';
 import {
+  Box,
   Dialog,
   HStack,
   VStack,
   Avatar,
   SearchInput,
+  Text,
   useTheme,
 } from '@coexist/wisp-react-native';
 import { MessageIcon } from '@/components/ui';
@@ -29,6 +32,7 @@ export interface ForwardDialogProps {
 }
 
 export function ForwardDialog({ open, onClose, onSelectConversation }: ForwardDialogProps) {
+  if (__DEV__) dbg.trackRender('ForwardDialog');
   const { theme } = useTheme();
   const tc = theme.colors;
   const { conversations } = useConversations();
@@ -105,7 +109,7 @@ export function ForwardDialog({ open, onClose, onSelectConversation }: ForwardDi
           gradientBorder
         />
 
-        <View
+        <Box
           style={{
             maxHeight: 300,
             borderRadius: 8,
@@ -115,13 +119,13 @@ export function ForwardDialog({ open, onClose, onSelectConversation }: ForwardDi
           }}
         >
           {filteredConversations.length === 0 ? (
-            <View style={{ padding: 24, alignItems: 'center' }}>
-              <RNText style={{ fontSize: 13, color: tc.text.muted }}>
+            <Box style={{ padding: 24, alignItems: 'center' }}>
+              <Text size="sm" style={{ color: tc.text.muted }}>
                 {conversations.length === 0
                   ? 'No conversations yet.'
                   : 'No conversations match your search.'}
-              </RNText>
-            </View>
+              </Text>
+            </Box>
           ) : (
             <ScrollView>
               {filteredConversations.map((convo) => {
@@ -146,23 +150,19 @@ export function ForwardDialog({ open, onClose, onSelectConversation }: ForwardDi
                     <HStack style={{ alignItems: 'center', gap: 10, flex: 1 }}>
                       <Avatar name={name} size="sm" />
                       <VStack style={{ flex: 1 }}>
-                        <RNText
-                          style={{
-                            fontSize: 14,
-                            fontWeight: '500',
-                            color: tc.text.primary,
-                          }}
+                        <Text
+                          size="sm"
+                          weight="medium"
+                          style={{ color: tc.text.primary }}
                         >
                           {name}
-                        </RNText>
-                        <RNText
-                          style={{
-                            fontSize: 11,
-                            color: tc.text.muted,
-                          }}
+                        </Text>
+                        <Text
+                          size="xs"
+                          style={{ color: tc.text.muted }}
                         >
                           {convo.type === 'dm' ? 'Direct Message' : 'Group'}
-                        </RNText>
+                        </Text>
                       </VStack>
                     </HStack>
                   </Pressable>
@@ -170,7 +170,7 @@ export function ForwardDialog({ open, onClose, onSelectConversation }: ForwardDi
               })}
             </ScrollView>
           )}
-        </View>
+        </Box>
       </VStack>
     </Dialog>
   );

@@ -10,14 +10,15 @@
  */
 
 import React, { useCallback } from 'react';
-import { View, ScrollView, Pressable } from 'react-native';
-import { Button, useTheme, Text } from '@coexist/wisp-react-native';
+import { ScrollView } from 'react-native';
+import { Box, Button, useTheme, Text } from '@coexist/wisp-react-native';
 import { useDmFiles } from '@/hooks/useDmFiles';
 import type { DmFileFilter } from '@/hooks/useDmFiles';
 import { getFileTypeIcon, formatFileSize } from '@/utils/fileIcons';
 import { LockIcon, FolderIcon, PlusIcon } from '@/components/ui';
 import type { DmSharedFileRecord } from '@umbra/service';
 import Svg, { Line } from 'react-native-svg';
+import { dbg } from '@/utils/debug';
 import { defaultSpacing, defaultRadii, defaultTypography } from '@coexist/wisp-core/theme/create-theme';
 
 // ---------------------------------------------------------------------------
@@ -74,6 +75,7 @@ const FILTER_TABS: { key: DmFileFilter; label: string }[] = [
 // ---------------------------------------------------------------------------
 
 export function DmSharedFilesPanel({ conversationId, onClose, onCreateFolder, onUploadFile }: DmSharedFilesPanelProps) {
+  if (__DEV__) dbg.trackRender('DmSharedFilesPanel');
   const { theme } = useTheme();
   const colors = theme.colors;
 
@@ -94,9 +96,9 @@ export function DmSharedFilesPanel({ conversationId, onClose, onCreateFolder, on
   );
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.background.canvas }}>
+    <Box style={{ flex: 1, backgroundColor: colors.background.canvas }}>
       {/* Header — matches MemberList / PinnedMessages style */}
-      <View
+      <Box
         style={{
           flexDirection: 'row',
           alignItems: 'center',
@@ -109,34 +111,24 @@ export function DmSharedFilesPanel({ conversationId, onClose, onCreateFolder, on
         }}
       >
         <Text
-          style={{
-            fontSize: defaultTypography.sizes.sm.fontSize,
-            lineHeight: defaultTypography.sizes.sm.lineHeight,
-            fontWeight: String(defaultTypography.weights.semibold) as any,
-            color: colors.text.primary,
-          }}
+          size="sm"
+          weight="semibold"
+          style={{ color: colors.text.primary }}
         >
           Shared Files
         </Text>
-        <Pressable
-          accessibilityRole="button"
+        <Button
+          variant="tertiary"
+          size="xs"
           accessibilityLabel="Close shared files"
           onPress={onClose}
-          style={{
-            width: 28,
-            height: 28,
-            borderRadius: defaultRadii.md,
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <CloseIcon size={16} color={colors.text.muted} />
-        </Pressable>
-      </View>
+          iconLeft={<CloseIcon size={16} color={colors.text.muted} />}
+        />
+      </Box>
 
       {/* Action buttons — New Folder + Upload */}
       {(onCreateFolder || onUploadFile) && (
-        <View
+        <Box
           style={{
             flexDirection: 'row',
             paddingHorizontal: defaultSpacing.md,
@@ -166,11 +158,11 @@ export function DmSharedFilesPanel({ conversationId, onClose, onCreateFolder, on
               Upload
             </Button>
           )}
-        </View>
+        </Box>
       )}
 
       {/* Filter tabs */}
-      <View
+      <Box
         style={{
           flexDirection: 'row',
           paddingHorizontal: 12,
@@ -181,12 +173,12 @@ export function DmSharedFilesPanel({ conversationId, onClose, onCreateFolder, on
         }}
       >
         {FILTER_TABS.map((tab) => (
-          <Pressable
+          <Button
             key={tab.key}
+            variant="tertiary"
+            size="xs"
             onPress={() => handleFilterChange(tab.key)}
             style={{
-              paddingHorizontal: 10,
-              paddingVertical: 4,
               borderRadius: 12,
               backgroundColor: filter === tab.key ? colors.accent.primary + '20' : 'transparent',
             }}
@@ -200,17 +192,17 @@ export function DmSharedFilesPanel({ conversationId, onClose, onCreateFolder, on
             >
               {tab.label}
             </Text>
-          </Pressable>
+          </Button>
         ))}
-      </View>
+      </Box>
 
       {/* Content */}
       {isLoading ? (
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+        <Box style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
           <Text size="sm" style={{ color: colors.text.muted }}>Loading files...</Text>
-        </View>
+        </Box>
       ) : error ? (
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        <Box style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 20 }}>
           <Text size="sm" style={{ color: colors.status.danger, marginBottom: 8 }}>
             Failed to load files
           </Text>
@@ -222,13 +214,13 @@ export function DmSharedFilesPanel({ conversationId, onClose, onCreateFolder, on
           >
             Retry
           </Text>
-        </View>
+        </Box>
       ) : files.length === 0 ? (
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+        <Box style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 20 }}>
           <Text size="sm" style={{ color: colors.text.muted }}>
             {filter === 'all' ? 'No shared files yet' : `No ${filter} found`}
           </Text>
-        </View>
+        </Box>
       ) : (
         <ScrollView style={{ flex: 1 }}>
           {files.map((file) => (
@@ -236,7 +228,7 @@ export function DmSharedFilesPanel({ conversationId, onClose, onCreateFolder, on
           ))}
         </ScrollView>
       )}
-    </View>
+    </Box>
   );
 }
 
@@ -250,7 +242,7 @@ function FileRow({ file }: { file: DmSharedFileRecord }) {
   const typeIcon = getFileTypeIcon(file.mimeType ?? 'application/octet-stream');
 
   return (
-    <View
+    <Box
       style={{
         flexDirection: 'row',
         alignItems: 'center',
@@ -262,7 +254,7 @@ function FileRow({ file }: { file: DmSharedFileRecord }) {
       }}
     >
       {/* File type icon */}
-      <View
+      <Box
         style={{
           width: 32,
           height: 32,
@@ -273,10 +265,10 @@ function FileRow({ file }: { file: DmSharedFileRecord }) {
         }}
       >
         <Text size="md">{typeIcon.icon}</Text>
-      </View>
+      </Box>
 
       {/* File info */}
-      <View style={{ flex: 1, minWidth: 0 }}>
+      <Box style={{ flex: 1, minWidth: 0 }}>
         <Text
           size="sm"
           weight="medium"
@@ -285,15 +277,15 @@ function FileRow({ file }: { file: DmSharedFileRecord }) {
         >
           {file.filename}
         </Text>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 1 }}>
+        <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 3, marginTop: 1 }}>
           <Text size="xs" style={{ color: colors.text.muted }}>
             {formatFileSize(file.fileSize)} · {new Date(file.createdAt).toLocaleDateString()}
           </Text>
           {file.isEncrypted && (
             <LockIcon size={10} color={colors.accent.primary} />
           )}
-        </View>
-      </View>
-    </View>
+        </Box>
+      </Box>
+    </Box>
   );
 }

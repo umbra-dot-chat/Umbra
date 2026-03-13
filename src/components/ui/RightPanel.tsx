@@ -1,6 +1,6 @@
 import React, { useMemo } from 'react';
-import { Animated, View } from 'react-native';
-import { useTheme, MemberList, PinnedMessages, ThreadPanel } from '@coexist/wisp-react-native';
+import { Animated } from 'react-native';
+import { useTheme, Box, MemberList, PinnedMessages, ThreadPanel } from '@coexist/wisp-react-native';
 import type { RightPanel as RightPanelType } from '@/types/panels';
 import { PANEL_WIDTH } from '@/types/panels';
 import { useFriends } from '@/hooks/useFriends';
@@ -9,6 +9,7 @@ import { SearchPanel } from './SearchPanel';
 import { DmSharedFilesPanel } from '@/components/chat/DmSharedFilesPanel';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import { AnimatedPresence } from '@/components/ui/AnimatedPresence';
+import { dbg } from '@/utils/debug';
 
 export interface RightPanelProps {
   panelWidth: Animated.Value;
@@ -42,6 +43,7 @@ export function RightPanel({
   conversationId, onSearchResultClick,
   onCreateFolder, onUploadFile, panelContentWidth,
 }: RightPanelProps) {
+  if (__DEV__) dbg.trackRender('RightPanel');
   const { theme } = useTheme();
   const { friends } = useFriends();
   const { onlineDids } = useNetwork();
@@ -134,9 +136,9 @@ export function RightPanel({
   // Desktop: animated side panel
   return (
     <Animated.View style={{ width: panelWidth, overflow: 'hidden' }}>
-      <View style={{ width: panelContentWidth ?? PANEL_WIDTH, height: '100%', borderLeftWidth: 1, borderLeftColor: theme.colors.border.subtle }}>
+      <Box style={{ width: panelContentWidth ?? PANEL_WIDTH, height: '100%', borderLeftWidth: 1, borderLeftColor: theme.colors.border.subtle }}>
         {panelContent}
-      </View>
+      </Box>
     </Animated.View>
   );
 }

@@ -12,10 +12,11 @@
  */
 
 import React, { useEffect, useRef, useState } from 'react';
-import { View, Text, Platform } from 'react-native';
+import { Platform } from 'react-native';
 import type { TextStyle, ViewStyle } from 'react-native';
-import { useTheme } from '@coexist/wisp-react-native';
+import { Box, Text, useTheme } from '@coexist/wisp-react-native';
 import type { CallStats } from '@/types/call';
+import { dbg } from '@/utils/debug';
 
 export interface GhostMetadata {
   type: 'ghost-metadata';
@@ -156,12 +157,18 @@ function qualityScore(stats: CallStats | null, ghost: GhostMetadata | null, hc: 
 }
 
 export function CallStatsOverlay({ callStats, ghostMetadata, visible }: CallStatsOverlayProps) {
+  if (__DEV__) dbg.trackRender('CallStatsOverlay');
   const { theme } = useTheme();
   const colors = theme.colors;
+  const isDark = theme.mode === 'dark';
+
+  // Overlay always has a dark backdrop — pick text tokens that stay light in both modes
+  const overlayText = isDark ? colors.text.primary : colors.text.inverse;
+  const overlayMuted = isDark ? colors.text.secondary : colors.text.muted;
 
   // Health color tokens for dynamic coloring
   const hc: HealthColors = {
-    muted: colors.text.muted,
+    muted: overlayMuted,
     success: colors.status.success,
     warning: colors.status.warning,
     danger: colors.status.danger,
@@ -236,7 +243,7 @@ export function CallStatsOverlay({ callStats, ghostMetadata, visible }: CallStat
     marginBottom: 4,
     paddingBottom: 4,
     borderBottomWidth: 0.5,
-    borderBottomColor: colors.border.subtle,
+    borderBottomColor: isDark ? colors.border.strong : colors.border.subtle,
   };
 
   const scoreLabelStyle: TextStyle = {
@@ -253,7 +260,7 @@ export function CallStatsOverlay({ callStats, ghostMetadata, visible }: CallStat
   };
 
   const timestampStyle: TextStyle = {
-    color: colors.text.muted,
+    color: overlayMuted,
     fontSize: 10,
     ...monoFont,
   };
@@ -269,26 +276,29 @@ export function CallStatsOverlay({ callStats, ghostMetadata, visible }: CallStat
   };
 
   const statStyle: TextStyle = {
-    color: colors.text.inverse,
+    color: overlayText,
     fontSize: 10,
     lineHeight: 14,
     ...monoFont,
   };
 
-  const mutedStyle: TextStyle = { color: colors.text.muted };
+  const mutedStyle: TextStyle = { color: overlayMuted, fontSize: 10, lineHeight: 14, ...monoFont };
+
+  /** Inline stat text with a dynamic color — keeps fontSize consistent with statStyle */
+  const colorStat = (color: string): TextStyle => ({ color, fontSize: 10, lineHeight: 14, ...monoFont });
 
   return (
-    <View style={containerStyle} pointerEvents="none">
+    <Box style={containerStyle} pointerEvents="none">
       {/* Quality Score Header */}
-      <View style={scoreRowStyle}>
-        <Text style={[scoreLabelStyle, { color: scoreColor }]}>
+      <Box style={scoreRowStyle}>
+        <Text style={{ ...scoreLabelStyle, color: scoreColor }}>
           {scoreLabel.toUpperCase()}
         </Text>
-        <Text style={[scoreValueStyle, { color: scoreColor }]}>
+        <Text style={{ ...scoreValueStyle, color: scoreColor }}>
           {score}/100
         </Text>
         <Text style={timestampStyle}>{timeStr}</Text>
-      </View>
+      </Box>
 
       {/* ── VIDEO ───────────────────────────────────────────────────────── */}
       <Text style={headerStyle}>VIDEO</Text>
@@ -297,7 +307,7 @@ export function CallStatsOverlay({ callStats, ghostMetadata, visible }: CallStat
       </Text>
       <Text style={statStyle}>
         {'  '}FPS:{' '}
-        <Text style={{ color: healthColor(s?.frameRate ?? null, FPS_GOOD, FPS_WARN, hc, false) }}>
+        <Text style={colorStat(healthColor(s?.frameRate ?? null, FPS_GOOD, FPS_WARN, hc, false))}>
           {s?.frameRate != null ? Math.round(s.frameRate) : '--'}
         </Text>
         {measuredFps != null && (
@@ -314,11 +324,11 @@ export function CallStatsOverlay({ callStats, ghostMetadata, visible }: CallStat
       </Text>
       <Text style={statStyle}>
         {'  '}Decoded: {s?.framesDecoded?.toLocaleString() ?? '--'} | Dropped:{' '}
-        <Text style={{ color: healthColor(dropRate, DROP_RATE_GOOD, DROP_RATE_WARN, hc) }}>
+        <Text style={colorStat(healthColor(dropRate, DROP_RATE_GOOD, DROP_RATE_WARN, hc))}>
           {s?.framesDropped ?? 0}
         </Text>
         {dropRate != null && (
-          <Text style={{ color: healthColor(dropRate, DROP_RATE_GOOD, DROP_RATE_WARN, hc) }}>
+          <Text style={colorStat(healthColor(dropRate, DROP_RATE_GOOD, DROP_RATE_WARN, hc))}>
             {' '}({dropRate.toFixed(2)}%)
           </Text>
         )}
@@ -342,17 +352,17 @@ export function CallStatsOverlay({ callStats, ghostMetadata, visible }: CallStat
       <Text style={headerStyle}>NETWORK</Text>
       <Text style={statStyle}>
         {'  '}RTT:{' '}
-        <Text style={{ color: healthColor(s?.roundTripTime ?? null, RTT_GOOD, RTT_WARN, hc) }}>
+        <Text style={colorStat(healthColor(s?.roundTripTime ?? null, RTT_GOOD, RTT_WARN, hc))}>
           {s?.roundTripTime != null ? `${s.roundTripTime.toFixed(0)} ms` : '--'}
         </Text>
         {'  '}Jitter:{' '}
-        <Text style={{ color: healthColor(s?.jitter ?? null, JITTER_GOOD, JITTER_WARN, hc) }}>
+        <Text style={colorStat(healthColor(s?.jitter ?? null, JITTER_GOOD, JITTER_WARN, hc))}>
           {s?.jitter != null ? `${s.jitter.toFixed(1)} ms` : '--'}
         </Text>
       </Text>
       <Text style={statStyle}>
         {'  '}Loss:{' '}
-        <Text style={{ color: healthColor(s?.packetLoss ?? null, LOSS_GOOD, LOSS_WARN, hc) }}>
+        <Text style={colorStat(healthColor(s?.packetLoss ?? null, LOSS_GOOD, LOSS_WARN, hc))}>
           {s?.packetLoss != null ? `${s.packetLoss.toFixed(2)}%` : '--'}
         </Text>
         {s?.packetsLost != null && s.packetsLost > 0 && (
@@ -362,13 +372,13 @@ export function CallStatsOverlay({ callStats, ghostMetadata, visible }: CallStat
       <Text style={statStyle}>
         {'  '}ICE: {s?.localCandidateType ?? '--'} {'<>'} {s?.remoteCandidateType ?? '--'}
         {s?.candidateType === 'relay' && (
-          <Text style={{ color: colors.status.warning }}>{' '}(TURN relay)</Text>
+          <Text style={colorStat(colors.status.warning)}>{' '}(TURN relay)</Text>
         )}
         {s?.candidateType === 'host' && (
-          <Text style={{ color: colors.status.success }}>{' '}(direct)</Text>
+          <Text style={colorStat(colors.status.success)}>{' '}(direct)</Text>
         )}
         {s?.candidateType === 'srflx' && (
-          <Text style={{ color: colors.status.success }}>{' '}(STUN)</Text>
+          <Text style={colorStat(colors.status.success)}>{' '}(STUN)</Text>
         )}
       </Text>
 
@@ -380,7 +390,7 @@ export function CallStatsOverlay({ callStats, ghostMetadata, visible }: CallStat
             <Text style={statStyle}>
               {'  '}Audio: {formatFilename(g.audio.file)}
               {'\n  '}  buf: {g.audio.bufferMs}ms | underruns:{' '}
-              <Text style={{ color: g.audio.underruns > 0 ? colors.status.warning : colors.status.success }}>
+              <Text style={colorStat(g.audio.underruns > 0 ? colors.status.warning : colors.status.success)}>
                 {g.audio.underruns}
               </Text>
               {' '}| frames: {g.audio.framesDelivered.toLocaleString()}
@@ -396,11 +406,11 @@ export function CallStatsOverlay({ callStats, ghostMetadata, visible }: CallStat
               </Text>
               <Text style={statStyle}>
                 {'  '}  buf: {g.video.bufferedFrames}f{' '}
-                <Text style={{ color: healthColor(g.video.bufferHealth, BUF_HEALTH_GOOD, BUF_HEALTH_WARN, hc, false) }}>
+                <Text style={colorStat(healthColor(g.video.bufferHealth, BUF_HEALTH_GOOD, BUF_HEALTH_WARN, hc, false))}>
                   ({Math.round(g.video.bufferHealth * 100)}%)
                 </Text>
                 {' '}| dropped:{' '}
-                <Text style={{ color: g.video.droppedFrames > 0 ? colors.status.warning : colors.status.success }}>
+                <Text style={colorStat(g.video.droppedFrames > 0 ? colors.status.warning : colors.status.success)}>
                   {g.video.droppedFrames}
                 </Text>
               </Text>
@@ -411,7 +421,7 @@ export function CallStatsOverlay({ callStats, ghostMetadata, visible }: CallStat
           )}
           <Text style={statStyle}>
             {'  '}Uptime: {g.uptime}s | Bot RTT:{' '}
-            <Text style={{ color: healthColor(g.stats.rtt * 1000, RTT_GOOD, RTT_WARN, hc) }}>
+            <Text style={colorStat(healthColor(g.stats.rtt * 1000, RTT_GOOD, RTT_WARN, hc))}>
               {(g.stats.rtt * 1000).toFixed(0)}ms
             </Text>
           </Text>
@@ -425,7 +435,7 @@ export function CallStatsOverlay({ callStats, ghostMetadata, visible }: CallStat
         {s?.frameRate != null && measuredFps != null && (
           <>
             {'\n  '}FPS match:{' '}
-            <Text style={{ color: Math.abs(s.frameRate - measuredFps) < 5 ? colors.status.success : colors.status.warning }}>
+            <Text style={colorStat(Math.abs(s.frameRate - measuredFps) < 5 ? colors.status.success : colors.status.warning)}>
               {Math.abs(s.frameRate - measuredFps) < 5 ? 'OK' : 'DRIFT'}
             </Text>
             {' '}(reported={Math.round(s.frameRate)} measured={measuredFps})
@@ -434,13 +444,13 @@ export function CallStatsOverlay({ callStats, ghostMetadata, visible }: CallStat
         {g?.video && s?.resolution && (
           <>
             {'\n  '}Res match:{' '}
-            <Text style={{ color: (g.video.width === s.resolution.width && g.video.height === s.resolution.height) ? colors.status.success : colors.status.warning }}>
+            <Text style={colorStat((g.video.width === s.resolution.width && g.video.height === s.resolution.height) ? colors.status.success : colors.status.warning)}>
               {g.video.width === s.resolution.width && g.video.height === s.resolution.height ? 'OK' : 'MISMATCH'}
             </Text>
             {' '}(bot={g.video.width}x{g.video.height} client={s.resolution.width}x{s.resolution.height})
           </>
         )}
       </Text>
-    </View>
+    </Box>
   );
 }

@@ -8,11 +8,11 @@
  */
 
 import React from 'react';
-import { View } from 'react-native';
-import { Avatar, Text, useTheme } from '@coexist/wisp-react-native';
+import { Avatar, Text, useTheme, Box } from '@coexist/wisp-react-native';
 import { MicOffIcon } from '@/components/ui';
 import { SpeakerBorder } from '@/components/call/SpeakerBorder';
 import type { CallParticipant } from '@/types/call';
+import { dbg } from '@/utils/debug';
 
 // ── Props ────────────────────────────────────────────────────────────────────
 
@@ -26,11 +26,12 @@ interface VoiceAvatarCardProps {
 // ── Component ────────────────────────────────────────────────────────────────
 
 export function VoiceAvatarCard({ participant, isSpeaking, avatar }: VoiceAvatarCardProps) {
+  if (__DEV__) dbg.trackRender('VoiceAvatarCard');
   const { theme } = useTheme();
 
   return (
     <SpeakerBorder active={isSpeaking} borderRadius={16}>
-      <View
+      <Box
         accessibilityLabel={`${participant.displayName}${isSpeaking ? ', speaking' : ''}${participant.isMuted ? ', muted' : ''}`}
         style={{
           alignItems: 'center',
@@ -64,7 +65,7 @@ export function VoiceAvatarCard({ participant, isSpeaking, avatar }: VoiceAvatar
 
         {/* Mute indicator badge */}
         {participant.isMuted && (
-          <View
+          <Box
             accessibilityLabel="Muted"
             style={{
               position: 'absolute',
@@ -79,9 +80,9 @@ export function VoiceAvatarCard({ participant, isSpeaking, avatar }: VoiceAvatar
             }}
           >
             <MicOffIcon size={12} color={theme.colors.text.inverse} />
-          </View>
+          </Box>
         )}
-      </View>
+      </Box>
     </SpeakerBorder>
   );
 }
