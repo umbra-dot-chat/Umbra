@@ -1,4 +1,7 @@
 import { useState, useCallback, useMemo } from 'react';
+import { dbg } from '@/utils/debug';
+
+const SRC = 'useWalletFlow';
 
 interface UseWalletFlowOptions {
   totalSteps: number;

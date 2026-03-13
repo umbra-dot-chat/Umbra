@@ -7,8 +7,11 @@
  */
 
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { dbg } from '@/utils/debug';
 import { useUmbra } from '@/contexts/UmbraContext';
 import { useAuth } from '@/contexts/AuthContext';
+
+const SRC = 'useAllCustomEmoji';
 import type { EmojiItem } from '@coexist/wisp-core/types/EmojiPicker.types';
 import type { StickerPickerPack } from '@coexist/wisp-core/types/StickerPicker.types';
 import type { CommunityEmoji, CommunitySticker, StickerPack } from '@umbra/service';

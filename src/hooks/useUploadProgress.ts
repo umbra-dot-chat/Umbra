@@ -15,6 +15,7 @@
  */
 
 import { useState, useEffect, useMemo } from 'react';
+import { dbg } from '@/utils/debug';
 import { useUmbra } from '@/contexts/UmbraContext';
 import type {
   TransferProgress,
@@ -54,6 +55,8 @@ export interface UseUploadProgressResult {
 // ---------------------------------------------------------------------------
 // Hook
 // ---------------------------------------------------------------------------
+
+const SRC = 'useUploadProgress';
 
 export function useUploadProgress(): UseUploadProgressResult {
   const { service, isReady } = useUmbra();

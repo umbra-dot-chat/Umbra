@@ -1,4 +1,7 @@
 import { Platform } from 'react-native';
+import { dbg } from '@/utils/debug';
+
+const SRC = 'usePlatformMedia';
 
 export interface PlatformMediaAPI {
   getUserMedia: (constraints: MediaStreamConstraints) => Promise<MediaStream>;

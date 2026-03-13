@@ -1,5 +1,8 @@
 import { useState, useCallback, useMemo, useRef } from 'react';
+import { dbg } from '@/utils/debug';
 import type { MentionUser } from '@coexist/wisp-react-native';
+
+const SRC = 'useMention';
 
 // ---------------------------------------------------------------------------
 // Types

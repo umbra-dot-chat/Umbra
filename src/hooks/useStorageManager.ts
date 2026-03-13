@@ -16,6 +16,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { dbg } from '@/utils/debug';
 import { useUmbra } from '@/contexts/UmbraContext';
 import {
   getStorageUsage,
@@ -64,6 +65,8 @@ export interface UseStorageManagerResult {
 // ---------------------------------------------------------------------------
 // Hook
 // ---------------------------------------------------------------------------
+
+const SRC = 'useStorageManager';
 
 export function useStorageManager(): UseStorageManagerResult {
   const { isReady } = useUmbra();

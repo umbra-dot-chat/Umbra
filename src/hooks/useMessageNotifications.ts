@@ -16,10 +16,13 @@
  */
 
 import { useEffect, useRef } from 'react';
+import { dbg } from '@/utils/debug';
 import { useUmbra } from '@/contexts/UmbraContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSound } from '@/contexts/SoundContext';
 import type { MessageEvent } from '@umbra/service';
+
+const SRC = 'useMessageNotifications';
 
 export function useMessageNotifications(activeConversationId: string | null): void {
   const { service, isReady } = useUmbra();
@@ -28,6 +31,17 @@ export function useMessageNotifications(activeConversationId: string | null): vo
   const myDid = identity?.did ?? '';
   const mountedAtRef = useRef<number>(0);
   const lastSoundRef = useRef<number>(0);
+
+  // Use refs for values that change but shouldn't cause re-subscription.
+  // This prevents the effect from tearing down and re-subscribing the
+  // onMessageEvent listener every time playSound, myDid, or
+  // activeConversationId changes identity.
+  const playSoundRef = useRef(playSound);
+  playSoundRef.current = playSound;
+  const myDidRef = useRef(myDid);
+  myDidRef.current = myDid;
+  const activeConvIdRef = useRef(activeConversationId);
+  activeConvIdRef.current = activeConversationId;
 
   useEffect(() => {
     // Record mount time for the 1-second guard
@@ -51,14 +65,14 @@ export function useMessageNotifications(activeConversationId: string | null): vo
       const msg = event.message;
 
       // Don't play sound for our own messages
-      if (msg.senderDid === myDid) return;
+      if (msg.senderDid === myDidRef.current) return;
 
       // Don't play sound for thread replies (handled separately)
       if (msg.threadId) return;
 
       // Don't play sound if this is the active conversation
       // (useMessages handles that case)
-      if (msg.conversationId === activeConversationId) return;
+      if (msg.conversationId === activeConvIdRef.current) return;
 
       // Throttle: max 1 notification sound per 5 seconds
       const now = Date.now();
@@ -66,9 +80,9 @@ export function useMessageNotifications(activeConversationId: string | null): vo
       lastSoundRef.current = now;
 
       // Play notification sound for messages in other conversations
-      playSound('message_receive');
+      playSoundRef.current('message_receive');
     });
 
     return unsubscribe;
-  }, [service, isReady, playSound, myDid, activeConversationId]);
+  }, [service, isReady]);
 }

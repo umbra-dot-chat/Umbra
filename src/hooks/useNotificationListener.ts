@@ -9,10 +9,13 @@
  */
 
 import { useEffect, useRef } from 'react';
+import { dbg } from '@/utils/debug';
 import { useUmbra } from '@/contexts/UmbraContext';
 import { useNotifications } from '@/contexts/NotificationContext';
 import { useSound } from '@/contexts/SoundContext';
 import type { FriendEvent, GroupEvent, CommunityEvent } from '@umbra/service';
+
+const SRC = 'useNotificationListener';
 
 export function useNotificationListener(): void {
   const { service, isReady } = useUmbra();

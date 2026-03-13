@@ -15,6 +15,9 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { Platform } from 'react-native';
+import { dbg } from '@/utils/debug';
+
+const SRC = 'usePendingInvite';
 
 const PENDING_INVITE_KEY = '@umbra/pending_invite';
 

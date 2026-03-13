@@ -4,6 +4,9 @@
  */
 
 import { useEffect, useRef, useState } from 'react';
+import { dbg } from '@/utils/debug';
+
+const SRC = 'useVideoFilters';
 
 export type VideoFilter = 'none' | 'grayscale' | 'sepia' | 'warm' | 'cool' | 'high-contrast';
 

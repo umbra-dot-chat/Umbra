@@ -10,6 +10,9 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Platform } from 'react-native';
+import { dbg } from '@/utils/debug';
+
+const SRC = 'useNativeVideoEffects';
 import {
   useVideoEffects,
   type VideoEffect,
