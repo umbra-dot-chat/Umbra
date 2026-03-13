@@ -115,7 +115,7 @@ export async function sendMessage(
         relayWs.send(JSON.stringify({ type: 'send', to_did: rm.toDid, payload: rm.payload }));
         relaySent = true;
       } catch (err) {
-        console.warn('[UmbraService] Failed to send relay message:', err);
+        _dbg()?.warn?.('messages', 'Failed to send relay message', { error: String(err) }, SRC);
       }
     }
   }
@@ -258,7 +258,7 @@ export async function getMessages(
       }
     } catch (err) {
       // Fallback: show a user-friendly indicator instead of raw ciphertext
-      console.warn('[getMessages] decrypt failed for msg', m.id, err);
+      _dbg()?.warn?.('messages', 'decrypt failed for msg', { mid: m.id?.slice(0, 8), error: String(err) }, SRC);
       text = categorizeDecryptError(err);
       _decryptFail++;
     }
@@ -433,7 +433,7 @@ export async function sendThreadReply(
         relayWs.send(JSON.stringify({ type: 'send', to_did: rm.toDid, payload: rm.payload }));
         relaySent = true;
       } catch (err) {
-        console.warn('[UmbraService] Failed to send relay message:', err);
+        _dbg()?.warn?.('messages', 'Failed to send relay message (thread)', { error: String(err) }, SRC);
       }
     }
   }
@@ -587,16 +587,14 @@ export async function decryptIncomingMessage(payload: ChatMessagePayload): Promi
     // Guard against empty string from WASM (shouldn't happen, but be safe)
     return text || null;
   } catch (err) {
-    console.warn(
-      '[decryptIncomingMessage] Decryption failed for message',
-      payload.messageId,
-      'in conversation', payload.conversationId,
-      'from', payload.senderDid,
-      '— nonce:', payload.nonce?.slice(0, 16) + '…',
-      '— error:', err,
-    );
-    const category = categorizeDecryptError(err);
-    console.warn('[decryptIncomingMessage] Category:', category);
+    _dbg()?.warn?.('messages', 'Decryption failed for incoming message', {
+      mid: payload.messageId?.slice(0, 8),
+      cid: payload.conversationId?.slice(0, 8),
+      from: payload.senderDid?.slice(0, 16),
+      nonce: payload.nonce?.slice(0, 16),
+      error: String(err),
+      category: categorizeDecryptError(err),
+    }, SRC);
     return null;
   }
 }

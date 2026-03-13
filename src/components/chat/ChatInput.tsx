@@ -128,7 +128,7 @@ export function ChatInput({
       onClear: onClearChat,
       onHelp: () => {
         // Show help — for now just log, can wire to a modal later
-        console.log('[System] Help requested');
+        if (__DEV__) dbg.info('messages', 'Help requested', undefined, SRC);
       },
     }));
 

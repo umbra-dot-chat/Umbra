@@ -182,10 +182,7 @@ export class UmbraService {
     (globalThis as any).__umbra_service = instance;
 
     initTimer?.();
-    console.log(
-      '[UmbraService] Initialized — WASM version:',
-      wasmModule.umbra_wasm_version()
-    );
+    _dbg()?.info?.('service', `Initialized — WASM version: ${wasmModule.umbra_wasm_version()}`, undefined, SRC);
   }
 
   /**
@@ -421,7 +418,7 @@ export class UmbraService {
       try {
         listener(event);
       } catch (err) {
-        console.error('[UmbraService] Friend listener error:', err);
+        _dbg()?.error?.('friends', 'Friend listener error', { error: String(err) }, SRC);
       }
     }
   }
@@ -568,8 +565,7 @@ export class UmbraService {
       try {
         listener(event);
       } catch (err) {
-        _dbg()?.error('messages', `dispatchMessageEvent listener threw`, { err: String(err) }, SRC);
-        console.error('[UmbraService] Message listener error:', err);
+        _dbg()?.error('messages', 'dispatchMessageEvent listener threw', { error: String(err) }, SRC);
       }
     }
   }
@@ -620,7 +616,7 @@ export class UmbraService {
       try {
         listener(event);
       } catch (err) {
-        console.error('[UmbraService] Call listener error:', err);
+        _dbg()?.error?.('call', 'Call listener error', { error: String(err) }, SRC);
       }
     }
   }
@@ -637,7 +633,7 @@ export class UmbraService {
     if (this._relayWsRef && this._relayWsRef.readyState === WebSocket.OPEN) {
       this._relayWsRef.send(relayMessage);
     } else {
-      console.warn('[UmbraService] Cannot send call signal: relay not connected');
+      _dbg()?.warn?.('call', 'Cannot send call signal: relay not connected', undefined, SRC);
     }
   }
 
@@ -645,7 +641,7 @@ export class UmbraService {
     if (this._relayWsRef && this._relayWsRef.readyState === WebSocket.OPEN) {
       this._relayWsRef.send(JSON.stringify({ type: 'create_call_room', group_id: groupId }));
     } else {
-      console.warn('[UmbraService] Cannot create call room: relay not connected');
+      _dbg()?.warn?.('call', 'Cannot create call room: relay not connected', undefined, SRC);
     }
   }
 
@@ -653,7 +649,7 @@ export class UmbraService {
     if (this._relayWsRef && this._relayWsRef.readyState === WebSocket.OPEN) {
       this._relayWsRef.send(JSON.stringify({ type: 'join_call_room', room_id: roomId }));
     } else {
-      console.warn('[UmbraService] Cannot join call room: relay not connected');
+      _dbg()?.warn?.('call', 'Cannot join call room: relay not connected', undefined, SRC);
     }
   }
 
@@ -661,7 +657,7 @@ export class UmbraService {
     if (this._relayWsRef && this._relayWsRef.readyState === WebSocket.OPEN) {
       this._relayWsRef.send(JSON.stringify({ type: 'leave_call_room', room_id: roomId }));
     } else {
-      console.warn('[UmbraService] Cannot leave call room: relay not connected');
+      _dbg()?.warn?.('call', 'Cannot leave call room: relay not connected', undefined, SRC);
     }
   }
 
@@ -669,7 +665,7 @@ export class UmbraService {
     if (this._relayWsRef && this._relayWsRef.readyState === WebSocket.OPEN) {
       this._relayWsRef.send(JSON.stringify({ type: 'call_signal', room_id: roomId, to_did: toDid, payload }));
     } else {
-      console.warn('[UmbraService] Cannot send call room signal: relay not connected');
+      _dbg()?.warn?.('call', 'Cannot send call room signal: relay not connected', undefined, SRC);
     }
   }
 
@@ -819,7 +815,7 @@ export class UmbraService {
       try {
         listener(event);
       } catch (err) {
-        console.error('[UmbraService] Group listener error:', err);
+        _dbg()?.error?.('groups', 'Group listener error', { error: String(err) }, SRC);
       }
     }
   }
@@ -1134,7 +1130,7 @@ export class UmbraService {
         );
       }
     } catch (err) {
-      console.warn('[UmbraService] importCommunityFromInvitePayload failed:', err);
+      _dbg()?.warn?.('community', 'importCommunityFromInvitePayload failed', { error: String(err) }, SRC);
     }
   }
 
@@ -1487,7 +1483,7 @@ export class UmbraService {
       try {
         listener(event);
       } catch (err) {
-        console.error('[UmbraService] File transfer listener error:', err);
+        _dbg()?.error?.('service', 'File transfer listener error', { error: String(err) }, SRC);
       }
     }
   }
@@ -1520,7 +1516,7 @@ export class UmbraService {
       try {
         listener(event);
       } catch (err) {
-        console.error('[UmbraService] Community listener error:', err);
+        _dbg()?.error?.('community', 'Community listener error', { error: String(err) }, SRC);
       }
     }
   }
@@ -1547,7 +1543,7 @@ export class UmbraService {
       try {
         listener(event);
       } catch (err) {
-        console.error('[UmbraService] DM file listener error:', err);
+        _dbg()?.error?.('service', 'DM file listener error', { error: String(err) }, SRC);
       }
     }
   }
@@ -1570,7 +1566,7 @@ export class UmbraService {
       try {
         listener(event);
       } catch (err) {
-        console.error('[UmbraService] Metadata listener error:', err);
+        _dbg()?.error?.('service', 'Metadata listener error', { error: String(err) }, SRC);
       }
     }
   }
@@ -1679,8 +1675,7 @@ export class UmbraService {
   private _dispatchEvent(event: UmbraEvent): void {
     const { domain, data } = event;
     if (!data || typeof data !== 'object') {
-      _dbg()?.warn('network', `_dispatchEvent: ignoring event with missing/invalid data`, { domain }, SRC);
-      console.warn('[UmbraService] Ignoring event with missing/invalid data:', JSON.stringify(event));
+      _dbg()?.warn('network', '_dispatchEvent: ignoring event with missing/invalid data', { domain, event: JSON.stringify(event).slice(0, 100) }, SRC);
       return;
     }
     const camelData = snakeToCamel(data) as Record<string, unknown>;
@@ -1691,8 +1686,7 @@ export class UmbraService {
     switch (domain) {
       case 'message': {
         if (!camelData || !camelData.type) {
-          _dbg()?.warn('messages', `_dispatchEvent: message event with no type`, { data: JSON.stringify(data).slice(0, 100) }, SRC);
-          console.warn('[UmbraService] Ignoring message event with no type:', JSON.stringify(data));
+          _dbg()?.warn('messages', '_dispatchEvent: message event with no type', { data: JSON.stringify(data).slice(0, 100) }, SRC);
           break;
         }
         _listenerCount = this._messageListeners.length;
@@ -1701,8 +1695,7 @@ export class UmbraService {
           try {
             listener(camelData as unknown as MessageEvent);
           } catch (err) {
-            _dbg()?.error('messages', `message listener threw`, { err: String(err) }, SRC);
-            console.error('[UmbraService] Message listener error:', err);
+            _dbg()?.error('messages', 'message listener threw', { error: String(err) }, SRC);
           }
         }
         break;
@@ -1715,8 +1708,7 @@ export class UmbraService {
           try {
             listener(camelData as unknown as FriendEvent);
           } catch (err) {
-            _dbg()?.error?.('service', `friend listener threw`, { err: String(err) }, SRC);
-            console.error('[UmbraService] Friend listener error:', err);
+            _dbg()?.error?.('friends', 'friend listener threw', { error: String(err) }, SRC);
           }
         }
         break;
@@ -1729,8 +1721,7 @@ export class UmbraService {
           try {
             listener(camelData as unknown as DiscoveryEvent);
           } catch (err) {
-            _dbg()?.error?.('service', `discovery listener threw`, { err: String(err) }, SRC);
-            console.error('[UmbraService] Discovery listener error:', err);
+            _dbg()?.error?.('service', 'discovery listener threw', { error: String(err) }, SRC);
           }
         }
         break;
@@ -1741,8 +1732,7 @@ export class UmbraService {
           try {
             listener(camelData as unknown as RelayEvent);
           } catch (err) {
-            _dbg()?.error?.('service', `relay listener threw`, { err: String(err) }, SRC);
-            console.error('[UmbraService] Relay listener error:', err);
+            _dbg()?.error?.('service', 'relay listener threw', { error: String(err) }, SRC);
           }
         }
         break;
@@ -1753,8 +1743,7 @@ export class UmbraService {
           try {
             listener(camelData as unknown as GroupEvent);
           } catch (err) {
-            _dbg()?.error?.('service', `group listener threw`, { err: String(err) }, SRC);
-            console.error('[UmbraService] Group listener error:', err);
+            _dbg()?.error?.('groups', 'group listener threw', { error: String(err) }, SRC);
           }
         }
         break;
@@ -1765,8 +1754,7 @@ export class UmbraService {
           try {
             listener(camelData as unknown as CommunityEvent);
           } catch (err) {
-            _dbg()?.error?.('service', `community listener threw`, { err: String(err) }, SRC);
-            console.error('[UmbraService] Community listener error:', err);
+            _dbg()?.error?.('community', 'community listener threw', { error: String(err) }, SRC);
           }
         }
         break;
@@ -1777,8 +1765,7 @@ export class UmbraService {
           try {
             listener(camelData as unknown as FileTransferEvent);
           } catch (err) {
-            _dbg()?.error?.('service', `file_transfer listener threw`, { err: String(err) }, SRC);
-            console.error('[UmbraService] File transfer listener error:', err);
+            _dbg()?.error?.('service', 'file_transfer listener threw', { error: String(err) }, SRC);
           }
         }
         break;

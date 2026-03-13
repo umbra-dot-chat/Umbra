@@ -43,7 +43,7 @@ const _STARTUP_DELAY_MS = 5000;
 if (typeof setTimeout !== 'undefined') {
   setTimeout(() => {
     _parsingEnabled = true;
-    console.log('[parseMessageContent] Markdown parsing enabled (startup guard lifted)');
+    if (__DEV__) dbg.info('messages', 'Markdown parsing enabled (startup guard lifted)', undefined, 'parseMessageContent');
   }, _STARTUP_DELAY_MS);
 }
 

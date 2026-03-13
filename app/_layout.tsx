@@ -28,7 +28,7 @@ import { DebugVitalsOverlay } from '@/components/debug/DebugVitalsOverlay';
 // ── Debug infrastructure init ──────────────────────────────────────────────
 const { isSafeMode: __safeMode, crashCount: __crashCount } = initCrashGuard();
 if (__crashCount > 1) {
-  console.warn(`[CrashGuard] Crash count: ${__crashCount}/3`);
+  dbg.warn('lifecycle', `CrashGuard: crash count ${__crashCount}/3`, { crashCount: __crashCount }, 'RootLayout');
 }
 dbg.startLongTaskDetection();
 initSentry();
