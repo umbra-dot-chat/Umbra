@@ -1,6 +1,7 @@
 import React from 'react';
-import { Pressable, View } from 'react-native';
-import { Text, StatusIcon } from '@coexist/wisp-react-native';
+import { Pressable } from 'react-native';
+import { Box, Text, StatusIcon } from '@coexist/wisp-react-native';
+import { dbg } from '@/utils/debug';
 
 export interface InlineMsgGroupProps {
   sender: string;
@@ -33,21 +34,22 @@ export function InlineMsgGroup({
   onAvatarPress,
   children,
 }: InlineMsgGroupProps) {
+  if (__DEV__) dbg.trackRender('InlineMsgGroup');
   return (
-    <View style={{ flexDirection: 'row', gap: 10, alignItems: 'flex-start' }}>
+    <Box style={{ flexDirection: 'row', gap: 10, alignItems: 'flex-start' }}>
       {/* Avatar column */}
-      <View style={{ width: 32, flexShrink: 0, paddingTop: 2 }}>
+      <Box style={{ width: 32, flexShrink: 0, paddingTop: 2 }}>
         {avatar && onAvatarPress ? (
           <Pressable onPress={onAvatarPress}>{avatar}</Pressable>
         ) : (
           avatar
         )}
-      </View>
+      </Box>
 
       {/* Content column */}
-      <View style={{ flex: 1, gap: 2 }}>
+      <Box style={{ flex: 1, gap: 2 }}>
         {/* Sender name + timestamp row */}
-        <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8 }}>
+        <Box style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8 }}>
           <Text
             size="sm"
             weight="semibold"
@@ -65,16 +67,16 @@ export function InlineMsgGroup({
               readColor={themeColors.accent.primary}
             />
           )}
-        </View>
+        </Box>
 
         {/* Message content */}
-        <View style={{ gap: 2 }}>
+        <Box style={{ gap: 2 }}>
           {children}
-        </View>
+        </Box>
 
         {/* Read receipts */}
         {readReceipts}
-      </View>
-    </View>
+      </Box>
+    </Box>
   );
 }

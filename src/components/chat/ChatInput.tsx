@@ -83,6 +83,7 @@ export function ChatInput({
   customEmojis, relayUrl, onGifSelect,
   friendDid, friendDisplayName, onClearChat,
 }: ChatInputProps) {
+  if (__DEV__) dbg.trackRender('ChatInput');
   const { theme } = useTheme();
   const { motionPreferences } = useAppTheme();
   const { friends } = useFriends();

@@ -11,9 +11,10 @@
  */
 
 import React, { useEffect } from 'react';
-import { View, Platform } from 'react-native';
+import { Platform } from 'react-native';
 import type { ViewStyle } from 'react-native';
-import { CallControls, useTheme } from '@coexist/wisp-react-native';
+import { Box, CallControls, useTheme } from '@coexist/wisp-react-native';
+import { dbg } from '@/utils/debug';
 
 // ─── Props ──────────────────────────────────────────────────────────────────
 
@@ -147,6 +148,7 @@ export function CallControlsOverlay({
   onEndCall,
   variant = 'call',
 }: CallControlsOverlayProps) {
+  if (__DEV__) dbg.trackRender('CallControlsOverlay');
   const { theme } = useTheme();
   const dangerColor = theme.colors.status.danger;
   const sunkenColor = theme.colors.background.sunken;
@@ -164,7 +166,7 @@ export function CallControlsOverlay({
     : { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 8, paddingHorizontal: 8 };
 
   return (
-    <View nativeID={id} style={barStyle}>
+    <Box nativeID={id} style={barStyle}>
       <CallControls
         isMuted={isMuted}
         isVideoOff={isCameraOff}
@@ -178,6 +180,6 @@ export function CallControlsOverlay({
         callType="video"
         layout="compact"
       />
-    </View>
+    </Box>
   );
 }

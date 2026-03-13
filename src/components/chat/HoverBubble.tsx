@@ -1,10 +1,11 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { Animated, Pressable, View, useWindowDimensions, Platform } from 'react-native';
-import { Text, useTheme, MessageActionBar } from '@coexist/wisp-react-native';
+import { Box, Text, useTheme, MessageActionBar } from '@coexist/wisp-react-native';
 import { ReplyIcon, ThreadIcon, CopyIcon, ForwardIcon, PinIcon, TrashIcon, EditIcon } from '@/components/ui';
 import { SlotRenderer } from '@/components/plugins/SlotRenderer';
 import { useAnimatedToggle } from '@/hooks/useAnimatedToggle';
 import { AnimatedPresence } from '@/components/ui/AnimatedPresence';
+import { dbg } from '@/utils/debug';
 
 // Lazy-load createPortal only on web to avoid react-dom import in native/test
 let createPortal: ((children: React.ReactNode, container: Element) => React.ReactPortal) | null = null;
@@ -97,6 +98,7 @@ export function HoverBubble({
   id, align, hoveredMessage, onHoverIn, onHoverOut,
   actions, contextActions, themeColors, children, message,
 }: HoverBubbleProps) {
+  if (__DEV__) dbg.trackRender('HoverBubble');
   const isOut = align === 'outgoing';
   const showBar = hoveredMessage === id;
   const { theme } = useTheme();
@@ -231,7 +233,7 @@ export function HoverBubble({
               zIndex: 9999,
             }}
           >
-            <View
+            <Box
               style={{
                 backgroundColor: colors.background.canvas,
                 borderRadius: 10,
@@ -286,7 +288,7 @@ export function HoverBubble({
               colors={colors}
             />
             {/* Separator */}
-            <View
+            <Box
               style={{
                 height: 1,
                 backgroundColor: colors.border.subtle,
@@ -301,7 +303,7 @@ export function HoverBubble({
               danger
               colors={colors}
             />
-            </View>
+            </Box>
           </AnimatedPresence>
         </>,
         document.body,

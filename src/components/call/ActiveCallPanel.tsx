@@ -5,8 +5,8 @@
  */
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { View, Pressable, Platform, useWindowDimensions } from 'react-native';
-import { Text, SegmentedControl, VideoTile, useTheme } from '@coexist/wisp-react-native';
+import { Platform, useWindowDimensions } from 'react-native';
+import { Box, Button, Text, SegmentedControl, VideoTile, useTheme } from '@coexist/wisp-react-native';
 import { SlotRenderer } from '@/components/plugins/SlotRenderer';
 import { CallStatsOverlay, type GhostMetadata } from '@/components/call/CallStatsOverlay';
 import { JustifiedVideoGrid, computeLayout } from '@/components/call/JustifiedVideoGrid';
@@ -16,6 +16,7 @@ import { useSpeakerDetection } from '@/hooks/useSpeakerDetection';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import { useDeveloperSettings } from '@/hooks/useDeveloperSettings';
 import type { ActiveCall, CallStats, VideoQuality, AudioQuality } from '@/types/call';
+import { dbg } from '@/utils/debug';
 
 // ── Props ────────────────────────────────────────────────────────────────────
 
@@ -54,6 +55,7 @@ export function ActiveCallPanel({
   onToggleScreenShare,
   onEndCall,
 }: ActiveCallPanelProps) {
+  if (__DEV__) dbg.trackRender('ActiveCallPanel');
   const { theme } = useTheme();
   const isMobile = useIsMobile();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
@@ -137,9 +139,9 @@ export function ActiveCallPanel({
   }, [showingVideoGrid, tileCount, windowWidth, maxHeight]);
 
   return (
-    <View
+    <Box
+      height={panelHeight}
       style={{
-        height: panelHeight,
         overflow: 'hidden',
         position: 'relative',
         zIndex: 10,
@@ -149,23 +151,23 @@ export function ActiveCallPanel({
       <SlotRenderer slot="voice-call-header" />
 
       {/* Main call area */}
-      <View style={{ flex: 1, position: 'relative' }}>
+      <Box style={{ flex: 1, position: 'relative' }}>
         {/* Screen share tab bar */}
         {anyScreenSharing && hasVideo && (
-          <View style={{ paddingHorizontal: 12, paddingTop: 8, zIndex: 20 }} accessibilityRole="tablist" accessibilityLabel="Screen share view">
+          <Box px={12} pt={8} style={{ zIndex: 20 }} accessibilityRole="tablist" accessibilityLabel="Screen share view">
             <SegmentedControl
               options={screenTabOptions}
               value={screenTab}
               onChange={setScreenTab}
               size="sm"
             />
-          </View>
+          </Box>
         )}
 
         {hasVideo ? (
           anyScreenSharing && screenTab === 'screen' && screenShareStream ? (
             /* Screen share view: full-width tile with the shared screen */
-            <View style={{ flex: 1, padding: 8 }}>
+            <Box p={8} style={{ flex: 1 }}>
               <VideoTile
                 stream={screenShareStream}
                 displayName="Screen Share"
@@ -175,7 +177,7 @@ export function ActiveCallPanel({
                 size="full"
                 style={{ flex: 1, borderRadius: 12 }}
               />
-            </View>
+            </Box>
           ) : (
             <JustifiedVideoGrid
               participants={participantList}
@@ -187,7 +189,8 @@ export function ActiveCallPanel({
           )
         ) : (
           /* Voice-only: render avatar cards in a simple flex grid */
-          <View
+          <Box
+            p={12}
             style={{
               flex: 1,
               flexDirection: 'row',
@@ -196,7 +199,6 @@ export function ActiveCallPanel({
               alignItems: 'center',
               alignContent: 'center',
               gap: 12,
-              padding: 12,
               backgroundColor: '#000000',
             }}
           >
@@ -208,7 +210,7 @@ export function ActiveCallPanel({
                 avatar={p.avatar}
               />
             ))}
-          </View>
+          </Box>
         )}
 
         {/* Stats overlay */}
@@ -219,8 +221,9 @@ export function ActiveCallPanel({
         />
 
         {/* Stats toggle button */}
-        <Pressable
-          accessibilityRole="button"
+        <Button
+          variant="tertiary"
+          size="xs"
           accessibilityLabel="Toggle call stats"
           onPress={() => setShowStats((v) => !v)}
           style={{
@@ -232,7 +235,8 @@ export function ActiveCallPanel({
             paddingHorizontal: 8,
             paddingVertical: 4,
             zIndex: 101,
-          }}
+            height: 'auto',
+          } as any}
         >
           <Text
             size="xs"
@@ -245,8 +249,8 @@ export function ActiveCallPanel({
           >
             STATS
           </Text>
-        </Pressable>
-      </View>
+        </Button>
+      </Box>
 
       {/* Controls bar — always visible, below the video area */}
       <CallControlsOverlay
@@ -273,6 +277,6 @@ export function ActiveCallPanel({
           pointerEvents: 'box-none',
         }}
       />
-    </View>
+    </Box>
   );
 }

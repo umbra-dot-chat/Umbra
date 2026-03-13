@@ -8,10 +8,11 @@
  */
 
 import React from 'react';
-import { Pressable, View } from 'react-native';
-import { Avatar, CallTimer, Text, VideoTile, useTheme } from '@coexist/wisp-react-native';
+import { Pressable } from 'react-native';
+import { Avatar, Box, CallTimer, Text, VideoTile, useTheme } from '@coexist/wisp-react-native';
 import { CallControlsOverlay } from '@/components/call/CallControlsOverlay';
 import type { ActiveCall } from '@/types/call';
+import { dbg } from '@/utils/debug';
 
 // ─── Props ──────────────────────────────────────────────────────────────────
 
@@ -40,19 +41,20 @@ export function SidebarCallPanel({
   isScreenSharing = false,
   onToggleScreenShare,
 }: SidebarCallPanelProps) {
+  if (__DEV__) dbg.trackRender('SidebarCallPanel');
   const { theme } = useTheme();
   const colors = theme.colors;
 
   const isVoiceOnly = activeCall.callType === 'voice';
 
   return (
-    <View
+    <Box
+      px={12}
+      pt={10}
+      pb={8}
       style={{
         borderTopWidth: 1,
         borderTopColor: colors.border.subtle,
-        paddingTop: 10,
-        paddingBottom: 8,
-        paddingHorizontal: 12,
       }}
     >
       {/* Video preview — tappable to return to call */}
@@ -67,15 +69,14 @@ export function SidebarCallPanel({
         }}
       >
         {isVoiceOnly ? (
-          <View style={{
-            height: 48,
+          <Box height={48} style={{
             alignItems: 'center',
             justifyContent: 'center',
           }}>
             <Avatar name={activeCall.remoteDisplayName} size="sm" />
-          </View>
+          </Box>
         ) : (
-          <View style={{ aspectRatio: 16 / 9, maxHeight: 120 }}>
+          <Box maxHeight={120} style={{ aspectRatio: 16 / 9 }}>
             <VideoTile
               stream={activeCall.remoteStream}
               displayName={activeCall.remoteDisplayName}
@@ -87,17 +88,16 @@ export function SidebarCallPanel({
               showOverlay={false}
               style={{ flex: 1 }}
             />
-          </View>
+          </Box>
         )}
       </Pressable>
 
       {/* Info row: avatar + name + timer */}
-      <View style={{
+      <Box height={24} style={{
         flexDirection: 'row',
         alignItems: 'center',
         gap: 8,
         marginTop: 8,
-        height: 24,
       }}>
         <Avatar name={activeCall.remoteDisplayName} size="xs" />
         <Text
@@ -111,10 +111,10 @@ export function SidebarCallPanel({
         {activeCall.connectedAt && (
           <CallTimer startedAt={activeCall.connectedAt} size="sm" color={colors.text.secondary} />
         )}
-      </View>
+      </Box>
 
       {/* Shared call controls with sidebar variant */}
-      <View style={{ marginTop: 4 }}>
+      <Box style={{ marginTop: 4 }}>
         <CallControlsOverlay
           isMuted={activeCall.isMuted}
           isDeafened={activeCall.isDeafened}
@@ -127,7 +127,7 @@ export function SidebarCallPanel({
           onEndCall={onEndCall}
           variant="sidebar"
         />
-      </View>
-    </View>
+      </Box>
+    </Box>
   );
 }

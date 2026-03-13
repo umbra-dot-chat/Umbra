@@ -333,7 +333,7 @@ export const ChatArea = React.memo(function ChatArea({
   onEndCall,
   onCallBack,
 }: ChatAreaProps) {
-  if (__DEV__) resetParseStats();
+  if (__DEV__) { dbg.trackRender('ChatArea'); resetParseStats(); }
 
   const { theme } = useTheme();
   const themeColors = theme.colors;
