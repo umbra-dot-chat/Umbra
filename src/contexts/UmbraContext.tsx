@@ -157,7 +157,7 @@ export function UmbraProvider({ children, config }: UmbraProviderProps) {
       } catch (err) {
         if (!cancelled) {
           if (__DEV__) { dbg.error('lifecycle', 'UmbraService.initialize FAILED', err, SRC); endTimer?.(); }
-          console.error('[UmbraProvider] Initialization failed:', err);
+          if (__DEV__) dbg.error('lifecycle', 'Initialization failed', err, SRC);
           setError(err instanceof Error ? err : new Error(String(err)));
           setIsLoading(false);
         }
@@ -234,10 +234,10 @@ export function UmbraProvider({ children, config }: UmbraProviderProps) {
               const svc = UmbraService.instance;
               await svc.restoreIdentity(currentPhrase, currentIdentity?.displayName ?? '');
               if (__DEV__) dbg.info('service', 'restoreIdentity via recovery phrase SUCCESS', undefined, SRC);
-              console.log('[UmbraProvider] Restored WASM identity via recovery phrase');
+              if (__DEV__) dbg.info('lifecycle', 'Restored WASM identity via recovery phrase', undefined, SRC);
             } catch (restoreErr) {
               if (__DEV__) dbg.warn('service', 'restoreIdentity FAILED, falling back', restoreErr, SRC);
-              console.warn('[UmbraProvider] restoreIdentity failed:', restoreErr);
+              if (__DEV__) dbg.warn('lifecycle', 'restoreIdentity failed', restoreErr, SRC);
               // Fall back to identity_set (works on Tauri)
               if (typeof w.umbra_wasm_identity_set === 'function') {
                 await w.umbra_wasm_identity_set(JSON.stringify({
@@ -245,7 +245,7 @@ export function UmbraProvider({ children, config }: UmbraProviderProps) {
                   display_name: currentIdentity?.displayName ?? '',
                 }));
                 if (__DEV__) dbg.info('service', 'identity_set fallback SUCCESS', undefined, SRC);
-                console.log('[UmbraProvider] Fell back to identity_set');
+                if (__DEV__) dbg.info('lifecycle', 'Fell back to identity_set', undefined, SRC);
               }
             }
           } else if (typeof w.umbra_wasm_identity_set === 'function') {
@@ -256,7 +256,7 @@ export function UmbraProvider({ children, config }: UmbraProviderProps) {
               display_name: currentIdentity?.displayName ?? '',
             }));
             if (__DEV__) dbg.info('service', 'identity_set SUCCESS', undefined, SRC);
-            console.log('[UmbraProvider] Restored backend identity via identity_set');
+            if (__DEV__) dbg.info('lifecycle', 'Restored backend identity via identity_set', undefined, SRC);
           }
         } else {
           if (__DEV__) dbg.info('lifecycle', 'Backend already has identity loaded, skipping restore', undefined, SRC);
@@ -266,7 +266,7 @@ export function UmbraProvider({ children, config }: UmbraProviderProps) {
         if (__DEV__) dbg.info('lifecycle', 'initStage → loading-data', undefined, SRC);
       } catch (err) {
         if (__DEV__) dbg.error('lifecycle', 'hydrateIdentity FAILED', err, SRC);
-        console.warn('[UmbraProvider] Failed to restore backend identity:', err);
+        if (__DEV__) dbg.warn('lifecycle', 'Failed to restore backend identity', err, SRC);
       }
 
       hydrationDoneRef.current = true;

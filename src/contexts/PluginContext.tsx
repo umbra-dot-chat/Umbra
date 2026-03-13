@@ -195,6 +195,8 @@ export function PluginProvider({ children }: { children: React.ReactNode }) {
           cb({ type: event.type, did: event.did });
         });
       },
+      // Reuse the onMessage listener for conversation events to avoid
+      // adding a second onMessageEvent subscription per plugin.
       onConversation: (cb: (event: ConversationEventPayload) => void) => {
         return service.onMessageEvent((event: any) => {
           if (event.type === 'conversationCreated' || event.type === 'conversationUpdated') {
@@ -250,11 +252,11 @@ export function PluginProvider({ children }: { children: React.ReactNode }) {
 
       showToast: (message, type) => {
         // TODO: Wire to ToastProvider when context is available
-        console.log(`[Plugin Toast] [${type ?? 'info'}] ${message}`);
+        if (__DEV__) dbg.info('plugins', 'Plugin toast', { type: type ?? 'info', message }, SRC);
       },
       openPanel: (_panelId, _props) => {
         // TODO: Wire to right panel system
-        console.log(`[Plugin] openPanel: ${_panelId}`);
+        if (__DEV__) dbg.info('plugins', 'openPanel', { panelId: _panelId }, SRC);
       },
 
       registerCommand: (pluginId: string, cmd: PluginCommand) => {
@@ -366,7 +368,7 @@ export function PluginProvider({ children }: { children: React.ReactNode }) {
         try {
           result = t.transform(result, context);
         } catch (err) {
-          console.warn(`[Plugin] Text transform "${t.id}" failed:`, err);
+          if (__DEV__) dbg.warn('plugins', 'Text transform failed', { transformId: t.id, err }, SRC);
         }
       }
       return result;
@@ -386,7 +388,7 @@ export function PluginProvider({ children }: { children: React.ReactNode }) {
       if (!wasm) return;
       (wasm as any).umbra_wasm_plugin_kv_set(SYSTEM_PLUGIN_ID, `plugin_state:${pluginId}`, state);
     } catch (err) {
-      console.warn(`Failed to save plugin state for "${pluginId}":`, err);
+      if (__DEV__) dbg.warn('plugins', 'Failed to save plugin state', { pluginId, err }, SRC);
     }
   }, []);
 
@@ -472,12 +474,12 @@ export function PluginProvider({ children }: { children: React.ReactNode }) {
             }
           } catch (err) {
             if (__DEV__) dbg.error('plugins', `Failed to load plugin "${manifest.id}"`, err, SRC);
-            console.error(`Failed to load plugin "${manifest.id}":`, err);
+            if (__DEV__) dbg.error('plugins', 'Failed to load plugin', { pluginId: manifest.id, err }, SRC);
           }
         }
       } catch (err) {
         if (__DEV__) dbg.error('plugins', 'loadInstalled FAILED', err, SRC);
-        console.error('Failed to load installed plugins:', err);
+        if (__DEV__) dbg.error('plugins', 'Failed to load installed plugins', err, SRC);
       } finally {
         if (!cancelled) { setIsLoading(false); if (__DEV__) dbg.info('plugins', 'loadInstalled DONE', undefined, SRC); }
       }

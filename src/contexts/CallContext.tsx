@@ -33,6 +33,9 @@ import { useSound } from '@/contexts/SoundContext';
 import { VoiceStreamBridge } from '@/services/VoiceStreamBridge';
 import { encryptSignal, decryptSignal, isSignalEncryptionAvailable } from '@/services/callCrypto';
 import { useDeveloperSettings } from '@/hooks/useDeveloperSettings';
+import { dbg } from '@/utils/debug';
+
+const SRC = 'CallContext';
 
 // ─── Context Value ───────────────────────────────────────────────────────────
 
@@ -222,7 +225,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
             timestamp,
           } satisfies EncryptedCallPayload;
         } catch (encErr) {
-          console.warn('[CallContext] Signal encryption failed, sending unencrypted:', encErr);
+          if (__DEV__) dbg.warn('call', 'Signal encryption failed, sending unencrypted', encErr, SRC);
           finalPayload = parsedPayload;
         }
       } else {
@@ -240,7 +243,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       });
       service.sendCallSignal(toDid, relayMessage);
     } catch (err) {
-      console.warn('[CallContext] Failed to send signal:', err);
+      if (__DEV__) dbg.warn('call', 'Failed to send signal', err, SRC);
     }
   }, [service]);
 
@@ -269,12 +272,12 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     callType: CallType,
   ) => {
     if (activeCall) {
-      console.warn('[CallContext] Already in a call');
+      if (__DEV__) dbg.warn('call', 'Already in a call', undefined, SRC);
       return;
     }
 
     const callId = `call-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
-    console.debug('[CallContext] Starting', callType, 'call to', remoteDid, 'callId:', callId);
+    if (__DEV__) dbg.debug('call', 'Starting call', { callType, remoteDid, callId }, SRC);
     const isVideo = callType === 'video';
     const manager = new CallManager();
     callManagerRef.current = manager;
@@ -328,7 +331,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
 
     // Set up connection state handler
     manager.onConnectionStateChange = (state) => {
-      console.debug('[CallContext] Outgoing connection state →', state, 'at', new Date().toISOString());
+      if (__DEV__) dbg.debug('call', 'Outgoing connection state changed', { state }, SRC);
       if (state === 'connected') {
         clearRingTimeout();
         // Clear any pending disconnected timeout on successful reconnect
@@ -345,8 +348,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
         if (state === 'failed') {
           const pc = manager.getPeerConnection();
           if (pc) {
-            console.error('[CallContext] Outgoing call FAILED — iceConnectionState:', pc.iceConnectionState,
-              'iceGatheringState:', pc.iceGatheringState, 'signalingState:', pc.signalingState);
+            if (__DEV__) dbg.error('call', 'Outgoing call FAILED', { iceConnectionState: pc.iceConnectionState, iceGatheringState: pc.iceGatheringState, signalingState: pc.signalingState }, SRC);
           }
         }
         endCallFromRef(state === 'failed' ? 'failed' : 'completed');
@@ -355,7 +357,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
         // Auto-end if stuck disconnected for 30s
         if (disconnectedTimeoutRef.current) clearTimeout(disconnectedTimeoutRef.current);
         disconnectedTimeoutRef.current = setTimeout(() => {
-          console.warn('[CallContext] Disconnected timeout — ending call');
+          if (__DEV__) dbg.warn('call', 'Disconnected timeout — ending call', undefined, SRC);
           endCallFromRef('timeout');
         }, 30_000);
       }
@@ -433,7 +435,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       }, RING_TIMEOUT_MS);
 
     } catch (err) {
-      console.error('[CallContext] Failed to start call:', err);
+      if (__DEV__) dbg.error('call', 'Failed to start call', err, SRC);
       cleanup();
     }
   }, [activeCall, myDid, myName, sendSignal, clearRingTimeout, cleanup, makeParticipant]);
@@ -454,14 +456,14 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       // The offer SDP was stored when we received the call_offer
       const storedOffer = manager.pendingOfferSdp;
       if (!storedOffer) throw new Error('No pending offer SDP');
-      console.debug('[CallContext] Accepting call, offer SDP length:', storedOffer.length);
+      if (__DEV__) dbg.debug('call', 'Accepting call', { offerSdpLength: storedOffer.length }, SRC);
 
       const isVideo = activeCall.callType === 'video';
       const sdpAnswer = await manager.acceptOffer(storedOffer, isVideo);
       const localStream = manager.getLocalStream();
 
       if (!localStream) {
-        console.error('[CallContext] acceptOffer succeeded but localStream is null');
+        if (__DEV__) dbg.error('call', 'acceptOffer succeeded but localStream is null', undefined, SRC);
         cleanup();
         return;
       }
@@ -486,7 +488,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       sendSignal(activeCall.remoteDid, JSON.stringify(answerPayload), 'call_answer');
 
     } catch (err) {
-      console.error('[CallContext] Failed to accept call:', err);
+      if (__DEV__) dbg.error('call', 'Failed to accept call', err, SRC);
       cleanup();
     }
   }, [activeCall, myDid, sendSignal, clearRingTimeout, cleanup]);
@@ -528,7 +530,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       const relayWs = service.getRelayWs();
       service.sendMessage(meta.conversationId, eventText, relayWs)
         .then((msg) => service.dispatchMessageEvent({ type: 'messageSent', message: msg }))
-        .catch((err) => console.warn('[CallContext] Failed to send call event:', err));
+        .catch((err) => { if (__DEV__) dbg.warn('call', 'Failed to send call event', err, SRC); });
     }
   }, [activeCall, myDid, sendSignal, cleanup, playSound, service]);
 
@@ -647,7 +649,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     const manager = callManagerRef.current;
     if (manager) {
       manager.setVideoQuality(quality).catch((err) => {
-        console.warn('[CallContext] Failed to set video quality:', err);
+        if (__DEV__) dbg.warn('call', 'Failed to set video quality', err, SRC);
       });
     }
   }, []);
@@ -701,7 +703,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
         return { ...prev, localStream: newStream, participants: updatedParticipants };
       });
     }).catch((err) => {
-      console.warn('[CallContext] Failed to switch camera:', err);
+      if (__DEV__) dbg.warn('call', 'Failed to switch camera', err, SRC);
     });
   }, [myDid]);
 
@@ -716,7 +718,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       setScreenShareStream(stream);
       setIsScreenSharing(true);
     } catch (err) {
-      console.warn('[CallContext] Failed to start screen share:', err);
+      if (__DEV__) dbg.warn('call', 'Failed to start screen share', err, SRC);
       setIsScreenSharing(false);
       setScreenShareStream(null);
     }
@@ -765,7 +767,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
         }
       }
     } catch (err) {
-      console.warn('[CallContext] Failed to reacquire audio track:', err);
+      if (__DEV__) dbg.warn('call', 'Failed to reacquire audio track', err, SRC);
     }
   }, []);
 
@@ -974,7 +976,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
           payload.callId ?? '',
         );
       } catch (err) {
-        console.warn('[CallContext] Failed to decrypt signal, using as-is:', err);
+        if (__DEV__) dbg.warn('call', 'Failed to decrypt signal, using as-is', err, SRC);
         return payload as T;
       }
     }
@@ -1010,7 +1012,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
             return;
           }
 
-          console.debug('[CallContext] Incoming call offer from', payload.senderDid, 'callId:', payload.callId, 'type:', payload.callType);
+          if (__DEV__) dbg.debug('call', 'Incoming call offer', { senderDid: payload.senderDid, callId: payload.callId, callType: payload.callType }, SRC);
 
           // Set pendingCallIdRef synchronously so ICE candidates arriving
           // before setActiveCall propagates are not dropped
@@ -1067,7 +1069,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
           };
 
           manager.onConnectionStateChange = (state) => {
-            console.debug('[CallContext] Connection state →', state, 'at', new Date().toISOString());
+            if (__DEV__) dbg.debug('call', 'Connection state changed', { state }, SRC);
             if (state === 'connected') {
               clearRingTimeout();
               if (disconnectedTimeoutRef.current) {
@@ -1083,8 +1085,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
               if (state === 'failed') {
                 const pc = manager.getPeerConnection();
                 if (pc) {
-                  console.error('[CallContext] Connection FAILED — iceConnectionState:', pc.iceConnectionState,
-                    'iceGatheringState:', pc.iceGatheringState, 'signalingState:', pc.signalingState);
+                  if (__DEV__) dbg.error('call', 'Connection FAILED', { iceConnectionState: pc.iceConnectionState, iceGatheringState: pc.iceGatheringState, signalingState: pc.signalingState }, SRC);
                 }
               }
               endCallFromRef(state === 'failed' ? 'failed' : 'completed');
@@ -1092,7 +1093,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
               setActiveCall((prev) => prev ? { ...prev, status: 'reconnecting' } : prev);
               if (disconnectedTimeoutRef.current) clearTimeout(disconnectedTimeoutRef.current);
               disconnectedTimeoutRef.current = setTimeout(() => {
-                console.warn('[CallContext] Disconnected timeout — ending call');
+                if (__DEV__) dbg.warn('call', 'Disconnected timeout — ending call', undefined, SRC);
                 endCallFromRef('timeout');
               }, 30_000);
             }
@@ -1144,12 +1145,12 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
           const manager = callManagerRef.current;
           if (!manager) return;
 
-          console.debug('[CallContext] Call answer received, SDP length:', payload.sdp?.length);
+          if (__DEV__) dbg.debug('call', 'Call answer received', { sdpLength: payload.sdp?.length }, SRC);
           clearRingTimeout();
           setActiveCall((prev) => prev ? { ...prev, status: 'connecting' } : prev);
 
           manager.completeHandshake(payload.sdp).catch((err) => {
-            console.error('[CallContext] Handshake failed:', err);
+            if (__DEV__) dbg.error('call', 'Handshake failed', err, SRC);
             cleanup();
           });
 
@@ -1162,13 +1163,13 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
           // Use pendingCallIdRef as fallback — ICE candidates can arrive
           // before setActiveCall state propagates from callOffer handler
           if (!currentCallId || currentCallId !== payload.callId) {
-            console.warn('[CallContext] Dropping ICE candidate: no matching call. callId:', payload.callId, 'current:', currentCallId);
+            if (__DEV__) dbg.warn('call', 'Dropping ICE candidate: no matching call', { callId: payload.callId, current: currentCallId }, SRC);
             return;
           }
 
           const manager = callManagerRef.current;
           if (!manager) {
-            console.warn('[CallContext] Dropping ICE candidate: no CallManager');
+            if (__DEV__) dbg.warn('call', 'Dropping ICE candidate: no CallManager', undefined, SRC);
             return;
           }
 
@@ -1177,7 +1178,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
             sdpMid: payload.sdpMid,
             sdpMLineIndex: payload.sdpMLineIndex,
           }).catch((err) => {
-            console.warn('[CallContext] Failed to add ICE candidate:', err);
+            if (__DEV__) dbg.warn('call', 'Failed to add ICE candidate', err, SRC);
           });
 
           break;
@@ -1186,7 +1187,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
         case 'callEnd': {
           const { payload } = event;
           if (currentCallId && currentCallId === payload.callId) {
-            console.debug('[CallContext] Call ended by remote, reason:', payload.reason);
+            if (__DEV__) dbg.debug('call', 'Call ended by remote', { reason: payload.reason }, SRC);
             cleanup();
           }
           break;
@@ -1226,7 +1227,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
             };
             sendSignal(payload.senderDid, JSON.stringify(reanswerPayload), 'call_reanswer');
           } catch (err) {
-            console.error('[CallContext] Failed to handle reoffer:', err);
+            if (__DEV__) dbg.error('call', 'Failed to handle reoffer', err, SRC);
           }
           break;
         }
@@ -1239,7 +1240,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
           try {
             await manager.handleReanswer(payload.sdp);
           } catch (err) {
-            console.error('[CallContext] Failed to handle reanswer:', err);
+            if (__DEV__) dbg.error('call', 'Failed to handle reanswer', err, SRC);
           }
           break;
         }
@@ -1283,7 +1284,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     const handleAppStateChange = (nextState: AppStateStatus) => {
       // End the call if the app is sent to background or becomes inactive
       if (nextState !== 'active' && activeCallRef.current) {
-        console.debug('[CallContext] App state →', nextState, '— ending active call');
+        if (__DEV__) dbg.debug('call', 'App state changed — ending active call', { nextState }, SRC);
         endCallFromRef('completed');
       }
     };
@@ -1308,7 +1309,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
         const relayWs = service.getRelayWs();
         service.sendMessage(activeCall.conversationId, startText, relayWs)
           .then((msg) => service.dispatchMessageEvent({ type: 'messageSent', message: msg }))
-          .catch((err) => console.warn('[CallContext] Failed to send call-started event:', err));
+          .catch((err) => { if (__DEV__) dbg.warn('call', 'Failed to send call-started event', err, SRC); });
       }
     } else if (status === 'incoming' && prevStatus !== 'incoming') {
       playSound('call_ringing');

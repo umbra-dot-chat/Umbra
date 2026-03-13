@@ -24,6 +24,9 @@ import { getWasm } from '@umbra/wasm';
 import { useUmbra } from '@/contexts/UmbraContext';
 import { markSyncDirty } from '@/contexts/SyncContext';
 import { fetchGoogleFontsCatalog } from '@/services/googleFontsApi';
+import { dbg } from '@/utils/debug';
+
+const SRC = 'FontContext';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Font Registry
@@ -188,7 +191,7 @@ export async function loadGoogleFont(font: FontEntry): Promise<void> {
     await ExpoFont.loadAsync(fontMap);
     nativeLoadedFonts.add(font.id);
   } catch (err) {
-    console.warn(`[FontContext] Failed to load native font "${font.name}":`, err);
+    if (__DEV__) dbg.warn('lifecycle', 'Failed to load native font', { fontName: font.name, err }, SRC);
     // Don't block — font will fall back to system default
   }
 }
@@ -246,10 +249,10 @@ export function FontProvider({ children }: { children: React.ReactNode }) {
       const result = (wasm as any).umbra_wasm_plugin_kv_set(SYSTEM_FONT_KV_ID, key, value);
       // Handle async returns (Tauri backend returns Promises)
       if (result && typeof result.then === 'function') {
-        result.catch((err: any) => console.warn('[FontContext] Failed to save:', key, err));
+        result.catch((err: any) => { if (__DEV__) dbg.warn('lifecycle', 'Failed to save', { key, err }, SRC); });
       }
     } catch (err) {
-      console.warn('[FontContext] Failed to save:', key, err);
+      if (__DEV__) dbg.warn('lifecycle', 'Failed to save', { key, err }, SRC);
     }
   }, []);
 
@@ -379,7 +382,7 @@ export function FontProvider({ children }: { children: React.ReactNode }) {
         }
       })
       .catch((err) => {
-        console.warn('[FontContext] Failed to fetch Google Fonts catalog:', err);
+        if (__DEV__) dbg.warn('lifecycle', 'Failed to fetch Google Fonts catalog', err, SRC);
         // Falls back to curated FONT_REGISTRY only — allFonts stays as-is
       });
   }, [isReady, applyFont]);

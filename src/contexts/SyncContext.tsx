@@ -287,12 +287,12 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
         setSyncStatus('synced');
         kvSet(KEY_LAST_SYNCED, String(now));
         if (__DEV__) dbg.info('sync', `doSyncUpload DONE (${result.size} bytes)`, undefined, SRC);
-        console.log(`[SyncContext] Upload complete (${result.size} bytes)`);
+        if (__DEV__) dbg.info('sync', 'Upload complete', { size: result.size }, SRC);
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       if (__DEV__) dbg.error('sync', 'doSyncUpload FAILED', err, SRC);
-      console.error('[SyncContext] Sync upload failed:', msg);
+      if (__DEV__) dbg.error('sync', 'Sync upload failed', { message: msg }, SRC);
       if (mountedRef.current) {
         setSyncStatus('error');
         setSyncError(msg);
@@ -350,11 +350,11 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
         setLastSyncedAt(null);
         setSyncStatus('idle');
         sectionVersionsRef.current = {};
-        console.log('[SyncContext] Remote sync data deleted');
+        if (__DEV__) dbg.info('sync', 'Remote sync data deleted', undefined, SRC);
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      console.error('[SyncContext] Delete sync data failed:', msg);
+      if (__DEV__) dbg.error('sync', 'Delete sync data failed', { message: msg }, SRC);
       if (mountedRef.current) {
         setSyncError(msg);
       }
@@ -374,7 +374,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       const summary = await parseSyncBlob(blob);
       return { summary, meta };
     } catch (err) {
-      console.error('[SyncContext] Check remote blob failed:', err);
+      if (__DEV__) dbg.error('sync', 'Check remote blob failed', err, SRC);
       return null;
     }
   }, [identity?.did, relayHttpUrl, ensureAuth]);
@@ -430,7 +430,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             // Single setIdentity call instead of 3 separate ones
             setIdentity({ ...currentId, ...updates });
             if (__DEV__) dbg.info('sync', 'identity profile synced', updates, SRC);
-            console.log('[SyncContext] Profile synced:', Object.keys(updates).join(', '));
+            if (__DEV__) dbg.info('sync', 'Profile synced', { keys: Object.keys(updates) }, SRC);
           }
         }
       } catch { /* ignore — profile sync is best-effort */ }
@@ -447,12 +447,12 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
             const namePart = syncedUsername.split('#')[0];
             if (namePart) {
               await apiRegisterUsername(currentId.did, namePart);
-              console.log(`[SyncContext] Username reclaimed from sync: "${syncedUsername}"`);
+              if (__DEV__) dbg.info('sync', 'Username reclaimed from sync', { syncedUsername }, SRC);
             }
           }
         }
       } catch (e) {
-        console.warn('[SyncContext] Username restore best-effort failed:', e);
+        if (__DEV__) dbg.warn('sync', 'Username restore best-effort failed', e, SRC);
       }
 
       if (__DEV__) dbg.info('sync', 'restoreFromRemote DONE', { imported: result.imported }, SRC);
@@ -460,7 +460,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       if (__DEV__) dbg.error('sync', 'restoreFromRemote FAILED', err, SRC);
-      console.error('[SyncContext] Restore from remote failed:', msg);
+      if (__DEV__) dbg.error('sync', 'Restore from remote failed', { message: msg }, SRC);
       if (mountedRef.current) {
         setSyncError(msg);
       }
@@ -513,7 +513,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
       syncUpdateTimerRef.current = setTimeout(() => {
         syncUpdateTimerRef.current = null;
         restoreFromRemote().catch((err) => {
-          console.error('[SyncContext] Failed to apply incoming sync update:', err);
+          if (__DEV__) dbg.error('sync', 'Failed to apply incoming sync update', err, SRC);
         });
       }, 300);
     };
@@ -540,7 +540,7 @@ export function SyncProvider({ children }: { children: React.ReactNode }) {
     // Small delay to ensure preference contexts are mounted
     const timer = setTimeout(() => {
       restoreFromRemote().catch((err) => {
-        console.error('[SyncContext] Initial sync-on-load failed:', err);
+        if (__DEV__) dbg.error('sync', 'Initial sync-on-load failed', err, SRC);
       });
     }, 1_500);
 

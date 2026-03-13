@@ -1,6 +1,9 @@
 import React, { createContext, useContext, useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { Platform } from 'react-native';
 import type { Identity } from '@umbra/service';
+import { dbg } from '@/utils/debug';
+
+const SRC = 'AuthContext';
 
 // ---------------------------------------------------------------------------
 // Storage keys
@@ -75,7 +78,7 @@ function ensureRustInit(native: any): Promise<void> {
             const message = parsed.error_message ?? 'Unknown error';
             // 101 = already initialized — that's fine
             if (code !== 101 && !message.includes('Already initialized')) {
-              console.warn('[AuthContext] Rust init returned error:', message);
+              if (__DEV__) dbg.warn('auth', 'Rust init returned error', { message }, SRC);
             }
             return; // Don't throw for init errors — they're usually benign
           }
@@ -85,7 +88,7 @@ function ensureRustInit(native: any): Promise<void> {
       // Fallback: some errors may still throw (e.g., module not loaded)
       const msg = e?.message ?? String(e);
       if (!msg.includes('Already initialized') && !msg.includes('101')) {
-        console.warn('[AuthContext] Rust init failed:', e);
+        if (__DEV__) dbg.warn('auth', 'Rust init failed', e, SRC);
       }
     }
   })();
@@ -136,12 +139,12 @@ async function setStorageItem(key: string, value: string): Promise<void> {
       try {
         const errCheck = JSON.parse(result);
         if (errCheck && errCheck.error === true) {
-          console.warn('[AuthContext] SecureStore write error:', errCheck.error_message);
+          if (__DEV__) dbg.warn('auth', 'SecureStore write error', { error: errCheck.error_message }, SRC);
         }
       } catch { /* ignore */ }
     }
   } catch (e) {
-    console.warn('[AuthContext] SecureStore write failed:', e);
+    if (__DEV__) dbg.warn('auth', 'SecureStore write failed', e, SRC);
   }
 }
 
@@ -163,12 +166,12 @@ async function removeStorageItem(key: string): Promise<void> {
       try {
         const errCheck = JSON.parse(result);
         if (errCheck && errCheck.error === true) {
-          console.warn('[AuthContext] SecureStore delete error:', errCheck.error_message);
+          if (__DEV__) dbg.warn('auth', 'SecureStore delete error', { error: errCheck.error_message }, SRC);
         }
       } catch { /* ignore */ }
     }
   } catch (e) {
-    console.warn('[AuthContext] SecureStore delete failed:', e);
+    if (__DEV__) dbg.warn('auth', 'SecureStore delete failed', e, SRC);
   }
 }
 
@@ -340,7 +343,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           } catch { /* ignore */ }
         }
       } catch (e) {
-        console.warn('[AuthContext] Native hydration failed:', e);
+        if (__DEV__) dbg.warn('auth', 'Native hydration failed', e, SRC);
       }
 
       if (!cancelled) {
@@ -500,7 +503,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const switchAccount = useCallback(async (did: string) => {
     const target = accountsRef.current.find((a) => a.did === did);
     if (!target) {
-      console.warn('[AuthContext] switchAccount: account not found for DID:', did.slice(0, 20));
+      if (__DEV__) dbg.warn('auth', 'switchAccount: account not found', { did: did.slice(0, 20) }, SRC);
       return;
     }
 
@@ -545,9 +548,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // 5. Bump switchGeneration — triggers UmbraProvider remount
       setSwitchGeneration((g) => g + 1);
 
-      console.log('[AuthContext] Switched to account:', target.displayName);
+      if (__DEV__) dbg.info('auth', 'Switched to account', { displayName: target.displayName }, SRC);
     } catch (err) {
-      console.error('[AuthContext] Account switch failed:', err);
+      if (__DEV__) dbg.error('auth', 'Account switch failed', err, SRC);
     } finally {
       setIsSwitching(false);
     }
@@ -564,7 +567,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const loginFromStoredAccount = useCallback(async (did: string) => {
     const target = accountsRef.current.find((a) => a.did === did);
     if (!target) {
-      console.warn('[AuthContext] loginFromStoredAccount: account not found for DID:', did.slice(0, 20));
+      if (__DEV__) dbg.warn('auth', 'loginFromStoredAccount: account not found', { did: did.slice(0, 20) }, SRC);
       return;
     }
 
@@ -618,9 +621,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // 5. Bump switchGeneration — triggers UmbraProvider remount
       setSwitchGeneration((g) => g + 1);
 
-      console.log('[AuthContext] Re-logged into stored account:', target.displayName);
+      if (__DEV__) dbg.info('auth', 'Re-logged into stored account', { displayName: target.displayName }, SRC);
     } catch (err) {
-      console.error('[AuthContext] loginFromStoredAccount failed:', err);
+      if (__DEV__) dbg.error('auth', 'loginFromStoredAccount failed', err, SRC);
     } finally {
       setIsSwitching(false);
     }

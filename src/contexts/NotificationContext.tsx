@@ -14,6 +14,10 @@ import React, {
   useMemo,
 } from 'react';
 import { useUmbra } from '@/contexts/UmbraContext';
+import { dbg } from '@/utils/debug';
+
+const SRC = 'NotificationContext';
+
 import {
   createNotification as createNotificationDb,
   getNotifications as getNotificationsDb,
@@ -96,7 +100,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       setNotifications(records);
       setUnreadCounts(counts);
     } catch (err) {
-      console.warn('[NotificationContext] Failed to refresh:', err);
+      if (__DEV__) dbg.warn('lifecycle', 'Failed to refresh notifications', err, SRC);
     }
   }, [isReady]);
 
@@ -140,7 +144,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         const counts = await getUnreadCountsDb();
         setUnreadCounts(counts);
       } catch (err) {
-        console.warn('[NotificationContext] Failed to create notification:', err);
+        if (__DEV__) dbg.warn('lifecycle', 'Failed to create notification', err, SRC);
       }
     },
     [isReady],
@@ -156,7 +160,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       markNotificationReadDb(id)
         .then(() => getUnreadCountsDb())
         .then(setUnreadCounts)
-        .catch((err) => console.warn('[NotificationContext] markRead failed:', err));
+        .catch((err) => { if (__DEV__) dbg.warn('lifecycle', 'markRead failed', err, SRC); });
     },
     [isReady],
   );
@@ -167,7 +171,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     markAllNotificationsReadDb()
       .then(() => getUnreadCountsDb())
       .then(setUnreadCounts)
-      .catch((err) => console.warn('[NotificationContext] markAllRead failed:', err));
+      .catch((err) => { if (__DEV__) dbg.warn('lifecycle', 'markAllRead failed', err, SRC); });
   }, [isReady]);
 
   const dismiss = useCallback(
@@ -177,7 +181,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
       dismissNotificationDb(id)
         .then(() => getUnreadCountsDb())
         .then(setUnreadCounts)
-        .catch((err) => console.warn('[NotificationContext] dismiss failed:', err));
+        .catch((err) => { if (__DEV__) dbg.warn('lifecycle', 'dismiss failed', err, SRC); });
     },
     [isReady],
   );

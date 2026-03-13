@@ -64,7 +64,7 @@ export function MessagingProvider({ children }: { children: React.ReactNode }) {
       (wasm as any).umbra_wasm_plugin_kv_set(KV_NAMESPACE, key, value);
     } catch (err) {
       if (__DEV__) dbg.error('state', `kvSet FAILED: ${key}`, err, SRC);
-      console.warn('[MessagingContext] Failed to save:', key, err);
+      if (__DEV__) dbg.warn('messages', 'Failed to save', { key, err }, SRC);
     }
   }, []);
 

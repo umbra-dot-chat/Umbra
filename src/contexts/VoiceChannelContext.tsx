@@ -22,6 +22,9 @@ import { useUmbra } from '@/contexts/UmbraContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSound } from '@/contexts/SoundContext';
 import type { CommunityEvent } from '@umbra/service';
+import { dbg } from '@/utils/debug';
+
+const SRC = 'VoiceChannelContext';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -142,7 +145,7 @@ export function VoiceChannelProvider({ children }: { children: React.ReactNode }
                 sdp: offerSdp,
               }));
             }).catch((err) => {
-              console.warn('[VoiceChannel] Failed to create offer for peer:', err);
+              if (__DEV__) dbg.warn('call', 'Failed to create offer for peer', err, SRC);
             });
           }
           break;
@@ -177,19 +180,19 @@ export function VoiceChannelProvider({ children }: { children: React.ReactNode }
                   }));
                 }
               }).catch((err) => {
-                console.warn('[VoiceChannel] Failed to accept offer:', err);
+                if (__DEV__) dbg.warn('call', 'Failed to accept offer', err, SRC);
               });
             } else if (signal.type === 'answer') {
               manager.completeHandshakeForPeer(fromDid, signal.sdp).catch((err) => {
-                console.warn('[VoiceChannel] Failed to complete handshake:', err);
+                if (__DEV__) dbg.warn('call', 'Failed to complete handshake', err, SRC);
               });
             } else if (signal.type === 'ice-candidate') {
               manager.addIceCandidateForPeer(fromDid, signal.candidate).catch((err) => {
-                console.warn('[VoiceChannel] Failed to add ICE candidate:', err);
+                if (__DEV__) dbg.warn('call', 'Failed to add ICE candidate', err, SRC);
               });
             }
           } catch (err) {
-            console.warn('[VoiceChannel] Failed to parse signal:', err);
+            if (__DEV__) dbg.warn('call', 'Failed to parse signal', err, SRC);
           }
           break;
         }
@@ -299,7 +302,7 @@ export function VoiceChannelProvider({ children }: { children: React.ReactNode }
     };
 
     manager.onRemoteStream = (did, stream) => {
-      console.log('[VoiceChannel] Remote stream from', did);
+      if (__DEV__) dbg.info('call', 'Remote stream received', { did }, SRC);
       // Set up audio analysis for the new remote stream
       manager.setupPeerAudioAnalysis(did, stream);
       // Register on VoiceStreamBridge for plugin access
@@ -307,12 +310,12 @@ export function VoiceChannelProvider({ children }: { children: React.ReactNode }
     };
 
     manager.onRemoteStreamRemoved = (did) => {
-      console.log('[VoiceChannel] Remote stream removed from', did);
+      if (__DEV__) dbg.info('call', 'Remote stream removed', { did }, SRC);
       VoiceStreamBridge.removePeerStream(did);
     };
 
     manager.onConnectionStateChange = (did, state) => {
-      console.log('[VoiceChannel] Peer', did, 'connection state:', state);
+      if (__DEV__) dbg.info('call', 'Peer connection state changed', { did, state }, SRC);
     };
   }, [service]);
 
@@ -347,7 +350,7 @@ export function VoiceChannelProvider({ children }: { children: React.ReactNode }
     try {
       await manager.getUserMedia(false); // audio only
     } catch (err) {
-      console.warn('[VoiceChannel] Failed to get user media:', err);
+      if (__DEV__) dbg.warn('call', 'Failed to get user media', err, SRC);
       setIsConnecting(false);
       setActiveChannelId(null);
       setActiveCommunityId(null);
@@ -397,7 +400,7 @@ export function VoiceChannelProvider({ children }: { children: React.ReactNode }
       { type: 'voiceChannelJoined', communityId, channelId, memberDid: myDid },
       myDid,
       relayWs,
-    ).catch((err) => console.warn('[VoiceChannel] Failed to broadcast join:', err));
+    ).catch((err) => { if (__DEV__) dbg.warn('call', 'Failed to broadcast join', err, SRC); });
 
     // Also dispatch locally for this client's UI
     service.dispatchCommunityEvent({
@@ -456,7 +459,7 @@ export function VoiceChannelProvider({ children }: { children: React.ReactNode }
         { type: 'voiceChannelLeft', communityId: currentCommunityId, channelId: currentChannelId, memberDid: myDid },
         myDid,
         relayWs,
-      ).catch((err) => console.warn('[VoiceChannel] Failed to broadcast leave:', err));
+      ).catch((err) => { if (__DEV__) dbg.warn('call', 'Failed to broadcast leave', err, SRC); });
 
       service.dispatchCommunityEvent({
         type: 'voiceChannelLeft',

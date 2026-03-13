@@ -23,6 +23,9 @@ import React, {
 import { getWasm } from '@umbra/wasm';
 import { useUmbra } from '@/contexts/UmbraContext';
 import { markSyncDirty } from '@/contexts/SyncContext';
+import { dbg } from '@/utils/debug';
+
+const SRC = 'SoundContext';
 import {
   SoundEngine,
   SOUND_CATEGORIES,
@@ -120,7 +123,7 @@ export function SoundProvider({ children }: { children: React.ReactNode }) {
       if (!wasm) return;
       (wasm as any).umbra_wasm_plugin_kv_set(KV_NAMESPACE, key, value);
     } catch (err) {
-      console.warn('[SoundContext] Failed to save:', key, err);
+      if (__DEV__) dbg.warn('lifecycle', 'Failed to save', { key, err }, SRC);
     }
   }, []);
 

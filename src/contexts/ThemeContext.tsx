@@ -26,6 +26,9 @@ import { useFonts, getFontFamily } from '@/contexts/FontContext';
 import { markSyncDirty } from '@/contexts/SyncContext';
 import type { ThemePreset, DeepPartial } from '@/themes/types';
 import { THEME_REGISTRY, getThemeById } from '@/themes/registry';
+import { dbg } from '@/utils/debug';
+
+const SRC = 'ThemeContext';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Context shape
@@ -144,10 +147,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       const result = (wasm as any).umbra_wasm_plugin_kv_set(KV_NAMESPACE, key, value);
       // Handle async returns (Tauri backend returns Promises)
       if (result && typeof result.then === 'function') {
-        result.catch((err: any) => console.warn('[ThemeContext] Failed to save:', key, err));
+        result.catch((err: any) => { if (__DEV__) dbg.warn('state', 'Failed to save', { key, err }, SRC); });
       }
     } catch (err) {
-      console.warn('[ThemeContext] Failed to save:', key, err);
+      if (__DEV__) dbg.warn('state', 'Failed to save', { key, err }, SRC);
     }
   }, []);
 
