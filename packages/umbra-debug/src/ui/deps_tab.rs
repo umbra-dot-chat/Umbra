@@ -389,7 +389,7 @@ fn flush_stack(stack: &mut Vec<DepsNode>, roots: &mut Vec<DepsNode>) {
     }
 
     // Build nested structure from stack (first = parent, rest = children)
-    let mut nodes: Vec<DepsNode> = stack.drain(..).collect();
+    let mut nodes: Vec<DepsNode> = std::mem::take(stack);
     while nodes.len() > 1 {
         let child = nodes.pop().unwrap();
         if let Some(parent) = nodes.last_mut() {
