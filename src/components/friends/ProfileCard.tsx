@@ -1,7 +1,7 @@
 import React, { useState, useCallback } from 'react';
-import { Platform, View, Pressable, Text as RNText, Image } from 'react-native';
+import { Platform, Pressable, Image } from 'react-native';
 import type { ViewStyle } from 'react-native';
-import { Card, Separator, useTheme } from '@coexist/wisp-react-native';
+import { Box, Text, Card, Separator, useTheme } from '@coexist/wisp-react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNetwork } from '@/hooks/useNetwork';
 import { useUsername } from '../../../packages/umbra-service/src/discovery/hooks';
@@ -10,6 +10,7 @@ import { CopyIcon, RadioIcon, KeyIcon, QrCodeIcon } from '@/components/ui';
 import { QRCardDialog } from '@/components/ui/QRCardDialog';
 import { HelpIndicator } from '@/components/ui/HelpIndicator';
 import { HelpText, HelpHighlight, HelpListItem } from '@/components/ui/HelpContent';
+import { dbg } from '@/utils/debug';
 
 interface ProfileCardProps {
   style?: ViewStyle;
@@ -20,6 +21,7 @@ interface ProfileCardProps {
  * and relay connection status.
  */
 export function ProfileCard({ style }: ProfileCardProps) {
+  if (__DEV__) dbg.trackRender('ProfileCard');
   const { identity } = useAuth();
   const { theme } = useTheme();
   const tc = theme.colors;
@@ -84,10 +86,10 @@ export function ProfileCard({ style }: ProfileCardProps) {
       } as any : {}),
       ...style,
     }}>
-      <View style={{ gap: 10 }}>
+      <Box style={{ gap: 10 }}>
         {/* Avatar + Name + Join Date row + Relay status top-right */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-          <View
+        <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+          <Box
             style={{
               width: 40,
               height: 40,
@@ -104,20 +106,20 @@ export function ProfileCard({ style }: ProfileCardProps) {
                 style={{ width: 40, height: 40 }}
               />
             ) : (
-              <RNText style={{ fontSize: 17, fontWeight: '700', color: tc.text.onAccent }}>
+              <Text size="md" weight="bold" style={{ color: tc.text.onAccent }}>
                 {identity.displayName.charAt(0).toUpperCase()}
-              </RNText>
+              </Text>
             )}
-          </View>
-          <View style={{ flex: 1 }}>
-            <RNText style={{ fontSize: 16, fontWeight: '700', color: tc.text.primary }}>
+          </Box>
+          <Box style={{ flex: 1 }}>
+            <Text size="md" weight="bold">
               {identity.displayName}
-            </RNText>
+            </Text>
             {username && (
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 1 }}>
-                <RNText style={{ fontSize: 12, color: tc.text.secondary, fontWeight: '500' }}>
+              <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 1 }}>
+                <Text size="xs" weight="medium" color="secondary">
                   {username}
-                </RNText>
+                </Text>
                 <Pressable
                   onPress={handleCopyUsername}
                   hitSlop={6}
@@ -125,12 +127,12 @@ export function ProfileCard({ style }: ProfileCardProps) {
                 >
                   <CopyIcon size={11} color={usernameCopied ? tc.status.success : tc.text.muted} />
                 </Pressable>
-              </View>
+              </Box>
             )}
-            <RNText style={{ fontSize: 11, color: tc.text.muted, marginTop: 2 }}>
+            <Text size="xs" color="muted" style={{ marginTop: 2 }}>
               Member since {memberSince}
-            </RNText>
-          </View>
+            </Text>
+          </Box>
           {/* Relay status — compact top-right badge */}
           <Pressable
             onPress={!relayConnected ? handleReconnect : undefined}
@@ -144,7 +146,7 @@ export function ProfileCard({ style }: ProfileCardProps) {
               backgroundColor: tc.background.sunken,
             }}
           >
-            <View
+            <Box
               style={{
                 width: 7,
                 height: 7,
@@ -152,9 +154,9 @@ export function ProfileCard({ style }: ProfileCardProps) {
                 backgroundColor: relayConnected ? tc.status.success : tc.status.danger,
               }}
             />
-            <RNText style={{ fontSize: 11, color: tc.text.secondary, fontWeight: '500' }}>
+            <Text size="xs" weight="medium" color="secondary">
               {relayConnected ? 'Relay' : 'Offline'}
-            </RNText>
+            </Text>
             <HelpIndicator
               id="relay-status"
               title="Relay Server"
@@ -172,25 +174,22 @@ export function ProfileCard({ style }: ProfileCardProps) {
               <HelpListItem>The relay never sees your message content — everything is encrypted end-to-end</HelpListItem>
             </HelpIndicator>
           </Pressable>
-        </View>
+        </Box>
 
         {/* DID section — hidden when user has a username (discoverable via search) */}
         {!username && (
           <>
             <Separator spacing="sm" />
-            <View>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                <RNText
-                  style={{
-                    fontSize: 11,
-                    fontWeight: '600',
-                    color: tc.text.muted,
-                    textTransform: 'uppercase',
-                    letterSpacing: 0.5,
-                  }}
+            <Box>
+              <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                <Text
+                  size="xs"
+                  weight="semibold"
+                  color="muted"
+                  style={{ textTransform: 'uppercase', letterSpacing: 0.5 }}
                 >
                   Decentralized ID
-                </RNText>
+                </Text>
                 <HelpIndicator
                   id="profile-did"
                   title="What is a DID?"
@@ -207,19 +206,16 @@ export function ProfileCard({ style }: ProfileCardProps) {
                   <HelpListItem>Unique to your wallet</HelpListItem>
                   <HelpListItem>Can be shared publicly</HelpListItem>
                 </HelpIndicator>
-              </View>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                <RNText
-                  style={{
-                    fontSize: 12,
-                    color: tc.text.secondary,
-                    fontFamily: 'monospace',
-                    flex: 1,
-                  }}
+              </Box>
+              <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Text
+                  size="xs"
+                  color="secondary"
+                  style={{ fontFamily: 'monospace', flex: 1 }}
                   numberOfLines={1}
                 >
                   {truncatedDid}
-                </RNText>
+                </Text>
                 <Pressable
                   onPress={handleCopyDid}
                   style={{
@@ -233,15 +229,13 @@ export function ProfileCard({ style }: ProfileCardProps) {
                   }}
                 >
                   <CopyIcon size={14} color={didCopied ? tc.status.success : tc.text.secondary} />
-                  <RNText
-                    style={{
-                      fontSize: 11,
-                      color: didCopied ? tc.status.success : tc.text.secondary,
-                      fontWeight: '500',
-                    }}
+                  <Text
+                    size="xs"
+                    weight="medium"
+                    style={{ color: didCopied ? tc.status.success : tc.text.secondary }}
                   >
                     {didCopied ? 'Copied' : 'Copy'}
-                  </RNText>
+                  </Text>
                 </Pressable>
                 <Pressable
                   onPress={() => setQrCardOpen(true)}
@@ -256,22 +250,16 @@ export function ProfileCard({ style }: ProfileCardProps) {
                   }}
                 >
                   <QrCodeIcon size={14} color={tc.text.secondary} />
-                  <RNText
-                    style={{
-                      fontSize: 11,
-                      color: tc.text.secondary,
-                      fontWeight: '500',
-                    }}
-                  >
+                  <Text size="xs" weight="medium" color="secondary">
                     QR
-                  </RNText>
+                  </Text>
                 </Pressable>
-              </View>
-            </View>
+              </Box>
+            </Box>
           </>
         )}
 
-      </View>
+      </Box>
 
       <QRCardDialog
         open={qrCardOpen}

@@ -15,8 +15,8 @@
  */
 
 import React, { useState, useCallback, useMemo } from 'react';
-import { View, Pressable, Platform, Alert, TextInput } from 'react-native';
-import { useTheme, Text } from '@coexist/wisp-react-native';
+import { Pressable, Platform, Alert, TextInput } from 'react-native';
+import { Box, useTheme, Text } from '@coexist/wisp-react-native';
 import { useCommunityFiles } from '@/hooks/useCommunityFiles';
 import { useCommunitySync } from '@/hooks/useCommunitySync';
 import { useUmbra } from '@/contexts/UmbraContext';
@@ -32,6 +32,7 @@ import type {
   CommunityFileFolderRecord,
   CommunityRole,
 } from '@umbra/service';
+import { dbg } from '@/utils/debug';
 
 // ---------------------------------------------------------------------------
 // Types adapted from Wisp for RN (subset of FileChannelView props)
@@ -151,6 +152,7 @@ function triggerWebDownload(base64Data: string, filename: string, mimeType: stri
 // ---------------------------------------------------------------------------
 
 export function FileChannelContent({ channelId, communityId, myRoles = [], isOwner = false }: FileChannelContentProps) {
+  if (__DEV__) dbg.trackRender('FileChannelContent');
   const { theme } = useTheme();
   const colors = theme.colors;
   const { service } = useUmbra();
@@ -388,9 +390,9 @@ export function FileChannelContent({ channelId, communityId, myRoles = [], isOwn
   // This provides the core file browsing experience on mobile.
 
   return (
-    <View style={{ flex: 1, backgroundColor: colors.background.canvas }}>
+    <Box style={{ flex: 1, backgroundColor: colors.background.canvas }}>
       {/* Toolbar */}
-      <View
+      <Box
         style={{
           flexDirection: 'row',
           alignItems: 'center',
@@ -402,7 +404,7 @@ export function FileChannelContent({ channelId, communityId, myRoles = [], isOwn
         }}
       >
         {/* Breadcrumbs */}
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, flex: 1 }}>
+        <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 4, flex: 1 }}>
           <Text
             size="sm"
             weight="medium"
@@ -431,7 +433,7 @@ export function FileChannelContent({ channelId, communityId, myRoles = [], isOwn
               </Text>
             </React.Fragment>
           ))}
-        </View>
+        </Box>
 
         {/* Search */}
         <TextInput
@@ -454,7 +456,7 @@ export function FileChannelContent({ channelId, communityId, myRoles = [], isOwn
         />
 
         {/* Actions */}
-        <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+        <Box style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
           {allowUpload && (
             <Text
               size="xs"
@@ -496,12 +498,12 @@ export function FileChannelContent({ channelId, communityId, myRoles = [], isOwn
           >
             Refresh
           </Text>
-        </View>
-      </View>
+        </Box>
+      </Box>
 
       {/* Upload error banner */}
       {uploadError && (
-        <View
+        <Box
           style={{
             flexDirection: 'row',
             alignItems: 'center',
@@ -522,16 +524,16 @@ export function FileChannelContent({ channelId, communityId, myRoles = [], isOwn
           >
             Dismiss
           </Text>
-        </View>
+        </Box>
       )}
 
       {/* Content */}
       {isLoading ? (
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+        <Box style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
           <Text size="sm" style={{ color: colors.text.muted }}>Loading files...</Text>
-        </View>
+        </Box>
       ) : error ? (
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40 }}>
+        <Box style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40 }}>
           <Text size="sm" style={{ color: colors.status.danger, marginBottom: 12 }}>
             Failed to load files: {error.message}
           </Text>
@@ -543,21 +545,21 @@ export function FileChannelContent({ channelId, communityId, myRoles = [], isOwn
           >
             Retry
           </Text>
-        </View>
+        </Box>
       ) : subfolderEntries.length === 0 && fileEntries.length === 0 ? (
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40 }}>
+        <Box style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: 40 }}>
           <Text size="lg" weight="semibold" style={{ color: colors.text.primary, marginBottom: 8 }}>
             No files yet
           </Text>
           <Text size="sm" style={{ color: colors.text.muted, textAlign: 'center', maxWidth: 300 }}>
             Upload files or create folders to get started. Files shared here are available to all community members.
           </Text>
-        </View>
+        </Box>
       ) : (
-        <View style={{ flex: 1, padding: 16 }}>
+        <Box style={{ flex: 1, padding: 16 }}>
           {/* Folders */}
           {subfolderEntries.length > 0 && (
-            <View style={{ marginBottom: 16 }}>
+            <Box style={{ marginBottom: 16 }}>
               <Text
                 size="xs"
                 weight="semibold"
@@ -565,7 +567,7 @@ export function FileChannelContent({ channelId, communityId, myRoles = [], isOwn
               >
                 Folders
               </Text>
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
+              <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
                 {subfolderEntries.map((folder) => (
                   <Pressable
                     key={folder.id}
@@ -581,21 +583,21 @@ export function FileChannelContent({ channelId, communityId, myRoles = [], isOwn
                         : colors.border.subtle,
                     }}
                   >
-                    <View style={{ marginBottom: 6 }}>
+                    <Box style={{ marginBottom: 6 }}>
                       <FolderIcon size={28} color={colors.accent.primary} />
-                    </View>
+                    </Box>
                     <Text size="sm" weight="medium" numberOfLines={1} style={{ color: colors.text.primary }}>
                       {folder.name}
                     </Text>
                   </Pressable>
                 ))}
-              </View>
-            </View>
+              </Box>
+            </Box>
           )}
 
           {/* Files */}
           {sortedFiles.length > 0 && (
-            <View>
+            <Box>
               <Text
                 size="xs"
                 weight="semibold"
@@ -603,7 +605,7 @@ export function FileChannelContent({ channelId, communityId, myRoles = [], isOwn
               >
                 Files
               </Text>
-              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
+              <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12 }}>
                 {sortedFiles.map((file) => (
                   <Pressable
                     key={file.id}
@@ -619,7 +621,7 @@ export function FileChannelContent({ channelId, communityId, myRoles = [], isOwn
                         : colors.border.subtle,
                     }}
                   >
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                    <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 }}>
                       {React.createElement(getFileTypeIcon(file.mimeType).IconComponent, {
                         size: 28,
                         color: getFileTypeIcon(file.mimeType).color,
@@ -627,7 +629,7 @@ export function FileChannelContent({ channelId, communityId, myRoles = [], isOwn
                       {file.isEncrypted && (
                         <LockIcon size={12} color={colors.accent.primary} />
                       )}
-                    </View>
+                    </Box>
                     <Text size="sm" weight="medium" numberOfLines={1} style={{ color: colors.text.primary }}>
                       {file.name}
                     </Text>
@@ -641,10 +643,10 @@ export function FileChannelContent({ channelId, communityId, myRoles = [], isOwn
                     )}
                   </Pressable>
                 ))}
-              </View>
-            </View>
+              </Box>
+            </Box>
           )}
-        </View>
+        </Box>
       )}
 
       {/* Create folder dialog */}
@@ -661,7 +663,7 @@ export function FileChannelContent({ channelId, communityId, myRoles = [], isOwn
 
       {/* Toast notification (web only — mobile uses Alert) */}
       {Platform.OS === 'web' && toastMessage && (
-        <View
+        <Box
           style={{
             position: 'absolute' as any,
             bottom: 24,
@@ -688,12 +690,12 @@ export function FileChannelContent({ channelId, communityId, myRoles = [], isOwn
           >
             ✕
           </Text>
-        </View>
+        </Box>
       )}
 
       {/* Detail panel (simple bottom sheet style) */}
       {detailFile && (
-        <View
+        <Box
           style={{
             borderTopWidth: 1,
             borderTopColor: colors.border.subtle,
@@ -701,7 +703,7 @@ export function FileChannelContent({ channelId, communityId, myRoles = [], isOwn
             padding: 16,
           }}
         >
-          <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+          <Box style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
             <Text size="md" weight="semibold" style={{ color: colors.text.primary }}>
               {detailFile.name}
             </Text>
@@ -713,8 +715,8 @@ export function FileChannelContent({ channelId, communityId, myRoles = [], isOwn
             >
               Close
             </Text>
-          </View>
-          <View style={{ gap: 4 }}>
+          </Box>
+          <Box style={{ gap: 4 }}>
             <Text size="xs" style={{ color: colors.text.muted }}>
               Size: {formatFileSize(detailFile.size)}
             </Text>
@@ -730,13 +732,13 @@ export function FileChannelContent({ channelId, communityId, myRoles = [], isOwn
               </Text>
             )}
             {detailFile.isEncrypted && (
-              <View style={{ marginTop: 4, gap: 2 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <Box style={{ marginTop: 4, gap: 2 }}>
+                <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
                   <LockIcon size={12} color={colors.accent.primary} />
                   <Text size="xs" style={{ color: colors.accent.primary }}>
                     Encrypted (AES-256-GCM){detailFile.encryptionKeyVersion ? ` · Key v${detailFile.encryptionKeyVersion}` : ''}
                   </Text>
-                </View>
+                </Box>
                 {detailFile.encryptionFingerprint && (
                   <Text size="xs" style={{ color: colors.text.muted, fontFamily: 'monospace' }}>
                     Fingerprint: {detailFile.encryptionFingerprint}
@@ -747,10 +749,10 @@ export function FileChannelContent({ channelId, communityId, myRoles = [], isOwn
                     Pending re-encryption (key rotated)
                   </Text>
                 )}
-              </View>
+              </Box>
             )}
-          </View>
-          <View style={{ flexDirection: 'row', gap: 12, marginTop: 12 }}>
+          </Box>
+          <Box style={{ flexDirection: 'row', gap: 12, marginTop: 12 }}>
             <Text
               size="sm"
               weight="medium"
@@ -769,9 +771,9 @@ export function FileChannelContent({ channelId, communityId, myRoles = [], isOwn
                 Delete
               </Text>
             )}
-          </View>
-        </View>
+          </Box>
+        </Box>
       )}
-    </View>
+    </Box>
   );
 }

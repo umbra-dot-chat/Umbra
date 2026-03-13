@@ -11,6 +11,7 @@
  */
 
 import React, { useState, useCallback, useMemo, useRef } from 'react';
+import { Button } from '@coexist/wisp-react-native';
 import {
   FileChannelView,
 } from '@coexist/wisp-react-native/src/components/file-channel-view';
@@ -37,6 +38,7 @@ import type {
   CommunityRole,
 } from '@umbra/service';
 import type { FileFolderNode } from '@/hooks/useCommunityFiles';
+import { dbg } from '@/utils/debug';
 
 // ---------------------------------------------------------------------------
 // Props
@@ -112,6 +114,7 @@ export function FileChannelContentWeb({
   myRoles = [],
   isOwner = false,
 }: FileChannelContentWebProps) {
+  if (__DEV__) dbg.trackRender('FileChannelContentWeb');
   const { service } = useUmbra();
   const { identity } = useAuth();
   const { syncEvent } = useCommunitySync(communityId);
@@ -430,19 +433,13 @@ export function FileChannelContentWeb({
           }}
         >
           <span style={{ flex: 1 }}>{toastMessage}</span>
-          <button
-            onClick={() => setToastMessage(null)}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: '#888',
-              cursor: 'pointer',
-              fontSize: 16,
-              padding: 4,
-            }}
+          <Button
+            variant="tertiary"
+            size="sm"
+            onPress={() => setToastMessage(null)}
           >
             ✕
-          </button>
+          </Button>
         </div>
       )}
     </div>

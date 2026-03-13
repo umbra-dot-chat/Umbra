@@ -10,10 +10,11 @@
  */
 
 import React, { useEffect, useRef } from 'react';
-import { Animated, Easing, View } from 'react-native';
-import { Avatar, Text, useTheme } from '@coexist/wisp-react-native';
+import { Animated, Easing } from 'react-native';
+import { Avatar, Text, useTheme, Box } from '@coexist/wisp-react-native';
 import { AudioWaveIcon } from '@/components/ui';
 import type { CommunityMember } from '@umbra/service';
+import { dbg } from '@/utils/debug';
 
 export interface VoiceChannelUsersProps {
   /** Set of participant DIDs in this voice channel. */
@@ -64,7 +65,7 @@ function SoundBars({ color, size = 12 }: { color: string; size?: number }) {
   const gap = 1;
 
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'flex-end', height: size, gap }}>
+    <Box style={{ flexDirection: 'row', alignItems: 'flex-end', height: size, gap }}>
       {bars.map((bar, i) => (
         <Animated.View
           key={i}
@@ -79,7 +80,7 @@ function SoundBars({ color, size = 12 }: { color: string; size?: number }) {
           }}
         />
       ))}
-    </View>
+    </Box>
   );
 }
 
@@ -90,6 +91,7 @@ export function VoiceChannelUsers({
   myDisplayName,
   speakingDids,
 }: VoiceChannelUsersProps) {
+  if (__DEV__) dbg.trackRender('VoiceChannelUsers');
   const { theme } = useTheme();
   const themeColors = theme.colors;
 
@@ -116,7 +118,7 @@ export function VoiceChannelUsers({
   const speakingColor = themeColors.status.success;
 
   return (
-    <View style={{ paddingLeft: 36, paddingRight: 8, paddingBottom: 2 }}>
+    <Box style={{ paddingLeft: 36, paddingRight: 8, paddingBottom: 2 }}>
       {sorted.map((did) => {
         const isMe = did === myDid;
         const member = memberMap.get(did);
@@ -126,7 +128,7 @@ export function VoiceChannelUsers({
         const isSpeaking = speakingDids?.has(did) ?? false;
 
         return (
-          <View
+          <Box
             key={did}
             style={{
               flexDirection: 'row',
@@ -136,7 +138,7 @@ export function VoiceChannelUsers({
             }}
           >
             {/* Avatar with green ring when speaking */}
-            <View
+            <Box
               style={
                 isSpeaking
                   ? {
@@ -159,7 +161,7 @@ export function VoiceChannelUsers({
                 size="xs"
                 status="online"
               />
-            </View>
+            </Box>
             <Text
               size="xs"
               style={{
@@ -174,9 +176,9 @@ export function VoiceChannelUsers({
             {isSpeaking && (
               <SoundBars size={12} color={speakingColor} />
             )}
-          </View>
+          </Box>
         );
       })}
-    </View>
+    </Box>
   );
 }

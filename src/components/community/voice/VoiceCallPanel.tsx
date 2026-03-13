@@ -9,12 +9,12 @@
  */
 
 import React, { useMemo } from 'react';
-import { View } from 'react-native';
-import { GroupCallPanel } from '@coexist/wisp-react-native';
+import { GroupCallPanel, Box } from '@coexist/wisp-react-native';
 import { useVoiceChannel } from '@/contexts/VoiceChannelContext';
 import { SlotRenderer } from '@/components/plugins/SlotRenderer';
 import type { CommunityMember } from '@umbra/service';
 import type { GroupCallParticipant } from '@coexist/wisp-core/types/GroupCallPanel.types';
+import { dbg } from '@/utils/debug';
 
 export interface VoiceCallPanelProps {
   /** Channel name to display in the header. */
@@ -33,6 +33,7 @@ export function VoiceCallPanel({
   myDid,
   myDisplayName,
 }: VoiceCallPanelProps) {
+  if (__DEV__) dbg.trackRender('VoiceCallPanel');
   const {
     activeChannelId,
     isMuted,
@@ -105,7 +106,7 @@ export function VoiceCallPanel({
   );
 
   return (
-    <View style={{ flex: 1, position: 'relative' }}>
+    <Box style={{ flex: 1, position: 'relative' }}>
       <SlotRenderer slot="voice-call-header" props={slotProps} />
       <GroupCallPanel
         participants={groupCallParticipants}
@@ -130,6 +131,6 @@ export function VoiceCallPanel({
         props={slotProps}
         style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, pointerEvents: 'box-none' }}
       />
-    </View>
+    </Box>
   );
 }

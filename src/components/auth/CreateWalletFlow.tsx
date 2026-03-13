@@ -9,10 +9,11 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Image } from 'react-native';
+import { Image } from 'react-native';
 import {
   Text,
   Button,
+  Box,
   VStack,
   HStack,
   Input,
@@ -22,6 +23,7 @@ import {
   Card,
   Presence,
   Separator,
+  useTheme,
 } from '@coexist/wisp-react-native';
 import type { ProgressStep } from '@coexist/wisp-react-native';
 import { useAuth } from '@/contexts/AuthContext';
@@ -43,6 +45,9 @@ import type { Identity } from '@umbra/service';
 import { enablePersistence, getWasm } from '@umbra/wasm';
 import { setPendingSyncOptIn } from '@/contexts/SyncContext';
 import { TEST_IDS } from '@/constants/test-ids';
+import { dbg } from '@/utils/debug';
+
+const SRC = 'CreateWalletFlow';
 
 // ---------------------------------------------------------------------------
 // Step definitions
@@ -71,6 +76,8 @@ export interface CreateWalletFlowProps {
 
 export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
   const { login, setPin, setRememberMe: setAuthRememberMe, setRecoveryPhrase, addAccount } = useAuth();
+  const { theme } = useTheme();
+  const colors = theme.colors;
 
   // Flow state
   const [displayName, setDisplayName] = useState('');
@@ -155,14 +162,14 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
       let finalIdentity = result.identity;
       if (importedProfile?.avatarBase64) {
         const avatarDataUrl = `data:${importedProfile.avatarMime || 'image/png'};base64,${importedProfile.avatarBase64}`;
-        console.log('[CreateWalletFlow] Setting avatar, size:', avatarDataUrl.length);
+        if (__DEV__) dbg.info('auth', 'Setting avatar', { size: avatarDataUrl.length }, SRC);
         try {
           await UmbraService.instance.updateProfile({ type: 'avatar', value: avatarDataUrl });
           // Update the identity with the avatar
           finalIdentity = { ...result.identity, avatar: avatarDataUrl };
-          console.log('[CreateWalletFlow] Avatar saved successfully');
+          if (__DEV__) dbg.info('auth', 'Avatar saved successfully', undefined, SRC);
         } catch (avatarErr: any) {
-          console.error('[CreateWalletFlow] Failed to save avatar:', avatarErr);
+          if (__DEV__) dbg.error('auth', 'Failed to save avatar', avatarErr, SRC);
         }
       }
 
@@ -176,10 +183,10 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
             importedProfile.displayName || importedProfile.username
           );
           setAccountLinkedDuringCreation(true);
-          console.log('[CreateWalletFlow] Platform account auto-linked:', importedProfile.platform);
+          if (__DEV__) dbg.info('auth', 'Platform account auto-linked', { platform: importedProfile.platform }, SRC);
         } catch (linkErr: any) {
           // Non-fatal — account linking is optional
-          console.warn('[CreateWalletFlow] Failed to auto-link account:', linkErr);
+          if (__DEV__) dbg.warn('auth', 'Failed to auto-link account', linkErr, SRC);
         }
       }
 
@@ -189,10 +196,10 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
       try {
         const usernameRes = await registerUsername(result.identity.did, displayName.trim());
         setUsernameResult(usernameRes);
-        console.log('[CreateWalletFlow] Username registered:', usernameRes.username);
+        if (__DEV__) dbg.info('auth', 'Username registered', { username: usernameRes.username }, SRC);
       } catch (usernameErr: any) {
         // Non-fatal — username registration is best-effort
-        console.warn('[CreateWalletFlow] Failed to register username:', usernameErr);
+        if (__DEV__) dbg.warn('auth', 'Failed to register username', usernameErr, SRC);
       }
     } catch (err: any) {
       setError(err.message ?? 'Failed to create account');
@@ -281,10 +288,10 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
     if (!identity) return false;
     try {
       await updateSettings(identity.did, true);
-      console.log('[CreateWalletFlow] Friend discovery enabled during signup');
+      if (__DEV__) dbg.info('auth', 'Friend discovery enabled during signup', undefined, SRC);
       return true;
     } catch (err: any) {
-      console.error('[CreateWalletFlow] Failed to enable discovery:', err);
+      if (__DEV__) dbg.error('auth', 'Failed to enable discovery', err, SRC);
       return false;
     }
   }, [identity]);
@@ -335,12 +342,12 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
 
             {/* Profile import section */}
             {!importedProfile ? (
-              <View testID={TEST_IDS.CREATE.IMPORT_PROFILE_BUTTON} accessibilityLabel="Import profile from another platform">
+              <Box testID={TEST_IDS.CREATE.IMPORT_PROFILE_BUTTON} accessibilityLabel="Import profile from another platform">
                 <ProfileImportSelector
                   onProfileImported={handleProfileImported}
                   compact
                 />
-              </View>
+              </Box>
             ) : (
               <VStack gap="md">
                 <HStack style={{ justifyContent: 'space-between', alignItems: 'center' }}>
@@ -354,7 +361,7 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
 
                 <Card variant="filled" padding="md">
                   <HStack gap="md" style={{ alignItems: 'center' }}>
-                    <View style={{ width: 48, height: 48, borderRadius: 24, overflow: 'hidden' }}>
+                    <Box style={{ width: 48, height: 48, borderRadius: 24, overflow: 'hidden' }}>
                       {importedProfile.avatarBase64 ? (
                         <Image
                           source={{ uri: `data:${importedProfile.avatarMime || 'image/png'};base64,${importedProfile.avatarBase64}` }}
@@ -366,13 +373,13 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
                           style={{ width: 48, height: 48 }}
                         />
                       ) : (
-                        <View style={{ width: 48, height: 48, backgroundColor: '#5865F2', alignItems: 'center', justifyContent: 'center' }}>
-                          <Text size="lg" weight="bold" style={{ color: 'white' }}>
+                        <Box style={{ width: 48, height: 48, backgroundColor: colors.accent.primary, alignItems: 'center', justifyContent: 'center' }}>
+                          <Text size="lg" weight="bold" style={{ color: colors.text.inverse }}>
                             {(importedProfile.displayName || importedProfile.username || '?').charAt(0).toUpperCase()}
                           </Text>
-                        </View>
+                        </Box>
                       )}
-                    </View>
+                    </Box>
                     <VStack gap="xs" style={{ flex: 1 }}>
                       <Text size="md" weight="semibold">
                         {importedProfile.displayName}
@@ -408,18 +415,18 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
             />
 
             {isLoading ? (
-              <View style={{ alignItems: 'center', paddingVertical: 32 }}>
+              <Box style={{ alignItems: 'center', paddingVertical: 32 }}>
                 <Spinner />
                 <Text size="sm" color="muted" style={{ marginTop: 12 }}>
                   Generating your account...
                 </Text>
-              </View>
+              </Box>
             ) : error ? (
               <Alert variant="danger" title="Error" description={error} />
             ) : seedPhrase ? (
-              <View testID={TEST_IDS.CREATE.SEED_PHRASE_GRID} accessibilityLabel="Recovery seed phrase grid">
+              <Box testID={TEST_IDS.CREATE.SEED_PHRASE_GRID} accessibilityLabel="Recovery seed phrase grid">
                 <SeedPhraseGrid words={seedPhrase} showCopy />
-              </View>
+              </Box>
             ) : null}
           </VStack>
         );
@@ -456,19 +463,19 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
 
       case 3:
         return (
-          <View testID={TEST_IDS.CREATE.PIN_STEP} accessibilityLabel="PIN setup step">
+          <Box testID={TEST_IDS.CREATE.PIN_STEP} accessibilityLabel="PIN setup step">
             <PinSetupStep onComplete={handlePinComplete} />
-          </View>
+          </Box>
         );
 
       case 4:
         return (
           <VStack gap="lg" style={{ paddingVertical: 16 }} testID={TEST_IDS.CREATE.SUCCESS_SCREEN} accessibilityLabel="Account created success screen">
-            <View style={{ alignItems: 'center' }}>
+            <Box style={{ alignItems: 'center' }}>
               <Presence visible animation="scaleIn">
-                <CheckCircleIcon size={64} color="#22c55e" />
+                <CheckCircleIcon size={64} color={colors.status.success} />
               </Presence>
-            </View>
+            </Box>
 
             <Presence visible animation="fadeIn" duration={400}>
               <VStack gap="xs" style={{ alignItems: 'center' }}>
@@ -550,7 +557,7 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
               variant="primary"
               onPress={goNext}
               disabled={!displayName.trim()}
-              iconRight={<ArrowRightIcon size={16} color="#FFFFFF" />}
+              iconRight={<ArrowRightIcon size={16} color={colors.text.inverse} />}
               testID={TEST_IDS.CREATE.NAME_NEXT}
               accessibilityLabel="Continue to next step"
             >
@@ -566,7 +573,7 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
               variant="primary"
               onPress={goNext}
               disabled={!seedPhrase || isLoading}
-              iconRight={<ArrowRightIcon size={16} color="#FFFFFF" />}
+              iconRight={<ArrowRightIcon size={16} color={colors.text.inverse} />}
               testID={TEST_IDS.CREATE.SEED_NEXT}
               accessibilityLabel="Continue after seed phrase"
             >
@@ -582,7 +589,7 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
               variant="primary"
               onPress={goNext}
               disabled={!backupConfirmed}
-              iconRight={<ArrowRightIcon size={16} color="#FFFFFF" />}
+              iconRight={<ArrowRightIcon size={16} color={colors.text.inverse} />}
               testID={TEST_IDS.CREATE.BACKUP_NEXT}
               accessibilityLabel="Continue after backup confirmation"
             >

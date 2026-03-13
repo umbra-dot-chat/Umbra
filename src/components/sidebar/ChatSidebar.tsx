@@ -17,6 +17,7 @@ import { NewChatMenu } from './NewChatMenu';
 import { SidebarCallPanel } from '@/components/call/SidebarCallPanel';
 import { SlotRenderer } from '@/components/plugins/SlotRenderer';
 import { TEST_IDS } from '@/constants/test-ids';
+import { dbg } from '@/utils/debug';
 
 // ─── CSS injection for sidebar layout (web only) ────────────────────────────
 
@@ -86,6 +87,7 @@ export interface ChatSidebarProps {
 }
 
 export function ChatSidebar(props: ChatSidebarProps) {
+  if (__DEV__) dbg.trackRender('ChatSidebar');
   return <ChatSidebarInner {...props} />;
 }
 

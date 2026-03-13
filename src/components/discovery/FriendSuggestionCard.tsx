@@ -3,12 +3,13 @@
  */
 
 import React from 'react';
-import { View, Pressable } from 'react-native';
+import { Pressable } from 'react-native';
 import type { ViewStyle } from 'react-native';
-import { Text, Button, Avatar, useTheme } from '@coexist/wisp-react-native';
+import { Box, Text, Button, Avatar, useTheme } from '@coexist/wisp-react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
 
 import type { DiscoveryPlatform as Platform, FriendSuggestion } from '@umbra/service';
+import { dbg } from '@/utils/debug';
 
 /** Extended platform type that includes Umbra itself for username search. */
 type SearchablePlatform = Platform | 'umbra';
@@ -124,39 +125,38 @@ export function FriendSuggestionCard({
   adding = false,
   style,
 }: FriendSuggestionCardProps) {
+  if (__DEV__) dbg.trackRender('FriendSuggestionCard');
   const { theme } = useTheme();
   const textMuted = theme?.colors?.text?.muted ?? '#94a3b8';
   const displayName = umbraUsername ?? platformUsername;
 
   return (
-    <View
-      style={[
-        {
-          flexDirection: 'row',
-          alignItems: 'center',
-          gap: 10,
-          paddingVertical: 6,
-          paddingHorizontal: 10,
-        },
-        style,
-      ]}
+    <Box
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 10,
+        paddingVertical: 6,
+        paddingHorizontal: 10,
+        ...style,
+      }}
     >
       {/* Avatar */}
       <Avatar name={displayName} size="sm" />
 
       {/* Name + platform badge */}
-      <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 0 }}>
+      <Box style={{ flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 0 }}>
         <Text size="sm" weight="medium" numberOfLines={1} style={{ flexShrink: 1 }}>
           {displayName}
         </Text>
 
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, backgroundColor: `${PLATFORM_COLORS[platform]}18`, flexShrink: 0 }}>
+        <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 3, paddingHorizontal: 6, paddingVertical: 2, borderRadius: 4, backgroundColor: `${PLATFORM_COLORS[platform]}18`, flexShrink: 0 }}>
           <PlatformIcon platform={platform} size={10} color={PLATFORM_COLORS[platform]} />
           <Text size="xs" weight="medium" style={{ color: PLATFORM_COLORS[platform] }}>
             {platform !== 'umbra' ? platformUsername : 'Umbra'}
           </Text>
-        </View>
-      </View>
+        </Box>
+      </Box>
 
       {/* Add button */}
       <Button
@@ -178,7 +178,7 @@ export function FriendSuggestionCard({
       >
         <XCloseIcon size={14} color={textMuted} />
       </Pressable>
-    </View>
+    </Box>
   );
 }
 

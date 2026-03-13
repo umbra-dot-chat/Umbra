@@ -10,12 +10,14 @@
  */
 
 import React from 'react';
-import { View, Pressable } from 'react-native';
-import { Text, useTheme } from '@coexist/wisp-react-native';
+import { Pressable } from 'react-native';
+import { Box, Text, useTheme } from '@coexist/wisp-react-native';
 import { useVoiceChannel } from '@/contexts/VoiceChannelContext';
 import { RadioIcon, PhoneOffIcon } from '@/components/ui';
+import { dbg } from '@/utils/debug';
 
 export function VoiceChannelBar() {
+  if (__DEV__) dbg.trackRender('VoiceChannelBar');
   const {
     activeChannelId,
     activeChannelName,
@@ -28,7 +30,7 @@ export function VoiceChannelBar() {
   if (!activeChannelId) return null;
 
   return (
-    <View
+    <Box
       style={{
         borderTopWidth: 1,
         borderTopColor: c.border.subtle,
@@ -39,15 +41,15 @@ export function VoiceChannelBar() {
       }}
     >
       {/* Row 1 — Status */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+      <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
         <RadioIcon size={12} color={isConnecting ? c.text.muted : c.status.success} />
         <Text size="xs" weight="semibold" style={{ color: isConnecting ? c.text.muted : c.status.success }}>
           {isConnecting ? 'Connecting…' : 'Voice Connected'}
         </Text>
-      </View>
+      </Box>
 
       {/* Row 2 — Channel name + controls */}
-      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+      <Box style={{ flexDirection: 'row', alignItems: 'center' }}>
         <Text
           size="xs"
           numberOfLines={1}
@@ -71,7 +73,7 @@ export function VoiceChannelBar() {
         >
           <PhoneOffIcon size={15} color={c.status.danger} />
         </Pressable>
-      </View>
-    </View>
+      </Box>
+    </Box>
   );
 }

@@ -10,12 +10,12 @@
  */
 
 import React, { useMemo } from 'react';
-import { View, Pressable } from 'react-native';
-import { useTheme, ChannelHeader } from '@coexist/wisp-react-native';
+import { useTheme, Box, Button, ChannelHeader } from '@coexist/wisp-react-native';
 import type { ChannelHeaderType, ChannelHeaderAction } from '@coexist/wisp-react-native';
 import type { RightPanel } from '@/types/panels';
 import { SearchIcon, PinIcon, UsersIcon, SettingsIcon, ArrowLeftIcon } from '@/components/ui';
 import { useIsMobile } from '@/hooks/useIsMobile';
+import { dbg } from '@/utils/debug';
 
 // ---------------------------------------------------------------------------
 // Props
@@ -60,6 +60,7 @@ export function CommunityChannelHeader({
   skeleton = false,
   onBackPress,
 }: CommunityChannelHeaderProps) {
+  if (__DEV__) dbg.trackRender('CommunityChannelHeader');
   const { theme } = useTheme();
   const themeColors = theme.colors;
   const isMobile = useIsMobile();
@@ -119,24 +120,22 @@ export function CommunityChannelHeader({
   // On mobile, wrap with a back button
   if (isMobile && onBackPress) {
     return (
-      <View style={{ flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: themeColors.border.subtle, backgroundColor: themeColors.background.surface }}>
-        <Pressable
+      <Box style={{ flexDirection: 'row', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: themeColors.border.subtle, backgroundColor: themeColors.background.surface }}>
+        <Button
+          variant="tertiary"
+          size="sm"
           onPress={onBackPress}
-          accessibilityRole="button"
           accessibilityLabel="Back to channels"
-          style={({ pressed }) => ({
+          style={{
             width: 40,
             height: 40,
-            borderRadius: 8,
             alignItems: 'center',
             justifyContent: 'center',
             marginLeft: 8,
-            opacity: pressed ? 0.7 : 1,
-          })}
-        >
-          <ArrowLeftIcon size={20} color={themeColors.text.secondary} />
-        </Pressable>
-        <View style={{ flex: 1 }}>
+          }}
+          iconLeft={<ArrowLeftIcon size={20} color={themeColors.text.secondary} />}
+        />
+        <Box style={{ flex: 1 }}>
           <ChannelHeader
             name={name}
             type={type}
@@ -146,8 +145,8 @@ export function CommunityChannelHeader({
             skeleton={skeleton}
             style={{ borderBottomWidth: 0 }}
           />
-        </View>
-      </View>
+        </Box>
+      </Box>
     );
   }
 

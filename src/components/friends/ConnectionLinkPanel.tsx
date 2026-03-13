@@ -8,32 +8,39 @@
  */
 
 import React, { useState, useCallback } from 'react';
-import { View, Text, Pressable, TextInput, ViewStyle } from 'react-native';
+import { Pressable } from 'react-native';
+import type { ViewStyle } from 'react-native';
 import {
   useTheme,
+  Box,
+  Text,
+  Input,
   Card,
   Button,
   CopyButton,
   Collapse,
+  Separator,
   Spinner,
+  HStack,
 } from '@coexist/wisp-react-native';
 import { useConnectionLink, type ParseResult } from '@/hooks/useConnectionLink';
 import { useFriends } from '@/hooks/useFriends';
+import { dbg } from '@/utils/debug';
 
 // Simple chevron icon components
 function ChevronDownIcon({ size = 16, color }: { size?: number; color: string }) {
   return (
-    <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
+    <Box style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
       <Text style={{ color, fontSize: size * 0.75, transform: [{ rotate: '0deg' }] }}>{'\u25BC'}</Text>
-    </View>
+    </Box>
   );
 }
 
 function ChevronUpIcon({ size = 16, color }: { size?: number; color: string }) {
   return (
-    <View style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
+    <Box style={{ width: size, height: size, justifyContent: 'center', alignItems: 'center' }}>
       <Text style={{ color, fontSize: size * 0.75, transform: [{ rotate: '180deg' }] }}>{'\u25BC'}</Text>
-    </View>
+    </Box>
   );
 }
 
@@ -42,6 +49,7 @@ export interface ConnectionLinkPanelProps {
 }
 
 export function ConnectionLinkPanel({ style }: ConnectionLinkPanelProps) {
+  if (__DEV__) dbg.trackRender('ConnectionLinkPanel');
   const { theme } = useTheme();
   const { myDid, myLink, isLoading: connectionLoading } = useConnectionLink();
   const { sendRequest } = useFriends();
@@ -112,7 +120,7 @@ export function ConnectionLinkPanel({ style }: ConnectionLinkPanelProps) {
 
   return (
     <Card style={{ marginBottom: 16, ...style }} padding="md">
-      {/* ── Share Your Info Section ── */}
+      {/* -- Share Your Info Section -- */}
       <Pressable
         onPress={() => setShareExpanded(!shareExpanded)}
         style={{
@@ -122,13 +130,7 @@ export function ConnectionLinkPanel({ style }: ConnectionLinkPanelProps) {
           paddingVertical: 4,
         }}
       >
-        <Text
-          style={{
-            fontSize: 14,
-            fontWeight: '600',
-            color: theme.colors.text.primary,
-          }}
-        >
+        <Text size="sm" weight="semibold">
           Share Your Info
         </Text>
         {shareExpanded ? (
@@ -139,26 +141,24 @@ export function ConnectionLinkPanel({ style }: ConnectionLinkPanelProps) {
       </Pressable>
 
       <Collapse open={shareExpanded}>
-        <View style={{ marginTop: 12, gap: 12 }}>
+        <Box style={{ marginTop: 12, gap: 12 }}>
           {connectionLoading ? (
-            <View style={{ alignItems: 'center', padding: 16 }}>
+            <Box style={{ alignItems: 'center', padding: 16 }}>
               <Spinner size="sm" />
-            </View>
+            </Box>
           ) : (
             <>
               {/* DID */}
-              <View>
+              <Box>
                 <Text
-                  style={{
-                    fontSize: 12,
-                    fontWeight: '500',
-                    color: theme.colors.text.muted,
-                    marginBottom: 4,
-                  }}
+                  size="xs"
+                  weight="medium"
+                  color="muted"
+                  style={{ marginBottom: 4 }}
                 >
                   Your DID
                 </Text>
-                <View
+                <Box
                   style={{
                     flexDirection: 'row',
                     alignItems: 'center',
@@ -169,9 +169,9 @@ export function ConnectionLinkPanel({ style }: ConnectionLinkPanelProps) {
                   }}
                 >
                   <Text
+                    size="xs"
                     style={{
                       flex: 1,
-                      fontSize: 12,
                       fontFamily: 'monospace',
                       color: theme.colors.text.secondary,
                     }}
@@ -181,23 +181,21 @@ export function ConnectionLinkPanel({ style }: ConnectionLinkPanelProps) {
                     {myDid || 'Not available'}
                   </Text>
                   {myDid && <CopyButton value={myDid} size="sm" />}
-                </View>
-              </View>
+                </Box>
+              </Box>
 
               {/* Connection Link */}
               {myLink && (
-                <View>
+                <Box>
                   <Text
-                    style={{
-                      fontSize: 12,
-                      fontWeight: '500',
-                      color: theme.colors.text.muted,
-                      marginBottom: 4,
-                    }}
+                    size="xs"
+                    weight="medium"
+                    color="muted"
+                    style={{ marginBottom: 4 }}
                   >
                     Connection Link
                   </Text>
-                  <View
+                  <Box
                     style={{
                       flexDirection: 'row',
                       alignItems: 'center',
@@ -208,9 +206,9 @@ export function ConnectionLinkPanel({ style }: ConnectionLinkPanelProps) {
                     }}
                   >
                     <Text
+                      size="xs"
                       style={{
                         flex: 1,
-                        fontSize: 12,
                         fontFamily: 'monospace',
                         color: theme.colors.text.secondary,
                       }}
@@ -220,54 +218,33 @@ export function ConnectionLinkPanel({ style }: ConnectionLinkPanelProps) {
                       {myLink}
                     </Text>
                     <CopyButton value={myLink} size="sm" />
-                  </View>
-                </View>
+                  </Box>
+                </Box>
               )}
             </>
           )}
-        </View>
+        </Box>
       </Collapse>
 
-      {/* ── Divider ── */}
-      <View
-        style={{
-          height: 1,
-          backgroundColor: theme.colors.border.subtle,
-          marginVertical: 12,
-        }}
-      />
+      {/* -- Divider -- */}
+      <Separator spacing="sm" style={{ marginVertical: 12 }} />
 
-      {/* ── Add Friend Section ── */}
-      <Text
-        style={{
-          fontSize: 14,
-          fontWeight: '600',
-          color: theme.colors.text.primary,
-          marginBottom: 8,
-        }}
-      >
+      {/* -- Add Friend Section -- */}
+      <Text size="sm" weight="semibold" style={{ marginBottom: 8 }}>
         Add Friend by Link
       </Text>
 
-      <View style={{ gap: 8 }}>
+      <Box style={{ gap: 8 }}>
         {/* Input + Parse Button */}
-        <View style={{ flexDirection: 'row', gap: 8 }}>
-          <TextInput
-            value={inputValue}
-            onChangeText={handleInputChange}
-            placeholder="Paste DID or connection link..."
-            placeholderTextColor={theme.colors.text.muted}
-            style={{
-              flex: 1,
-              backgroundColor: theme.colors.background.sunken,
-              borderRadius: 6,
-              padding: 10,
-              fontSize: 13,
-              color: theme.colors.text.primary,
-              borderWidth: 1,
-              borderColor: theme.colors.border.subtle,
-            }}
-          />
+        <HStack style={{ gap: 8 }}>
+          <Box style={{ flex: 1 }}>
+            <Input
+              value={inputValue}
+              onChangeText={handleInputChange}
+              placeholder="Paste DID or connection link..."
+              fullWidth
+            />
+          </Box>
           <Button
             onPress={handleParse}
             disabled={!inputValue.trim() || isParsing}
@@ -276,11 +253,11 @@ export function ConnectionLinkPanel({ style }: ConnectionLinkPanelProps) {
           >
             {isParsing ? 'Parsing...' : 'Parse'}
           </Button>
-        </View>
+        </HStack>
 
         {/* Parse Result */}
         {parseResult && (
-          <View
+          <Box
             style={{
               backgroundColor: parseResult.success
                 ? theme.colors.background.sunken
@@ -292,8 +269,8 @@ export function ConnectionLinkPanel({ style }: ConnectionLinkPanelProps) {
           >
             {parseResult.success && parseResult.connectionInfo ? (
               <>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <View
+                <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <Box
                     style={{
                       width: 8,
                       height: 8,
@@ -301,22 +278,14 @@ export function ConnectionLinkPanel({ style }: ConnectionLinkPanelProps) {
                       backgroundColor: theme.colors.status.success,
                     }}
                   />
-                  <Text
-                    style={{
-                      fontSize: 13,
-                      fontWeight: '500',
-                      color: theme.colors.text.primary,
-                    }}
-                  >
+                  <Text size="sm" weight="medium">
                     {parseResult.connectionInfo.displayName || 'Unknown User'}
                   </Text>
-                </View>
+                </Box>
                 <Text
-                  style={{
-                    fontSize: 11,
-                    fontFamily: 'monospace',
-                    color: theme.colors.text.muted,
-                  }}
+                  size="xs"
+                  color="muted"
+                  style={{ fontFamily: 'monospace' }}
                 >
                   {truncateDid(parseResult.connectionInfo.did)}
                 </Text>
@@ -332,20 +301,18 @@ export function ConnectionLinkPanel({ style }: ConnectionLinkPanelProps) {
               </>
             ) : (
               <Text
-                style={{
-                  fontSize: 13,
-                  color: theme.colors.status.danger,
-                }}
+                size="sm"
+                style={{ color: theme.colors.status.danger }}
               >
                 {parseResult.error || 'Invalid input'}
               </Text>
             )}
-          </View>
+          </Box>
         )}
 
         {/* Send Feedback */}
         {sendFeedback && (
-          <View
+          <Box
             style={{
               backgroundColor:
                 sendFeedback.type === 'success'
@@ -356,8 +323,8 @@ export function ConnectionLinkPanel({ style }: ConnectionLinkPanelProps) {
             }}
           >
             <Text
+              size="sm"
               style={{
-                fontSize: 13,
                 color:
                   sendFeedback.type === 'success'
                     ? theme.colors.status.success
@@ -366,9 +333,9 @@ export function ConnectionLinkPanel({ style }: ConnectionLinkPanelProps) {
             >
               {sendFeedback.message}
             </Text>
-          </View>
+          </Box>
         )}
-      </View>
+      </Box>
     </Card>
   );
 }

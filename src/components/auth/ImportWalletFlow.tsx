@@ -8,11 +8,11 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { View } from 'react-native';
 import { TEST_IDS } from '@/constants/test-ids';
 import {
   Text,
   Button,
+  Box,
   VStack,
   HStack,
   Input,
@@ -20,6 +20,7 @@ import {
   Spinner,
   Card,
   Presence,
+  useTheme,
 } from '@coexist/wisp-react-native';
 import type { ProgressStep } from '@coexist/wisp-react-native';
 import { useAuth } from '@/contexts/AuthContext';
@@ -46,6 +47,9 @@ import { enablePersistence, getWasm } from '@umbra/wasm';
 import { getRelayHttpUrl } from '@/hooks/useNetwork';
 import { DEFAULT_RELAY_SERVERS } from '@/config';
 import { setPendingSyncOptIn } from '@/contexts/SyncContext';
+import { dbg } from '@/utils/debug';
+
+const SRC = 'ImportWalletFlow';
 
 // ---------------------------------------------------------------------------
 // Step definitions
@@ -81,6 +85,8 @@ function createEmptyWords(): string[] {
 
 export function ImportWalletFlow({ open, onClose }: ImportWalletFlowProps) {
   const { login, setPin, setRecoveryPhrase, setRememberMe, addAccount } = useAuth();
+  const { theme } = useTheme();
+  const colors = theme.colors;
 
   // Flow state
   const [words, setWords] = useState<string[]>(createEmptyWords);
@@ -204,11 +210,11 @@ export function ImportWalletFlow({ open, onClose }: ImportWalletFlowProps) {
             const summary = await parseSyncBlob(blob);
             setSyncSummary(summary);
             setSyncBlob(blob);
-            console.log('[ImportWalletFlow] Sync blob found on relay, showing restore prompt');
+            if (__DEV__) dbg.info('auth', 'Sync blob found on relay, showing restore prompt', undefined, SRC);
           }
         }
       } catch (syncErr) {
-        console.warn('[ImportWalletFlow] Sync check failed (non-fatal):', syncErr);
+        if (__DEV__) dbg.warn('auth', 'Sync check failed (non-fatal)', syncErr, SRC);
       }
       setSyncCheckDone(true);
     } catch (err: any) {
@@ -322,9 +328,9 @@ export function ImportWalletFlow({ open, onClose }: ImportWalletFlowProps) {
 
       case 2:
         return (
-          <View testID={TEST_IDS.IMPORT.PIN_STEP} accessibilityLabel="PIN setup step">
+          <Box testID={TEST_IDS.IMPORT.PIN_STEP} accessibilityLabel="PIN setup step">
             <PinSetupStep onComplete={handlePinComplete} />
-          </View>
+          </Box>
         );
 
       case 3:
@@ -357,7 +363,7 @@ export function ImportWalletFlow({ open, onClose }: ImportWalletFlowProps) {
         return (
           <VStack gap="lg" style={{ alignItems: 'center', paddingVertical: 16 }} testID={TEST_IDS.IMPORT.SUCCESS_SCREEN} accessibilityLabel="Import success screen">
             <Presence visible animation="scaleIn">
-              <CheckCircleIcon size={64} color="#22c55e" />
+              <CheckCircleIcon size={64} color={colors.status.success} />
             </Presence>
 
             <Presence visible animation="fadeIn" duration={400}>
@@ -456,7 +462,7 @@ export function ImportWalletFlow({ open, onClose }: ImportWalletFlowProps) {
                               }
                             } catch { /* ignore */ }
                           } catch (e) {
-                            console.error('[ImportWalletFlow] Sync restore failed:', e);
+                            if (__DEV__) dbg.error('auth', 'Sync restore failed', e, SRC);
                           } finally {
                             setSyncRestoring(false);
                           }
@@ -483,7 +489,7 @@ export function ImportWalletFlow({ open, onClose }: ImportWalletFlowProps) {
               <Presence visible animation="fadeIn" duration={400}>
                 <Card variant="outlined" padding="sm" style={{ width: '100%' }} testID={TEST_IDS.SYNC.RESTORE_SUCCESS}>
                   <HStack gap="sm" style={{ alignItems: 'center', justifyContent: 'center' }}>
-                    <CheckCircleIcon size={16} color="#22c55e" />
+                    <CheckCircleIcon size={16} color={colors.status.success} />
                     <Text size="sm" color="secondary">Synced data restored successfully</Text>
                   </HStack>
                 </Card>
@@ -509,7 +515,7 @@ export function ImportWalletFlow({ open, onClose }: ImportWalletFlowProps) {
             <Button
               variant="primary"
               onPress={validateAndAdvance}
-              iconRight={<ArrowRightIcon size={16} color="#FFFFFF" />}
+              iconRight={<ArrowRightIcon size={16} color={colors.text.inverse} />}
               testID={TEST_IDS.IMPORT.SEED_NEXT}
               accessibilityLabel="Continue to next step"
             >
@@ -525,7 +531,7 @@ export function ImportWalletFlow({ open, onClose }: ImportWalletFlowProps) {
               variant="primary"
               onPress={goNext}
               disabled={!displayName.trim()}
-              iconRight={<ArrowRightIcon size={16} color="#FFFFFF" />}
+              iconRight={<ArrowRightIcon size={16} color={colors.text.inverse} />}
               testID={TEST_IDS.IMPORT.NAME_NEXT}
               accessibilityLabel="Continue to next step"
               accessibilityActions={[{ name: 'activate', label: 'Continue' }]}

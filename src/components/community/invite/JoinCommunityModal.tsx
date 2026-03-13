@@ -10,14 +10,16 @@
  */
 
 import React, { useState, useCallback, useEffect } from 'react';
-import { View } from 'react-native';
-import { Dialog, Button, Text, Input, Alert, useTheme } from '@coexist/wisp-react-native';
+import { Dialog, Button, Text, Input, Alert, useTheme, Box } from '@coexist/wisp-react-native';
 import { defaultSpacing } from '@coexist/wisp-core/theme/create-theme';
 import { useUmbra } from '@/contexts/UmbraContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'expo-router';
 import { resolveInviteFromRelay } from '@umbra/service';
 import { DEFAULT_RELAY_SERVERS } from '@/config';
+import { dbg } from '@/utils/debug';
+
+const SRC = 'JoinCommunityModal';
 
 // ---------------------------------------------------------------------------
 // Props
@@ -63,6 +65,7 @@ export function JoinCommunityModal({
   onClose,
   initialCode,
 }: JoinCommunityModalProps) {
+  if (__DEV__) dbg.trackRender('JoinCommunityModal');
   const { theme } = useTheme();
   const tc = theme.colors;
   const { service, isReady } = useUmbra();
@@ -159,7 +162,7 @@ export function JoinCommunityModal({
                 ownerNickname,
               );
             } catch (importErr) {
-              console.warn('[JoinCommunityModal] Failed to import from relay:', importErr);
+              if (__DEV__) dbg.warn('community', 'Failed to import from relay', importErr, SRC);
             }
 
             // Retry the local join with the now-imported data
@@ -167,18 +170,18 @@ export function JoinCommunityModal({
               const communityId = await service.useCommunityInvite(code, identity.did, identity.displayName);
               if (communityId) {
                 // Broadcast memberJoined to other community members via relay
-                console.log('[JoinCommunityModal] Join succeeded, communityId=', communityId, '— broadcasting memberJoined');
+                if (__DEV__) dbg.info('community', 'Join succeeded, broadcasting memberJoined', { communityId }, SRC);
                 try {
                   const relayWs = service.getRelayWs();
-                  console.log('[JoinCommunityModal] relayWs=', relayWs ? `readyState=${relayWs.readyState}` : 'null');
+                  if (__DEV__) dbg.info('community', 'relayWs state', { readyState: relayWs ? relayWs.readyState : null }, SRC);
                   await service.broadcastCommunityEvent(
                     communityId,
                     { type: 'memberJoined', communityId, memberDid: identity.did, memberNickname: identity.displayName, memberAvatar: identity.avatar },
                     identity.did,
                     relayWs,
                   );
-                  console.log('[JoinCommunityModal] memberJoined broadcast complete');
-                } catch (broadcastErr) { console.warn('[JoinCommunityModal] memberJoined broadcast failed:', broadcastErr); }
+                  if (__DEV__) dbg.info('community', 'memberJoined broadcast complete', undefined, SRC);
+                } catch (broadcastErr) { if (__DEV__) dbg.warn('community', 'memberJoined broadcast failed', broadcastErr, SRC); }
                 onClose();
                 router.push(`/community/${communityId}`);
                 return;
@@ -203,7 +206,7 @@ export function JoinCommunityModal({
             return;
           }
         } catch (relayErr) {
-          console.warn('[JoinCommunityModal] Relay resolution failed:', relayErr);
+          if (__DEV__) dbg.warn('community', 'Relay resolution failed', relayErr, SRC);
         }
 
         // Neither local nor relay resolution found the invite
@@ -237,7 +240,7 @@ export function JoinCommunityModal({
       title="Join Community"
       size="sm"
     >
-      <View style={{ gap: defaultSpacing.md }}>
+      <Box style={{ gap: defaultSpacing.md }}>
         <Text size="sm" style={{ color: tc.text.muted }}>
           Enter an invite code or paste an invite link to join an existing community.
         </Text>
@@ -261,8 +264,8 @@ export function JoinCommunityModal({
           </Alert>
         )}
 
-        <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: defaultSpacing.sm }}>
-          <View style={{ flex: 1 }} />
+        <Box style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: defaultSpacing.sm }}>
+          <Box style={{ flex: 1 }} />
           <Button
             variant="tertiary"
             onPress={onClose}
@@ -278,8 +281,8 @@ export function JoinCommunityModal({
           >
             Join Community
           </Button>
-        </View>
-      </View>
+        </Box>
+      </Box>
     </Dialog>
   );
 }

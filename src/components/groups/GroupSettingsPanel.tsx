@@ -11,9 +11,10 @@
  */
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { View, ScrollView, Pressable } from 'react-native';
+import { ScrollView } from 'react-native';
 import type { ViewStyle, TextStyle } from 'react-native';
 import {
+  Box,
   Input,
   TextArea,
   Button,
@@ -36,6 +37,9 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { useGroups } from '@/hooks/useGroups';
 import { useAuth } from '@/contexts/AuthContext';
 import type { Group, GroupMember } from '@umbra/service';
+import { dbg } from '@/utils/debug';
+
+const SRC = 'GroupSettingsPanel';
 
 // ─── Props ───────────────────────────────────────────────────────────────────
 
@@ -54,7 +58,7 @@ function SectionHeader({ title, description, icon }: {
   const { theme } = useTheme();
   const tc = theme.colors;
   return (
-    <View style={{ marginBottom: 12 }}>
+    <Box style={{ marginBottom: 12 }}>
       <HStack style={{ alignItems: 'center', gap: 6, marginBottom: 2 }}>
         {icon}
         <Text style={{ fontSize: 13, fontWeight: '600', color: tc.text.secondary, textTransform: 'uppercase', letterSpacing: 0.5 } as TextStyle}>
@@ -64,7 +68,7 @@ function SectionHeader({ title, description, icon }: {
       <Text style={{ fontSize: 12, color: tc.text.muted } as TextStyle}>
         {description}
       </Text>
-    </View>
+    </Box>
   );
 }
 
@@ -79,28 +83,28 @@ function SettingRow({ label, description, children, vertical = false }: {
 
   if (vertical) {
     return (
-      <View style={{ gap: 8, paddingVertical: 4 }}>
-        <View>
+      <Box style={{ gap: 8, paddingVertical: 4 }}>
+        <Box>
           <Text style={{ fontSize: 14, fontWeight: '500', color: tc.text.primary } as TextStyle}>{label}</Text>
           {description && (
             <Text style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 } as TextStyle}>{description}</Text>
           )}
-        </View>
+        </Box>
         {children}
-      </View>
+      </Box>
     );
   }
 
   return (
-    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 40, paddingVertical: 4 }}>
-      <View style={{ flex: 1, marginRight: 12 }}>
+    <Box style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', minHeight: 40, paddingVertical: 4 }}>
+      <Box style={{ flex: 1, marginRight: 12 }}>
         <Text style={{ fontSize: 14, fontWeight: '500', color: tc.text.primary } as TextStyle}>{label}</Text>
         {description && (
           <Text style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 } as TextStyle}>{description}</Text>
         )}
-      </View>
-      <View style={{ flexShrink: 0 }}>{children}</View>
-    </View>
+      </Box>
+      <Box style={{ flexShrink: 0 }}>{children}</Box>
+    </Box>
   );
 }
 
@@ -175,7 +179,7 @@ export function GroupSettingsPanel({ groupId, onClose }: GroupSettingsPanelProps
       await updateGroup(groupId, editName, editDescription || undefined);
       setIsEditing(false);
     } catch (err) {
-      console.error('[GroupSettings] Save failed:', err);
+      if (__DEV__) dbg.error('groups', 'Save failed', err, SRC);
     } finally {
       setIsSaving(false);
     }
@@ -189,7 +193,7 @@ export function GroupSettingsPanel({ groupId, onClose }: GroupSettingsPanelProps
       setMembers((prev) => prev.filter((m) => m.memberDid !== confirmRemoveDid));
       setConfirmRemoveDid(null);
     } catch (err) {
-      console.error('[GroupSettings] Remove member failed:', err);
+      if (__DEV__) dbg.error('groups', 'Remove member failed', err, SRC);
     } finally {
       setIsSubmitting(false);
     }
@@ -203,7 +207,7 @@ export function GroupSettingsPanel({ groupId, onClose }: GroupSettingsPanelProps
       setRotateSuccess(true);
       setTimeout(() => setRotateSuccess(false), 3000);
     } catch (err) {
-      console.error('[GroupSettings] Key rotation failed:', err);
+      if (__DEV__) dbg.error('groups', 'Key rotation failed', err, SRC);
     } finally {
       setIsRotating(false);
     }
@@ -215,7 +219,7 @@ export function GroupSettingsPanel({ groupId, onClose }: GroupSettingsPanelProps
       await leaveGroup(groupId);
       onClose?.();
     } catch (err) {
-      console.error('[GroupSettings] Leave group failed:', err);
+      if (__DEV__) dbg.error('groups', 'Leave group failed', err, SRC);
     } finally {
       setIsSubmitting(false);
       setConfirmLeave(false);
@@ -228,7 +232,7 @@ export function GroupSettingsPanel({ groupId, onClose }: GroupSettingsPanelProps
       await deleteGroup(groupId);
       onClose?.();
     } catch (err) {
-      console.error('[GroupSettings] Delete group failed:', err);
+      if (__DEV__) dbg.error('groups', 'Delete group failed', err, SRC);
     } finally {
       setIsSubmitting(false);
       setConfirmDelete(false);
@@ -273,14 +277,14 @@ export function GroupSettingsPanel({ groupId, onClose }: GroupSettingsPanelProps
   }), [tc]);
 
   return (
-    <View style={styles.container}>
+    <Box style={styles.container}>
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <VStack style={{ gap: 24, paddingBottom: 32 }}>
 
           {/* ══════════════════════════════════════════════════════════════
               Section 1: General
              ══════════════════════════════════════════════════════════════ */}
-          <View>
+          <Box>
             <SectionHeader
               title="General"
               description="Group name and description"
@@ -339,14 +343,14 @@ export function GroupSettingsPanel({ groupId, onClose }: GroupSettingsPanelProps
                 </Button>
               </VStack>
             )}
-          </View>
+          </Box>
 
           <Separator />
 
           {/* ══════════════════════════════════════════════════════════════
               Section 2: Members
              ══════════════════════════════════════════════════════════════ */}
-          <View>
+          <Box>
             <SectionHeader
               title="Members"
               description="Manage group members"
@@ -367,16 +371,16 @@ export function GroupSettingsPanel({ groupId, onClose }: GroupSettingsPanelProps
                     return (a.displayName || a.memberDid).localeCompare(b.displayName || b.memberDid);
                   })
                   .map((member) => (
-                    <View key={member.memberDid} style={styles.memberRow}>
+                    <Box key={member.memberDid} style={styles.memberRow}>
                       <VStack style={{ flex: 1, minWidth: 0 }}>
                         <HStack style={{ alignItems: 'center', gap: 6 }}>
                           <Text style={styles.memberName} numberOfLines={1}>
                             {member.displayName || member.memberDid.slice(0, 16) + '...'}
                           </Text>
                           {member.role === 'admin' && (
-                            <View style={styles.roleBadge}>
+                            <Box style={styles.roleBadge}>
                               <Text style={styles.roleText}>Admin</Text>
-                            </View>
+                            </Box>
                           )}
                           {member.memberDid === identity?.did && (
                             <Text style={{ fontSize: 11, color: tc.text.muted } as TextStyle}>(you)</Text>
@@ -388,26 +392,26 @@ export function GroupSettingsPanel({ groupId, onClose }: GroupSettingsPanelProps
                       </VStack>
                       {/* Remove button: only for admins, not on self, not on other admins */}
                       {isAdmin && member.memberDid !== identity?.did && member.role !== 'admin' && (
-                        <Pressable
+                        <Button
+                          variant="tertiary"
                           onPress={() => setConfirmRemoveDid(member.memberDid)}
-                          hitSlop={8}
                           accessibilityLabel={`Remove ${member.displayName || 'member'}`}
-                        >
-                          <UserMinusIcon size={16} color={tc.status?.danger || '#ef4444'} />
-                        </Pressable>
+                          iconLeft={<UserMinusIcon size={16} color={tc.status?.danger || '#ef4444'} />}
+                          size="sm"
+                        />
                       )}
-                    </View>
+                    </Box>
                   ))}
               </VStack>
             )}
-          </View>
+          </Box>
 
           <Separator />
 
           {/* ══════════════════════════════════════════════════════════════
               Section 3: Security
              ══════════════════════════════════════════════════════════════ */}
-          <View>
+          <Box>
             <SectionHeader
               title="Security"
               description="Encryption and key management"
@@ -437,14 +441,14 @@ export function GroupSettingsPanel({ groupId, onClose }: GroupSettingsPanelProps
                 </Button>
               </SettingRow>
             </VStack>
-          </View>
+          </Box>
 
           <Separator />
 
           {/* ══════════════════════════════════════════════════════════════
               Section 4: Danger Zone
              ══════════════════════════════════════════════════════════════ */}
-          <View>
+          <Box>
             <SectionHeader
               title="Danger Zone"
               description="Irreversible actions"
@@ -481,7 +485,7 @@ export function GroupSettingsPanel({ groupId, onClose }: GroupSettingsPanelProps
                 </SettingRow>
               )}
             </VStack>
-          </View>
+          </Box>
         </VStack>
       </ScrollView>
 
@@ -515,6 +519,6 @@ export function GroupSettingsPanel({ groupId, onClose }: GroupSettingsPanelProps
         onConfirm={handleRemoveMember}
         submitting={isSubmitting}
       />
-    </View>
+    </Box>
   );
 }

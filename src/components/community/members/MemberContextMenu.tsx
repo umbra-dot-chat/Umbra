@@ -10,14 +10,15 @@
  */
 
 import React, { useCallback } from 'react';
-import { View, Pressable } from 'react-native';
+import { Pressable } from 'react-native';
 import type { ViewStyle, TextStyle } from 'react-native';
 import {
-  useTheme, Text,
+  Box, useTheme, Text,
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator,
 } from '@coexist/wisp-react-native';
 import { defaultSpacing, defaultRadii, defaultTypography } from '@coexist/wisp-core/theme/create-theme';
 import Svg, { Polyline, Line } from 'react-native-svg';
+import { dbg } from '@/utils/debug';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -56,7 +57,7 @@ export interface MemberContextMenuProps {
 
 function CheckboxIcon({ checked, color }: { checked: boolean; color: string }) {
   return (
-    <View
+    <Box
       style={{
         width: 16,
         height: 16,
@@ -82,7 +83,7 @@ function CheckboxIcon({ checked, color }: { checked: boolean; color: string }) {
           <Polyline points="20,6 9,17 4,12" />
         </Svg>
       )}
-    </View>
+    </Box>
   );
 }
 
@@ -101,6 +102,7 @@ export function MemberContextMenu({
   onKick,
   onBan,
 }: MemberContextMenuProps) {
+  if (__DEV__) dbg.trackRender('MemberContextMenu');
   const { theme } = useTheme();
 
   const handleRolePress = useCallback(
@@ -118,7 +120,7 @@ export function MemberContextMenu({
     <DropdownMenu open={open} onOpenChange={onOpenChange} anchorLayout={anchorLayout}>
       <DropdownMenuContent>
         {/* Member name header */}
-        <View
+        <Box
           style={{
             paddingHorizontal: defaultSpacing.md,
             paddingVertical: defaultSpacing.sm,
@@ -132,12 +134,12 @@ export function MemberContextMenu({
           >
             {member.name}
           </Text>
-        </View>
+        </Box>
 
         <DropdownMenuSeparator />
 
         {/* Roles section header */}
-        <View
+        <Box
           style={{
             paddingHorizontal: defaultSpacing.md,
             paddingTop: defaultSpacing.xs,
@@ -155,7 +157,7 @@ export function MemberContextMenu({
           >
             Roles
           </Text>
-        </View>
+        </Box>
 
         {/* Role checkboxes — use Pressable instead of DropdownMenuItem so menu stays open */}
         {roles.map((role) => {
@@ -179,7 +181,7 @@ export function MemberContextMenu({
               accessibilityLabel={`${role.name} role`}
             >
               <CheckboxIcon checked={isAssigned} color={role.color} />
-              <View
+              <Box
                 style={{
                   width: 8,
                   height: 8,

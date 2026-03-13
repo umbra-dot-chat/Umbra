@@ -8,13 +8,14 @@
  */
 
 import React, { useCallback, useRef, useState } from 'react';
-import { Animated, Platform, View } from 'react-native';
+import { Animated, Platform } from 'react-native';
 import { TEST_IDS } from '@/constants/test-ids';
 import {
-  Text, Button, HStack, VStack, Avatar, Collapse,
+  Box, Text, Button, HStack, VStack, Avatar, Collapse,
   useTheme,
 } from '@coexist/wisp-react-native';
 import { ChevronDownIcon, ChevronRightIcon } from '@/components/ui';
+import { dbg } from '@/utils/debug';
 
 // ---------------------------------------------------------------------------
 // FriendListItem
@@ -56,6 +57,7 @@ export function FriendListItem({
   actions,
   flat,
 }: FriendListItemProps) {
+  if (__DEV__) dbg.trackRender('FriendListItem');
   const { theme } = useTheme();
   const tc = theme.colors;
 
@@ -130,6 +132,7 @@ export function FriendRequestItem({
   onCancel,
   flat,
 }: FriendRequestItemProps) {
+  if (__DEV__) dbg.trackRender('FriendRequestItem');
   const { theme } = useTheme();
   const tc = theme.colors;
   const glowOpacity = useRef(new Animated.Value(0)).current;
@@ -152,7 +155,7 @@ export function FriendRequestItem({
     : {};
 
   return (
-    <View style={{ borderRadius: 4, marginHorizontal: flat ? 0 : 4, position: 'relative' as const }}>
+    <Box style={{ borderRadius: 4, marginHorizontal: flat ? 0 : 4, position: 'relative' as const }}>
       {/* Glow layer — fades in/out via glowOpacity */}
       {Platform.OS === 'web' && (
         <Animated.View
@@ -210,7 +213,7 @@ export function FriendRequestItem({
           </Button>
         )}
       </HStack>
-    </View>
+    </Box>
   );
 }
 
@@ -235,6 +238,7 @@ export function FriendSection({
   headerRight,
   children,
 }: FriendSectionProps) {
+  if (__DEV__) dbg.trackRender('FriendSection');
   const { theme } = useTheme();
   const tc = theme.colors;
   const [collapsed, setCollapsed] = useState(defaultCollapsed);
@@ -264,9 +268,9 @@ export function FriendSection({
   };
 
   return (
-    <View style={{ marginBottom: 12 }}>
+    <Box style={{ marginBottom: 12 }}>
       {/* Section header — matches wisp MemberList chevron + label pattern */}
-      <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+      <Box style={{ flexDirection: 'row', alignItems: 'center' }}>
         <Button
           variant="tertiary"
           size="xs"
@@ -283,20 +287,20 @@ export function FriendSection({
             {headerText}
           </Text>
         </Button>
-        {headerRight && <View style={{ marginLeft: 4 }}>{headerRight}</View>}
-      </View>
+        {headerRight && <Box style={{ marginLeft: 4 }}>{headerRight}</Box>}
+      </Box>
 
       {/* Body — animated collapse */}
       <Collapse open={!collapsed}>
         {hasChildren ? (
-          <View>{children}</View>
+          <Box>{children}</Box>
         ) : emptyMessage ? (
           <Text size="sm" style={{ color: tc.text.muted, paddingVertical: 12, textAlign: 'center' }}>
             {emptyMessage}
           </Text>
         ) : null}
       </Collapse>
-    </View>
+    </Box>
   );
 }
 

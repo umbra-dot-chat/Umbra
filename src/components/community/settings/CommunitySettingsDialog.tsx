@@ -8,9 +8,9 @@
  */
 
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
-import { View, Pressable, ScrollView, Text as RNText, ActivityIndicator } from 'react-native';
+import { Pressable, ScrollView } from 'react-native';
 import type { ViewStyle, TextStyle } from 'react-native';
-import { Overlay, Button, Toggle, Text, useTheme } from '@coexist/wisp-react-native';
+import { Box, Overlay, Button, Spinner, Toggle, Text, useTheme } from '@coexist/wisp-react-native';
 import type { RoleMember, InviteCreateOptions } from '@coexist/wisp-react-native';
 import { defaultSpacing, defaultRadii } from '@coexist/wisp-core/theme/create-theme';
 import Svg, { Path, Circle, Line, Polyline } from 'react-native-svg';
@@ -147,6 +147,10 @@ function StickerIcon({ size, color }: { size?: number; color?: string }) {
     </Svg>
   );
 }
+
+import { dbg } from '@/utils/debug';
+
+const SRC = 'CommunitySettings';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -311,6 +315,7 @@ export function CommunitySettingsDialog({
   onLeaveCommunity,
   onDeleteCommunity,
 }: CommunitySettingsDialogProps) {
+  if (__DEV__) dbg.trackRender('CommunitySettingsDialog');
   const { theme, mode } = useTheme();
   const tc = theme.colors;
   const isDark = mode === 'dark';
@@ -394,7 +399,7 @@ export function CommunitySettingsDialog({
               if (data.data.bridgeDid && service && communityId) {
                 try {
                   await service.joinCommunity(communityId, data.data.bridgeDid, 'Bridge Bot');
-                  console.log(`[bridge] Ensured bridge bot DID is community member: ${data.data.bridgeDid}`);
+                  if (__DEV__) dbg.info('community', 'Ensured bridge bot DID is community member', { bridgeDid: data.data.bridgeDid }, SRC);
                 } catch {
                   // May already be a member — safe to ignore
                 }
@@ -490,7 +495,7 @@ export function CommunitySettingsDialog({
         );
       }
 
-      console.log(`[bridge-setup] Matched guild: "${targetGuild.name}" (${targetGuild.id})`);
+      if (__DEV__) dbg.info('community', 'Matched guild', { name: targetGuild.name, id: targetGuild.id }, SRC);
 
       // 3. Fetch guild structure to get Discord channel IDs
       const warnings: string[] = [];
@@ -791,7 +796,7 @@ export function CommunitySettingsDialog({
 
       setSeatsLoaded(false);
     } catch (err) {
-      console.error('[fetch-users] Error:', err);
+      if (__DEV__) dbg.error('community', 'Error fetching users', err, SRC);
     } finally {
       setFetchingUsers(false);
     }
@@ -998,13 +1003,13 @@ export function CommunitySettingsDialog({
 
       case 'members':
         return (
-          <View style={{ flex: 1, padding: defaultSpacing.md }}>
+          <Box style={{ flex: 1, padding: defaultSpacing.md }}>
             <Text size="lg" weight="semibold" style={{ color: tc.text.primary, marginBottom: defaultSpacing.md }}>
               Members ({members.length})
             </Text>
             <ScrollView style={{ flex: 1 }}>
               {members.map((member) => (
-                <View
+                <Box
                   key={member.memberDid}
                   style={{
                     flexDirection: 'row',
@@ -1016,7 +1021,7 @@ export function CommunitySettingsDialog({
                     marginBottom: 2,
                   }}
                 >
-                  <View
+                  <Box
                     style={{
                       width: 32,
                       height: 32,
@@ -1029,22 +1034,22 @@ export function CommunitySettingsDialog({
                     <Text size="sm" weight="bold" style={{ color: tc.accent.primary }}>
                       {(member.nickname || member.memberDid).charAt(0).toUpperCase()}
                     </Text>
-                  </View>
-                  <View style={{ flex: 1, minWidth: 0 }}>
+                  </Box>
+                  <Box style={{ flex: 1, minWidth: 0 }}>
                     <Text size="sm" weight="medium" style={{ color: tc.text.primary }} numberOfLines={1}>
                       {member.nickname || member.memberDid.slice(0, 16)}
                     </Text>
                     <Text size="xs" style={{ color: tc.text.muted }} numberOfLines={1}>
                       {member.memberDid.slice(0, 24)}...
                     </Text>
-                  </View>
+                  </Box>
                   <Text size="xs" style={{ color: tc.text.muted }}>
                     Joined {new Date(member.joinedAt).toLocaleDateString()}
                   </Text>
-                </View>
+                </Box>
               ))}
             </ScrollView>
-          </View>
+          </Box>
         );
 
       case 'seats':
@@ -1065,7 +1070,7 @@ export function CommunitySettingsDialog({
 
       case 'invites':
         return (
-          <View style={{ flex: 1, padding: defaultSpacing.md }}>
+          <Box style={{ flex: 1, padding: defaultSpacing.md }}>
             <CommunityInvitePanel
               communityId={communityId}
               invites={invites || []}
@@ -1075,25 +1080,25 @@ export function CommunitySettingsDialog({
               loading={invitesLoading}
               title="Invites"
             />
-          </View>
+          </Box>
         );
 
       case 'bridge':
         return (
-          <View style={{ flex: 1, padding: defaultSpacing.md, gap: defaultSpacing.lg }}>
+          <Box style={{ flex: 1, padding: defaultSpacing.md, gap: defaultSpacing.lg }}>
             {/* Section header */}
-            <View>
+            <Box>
               <Text size="lg" weight="semibold" style={{ color: tc.text.primary, marginBottom: 4 }}>
                 Discord Bridge
               </Text>
               <Text size="sm" style={{ color: tc.text.muted }}>
                 Bidirectional message sync between Discord and Umbra.
               </Text>
-            </View>
+            </Box>
 
             {/* Warning/error banner */}
             {bridgeWarnings.length > 0 && (
-              <View
+              <Box
                 style={{
                   padding: defaultSpacing.md,
                   backgroundColor: '#f59e0b20',
@@ -1103,7 +1108,7 @@ export function CommunitySettingsDialog({
                   gap: defaultSpacing.xs,
                 }}
               >
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: defaultSpacing.sm }}>
+                <Box style={{ flexDirection: 'row', alignItems: 'center', gap: defaultSpacing.sm }}>
                   <AlertTriangleIcon size={16} color="#f59e0b" />
                   <Text size="sm" weight="semibold" style={{ color: '#f59e0b', flex: 1 }}>
                     Setup completed with warnings
@@ -1111,22 +1116,22 @@ export function CommunitySettingsDialog({
                   <Pressable onPress={() => setBridgeWarnings([])}>
                     <XIcon size={14} color={tc.text.muted} />
                   </Pressable>
-                </View>
+                </Box>
                 {bridgeWarnings.map((w, i) => (
                   <Text key={i} size="xs" style={{ color: tc.text.secondary, paddingLeft: 24 }}>
                     {w}
                   </Text>
                 ))}
-              </View>
+              </Box>
             )}
 
             {bridgeLoading ? (
-              <View style={{ alignItems: 'center', paddingVertical: defaultSpacing.xl }}>
-                <ActivityIndicator color={tc.accent.primary} />
-              </View>
+              <Box style={{ alignItems: 'center', paddingVertical: defaultSpacing.xl }}>
+                <Spinner color={tc.accent.primary} />
+              </Box>
             ) : !bridgeConfig ? (
               /* No bridge configured — offer setup */
-              <View
+              <Box
                 style={{
                   padding: defaultSpacing.lg,
                   backgroundColor: tc.background.sunken,
@@ -1153,11 +1158,11 @@ export function CommunitySettingsDialog({
                 >
                   {bridgeSetupStatus === 'registering' ? 'Setting up bridge...' : 'Connect Discord'}
                 </Button>
-              </View>
+              </Box>
             ) : (
               <>
                 {/* Enable/Disable toggle */}
-                <View
+                <Box
                   style={{
                     flexDirection: 'row',
                     alignItems: 'center',
@@ -1176,7 +1181,7 @@ export function CommunitySettingsDialog({
                     size={20}
                     color={bridgeConfig.enabled ? tc.accent.primary : tc.text.muted}
                   />
-                  <View style={{ flex: 1, marginLeft: defaultSpacing.sm }}>
+                  <Box style={{ flex: 1, marginLeft: defaultSpacing.sm }}>
                     <Text size="sm" weight="semibold" style={{ color: tc.text.primary }}>
                       {bridgeConfig.enabled ? 'Bridge Active' : 'Bridge Disabled'}
                     </Text>
@@ -1185,24 +1190,24 @@ export function CommunitySettingsDialog({
                         ? 'Messages are syncing between Discord and Umbra in real-time'
                         : 'Enable to resume message syncing with Discord'}
                     </Text>
-                  </View>
+                  </Box>
                   <Toggle
                     checked={bridgeConfig.enabled}
                     onChange={handleBridgeToggle}
                     size="sm"
                     disabled={bridgeToggling}
                   />
-                </View>
+                </Box>
 
                 {/* Bridge info cards */}
-                <View style={{ gap: defaultSpacing.md }}>
+                <Box style={{ gap: defaultSpacing.md }}>
                   <Text size="sm" weight="medium" style={{ color: tc.text.secondary }}>
                     Configuration
                   </Text>
 
                   {/* Stats row */}
-                  <View style={{ flexDirection: 'row', gap: defaultSpacing.md }}>
-                    <View
+                  <Box style={{ flexDirection: 'row', gap: defaultSpacing.md }}>
+                    <Box
                       style={{
                         flex: 1,
                         padding: defaultSpacing.md,
@@ -1217,8 +1222,8 @@ export function CommunitySettingsDialog({
                       <Text size="lg" weight="bold" style={{ color: tc.text.primary }}>
                         {bridgeConfig.channels.length}
                       </Text>
-                    </View>
-                    <View
+                    </Box>
+                    <Box
                       style={{
                         flex: 1,
                         padding: defaultSpacing.md,
@@ -1233,8 +1238,8 @@ export function CommunitySettingsDialog({
                       <Text size="lg" weight="bold" style={{ color: tc.text.primary }}>
                         {bridgeConfig.seats.length}
                       </Text>
-                    </View>
-                    <View
+                    </Box>
+                    <Box
                       style={{
                         flex: 1,
                         padding: defaultSpacing.md,
@@ -1249,11 +1254,11 @@ export function CommunitySettingsDialog({
                       <Text size="lg" weight="bold" style={{ color: tc.text.primary }}>
                         {bridgeConfig.memberDids.length}
                       </Text>
-                    </View>
-                  </View>
+                    </Box>
+                  </Box>
 
                   {/* Guild ID */}
-                  <View
+                  <Box
                     style={{
                       padding: defaultSpacing.md,
                       backgroundColor: tc.background.sunken,
@@ -1267,11 +1272,11 @@ export function CommunitySettingsDialog({
                     <Text size="sm" weight="medium" style={{ color: tc.text.primary }}>
                       {bridgeConfig.guildId}
                     </Text>
-                  </View>
+                  </Box>
 
                   {/* Bridged channels list */}
                   {bridgeConfig.channels.length > 0 && (
-                    <View
+                    <Box
                       style={{
                         padding: defaultSpacing.md,
                         backgroundColor: tc.background.sunken,
@@ -1283,7 +1288,7 @@ export function CommunitySettingsDialog({
                         Bridged Channels
                       </Text>
                       {bridgeConfig.channels.map((ch) => (
-                        <View
+                        <Box
                           key={ch.discordChannelId}
                           style={{
                             flexDirection: 'row',
@@ -1297,14 +1302,14 @@ export function CommunitySettingsDialog({
                           <Text size="sm" style={{ color: tc.text.primary }}>
                             {ch.name}
                           </Text>
-                        </View>
+                        </Box>
                       ))}
-                    </View>
+                    </Box>
                   )}
 
                   {/* Member sync warning — show when memberDids count seems too low */}
                   {bridgeConfig.memberDids.length <= 1 && (
-                    <View
+                    <Box
                       style={{
                         padding: defaultSpacing.md,
                         backgroundColor: tc.status.danger + '15',
@@ -1314,19 +1319,19 @@ export function CommunitySettingsDialog({
                         gap: defaultSpacing.sm,
                       }}
                     >
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: defaultSpacing.sm }}>
+                      <Box style={{ flexDirection: 'row', alignItems: 'center', gap: defaultSpacing.sm }}>
                         <AlertTriangleIcon size={16} color={tc.status.danger} />
                         <Text size="sm" weight="semibold" style={{ color: tc.status.danger }}>
                           {bridgeConfig.memberDids.length === 0 ? 'No members synced' : 'Members not synced'}
                         </Text>
-                      </View>
+                      </Box>
                       <Text size="xs" style={{ color: tc.text.secondary }}>
                         {bridgeConfig.memberDids.length === 0
                           ? 'The bridge has no community member DIDs. Discord messages won\'t be delivered to Umbra users.'
                           : 'The bridge only has the bot\'s DID. Community members need to be synced for Discord messages to reach Umbra users.'}
                         {' '}Click "Re-sync Members" to fix this.
                       </Text>
-                    </View>
+                    </Box>
                   )}
 
                   {/* Re-sync Members button — always visible */}
@@ -1357,7 +1362,7 @@ export function CommunitySettingsDialog({
                           }
                         }
                       } catch (err) {
-                        console.error('[bridge] Failed to re-sync members:', err);
+                        if (__DEV__) dbg.error('community', 'Failed to re-sync members', err, SRC);
                       }
                     }}
                   >
@@ -1368,34 +1373,34 @@ export function CommunitySettingsDialog({
                   <Text size="xs" style={{ color: tc.text.muted }}>
                     Last updated {new Date(bridgeConfig.updatedAt).toLocaleString()}
                   </Text>
-                </View>
+                </Box>
               </>
             )}
-          </View>
+          </Box>
         );
 
       case 'moderation':
         return (
-          <View style={{ flex: 1, padding: defaultSpacing.md }}>
+          <Box style={{ flex: 1, padding: defaultSpacing.md }}>
             <Text size="lg" weight="semibold" style={{ color: tc.text.primary, marginBottom: defaultSpacing.md }}>
               Moderation
             </Text>
             <Text size="sm" style={{ color: tc.text.muted }}>
               View banned members and manage moderation actions.
             </Text>
-          </View>
+          </Box>
         );
 
       case 'audit-log':
         return (
-          <View style={{ flex: 1, padding: defaultSpacing.md }}>
+          <Box style={{ flex: 1, padding: defaultSpacing.md }}>
             <Text size="lg" weight="semibold" style={{ color: tc.text.primary, marginBottom: defaultSpacing.md }}>
               Audit Log
             </Text>
             <Text size="sm" style={{ color: tc.text.muted }}>
               Review actions taken by members and administrators.
             </Text>
-          </View>
+          </Box>
         );
 
       case 'emoji':
@@ -1417,7 +1422,7 @@ export function CommunitySettingsDialog({
 
       case 'danger':
         return (
-          <View style={{ flex: 1, padding: defaultSpacing.md }}>
+          <Box style={{ flex: 1, padding: defaultSpacing.md }}>
             <Text size="lg" weight="semibold" style={{ color: tc.status.danger, marginBottom: defaultSpacing.sm }}>
               Danger Zone
             </Text>
@@ -1425,7 +1430,7 @@ export function CommunitySettingsDialog({
               Irreversible and destructive actions.
             </Text>
 
-            <View
+            <Box
               style={{
                 padding: defaultSpacing.md,
                 borderRadius: defaultRadii.md,
@@ -1436,35 +1441,35 @@ export function CommunitySettingsDialog({
             >
               {isOwner ? (
                 <>
-                  <View>
+                  <Box>
                     <Text size="sm" weight="semibold" style={{ color: tc.text.primary, marginBottom: defaultSpacing.xs }}>
                       Delete Community
                     </Text>
                     <Text size="sm" style={{ color: tc.text.muted }}>
                       Permanently delete this community and all of its data including channels, messages, roles, and members. This action cannot be undone.
                     </Text>
-                  </View>
+                  </Box>
                   <Button variant="destructive" onPress={onDeleteCommunity}>
                     Delete Community
                   </Button>
                 </>
               ) : (
                 <>
-                  <View>
+                  <Box>
                     <Text size="sm" weight="semibold" style={{ color: tc.text.primary, marginBottom: defaultSpacing.xs }}>
                       Leave Community
                     </Text>
                     <Text size="sm" style={{ color: tc.text.muted }}>
                       Leave this community and lose access to all channels and messages. You can rejoin later if you have an invite.
                     </Text>
-                  </View>
+                  </Box>
                   <Button variant="destructive" onPress={onLeaveCommunity}>
                     Leave Community
                   </Button>
                 </>
               )}
-            </View>
-          </View>
+            </Box>
+          </Box>
         );
 
       default:
@@ -1480,10 +1485,10 @@ export function CommunitySettingsDialog({
       onBackdropPress={onClose}
       animationType="fade"
     >
-      <View style={modalStyle}>
+      <Box style={modalStyle}>
         {/* ── Left Sidebar ── */}
         <ScrollView style={sidebarStyle} showsVerticalScrollIndicator={false}>
-          <RNText style={sidebarTitleStyle}>Server Settings</RNText>
+          <Text style={sidebarTitleStyle}>Server Settings</Text>
 
           {NAV_ITEMS.map((item) => {
             const isActive = activeSection === item.id;
@@ -1494,7 +1499,7 @@ export function CommunitySettingsDialog({
               <React.Fragment key={item.id}>
                 {/* Separator before danger section */}
                 {isDanger && (
-                  <View
+                  <Box
                     style={{
                       height: 1,
                       backgroundColor: tc.border.subtle,
@@ -1528,7 +1533,7 @@ export function CommunitySettingsDialog({
                     size={18}
                     color={isActive ? tc.text.onAccent : isDanger ? tc.status.danger : tc.text.secondary}
                   />
-                  <RNText
+                  <Text
                     style={{
                       fontSize: 14,
                       fontWeight: isActive ? '600' : '400',
@@ -1536,7 +1541,7 @@ export function CommunitySettingsDialog({
                     }}
                   >
                     {item.label}
-                  </RNText>
+                  </Text>
                 </Pressable>
               </React.Fragment>
             );
@@ -1544,7 +1549,7 @@ export function CommunitySettingsDialog({
         </ScrollView>
 
         {/* ── Right Content ── */}
-        <View style={{ flex: 1, position: 'relative' }}>
+        <Box style={{ flex: 1, position: 'relative' }}>
           {/* Close button */}
           <Pressable
             onPress={onClose}
@@ -1566,21 +1571,21 @@ export function CommunitySettingsDialog({
 
           {/* Section content */}
           {loading && !community ? (
-            <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-              <ActivityIndicator color={tc.accent.primary} />
-            </View>
+            <Box style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
+              <Spinner color={tc.accent.primary} />
+            </Box>
           ) : sectionManagesOwnScroll ? (
             // Roles and Invites panels manage their own scrolling
-            <View style={{ flex: 1 }}>
+            <Box style={{ flex: 1 }}>
               {renderSection()}
-            </View>
+            </Box>
           ) : (
             <ScrollView style={{ flex: 1 }} contentContainerStyle={{ flexGrow: 1 }}>
               {renderSection()}
             </ScrollView>
           )}
-        </View>
-      </View>
+        </Box>
+      </Box>
     </Overlay>
   );
 }

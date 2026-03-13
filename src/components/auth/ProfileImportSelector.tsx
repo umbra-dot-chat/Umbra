@@ -6,12 +6,13 @@
  */
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
-import { View, Pressable, Platform } from 'react-native';
+import { Pressable, Platform } from 'react-native';
 import {
   VStack,
   HStack,
   Text,
   Card,
+  Box,
   Button,
   Spinner,
   Alert,
@@ -21,6 +22,9 @@ import {
 import Svg, { Path } from 'react-native-svg';
 import * as WebBrowser from 'expo-web-browser';
 import { isTauri } from '@umbra/wasm';
+import { dbg } from '@/utils/debug';
+
+const SRC = 'ProfileImportSelector';
 
 // Types
 export type ImportPlatform = 'discord' | 'github' | 'steam' | 'bluesky';
@@ -198,7 +202,7 @@ export function ProfileImportSelector({
         return;
       }
 
-      console.log('[ProfileImport] Received message:', event.data);
+      if (__DEV__) dbg.info('auth', 'Received message', event.data, SRC);
 
       if (event.data.success && event.data.profile) {
         const normalized = normalizeProfile(event.data.profile);
@@ -354,7 +358,7 @@ export function ProfileImportSelector({
         }
       }
     } catch (err: any) {
-      console.error('[ProfileImport] Error:', err);
+      if (__DEV__) dbg.error('auth', 'Profile import error', err, SRC);
       setError(err.message || 'Failed to connect');
       setStatus('error');
     }
@@ -410,7 +414,7 @@ export function ProfileImportSelector({
             ) : importedProfile.avatarUrl ? (
               <Avatar src={importedProfile.avatarUrl} size="lg" />
             ) : (
-              <View
+              <Box
                 style={{
                   width: 48,
                   height: 48,
@@ -423,7 +427,7 @@ export function ProfileImportSelector({
                 <Text size="lg" weight="bold">
                   {importedProfile.displayName.charAt(0).toUpperCase()}
                 </Text>
-              </View>
+              </Box>
             )}
             <VStack gap="xs" style={{ flex: 1 }}>
               <Text weight="semibold">{importedProfile.displayName}</Text>
@@ -498,7 +502,7 @@ export function ProfileImportSelector({
                   }}
                 >
                   <HStack gap="md" style={{ alignItems: 'center' }}>
-                    <View
+                    <Box
                       style={{
                         width: 44,
                         height: 44,
@@ -509,7 +513,7 @@ export function ProfileImportSelector({
                       }}
                     >
                       <PlatformIcon platform={platform.id} size={24} color={platformColor} />
-                    </View>
+                    </Box>
 
                     <VStack gap="xs" style={{ flex: 1 }}>
                       <Text size="md" weight="semibold">

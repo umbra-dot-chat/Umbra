@@ -111,6 +111,9 @@ import { LinkedAccountsPanel, FriendDiscoveryPanel } from '@/components/discover
 import { IdentityCardDialog } from '@/components/modals/IdentityCardDialog';
 import { useSync, markSyncDirty } from '@/contexts/SyncContext';
 import { useDeveloperSettings } from '@/hooks/useDeveloperSettings';
+import { dbg } from '@/utils/debug';
+
+const SRC = 'SettingsDialog';
 
 // Cast icons for Wisp Input compatibility (accepts strokeWidth prop)
 type InputIcon = React.ComponentType<{ size?: number | string; color?: string; strokeWidth?: number }>;
@@ -992,7 +995,7 @@ function AccountSection() {
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
     } catch (err) {
-      console.error('[AccountSection] Failed to save profile:', err);
+      if (__DEV__) dbg.error('state', 'Failed to save profile', err, SRC);
     } finally {
       setSaving(false);
     }
@@ -2336,7 +2339,7 @@ function AudioVideoSection() {
         },
       };
     } catch (err) {
-      console.warn('Mic test failed:', err);
+      if (__DEV__) dbg.warn('state', 'Mic test failed', err, SRC);
     }
   }, []);
 
@@ -3938,7 +3941,7 @@ function DataManagementSection() {
       setClearStatus('Messages cleared successfully.');
       setTimeout(() => setClearStatus(null), 3000);
     } catch (err) {
-      console.error('[DataManagement] Failed to clear messages:', err);
+      if (__DEV__) dbg.error('state', 'Failed to clear messages', err, SRC);
       setClearStatus('Failed to clear messages.');
       setTimeout(() => setClearStatus(null), 3000);
     }
@@ -3978,7 +3981,7 @@ function DataManagementSection() {
       setClearStatus('All data cleared.');
       setTimeout(() => setClearStatus(null), 5000);
     } catch (err) {
-      console.error('[DataManagement] Failed to clear all data:', err);
+      if (__DEV__) dbg.error('state', 'Failed to clear all data', err, SRC);
       setClearStatus('Failed to clear data.');
       setTimeout(() => setClearStatus(null), 3000);
     }
@@ -4223,7 +4226,7 @@ function PluginsSection({ onOpenMarketplace }: { onOpenMarketplace?: () => void 
         await enablePlugin(pluginId);
       }
     } catch (err) {
-      console.error('Failed to toggle plugin:', err);
+      if (__DEV__) dbg.error('plugins', 'Failed to toggle plugin', err, SRC);
     }
   }, [registry, enablePlugin, disablePlugin]);
 
@@ -4231,7 +4234,7 @@ function PluginsSection({ onOpenMarketplace }: { onOpenMarketplace?: () => void 
     try {
       await uninstallPlugin(pluginId);
     } catch (err) {
-      console.error('Failed to uninstall plugin:', err);
+      if (__DEV__) dbg.error('plugins', 'Failed to uninstall plugin', err, SRC);
     }
   }, [uninstallPlugin]);
 
@@ -4694,7 +4697,7 @@ function DangerZoneSubsection() {
       // Hard reload to start fresh
       window.location.href = '/';
     } catch (err) {
-      console.error('Browser reset failed:', err);
+      if (__DEV__) dbg.error('state', 'Browser reset failed', err, SRC);
       // Reload anyway — partial reset is better than none
       window.location.href = '/';
     }

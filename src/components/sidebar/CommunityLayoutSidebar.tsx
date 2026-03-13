@@ -56,6 +56,9 @@ const umbraDeadImage = require('@/assets/emoji/umbra-dead.png');
 import { ChannelCreateDialog } from '@/components/community/channels/ChannelCreateDialog';
 import type { CreateChannelType } from '@/components/community/channels/ChannelCreateDialog';
 import { MoveToCategoryDialog } from '@/components/community/channels/MoveToCategoryDialog';
+import { dbg } from '@/utils/debug';
+
+const SRC = 'CommunitySidebar';
 
 // (Mock data removed — all communities now use real backend data)
 
@@ -88,6 +91,7 @@ export interface CommunityLayoutSidebarProps {
 // ---------------------------------------------------------------------------
 
 export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarProps) {
+  if (__DEV__) dbg.trackRender('CommunityLayoutSidebar');
   const router = useRouter();
   const { identity } = useAuth();
   const { service } = useUmbra();
@@ -396,7 +400,7 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
       await service.leaveCommunity(communityId, myDid);
       router.push('/');
     } catch (err) {
-      console.warn('[CommunityLayoutSidebar] Failed to leave community:', err);
+      if (__DEV__) dbg.warn('community', 'Failed to leave community', err, SRC);
       throw err;
     }
   }, [service, myDid, communityId, router]);
@@ -413,7 +417,7 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
       await service.deleteCommunity(communityId, myDid);
       router.push('/');
     } catch (err) {
-      console.warn('[CommunityLayoutSidebar] Failed to delete community:', err);
+      if (__DEV__) dbg.warn('community', 'Failed to delete community', err, SRC);
       throw err;
     }
   }, [service, myDid, communityId, router]);
@@ -532,7 +536,7 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
       try {
         await service.assignRole(communityId, memberId, roleId, myDid);
       } catch (err) {
-        console.warn('[CommunityLayoutSidebar] Failed to assign role:', err);
+        if (__DEV__) dbg.warn('community', 'Failed to assign role', err, SRC);
       }
     },
     [service, communityId, myDid],
@@ -544,7 +548,7 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
       try {
         await service.unassignRole(communityId, memberId, roleId, myDid);
       } catch (err) {
-        console.warn('[CommunityLayoutSidebar] Failed to unassign role:', err);
+        if (__DEV__) dbg.warn('community', 'Failed to unassign role', err, SRC);
       }
     },
     [service, communityId, myDid],
@@ -570,7 +574,7 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
       setSelectedRoleId(role.id);
       syncEvent({ type: 'communityRoleCreated', communityId, roleId: role.id });
     } catch (err) {
-      console.warn('[CommunityLayoutSidebar] Failed to create role:', err);
+      if (__DEV__) dbg.warn('community', 'Failed to create role', err, SRC);
     }
   }, [service, communityId, myDid]);
 
@@ -587,7 +591,7 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
         });
         syncEvent({ type: 'communityRoleUpdated', roleId });
       } catch (err) {
-        console.warn('[CommunityLayoutSidebar] Failed to update role:', err);
+        if (__DEV__) dbg.warn('community', 'Failed to update role', err, SRC);
       }
     },
     [service, myDid],
@@ -599,7 +603,7 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
       // Prevent deletion of preset roles (Owner, Member)
       const role = rolePanelRoles.find((r) => r.id === roleId);
       if (role?.is_preset) {
-        console.warn('[CommunityLayoutSidebar] Cannot delete preset role:', role.name);
+        if (__DEV__) dbg.warn('community', 'Cannot delete preset role', { roleName: role.name }, SRC);
         return;
       }
       try {
@@ -609,7 +613,7 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
           setSelectedRoleId(undefined);
         }
       } catch (err) {
-        console.warn('[CommunityLayoutSidebar] Failed to delete role:', err);
+        if (__DEV__) dbg.warn('community', 'Failed to delete role', err, SRC);
       }
     },
     [service, myDid, selectedRoleId, rolePanelRoles],
@@ -637,7 +641,7 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
         await service.updateRolePermissions(roleId, bigPerms.toString(), myDid);
         syncEvent({ type: 'communityRolePermissionsUpdated', roleId });
       } catch (err) {
-        console.warn('[CommunityLayoutSidebar] Failed to toggle permission:', err);
+        if (__DEV__) dbg.warn('community', 'Failed to toggle permission', err, SRC);
       }
     },
     [service, myDid, rolePanelRoles],
@@ -651,7 +655,7 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
         // Dispatch event to refresh roles (ensure UI updates)
         syncEvent({ type: 'communityRoleUpdated', roleId });
       } catch (err) {
-        console.warn('[CommunityLayoutSidebar] Failed to reorder role:', err);
+        if (__DEV__) dbg.warn('community', 'Failed to reorder role', err, SRC);
       }
     },
     [service, myDid],
@@ -675,7 +679,7 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
         setSpaceCreateDialogOpen(false);
         syncEvent({ type: 'spaceCreated', communityId, spaceId: space.id });
       } catch (err) {
-        console.warn('[CommunityLayoutSidebar] Failed to create space:', err);
+        if (__DEV__) dbg.warn('community', 'Failed to create space', err, SRC);
         throw err;
       } finally {
         setDialogSubmitting(false);
@@ -729,7 +733,7 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
         setSpaceEditDialogOpen(false);
         syncEvent({ type: 'spaceUpdated', communityId, spaceId: spaceEditTarget.id });
       } catch (err) {
-        console.warn('[CommunityLayoutSidebar] Failed to update space:', err);
+        if (__DEV__) dbg.warn('community', 'Failed to update space', err, SRC);
         throw err;
       } finally {
         setDialogSubmitting(false);
@@ -760,7 +764,7 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
       }
       setSpaceDeleteDialogOpen(false);
     } catch (err) {
-      console.warn('[CommunityLayoutSidebar] Failed to delete space:', err);
+      if (__DEV__) dbg.warn('community', 'Failed to delete space', err, SRC);
       throw err;
     } finally {
       setDialogSubmitting(false);
@@ -799,7 +803,7 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
         setChannelCreateDialogOpen(false);
         syncEvent({ type: 'channelCreated', communityId, channelId: channel.id });
       } catch (err) {
-        console.warn('[CommunityLayoutSidebar] Failed to create channel:', err);
+        if (__DEV__) dbg.warn('community', 'Failed to create channel', err, SRC);
         throw err;
       } finally {
         setDialogSubmitting(false);
@@ -842,7 +846,7 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
         setChannelEditDialogOpen(false);
         syncEvent({ type: 'channelUpdated', communityId, channelId: channelEditTarget.id });
       } catch (err) {
-        console.warn('[CommunityLayoutSidebar] Failed to update channel:', err);
+        if (__DEV__) dbg.warn('community', 'Failed to update channel', err, SRC);
         throw err;
       } finally {
         setDialogSubmitting(false);
@@ -874,7 +878,7 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
       }
       setChannelDeleteDialogOpen(false);
     } catch (err) {
-      console.warn('[CommunityLayoutSidebar] Failed to delete channel:', err);
+      if (__DEV__) dbg.warn('community', 'Failed to delete channel', err, SRC);
       throw err;
     } finally {
       setDialogSubmitting(false);
@@ -900,7 +904,7 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
         setCategoryCreateDialogOpen(false);
         syncEvent({ type: 'categoryCreated', communityId, categoryId: category.id });
       } catch (err) {
-        console.warn('[CommunityLayoutSidebar] Failed to create category:', err);
+        if (__DEV__) dbg.warn('community', 'Failed to create category', err, SRC);
         throw err;
       } finally {
         setDialogSubmitting(false);
@@ -946,7 +950,7 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
         setCategoryEditDialogOpen(false);
         syncEvent({ type: 'categoryUpdated', categoryId: categoryEditTarget.id });
       } catch (err) {
-        console.warn('[CommunityLayoutSidebar] Failed to update category:', err);
+        if (__DEV__) dbg.warn('community', 'Failed to update category', err, SRC);
         throw err;
       } finally {
         setDialogSubmitting(false);
@@ -972,7 +976,7 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
       syncEvent({ type: 'categoryDeleted', categoryId: categoryDeleteTarget.id });
       setCategoryDeleteDialogOpen(false);
     } catch (err) {
-      console.warn('[CommunityLayoutSidebar] Failed to delete category:', err);
+      if (__DEV__) dbg.warn('community', 'Failed to delete category', err, SRC);
       throw err;
     } finally {
       setDialogSubmitting(false);
@@ -998,7 +1002,7 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
         // Dispatch event to refresh channels (WASM doesn't emit reorder events)
         syncEvent({ type: 'channelUpdated', communityId, channelId });
       } catch (err) {
-        console.warn('[CommunityLayoutSidebar] Failed to move channel:', err);
+        if (__DEV__) dbg.warn('community', 'Failed to move channel', err, SRC);
       }
     },
     [service, myDid, communityId],
@@ -1040,7 +1044,7 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
         // Dispatch event to refresh categories (WASM doesn't emit reorder events)
         syncEvent({ type: 'categoryUpdated', categoryId });
       } catch (err) {
-        console.warn('[CommunityLayoutSidebar] Failed to move category up:', err);
+        if (__DEV__) dbg.warn('community', 'Failed to move category up', err, SRC);
       }
     },
     [service, activeSpaceId, realCategories],
@@ -1062,7 +1066,7 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
         // Dispatch event to refresh categories (WASM doesn't emit reorder events)
         syncEvent({ type: 'categoryUpdated', categoryId });
       } catch (err) {
-        console.warn('[CommunityLayoutSidebar] Failed to move category down:', err);
+        if (__DEV__) dbg.warn('community', 'Failed to move category down', err, SRC);
       }
     },
     [service, activeSpaceId, realCategories],
@@ -1143,7 +1147,7 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
         //    The WASM reorder functions update the DB but don't emit events.
         syncEvent({ type: 'channelUpdated', communityId, channelId });
       } catch (err) {
-        console.warn('[CommunityLayoutSidebar] Failed to reorder channel:', err);
+        if (__DEV__) dbg.warn('community', 'Failed to reorder channel', err, SRC);
       }
     },
     [service, channels, activeSpaceId, myDid, communityId],
@@ -1167,7 +1171,7 @@ export function CommunityLayoutSidebar({ communityId }: CommunityLayoutSidebarPr
         // The WASM reorder function updates the DB but doesn't emit events.
         syncEvent({ type: 'categoryUpdated', categoryId });
       } catch (err) {
-        console.warn('[CommunityLayoutSidebar] Failed to reorder category:', err);
+        if (__DEV__) dbg.warn('community', 'Failed to reorder category', err, SRC);
       }
     },
     [service, realCategories, activeSpaceId],

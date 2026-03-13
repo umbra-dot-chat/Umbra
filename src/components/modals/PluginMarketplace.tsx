@@ -52,6 +52,9 @@ import type { MarketplaceListing, PluginBranding } from '@umbra/plugin-runtime';
 import type { PluginPermission, PluginInstance } from '@umbra/plugin-sdk';
 import { TEST_IDS } from '@/constants/test-ids';
 import { LinearGradient } from 'expo-linear-gradient';
+import { dbg } from '@/utils/debug';
+
+const SRC = 'PluginMarketplace';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -1421,20 +1424,20 @@ export function PluginMarketplace({ open, onClose }: PluginMarketplaceProps) {
   const handleInstall = useCallback(async (listing: MarketplaceListing) => {
     setInstallingId(listing.id);
     try { await installPlugin(listing.downloadUrl, listing); }
-    catch (err: any) { console.error('Install failed:', err); setError(`Failed to install "${listing.name}": ${err?.message}`); }
+    catch (err: any) { if (__DEV__) dbg.error('plugins', 'Install failed', err, SRC); setError(`Failed to install "${listing.name}": ${err?.message}`); }
     finally { setInstallingId(null); }
   }, [installPlugin]);
 
   const handleUninstall = useCallback(async (pluginId: string) => {
     try { await uninstallPlugin(pluginId); setSelectedListing(null); }
-    catch (err: any) { console.error('Uninstall failed:', err); setError(`Failed to uninstall: ${err?.message}`); }
+    catch (err: any) { if (__DEV__) dbg.error('plugins', 'Uninstall failed', err, SRC); setError(`Failed to uninstall: ${err?.message}`); }
   }, [uninstallPlugin]);
 
   const handleToggle = useCallback(async (pluginId: string) => {
     const plugin = registry.getPlugin(pluginId);
     if (!plugin) return;
     try { if (plugin.state === 'enabled') await disablePlugin(pluginId); else await enablePlugin(pluginId); }
-    catch (err: any) { console.error('Toggle failed:', err); }
+    catch (err: any) { if (__DEV__) dbg.error('plugins', 'Toggle failed', err, SRC); }
   }, [registry, enablePlugin, disablePlugin]);
 
   const handleLoadDevPlugin = useCallback(async () => {
