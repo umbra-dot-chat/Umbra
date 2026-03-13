@@ -115,6 +115,7 @@ let cleanupRules: AutoCleanupRules = { ...DEFAULT_RULES };
  * @returns Storage usage breakdown
  */
 export async function getStorageUsage(): Promise<StorageUsage> {
+  const t0 = performance.now();
   // Get Storage API estimate for total disk usage
   let totalUsage = 0;
   if (typeof navigator !== 'undefined' && navigator.storage?.estimate) {
@@ -162,6 +163,10 @@ export async function getStorageUsage(): Promise<StorageUsage> {
   // small portion attributed to shared folders and transfer cache.
   const dataBytes = Math.max(0, effectiveTotal - transferCacheBytes);
 
+  const dur = performance.now() - t0;
+  _dbg()?.tracePerf?.('service', `storage.getUsage total=${effectiveTotal}B transfers=${activeTransferCount}`, dur, SRC);
+  if (dur > 100) _dbg()?.warn?.('service', `storage.getUsage slow: ${dur.toFixed(1)}ms`, undefined, SRC);
+
   return {
     total: effectiveTotal,
     byContext: {
@@ -189,6 +194,7 @@ export async function getStorageUsage(): Promise<StorageUsage> {
  * @returns Cleanup results
  */
 export async function smartCleanup(): Promise<CleanupResult> {
+  const t0 = performance.now();
   const result: CleanupResult = {
     bytesFreed: 0,
     chunksRemoved: 0,
@@ -216,6 +222,9 @@ export async function smartCleanup(): Promise<CleanupResult> {
     // Transfer cleanup failed
   }
 
+  const dur = performance.now() - t0;
+  _dbg()?.tracePerf?.('service', `storage.cleanup freed=${result.bytesFreed}B transfers=${result.transfersCleaned}`, dur, SRC);
+  if (dur > 100) _dbg()?.warn?.('service', `storage.cleanup slow: ${dur.toFixed(1)}ms`, undefined, SRC);
   _dbg()?.info?.('service', 'Smart cleanup complete', result, SRC);
   return result;
 }
@@ -250,6 +259,7 @@ export function getAutoCleanupRules(): AutoCleanupRules {
  * @returns Array of cleanup suggestions
  */
 export async function getCleanupSuggestions(): Promise<CleanupSuggestion[]> {
+  const t0 = performance.now();
   const suggestions: CleanupSuggestion[] = [];
 
   // Check for completed transfers that can be cleaned
@@ -277,6 +287,10 @@ export async function getCleanupSuggestions(): Promise<CleanupSuggestion[]> {
 
   // Sort by bytes reclaimable (largest first)
   suggestions.sort((a, b) => b.bytesReclaimable - a.bytesReclaimable);
+
+  const dur = performance.now() - t0;
+  _dbg()?.tracePerf?.('service', `storage.suggestions count=${suggestions.length}`, dur, SRC);
+  if (dur > 100) _dbg()?.warn?.('service', `storage.suggestions slow: ${dur.toFixed(1)}ms`, undefined, SRC);
 
   return suggestions;
 }

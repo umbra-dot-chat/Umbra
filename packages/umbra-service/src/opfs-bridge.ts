@@ -92,6 +92,7 @@ function bytesToB64(bytes: Uint8Array): string {
  * @returns `true` on success
  */
 async function storeChunk(chunkId: string, dataB64: string): Promise<boolean> {
+  const t0 = performance.now();
   const root = await getRoot();
   const bucket = await getBucket(root, chunkId);
   const fileHandle = await bucket.getFileHandle(chunkId, { create: true });
@@ -100,6 +101,11 @@ async function storeChunk(chunkId: string, dataB64: string): Promise<boolean> {
   const bytes = b64ToBytes(dataB64);
   await writable.write(bytes);
   await writable.close();
+
+  const dur = performance.now() - t0;
+  const size = bytes.length;
+  _dbg()?.tracePerf?.('service', `opfs.store key=${chunkId.slice(0, 50)} size=${size}B`, dur, SRC);
+  if (dur > 100) _dbg()?.warn?.('service', `opfs.store slow: ${dur.toFixed(1)}ms key=${chunkId.slice(0, 50)}`, undefined, SRC);
 
   return true;
 }
@@ -111,15 +117,21 @@ async function storeChunk(chunkId: string, dataB64: string): Promise<boolean> {
  * @returns Base64-encoded chunk data, or `null` if not found
  */
 async function getChunk(chunkId: string): Promise<string | null> {
+  const t0 = performance.now();
   try {
     const root = await getRoot();
     const bucket = await getBucket(root, chunkId);
     const fileHandle = await bucket.getFileHandle(chunkId);
     const file = await fileHandle.getFile();
     const buffer = await file.arrayBuffer();
-    return bytesToB64(new Uint8Array(buffer));
+    const result = bytesToB64(new Uint8Array(buffer));
+    const dur = performance.now() - t0;
+    _dbg()?.tracePerf?.('service', `opfs.read key=${chunkId.slice(0, 50)} size=${buffer.byteLength}B`, dur, SRC);
+    if (dur > 100) _dbg()?.warn?.('service', `opfs.read slow: ${dur.toFixed(1)}ms key=${chunkId.slice(0, 50)}`, undefined, SRC);
+    return result;
   } catch {
-    // File not found
+    const dur = performance.now() - t0;
+    _dbg()?.tracePerf?.('service', `opfs.read key=${chunkId.slice(0, 50)} size=0B (not found)`, dur, SRC);
     return null;
   }
 }
@@ -131,13 +143,19 @@ async function getChunk(chunkId: string): Promise<string | null> {
  * @returns `true` on success, `false` if not found
  */
 async function deleteChunk(chunkId: string): Promise<boolean> {
+  const t0 = performance.now();
   try {
     const root = await getRoot();
     const prefix = chunkId.substring(0, 2);
     const bucket = await root.getDirectoryHandle(prefix);
     await bucket.removeEntry(chunkId);
+    const dur = performance.now() - t0;
+    _dbg()?.tracePerf?.('service', `opfs.delete key=${chunkId.slice(0, 50)}`, dur, SRC);
+    if (dur > 100) _dbg()?.warn?.('service', `opfs.delete slow: ${dur.toFixed(1)}ms key=${chunkId.slice(0, 50)}`, undefined, SRC);
     return true;
   } catch {
+    const dur = performance.now() - t0;
+    _dbg()?.tracePerf?.('service', `opfs.delete key=${chunkId.slice(0, 50)} (not found)`, dur, SRC);
     return false;
   }
 }
@@ -150,6 +168,7 @@ async function deleteChunk(chunkId: string): Promise<boolean> {
  * @returns Total bytes used by stored chunks
  */
 async function getUsage(): Promise<number> {
+  const t0 = performance.now();
   let totalBytes = 0;
 
   try {
@@ -170,6 +189,10 @@ async function getUsage(): Promise<number> {
     // Root directory may not exist yet
   }
 
+  const dur = performance.now() - t0;
+  _dbg()?.tracePerf?.('service', `opfs.usage totalBytes=${totalBytes}B`, dur, SRC);
+  if (dur > 100) _dbg()?.warn?.('service', `opfs.usage slow: ${dur.toFixed(1)}ms`, undefined, SRC);
+
   return totalBytes;
 }
 
@@ -180,12 +203,17 @@ async function getUsage(): Promise<number> {
  * @returns `true` if the chunk exists
  */
 async function existsChunk(chunkId: string): Promise<boolean> {
+  const t0 = performance.now();
   try {
     const root = await getRoot();
     const bucket = await getBucket(root, chunkId);
     await bucket.getFileHandle(chunkId);
+    const dur = performance.now() - t0;
+    _dbg()?.tracePerf?.('service', `opfs.exists key=${chunkId.slice(0, 50)} found=true`, dur, SRC);
     return true;
   } catch {
+    const dur = performance.now() - t0;
+    _dbg()?.tracePerf?.('service', `opfs.exists key=${chunkId.slice(0, 50)} found=false`, dur, SRC);
     return false;
   }
 }
@@ -197,9 +225,12 @@ async function existsChunk(chunkId: string): Promise<boolean> {
  * @returns Number of chunks successfully deleted
  */
 async function deleteManyChunks(chunkIdsJson: string): Promise<number> {
+  const t0 = performance.now();
   let deleted = 0;
+  let total = 0;
   try {
     const chunkIds: string[] = JSON.parse(chunkIdsJson);
+    total = chunkIds.length;
     const root = await getRoot();
 
     for (const chunkId of chunkIds) {
@@ -215,6 +246,10 @@ async function deleteManyChunks(chunkIdsJson: string): Promise<number> {
   } catch {
     // JSON parse error or root not found
   }
+
+  const dur = performance.now() - t0;
+  _dbg()?.tracePerf?.('service', `opfs.deleteMany count=${total} deleted=${deleted}`, dur, SRC);
+  if (dur > 100) _dbg()?.warn?.('service', `opfs.deleteMany slow: ${dur.toFixed(1)}ms count=${total}`, undefined, SRC);
 
   return deleted;
 }
