@@ -69,6 +69,11 @@ pub fn render(frame: &mut Frame, app: &App) {
         Tab::Replay => replay_tab::render(frame, app, content_area),
     }
 
+    // 2b. Breakpoint input dialog overlay (renders on top of content)
+    if app.bp_input_mode {
+        breakpoint::render_breakpoint_dialog(frame, &app.bp_input, content_area);
+    }
+
     // 3. Filter input bar (if active)
     if app.filter_mode {
         render_filter_bar(frame, &app.filter_input, chunks[2]);
@@ -78,9 +83,14 @@ pub fn render(frame: &mut Frame, app: &App) {
         render_filter_bar(frame, &format!("replay:{}", app.replay_filter_input), chunks[2]);
     }
 
-    // 4. Status bar
+    // 4. Status bar (breakpoint pause overrides normal status)
     let status_area = if has_filter { chunks[3] } else { chunks[2] };
-    render_status_bar(frame, app, status_area);
+    if app.bp_paused {
+        let reason = app.bp_pause_reason.as_deref().unwrap_or("Breakpoint");
+        breakpoint::render_pause_indicator(frame, reason, status_area);
+    } else {
+        render_status_bar(frame, app, status_area);
+    }
 }
 
 /// Render the tab bar at the top.
@@ -150,6 +160,11 @@ fn render_status_bar(frame: &mut Frame, app: &App, area: Rect) {
 
     if app.filter.is_some() {
         parts.push(format!("[filter: {}]", app.filter_input));
+    }
+
+    if !app.breakpoints.is_empty() {
+        let enabled = app.breakpoints.iter().filter(|b| b.enabled).count();
+        parts.push(format!("[bp: {enabled}]"));
     }
 
     let status_text = parts.join(" | ");

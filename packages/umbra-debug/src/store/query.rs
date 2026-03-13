@@ -253,7 +253,7 @@ pub fn print_state_changes(log_dir: &Path, context: &str) -> Result<()> {
         return Ok(());
     }
 
-    println!("{:<15} {:<40} {}", "Timestamp", "Function", "Preview");
+    println!("{:<15} {:<40} Preview", "Timestamp", "Function");
     println!("{}", "-".repeat(80));
     for ev in &matches {
         let preview = ev.arg_preview.as_deref().unwrap_or("-");
@@ -335,7 +335,7 @@ pub fn print_errors_only(log_dir: &Path) -> Result<()> {
         return Ok(());
     }
 
-    println!("{:<15} {:<10} {}", "Timestamp", "Category", "Message");
+    println!("{:<15} {:<10} Message", "Timestamp", "Category");
     println!("{}", "-".repeat(80));
     for ev in &errors {
         let msg = ev
@@ -372,7 +372,7 @@ pub fn print_budget_violations(log_dir: &Path) -> Result<()> {
         return Ok(());
     }
 
-    println!("{:<15} {}", "Timestamp", "Violation");
+    println!("{:<15} Violation", "Timestamp");
     println!("{}", "-".repeat(80));
     for ev in &violations {
         let detail = ev

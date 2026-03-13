@@ -783,7 +783,26 @@ impl App {
                         self.ingest_log_entry(&trace);
                     }
 
+                    // Check breakpoints before ingesting
+                    let trigger = self.check_breakpoints(&trace);
+
                     self.ingest_event(trace);
+
+                    // If a breakpoint triggered, pause
+                    if let Some(reason) = trigger {
+                        self.bp_paused = true;
+                        self.bp_pause_reason = Some(reason);
+                        self.bp_pause_index = Some(self.events.len().saturating_sub(1));
+                        self.paused = true;
+                    }
+
+                    // If step mode was active, re-pause after one event
+                    if self.bp_step_one {
+                        self.bp_step_one = false;
+                        self.bp_paused = true;
+                        self.bp_pause_reason = Some("Step".to_string());
+                        self.paused = true;
+                    }
                 }
             }
             WsEvent::ClientDisconnected { client_id, clean } => {
@@ -815,6 +834,17 @@ impl App {
         }
 
         self.events.push(event);
+    }
+
+    /// Check all breakpoints against a trace event.
+    /// Returns the reason string if any breakpoint triggered.
+    fn check_breakpoints(&self, event: &TraceEvent) -> Option<String> {
+        for bp in &self.breakpoints {
+            if let Some(reason) = bp.should_trigger(event, self) {
+                return Some(reason);
+            }
+        }
+        None
     }
 
     /// Ingest a trace event as a log entry into the Log tab.
