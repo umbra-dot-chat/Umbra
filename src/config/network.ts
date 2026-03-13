@@ -4,6 +4,10 @@
  * Default relay servers and network settings for Umbra.
  */
 
+import { dbg } from '@/utils/debug';
+
+const SRC = 'network-config';
+
 /**
  * Default relay servers for signaling and offline messaging.
  * These are tried in order if the primary fails.
@@ -132,7 +136,7 @@ export async function resolveTurnCredentials(): Promise<{ username: string; cred
             credential: data.credential,
             expiresAt: Date.now() + ttl * 1000,
           };
-          console.log('[TURN] Credentials fetched from relay');
+          if (__DEV__) dbg.info('network', 'TURN credentials fetched from relay', undefined, SRC);
           return { username: data.username, credential: data.credential };
         }
       }
@@ -150,11 +154,11 @@ export async function resolveTurnCredentials(): Promise<{ username: string; cred
       ...creds,
       expiresAt: Date.now() + 24 * 60 * 60 * 1000,
     };
-    console.log('[TURN] Credentials generated from env secret');
+    if (__DEV__) dbg.info('network', 'TURN credentials generated from env secret', undefined, SRC);
     return creds;
   }
 
-  console.warn('[TURN] No TURN credentials available — remote calls may fail on restrictive NATs');
+  if (__DEV__) dbg.warn('network', 'No TURN credentials available — remote calls may fail on restrictive NATs', undefined, SRC);
   return null;
 }
 

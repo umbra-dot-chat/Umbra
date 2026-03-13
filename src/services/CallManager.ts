@@ -17,6 +17,9 @@ import type {
 } from '@/types/call';
 import { DEFAULT_ICE_SERVERS, DEFAULT_OPUS_CONFIG, VIDEO_QUALITY_PRESETS } from '@/types/call';
 import { generateTurnCredentials, resolveTurnCredentials } from '@/config/network';
+import { dbg } from '@/utils/debug';
+
+const SRC = 'CallManager';
 
 // ─── Inline E2EE Worker (Blob URL) ──────────────────────────────────────────
 // Metro bundler doesn't support import.meta.url, so we inline the worker code
@@ -174,7 +177,7 @@ export class CallManager {
             servers.push({ urls: s.urls, username: resolvedCreds.username, credential: resolvedCreds.credential });
           } else {
             // No credentials available — skip to avoid Chrome InvalidAccessError
-            console.warn('[CallManager] Skipping TURN server (no credentials):', urls[0]);
+            if (__DEV__) dbg.warn('call', 'Skipping TURN server (no credentials)', { url: urls[0] }, SRC);
             continue;
           }
         }
@@ -252,7 +255,7 @@ export class CallManager {
         await pc.setLocalDescription({ ...offer, sdp } as RTCSessionDescriptionInit);
         this.onRenegotiationNeeded?.({ sdp, type: offer.type! });
       } catch (err) {
-        console.error('[CallManager] Renegotiation offer failed:', err);
+        if (__DEV__) dbg.error('call', 'Renegotiation offer failed', { error: String(err) }, SRC);
       }
     };
 
@@ -454,7 +457,7 @@ export class CallManager {
    */
   private logCodecNegotiation(label: string, sdp: string): void {
     const info = CallManager.parseCodecInfo(sdp);
-    console.debug(`[CODEC] ${label}:`, info);
+    if (__DEV__) dbg.debug('call', `codec ${label}`, info, SRC);
     this.sendDataChannelMessage({
       type: 'codec-negotiation',
       label,

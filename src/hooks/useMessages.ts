@@ -473,7 +473,7 @@ export function useMessages(conversationId: string | null, groupId?: string | nu
             });
           } catch (err) {
             // Non-fatal: the message was sent, just the shared files entry failed
-            console.warn('[useMessages] Failed to register file in shared files:', err);
+            if (__DEV__) dbg.warn('messages', 'Failed to register file in shared files', { error: String(err) }, SRC);
           }
         }
 
@@ -518,17 +518,17 @@ export function useMessages(conversationId: string | null, groupId?: string | nu
             for (const msg of unreadFromOthers) {
               service.sendDeliveryReceipt(
                 msg.id, conversationId, msg.senderDid, 'read', relayWs
-              ).catch((err) =>
-                console.warn('[useMessages] Failed to send read receipt:', err)
-              );
+              ).catch((err) => {
+                if (__DEV__) dbg.warn('messages', 'Failed to send read receipt', { error: String(err) }, SRC);
+              });
             }
           }
         } catch (err) {
-          console.error('[useMessages] Failed to send read receipts:', err);
+          if (__DEV__) dbg.error('messages', 'Failed to send read receipts', { error: String(err) }, SRC);
         }
       }, 2000);
     } catch (err) {
-      console.error('[useMessages] Failed to mark as read:', err);
+      if (__DEV__) dbg.error('messages', 'Failed to mark as read', { error: String(err) }, SRC);
     }
   }, [service, conversationId, getRelayWs, myDid]);
 

@@ -9,6 +9,7 @@
  */
 
 import { Platform } from 'react-native';
+import { dbg } from '@/utils/debug';
 
 /**
  * Trigger a file download on web via Blob + anchor tag.
@@ -19,7 +20,7 @@ import { Platform } from 'react-native';
  */
 export function triggerWebDownload(base64Data: string, filename: string, mimeType: string): void {
   if (Platform.OS !== 'web') {
-    console.warn('[triggerWebDownload] Not supported on this platform');
+    if (__DEV__) dbg.warn('service', 'triggerWebDownload not supported on this platform', undefined, 'fileDownload');
     return;
   }
 

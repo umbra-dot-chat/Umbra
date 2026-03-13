@@ -8,6 +8,7 @@
  */
 
 import { Platform } from 'react-native';
+import { dbg } from '@/utils/debug';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -211,7 +212,7 @@ export async function readFileAsBase64(
 
 async function pickFileMobile(_multiple: boolean): Promise<PickedFile[] | null> {
   // TODO: Integrate with expo-document-picker
-  console.warn('[filePicker] File picking not yet implemented on mobile. Use expo-document-picker.');
+  if (__DEV__) dbg.warn('service', 'File picking not yet implemented on mobile', undefined, 'filePicker');
   return null;
 }
 

@@ -13,6 +13,9 @@
  */
 
 import type { FontEntry } from '@/contexts/FontContext';
+import { dbg } from '@/utils/debug';
+
+const SRC = 'googleFontsApi';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -181,7 +184,7 @@ export async function fetchGoogleFontsCatalog(): Promise<FontEntry[]> {
     const catalog = await fetchFromFontsourceCDN();
     cachedCatalog = catalog;
     cacheTimestamp = Date.now();
-    console.log(`[FontCatalog] Loaded ${catalog.length} fonts from fontsource CDN`);
+    if (__DEV__) dbg.info('lifecycle', `Loaded ${catalog.length} fonts from fontsource CDN`, undefined, SRC);
     return catalog;
   } catch (err: any) {
     errors.push(`cdn: ${err.message}`);
@@ -192,7 +195,7 @@ export async function fetchGoogleFontsCatalog(): Promise<FontEntry[]> {
     const catalog = await fetchFromFontsourceRaw();
     cachedCatalog = catalog;
     cacheTimestamp = Date.now();
-    console.log(`[FontCatalog] Loaded ${catalog.length} fonts from fontsource raw`);
+    if (__DEV__) dbg.info('lifecycle', `Loaded ${catalog.length} fonts from fontsource raw`, undefined, SRC);
     return catalog;
   } catch (err: any) {
     errors.push(`raw: ${err.message}`);
@@ -203,13 +206,13 @@ export async function fetchGoogleFontsCatalog(): Promise<FontEntry[]> {
     const catalog = await fetchFromDeveloperApi();
     cachedCatalog = catalog;
     cacheTimestamp = Date.now();
-    console.log(`[FontCatalog] Loaded ${catalog.length} fonts from Developer API`);
+    if (__DEV__) dbg.info('lifecycle', `Loaded ${catalog.length} fonts from Developer API`, undefined, SRC);
     return catalog;
   } catch (err: any) {
     errors.push(`api: ${err.message}`);
   }
 
-  console.warn(`[FontCatalog] All sources failed: ${errors.join('; ')}`);
+  if (__DEV__) dbg.warn('lifecycle', `All font sources failed: ${errors.join('; ')}`, undefined, SRC);
   throw new Error(`Failed to fetch font catalog: ${errors.join('; ')}`);
 }
 

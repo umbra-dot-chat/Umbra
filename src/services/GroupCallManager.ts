@@ -15,6 +15,9 @@ import type {
 import { DEFAULT_ICE_SERVERS, VIDEO_QUALITY_PRESETS } from '@/types/call';
 import { resolveTurnCredentials } from '@/config/network';
 import { Platform } from 'react-native';
+import { dbg } from '@/utils/debug';
+
+const SRC = 'GroupCallManager';
 
 interface PeerConnection {
   pc: RTCPeerConnection;
@@ -72,7 +75,7 @@ export class GroupCallManager {
           servers.push({ urls: s.urls, username: resolvedCreds.username, credential: resolvedCreds.credential });
         } else {
           // No credentials available — skip to avoid Chrome InvalidAccessError
-          console.warn('[GroupCallManager] Skipping TURN server (no credentials):', urls[0]);
+          if (__DEV__) dbg.warn('call', 'Skipping TURN server (no credentials)', { url: urls[0] }, SRC);
           continue;
         }
       } else {

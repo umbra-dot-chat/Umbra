@@ -13,6 +13,10 @@
  * from a user gesture to unlock playback.
  */
 
+import { dbg } from '@/utils/debug';
+
+const SRC = 'SoundEngine';
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────────────────────────────────────
@@ -472,7 +476,7 @@ export class SoundEngine {
         this.playSynth(name, audio.ctx, soundGain);
       }
     } catch (err) {
-      console.warn('[SoundEngine] Failed to play sound:', name, err);
+      if (__DEV__) dbg.warn('lifecycle', 'Failed to play sound', { name, error: String(err) }, SRC);
     }
 
     // Disconnect GainNode after sound finishes to prevent memory leak.

@@ -18,6 +18,9 @@ import { useCallback } from 'react';
 import { useUmbra } from '@/contexts/UmbraContext';
 import { useAuth } from '@/contexts/AuthContext';
 import type { CommunityEvent } from '@umbra/service';
+import { dbg } from '@/utils/debug';
+
+const SRC = 'useCommunitySync';
 
 export function useCommunitySync(communityId: string) {
   const { service } = useUmbra();
@@ -44,7 +47,7 @@ export function useCommunitySync(communityId: string) {
       service
         .broadcastCommunityEvent(communityId, event, myDid, relayWs)
         .catch((err) => {
-          console.warn('[useCommunitySync] Failed to broadcast event:', err);
+          if (__DEV__) dbg.warn('community', 'Failed to broadcast event', { error: String(err) }, SRC);
         });
     },
     [service, communityId, myDid],
