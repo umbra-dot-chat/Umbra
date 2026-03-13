@@ -139,6 +139,7 @@ pub struct ClientInfo {
 /// Active tab in the TUI.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Tab {
+    Dashboard,
     All,
     Wasm,
     Sql,
@@ -151,7 +152,8 @@ pub enum Tab {
 }
 
 impl Tab {
-    pub const ALL: [Tab; 9] = [
+    pub const ALL: [Tab; 10] = [
+        Tab::Dashboard,
         Tab::All,
         Tab::Wasm,
         Tab::Sql,
@@ -165,6 +167,7 @@ impl Tab {
 
     pub fn label(self) -> &'static str {
         match self {
+            Tab::Dashboard => "Dash",
             Tab::All => "All",
             Tab::Wasm => "WASM",
             Tab::Sql => "SQL",
@@ -264,7 +267,7 @@ impl App {
 
         Self {
             events: Vec::with_capacity(1024),
-            tab: Tab::All,
+            tab: Tab::Dashboard,
             paused: false,
             scroll_offset: 0,
             filter: None,

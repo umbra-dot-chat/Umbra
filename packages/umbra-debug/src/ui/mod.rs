@@ -6,6 +6,7 @@
 pub mod all_tab;
 pub mod analysis_tab;
 pub mod browser_tab;
+pub mod dashboard_tab;
 pub mod err_tab;
 pub mod log_tab;
 pub mod mem_tab;
@@ -47,6 +48,7 @@ pub fn render(frame: &mut Frame, app: &App) {
     // 2. Main content area — dispatch to active tab
     let content_area = chunks[1];
     match app.tab {
+        Tab::Dashboard => dashboard_tab::render(frame, app, content_area),
         Tab::All => all_tab::render(frame, app, content_area),
         Tab::Wasm => wasm_tab::render(frame, app, content_area),
         Tab::Sql => sql_tab::render(frame, app, content_area),
