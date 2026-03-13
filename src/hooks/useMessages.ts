@@ -132,12 +132,22 @@ export function useMessages(conversationId: string | null, groupId?: string | nu
   const initialLoadDoneRef = useRef(false);
   const clearUnreadMarker = useCallback(() => setFirstUnreadMessageId(null), []);
 
+  // Guard against concurrent fetches — prevents racing WASM calls when
+  // offline batch completion and initial fetch overlap.
+  const fetchingRef = useRef(false);
+
   const fetchMessages = useCallback(async () => {
     if (!service || !conversationId) {
       setMessages([]);
       setIsLoading(false);
       return;
     }
+    // Skip if already fetching — the in-flight fetch will return the latest data
+    if (fetchingRef.current) {
+      if (__DEV__) dbg.debug('messages', `getMessages SKIP (already fetching)`, { conversationId: conversationId.slice(0, 12) }, SRC);
+      return;
+    }
+    fetchingRef.current = true;
 
     if (__DEV__) dbg.info('messages', `getMessages START`, { conversationId: conversationId.slice(0, 12) }, SRC);
     try {
@@ -161,6 +171,7 @@ export function useMessages(conversationId: string | null, groupId?: string | nu
       setError(err instanceof Error ? err : new Error(String(err)));
     } finally {
       setIsLoading(false);
+      fetchingRef.current = false;
     }
   }, [service, conversationId]);
 
@@ -209,10 +220,14 @@ export function useMessages(conversationId: string | null, groupId?: string | nu
   const debouncedFetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const debouncedFetch = useCallback(() => {
     if (debouncedFetchTimerRef.current) {
+      if (__DEV__) dbg.trace('messages', 'debouncedFetch RESET (timer already pending)', undefined, SRC);
       clearTimeout(debouncedFetchTimerRef.current);
+    } else {
+      if (__DEV__) dbg.debug('messages', 'debouncedFetch SCHEDULED (500ms)', undefined, SRC);
     }
     debouncedFetchTimerRef.current = setTimeout(() => {
       debouncedFetchTimerRef.current = null;
+      if (__DEV__) dbg.info('messages', 'debouncedFetch FIRING', undefined, SRC);
       fetchMessagesRef.current?.();
     }, 500);
   }, []);
@@ -239,14 +254,14 @@ export function useMessages(conversationId: string | null, groupId?: string | nu
       setMessages((prev) => {
         const existingIds = new Set(prev.map((m) => m.id));
         const newMsgs = batch.filter((m) => !existingIds.has(m.id));
-        if (newMsgs.length === 0) return prev;
-        const next = [...prev, ...newMsgs];
-        // Cap at 200 messages to prevent unbounded memory growth.
-        // Lower cap reduces DOM nodes + React fiber tree size in active group chats.
-        if (next.length > 200) {
-          return next.slice(next.length - 200);
+        if (newMsgs.length === 0) {
+          if (__DEV__) dbg.trace('messages', `flush ${batch.length} pending → 0 new (all dupes)`, undefined, SRC);
+          return prev;
         }
-        return next;
+        const next = [...prev, ...newMsgs];
+        const capped = next.length > 200 ? next.slice(next.length - 200) : next;
+        if (__DEV__) dbg.debug('messages', `flush ${batch.length} pending → state ${prev.length}→${capped.length} msgs (${newMsgs.length} new, ${batch.length - newMsgs.length} dupes)`, undefined, SRC);
+        return capped;
       });
     };
 
