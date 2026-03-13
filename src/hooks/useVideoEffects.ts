@@ -15,6 +15,9 @@ import {
   bgOffice, bgNature, bgAbstract, bgGradient,
   bgSolidDark, bgSolidLight, bgBeach, bgCity,
 } from '../../assets/backgrounds';
+import { dbg } from '@/utils/debug';
+
+const SRC = 'useVideoEffects';
 
 // ── Types ───────────────────────────────────────────────────────────────
 
@@ -189,7 +192,7 @@ export function useVideoEffects(config: UseVideoEffectsConfig): UseVideoEffectsR
     img.crossOrigin = 'anonymous';
     img.onload = () => { backgroundImageRef.current = img; };
     img.onerror = () => {
-      console.warn('[useVideoEffects] Failed to load background image:', backgroundImage);
+      if (__DEV__) dbg.warn('call', 'failed to load background image', { backgroundImage }, SRC);
       backgroundImageRef.current = null;
     };
     img.src = backgroundImage;
@@ -374,9 +377,9 @@ export function useVideoEffects(config: UseVideoEffectsConfig): UseVideoEffectsR
 
             segmenterRef.current = segmenter;
             segmenterReadyRef.current = true;
-            console.info('[useVideoEffects] MediaPipe selfie segmenter ready');
+            if (__DEV__) dbg.info('call', 'MediaPipe selfie segmenter ready', undefined, SRC);
           } catch (segErr) {
-            console.warn('[useVideoEffects] MediaPipe init failed, effects will show raw video:', segErr);
+            if (__DEV__) dbg.warn('call', 'MediaPipe init failed, effects will show raw video', { error: String(segErr) }, SRC);
             segmenterReadyRef.current = false;
           }
         }
@@ -412,7 +415,7 @@ export function useVideoEffects(config: UseVideoEffectsConfig): UseVideoEffectsR
 
         // 4. Capture stream
         if (typeof canvas.captureStream !== 'function') {
-          console.warn('[useVideoEffects] captureStream not supported');
+          if (__DEV__) dbg.warn('call', 'captureStream not supported', undefined, SRC);
           setOutputStream(sourceStream);
           setIsProcessing(false);
           return;
@@ -433,7 +436,7 @@ export function useVideoEffects(config: UseVideoEffectsConfig): UseVideoEffectsR
       } catch (err) {
         if (!cancelled) {
           const message = err instanceof Error ? err.message : String(err);
-          console.error('[useVideoEffects] Pipeline setup failed:', message);
+          if (__DEV__) dbg.error('call', 'pipeline setup failed', { error: message }, SRC);
           setError(message);
           setIsProcessing(false);
           setOutputStream(sourceStream);

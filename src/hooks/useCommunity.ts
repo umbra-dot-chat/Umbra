@@ -13,6 +13,9 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useUmbra } from '@/contexts/UmbraContext';
+import { dbg } from '@/utils/debug';
+
+const SRC = 'useCommunity';
 import type {
   Community,
   CommunitySpace,
@@ -324,7 +327,7 @@ export function useCommunity(communityId: string | null): UseCommunityResult {
         // Add bridge bot as a community member in local WASM DB
         try {
           await service.joinCommunity(communityId, bridgeDid, 'Bridge Bot');
-          console.log(`[bridge-sync] Added bridge bot DID as community member: ${bridgeDid}`);
+          if (__DEV__) dbg.info('community', 'added bridge bot DID as community member', { bridgeDid }, SRC);
           // Refresh members to include the bot
           const freshMembers = await service.getCommunityMembers(communityId);
           setMembers(freshMembers);

@@ -8,6 +8,9 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import type { CallParticipant } from '@/types/call';
+import { dbg } from '@/utils/debug';
+
+const SRC = 'useSpeakerDetection';
 
 export interface SpeakerDetectionResult {
   /** DID of the loudest currently speaking participant, or null */
@@ -77,7 +80,7 @@ export function useSpeakerDetection(
         source.connect(analyser);
         analysersRef.current.set(did, { analyser, source });
       } catch (e) {
-        console.warn(`[useSpeakerDetection] Failed to create analyser for ${did}:`, e);
+        if (__DEV__) dbg.warn('call', `failed to create analyser for ${did}`, { error: String(e) }, SRC);
       }
     }
 

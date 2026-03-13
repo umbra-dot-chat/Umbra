@@ -9,6 +9,9 @@
 
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { isTauri } from '@umbra/wasm';
+import { dbg } from '@/utils/debug';
+
+const SRC = 'useDiscordImport';
 import type {
   DiscordGuildInfo,
   DiscordImportedStructure,
@@ -389,53 +392,49 @@ export function useDiscordCommunityImport(): UseDiscordCommunityImportState & Us
   const fetchMembers = useCallback(
     async (guildId: string) => {
       const token = accessTokenRef.current;
-      console.log('[fetchMembers] called for guild', guildId, 'accessToken?', !!token);
+      if (__DEV__) dbg.info('community', 'fetchMembers called', { guildId, hasToken: !!token }, SRC);
       if (!token) {
-        console.warn('[fetchMembers] No accessToken — skipping');
+        if (__DEV__) dbg.warn('community', 'fetchMembers: no accessToken — skipping', undefined, SRC);
         return;
       }
 
       setMembersLoading(true);
       try {
         const url = `${RELAY_BASE_URL}/community/import/discord/guild/${guildId}/members?token=${encodeURIComponent(token)}`;
-        console.log('[fetchMembers] Fetching:', url.replace(/token=[^&]+/, 'token=***'));
+        if (__DEV__) dbg.info('community', 'fetchMembers: fetching', { url: url.replace(/token=[^&]+/, 'token=***') }, SRC);
         const response = await fetch(url);
-        console.log('[fetchMembers] Response status:', response.status);
+        if (__DEV__) dbg.info('community', 'fetchMembers: response', { status: response.status }, SRC);
 
         if (!response.ok) {
           // 403 likely means the bot doesn't have GUILD_MEMBERS intent
           if (response.status === 403) {
-            console.warn('[fetchMembers] 403 — bot likely lacks GUILD_MEMBERS intent');
+            if (__DEV__) dbg.warn('community', 'fetchMembers: 403 — bot likely lacks GUILD_MEMBERS intent', undefined, SRC);
             setMembersAvailable(false);
             setImportedMembers(null);
             return;
           }
           // Other errors — silently fail (members are optional)
-          console.warn('[fetchMembers] Non-OK response:', response.status);
+          if (__DEV__) dbg.warn('community', 'fetchMembers: non-OK response', { status: response.status }, SRC);
           setMembersAvailable(false);
           setImportedMembers(null);
           return;
         }
 
         const data: DiscordGuildMembersResponse = await response.json();
-        console.log('[fetchMembers] Response data:', {
-          hasMembersIntent: data.hasMembersIntent,
-          memberCount: data.members?.length ?? 0,
-          error: (data as any).error,
-        });
+        if (__DEV__) dbg.info('community', 'fetchMembers: response data', { hasMembersIntent: data.hasMembersIntent, memberCount: data.members?.length ?? 0, error: (data as any).error }, SRC);
         setMembersAvailable(data.hasMembersIntent);
 
         if (data.hasMembersIntent && data.members.length > 0) {
           // Filter out bots
           const humanMembers = data.members.filter((m) => !m.bot);
-          console.log('[fetchMembers] Human members:', humanMembers.length);
+          if (__DEV__) dbg.info('community', 'fetchMembers: human members', { count: humanMembers.length }, SRC);
           setImportedMembers(humanMembers);
         } else {
           setImportedMembers(null);
         }
       } catch (err) {
         // Network error — members are optional, don't fail the flow
-        console.error('[fetchMembers] Error:', err);
+        if (__DEV__) dbg.error('community', 'fetchMembers: error', { error: String(err) }, SRC);
         setMembersAvailable(false);
         setImportedMembers(null);
       } finally {
@@ -482,7 +481,7 @@ export function useDiscordCommunityImport(): UseDiscordCommunityImportState & Us
       }
 
       setPinsLoading(true);
-      console.log('[fetchPins] Fetching pins for', textChannels.length, 'channels');
+      if (__DEV__) dbg.info('community', 'fetchPins: fetching', { channelCount: textChannels.length }, SRC);
       const allPins: Record<string, MappedPinnedMessage[]> = {};
       let totalPins = 0;
 
@@ -493,7 +492,7 @@ export function useDiscordCommunityImport(): UseDiscordCommunityImportState & Us
           );
 
           if (!response.ok) {
-            console.warn(`[fetchPins] Failed to fetch pins for channel ${ch.name}:`, response.status);
+            if (__DEV__) dbg.warn('community', `fetchPins: failed for channel ${ch.name}`, { status: response.status }, SRC);
             continue;
           }
 
@@ -510,11 +509,11 @@ export function useDiscordCommunityImport(): UseDiscordCommunityImportState & Us
             totalPins += data.pins.length;
           }
         } catch (err) {
-          console.warn(`[fetchPins] Error fetching pins for channel ${ch.name}:`, err);
+          if (__DEV__) dbg.warn('community', `fetchPins: error for channel ${ch.name}`, { error: String(err) }, SRC);
         }
       }
 
-      console.log('[fetchPins] Total pins fetched:', totalPins, 'across', Object.keys(allPins).length, 'channels');
+      if (__DEV__) dbg.info('community', 'fetchPins: total pins fetched', { totalPins, channelCount: Object.keys(allPins).length }, SRC);
 
       if (totalPins > 0) {
         setPinnedMessages(allPins);
@@ -535,45 +534,40 @@ export function useDiscordCommunityImport(): UseDiscordCommunityImportState & Us
   const fetchAuditLog = useCallback(
     async (guildId: string) => {
       const token = accessTokenRef.current;
-      console.log('[fetchAuditLog] ===== CALLED =====');
-      console.log('[fetchAuditLog] guildId:', guildId);
-      console.log('[fetchAuditLog] accessToken present?', !!token);
+      if (__DEV__) dbg.info('community', 'fetchAuditLog called', { guildId, hasToken: !!token }, SRC);
       if (!token) {
-        console.warn('[fetchAuditLog] No accessToken — skipping');
+        if (__DEV__) dbg.warn('community', 'fetchAuditLog: no accessToken — skipping', undefined, SRC);
         return;
       }
 
       setAuditLogLoading(true);
       try {
         const url = `${RELAY_BASE_URL}/community/import/discord/guild/${guildId}/audit-log?token=${encodeURIComponent(token)}`;
-        console.log('[fetchAuditLog] Fetching:', url.replace(/token=[^&]+/, 'token=***'));
+        if (__DEV__) dbg.info('community', 'fetchAuditLog: fetching', { url: url.replace(/token=[^&]+/, 'token=***') }, SRC);
         const response = await fetch(url);
-        console.log('[fetchAuditLog] Response status:', response.status);
+        if (__DEV__) dbg.info('community', 'fetchAuditLog: response', { status: response.status }, SRC);
 
         if (!response.ok) {
           // 403 likely means the bot doesn't have VIEW_AUDIT_LOG permission
           if (response.status === 403) {
-            console.warn('[fetchAuditLog] 403 — bot likely lacks VIEW_AUDIT_LOG permission');
+            if (__DEV__) dbg.warn('community', 'fetchAuditLog: 403 — bot likely lacks VIEW_AUDIT_LOG permission', undefined, SRC);
             setAuditLogAvailable(false);
             setAuditLogEntries(null);
             return;
           }
           // Other errors — silently fail (audit log is optional)
-          console.warn('[fetchAuditLog] Non-OK response:', response.status);
+          if (__DEV__) dbg.warn('community', 'fetchAuditLog: non-OK response', { status: response.status }, SRC);
           setAuditLogAvailable(false);
           setAuditLogEntries(null);
           return;
         }
 
         const data: DiscordAuditLogResponse = await response.json();
-        console.log('[fetchAuditLog] Response data:', {
-          entryCount: data.entries?.length ?? 0,
-          error: data.error,
-        });
+        if (__DEV__) dbg.info('community', 'fetchAuditLog: response data', { entryCount: data.entries?.length ?? 0, error: data.error }, SRC);
 
         // Check for error in response
         if (data.error) {
-          console.warn('[fetchAuditLog] Error in response:', data.error);
+          if (__DEV__) dbg.warn('community', 'fetchAuditLog: error in response', { error: data.error }, SRC);
           setAuditLogAvailable(false);
           setAuditLogEntries(null);
           return;
@@ -592,7 +586,7 @@ export function useDiscordCommunityImport(): UseDiscordCommunityImportState & Us
             metadata: entry.changes ? { changes: entry.changes, options: entry.options } : entry.options,
             timestamp: snowflakeToTimestamp(entry.id),
           }));
-          console.log('[fetchAuditLog] Mapped entries:', mappedEntries.length);
+          if (__DEV__) dbg.info('community', 'fetchAuditLog: mapped entries', { count: mappedEntries.length }, SRC);
           setAuditLogEntries(mappedEntries);
           setAuditLogAvailable(true);
         } else {
@@ -601,7 +595,7 @@ export function useDiscordCommunityImport(): UseDiscordCommunityImportState & Us
         }
       } catch (err) {
         // Network error — audit log is optional, don't fail the flow
-        console.error('[fetchAuditLog] Error:', err);
+        if (__DEV__) dbg.error('community', 'fetchAuditLog: error', { error: String(err) }, SRC);
         setAuditLogAvailable(false);
         setAuditLogEntries(null);
       } finally {
@@ -769,21 +763,21 @@ export function useDiscordCommunityImport(): UseDiscordCommunityImportState & Us
         } else {
           // Structure loaded via OAuth — check if bot is also in guild for enhanced features
           const { botEnabled, inGuild } = await checkBotStatusForGuild(guild.id);
-          console.log('[selectGuild] Bot status:', { botEnabled, inGuild, guildId: guild.id });
+          if (__DEV__) dbg.info('community', 'selectGuild: bot status', { botEnabled, inGuild, guildId: guild.id }, SRC);
           if (botEnabled && inGuild) {
             setBotStatus('in_guild');
             // Bot is in guild — fetch members, pins, and audit log in background
-            console.log('[selectGuild] Calling fetchMembers + fetchPins + fetchAuditLog for guild', guild.id);
+            if (__DEV__) dbg.info('community', 'selectGuild: calling fetchMembers + fetchPins + fetchAuditLog', { guildId: guild.id }, SRC);
             fetchMembers(guild.id);
             if (mapped) fetchPins(mapped.channels);
             fetchAuditLog(guild.id);
           } else if (botEnabled) {
             setBotStatus('not_in_guild');
-            console.log('[selectGuild] Bot enabled but NOT in guild — skipping fetchMembers');
+            if (__DEV__) dbg.info('community', 'selectGuild: bot enabled but NOT in guild — skipping fetchMembers', undefined, SRC);
             // Bot exists but not in this guild — preview will show "Connect Bot" banner
           } else {
             setBotStatus('disabled');
-            console.log('[selectGuild] Bot disabled on relay');
+            if (__DEV__) dbg.info('community', 'selectGuild: bot disabled on relay', undefined, SRC);
             // Bot not configured on relay
           }
           setPhase('previewing');
@@ -1094,10 +1088,10 @@ export function useDiscordCommunityImport(): UseDiscordCommunityImportState & Us
                 }),
               });
 
-              console.log('[Import] Bridge config registered with relay');
+              if (__DEV__) dbg.info('community', 'bridge config registered with relay', undefined, SRC);
             } catch (bridgeErr) {
               // Bridge registration failure is non-fatal — community was still created
-              console.warn('[Import] Failed to register bridge config:', bridgeErr);
+              if (__DEV__) dbg.warn('community', 'failed to register bridge config', { error: String(bridgeErr) }, SRC);
             }
           }
 

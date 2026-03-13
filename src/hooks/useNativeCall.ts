@@ -7,6 +7,9 @@
 
 import { useCallback, useEffect } from 'react';
 import { Platform } from 'react-native';
+import { dbg } from '@/utils/debug';
+
+const SRC = 'useNativeCall';
 
 export interface NativeCallAPI {
   /** Report an incoming call to the native OS call UI */
@@ -35,7 +38,7 @@ export function useNativeCall(): NativeCallAPI {
         RNCallKeep.displayIncomingCall(callId, callerName, callerName, 'generic', hasVideo);
       }
     } catch (err) {
-      console.warn('[useNativeCall] Failed to report incoming call:', err);
+      if (__DEV__) dbg.warn('call', 'failed to report incoming call', { error: String(err) }, SRC);
     }
   }, [isNative]);
 
@@ -73,7 +76,7 @@ export function useNativeCall(): NativeCallAPI {
           selfManaged: true,
         },
       }).catch((err: Error) => {
-        console.warn('[useNativeCall] CallKeep setup failed:', err);
+        if (__DEV__) dbg.warn('call', 'CallKeep setup failed', { error: String(err) }, SRC);
       });
     }).catch(() => {
       // react-native-callkeep not available

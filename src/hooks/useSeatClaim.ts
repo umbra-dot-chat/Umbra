@@ -16,6 +16,9 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import type { CommunitySeat } from '@umbra/service';
 import { getDiscoveryStatus } from '@umbra/service';
 import { useUmbra } from '@/contexts/UmbraContext';
+import { dbg } from '@/utils/debug';
+
+const SRC = 'useSeatClaim';
 
 export interface UseSeatClaimResult {
   /** Seats matching the user's linked accounts. */
@@ -95,7 +98,7 @@ export function useSeatClaim(
         setMatchingSeats(matches);
         setChecked(true);
       } catch (err) {
-        console.warn('[useSeatClaim] Failed to check seats:', err);
+        if (__DEV__) dbg.warn('community', 'failed to check seats', { error: String(err) }, SRC);
         setMatchingSeats([]);
         setChecked(true);
       } finally {

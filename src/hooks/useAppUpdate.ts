@@ -2,6 +2,9 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { Platform } from 'react-native';
 import type { PlatformDownload, AppUpdateState } from '@/types/version';
 import appJson from '../../app.json';
+import { dbg } from '@/utils/debug';
+
+const SRC = 'useAppUpdate';
 
 const APP_VERSION = appJson.expo.version;
 
@@ -244,7 +247,7 @@ export function useAppUpdate(): AppUpdateState {
       });
 
       if (!response.ok) {
-        console.warn('[useAppUpdate] GitHub API returned', response.status);
+        if (__DEV__) dbg.warn('lifecycle', 'GitHub API returned non-OK status', { status: response.status }, SRC);
         return;
       }
 
@@ -256,7 +259,7 @@ export function useAppUpdate(): AppUpdateState {
 
       setDownloads(parseReleaseAssets(release.assets || [], release.html_url));
     } catch (err) {
-      console.warn('[useAppUpdate] Failed to fetch latest release:', err);
+      if (__DEV__) dbg.warn('lifecycle', 'failed to fetch latest release', { error: String(err) }, SRC);
     } finally {
       setIsLoading(false);
     }
@@ -281,7 +284,7 @@ export function useAppUpdate(): AppUpdateState {
       }
     } catch (err: any) {
       const message = err?.message || err?.toString() || 'Unknown error';
-      console.warn('[useAppUpdate] Tauri update check failed:', message);
+      if (__DEV__) dbg.warn('lifecycle', 'Tauri update check failed', { error: message }, SRC);
       // If the check itself fails (e.g. no matching platform in manifest),
       // surface the error so the user knows why
       if (message.includes('platform') || message.includes('signature') || message.includes('manifest')) {
@@ -321,7 +324,7 @@ export function useAppUpdate(): AppUpdateState {
       setDesktopPhase('ready');
     } catch (err: any) {
       const message = err?.message || err?.toString() || 'Unknown error';
-      console.error('[useAppUpdate] Download failed:', message);
+      if (__DEV__) dbg.error('lifecycle', 'download failed', { error: message }, SRC);
       setDesktopError(message);
       setDesktopPhase('error');
     }
@@ -334,7 +337,7 @@ export function useAppUpdate(): AppUpdateState {
       const { relaunch } = await import(/* @vite-ignore */ _processPkg);
       await relaunch();
     } catch (err) {
-      console.error('[useAppUpdate] Restart failed:', err);
+      if (__DEV__) dbg.error('lifecycle', 'restart failed', { error: String(err) }, SRC);
     }
   }, []);
 
@@ -400,7 +403,7 @@ export function useAppUpdate(): AppUpdateState {
       setWebStatusText('Ready to update!');
       setWebPhase('ready');
     } catch (err) {
-      console.error('[useAppUpdate] Web preload failed:', err);
+      if (__DEV__) dbg.error('lifecycle', 'web preload failed', { error: String(err) }, SRC);
       setWebPhase('error');
       setWebStatusText('Preload failed');
     }

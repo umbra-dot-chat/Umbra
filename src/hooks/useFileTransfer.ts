@@ -20,6 +20,9 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useUmbra } from '@/contexts/UmbraContext';
+import { dbg } from '@/utils/debug';
+
+const SRC = 'useFileTransfer';
 import type {
   TransferProgress,
   FileTransferEvent,
@@ -103,7 +106,7 @@ export function useFileTransfer(): UseFileTransferResult {
       }
       setTransfers(merged);
     } catch (err) {
-      console.error('[useFileTransfer] Failed to fetch transfers:', err);
+      if (__DEV__) dbg.error('service', 'failed to fetch transfers', { error: String(err) }, SRC);
     }
   }, [service]);
 
@@ -271,7 +274,7 @@ export function useFileTransfer(): UseFileTransferResult {
         setTransfers((prev) => [...prev, progress]);
         return progress;
       } catch (err) {
-        console.error('[useFileTransfer] Failed to initiate upload:', err);
+        if (__DEV__) dbg.error('service', 'failed to initiate upload', { error: String(err) }, SRC);
         return null;
       }
     },
@@ -288,7 +291,7 @@ export function useFileTransfer(): UseFileTransferResult {
         );
         return progress;
       } catch (err) {
-        console.error('[useFileTransfer] Failed to accept download:', err);
+        if (__DEV__) dbg.error('service', 'failed to accept download', { error: String(err) }, SRC);
         return null;
       }
     },
@@ -301,7 +304,7 @@ export function useFileTransfer(): UseFileTransferResult {
       try {
         await service.pauseTransfer(transferId);
       } catch (err) {
-        console.error('[useFileTransfer] Failed to pause transfer:', err);
+        if (__DEV__) dbg.error('service', 'failed to pause transfer', { error: String(err) }, SRC);
       }
     },
     [service],
@@ -313,7 +316,7 @@ export function useFileTransfer(): UseFileTransferResult {
       try {
         await service.resumeTransfer(transferId);
       } catch (err) {
-        console.error('[useFileTransfer] Failed to resume transfer:', err);
+        if (__DEV__) dbg.error('service', 'failed to resume transfer', { error: String(err) }, SRC);
       }
     },
     [service],
@@ -325,7 +328,7 @@ export function useFileTransfer(): UseFileTransferResult {
       try {
         await service.cancelTransfer(transferId, reason);
       } catch (err) {
-        console.error('[useFileTransfer] Failed to cancel transfer:', err);
+        if (__DEV__) dbg.error('service', 'failed to cancel transfer', { error: String(err) }, SRC);
       }
     },
     [service],

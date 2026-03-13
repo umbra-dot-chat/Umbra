@@ -17,7 +17,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useUmbra } from '@/contexts/UmbraContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { dbg } from '@/utils/debug';
 import type { CommunityInvite, CommunityEvent } from '@umbra/service';
+
+const SRC = 'useCommunityInvites';
 
 export interface UseCommunityInvitesResult {
   /** All invite records for this community */
@@ -127,7 +130,7 @@ export function useCommunityInvites(communityId: string | null): UseCommunityInv
           );
         } catch (publishErr) {
           // Non-fatal — invite is still created locally
-          console.warn('[useCommunityInvites] Failed to publish invite to relay:', publishErr);
+          if (__DEV__) dbg.warn('community', 'failed to publish invite to relay', { error: String(publishErr) }, SRC);
         }
 
         return invite;
