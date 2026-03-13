@@ -9,6 +9,7 @@
 
 import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { Platform } from 'react-native';
+import { dbg } from '@/utils/debug';
 import type { CrashVitals } from '@/utils/debug';
 
 // Only render on web in dev mode
