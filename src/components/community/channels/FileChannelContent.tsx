@@ -34,6 +34,8 @@ import type {
 } from '@umbra/service';
 import { dbg } from '@/utils/debug';
 
+const SRC = 'FileChannelContent';
+
 // ---------------------------------------------------------------------------
 // Types adapted from Wisp for RN (subset of FileChannelView props)
 // ---------------------------------------------------------------------------
@@ -314,7 +316,7 @@ export function FileChannelContent({ channelId, communityId, myRoles = [], isOwn
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       setUploadError(msg);
-      console.error('[FileChannelContent] Upload failed:', err);
+      if (__DEV__) dbg.error('community', 'Upload failed', err, SRC);
     } finally {
       setIsUploading(false);
     }
@@ -363,7 +365,7 @@ export function FileChannelContent({ channelId, communityId, myRoles = [], isOwn
             );
           } else {
             // Mobile: would use expo-file-system or share sheet
-            console.log('[FileChannelContent] Mobile download not yet implemented');
+            if (__DEV__) dbg.info('community', 'Mobile download not yet implemented', undefined, SRC);
           }
         }
       } catch {

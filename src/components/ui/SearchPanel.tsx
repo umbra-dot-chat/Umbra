@@ -5,6 +5,9 @@ import { useUmbra } from '@/contexts/UmbraContext';
 import { useFriends } from '@/hooks/useFriends';
 import { useAuth } from '@/contexts/AuthContext';
 import type { Message } from '@umbra/service';
+import { dbg } from '@/utils/debug';
+
+const SRC = 'SearchPanel';
 
 export interface SearchPanelProps {
   query: string;
@@ -93,7 +96,7 @@ export function SearchPanel({ query, onQueryChange, onClose, conversationId, onR
 
       setResults(searchResults);
     } catch (err) {
-      console.warn('[SearchPanel] Search failed:', err);
+      if (__DEV__) dbg.warn('state', 'Search failed', err, SRC);
       setResults([]);
     } finally {
       setLoading(false);

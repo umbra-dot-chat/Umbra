@@ -19,6 +19,8 @@ import type { Message, CommunityEmoji } from '@umbra/service';
 import type { ActiveCall } from '@/types/call';
 import { InlineCallCardMessage } from '@/components/call/InlineCallCardMessage';
 
+const SRC = 'ChatArea';
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────────────────────────────────────
@@ -456,7 +458,7 @@ export const ChatArea = React.memo(function ChatArea({
           triggerHighlight();
         },
         () => {
-          console.warn('[ChatArea] Could not find message to scroll to:', scrollToMessageId);
+          if (__DEV__) dbg.warn('messages', 'Could not find message to scroll to', { scrollToMessageId }, SRC);
           onScrollToComplete?.();
         },
       );

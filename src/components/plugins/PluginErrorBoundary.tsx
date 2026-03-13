@@ -7,6 +7,9 @@
 
 import React from 'react';
 import { Box, Button, Text, useTheme } from '@coexist/wisp-react-native';
+import { dbg } from '@/utils/debug';
+
+const SRC = 'PluginErrorBoundary';
 
 interface Props {
   /** Plugin ID for error reporting */
@@ -32,11 +35,7 @@ export class PluginErrorBoundary extends React.Component<Props, State> {
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    console.error(
-      `[Plugin Error] Plugin "${this.props.pluginId}"${this.props.slot ? ` in slot "${this.props.slot}"` : ''} crashed:`,
-      error,
-      errorInfo
-    );
+    if (__DEV__) dbg.error('plugins', `Plugin "${this.props.pluginId}"${this.props.slot ? ` in slot "${this.props.slot}"` : ''} crashed`, { error, errorInfo }, SRC);
   }
 
   handleRetry = () => {

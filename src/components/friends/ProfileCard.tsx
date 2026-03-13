@@ -12,6 +12,8 @@ import { HelpIndicator } from '@/components/ui/HelpIndicator';
 import { HelpText, HelpHighlight, HelpListItem } from '@/components/ui/HelpContent';
 import { dbg } from '@/utils/debug';
 
+const SRC = 'ProfileCard';
+
 interface ProfileCardProps {
   style?: ViewStyle;
 }
@@ -57,7 +59,7 @@ export function ProfileCard({ style }: ProfileCardProps) {
     try {
       await connectRelay(PRIMARY_RELAY_URL);
     } catch (err) {
-      console.error('[ProfileCard] Reconnect failed:', err);
+      if (__DEV__) dbg.error('friends', 'Reconnect failed', err, SRC);
     }
   }, [connectRelay]);
 

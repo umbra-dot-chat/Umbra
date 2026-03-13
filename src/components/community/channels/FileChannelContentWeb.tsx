@@ -40,6 +40,8 @@ import type {
 import type { FileFolderNode } from '@/hooks/useCommunityFiles';
 import { dbg } from '@/utils/debug';
 
+const SRC = 'FileChannelContentWeb';
+
 // ---------------------------------------------------------------------------
 // Props
 // ---------------------------------------------------------------------------
@@ -280,7 +282,7 @@ export function FileChannelContentWeb({
         }
         setUploadProgress(100);
       } catch (err) {
-        console.error('[FileChannelContentWeb] Upload failed:', err);
+        if (__DEV__) dbg.error('community', 'Upload failed', err, SRC);
         setToastMessage(`Upload failed: ${err instanceof Error ? err.message : String(err)}`);
       } finally {
         setIsUploading(false);

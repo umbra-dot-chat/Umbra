@@ -7,8 +7,8 @@
  */
 
 import React, { useCallback, useEffect } from 'react';
-import { View, ScrollView, Pressable, ActivityIndicator, Image } from 'react-native';
-import { Dialog, Button, Text, Toggle, useTheme } from '@coexist/wisp-react-native';
+import { ScrollView, Pressable, Image } from 'react-native';
+import { Box, Dialog, Button, Spinner, Text, Toggle, useTheme } from '@coexist/wisp-react-native';
 import { useSound } from '@/contexts/SoundContext';
 import { defaultSpacing, defaultRadii } from '@coexist/wisp-core/theme/create-theme';
 import Svg, { Path, Circle, Rect, Line, Polyline } from 'react-native-svg';
@@ -22,6 +22,9 @@ import type {
   CommunityImportProgress,
 } from '@umbra/service';
 import { getGuildIconUrl, getGuildBannerUrl } from '@umbra/service';
+import { dbg } from '@/utils/debug';
+
+const SRC = 'DiscordImportDialog';
 
 // ---------------------------------------------------------------------------
 // Icons
@@ -187,8 +190,8 @@ function AuthScreen({
   const tc = theme.colors;
 
   return (
-    <View style={{ alignItems: 'center', gap: defaultSpacing.lg, paddingVertical: defaultSpacing.lg }}>
-      <View
+    <Box style={{ alignItems: 'center', gap: defaultSpacing.lg, paddingVertical: defaultSpacing.lg }}>
+      <Box
         style={{
           width: 64,
           height: 64,
@@ -199,19 +202,19 @@ function AuthScreen({
         }}
       >
         <DiscordIcon size={36} color="#fff" />
-      </View>
+      </Box>
 
-      <View style={{ alignItems: 'center', gap: defaultSpacing.sm }}>
+      <Box style={{ alignItems: 'center', gap: defaultSpacing.sm }}>
         <Text size="lg" weight="semibold" style={{ color: tc.text.primary }}>
           Import from Discord
         </Text>
         <Text size="sm" style={{ color: tc.text.muted, textAlign: 'center' }}>
           Connect your Discord account to import your server's channels and roles.
         </Text>
-      </View>
+      </Box>
 
       {error && (
-        <View
+        <Box
           style={{
             flexDirection: 'row',
             alignItems: 'center',
@@ -225,7 +228,7 @@ function AuthScreen({
           <Text size="sm" style={{ color: tc.status.danger, flex: 1 }}>
             {error}
           </Text>
-        </View>
+        </Box>
       )}
 
       <Button
@@ -239,7 +242,7 @@ function AuthScreen({
       <Text size="xs" style={{ color: tc.text.muted, textAlign: 'center' }}>
         Only servers where you have "Manage Server" permission will be shown.
       </Text>
-    </View>
+    </Box>
   );
 }
 
@@ -263,18 +266,18 @@ function ServerSelectionScreen({
   const tc = theme.colors;
 
   return (
-    <View style={{ gap: defaultSpacing.md }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+    <Box style={{ gap: defaultSpacing.md }}>
+      <Box style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
         <Text size="sm" weight="medium" style={{ color: tc.text.muted }}>
           Select a server to import ({guilds.length} available)
         </Text>
         <Button variant="tertiary" size="sm" onPress={onRefresh} disabled={isLoading}>
           Refresh
         </Button>
-      </View>
+      </Box>
 
       {error && (
-        <View
+        <Box
           style={{
             flexDirection: 'row',
             alignItems: 'center',
@@ -288,22 +291,22 @@ function ServerSelectionScreen({
           <Text size="sm" style={{ color: tc.status.danger, flex: 1 }}>
             {error}
           </Text>
-        </View>
+        </Box>
       )}
 
       {isLoading ? (
-        <View style={{ padding: defaultSpacing.xl, alignItems: 'center' }}>
-          <ActivityIndicator color={tc.accent.primary} />
-        </View>
+        <Box style={{ padding: defaultSpacing.xl, alignItems: 'center' }}>
+          <Spinner color={tc.accent.primary} />
+        </Box>
       ) : guilds.length === 0 ? (
-        <View style={{ padding: defaultSpacing.xl, alignItems: 'center' }}>
+        <Box style={{ padding: defaultSpacing.xl, alignItems: 'center' }}>
           <Text size="sm" style={{ color: tc.text.muted, textAlign: 'center' }}>
             No servers found. Make sure you have "Manage Server" permission in at least one server.
           </Text>
-        </View>
+        </Box>
       ) : (
         <ScrollView style={{ maxHeight: 300 }}>
-          <View style={{ gap: defaultSpacing.xs }}>
+          <Box style={{ gap: defaultSpacing.xs }}>
             {guilds.map((guild) => (
               <Pressable
                 key={guild.id}
@@ -318,7 +321,7 @@ function ServerSelectionScreen({
                 })}
               >
                 {/* Guild icon */}
-                <View
+                <Box
                   style={{
                     width: 40,
                     height: 40,
@@ -343,24 +346,24 @@ function ServerSelectionScreen({
                       {guild.name.charAt(0).toUpperCase()}
                     </Text>
                   )}
-                </View>
+                </Box>
 
-                <View style={{ flex: 1, minWidth: 0 }}>
+                <Box style={{ flex: 1, minWidth: 0 }}>
                   <Text size="sm" weight="medium" style={{ color: tc.text.primary }} numberOfLines={1}>
                     {guild.name}
                   </Text>
                   <Text size="xs" style={{ color: tc.text.muted }}>
                     {guild.owner ? 'Owner' : 'Manager'}
                   </Text>
-                </View>
+                </Box>
 
                 <ChevronRightIcon size={16} color={tc.text.muted} />
               </Pressable>
             ))}
-          </View>
+          </Box>
         </ScrollView>
       )}
-    </View>
+    </Box>
   );
 }
 
@@ -459,19 +462,19 @@ function PreviewScreen({
   const iconUrl = selectedGuild ? getGuildIconUrl(selectedGuild.id, selectedGuild.icon, 128) : null;
 
   // Debug logging for audit log
-  console.log('[PreviewScreen] Audit log state:', {
+  if (__DEV__) dbg.info('community', 'Audit log state', {
     auditLogCount,
     auditLogAvailable,
     auditLogLoading,
     importAuditLog,
     botStatus,
-  });
+  }, SRC);
 
   return (
-    <View style={{ gap: defaultSpacing.md }}>
+    <Box style={{ gap: defaultSpacing.md }}>
       {/* Banner and header */}
       {bannerUrl ? (
-        <View style={{ marginHorizontal: -defaultSpacing.lg, marginTop: -defaultSpacing.lg }}>
+        <Box style={{ marginHorizontal: -defaultSpacing.lg, marginTop: -defaultSpacing.lg }}>
           <Image
             source={{ uri: bannerUrl }}
             style={{
@@ -482,7 +485,7 @@ function PreviewScreen({
             }}
             resizeMode="cover"
           />
-          <View
+          <Box
             style={{
               flexDirection: 'row',
               alignItems: 'center',
@@ -496,7 +499,7 @@ function PreviewScreen({
               Back
             </Button>
             {iconUrl ? (
-              <View
+              <Box
                 style={{
                   width: 48,
                   height: 48,
@@ -510,22 +513,22 @@ function PreviewScreen({
                   source={{ uri: iconUrl }}
                   style={{ width: 42, height: 42 }}
                 />
-              </View>
+              </Box>
             ) : null}
-            <View style={{ flex: 1 }}>
+            <Box style={{ flex: 1 }}>
               <Text size="lg" weight="semibold" style={{ color: tc.text.primary }}>
                 {structure.name}
               </Text>
-            </View>
-          </View>
-        </View>
+            </Box>
+          </Box>
+        </Box>
       ) : (
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: defaultSpacing.md }}>
+        <Box style={{ flexDirection: 'row', alignItems: 'center', gap: defaultSpacing.md }}>
           <Button variant="tertiary" size="sm" onPress={onBack}>
             Back
           </Button>
           {iconUrl ? (
-            <View
+            <Box
               style={{
                 width: 40,
                 height: 40,
@@ -537,19 +540,19 @@ function PreviewScreen({
                 source={{ uri: iconUrl }}
                 style={{ width: 40, height: 40 }}
               />
-            </View>
+            </Box>
           ) : null}
-          <View style={{ flex: 1 }}>
+          <Box style={{ flex: 1 }}>
             <Text size="lg" weight="semibold" style={{ color: tc.text.primary }}>
               {structure.name}
             </Text>
-          </View>
-        </View>
+          </Box>
+        </Box>
       )}
 
       {/* Validation issues */}
       {hasIssues && (
-        <View
+        <Box
           style={{
             padding: defaultSpacing.md,
             backgroundColor: tc.status.warning + '15',
@@ -557,23 +560,23 @@ function PreviewScreen({
             gap: defaultSpacing.sm,
           }}
         >
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: defaultSpacing.sm }}>
+          <Box style={{ flexDirection: 'row', alignItems: 'center', gap: defaultSpacing.sm }}>
             <AlertCircleIcon size={16} color={tc.status.warning} />
             <Text size="sm" weight="medium" style={{ color: tc.status.warning }}>
               Some items may not import correctly:
             </Text>
-          </View>
+          </Box>
           {validationIssues.map((issue, i) => (
             <Text key={i} size="xs" style={{ color: tc.text.muted, paddingLeft: 24 }}>
               • {issue}
             </Text>
           ))}
-        </View>
+        </Box>
       )}
 
       {/* Summary */}
-      <View style={{ flexDirection: 'row', gap: defaultSpacing.sm, flexWrap: 'wrap' }}>
-        <View
+      <Box style={{ flexDirection: 'row', gap: defaultSpacing.sm, flexWrap: 'wrap' }}>
+        <Box
           style={{
             flex: 1,
             minWidth: 70,
@@ -589,8 +592,8 @@ function PreviewScreen({
           <Text size="xs" style={{ color: tc.text.muted }}>
             Categories
           </Text>
-        </View>
-        <View
+        </Box>
+        <Box
           style={{
             flex: 1,
             minWidth: 70,
@@ -606,8 +609,8 @@ function PreviewScreen({
           <Text size="xs" style={{ color: tc.text.muted }}>
             Channels
           </Text>
-        </View>
-        <View
+        </Box>
+        <Box
           style={{
             flex: 1,
             minWidth: 70,
@@ -623,9 +626,9 @@ function PreviewScreen({
           <Text size="xs" style={{ color: tc.text.muted }}>
             Roles
           </Text>
-        </View>
+        </Box>
         {memberCount > 0 && (
-          <View
+          <Box
             style={{
               flex: 1,
               minWidth: 70,
@@ -641,10 +644,10 @@ function PreviewScreen({
             <Text size="xs" style={{ color: tc.text.muted }}>
               Members
             </Text>
-          </View>
+          </Box>
         )}
         {emojiCount > 0 && (
-          <View
+          <Box
             style={{
               flex: 1,
               minWidth: 70,
@@ -660,16 +663,16 @@ function PreviewScreen({
             <Text size="xs" style={{ color: tc.text.muted }}>
               Emojis
             </Text>
-          </View>
+          </Box>
         )}
-      </View>
+      </Box>
 
       {/* Bot-gate: Enhanced import features */}
       {botStatus === 'in_guild' ? (
         <>
           {/* Bot connected — show feature toggles */}
           {membersLoading ? (
-            <View
+            <Box
               style={{
                 flexDirection: 'row',
                 alignItems: 'center',
@@ -679,18 +682,18 @@ function PreviewScreen({
                 borderRadius: defaultRadii.md,
               }}
             >
-              <ActivityIndicator size="small" color={tc.text.muted} />
-              <View style={{ flex: 1 }}>
+              <Spinner size="sm" color={tc.text.muted} />
+              <Box style={{ flex: 1 }}>
                 <Text size="sm" weight="medium" style={{ color: tc.text.primary }}>
                   Fetching members...
                 </Text>
                 <Text size="xs" style={{ color: tc.text.muted }}>
                   This may take a moment for large servers
                 </Text>
-              </View>
-            </View>
+              </Box>
+            </Box>
           ) : memberCount > 0 ? (
-            <View
+            <Box
               style={{
                 flexDirection: 'row',
                 alignItems: 'center',
@@ -701,18 +704,18 @@ function PreviewScreen({
               }}
             >
               <UsersIcon size={18} color={tc.text.muted} />
-              <View style={{ flex: 1 }}>
+              <Box style={{ flex: 1 }}>
                 <Text size="sm" weight="medium" style={{ color: tc.text.primary }}>
                   Import member seats
                 </Text>
                 <Text size="xs" style={{ color: tc.text.muted }}>
                   {memberCount.toLocaleString()} members as claimable ghost seats
                 </Text>
-              </View>
+              </Box>
               <Toggle checked={importMembers} onChange={() => onToggleMemberImport()} size="sm" />
-            </View>
+            </Box>
           ) : !membersAvailable && (
-            <View
+            <Box
               style={{
                 flexDirection: 'row',
                 alignItems: 'center',
@@ -725,12 +728,12 @@ function PreviewScreen({
               <Text size="xs" style={{ color: tc.text.muted, flex: 1 }}>
                 Unable to fetch members. Ensure the Server Members Intent is enabled in the Discord Developer Portal and the bot has been re-added to the server after enabling it.
               </Text>
-            </View>
+            </Box>
           )}
 
           {/* Pin import toggle */}
           {pinsLoading ? (
-            <View
+            <Box
               style={{
                 flexDirection: 'row',
                 alignItems: 'center',
@@ -740,18 +743,18 @@ function PreviewScreen({
                 borderRadius: defaultRadii.md,
               }}
             >
-              <ActivityIndicator size="small" color={tc.text.muted} />
-              <View style={{ flex: 1 }}>
+              <Spinner size="sm" color={tc.text.muted} />
+              <Box style={{ flex: 1 }}>
                 <Text size="sm" weight="medium" style={{ color: tc.text.primary }}>
                   Fetching pinned messages...
                 </Text>
                 <Text size="xs" style={{ color: tc.text.muted }}>
                   Scanning channels for pins
                 </Text>
-              </View>
-            </View>
+              </Box>
+            </Box>
           ) : pinCount > 0 ? (
-            <View
+            <Box
               style={{
                 flexDirection: 'row',
                 alignItems: 'center',
@@ -762,21 +765,21 @@ function PreviewScreen({
               }}
             >
               <PinIcon size={18} color={tc.text.muted} />
-              <View style={{ flex: 1 }}>
+              <Box style={{ flex: 1 }}>
                 <Text size="sm" weight="medium" style={{ color: tc.text.primary }}>
                   Import pinned messages
                 </Text>
                 <Text size="xs" style={{ color: tc.text.muted }}>
                   {pinCount.toLocaleString()} pinned message{pinCount !== 1 ? 's' : ''} across channels
                 </Text>
-              </View>
+              </Box>
               <Toggle checked={importPins} onChange={() => onTogglePinImport()} size="sm" />
-            </View>
+            </Box>
           ) : null}
 
           {/* Audit log toggle */}
           {auditLogLoading ? (
-            <View
+            <Box
               style={{
                 flexDirection: 'row',
                 alignItems: 'center',
@@ -786,18 +789,18 @@ function PreviewScreen({
                 borderRadius: defaultRadii.md,
               }}
             >
-              <ActivityIndicator size="small" color={tc.text.muted} />
-              <View style={{ flex: 1 }}>
+              <Spinner size="sm" color={tc.text.muted} />
+              <Box style={{ flex: 1 }}>
                 <Text size="sm" weight="medium" style={{ color: tc.text.primary }}>
                   Fetching audit log...
                 </Text>
                 <Text size="xs" style={{ color: tc.text.muted }}>
                   Loading server moderation history
                 </Text>
-              </View>
-            </View>
+              </Box>
+            </Box>
           ) : auditLogCount > 0 ? (
-            <View
+            <Box
               style={{
                 flexDirection: 'row',
                 alignItems: 'center',
@@ -808,18 +811,18 @@ function PreviewScreen({
               }}
             >
               <HistoryIcon size={18} color={tc.text.muted} />
-              <View style={{ flex: 1 }}>
+              <Box style={{ flex: 1 }}>
                 <Text size="sm" weight="medium" style={{ color: tc.text.primary }}>
                   Import audit log
                 </Text>
                 <Text size="xs" style={{ color: tc.text.muted }}>
                   {auditLogCount.toLocaleString()} moderation action{auditLogCount !== 1 ? 's' : ''}
                 </Text>
-              </View>
+              </Box>
               <Toggle checked={importAuditLog} onChange={() => onToggleAuditLogImport()} size="sm" />
-            </View>
+            </Box>
           ) : !auditLogAvailable && !auditLogLoading ? (
-            <View
+            <Box
               style={{
                 flexDirection: 'row',
                 alignItems: 'center',
@@ -832,11 +835,11 @@ function PreviewScreen({
               <Text size="xs" style={{ color: tc.text.muted, flex: 1 }}>
                 No audit log entries found or unable to fetch audit log.
               </Text>
-            </View>
+            </Box>
           ) : null}
 
           {/* Bridge toggle — always shown when bot is connected */}
-          <View
+          <Box
             style={{
               flexDirection: 'row',
               alignItems: 'center',
@@ -847,20 +850,20 @@ function PreviewScreen({
             }}
           >
             <BridgeIcon size={18} color={tc.text.muted} />
-            <View style={{ flex: 1 }}>
+            <Box style={{ flex: 1 }}>
               <Text size="sm" weight="medium" style={{ color: tc.text.primary }}>
                 Enable Discord Bridge
               </Text>
               <Text size="xs" style={{ color: tc.text.muted }}>
                 Keep messages synced between Discord and Umbra in real-time
               </Text>
-            </View>
+            </Box>
             <Toggle checked={enableBridge} onChange={() => onToggleBridge()} size="sm" />
-          </View>
+          </Box>
         </>
       ) : (
         /* Bot not connected — show connect banner */
-        <View
+        <Box
           style={{
             padding: defaultSpacing.md,
             backgroundColor: tc.accent.primary + '10',
@@ -870,60 +873,60 @@ function PreviewScreen({
             gap: defaultSpacing.sm,
           }}
         >
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: defaultSpacing.sm }}>
+          <Box style={{ flexDirection: 'row', alignItems: 'center', gap: defaultSpacing.sm }}>
             <BotIcon size={18} color={tc.accent.primary} />
-            <View style={{ flex: 1 }}>
+            <Box style={{ flex: 1 }}>
               <Text size="sm" weight="semibold" style={{ color: tc.text.primary }}>
                 Connect Bot for Enhanced Import
               </Text>
               <Text size="xs" style={{ color: tc.text.muted }}>
                 Unlock additional import features
               </Text>
-            </View>
+            </Box>
             <Button size="xs" onPress={onInviteBot} isLoading={botStatus === 'inviting'}>
               Connect
             </Button>
-          </View>
-          <View style={{ gap: 4, paddingLeft: 26 }}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: defaultSpacing.xs }}>
+          </Box>
+          <Box style={{ gap: 4, paddingLeft: 26 }}>
+            <Box style={{ flexDirection: 'row', alignItems: 'center', gap: defaultSpacing.xs }}>
               <UsersIcon size={12} color={tc.text.muted} />
               <Text size="xs" style={{ color: tc.text.muted }}>
                 Member seats — import members as claimable ghost seats
               </Text>
-            </View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: defaultSpacing.xs }}>
+            </Box>
+            <Box style={{ flexDirection: 'row', alignItems: 'center', gap: defaultSpacing.xs }}>
               <ShieldIcon size={12} color={tc.text.muted} />
               <Text size="xs" style={{ color: tc.text.muted }}>
                 Full permissions — import role permission settings
               </Text>
-            </View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: defaultSpacing.xs }}>
+            </Box>
+            <Box style={{ flexDirection: 'row', alignItems: 'center', gap: defaultSpacing.xs }}>
               <PinIcon size={12} color={tc.text.muted} />
               <Text size="xs" style={{ color: tc.text.muted }}>
                 Pinned messages — import pinned messages from channels
               </Text>
-            </View>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: defaultSpacing.xs }}>
+            </Box>
+            <Box style={{ flexDirection: 'row', alignItems: 'center', gap: defaultSpacing.xs }}>
               <HistoryIcon size={12} color={tc.text.muted} />
               <Text size="xs" style={{ color: tc.text.muted }}>
                 Audit log — import moderation history with user seats
               </Text>
-            </View>
-          </View>
-        </View>
+            </Box>
+          </Box>
+        </Box>
       )}
 
       {/* Channel preview */}
-      <View style={{ gap: defaultSpacing.sm }}>
+      <Box style={{ gap: defaultSpacing.sm }}>
         <Text size="sm" weight="medium" style={{ color: tc.text.muted }}>
           Channel Structure
         </Text>
         <ScrollView style={{ maxHeight: 200 }}>
-          <View style={{ gap: 2 }}>
+          <Box style={{ gap: 2 }}>
             {/* Categories with their channels */}
             {structure.categories.map((category) => (
-              <View key={category.discordId}>
-                <View
+              <Box key={category.discordId}>
+                <Box
                   style={{
                     flexDirection: 'row',
                     alignItems: 'center',
@@ -935,11 +938,11 @@ function PreviewScreen({
                   <Text size="xs" weight="semibold" style={{ color: tc.text.muted, textTransform: 'uppercase' }}>
                     {category.name}
                   </Text>
-                </View>
+                </Box>
                 {structure.channels
                   .filter((ch) => ch.categoryDiscordId === category.discordId)
                   .map((channel) => (
-                    <View
+                    <Box
                       key={channel.discordId}
                       style={{
                         flexDirection: 'row',
@@ -957,15 +960,15 @@ function PreviewScreen({
                       <Text size="sm" style={{ color: tc.text.primary }}>
                         {channel.name}
                       </Text>
-                    </View>
+                    </Box>
                   ))}
-              </View>
+              </Box>
             ))}
 
             {/* Uncategorized channels */}
             {structure.channels.filter((ch) => !ch.categoryDiscordId).length > 0 && (
-              <View>
-                <View
+              <Box>
+                <Box
                   style={{
                     flexDirection: 'row',
                     alignItems: 'center',
@@ -976,11 +979,11 @@ function PreviewScreen({
                   <Text size="xs" weight="semibold" style={{ color: tc.text.muted, textTransform: 'uppercase' }}>
                     Uncategorized
                   </Text>
-                </View>
+                </Box>
                 {structure.channels
                   .filter((ch) => !ch.categoryDiscordId)
                   .map((channel) => (
-                    <View
+                    <Box
                       key={channel.discordId}
                       style={{
                         flexDirection: 'row',
@@ -998,13 +1001,13 @@ function PreviewScreen({
                       <Text size="sm" style={{ color: tc.text.primary }}>
                         {channel.name}
                       </Text>
-                    </View>
+                    </Box>
                   ))}
-              </View>
+              </Box>
             )}
-          </View>
+          </Box>
         </ScrollView>
-      </View>
+      </Box>
 
       {/* Import button */}
       <Button onPress={onImport} disabled={isLoading}>
@@ -1016,7 +1019,7 @@ function PreviewScreen({
         {importMembers && memberCount > 0 ? ' Members will be imported as claimable ghost seats.' : ''}
         {importPins && pinCount > 0 ? ` ${pinCount.toLocaleString()} pinned messages will be imported.` : ''}
       </Text>
-    </View>
+    </Box>
   );
 }
 
@@ -1046,22 +1049,22 @@ function BotInviteScreen({
   const isInviting = botStatus === 'inviting';
 
   return (
-    <View style={{ gap: defaultSpacing.md }}>
+    <Box style={{ gap: defaultSpacing.md }}>
       {/* Header with back button */}
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: defaultSpacing.md }}>
+      <Box style={{ flexDirection: 'row', alignItems: 'center', gap: defaultSpacing.md }}>
         <Button variant="tertiary" size="sm" onPress={onBack} disabled={isInviting}>
           Back
         </Button>
-        <View style={{ flex: 1 }}>
+        <Box style={{ flex: 1 }}>
           <Text size="lg" weight="semibold" style={{ color: tc.text.primary }} numberOfLines={1}>
             {guild.name}
           </Text>
-        </View>
-      </View>
+        </Box>
+      </Box>
 
       {/* Bot icon + explanation */}
-      <View style={{ alignItems: 'center', gap: defaultSpacing.md, paddingVertical: defaultSpacing.md }}>
-        <View
+      <Box style={{ alignItems: 'center', gap: defaultSpacing.md, paddingVertical: defaultSpacing.md }}>
+        <Box
           style={{
             width: 56,
             height: 56,
@@ -1072,20 +1075,20 @@ function BotInviteScreen({
           }}
         >
           <BotIcon size={28} color="#5865F2" />
-        </View>
+        </Box>
 
-        <View style={{ alignItems: 'center', gap: defaultSpacing.xs }}>
+        <Box style={{ alignItems: 'center', gap: defaultSpacing.xs }}>
           <Text size="md" weight="semibold" style={{ color: tc.text.primary, textAlign: 'center' }}>
             Connect Umbra Bot
           </Text>
           <Text size="sm" style={{ color: tc.text.muted, textAlign: 'center', maxWidth: 320 }}>
             To read your server's channels and roles, Umbra's bot needs temporary access to your server.
           </Text>
-        </View>
-      </View>
+        </Box>
+      </Box>
 
       {/* Permission badge */}
-      <View
+      <Box
         style={{
           flexDirection: 'row',
           alignItems: 'center',
@@ -1098,22 +1101,22 @@ function BotInviteScreen({
         }}
       >
         <ShieldIcon size={18} color={tc.status.success} />
-        <View style={{ flex: 1 }}>
+        <Box style={{ flex: 1 }}>
           <Text size="sm" weight="medium" style={{ color: tc.text.primary }}>
             Minimal permissions
           </Text>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: defaultSpacing.xs, marginTop: 2 }}>
+          <Box style={{ flexDirection: 'row', alignItems: 'center', gap: defaultSpacing.xs, marginTop: 2 }}>
             <EyeIcon size={12} color={tc.text.muted} />
             <Text size="xs" style={{ color: tc.text.muted }}>
               View Channels — read-only access to channel list and roles
             </Text>
-          </View>
-        </View>
-      </View>
+          </Box>
+        </Box>
+      </Box>
 
       {/* Error */}
       {error && (
-        <View
+        <Box
           style={{
             flexDirection: 'row',
             alignItems: 'center',
@@ -1127,22 +1130,22 @@ function BotInviteScreen({
           <Text size="sm" style={{ color: tc.status.danger, flex: 1 }}>
             {error}
           </Text>
-        </View>
+        </Box>
       )}
 
       {/* Invite button or waiting state */}
       {isInviting || isLoading ? (
-        <View style={{ alignItems: 'center', gap: defaultSpacing.md, paddingVertical: defaultSpacing.md }}>
-          <ActivityIndicator color="#5865F2" />
+        <Box style={{ alignItems: 'center', gap: defaultSpacing.md, paddingVertical: defaultSpacing.md }}>
+          <Spinner color="#5865F2" />
           <Text size="sm" style={{ color: tc.text.muted }}>
             {isLoading ? 'Loading server structure...' : 'Waiting for bot to join...'}
           </Text>
           <Text size="xs" style={{ color: tc.text.muted, textAlign: 'center' }}>
             Complete the authorization in the popup window, then we'll automatically load your server's structure.
           </Text>
-        </View>
+        </Box>
       ) : (
-        <View style={{ gap: defaultSpacing.sm }}>
+        <Box style={{ gap: defaultSpacing.sm }}>
           <Button
             onPress={onInviteBot}
             style={{ backgroundColor: '#5865F2' }}
@@ -1152,9 +1155,9 @@ function BotInviteScreen({
           <Button variant="tertiary" size="sm" onPress={onSkip}>
             Skip — continue without bot
           </Button>
-        </View>
+        </Box>
       )}
-    </View>
+    </Box>
   );
 }
 
@@ -1187,15 +1190,15 @@ function ImportingScreen({ progress }: { progress: CommunityImportProgress | nul
   const detail = progress?.currentItem ?? null;
 
   return (
-    <View style={{ padding: 40, alignItems: 'center', gap: 20 }}>
-      <ActivityIndicator size="large" color={tc.accent.primary} />
+    <Box style={{ padding: 40, alignItems: 'center', gap: 20 }}>
+      <Spinner size="lg" color={tc.accent.primary} />
 
       <Text size="lg" weight="semibold" style={{ color: tc.text.primary }}>
         {label}
       </Text>
 
       {/* Progress bar */}
-      <View
+      <Box
         style={{
           width: '100%',
           maxWidth: 320,
@@ -1205,7 +1208,7 @@ function ImportingScreen({ progress }: { progress: CommunityImportProgress | nul
           overflow: 'hidden',
         }}
       >
-        <View
+        <Box
           style={{
             width: `${Math.max(pct, 2)}%`,
             height: '100%',
@@ -1213,7 +1216,7 @@ function ImportingScreen({ progress }: { progress: CommunityImportProgress | nul
             backgroundColor: tc.accent.primary,
           }}
         />
-      </View>
+      </Box>
 
       {/* Detail text (e.g. "1,250 / 9,900 members") */}
       <Text size="sm" style={{ color: tc.text.muted }}>
@@ -1226,7 +1229,7 @@ function ImportingScreen({ progress }: { progress: CommunityImportProgress | nul
           {progress.completedItems.toLocaleString()} / {progress.totalItems.toLocaleString()}
         </Text>
       )}
-    </View>
+    </Box>
   );
 }
 
@@ -1251,8 +1254,8 @@ function CompleteScreen({
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
-    <View style={{ alignItems: 'center', gap: defaultSpacing.lg, paddingVertical: defaultSpacing.lg }}>
-      <View
+    <Box style={{ alignItems: 'center', gap: defaultSpacing.lg, paddingVertical: defaultSpacing.lg }}>
+      <Box
         style={{
           width: 64,
           height: 64,
@@ -1263,98 +1266,98 @@ function CompleteScreen({
         }}
       >
         <CheckCircleIcon size={36} color={tc.status.success} />
-      </View>
+      </Box>
 
-      <View style={{ alignItems: 'center', gap: defaultSpacing.sm }}>
+      <Box style={{ alignItems: 'center', gap: defaultSpacing.sm }}>
         <Text size="lg" weight="semibold" style={{ color: tc.text.primary }}>
           Import Complete!
         </Text>
         <Text size="sm" style={{ color: tc.text.muted, textAlign: 'center' }}>
           Your community has been created successfully.
         </Text>
-      </View>
+      </Box>
 
       {/* Stats */}
-      <View style={{ flexDirection: 'row', gap: defaultSpacing.md, flexWrap: 'wrap', justifyContent: 'center' }}>
-        <View style={{ alignItems: 'center' }}>
+      <Box style={{ flexDirection: 'row', gap: defaultSpacing.md, flexWrap: 'wrap', justifyContent: 'center' }}>
+        <Box style={{ alignItems: 'center' }}>
           <Text size="xl" weight="bold" style={{ color: tc.accent.primary }}>
             {result.categoriesCreated}
           </Text>
           <Text size="xs" style={{ color: tc.text.muted }}>
             Categories
           </Text>
-        </View>
-        <View style={{ alignItems: 'center' }}>
+        </Box>
+        <Box style={{ alignItems: 'center' }}>
           <Text size="xl" weight="bold" style={{ color: tc.accent.primary }}>
             {result.channelsCreated}
           </Text>
           <Text size="xs" style={{ color: tc.text.muted }}>
             Channels
           </Text>
-        </View>
-        <View style={{ alignItems: 'center' }}>
+        </Box>
+        <Box style={{ alignItems: 'center' }}>
           <Text size="xl" weight="bold" style={{ color: tc.accent.primary }}>
             {result.rolesCreated}
           </Text>
           <Text size="xs" style={{ color: tc.text.muted }}>
             Roles
           </Text>
-        </View>
+        </Box>
         {result.seatsCreated > 0 && (
-          <View style={{ alignItems: 'center' }}>
+          <Box style={{ alignItems: 'center' }}>
             <Text size="xl" weight="bold" style={{ color: tc.accent.primary }}>
               {result.seatsCreated.toLocaleString()}
             </Text>
             <Text size="xs" style={{ color: tc.text.muted }}>
               Seats
             </Text>
-          </View>
+          </Box>
         )}
         {result.pinsImported > 0 && (
-          <View style={{ alignItems: 'center' }}>
+          <Box style={{ alignItems: 'center' }}>
             <Text size="xl" weight="bold" style={{ color: tc.accent.primary }}>
               {result.pinsImported.toLocaleString()}
             </Text>
             <Text size="xs" style={{ color: tc.text.muted }}>
               Pins
             </Text>
-          </View>
+          </Box>
         )}
         {result.auditLogImported > 0 && (
-          <View style={{ alignItems: 'center' }}>
+          <Box style={{ alignItems: 'center' }}>
             <Text size="xl" weight="bold" style={{ color: tc.accent.primary }}>
               {result.auditLogImported.toLocaleString()}
             </Text>
             <Text size="xs" style={{ color: tc.text.muted }}>
               Audit Log
             </Text>
-          </View>
+          </Box>
         )}
         {result.emojiImported > 0 && (
-          <View style={{ alignItems: 'center' }}>
+          <Box style={{ alignItems: 'center' }}>
             <Text size="xl" weight="bold" style={{ color: tc.accent.primary }}>
               {result.emojiImported.toLocaleString()}
             </Text>
             <Text size="xs" style={{ color: tc.text.muted }}>
               Emoji
             </Text>
-          </View>
+          </Box>
         )}
         {result.stickersImported > 0 && (
-          <View style={{ alignItems: 'center' }}>
+          <Box style={{ alignItems: 'center' }}>
             <Text size="xl" weight="bold" style={{ color: tc.accent.primary }}>
               {result.stickersImported.toLocaleString()}
             </Text>
             <Text size="xs" style={{ color: tc.text.muted }}>
               Stickers
             </Text>
-          </View>
+          </Box>
         )}
-      </View>
+      </Box>
 
       {/* Warnings — compact, truncated to avoid overwhelming the screen */}
       {result.warnings.length > 0 && (
-        <View
+        <Box
           style={{
             width: '100%',
             padding: defaultSpacing.sm,
@@ -1380,13 +1383,13 @@ function CompleteScreen({
               +{result.warnings.length - 2} more
             </Text>
           )}
-        </View>
+        </Box>
       )}
 
       <Button onPress={onClose} style={{ minWidth: 150 }}>
         Done
       </Button>
-    </View>
+    </Box>
   );
 }
 
@@ -1501,10 +1504,10 @@ export function DiscordImportDialog({
 
       case 'loading_structure':
         return (
-          <View style={{ padding: 40, alignItems: 'center', gap: 16 }}>
-            <ActivityIndicator size="large" />
+          <Box style={{ padding: 40, alignItems: 'center', gap: 16 }}>
+            <Spinner size="lg" />
             <Text>Loading server structure...</Text>
-          </View>
+          </Box>
         );
 
       case 'needs_bot':

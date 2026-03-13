@@ -6,9 +6,9 @@
  */
 
 import React, { useState, useCallback, useMemo } from 'react';
-import { View } from 'react-native';
 import type { ViewStyle, TextStyle } from 'react-native';
 import {
+  Box,
   Dialog,
   Input,
   TextArea,
@@ -27,6 +27,9 @@ import { useNetwork } from '@/hooks/useNetwork';
 import { useGroups } from '@/hooks/useGroups';
 import type { Friend } from '@umbra/service';
 import { TEST_IDS } from '@/constants/test-ids';
+import { dbg } from '@/utils/debug';
+
+const SRC = 'CreateGroupDialog';
 
 export interface CreateGroupDialogProps {
   open: boolean;
@@ -103,7 +106,7 @@ export function CreateGroupDialog({ open, onClose, onCreated }: CreateGroupDialo
         }, 1200);
       }
     } catch (err) {
-      console.error('[CreateGroupDialog] Failed:', err);
+      if (__DEV__) dbg.error('groups', 'Failed to create group', err, SRC);
       const msg = err instanceof Error ? err.message : String(err);
       let userMessage = 'Failed to create group. Please try again.';
       if (msg.length > 0 && msg.length < 200) {
@@ -150,7 +153,7 @@ export function CreateGroupDialog({ open, onClose, onCreated }: CreateGroupDialo
 
   return (
     <Dialog open={open} onClose={handleClose}>
-      <View style={styles.container} testID={TEST_IDS.GROUPS.CREATE_DIALOG}>
+      <Box style={styles.container} testID={TEST_IDS.GROUPS.CREATE_DIALOG}>
         <HStack style={{ alignItems: 'center', gap: 8 }}>
           <UsersIcon size={20} color={theme.colors.accent.primary} />
           <Text style={styles.header}>Create Group & Invite Members</Text>
@@ -206,14 +209,14 @@ export function CreateGroupDialog({ open, onClose, onCreated }: CreateGroupDialo
         )}
 
         {successMessage && (
-          <View style={{ backgroundColor: theme.colors.status.successSurface, borderRadius: 8, padding: 10, marginTop: -8, alignItems: 'center' }}>
+          <Box style={{ backgroundColor: theme.colors.status.successSurface, borderRadius: 8, padding: 10, marginTop: -8, alignItems: 'center' }}>
             <Text style={{ fontSize: 13, fontWeight: '600', color: theme.colors.status.success }}>
               {successMessage}
             </Text>
-          </View>
+          </Box>
         )}
 
-        <View style={styles.buttons}>
+        <Box style={styles.buttons}>
           <Button variant="tertiary" onPress={handleClose} testID={TEST_IDS.GROUPS.CANCEL_BUTTON}>
             Cancel
           </Button>
@@ -224,8 +227,8 @@ export function CreateGroupDialog({ open, onClose, onCreated }: CreateGroupDialo
           >
             {isCreating ? 'Sending Invites...' : 'Create & Invite'}
           </Button>
-        </View>
-      </View>
+        </Box>
+      </Box>
     </Dialog>
   );
 }
