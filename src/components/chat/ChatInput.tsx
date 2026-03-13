@@ -19,6 +19,9 @@ import { AnimatedPresence } from '@/components/ui/AnimatedPresence';
 import { getSystemCommands, GHOST_COMMANDS, SWARM_COMMANDS, isGhostBot } from '@/services/SlashCommandRegistry';
 import { useAppTheme } from '@/contexts/ThemeContext';
 import { opacity } from '@coexist/wisp-core/tokens';
+import { dbg } from '@/utils/debug';
+
+const SRC = 'ChatInput';
 
 // ---------------------------------------------------------------------------
 // Ghost text helper — computes the inline completion suggestion
@@ -237,7 +240,7 @@ export function ChatInput({
       cancelAnimationFrame(raf);
       ro?.disconnect();
     };
-  }, [inputFocused, !!replyingTo, !!editing]);
+  }, [!!replyingTo, !!editing]);
 
   // Correct vertical alignment of overlays AFTER each render via direct DOM manipulation.
   // useLayoutEffect fires before browser paint, so there's no visual flash.
@@ -329,6 +332,7 @@ export function ChatInput({
     (cmd: SlashCommandDef) => {
       try {
         const { newText, shouldSend } = selectCommand(cmd, message);
+        if (__DEV__) dbg.debug('messages', `slash command: /${cmd.command}`, { shouldSend, len: newText.length }, SRC);
         if (shouldSend) {
           // Eagerly reset textarea color before React re-renders (prevents stuck transparent text)
           if (Platform.OS === 'web' && transparentTextareaRef.current) {
@@ -344,7 +348,7 @@ export function ChatInput({
         }
       } catch (err) {
         // Defensive: if command execution fails, at least clear the input and reset state
-        console.error('[ChatInput] handleSlashSelect error:', err);
+        if (__DEV__) dbg.error('messages', 'handleSlashSelect error', { error: String(err) }, SRC);
         if (Platform.OS === 'web' && transparentTextareaRef.current) {
           transparentTextareaRef.current.style.color = '';
           transparentTextareaRef.current.style.caretColor = '';
@@ -485,12 +489,18 @@ export function ChatInput({
       }
       } catch (err) {
         // Defensive: prevent keydown errors from crashing the page
-        console.error('[ChatInput] keydown handler error:', err);
+        if (__DEV__) dbg.error('render', 'keydown handler error', { error: String(err) }, SRC);
       }
     };
 
-    const handleFocusIn = () => setInputFocused(true);
-    const handleFocusOut = () => setInputFocused(false);
+    const handleFocusIn = () => {
+      if (__DEV__) dbg.trace('render', 'input FOCUS', undefined, SRC);
+      setInputFocused(true);
+    };
+    const handleFocusOut = () => {
+      if (__DEV__) dbg.trace('render', 'input BLUR', undefined, SRC);
+      setInputFocused(false);
+    };
 
     wrapper.addEventListener('keydown', handleKeyDown, true);
     wrapper.addEventListener('focusin', handleFocusIn);
@@ -579,6 +589,7 @@ export function ChatInput({
               onValueChange={handleValueChange}
               onSelectionChange={handleSelectionChange}
               onSubmit={(msg) => {
+                if (__DEV__) dbg.info('messages', `send msg len=${msg.length}`, { editing: !!editing }, SRC);
                 // Eagerly reset transparent textarea (safety net for command highlight cleanup)
                 if (Platform.OS === 'web' && transparentTextareaRef.current) {
                   transparentTextareaRef.current.style.color = '';
