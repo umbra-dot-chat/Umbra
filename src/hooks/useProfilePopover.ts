@@ -1,4 +1,7 @@
 import { useState, useCallback } from 'react';
+import { dbg } from '@/utils/debug';
+
+const SRC = 'useProfilePopover';
 
 /** A member that can be shown in the profile popover */
 export interface ProfileMember {

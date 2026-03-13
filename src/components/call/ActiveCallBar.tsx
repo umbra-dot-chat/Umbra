@@ -7,14 +7,15 @@
  */
 
 import React from 'react';
-import { View } from 'react-native';
-import { Avatar, Text, useTheme, CallControls, CallTimer } from '@coexist/wisp-react-native';
+import { Avatar, Text, useTheme, CallControls, CallTimer, Box } from '@coexist/wisp-react-native';
 import { useCall } from '@/hooks/useCall';
 import { SlotRenderer } from '@/components/plugins/SlotRenderer';
+import { dbg } from '@/utils/debug';
 
 const noop = () => {};
 
 export function ActiveCallBar() {
+  if (__DEV__) dbg.trackRender('ActiveCallBar');
   const { activeCall, toggleMute, toggleCamera, endCall } = useCall();
   const { theme } = useTheme();
   const themeColors = theme.colors;
@@ -40,7 +41,7 @@ export function ActiveCallBar() {
   const callType = activeCall.callType === 'voice' ? 'audio' : activeCall.callType;
 
   return (
-    <View
+    <Box
       style={{
         flexDirection: 'row',
         alignItems: 'center',
@@ -52,7 +53,7 @@ export function ActiveCallBar() {
     >
       {/* Caller info */}
       <Avatar name={activeCall.remoteDisplayName} size="xs" status="online" />
-      <View style={{ flex: 1, gap: 2 }}>
+      <Box style={{ flex: 1, gap: 2 }}>
         <Text size="sm" weight="semibold" style={{ color: themeColors.text.inverse }}>
           {activeCall.remoteDisplayName}
         </Text>
@@ -63,7 +64,7 @@ export function ActiveCallBar() {
         ) : activeCall.connectedAt ? (
           <CallTimer startedAt={activeCall.connectedAt} size="sm" color={themeColors.text.inverse} style={{ opacity: 0.8 }} />
         ) : null}
-      </View>
+      </Box>
 
       {/* Plugin slot: voice-call-controls */}
       <SlotRenderer slot="voice-call-controls" style={{ flexDirection: 'row', alignItems: 'center' }} />
@@ -82,6 +83,6 @@ export function ActiveCallBar() {
         callType={callType as 'audio' | 'video'}
         layout="compact"
       />
-    </View>
+    </Box>
   );
 }

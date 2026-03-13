@@ -1,7 +1,9 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
-import { Dimensions, View } from 'react-native';
+import { Dimensions } from 'react-native';
 import type { ViewStyle } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
+import { Box } from '@coexist/wisp-react-native';
+import { dbg } from '@/utils/debug';
 
 // ---------------------------------------------------------------------------
 // Multiple morphing ink blobs — one large (bottom-left) + two smaller accent
@@ -203,6 +205,7 @@ export interface AnimatedBlobsProps {
 }
 
 export function AnimatedBlobs({ style, pathData, color = '#000000' }: AnimatedBlobsProps) {
+  if (__DEV__) dbg.trackRender('AnimatedBlobs');
   const [dimensions, setDimensions] = useState(() => {
     const { width, height } = Dimensions.get('window');
     return { width, height };
@@ -229,23 +232,21 @@ export function AnimatedBlobs({ style, pathData, color = '#000000' }: AnimatedBl
   }
 
   return (
-    <View
-      style={[
-        {
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          overflow: 'hidden',
-        },
-        style,
-      ]}
+    <Box
+      style={{
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
+        overflow: 'hidden',
+        ...style,
+      }}
       pointerEvents="none"
     >
       <Svg width={width} height={height} viewBox={`0 0 ${width} ${height}`}>
         <Path d={pathData} fill={color} fillRule="nonzero" />
       </Svg>
-    </View>
+    </Box>
   );
 }

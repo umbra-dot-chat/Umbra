@@ -16,10 +16,13 @@
  */
 
 import { useEffect, useRef } from 'react';
+import { dbg } from '@/utils/debug';
 import { useUmbra } from '@/contexts/UmbraContext';
 import { useToast } from '@coexist/wisp-react-native';
 import { useSound } from '@/contexts/SoundContext';
 import type { FriendEvent } from '@umbra/service';
+
+const SRC = 'useFriendNotifications';
 
 export function useFriendNotifications(): void {
   const { service, isReady } = useUmbra();

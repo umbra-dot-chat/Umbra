@@ -12,9 +12,12 @@
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { dbg } from '@/utils/debug';
 import { useUmbra } from '@/contexts/UmbraContext';
 import { useAuth } from '@/contexts/AuthContext';
 import type { Community, CommunityCreateResult, CommunityEvent } from '@umbra/service';
+
+const SRC = 'useCommunities';
 
 export interface UseCommunititesResult {
   /** List of communities the user is a member of */

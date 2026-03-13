@@ -7,6 +7,9 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { Platform } from 'react-native';
+import { dbg } from '@/utils/debug';
+
+const SRC = 'useFullscreen';
 
 export interface FullscreenState {
   /** The DID of the participant in fullscreen, or null */

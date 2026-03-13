@@ -1,8 +1,11 @@
 import { useRef, useState, useCallback } from 'react';
 import { Animated, Easing } from 'react-native';
 import { durations } from '@coexist/wisp-core';
+import { dbg } from '@/utils/debug';
 import { PANEL_WIDTH } from '@/types/panels';
 import type { RightPanel } from '@/types/panels';
+
+const SRC = 'useRightPanel';
 
 const PANEL_MIN = 220;
 const PANEL_MAX = 500;

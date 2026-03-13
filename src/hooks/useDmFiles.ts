@@ -15,12 +15,15 @@
  */
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { dbg } from '@/utils/debug';
 import { useUmbra } from '@/contexts/UmbraContext';
 import { useAuth } from '@/contexts/AuthContext';
 import type {
   DmSharedFileRecord,
   DmFileEventPayload,
 } from '@umbra/service';
+
+const SRC = 'useDmFiles';
 
 const PAGE_SIZE = 100;
 

@@ -9,6 +9,7 @@ import { Box, Button, CallTimer, useTheme } from '@coexist/wisp-react-native';
 import { InlineEventCard } from '@/components/ui/InlineEventCard';
 import { PhoneIcon, VideoIcon } from '@/components/ui';
 import type { ActiveCall } from '@/types/call';
+import { dbg } from '@/utils/debug';
 
 export interface InlineCallCardMessageProps {
   /** The active call to display. */
@@ -24,6 +25,7 @@ export interface InlineCallCardMessageProps {
 export function InlineCallCardMessage({
   activeCall, isGroup, onAccept, onEnd,
 }: InlineCallCardMessageProps) {
+  if (__DEV__) dbg.trackRender('InlineCallCardMessage');
   const { theme } = useTheme();
   const tc = theme.colors;
 

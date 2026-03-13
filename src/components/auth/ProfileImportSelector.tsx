@@ -184,6 +184,7 @@ export function ProfileImportSelector({
   relayUrl = DEFAULT_RELAY_URL,
   compact = false,
 }: ProfileImportSelectorProps) {
+  if (__DEV__) dbg.trackRender('ProfileImportSelector');
   const { theme, mode } = useTheme();
   const isDark = mode === 'dark';
   const [status, setStatus] = useState<'idle' | 'connecting' | 'fetching' | 'success' | 'error'>('idle');

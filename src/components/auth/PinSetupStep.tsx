@@ -9,8 +9,8 @@
  */
 
 import React, { useState, useCallback } from 'react';
-import { Pressable } from 'react-native';
 import {
+  Button,
   Text,
   VStack,
   Alert,
@@ -19,6 +19,7 @@ import {
 import { KeyIcon } from '@/components/ui';
 import { GrowablePinInput } from './GrowablePinInput';
 import { TEST_IDS } from '@/constants/test-ids';
+import { dbg } from '@/utils/debug';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -40,6 +41,7 @@ export interface PinSetupStepProps {
 // ---------------------------------------------------------------------------
 
 export function PinSetupStep({ onComplete }: PinSetupStepProps) {
+  if (__DEV__) dbg.trackRender('PinSetupStep');
   const [stage, setStage] = useState<'enter' | 'confirm'>('enter');
   const [enteredPin, setEnteredPin] = useState('');
   const [confirmValue, setConfirmValue] = useState('');
@@ -111,11 +113,11 @@ export function PinSetupStep({ onComplete }: PinSetupStepProps) {
             error={!!error}
           />
 
-          <Pressable onPress={handleBack}>
+          <Button variant="tertiary" size="sm" onPress={handleBack}>
             <Text size="sm" color="muted" style={{ textDecorationLine: 'underline' }}>
               Go back
             </Text>
-          </Pressable>
+          </Button>
         </VStack>
       </Presence>
     );
@@ -145,11 +147,11 @@ export function PinSetupStep({ onComplete }: PinSetupStepProps) {
         autoFocus
       />
 
-      <Pressable onPress={handleSkip} testID={TEST_IDS.PIN.SKIP_BUTTON}>
+      <Button variant="tertiary" size="sm" onPress={handleSkip} testID={TEST_IDS.PIN.SKIP_BUTTON}>
         <Text size="sm" color="muted" style={{ textDecorationLine: 'underline' }}>
           Skip for now
         </Text>
-      </Pressable>
+      </Button>
     </VStack>
   );
 }

@@ -13,11 +13,12 @@
  */
 
 import React, { useRef } from 'react';
-import { View, ScrollView, Platform, Pressable, type ViewStyle } from 'react-native';
+import { ScrollView, Platform, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { Overlay, ProgressSteps, Separator, Presence, Text, useTheme } from '@coexist/wisp-react-native';
+import { Overlay, ProgressSteps, Separator, Presence, Text, Box, Button, useTheme } from '@coexist/wisp-react-native';
 import type { ProgressStep, PresenceAnimation } from '@coexist/wisp-react-native';
 import { ArrowLeftIcon, XIcon } from '@/components/ui';
+import { dbg } from '@/utils/debug';
 
 export interface WalletFlowLayoutProps {
   open: boolean;
@@ -56,6 +57,7 @@ export function WalletFlowLayout({
   backButtonTestID,
   backButtonAccessibilityLabel,
 }: WalletFlowLayoutProps) {
+  if (__DEV__) dbg.trackRender('WalletFlowLayout');
   const insets = useSafeAreaInsets();
   const isNative = Platform.OS !== 'web';
   const { theme } = useTheme();
@@ -87,13 +89,14 @@ export function WalletFlowLayout({
     <>
       {/* Native header bar — safe area + back button + title */}
       {isNative && (
-        <View style={{ backgroundColor: tc.background.canvas }}>
+        <Box style={{ backgroundColor: tc.background.canvas }}>
           {/* Safe area spacer */}
-          <View style={{ height: insets.top }} />
+          <Box style={{ height: insets.top }} />
 
           {/* Header bar */}
-          <View style={headerBarStyle}>
-            <Pressable
+          <Box style={headerBarStyle}>
+            <Button
+              variant="tertiary"
               onPress={handleHeaderBack}
               style={headerBackButton}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -105,22 +108,22 @@ export function WalletFlowLayout({
               ) : (
                 <ArrowLeftIcon size={20} color={tc.text.primary} />
               )}
-            </Pressable>
+            </Button>
 
             <Text size="md" weight="semibold" style={{ flex: 1, textAlign: 'center' }}>
               {stepTitle}
             </Text>
 
             {/* Spacer to balance the back button */}
-            <View style={{ width: 40 }} />
-          </View>
+            <Box style={{ width: 40 }} />
+          </Box>
 
           <Separator spacing="none" />
-        </View>
+        </Box>
       )}
 
       {/* Step indicator — xs on native (compact), sm on web */}
-      <View style={{ paddingHorizontal: isNative ? 20 : 24, paddingTop: isNative ? 12 : 24, paddingBottom: isNative ? 12 : 16 }}>
+      <Box style={{ paddingHorizontal: isNative ? 20 : 24, paddingTop: isNative ? 12 : 24, paddingBottom: isNative ? 12 : 16 }}>
         <ProgressSteps
           steps={steps}
           currentStep={currentStep}
@@ -128,7 +131,7 @@ export function WalletFlowLayout({
           size={isNative ? 'xs' : 'sm'}
           onStepClick={onStepClick}
         />
-      </View>
+      </Box>
 
       <Separator spacing="none" />
 
@@ -147,18 +150,18 @@ export function WalletFlowLayout({
       <Separator spacing="none" />
 
       {/* Footer */}
-      <View style={{ paddingHorizontal: 24, paddingVertical: 16, paddingBottom: isNative ? Math.max(insets.bottom, 16) : 16 }}>
+      <Box style={{ paddingHorizontal: 24, paddingVertical: 16, paddingBottom: isNative ? Math.max(insets.bottom, 16) : 16 }}>
         {footer}
-      </View>
+      </Box>
     </>
   );
 
   // Native: full-screen view
   if (isNative) {
     return (
-      <View style={[fullScreenStyle, { backgroundColor: tc.background.canvas }]} testID={testID} accessibilityLabel={accessibilityLabel}>
+      <Box style={{...fullScreenStyle, backgroundColor: tc.background.canvas}} testID={testID} accessibilityLabel={accessibilityLabel}>
         {content}
-      </View>
+      </Box>
     );
   }
 
@@ -171,9 +174,9 @@ export function WalletFlowLayout({
       onBackdropPress={allowBackdropClose ? onClose : undefined}
       useModal={false}
     >
-      <View style={[modalStyle, { backgroundColor: tc.background.raised ?? tc.background.canvas }]} testID={testID} accessibilityLabel={accessibilityLabel}>
+      <Box style={{...modalStyle, backgroundColor: tc.background.raised ?? tc.background.canvas}} testID={testID} accessibilityLabel={accessibilityLabel}>
         {content}
-      </View>
+      </Box>
     </Overlay>
   );
 }

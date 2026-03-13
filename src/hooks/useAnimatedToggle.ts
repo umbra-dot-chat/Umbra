@@ -12,6 +12,9 @@
 
 import { useRef, useState, useEffect, useCallback } from 'react';
 import { Animated, Easing } from 'react-native';
+import { dbg } from '@/utils/debug';
+
+const SRC = 'useAnimatedToggle';
 
 // ---------------------------------------------------------------------------
 // Motion tokens (inlined to avoid import issues across platforms)

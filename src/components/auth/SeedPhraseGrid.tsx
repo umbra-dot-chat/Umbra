@@ -8,10 +8,11 @@
  */
 
 import React, { useCallback, useRef, useEffect, useState } from 'react';
-import { Animated, View, Platform, type ViewStyle } from 'react-native';
-import { Text, Button, Card, HStack, Alert, useTextScramble } from '@coexist/wisp-react-native';
+import { Animated, Platform, type ViewStyle } from 'react-native';
+import { Text, Button, Box, Card, HStack, Alert, useTextScramble } from '@coexist/wisp-react-native';
 import { CopyIcon } from '@/components/ui';
 import { TEST_IDS } from '@/constants/test-ids';
+import { dbg } from '@/utils/debug';
 
 const isMobile = Platform.OS !== 'web';
 
@@ -66,7 +67,7 @@ function AnimatedWordCard({ word, index }: AnimatedWordCardProps) {
   };
 
   return (
-    <View style={cellStyle}>
+    <Box style={cellStyle}>
       <Animated.View style={animatedStyle}>
         <Card variant="outlined" radius="sm" padding={isMobile ? 'none' : 'sm'} style={isMobile ? cardStyleMobile : { width: '100%' }}>
           <HStack gap="xs" style={{ alignItems: 'center' }}>
@@ -84,7 +85,7 @@ function AnimatedWordCard({ word, index }: AnimatedWordCardProps) {
           </HStack>
         </Card>
       </Animated.View>
-    </View>
+    </Box>
   );
 }
 
@@ -99,6 +100,7 @@ export interface SeedPhraseGridProps {
 }
 
 export function SeedPhraseGrid({ words, showCopy = false }: SeedPhraseGridProps) {
+  if (__DEV__) dbg.trackRender('SeedPhraseGrid');
   const [copied, setCopied] = useState(false);
 
   const handleCopy = useCallback(async () => {
@@ -115,15 +117,15 @@ export function SeedPhraseGrid({ words, showCopy = false }: SeedPhraseGridProps)
   }, [words]);
 
   return (
-    <View>
-      <View style={gridStyle} testID={TEST_IDS.SEED.GRID} accessibilityValue={{ text: words.join(' ') }}>
+    <Box>
+      <Box style={gridStyle} testID={TEST_IDS.SEED.GRID} accessibilityValue={{ text: words.join(' ') }}>
         {words.map((word, i) => (
           <AnimatedWordCard key={i} word={word} index={i} />
         ))}
-      </View>
+      </Box>
 
       {showCopy && (
-        <View style={{ marginTop: 16, gap: 12 }}>
+        <Box style={{ marginTop: 16, gap: 12 }}>
           <Button
             variant="tertiary"
             size="sm"
@@ -138,9 +140,9 @@ export function SeedPhraseGrid({ words, showCopy = false }: SeedPhraseGridProps)
             description="Your clipboard may be accessible to other apps. Clear it after use."
             testID={TEST_IDS.SEED.WARNING}
           />
-        </View>
+        </Box>
       )}
-    </View>
+    </Box>
   );
 }
 

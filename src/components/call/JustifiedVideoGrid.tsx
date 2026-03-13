@@ -4,13 +4,14 @@
  */
 
 import React, { useState, useMemo, useCallback, useRef, useEffect } from 'react';
-import { View, Pressable, Platform } from 'react-native';
+import { Pressable, Platform } from 'react-native';
 import type { LayoutChangeEvent, ViewStyle } from 'react-native';
-import { VideoTile, Text, useTheme } from '@coexist/wisp-react-native';
+import { Box, VideoTile, Text, useTheme } from '@coexist/wisp-react-native';
 import type { CallParticipant } from '@/types/call';
 import { useFullscreen } from '@/hooks/useFullscreen';
 import { SpeakerBorder } from '@/components/call/SpeakerBorder';
 import { VideoTileStatusIcons } from '@/components/call/VideoTileStatusIcons';
+import { dbg } from '@/utils/debug';
 
 // ─── Props ──────────────────────────────────────────────────────────────────
 
@@ -117,6 +118,7 @@ export function JustifiedVideoGrid({
   gap = 8,
   aspectRatio = 16 / 9,
 }: JustifiedVideoGridProps) {
+  if (__DEV__) dbg.trackRender('JustifiedVideoGrid');
   const { theme } = useTheme();
   const [containerSize, setContainerSize] = useState({ w: 0, h: 0 });
   const { fullscreenDid, enterFullscreen, exitFullscreen } = useFullscreen();
@@ -205,7 +207,7 @@ export function JustifiedVideoGrid({
   };
 
   return (
-    <View style={containerStyle} onLayout={handleLayout}>
+    <Box style={containerStyle} onLayout={handleLayout}>
       {/* Fullscreen mode: single tile fills the container */}
       {fullscreenParticipant ? (
         <Pressable
@@ -238,26 +240,26 @@ export function JustifiedVideoGrid({
             size="full"
             style={{ flex: 1 }}
           />
-          <View
+          <Box
+            px={8}
+            py={4}
+            radius={4}
             style={{
               position: 'absolute',
               top: 8,
               right: 8,
               backgroundColor: theme.colors.background.overlay,
-              borderRadius: 4,
-              paddingHorizontal: 8,
-              paddingVertical: 4,
             }}
           >
             <Text size="xs" style={{ color: theme.colors.text.inverse }}>
               Press Esc to exit
             </Text>
-          </View>
+          </Box>
         </Pressable>
       ) : (
         /* Normal grid mode */
         layout && containerSize.w > 0 && (
-          <View nativeID="video-grid" style={gridStyle}>
+          <Box nativeID="video-grid" style={gridStyle}>
             {tiles.map((participant) => {
               const isLocal = participant.did === localDid;
               const isSpeaking = speakingDids.has(participant.did);
@@ -313,9 +315,9 @@ export function JustifiedVideoGrid({
                 </SpeakerBorder>
               );
             })}
-          </View>
+          </Box>
         )
       )}
-    </View>
+    </Box>
   );
 }

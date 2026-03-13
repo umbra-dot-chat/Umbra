@@ -20,9 +20,12 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { dbg } from '@/utils/debug';
 import { useUmbra } from '@/contexts/UmbraContext';
 import { useAuth } from '@/contexts/AuthContext';
 import type { ConnectionInfo } from '@umbra/service';
+
+const SRC = 'useConnectionLink';
 
 export interface ParseResult {
   success: boolean;

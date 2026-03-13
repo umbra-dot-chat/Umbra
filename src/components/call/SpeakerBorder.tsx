@@ -15,10 +15,11 @@
  */
 
 import React, { useEffect, useRef } from 'react';
-import { View, Animated, Platform } from 'react-native';
+import { Animated, Platform } from 'react-native';
 import type { ViewStyle } from 'react-native';
-import { useTheme } from '@coexist/wisp-react-native';
+import { useTheme, Box } from '@coexist/wisp-react-native';
 import { useAppTheme } from '@/contexts/ThemeContext';
+import { dbg } from '@/utils/debug';
 
 const BORDER_WIDTH = 3;
 const ANIMATION_DURATION = 3000;
@@ -58,6 +59,7 @@ interface SpeakerBorderProps {
 // ── Component ────────────────────────────────────────────────────────────────
 
 export function SpeakerBorder({ active, children, borderRadius = 12, style }: SpeakerBorderProps) {
+  if (__DEV__) dbg.trackRender('SpeakerBorder');
   const { theme } = useTheme();
   const colors = theme.colors;
   const { motionPreferences } = useAppTheme();
@@ -99,9 +101,9 @@ export function SpeakerBorder({ active, children, borderRadius = 12, style }: Sp
   // Inactive: plain wrapper, no visual border, no layout shift
   if (!active) {
     return (
-      <View style={[{ borderRadius }, style]}>
+      <Box style={{ borderRadius, ...style }}>
         {children}
-      </View>
+      </Box>
     );
   }
 
@@ -110,52 +112,46 @@ export function SpeakerBorder({ active, children, borderRadius = 12, style }: Sp
   if (!animationsEnabled) {
     if (Platform.OS === 'web') {
       return (
-        <View
-          style={[
-            {
-              borderRadius,
-              boxShadow: `0 0 0 ${BORDER_WIDTH}px ${colors.accent.primary}, 0 0 10px 1px ${colors.accent.primary}`,
-            } as any,
-            style,
-          ]}
+        <Box
+          style={{
+            borderRadius,
+            boxShadow: `0 0 0 ${BORDER_WIDTH}px ${colors.accent.primary}, 0 0 10px 1px ${colors.accent.primary}`,
+            ...style,
+          } as any}
         >
           {children}
-        </View>
+        </Box>
       );
     }
     return (
-      <View
-        style={[
-          {
-            borderWidth: BORDER_WIDTH,
-            borderColor: colors.accent.primary,
-            borderRadius,
-          },
-          style,
-        ]}
+      <Box
+        style={{
+          borderWidth: BORDER_WIDTH,
+          borderColor: colors.accent.primary,
+          borderRadius,
+          ...style,
+        }}
       >
         {children}
-      </View>
+      </Box>
     );
   }
 
   // Web: CSS animation using box-shadow (renders OUTSIDE the element)
   if (Platform.OS === 'web') {
     return (
-      <View
-        style={[
-          {
-            borderRadius,
-            animationName: 'speakerGlow',
-            animationDuration: `${ANIMATION_DURATION}ms`,
-            animationTimingFunction: 'ease-in-out',
-            animationIterationCount: 'infinite',
-          } as any,
-          style,
-        ]}
+      <Box
+        style={{
+          borderRadius,
+          animationName: 'speakerGlow',
+          animationDuration: `${ANIMATION_DURATION}ms`,
+          animationTimingFunction: 'ease-in-out',
+          animationIterationCount: 'infinite',
+          ...style,
+        } as any}
       >
         {children}
-      </View>
+      </Box>
     );
   }
 

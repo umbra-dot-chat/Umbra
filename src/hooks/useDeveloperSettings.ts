@@ -1,4 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
+import { dbg } from '@/utils/debug';
+
+const SRC = 'useDeveloperSettings';
 
 export interface DeveloperSettings {
   /** Master switch for all diagnostic features */

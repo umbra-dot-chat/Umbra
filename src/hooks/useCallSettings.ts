@@ -1,8 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
+import { dbg } from '@/utils/debug';
 import { VideoQuality, AudioQuality } from '@/types/call';
 import type { OpusConfig, OpusApplication, AudioBitrate } from '@/types/call';
 import { DEFAULT_OPUS_CONFIG } from '@/types/call';
 import type { VideoEffect } from '@/hooks/useVideoEffects';
+
+const SRC = 'useCallSettings';
 
 export type IncomingCallDisplay = 'fullscreen' | 'toast';
 

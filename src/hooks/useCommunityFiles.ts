@@ -16,6 +16,7 @@
  */
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { dbg } from '@/utils/debug';
 import { useUmbra } from '@/contexts/UmbraContext';
 import { useAuth } from '@/contexts/AuthContext';
 import type {
@@ -23,6 +24,8 @@ import type {
   CommunityFileFolderRecord,
   CommunityEvent,
 } from '@umbra/service';
+
+const SRC = 'useCommunityFiles';
 
 const PAGE_SIZE = 100;
 

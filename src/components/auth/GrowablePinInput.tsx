@@ -7,9 +7,10 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, TextInput, Pressable, Animated, Platform, type ViewStyle, type TextStyle } from 'react-native';
-import { Text, useTheme, GradientBorder } from '@coexist/wisp-react-native';
+import { TextInput, Pressable, Animated, Platform, type ViewStyle, type TextStyle } from 'react-native';
+import { Text, Box, useTheme, GradientBorder } from '@coexist/wisp-react-native';
 import { TEST_IDS } from '@/constants/test-ids';
+import { dbg } from '@/utils/debug';
 
 // Gradient colors for filled PIN dots
 const PIN_GRADIENT_COLORS = ['#8B5CF6', '#EC4899', '#3B82F6'];
@@ -63,6 +64,7 @@ export function GrowablePinInput({
   cellSize = 48,
   gap = 10,
 }: GrowablePinInputProps) {
+  if (__DEV__) dbg.trackRender('GrowablePinInput');
   const { theme } = useTheme();
   const inputRef = useRef<TextInput>(null);
 
@@ -164,7 +166,7 @@ export function GrowablePinInput({
   };
 
   return (
-    <View style={{ alignItems: 'center' }}>
+    <Box style={{ alignItems: 'center' }}>
       {/* Hidden input captures keyboard */}
       <TextInput
         ref={inputRef}
@@ -189,9 +191,9 @@ export function GrowablePinInput({
         {chars.map((char, i) => {
           const isActive = i === activeIndex && !disabled;
           const cell = (
-            <View
+            <Box
               key={i}
-              style={[cellStyle(i), isActive && { borderColor: 'transparent' }]}
+              style={{...cellStyle(i), ...(isActive ? { borderColor: 'transparent' } : {})}}
               testID={`${TEST_IDS.PIN.CELL}.${i}`}
             >
               {char ? (
@@ -203,7 +205,7 @@ export function GrowablePinInput({
                   <Text style={charStyle}>{char}</Text>
                 )
               ) : null}
-            </View>
+            </Box>
           );
 
           if (isActive) {
@@ -224,7 +226,7 @@ export function GrowablePinInput({
           return cell;
         })}
       </Pressable>
-    </View>
+    </Box>
   );
 }
 

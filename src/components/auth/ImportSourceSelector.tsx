@@ -5,12 +5,13 @@
  */
 
 import React, { useCallback, useRef } from 'react';
-import { View, Pressable, Platform } from 'react-native';
+import { Pressable, Platform } from 'react-native';
 import {
   VStack,
   HStack,
   Text,
   Card,
+  Box,
   Button,
   Spinner,
   useTheme,
@@ -19,6 +20,7 @@ import Svg, { Path, Circle } from 'react-native-svg';
 
 import type { ImportSource, ImportSourceInfo } from '@umbra/service';
 import { useImportSources } from '@umbra/service';
+import { dbg } from '@/utils/debug';
 
 // Platform icons
 function DiscordIcon({ size = 24, color }: { size?: number; color: string }) {
@@ -165,7 +167,7 @@ function ImportSourceCard({
         >
           <HStack gap="md" style={{ alignItems: 'center' }}>
             {/* Icon */}
-            <View
+            <Box
               style={{
                 width: 44,
                 height: 44,
@@ -180,7 +182,7 @@ function ImportSourceCard({
               ) : (
                 <PlatformIcon source={source.id} size={24} color={source.color} />
               )}
-            </View>
+            </Box>
 
             {/* Info */}
             <VStack gap="xs" style={{ flex: 1 }}>
@@ -219,6 +221,7 @@ export function ImportSourceSelector({
   error = null,
   compact = false,
 }: ImportSourceSelectorProps) {
+  if (__DEV__) dbg.trackRender('ImportSourceSelector');
   const { theme } = useTheme();
   const { sources } = useImportSources();
 

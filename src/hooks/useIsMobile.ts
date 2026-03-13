@@ -7,6 +7,9 @@
 
 import { useState, useEffect } from 'react';
 import { Platform } from 'react-native';
+import { dbg } from '@/utils/debug';
+
+const SRC = 'useIsMobile';
 
 export const MOBILE_BREAKPOINT = 768;
 

@@ -1,4 +1,7 @@
 import { useRef, useState, useCallback } from 'react';
+import { dbg } from '@/utils/debug';
+
+const SRC = 'useHoverMessage';
 
 export function useHoverMessage(delay = 150) {
   const [hoveredMessage, setHoveredMessage] = useState<string | null>(null);

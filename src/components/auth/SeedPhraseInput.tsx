@@ -6,9 +6,11 @@
  */
 
 import React, { useRef, useCallback } from 'react';
-import { View, TextInput, Platform, type ViewStyle } from 'react-native';
-import { Input, Button, Alert, Text } from '@coexist/wisp-react-native';
+import { Platform, type ViewStyle } from 'react-native';
+import type { TextInput } from 'react-native';
+import { Input, Button, Box, Alert, Text } from '@coexist/wisp-react-native';
 import { ClipboardIcon } from '@/components/ui';
+import { dbg } from '@/utils/debug';
 
 export interface SeedPhraseInputProps {
   words: string[];
@@ -42,6 +44,7 @@ export function SeedPhraseInput({
   testID,
   pasteButtonTestID,
 }: SeedPhraseInputProps) {
+  if (__DEV__) dbg.trackRender('SeedPhraseInput');
   const inputRefs = useRef<(TextInput | null)[]>([]);
 
   const handleChangeText = useCallback(
@@ -88,11 +91,11 @@ export function SeedPhraseInput({
   }, [onPasteAll]);
 
   return (
-    <View testID={testID} accessibilityLabel={testID ? 'Seed phrase input' : undefined}>
+    <Box testID={testID} accessibilityLabel={testID ? 'Seed phrase input' : undefined}>
       {/* 3-column grid */}
-      <View style={gridStyle}>
+      <Box style={gridStyle}>
         {words.map((word, i) => (
-          <View key={i} style={cellStyle}>
+          <Box key={i} style={cellStyle}>
             <Input
               ref={(ref: any) => {
                 inputRefs.current[i] = ref;
@@ -109,12 +112,12 @@ export function SeedPhraseInput({
               fullWidth
               testID={testID ? `${testID}.word.${i}` : undefined}
             />
-          </View>
+          </Box>
         ))}
-      </View>
+      </Box>
 
       {/* Paste button */}
-      <View style={{ marginTop: 12 }}>
+      <Box style={{ marginTop: 12 }}>
         <Button
           variant="tertiary"
           size="sm"
@@ -125,15 +128,15 @@ export function SeedPhraseInput({
         >
           Paste from clipboard
         </Button>
-      </View>
+      </Box>
 
       {/* Error */}
       {error && (
-        <View style={{ marginTop: 12 }}>
+        <Box style={{ marginTop: 12 }}>
           <Alert variant="danger" description={error} />
-        </View>
+        </Box>
       )}
-    </View>
+    </Box>
   );
 }
 

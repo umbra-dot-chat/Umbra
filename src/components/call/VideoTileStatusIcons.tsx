@@ -8,9 +8,10 @@
  */
 
 import React from 'react';
-import { View } from 'react-native';
 import type { ViewStyle } from 'react-native';
+import { Box, useTheme } from '@coexist/wisp-react-native';
 import Svg, { Path, Line } from 'react-native-svg';
+import { dbg } from '@/utils/debug';
 
 // ─── Props ──────────────────────────────────────────────────────────────────
 
@@ -53,25 +54,25 @@ function CameraOffIcon({ size = 14 }: { size?: number }) {
   );
 }
 
-// ─── Shared Styles ──────────────────────────────────────────────────────────
-
-const iconBadge: ViewStyle = {
-  width: 24,
-  height: 24,
-  borderRadius: 12,
-  backgroundColor: 'rgba(0, 0, 0, 0.7)',
-  alignItems: 'center',
-  justifyContent: 'center',
-};
-
 // ─── Component ──────────────────────────────────────────────────────────────
 
 export function VideoTileStatusIcons({ isMuted, isDeafened, isCameraOff }: VideoTileStatusIconsProps) {
+  if (__DEV__) dbg.trackRender('VideoTileStatusIcons');
+  const { theme } = useTheme();
   const hasAny = isMuted || isDeafened || isCameraOff;
   if (!hasAny) return null;
 
+  const iconBadge: ViewStyle = {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: theme.colors.background.overlay,
+    alignItems: 'center',
+    justifyContent: 'center',
+  };
+
   return (
-    <View
+    <Box
       style={{
         position: 'absolute',
         top: 6,
@@ -82,20 +83,20 @@ export function VideoTileStatusIcons({ isMuted, isDeafened, isCameraOff }: Video
       }}
     >
       {isMuted && (
-        <View style={iconBadge}>
+        <Box style={iconBadge}>
           <MicOffIcon size={14} />
-        </View>
+        </Box>
       )}
       {isDeafened && (
-        <View style={iconBadge}>
+        <Box style={iconBadge}>
           <HeadphonesOffIcon size={14} />
-        </View>
+        </Box>
       )}
       {isCameraOff && (
-        <View style={iconBadge}>
+        <Box style={iconBadge}>
           <CameraOffIcon size={14} />
-        </View>
+        </Box>
       )}
-    </View>
+    </Box>
   );
 }

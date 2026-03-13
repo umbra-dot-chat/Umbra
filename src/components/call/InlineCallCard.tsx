@@ -11,6 +11,7 @@ import { Box, Text, Button, CallTimer, useTheme } from '@coexist/wisp-react-nati
 import { useCall } from '@/hooks/useCall';
 import { InlineEventCard } from '@/components/ui/InlineEventCard';
 import { PhoneIcon, VideoIcon } from '@/components/ui';
+import { dbg } from '@/utils/debug';
 
 interface InlineCallCardProps {
   /** Only show when the call matches this conversation. */
@@ -20,6 +21,7 @@ interface InlineCallCardProps {
 }
 
 export function InlineCallCard({ conversationId, isGroup }: InlineCallCardProps) {
+  if (__DEV__) dbg.trackRender('InlineCallCard');
   const { activeCall, acceptCall, endCall } = useCall();
   const { theme } = useTheme();
   const tc = theme.colors;
