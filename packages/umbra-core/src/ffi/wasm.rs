@@ -137,8 +137,9 @@ pub fn umbra_wasm_init() -> Result<(), JsValue> {
     // grows WASM linear memory (which can never shrink), causing Chrome OOM
     // crashes on data-heavy accounts.
     //
-    // When debug-trace is enabled: raise to INFO so FFI_ENTER/FFI_EXIT
-    // events from #[trace_ffi] are captured.
+    // When debug-trace is enabled: install the bridge subscriber at INFO
+    // level. This captures events into a ring buffer that JS can drain via
+    // flush_trace_events(), AND forwards to the browser console.
     #[cfg(not(feature = "debug-trace"))]
     {
         let config = tracing_wasm::WASMLayerConfigBuilder::new()
@@ -148,10 +149,7 @@ pub fn umbra_wasm_init() -> Result<(), JsValue> {
     }
     #[cfg(feature = "debug-trace")]
     {
-        let config = tracing_wasm::WASMLayerConfigBuilder::new()
-            .set_max_level(tracing::Level::INFO)
-            .build();
-        tracing_wasm::set_as_global_default_with_config(config);
+        crate::tracing_bridge::install_bridge_subscriber(tracing::Level::INFO);
     }
 
     if STATE.set(Arc::new(RwLock::new(WasmState::new()))).is_err() {
@@ -159,6 +157,24 @@ pub fn umbra_wasm_init() -> Result<(), JsValue> {
     }
 
     Ok(())
+}
+
+/// Drain all buffered Rust trace events and return them as a JSON array.
+///
+/// Returns `"[]"` when the `debug-trace` feature is disabled or the
+/// bridge subscriber has not been installed. JS should poll this at
+/// ~500ms intervals when debug mode is active.
+#[wasm_bindgen]
+pub fn umbra_wasm_flush_trace_events() -> String {
+    #[cfg(feature = "debug-trace")]
+    {
+        let events = crate::tracing_bridge::drain_trace_events();
+        serde_json::to_string(&events).unwrap_or_else(|_| "[]".to_string())
+    }
+    #[cfg(not(feature = "debug-trace"))]
+    {
+        "[]".to_string()
+    }
 }
 
 /// Initialize the database
