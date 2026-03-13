@@ -11,6 +11,40 @@ import type { NetworkStatus, ConnectionInfo, DiscoveryResult, DiscoveryEvent } f
 function _dbg(): any { return (globalThis as any).__umbra_logger_instance; }
 const SRC = 'svc:network';
 
+// ── Per-event-type relay stats ─────────────────────────────────────────────
+const _relayStats = new Map<string, { count: number; totalBytes: number; maxBytes: number; totalMs: number; maxMs: number }>();
+
+/** Record a network operation for aggregate stats. */
+function _recordRelayOp(type: string, size: number, dur: number): void {
+  let stats = _relayStats.get(type);
+  if (!stats) {
+    stats = { count: 0, totalBytes: 0, maxBytes: 0, totalMs: 0, maxMs: 0 };
+    _relayStats.set(type, stats);
+  }
+  stats.count++;
+  stats.totalBytes += size;
+  if (size > stats.maxBytes) stats.maxBytes = size;
+  stats.totalMs += dur;
+  if (dur > stats.maxMs) stats.maxMs = dur;
+}
+
+// Log aggregate relay stats every 30 seconds
+if (typeof setInterval !== 'undefined') {
+  setInterval(() => {
+    if (_relayStats.size === 0) return;
+    const summary: Record<string, any> = {};
+    for (const [type, s] of _relayStats) {
+      summary[type] = {
+        count: s.count,
+        totalKB: (s.totalBytes / 1024).toFixed(1),
+        avgMs: (s.totalMs / s.count).toFixed(1),
+        maxMs: s.maxMs.toFixed(1),
+      };
+    }
+    _dbg()?.info?.('network', 'relay stats (30s)', summary, SRC);
+  }, 30_000);
+}
+
 /**
  * Start the network service
  *
@@ -19,7 +53,11 @@ const SRC = 'svc:network';
  */
 export async function startNetwork(): Promise<void> {
   _dbg()?.info?.('network', 'Starting network...', undefined, SRC);
+  const t0 = performance.now();
   await wasm().umbra_wasm_network_start();
+  const dur = performance.now() - t0;
+  _dbg()?.tracePerf?.('network', 'relay.send type=network_start size=0B', dur, SRC);
+  _recordRelayOp('network_start', 0, dur);
   _dbg()?.info?.('network', 'Network started', undefined, SRC);
 }
 
@@ -28,7 +66,11 @@ export async function startNetwork(): Promise<void> {
  */
 export async function stopNetwork(): Promise<void> {
   _dbg()?.info?.('network', 'Stopping network...', undefined, SRC);
+  const t0 = performance.now();
   await wasm().umbra_wasm_network_stop();
+  const dur = performance.now() - t0;
+  _dbg()?.tracePerf?.('network', 'relay.send type=network_stop size=0B', dur, SRC);
+  _recordRelayOp('network_stop', 0, dur);
   _dbg()?.info?.('network', 'Network stopped', undefined, SRC);
 }
 
@@ -39,7 +81,13 @@ export async function stopNetwork(): Promise<void> {
  * Share this with the other peer via QR code or connection link.
  */
 export async function createOffer(): Promise<string> {
-  return wasm().umbra_wasm_network_create_offer();
+  const t0 = performance.now();
+  const result = await wasm().umbra_wasm_network_create_offer();
+  const dur = performance.now() - t0;
+  const size = result?.length ?? 0;
+  _dbg()?.tracePerf?.('network', `relay.send type=create_offer size=${size}B`, dur, SRC);
+  _recordRelayOp('create_offer', size, dur);
+  return result;
 }
 
 /**
@@ -49,7 +97,14 @@ export async function createOffer(): Promise<string> {
  * Returns JSON string with SDP answer and ICE candidates.
  */
 export async function acceptOffer(offerJson: string): Promise<string> {
-  return wasm().umbra_wasm_network_accept_offer(offerJson);
+  const t0 = performance.now();
+  const size = offerJson.length;
+  const result = await wasm().umbra_wasm_network_accept_offer(offerJson);
+  const dur = performance.now() - t0;
+  const resultSize = result?.length ?? 0;
+  _dbg()?.tracePerf?.('network', `relay.send type=accept_offer size=${size}B resultSize=${resultSize}B`, dur, SRC);
+  _recordRelayOp('accept_offer', size + resultSize, dur);
+  return result;
 }
 
 /**
@@ -58,7 +113,12 @@ export async function acceptOffer(offerJson: string): Promise<string> {
  * Takes the answer JSON string from the other peer.
  */
 export async function completeHandshake(answerJson: string): Promise<void> {
+  const t0 = performance.now();
+  const size = answerJson.length;
   await wasm().umbra_wasm_network_complete_handshake(answerJson);
+  const dur = performance.now() - t0;
+  _dbg()?.tracePerf?.('network', `relay.send type=complete_handshake size=${size}B`, dur, SRC);
+  _recordRelayOp('complete_handshake', size, dur);
 }
 
 /**
@@ -69,15 +129,25 @@ export async function completeHandshake(answerJson: string): Promise<void> {
  * swarm knows who the remote peer is.
  */
 export async function completeAnswerer(offererDid?: string, offererPeerId?: string): Promise<void> {
+  const t0 = performance.now();
   await wasm().umbra_wasm_network_complete_answerer(offererDid, offererPeerId);
+  const dur = performance.now() - t0;
+  _dbg()?.tracePerf?.('network', `relay.send type=complete_answerer size=0B`, dur, SRC);
+  _recordRelayOp('complete_answerer', 0, dur);
 }
 
 /**
  * Get network status
  */
 export async function getNetworkStatus(): Promise<NetworkStatus> {
+  const t0 = performance.now();
   const statusJson = wasm().umbra_wasm_network_status();
-  return await parseWasm<NetworkStatus>(statusJson);
+  const result = await parseWasm<NetworkStatus>(statusJson);
+  const dur = performance.now() - t0;
+  const size = typeof statusJson === 'string' ? statusJson.length : 0;
+  _dbg()?.tracePerf?.('network', `relay.send type=network_status size=${size}B`, dur, SRC);
+  _recordRelayOp('network_status', size, dur);
+  return result;
 }
 
 /**
@@ -98,16 +168,28 @@ export async function lookupPeer(_did: string): Promise<DiscoveryResult> {
  * for others to connect to us directly.
  */
 export async function getConnectionInfo(): Promise<ConnectionInfo> {
+  const t0 = performance.now();
   const infoJson = wasm().umbra_wasm_discovery_get_connection_info();
-  return await parseWasm<ConnectionInfo>(infoJson);
+  const result = await parseWasm<ConnectionInfo>(infoJson);
+  const dur = performance.now() - t0;
+  const size = typeof infoJson === 'string' ? infoJson.length : 0;
+  _dbg()?.tracePerf?.('network', `relay.send type=get_connection_info size=${size}B`, dur, SRC);
+  _recordRelayOp('get_connection_info', size, dur);
+  return result;
 }
 
 /**
  * Parse connection info from a string (link, base64, or JSON)
  */
 export async function parseConnectionInfo(info: string): Promise<ConnectionInfo> {
+  const t0 = performance.now();
+  const size = info.length;
   const resultJson = wasm().umbra_wasm_discovery_parse_connection_info(info);
-  return await parseWasm<ConnectionInfo>(resultJson);
+  const result = await parseWasm<ConnectionInfo>(resultJson);
+  const dur = performance.now() - t0;
+  _dbg()?.tracePerf?.('network', `relay.send type=parse_connection_info size=${size}B`, dur, SRC);
+  _recordRelayOp('parse_connection_info', size, dur);
+  return result;
 }
 
 /**
