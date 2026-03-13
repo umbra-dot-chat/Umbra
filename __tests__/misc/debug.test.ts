@@ -397,8 +397,8 @@ describe('Throughput Stats', () => {
     const serviceRow = stats.find((r: any) => r.category === 'service');
     const networkRow = stats.find((r: any) => r.category === 'network');
 
-    expect(serviceRow.count).toBeGreaterThanOrEqual(2);
-    expect(networkRow.count).toBeGreaterThanOrEqual(1);
+    expect(serviceRow?.count).toBeGreaterThanOrEqual(2);
+    expect(networkRow?.count).toBeGreaterThanOrEqual(1);
   });
 });
 

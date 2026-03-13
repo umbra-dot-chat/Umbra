@@ -1047,5 +1047,6 @@ export function createTauriBackend(
     umbra_wasm_community_audit_log_list: (json: string) => {
       return call('community_audit_log_list', json) as any;
     },
+    umbra_wasm_flush_trace_events: () => '[]',
   };
 }

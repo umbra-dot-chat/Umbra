@@ -576,6 +576,7 @@ function createNativeBackend(native: NativeUmbraCore): UmbraWasmModule {
     // ── Community Audit Log (via dispatcher) ────────────────────────────
     umbra_wasm_community_audit_log_create_batch: (json: string) => call('community_audit_log_create_batch', JSON.parse(json)),
     umbra_wasm_community_audit_log_list: (json: string) => call('community_audit_log_list', JSON.parse(json)),
+    umbra_wasm_flush_trace_events: () => '[]',
   };
 }
 
@@ -831,5 +832,6 @@ function createStubBackend(): UmbraWasmModule {
     umbra_wasm_community_seat_count: () => notImplemented('community_seat_count'),
     umbra_wasm_community_audit_log_create_batch: () => notImplemented('community_audit_log_create_batch'),
     umbra_wasm_community_audit_log_list: () => notImplemented('community_audit_log_list'),
+    umbra_wasm_flush_trace_events: () => '[]',
   };
 }
