@@ -10,6 +10,7 @@ import { useFriends } from '@/hooks/useFriends';
 import { useNetwork } from '@/hooks/useNetwork';
 import { usePlugins } from '@/contexts/PluginContext';
 import { UsersIcon, SearchIcon, SettingsIcon, MessageIcon, ZapIcon, DownloadIcon } from '@/components/ui';
+import { dbg } from '@/utils/debug';
 
 type IconComponent = React.ComponentType<{ size?: number | string; color?: string }>;
 const Users = UsersIcon as IconComponent;
@@ -30,6 +31,7 @@ const Zap = ZapIcon as IconComponent;
 const Download = DownloadIcon as IconComponent;
 
 export function CommandPalette({ open, onOpenChange, onOpenSettings, onOpenMarketplace, onSearchMessages }: CommandPaletteProps) {
+  if (__DEV__) dbg.trackRender('CommandPalette');
   const router = useRouter();
   const { friends } = useFriends();
   const { onlineDids } = useNetwork();

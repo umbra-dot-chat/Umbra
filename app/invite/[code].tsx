@@ -14,14 +14,15 @@
  */
 
 import React, { useEffect } from 'react';
-import { View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useTheme } from '@coexist/wisp-react-native';
+import { useTheme, Box } from '@coexist/wisp-react-native';
 import { useAuth } from '@/contexts/AuthContext';
 import { JoinCommunityModal } from '@/components/community/invite/JoinCommunityModal';
 import { usePendingInvite } from '@/hooks/usePendingInvite';
+import { dbg } from '@/utils/debug';
 
 export default function InvitePage() {
+  if (__DEV__) dbg.trackRender('InvitePage');
   const { code } = useLocalSearchParams<{ code: string }>();
   const { isAuthenticated } = useAuth();
   const { setPendingCode } = usePendingInvite();
@@ -42,12 +43,12 @@ export default function InvitePage() {
   }
 
   return (
-    <View style={{ flex: 1, backgroundColor: theme.colors.background.canvas }}>
+    <Box style={{ flex: 1, backgroundColor: theme.colors.background.canvas }}>
       <JoinCommunityModal
         open
         initialCode={code}
         onClose={() => router.replace('/(main)')}
       />
-    </View>
+    </Box>
   );
 }

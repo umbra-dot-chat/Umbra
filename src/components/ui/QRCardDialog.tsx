@@ -21,6 +21,7 @@ import {
 } from '@coexist/wisp-react-native';
 import { defaultSpacing } from '@coexist/wisp-core/theme/create-theme';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import { dbg } from '@/utils/debug';
 
 // ---------------------------------------------------------------------------
 // QR parsing helper
@@ -105,6 +106,7 @@ export function QRCardDialog({
   onScanned,
   title,
 }: QRCardDialogProps) {
+  if (__DEV__) dbg.trackRender('QRCardDialog');
   const { theme } = useTheme();
   const tc = theme.colors;
 

@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import React, { useState, useMemo, useCallback, useEffect, useRef } from 'react';
 import { KeyboardAvoidingView, Platform, Image, useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Text, GradientText, useTheme, Box } from '@coexist/wisp-react-native';
@@ -6,7 +6,7 @@ import { TEST_IDS } from '@/constants/test-ids';
 import { useHoverMessage } from '@/hooks/useHoverMessage';
 import { useRightPanel } from '@/hooks/useRightPanel';
 import { useProfilePopoverContext } from '@/contexts/ProfilePopoverContext';
-import { useConversations } from '@/hooks/useConversations';
+import { useActiveConversationData } from '@/hooks/useActiveConversationData';
 import { useMessages } from '@/hooks/useMessages';
 import { useFriends } from '@/hooks/useFriends';
 import { useGroups } from '@/hooks/useGroups';
@@ -37,6 +37,9 @@ import { ResizeHandle } from '@/components/ui/ResizeHandle';
 import { useAllCustomEmoji } from '@/hooks/useAllCustomEmoji';
 import { useNetwork } from '@/hooks/useNetwork';
 import { useFileTransfer } from '@/hooks/useFileTransfer';
+import { dbg } from '@/utils/debug';
+
+const SRC = 'ChatPage';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Empty conversation state
@@ -99,13 +102,21 @@ function EmptyConversation() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function ChatPage() {
+  if (__DEV__) dbg.trackRender('ChatPage');
   const { identity } = useAuth();
   const { service } = useUmbra();
   const myDid = identity?.did ?? '';
   const insets = Platform.OS !== 'web' ? useSafeAreaInsets() : { top: 0, bottom: 0 };
 
+  // Active conversation — shared with sidebar via context
+  const { activeId: activeConversationId, setActiveId, clearActiveId, searchPanelRequested, clearSearchPanelRequest } = useActiveConversation();
+
+  // Memoized selector: only re-renders when the ACTIVE conversation changes,
+  // not when the full conversation list updates. This breaks the render cascade
+  // where every incoming message caused ConversationsProvider → ChatPage → ChatArea.
+  const { activeConversation, resolvedConversationId, isLoading: convsLoading, hasConversations } = useActiveConversationData(activeConversationId);
+
   // Data hooks
-  const { conversations, isLoading: convsLoading } = useConversations();
   const { friends } = useFriends();
   const { groups, getMembers } = useGroups();
   const { onlineDids } = useNetwork();
@@ -138,13 +149,6 @@ export default function ChatPage() {
     }
     return map;
   }, [friends]);
-
-  // Active conversation — shared with sidebar via context
-  const { activeId: activeConversationId, setActiveId, clearActiveId, searchPanelRequested, clearSearchPanelRequest } = useActiveConversation();
-
-  // Resolve active conversation: prefer explicitly selected, fall back to first
-  const resolvedConversationId = activeConversationId ?? conversations[0]?.id ?? null;
-  const activeConversation = conversations.find((c) => c.id === resolvedConversationId);
 
   // Messages for the active conversation
   const {
@@ -424,7 +428,7 @@ export default function ChatPage() {
         };
       });
     } catch (err) {
-      console.error('[ChatPage] File attachment failed:', err);
+      dbg.error('messages', 'File attachment failed', { error: (err as Error)?.message ?? String(err) }, SRC);
       setPendingAttachment(null);
     }
   }, [service, resolvedConversationId]);
@@ -437,10 +441,10 @@ export default function ChatPage() {
       if (reassembled && reassembled.dataB64) {
         triggerWebDownload(reassembled.dataB64, reassembled.filename || filename, mimeType);
       } else {
-        console.warn('[ChatPage] reassembleFile returned no data for', fileId);
+        dbg.warn('service', 'reassembleFile returned no data', { fileId }, SRC);
       }
     } catch (err) {
-      console.error('[ChatPage] File download failed:', err);
+      dbg.error('service', 'File download failed', { error: (err as Error)?.message ?? String(err) }, SRC);
     }
   }, [service]);
 
@@ -455,10 +459,10 @@ export default function ChatPage() {
     setSharedFolderDialogSubmitting(true);
     try {
       await service.createDmFolder(resolvedConversationId, null, name.trim(), myDid);
-      console.log('[ChatPage] Shared folder created:', name.trim());
+      if (__DEV__) dbg.info('service', 'Shared folder created', { name: name.trim() }, SRC);
       setSharedFolderDialogOpen(false);
     } catch (err) {
-      console.error('[ChatPage] Failed to create shared folder:', err);
+      dbg.error('service', 'Failed to create shared folder', { error: (err as Error)?.message ?? String(err) }, SRC);
     } finally {
       setSharedFolderDialogSubmitting(false);
     }
@@ -479,40 +483,45 @@ export default function ChatPage() {
     }
   }, [threadParent, sendThreadReply]);
 
-  // Subscribe to real-time thread reply events to update the thread panel
+  // Subscribe to real-time thread reply events ONLY when the thread panel
+  // is open. This avoids adding a permanent onMessageEvent listener that
+  // fires on every message even when threads aren't being viewed.
+  const threadParentRef = useRef(threadParent);
+  threadParentRef.current = threadParent;
+  const friendNamesRef = useRef(friendNames);
+  friendNamesRef.current = friendNames;
+
   useEffect(() => {
-    if (!service) return;
+    if (!service || !threadParent) return;
 
     const unsubscribe = service.onMessageEvent((event: any) => {
       if (event.type === 'threadReplyReceived' && event.parentId && event.message) {
-        // Only update if the thread panel is open for this parent message
-        setThreadParent((current) => {
-          if (current && current.id === event.parentId) {
-            const msg = event.message;
-            const senderName = !msg.senderDid
-              ? 'Unknown'
-              : msg.senderDid === myDid
-                ? 'You'
-                : (friendNames[msg.senderDid] || msg.senderDid.slice(0, 16));
-            setThreadReplies((prev) => {
-              // Avoid duplicates
-              if (prev.some((r) => r.id === msg.id)) return prev;
-              return [...prev, {
-                id: msg.id,
-                sender: senderName,
-                content: msg.content?.text || '',
-                timestamp: new Date(msg.timestamp).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
-                isOwn: msg.senderDid === myDid,
-              }];
-            });
-          }
-          return current;
-        });
+        const current = threadParentRef.current;
+        if (current && current.id === event.parentId) {
+          const msg = event.message;
+          const names = friendNamesRef.current;
+          const senderName = !msg.senderDid
+            ? 'Unknown'
+            : msg.senderDid === myDid
+              ? 'You'
+              : (names[msg.senderDid] || msg.senderDid.slice(0, 16));
+          setThreadReplies((prev) => {
+            if (prev.some((r) => r.id === msg.id)) return prev;
+            return [...prev, {
+              id: msg.id,
+              sender: senderName,
+              content: msg.content?.text || '',
+              timestamp: new Date(msg.timestamp).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }),
+              isOwn: msg.senderDid === myDid,
+            }];
+          });
+        }
       }
     });
 
     return unsubscribe;
-  }, [service, myDid, friendNames]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [service, threadParent?.id, myDid]);
 
   // Build pinned messages for the panel
   const pinnedForPanel = useMemo(() =>
@@ -544,7 +553,7 @@ export default function ChatPage() {
   }, [resolvedConversationId, friendDid, friendDisplayName, startCall, setActiveId]);
 
   // No conversations yet — show welcome
-  if (!convsLoading && conversations.length === 0) {
+  if (!convsLoading && !hasConversations) {
     return (
       <Box testID={TEST_IDS.MAIN.CONTAINER} style={{ flex: 1 }}>
         <EmptyConversation />

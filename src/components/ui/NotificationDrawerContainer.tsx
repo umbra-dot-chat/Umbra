@@ -21,6 +21,7 @@ import {
 } from '@coexist/wisp-react-native';
 import { useNotifications } from '@/contexts/NotificationContext';
 import type { NotificationRecord, NotificationType, NotificationCategory } from '@umbra/service';
+import { dbg } from '@/utils/debug';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -111,6 +112,7 @@ function groupByDate(notifications: NotificationRecord[]): GroupedNotifications[
 // ---------------------------------------------------------------------------
 
 export function NotificationDrawerContainer() {
+  if (__DEV__) dbg.trackRender('NotificationDrawerContainer');
   const {
     notifications,
     unreadCounts,

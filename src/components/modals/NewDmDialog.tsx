@@ -24,6 +24,7 @@ import { useFriends } from '@/hooks/useFriends';
 import { useNetwork } from '@/hooks/useNetwork';
 import { useConversations } from '@/hooks/useConversations';
 import type { Friend } from '@umbra/service';
+import { dbg } from '@/utils/debug';
 
 export interface NewDmDialogProps {
   open: boolean;
@@ -34,6 +35,7 @@ export interface NewDmDialogProps {
 }
 
 export function NewDmDialog({ open, onClose, onSelectFriend }: NewDmDialogProps) {
+  if (__DEV__) dbg.trackRender('NewDmDialog');
   const { theme } = useTheme();
   const tc = theme.colors;
   const { friends } = useFriends();

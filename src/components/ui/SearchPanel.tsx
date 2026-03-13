@@ -25,6 +25,7 @@ const SEARCH_DEBOUNCE_MS = 300;
 const MAX_SEARCH_MESSAGES = 500;
 
 export function SearchPanel({ query, onQueryChange, onClose, conversationId, onResultClick }: SearchPanelProps) {
+  if (__DEV__) dbg.trackRender('SearchPanel');
   const { service } = useUmbra();
   const { friends } = useFriends();
   const { identity } = useAuth();

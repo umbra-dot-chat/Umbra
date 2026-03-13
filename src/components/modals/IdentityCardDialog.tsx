@@ -31,6 +31,7 @@ import {
   getIdentityCardPreviewUrl,
 } from '@/utils/identity-card-pdf';
 import type { IdentityCardData } from '@/utils/identity-card-pdf';
+import { dbg } from '@/utils/debug';
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -42,6 +43,7 @@ export interface IdentityCardDialogProps {
 // ── Component ──────────────────────────────────────────────────────────
 
 export function IdentityCardDialog({ open, onClose }: IdentityCardDialogProps) {
+  if (__DEV__) dbg.trackRender('IdentityCardDialog');
   const { theme } = useTheme();
   const tc = theme.colors;
   const { identity, recoveryPhrase } = useAuth();

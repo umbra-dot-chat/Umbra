@@ -10,6 +10,7 @@ import React, { useEffect, useRef, useCallback } from 'react';
 import { Platform } from 'react-native';
 import { Box, Button, Text, useTheme } from '@coexist/wisp-react-native';
 import { UsersIcon, MessageIcon } from '@/components/ui';
+import { dbg } from '@/utils/debug';
 
 export interface NewChatMenuProps {
   visible: boolean;
@@ -19,6 +20,7 @@ export interface NewChatMenuProps {
 }
 
 export function NewChatMenu({ visible, onClose, onNewDm, onNewGroup }: NewChatMenuProps) {
+  if (__DEV__) dbg.trackRender('NewChatMenu');
   const { theme } = useTheme();
   const tc = theme.colors;
   const menuRef = useRef<any>(null);

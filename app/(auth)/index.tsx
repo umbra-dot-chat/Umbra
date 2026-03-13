@@ -13,6 +13,7 @@ import { useAuth, type StoredAccount } from '@/contexts/AuthContext';
 import { TAGLINES } from '@/constants/taglines';
 // react-native-svg is already used by AnimatedBlobs, safe to import on all platforms
 import Svg, { Path } from 'react-native-svg';
+import { dbg } from '@/utils/debug';
 
 // Ghost logo assets — black and white variants for theme + blob inversion
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -501,6 +502,7 @@ function NativeInvertedLayer({
 // ---------------------------------------------------------------------------
 
 export default function AuthScreen() {
+  if (__DEV__) dbg.trackRender('AuthScreen');
   const { pathData } = useBlobPath();
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
   const { theme, mode } = useTheme();

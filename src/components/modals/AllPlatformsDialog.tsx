@@ -12,6 +12,7 @@ import {
   ExternalLinkIcon,
   GlobeIcon,
 } from '@/components/ui';
+import { dbg } from '@/utils/debug';
 
 interface AllPlatformsDialogProps {
   open: boolean;
@@ -62,6 +63,7 @@ function getPlatformIcon(icon: string): string {
 }
 
 export function AllPlatformsDialog({ open, onClose, downloads, version, releaseUrl }: AllPlatformsDialogProps) {
+  if (__DEV__) dbg.trackRender('AllPlatformsDialog');
   const { theme } = useTheme();
   const tc = theme.colors;
 

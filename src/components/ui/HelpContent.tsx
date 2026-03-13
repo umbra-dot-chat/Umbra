@@ -19,6 +19,7 @@
 import React from 'react';
 import type { ViewStyle } from 'react-native';
 import { Box, Text, useTheme } from '@coexist/wisp-react-native';
+import { dbg } from '@/utils/debug';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // HelpSection — Section with title header
@@ -31,6 +32,7 @@ interface HelpSectionProps {
 }
 
 export function HelpSection({ title, children, style }: HelpSectionProps) {
+  if (__DEV__) dbg.trackRender('HelpSection');
   const { theme } = useTheme();
   const tc = theme.colors;
 

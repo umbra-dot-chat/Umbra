@@ -41,6 +41,7 @@ import { MobileBackButton } from '@/components/ui/MobileBackButton';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import { useNetwork } from '@/hooks/useNetwork';
 import { TEST_IDS } from '@/constants/test-ids';
+import { dbg } from '@/utils/debug';
 
 // ---------------------------------------------------------------------------
 // Search Platform Selector
@@ -105,6 +106,7 @@ function formatRelativeTime(timestamp: number): string {
 // ---------------------------------------------------------------------------
 
 export default function FriendsPage() {
+  if (__DEV__) dbg.trackRender('FriendsPage');
   const { theme } = useTheme();
   const router = useRouter();
   const { identity } = useAuth();

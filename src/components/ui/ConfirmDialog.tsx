@@ -9,6 +9,7 @@
 import React, { useCallback, useState } from 'react';
 import { Image } from 'react-native';
 import { Dialog, Button, Text, Box, useTheme } from '@coexist/wisp-react-native';
+import { dbg } from '@/utils/debug';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -47,6 +48,7 @@ export function ConfirmDialog({
   submitting = false,
   image,
 }: ConfirmDialogProps) {
+  if (__DEV__) dbg.trackRender('ConfirmDialog');
   const { theme } = useTheme();
   const [error, setError] = useState<string | null>(null);
 

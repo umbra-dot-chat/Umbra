@@ -6,12 +6,14 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useNetwork } from '@/hooks/useNetwork';
 import { useConversations } from '@/hooks/useConversations';
 import { useFriends } from '@/hooks/useFriends';
+import { dbg } from '@/utils/debug';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Debug Page
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function DebugPage() {
+  if (__DEV__) dbg.trackRender('DebugPage');
   const { theme } = useTheme();
   const colors = theme.colors;
   const router = useRouter();

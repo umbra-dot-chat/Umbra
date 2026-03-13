@@ -19,12 +19,14 @@ import {
 import type { LayoutChangeEvent } from 'react-native';
 import { Box, Button, Text, useTheme } from '@coexist/wisp-react-native';
 import { useHelp } from '@/contexts/HelpContext';
+import { dbg } from '@/utils/debug';
 
 const SCREEN_PADDING = 12;
 const POPOVER_WIDTH = 340;
 const POPOVER_MAX_HEIGHT = 420;
 
 export function HelpPopoverHost() {
+  if (__DEV__) dbg.trackRender('HelpPopoverHost');
   const { popoverState, closePopover } = useHelp();
   const { theme } = useTheme();
   const tc = theme.colors;

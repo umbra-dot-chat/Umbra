@@ -19,6 +19,7 @@
 import React, { useEffect, useRef } from 'react';
 import { Animated, Platform } from 'react-native';
 import { Box } from '@coexist/wisp-react-native';
+import { dbg } from '@/utils/debug';
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -146,6 +147,7 @@ export function GradientIcon({
   speed = DEFAULT_SPEED,
   fallbackColor,
 }: GradientIconProps) {
+  if (__DEV__) dbg.trackRender('GradientIcon');
   if (!active) {
     return fallbackColor
       ? React.cloneElement(children, { color: fallbackColor })

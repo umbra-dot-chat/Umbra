@@ -9,6 +9,7 @@ import { Pressable, Dimensions, Platform } from 'react-native';
 import type { ViewStyle } from 'react-native';
 import { Avatar, Box, useTheme, UserProfileCard } from '@coexist/wisp-react-native';
 import type { ProfileMember } from '@/hooks/useProfilePopover';
+import { dbg } from '@/utils/debug';
 
 export interface ProfilePopoverProps {
   selectedMember: ProfileMember | null;
@@ -17,6 +18,7 @@ export interface ProfilePopoverProps {
 }
 
 export function ProfilePopover({ selectedMember, anchor, onClose }: ProfilePopoverProps) {
+  if (__DEV__) dbg.trackRender('ProfilePopover');
   const { theme } = useTheme();
   const tc = theme.colors;
 

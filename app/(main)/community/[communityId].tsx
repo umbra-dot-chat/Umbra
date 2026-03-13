@@ -54,6 +54,9 @@ import { VolumeIcon, ArrowLeftIcon } from '@/components/ui';
 import { FileChannelContent } from '@/components/community/channels/FileChannelContent';
 import { AnimatedPresence } from '@/components/ui/AnimatedPresence';
 import { pickFile } from '@/utils/filePicker';
+import { dbg } from '@/utils/debug';
+
+const SRC = 'CommunityPage';
 
 // ---------------------------------------------------------------------------
 // Channel type mapping
@@ -197,6 +200,7 @@ function VoiceChannelLobby({
 // ---------------------------------------------------------------------------
 
 export default function CommunityPage() {
+  if (__DEV__) dbg.trackRender('CommunityPage');
   const { communityId } = useLocalSearchParams<{ communityId: string }>();
   const { theme } = useTheme();
   const { identity } = useAuth();
@@ -571,7 +575,7 @@ export default function CommunityPage() {
       });
       await sendMessage(fileContent);
     } catch (err) {
-      console.error('[CommunityPage] File attachment failed:', err);
+      dbg.error('community', 'File attachment failed', { error: (err as Error)?.message ?? String(err) }, SRC);
     }
   }, [service, activeChannelId, sendMessage]);
 
@@ -607,7 +611,7 @@ export default function CommunityPage() {
           const memberRoles = await service.getMemberRoles(communityId, member.id);
           setContextMenuMemberRoleIds(new Set(memberRoles.map((r: any) => r.id)));
         } catch (err) {
-          console.warn('[CommunityPage] Failed to get member roles:', err);
+          dbg.warn('community', 'Failed to get member roles', { error: (err as Error)?.message ?? String(err) }, SRC);
           setContextMenuMemberRoleIds(new Set());
         }
       }
@@ -638,7 +642,7 @@ export default function CommunityPage() {
           // Refresh community data after role change
           await refreshCommunity();
         } catch (err) {
-          console.warn('[CommunityPage] Failed to toggle role:', err);
+          dbg.warn('community', 'Failed to toggle role', { error: (err as Error)?.message ?? String(err) }, SRC);
           // Revert optimistic update
           setContextMenuMemberRoleIds((prev) => {
             const next = new Set(prev);
@@ -662,7 +666,7 @@ export default function CommunityPage() {
         setContextMenuOpen(false);
         await refreshCommunity();
       } catch (err) {
-        console.warn('[CommunityPage] Failed to kick member:', err);
+        dbg.warn('community', 'Failed to kick member', { error: (err as Error)?.message ?? String(err) }, SRC);
       }
     },
     [service, communityId, myDid, refreshCommunity],
@@ -678,7 +682,7 @@ export default function CommunityPage() {
         setContextMenuOpen(false);
         await refreshCommunity();
       } catch (err) {
-        console.warn('[CommunityPage] Failed to ban member:', err);
+        dbg.warn('community', 'Failed to ban member', { error: (err as Error)?.message ?? String(err) }, SRC);
       }
     },
     [service, communityId, myDid, refreshCommunity],

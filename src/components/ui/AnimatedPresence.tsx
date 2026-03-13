@@ -20,6 +20,7 @@ import { Animated } from 'react-native';
 import type { ViewStyle } from 'react-native';
 import { useAnimatedToggle } from '@/hooks/useAnimatedToggle';
 import type { AnimatedToggleOptions } from '@/hooks/useAnimatedToggle';
+import { dbg } from '@/utils/debug';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -139,6 +140,7 @@ export function AnimatedPresence({
   style,
   children,
 }: AnimatedPresenceProps) {
+  if (__DEV__) dbg.trackRender('AnimatedPresence');
   const { animatedValue, shouldRender } = useAnimatedToggle(visible, options);
 
   if (!shouldRender) return null;

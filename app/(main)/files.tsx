@@ -28,6 +28,9 @@ import {
 } from '@/components/ui';
 import { pickFile, pickFileHandle } from '@/utils/filePicker';
 import { MobileBackButton } from '@/components/ui/MobileBackButton';
+import { dbg } from '@/utils/debug';
+
+const SRC = 'FilesPage';
 
 // ---------------------------------------------------------------------------
 // Section: Active Transfers Bar
@@ -423,7 +426,7 @@ function FolderDetailView({
       const result = await service.getDmFiles(folder.conversationId, folder.folder.id, 1000, 0);
       setFiles(result);
     } catch (err) {
-      console.error('[FolderDetailView] Failed to load files:', err);
+      dbg.error('service', 'Failed to load files', { error: (err as Error)?.message ?? String(err) }, SRC);
     }
   }, [service, folder.conversationId, folder.folder.id]);
 
@@ -487,7 +490,7 @@ function FolderDetailView({
         event: { type: 'fileUploaded', file: record },
       });
     } catch (err) {
-      console.error('[FolderDetailView] Upload failed:', err);
+      dbg.error('service', 'Upload failed', { error: (err as Error)?.message ?? String(err) }, SRC);
       throw err;
     }
   }, [service, myDid, folder.conversationId, folder.folder.id]);
@@ -1106,6 +1109,7 @@ function AutoCleanupRuleRow({
 // ---------------------------------------------------------------------------
 
 export default function FilesPage() {
+  if (__DEV__) dbg.trackRender('FilesPage');
   const { theme } = useTheme();
   const router = useRouter();
   const { hasActiveUploads, uploadRingProgress } = useUploadProgress();

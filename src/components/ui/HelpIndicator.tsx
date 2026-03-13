@@ -33,6 +33,7 @@ import {
 import type { ViewStyle, GestureResponderEvent } from 'react-native';
 import { Box, Text, useTheme } from '@coexist/wisp-react-native';
 import { useHelp } from '@/contexts/HelpContext';
+import { dbg } from '@/utils/debug';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Gradient CSS injection (web only)
@@ -91,6 +92,7 @@ export function HelpIndicator({
   size = 16,
   style,
 }: HelpIndicatorProps) {
+  if (__DEV__) dbg.trackRender('HelpIndicator');
   const { theme } = useTheme();
   const tc = theme.colors;
   const { registerHint, unregisterHint, isActive, isViewed, openPopover } = useHelp();

@@ -9,6 +9,7 @@
 import React, { useCallback, useRef, useState } from 'react';
 import { Animated, Platform, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
 import { Box } from '@coexist/wisp-react-native';
+import { dbg } from '@/utils/debug';
 
 interface ScrollProgressProps {
   /** Height of the bar in pixels. @default 2 */
@@ -36,6 +37,7 @@ export function useScrollProgress() {
 export function ScrollProgress({
   height = 2,
 }: ScrollProgressProps & { progress: Animated.Value }) {
+  if (__DEV__) dbg.trackRender('ScrollProgress');
   return null; // Unused standalone — use ScrollProgressBar instead
 }
 

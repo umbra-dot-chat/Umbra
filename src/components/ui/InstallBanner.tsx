@@ -23,8 +23,10 @@ import {
   ExternalLinkIcon,
   ChevronDownIcon,
 } from '@/components/ui';
+import { dbg } from '@/utils/debug';
 
 export function InstallBanner({ topInset = 0, onVisibilityChange }: { topInset?: number; onVisibilityChange?: (visible: boolean) => void }) {
+  if (__DEV__) dbg.trackRender('InstallBanner');
   const { theme } = useTheme();
   const tc = theme.colors;
   const update = useAppUpdate();

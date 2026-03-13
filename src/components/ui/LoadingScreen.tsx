@@ -4,6 +4,7 @@ import { Box, Text, useTheme } from '@coexist/wisp-react-native';
 import { useBlobPath, AnimatedBlobs } from '@/components/auth/AnimatedBlobs';
 import { TAGLINES } from '@/constants/taglines';
 import Svg, { Path } from 'react-native-svg';
+import { dbg } from '@/utils/debug';
 
 // Inject loading shimmer CSS (web only)
 let loadingCSSInjected = false;
@@ -100,6 +101,7 @@ const TAGLINE_INTERVAL = 3500;
 const TAGLINE_ANIM_DURATION = 500;
 
 export function LoadingScreen({ steps, onComplete }: LoadingScreenProps) {
+  if (__DEV__) dbg.trackRender('LoadingScreen');
   if (Platform.OS === 'web') injectLoadingCSS();
   const { pathData } = useBlobPath();
   const fadeAnim = useRef(new Animated.Value(1)).current;

@@ -9,6 +9,7 @@ import React from 'react';
 import type { ViewStyle } from 'react-native';
 import { Box, Card, Text, useTheme } from '@coexist/wisp-react-native';
 import { AnimatedPresence } from './AnimatedPresence';
+import { dbg } from '@/utils/debug';
 
 export interface InlineEventCardProps {
   /** Controls visibility — triggers slide-down animation. */
@@ -39,6 +40,7 @@ export function InlineEventCard({
   children,
   testID,
 }: InlineEventCardProps) {
+  if (__DEV__) dbg.trackRender('InlineEventCard');
   const { theme } = useTheme();
 
   const cardStyle: ViewStyle = {

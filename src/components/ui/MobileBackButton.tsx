@@ -9,6 +9,7 @@ import React from 'react';
 import { Button, useTheme } from '@coexist/wisp-react-native';
 import { ArrowLeftIcon } from '@/components/ui';
 import { useIsMobile } from '@/hooks/useIsMobile';
+import { dbg } from '@/utils/debug';
 
 interface MobileBackButtonProps {
   onPress: () => void;
@@ -16,6 +17,7 @@ interface MobileBackButtonProps {
 }
 
 export function MobileBackButton({ onPress, label = 'Back' }: MobileBackButtonProps) {
+  if (__DEV__) dbg.trackRender('MobileBackButton');
   const isMobile = useIsMobile();
   const { theme } = useTheme();
 

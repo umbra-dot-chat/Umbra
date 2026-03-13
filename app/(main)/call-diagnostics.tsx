@@ -12,6 +12,9 @@
 
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { Text, Button, TextArea, useTheme, Box, ScrollArea } from '@coexist/wisp-react-native';
+import { dbg } from '@/utils/debug';
+
+const SRC = 'CallDiagnostics';
 import { CallManager } from '@/services/CallManager';
 import { resolveTurnCredentials } from '@/config/network';
 import { useCallContext } from '@/contexts/CallContext';
@@ -56,6 +59,7 @@ interface IceCandidate {
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function CallDiagnosticsPage() {
+  if (__DEV__) dbg.trackRender('CallDiagnosticsPage');
   const { theme } = useTheme();
   const colors = theme.colors;
   const { activeCall, callStats } = useCallContext();
@@ -195,7 +199,7 @@ export default function CallDiagnosticsPage() {
       };
       updateLevel();
     } catch (err) {
-      console.warn('[Diagnostics] Failed to get audio:', err);
+      dbg.warn('call', 'Failed to get audio', { error: (err as Error)?.message ?? String(err) }, SRC);
     }
   }, []);
 

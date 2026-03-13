@@ -40,6 +40,7 @@ import NetworkContent from '@/components/guide/NetworkContent';
 import PluginsContent from '@/components/guide/PluginsContent';
 import LimitationsContent from '@/components/guide/LimitationsContent';
 import TechnicalReferenceContent from '@/components/guide/TechnicalReferenceContent';
+import { dbg } from '@/utils/debug';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -94,6 +95,7 @@ const MOBILE_BREAKPOINT = 600;
 // ---------------------------------------------------------------------------
 
 export function GuideDialog({ open, onClose }: GuideDialogProps) {
+  if (__DEV__) dbg.trackRender('GuideDialog');
   const { theme, mode } = useTheme();
   const tc = theme.colors;
   const isDark = mode === 'dark';

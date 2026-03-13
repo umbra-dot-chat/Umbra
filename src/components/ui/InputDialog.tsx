@@ -8,6 +8,7 @@
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Box, Dialog, Input, Button, Text, useTheme } from '@coexist/wisp-react-native';
+import { dbg } from '@/utils/debug';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -55,6 +56,7 @@ export function InputDialog({
   minLength = 1,
   maxLength,
 }: InputDialogProps) {
+  if (__DEV__) dbg.trackRender('InputDialog');
   const { theme } = useTheme();
   const [value, setValue] = useState(defaultValue);
   const [error, setError] = useState<string | null>(null);
