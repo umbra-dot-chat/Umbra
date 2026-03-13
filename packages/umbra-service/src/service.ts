@@ -311,10 +311,12 @@ export class UmbraService {
 
   onDiscoveryEvent(callback: (event: DiscoveryEvent) => void): () => void {
     this._discoveryListeners.push(callback);
+    _dbg()?.debug?.('service', `onDiscoveryEvent ADD → ${this._discoveryListeners.length} listeners`, undefined, SRC);
     return () => {
       const index = this._discoveryListeners.indexOf(callback);
       if (index !== -1) {
         this._discoveryListeners.splice(index, 1);
+        _dbg()?.debug?.('service', `onDiscoveryEvent REMOVE → ${this._discoveryListeners.length} listeners`, undefined, SRC);
       }
     };
   }
@@ -404,10 +406,12 @@ export class UmbraService {
 
   onFriendEvent(callback: (event: FriendEvent) => void): () => void {
     this._friendListeners.push(callback);
+    _dbg()?.debug?.('service', `onFriendEvent ADD → ${this._friendListeners.length} listeners`, undefined, SRC);
     return () => {
       const index = this._friendListeners.indexOf(callback);
       if (index !== -1) {
         this._friendListeners.splice(index, 1);
+        _dbg()?.debug?.('service', `onFriendEvent REMOVE → ${this._friendListeners.length} listeners`, undefined, SRC);
       }
     };
   }
@@ -601,10 +605,12 @@ export class UmbraService {
 
   onCallEvent(callback: (event: any) => void): () => void {
     this._callListeners.push(callback);
+    _dbg()?.debug?.('service', `onCallEvent ADD → ${this._callListeners.length} listeners`, undefined, SRC);
     return () => {
       const index = this._callListeners.indexOf(callback);
       if (index !== -1) {
         this._callListeners.splice(index, 1);
+        _dbg()?.debug?.('service', `onCallEvent REMOVE → ${this._callListeners.length} listeners`, undefined, SRC);
       }
     };
   }
@@ -798,10 +804,12 @@ export class UmbraService {
 
   onGroupEvent(callback: (event: GroupEvent) => void): () => void {
     this._groupListeners.push(callback);
+    _dbg()?.debug?.('service', `onGroupEvent ADD → ${this._groupListeners.length} listeners`, undefined, SRC);
     return () => {
       const index = this._groupListeners.indexOf(callback);
       if (index !== -1) {
         this._groupListeners.splice(index, 1);
+        _dbg()?.debug?.('service', `onGroupEvent REMOVE → ${this._groupListeners.length} listeners`, undefined, SRC);
       }
     };
   }
@@ -1464,10 +1472,12 @@ export class UmbraService {
   // File transfer events
   onFileTransferEvent(callback: (event: FileTransferEvent) => void): () => void {
     this._fileTransferListeners.push(callback);
+    _dbg()?.debug?.('service', `onFileTransferEvent ADD → ${this._fileTransferListeners.length} listeners`, undefined, SRC);
     return () => {
       const index = this._fileTransferListeners.indexOf(callback);
       if (index !== -1) {
         this._fileTransferListeners.splice(index, 1);
+        _dbg()?.debug?.('service', `onFileTransferEvent REMOVE → ${this._fileTransferListeners.length} listeners`, undefined, SRC);
       }
     };
   }
@@ -1495,10 +1505,12 @@ export class UmbraService {
   // Community events
   onCommunityEvent(callback: (event: CommunityEvent) => void): () => void {
     this._communityListeners.push(callback);
+    _dbg()?.debug?.('service', `onCommunityEvent ADD → ${this._communityListeners.length} listeners`, undefined, SRC);
     return () => {
       const index = this._communityListeners.indexOf(callback);
       if (index !== -1) {
         this._communityListeners.splice(index, 1);
+        _dbg()?.debug?.('service', `onCommunityEvent REMOVE → ${this._communityListeners.length} listeners`, undefined, SRC);
       }
     };
   }
@@ -1520,10 +1532,12 @@ export class UmbraService {
   // DM file events
   onDmFileEvent(callback: (event: DmFileEventPayload) => void): () => void {
     this._dmFileListeners.push(callback);
+    _dbg()?.debug?.('service', `onDmFileEvent ADD → ${this._dmFileListeners.length} listeners`, undefined, SRC);
     return () => {
       const index = this._dmFileListeners.indexOf(callback);
       if (index !== -1) {
         this._dmFileListeners.splice(index, 1);
+        _dbg()?.debug?.('service', `onDmFileEvent REMOVE → ${this._dmFileListeners.length} listeners`, undefined, SRC);
       }
     };
   }
@@ -1541,10 +1555,12 @@ export class UmbraService {
   // Metadata events
   onMetadataEvent(callback: (event: MetadataEvent) => void): () => void {
     this._metadataListeners.push(callback);
+    _dbg()?.debug?.('service', `onMetadataEvent ADD → ${this._metadataListeners.length} listeners`, undefined, SRC);
     return () => {
       const index = this._metadataListeners.indexOf(callback);
       if (index !== -1) {
         this._metadataListeners.splice(index, 1);
+        _dbg()?.debug?.('service', `onMetadataEvent REMOVE → ${this._metadataListeners.length} listeners`, undefined, SRC);
       }
     };
   }
@@ -1601,10 +1617,12 @@ export class UmbraService {
 
   onRelayEvent(callback: (event: RelayEvent) => void): () => void {
     this._relayListeners.push(callback);
+    _dbg()?.debug?.('service', `onRelayEvent ADD → ${this._relayListeners.length} listeners`, undefined, SRC);
     return () => {
       const index = this._relayListeners.indexOf(callback);
       if (index !== -1) {
         this._relayListeners.splice(index, 1);
+        _dbg()?.debug?.('service', `onRelayEvent REMOVE → ${this._relayListeners.length} listeners`, undefined, SRC);
       }
     };
   }
@@ -1666,17 +1684,19 @@ export class UmbraService {
       return;
     }
     const camelData = snakeToCamel(data) as Record<string, unknown>;
-    _dbg()?.debug('network', `_dispatchEvent: ${domain}.${camelData.type}`, { listenerCounts: { message: this._messageListeners.length, friend: this._friendListeners.length, discovery: this._discoveryListeners.length, relay: this._relayListeners.length } }, SRC);
+    const _t0 = performance.now();
+    let _listenerCount = 0;
+    _dbg()?.debug?.('service', `dispatch → ${domain}.${camelData.type}`, { listenerCounts: { message: this._messageListeners.length, friend: this._friendListeners.length, discovery: this._discoveryListeners.length, relay: this._relayListeners.length } }, SRC);
 
     switch (domain) {
       case 'message': {
-        // Rust now emits structured content ({ type, text }) and status directly.
         if (!camelData || !camelData.type) {
           _dbg()?.warn('messages', `_dispatchEvent: message event with no type`, { data: JSON.stringify(data).slice(0, 100) }, SRC);
           console.warn('[UmbraService] Ignoring message event with no type:', JSON.stringify(data));
           break;
         }
-        _dbg()?.info('messages', `_dispatchEvent → message.${camelData.type} to ${this._messageListeners.length} listeners`, undefined, SRC);
+        _listenerCount = this._messageListeners.length;
+        _dbg()?.info('messages', `_dispatchEvent → message.${camelData.type} to ${_listenerCount} listeners`, undefined, SRC);
         for (const listener of this._messageListeners) {
           try {
             listener(camelData as unknown as MessageEvent);
@@ -1689,11 +1709,13 @@ export class UmbraService {
       }
 
       case 'friend':
-        _dbg()?.info('friends', `_dispatchEvent → friend.${camelData.type} to ${this._friendListeners.length} listeners`, undefined, SRC);
+        _listenerCount = this._friendListeners.length;
+        _dbg()?.info('friends', `_dispatchEvent → friend.${camelData.type} to ${_listenerCount} listeners`, undefined, SRC);
         for (const listener of this._friendListeners) {
           try {
             listener(camelData as unknown as FriendEvent);
           } catch (err) {
+            _dbg()?.error?.('service', `friend listener threw`, { err: String(err) }, SRC);
             console.error('[UmbraService] Friend listener error:', err);
           }
         }
@@ -1701,55 +1723,69 @@ export class UmbraService {
 
       case 'discovery':
       case 'network':
-        _dbg()?.info('network', `_dispatchEvent → ${domain}.${camelData.type} to ${this._discoveryListeners.length} listeners`, undefined, SRC);
+        _listenerCount = this._discoveryListeners.length;
+        _dbg()?.info('network', `_dispatchEvent → ${domain}.${camelData.type} to ${_listenerCount} listeners`, undefined, SRC);
         for (const listener of this._discoveryListeners) {
           try {
             listener(camelData as unknown as DiscoveryEvent);
           } catch (err) {
+            _dbg()?.error?.('service', `discovery listener threw`, { err: String(err) }, SRC);
             console.error('[UmbraService] Discovery listener error:', err);
           }
         }
         break;
 
       case 'relay':
+        _listenerCount = this._relayListeners.length;
         for (const listener of this._relayListeners) {
           try {
             listener(camelData as unknown as RelayEvent);
           } catch (err) {
+            _dbg()?.error?.('service', `relay listener threw`, { err: String(err) }, SRC);
             console.error('[UmbraService] Relay listener error:', err);
           }
         }
         break;
 
       case 'group':
+        _listenerCount = this._groupListeners.length;
         for (const listener of this._groupListeners) {
           try {
             listener(camelData as unknown as GroupEvent);
           } catch (err) {
+            _dbg()?.error?.('service', `group listener threw`, { err: String(err) }, SRC);
             console.error('[UmbraService] Group listener error:', err);
           }
         }
         break;
 
       case 'community':
+        _listenerCount = this._communityListeners.length;
         for (const listener of this._communityListeners) {
           try {
             listener(camelData as unknown as CommunityEvent);
           } catch (err) {
+            _dbg()?.error?.('service', `community listener threw`, { err: String(err) }, SRC);
             console.error('[UmbraService] Community listener error:', err);
           }
         }
         break;
 
       case 'file_transfer':
+        _listenerCount = this._fileTransferListeners.length;
         for (const listener of this._fileTransferListeners) {
           try {
             listener(camelData as unknown as FileTransferEvent);
           } catch (err) {
+            _dbg()?.error?.('service', `file_transfer listener threw`, { err: String(err) }, SRC);
             console.error('[UmbraService] File transfer listener error:', err);
           }
         }
         break;
     }
+
+    const _dur = performance.now() - _t0;
+    _dbg()?.trace?.('service', `dispatch DONE ${domain}.${camelData.type} in ${_dur.toFixed(1)}ms`, { listeners: _listenerCount }, SRC);
+    if (_dur > 50) _dbg()?.warn?.('service', `SLOW dispatch ${domain}.${camelData.type}: ${_dur.toFixed(1)}ms (${_listenerCount} listeners)`, undefined, SRC);
   }
 }
