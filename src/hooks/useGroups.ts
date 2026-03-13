@@ -18,6 +18,9 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useUmbra } from '@/contexts/UmbraContext';
+import { dbg } from '@/utils/debug';
+
+const SRC = 'useGroups';
 import { useAuth } from '@/contexts/AuthContext';
 import { useNetwork } from '@/hooks/useNetwork';
 import type { Group, GroupMember, PendingGroupInvite, GroupEvent } from '@umbra/service';
@@ -96,7 +99,7 @@ export function useGroups(): UseGroupsResult {
       const result = await service.getPendingGroupInvites();
       setPendingInvites(result);
     } catch (err) {
-      console.warn('[useGroups] Failed to fetch pending invites:', err);
+      if (__DEV__) dbg.warn('groups', 'failed to fetch pending invites', { error: String(err) }, SRC);
     }
   }, [service]);
 
@@ -146,7 +149,7 @@ export function useGroups(): UseGroupsResult {
         await fetchGroups(); // Refresh list
         return result;
       } catch (err) {
-        console.error('[useGroups] createGroup failed:', err);
+        if (__DEV__) dbg.error('groups', 'createGroup failed', { error: String(err) }, SRC);
         const error = err instanceof Error ? err : new Error(String(err));
         setError(error);
         throw error;

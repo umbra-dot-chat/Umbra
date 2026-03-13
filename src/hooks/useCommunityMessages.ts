@@ -14,8 +14,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useUmbra } from '@/contexts/UmbraContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { dbg } from '@/utils/debug';
 import type { CommunityMessage, CommunityEvent, MessageMetadata } from '@umbra/service';
 
+const SRC = 'useCommunityMessages';
 const PAGE_SIZE = 50;
 
 export interface UseCommunityMessagesResult {
@@ -103,7 +105,7 @@ export function useCommunityMessages(channelId: string | null, communityId?: str
       const pinned = await service.getCommunityPinnedMessages(channelId);
       setPinnedMessages(pinned);
     } catch (err) {
-      console.warn('[useCommunityMessages] Failed to fetch pinned:', err);
+      if (__DEV__) dbg.warn('messages', 'failed to fetch pinned', { error: String(err) }, SRC);
     }
   }, [service, channelId]);
 
@@ -184,9 +186,9 @@ export function useCommunityMessages(channelId: string | null, communityId?: str
               service.storeReceivedCommunityMessage(
                 event.messageId, event.channelId, event.senderDid, event.content, now,
                 event.metadata,
-              ).catch((err) =>
-                console.warn('[useCommunityMessages] Failed to persist relay message:', err),
-              );
+              ).catch((err) => {
+                if (__DEV__) dbg.warn('messages', 'failed to persist relay message', { error: String(err) }, SRC);
+              });
             } else {
               // Event without content — refresh from local WASM DB
               refreshFromWasm();
@@ -285,12 +287,12 @@ export function useCommunityMessages(channelId: string | null, communityId?: str
             },
             identity.did,
             relayWs,
-          ).catch((err) => console.warn('[useCommunityMessages] Failed to broadcast message:', err));
+          ).catch((err) => { if (__DEV__) dbg.warn('messages', 'failed to broadcast message', { error: String(err) }, SRC); });
         }
 
         return msg;
       } catch (err) {
-        console.error('[useCommunityMessages] sendMessage FAILED:', err);
+        if (__DEV__) dbg.error('messages', 'sendMessage FAILED', { error: String(err) }, SRC);
         setError(err instanceof Error ? err : new Error(String(err)));
         return null;
       }
@@ -304,7 +306,7 @@ export function useCommunityMessages(channelId: string | null, communityId?: str
       if (!service || !communityId || !identity?.did) return;
       const relayWs = service.getRelayWs();
       service.broadcastCommunityEvent(communityId, event, identity.did, relayWs)
-        .catch((err) => console.warn('[useCommunityMessages] Broadcast failed:', err));
+        .catch((err) => { if (__DEV__) dbg.warn('messages', 'broadcast failed', { error: String(err) }, SRC); });
     },
     [service, communityId, identity?.did],
   );

@@ -18,6 +18,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useUmbra } from '@/contexts/UmbraContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { dbg } from '@/utils/debug';
+
+const SRC = 'useFriends';
 import { useNetwork } from '@/hooks/useNetwork';
 import type { Friend, FriendRequest, FriendEvent, BlockedUser } from '@umbra/service';
 
@@ -148,11 +151,9 @@ export function useFriends(): UseFriendsResult {
         // a different DID than the one stored in localStorage.
         const relayWs = getRelayWs();
         const fromIdentity = identity ? { did: identity.did, displayName: identity.displayName } : null;
-        console.log('[useFriends] sendRequest — DID:', did.slice(0, 24) + '...');
-        console.log('[useFriends] sendRequest — relayWs:', relayWs ? `readyState=${relayWs.readyState}` : 'null');
-        console.log('[useFriends] sendRequest — fromDid:', fromIdentity?.did?.slice(0, 24) + '...');
+        if (__DEV__) dbg.info('friends', 'sendRequest', { did: did.slice(0, 24) + '...', relayWs: relayWs ? `readyState=${relayWs.readyState}` : 'null', fromDid: fromIdentity?.did?.slice(0, 24) + '...' }, SRC);
         const request = await service.sendFriendRequest(did, message, relayWs, fromIdentity);
-        console.log('[useFriends] sendRequest — result:', request ? 'success' : 'null');
+        if (__DEV__) dbg.info('friends', 'sendRequest result', { success: !!request }, SRC);
         await fetchAll(); // Refresh to show the new outgoing request
         return request;
       } catch (err) {
