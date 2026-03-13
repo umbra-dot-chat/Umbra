@@ -16,6 +16,7 @@ import { PlusIcon, CheckIcon, TrashIcon } from '@/components/ui';
 import { GrowablePinInput } from '@/components/auth/GrowablePinInput';
 import type { StoredAccount } from '@/contexts/AuthContext';
 import { TEST_IDS } from '@/constants/test-ids';
+import { dbg } from '@/utils/debug';
 
 // ---------------------------------------------------------------------------
 // Props
@@ -64,6 +65,7 @@ export function AccountSwitcher({
   onRemoveAccount,
   anchor,
 }: AccountSwitcherProps) {
+  if (__DEV__) dbg.trackRender('AccountSwitcher');
   const { theme } = useTheme();
   const tc = theme.colors;
 

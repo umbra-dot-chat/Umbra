@@ -23,6 +23,7 @@ import { Text, Skeleton, useTheme, NotificationBadge } from '@coexist/wisp-react
 import { UmbraIcon, FolderIcon, PlusIcon, SettingsIcon, BellIcon } from '@/components/ui';
 import type { Community } from '@umbra/service';
 import { TEST_IDS } from '@/constants/test-ids';
+import { dbg } from '@/utils/debug';
 
 // Default community icon — the colored Umbra ghost app icon
 // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -120,6 +121,7 @@ export function NavigationRail({
   safeAreaTop = 0,
   safeAreaBottom = 0,
 }: NavigationRailProps) {
+  if (__DEV__) dbg.trackRender('NavigationRail');
   const { theme } = useTheme();
 
   // Inject CSS keyframes once on web

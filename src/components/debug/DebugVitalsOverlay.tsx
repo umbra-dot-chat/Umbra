@@ -177,6 +177,7 @@ function OverlayContent() {
 }
 
 export function DebugVitalsOverlay() {
+  if (__DEV__) dbg.trackRender('DebugVitalsOverlay');
   const [visible, setVisible] = useState(false);
 
   // Toggle with Ctrl+Shift+D
