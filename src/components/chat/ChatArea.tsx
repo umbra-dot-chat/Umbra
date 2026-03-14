@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Platform, FlatList, View, Animated as RNAnimated } from 'react-native';
+import { Platform, ScrollView, View, Animated as RNAnimated } from 'react-native';
 import { TEST_IDS } from '@/constants/test-ids';
 import {
   Avatar, Box, Button, ChatBubble, Text, TypingIndicator, NewMessageDivider, useTheme,
@@ -11,15 +11,12 @@ import { MsgGroup } from './MsgGroup';
 import { InlineMsgGroup } from './InlineMsgGroup';
 import { DmFileMessage } from '@/components/chat/DmFileMessage';
 import { SlotRenderer } from '@/components/plugins/SlotRenderer';
-import { useApplyTextTransforms } from '@/contexts/PluginContext';
+import { usePlugins } from '@/contexts/PluginContext';
 import { useMessaging } from '@/contexts/MessagingContext';
-import { parseMessageContent, buildEmojiMap, isEmojiOnlyMessage, resetParseStats, getParseStats, type EmojiMap } from '@/utils/parseMessageContent';
-import { dbg } from '@/utils/debug';
+import { parseMessageContent, buildEmojiMap, isEmojiOnlyMessage, type EmojiMap } from '@/utils/parseMessageContent';
 import type { Message, CommunityEmoji } from '@umbra/service';
 import type { ActiveCall } from '@/types/call';
 import { InlineCallCardMessage } from '@/components/call/InlineCallCardMessage';
-
-const SRC = 'ChatArea';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -44,12 +41,9 @@ export interface ChatAreaProps {
   isGroupChat?: boolean;
   /** Who is currently typing (display name), or null */
   typingUser?: string | null;
-  /** @deprecated — hover state is now managed inside HoverBubble. Ignored. */
-  hoveredMessage?: string | null;
-  /** @deprecated — hover state is now managed inside HoverBubble. Ignored. */
-  onHoverIn?: (id: string) => void;
-  /** @deprecated — hover state is now managed inside HoverBubble. Ignored. */
-  onHoverOut?: () => void;
+  hoveredMessage: string | null;
+  onHoverIn: (id: string) => void;
+  onHoverOut: () => void;
   onReplyTo: (reply: { sender: string; text: string }) => void;
   onOpenThread: (msg: { id: string; sender: string; content: string; timestamp: string }) => void;
   onShowProfile: (name: string, event: any, status?: 'online' | 'idle' | 'offline', avatar?: string) => void;
@@ -250,29 +244,6 @@ function formatCallEventDisplay(callType: string, status: string, duration: numb
 }
 
 /**
- * Build a lightweight fingerprint for a message group.
- * Encodes each message's id, edit state, delivery status, and reaction count
- * so that arePropsEqual on InlineMsgGroup/MsgGroup can compare a single string
- * instead of a children reference (which is always a new array from group.map).
- */
-function messageGroupFingerprint(group: Message[]): string {
-  let fp = '';
-  for (let i = 0; i < group.length; i++) {
-    const m = group[i];
-    if (i > 0) fp += ',';
-    fp += m.id;
-    fp += m.edited ? '|1' : '|0';
-    fp += '|';
-    fp += typeof m.status === 'string' ? m.status : '';
-    fp += '|';
-    fp += m.reactions?.length ?? 0;
-    fp += '|';
-    fp += m.threadReplyCount ?? 0;
-  }
-  return fp;
-}
-
-/**
  * Group consecutive messages from the same sender into display groups.
  * Each group shows sender name + avatar once, with multiple bubbles underneath.
  */
@@ -342,9 +313,10 @@ function LoadingSkeleton() {
 // Component
 // ─────────────────────────────────────────────────────────────────────────────
 
-export const ChatArea = React.memo(function ChatArea({
+export function ChatArea({
   messages, myDid, myDisplayName, myAvatar, friendNames, friendAvatars,
   isLoading, isGroupChat, typingUser,
+  hoveredMessage, onHoverIn, onHoverOut,
   onReplyTo, onOpenThread, onShowProfile,
   onToggleReaction, onEditMessage, onDeleteMessage, onPinMessage, onForwardMessage, onCopyMessage,
   stickyHeader,
@@ -360,24 +332,10 @@ export const ChatArea = React.memo(function ChatArea({
   onEndCall,
   onCallBack,
 }: ChatAreaProps) {
-  if (__DEV__) { dbg.trackRender('ChatArea'); resetParseStats(); }
-
   const { theme } = useTheme();
   const themeColors = theme.colors;
   const { displayMode } = useMessaging();
-  const applyTextTransforms = useApplyTextTransforms();
-
-  useEffect(() => {
-    if (__DEV__) {
-      const stats = getParseStats();
-      if (stats.calls > 0) {
-        dbg.debug('messages', `ChatArea render: ${stats.calls} parses in ${stats.totalMs.toFixed(1)}ms`, stats, 'ChatArea');
-        if (stats.totalMs > 50) {
-          dbg.warn('messages', `ChatArea SLOW: ${stats.calls} parses took ${stats.totalMs.toFixed(1)}ms`, stats, 'ChatArea');
-        }
-      }
-    }
-  });
+  const { applyTextTransforms } = usePlugins();
 
   // ── Download state ──
   const [downloadingFileId, setDownloadingFileId] = useState<string | null>(null);
@@ -399,59 +357,41 @@ export const ChatArea = React.memo(function ChatArea({
   );
   const isInline = displayMode === 'inline';
 
-  // ── Scroll logic ──
-  const listRef = useRef<FlatList<Message[]>>(null);
+  // ── Scroll-to-bottom logic ──
+  const scrollRef = useRef<ScrollView>(null);
+  // Track whether the user is near the bottom so we auto-scroll on new messages
+  // but don't yank them back if they scrolled up to read history.
   const isNearBottomRef = useRef(true);
   const prevMessageCountRef = useRef(messages.length);
 
   const handleScroll = useCallback((e: any) => {
     const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
+    // Consider "near bottom" if within 150px of the end
     const distanceFromBottom = contentSize.height - layoutMeasurement.height - contentOffset.y;
     isNearBottomRef.current = distanceFromBottom < 150;
   }, []);
 
-  // Auto-scroll to bottom when new messages arrive.
-  // Debounced: rapid arrivals (5 bots responding) coalesce into a single scroll.
-  const scrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // When new messages arrive, auto-scroll if user is near the bottom
   useEffect(() => {
     if (messages.length > prevMessageCountRef.current && isNearBottomRef.current) {
-      if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
-      scrollTimerRef.current = setTimeout(() => {
-        scrollTimerRef.current = null;
-        listRef.current?.scrollToEnd({ animated: true });
-      }, 80);
+      // Small delay so layout has time to update before scrolling
+      setTimeout(() => {
+        scrollRef.current?.scrollToEnd({ animated: true });
+      }, 50);
     }
     prevMessageCountRef.current = messages.length;
   }, [messages.length]);
 
-  // Scroll to end when content first renders
+  // Scroll to end when content first renders (show most recent messages)
   const handleContentSizeChange = useCallback((_w: number, _h: number) => {
+    // Only auto-scroll to end if user hasn't scrolled up
     if (isNearBottomRef.current) {
-      listRef.current?.scrollToEnd({ animated: false });
+      scrollRef.current?.scrollToEnd({ animated: false });
     }
   }, []);
 
   // ── Scroll-to-message + highlight ──
   const messageRefs = useRef<Record<string, View | null>>({});
-
-  // Clean up stale message refs only when messages are removed (rare).
-  // During rapid message arrivals the messages array only grows, so this
-  // check is skipped entirely — avoiding an O(N) Set allocation + iteration
-  // on every render during bot floods.
-  const prevMsgLenRef = useRef(messages.length);
-  useEffect(() => {
-    // Only clean up when messages shrink (pagination reset, conversation switch)
-    if (messages.length < prevMsgLenRef.current) {
-      const currentIds = new Set(messages.map((m) => m.id));
-      const refs = messageRefs.current;
-      for (const id in refs) {
-        if (!currentIds.has(id)) {
-          delete refs[id];
-        }
-      }
-    }
-    prevMsgLenRef.current = messages.length;
-  }, [messages]);
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const highlightAnim = useRef(new RNAnimated.Value(0)).current;
 
@@ -473,6 +413,7 @@ export const ChatArea = React.memo(function ChatArea({
     };
 
     if (Platform.OS === 'web') {
+      // On web, use DOM scrollIntoView for reliable behaviour
       const node = targetRef as unknown as HTMLElement | null;
       if (node && typeof node.scrollIntoView === 'function') {
         node.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -480,9 +421,18 @@ export const ChatArea = React.memo(function ChatArea({
       } else {
         onScrollToComplete?.();
       }
-    } else if (targetRef && listRef.current) {
-      // FlatList doesn't have getInnerViewNode, use scrollToItem or manual offset
-      onScrollToComplete?.();
+    } else if (targetRef && scrollRef.current) {
+      targetRef.measureLayout(
+        scrollRef.current.getInnerViewNode() as any,
+        (_x: number, y: number) => {
+          scrollRef.current?.scrollTo({ y: Math.max(0, y - 80), animated: true });
+          triggerHighlight();
+        },
+        () => {
+          console.warn('[ChatArea] Could not find message to scroll to:', scrollToMessageId);
+          onScrollToComplete?.();
+        },
+      );
     } else {
       onScrollToComplete?.();
     }
@@ -493,9 +443,6 @@ export const ChatArea = React.memo(function ChatArea({
     outputRange: ['transparent', themeColors.accent.primary + '22'],
   });
 
-  // Memoize message grouping
-  const groups = useMemo(() => groupMessages(messages), [messages]);
-
   if (isLoading) {
     return <LoadingSkeleton />;
   }
@@ -503,6 +450,8 @@ export const ChatArea = React.memo(function ChatArea({
   if (messages.length === 0) {
     return <EmptyMessages />;
   }
+
+  const groups = groupMessages(messages);
 
   const getSenderName = (did: string): string => {
     if (did === myDid) return myDisplayName || did.slice(0, 16) + '...';
@@ -512,6 +461,11 @@ export const ChatArea = React.memo(function ChatArea({
   const getSenderAvatar = (did: string): string | undefined => {
     if (did === myDid) return myAvatar;
     return friendAvatars?.[did];
+  };
+
+  const renderAvatar = (did: string, name: string) => {
+    const avatarSrc = getSenderAvatar(did);
+    return <Avatar name={name} src={avatarSrc} size="sm" />;
   };
 
   const handleCopy = (text: string) => {
@@ -539,302 +493,327 @@ export const ChatArea = React.memo(function ChatArea({
     onEdit: isOwn ? () => onEditMessage?.(msgId) : undefined,
   });
 
-  // ── Render a single message within a group ──
-  const renderSingleMessage = (msg: Message, inlineMode: boolean) => {
-    const rawText = getMessageText(msg);
-    const text = applyTextTransforms(rawText, { senderDid: msg.senderDid, conversationId: msg.conversationId });
-    const name = getSenderName(msg.senderDid);
-    const time = formatTime(msg.timestamp);
-    const isOwn = msg.senderDid === myDid;
-    const fileInfo = tryParseFileMessage(msg);
-
-    const displayContent = fileInfo ? null : (
-      emojiMap.size > 0
-        ? parseMessageContent(text, emojiMap, undefined, {
-            textColor: themeColors.text.primary,
-            linkColor: themeColors.text.link ?? '#5865F2',
-            codeBgColor: themeColors.background.sunken,
-            codeTextColor: themeColors.text.primary,
-            spoilerBgColor: themeColors.text.muted,
-            quoteBorderColor: themeColors.border.subtle,
-          })
-        : text
-    );
-
-    const emojiOnly = !fileInfo && isEmojiOnlyMessage(text);
-
-    const reactionChips = msg.reactions?.map((r) => ({
-      emoji: r.emoji,
-      count: r.count ?? r.users?.length ?? 0,
-      active: r.reacted ?? r.users?.includes(myDid) ?? false,
-    }));
-
-    const replyTo = msg.replyTo ? {
-      sender: msg.replyTo.senderName || getSenderName(msg.replyTo.senderDid),
-      text: msg.replyTo.text,
-    } : undefined;
-
-    const threadCount = msg.threadReplyCount ?? 0;
-
-    return (
-      <RNAnimated.View
-        key={msg.id}
-        ref={(el: any) => { messageRefs.current[msg.id] = el; }}
-        style={highlightedId === msg.id ? {
-          backgroundColor: highlightBg,
-          borderRadius: 8,
-          marginHorizontal: -4,
-          paddingHorizontal: 4,
-        } : undefined}
-      >
-        <HoverBubble
-          id={msg.id}
-          align={inlineMode ? 'incoming' : (isOwn ? 'outgoing' : 'incoming')}
-          actions={makeActions(msg.id, name, text, time)}
-          contextActions={makeContextActions(msg.id, name, text, time, isOwn)}
-          themeColors={themeColors}
-          message={{ id: msg.id, text, conversationId: msg.conversationId, senderDid: msg.senderDid, edited: msg.edited, reactionsCount: msg.reactions?.length, status: typeof msg.status === 'string' ? msg.status : msg.status ? 'failed' : undefined }}
-        >
-          {inlineMode ? (
-            <Box style={{ paddingVertical: 2 }}>
-              {replyTo && (
-                <Box
-                  style={{
-                    borderLeftWidth: 2,
-                    borderLeftColor: themeColors.accent.primary,
-                    paddingLeft: 8,
-                    marginBottom: 4,
-                    opacity: 0.7,
-                  }}
-                >
-                  <Text size="xs" style={{ color: themeColors.text.muted }}>
-                    {replyTo.sender}: {replyTo.text}
-                  </Text>
-                </Box>
-              )}
-              {fileInfo ? (() => {
-                const upload = isOwn ? activeUploads?.get(fileInfo.fileId) : undefined;
-                return (
-                  <DmFileMessage
-                    fileId={fileInfo.fileId}
-                    filename={fileInfo.filename}
-                    size={fileInfo.size}
-                    mimeType={fileInfo.mimeType}
-                    thumbnail={fileInfo.thumbnail}
-                    isOutgoing={isOwn}
-                    variant="inline"
-                    onDownload={onFileDownload
-                      ? () => handleFileDownload(fileInfo.fileId, fileInfo.filename, fileInfo.mimeType)
-                      : undefined}
-                    isDownloading={downloadingFileId === fileInfo.fileId}
-                    isUploading={!!upload}
-                    uploadProgress={upload?.progress ?? 0}
-                  />
-                );
-              })() : typeof displayContent === 'string' ? (
-                <Text size="sm" style={{ color: themeColors.text.primary, lineHeight: 20 }}>
-                  {displayContent}
-                </Text>
-              ) : (
-                <Box style={{ minHeight: 20 }}>{displayContent}</Box>
-              )}
-              {msg.edited && (
-                <Text size="xs" style={{ color: themeColors.text.muted }}>(edited)</Text>
-              )}
-            </Box>
-          ) : (
-            <ChatBubble
-              align={isOwn ? 'outgoing' : 'incoming'}
-              reactions={reactionChips}
-              onReactionClick={(emoji: string) => onToggleReaction?.(msg.id, emoji)}
-              replyTo={replyTo}
-              edited={msg.edited}
-              forwarded={msg.forwarded}
-            >
-              {fileInfo ? (() => {
-                const upload = isOwn ? activeUploads?.get(fileInfo.fileId) : undefined;
-                return (
-                  <DmFileMessage
-                    fileId={fileInfo.fileId}
-                    filename={fileInfo.filename}
-                    size={fileInfo.size}
-                    mimeType={fileInfo.mimeType}
-                    thumbnail={fileInfo.thumbnail}
-                    isOutgoing={isOwn}
-                    variant="bubble"
-                    onDownload={onFileDownload
-                      ? () => handleFileDownload(fileInfo.fileId, fileInfo.filename, fileInfo.mimeType)
-                      : undefined}
-                    isDownloading={downloadingFileId === fileInfo.fileId}
-                    isUploading={!!upload}
-                    uploadProgress={upload?.progress ?? 0}
-                  />
-                );
-              })() : (
-                displayContent
-              )}
-            </ChatBubble>
-          )}
-        </HoverBubble>
-        <SlotRenderer
-          slot="message-decorator"
-          props={{ message: msg, conversationId: msg.conversationId }}
-        />
-        {threadCount > 0 && (
-          <Button
-            variant="tertiary"
-            size="xs"
-            onPress={() => onOpenThread({ id: msg.id, sender: name, content: text, timestamp: time })}
-            iconLeft={<ThreadIcon size={12} color={themeColors.accent.primary} />}
-            style={{
-              alignSelf: 'flex-start',
-              marginTop: 2,
-            }}
-          >
-            <Text size="xs" weight="semibold" style={{ color: themeColors.accent.primary }}>
-              {threadCount} {threadCount === 1 ? 'reply' : 'replies'}
-            </Text>
-          </Button>
-        )}
-      </RNAnimated.View>
-    );
-  };
-
-  // ── Render a message group (FlatList item) ──
-  const renderGroupItem = ({ item: group, index: groupIdx }: { item: Message[]; index: number }) => {
-    const firstMsg = group[0];
-    const senderDid = firstMsg.senderDid;
-    const isOutgoing = senderDid === myDid;
-    const senderName = getSenderName(senderDid);
-    const timeStr = formatTime(firstMsg.timestamp);
-    const firstText = getMessageText(firstMsg);
-
-    const showUnreadDivider = firstUnreadMessageId != null &&
-      group.some((m) => m.id === firstUnreadMessageId);
-
-    // ── Call event: render as an InlineEventCard ──
-    if (isCallEventMessage(firstText)) {
-      const parsed = parseCallEvent(firstText);
-      const displayText = parsed
-        ? formatCallEventDisplay(parsed.callType, parsed.status, parsed.duration)
-        : firstText;
-      const isVideo = parsed?.callType === 'video';
-      const isStarted = parsed?.status === 'started';
-      const isMissed = parsed?.status === 'missed' || parsed?.status === 'declined';
-      const accentColor = isMissed
-        ? themeColors.status.danger
-        : isStarted
-          ? themeColors.status.success
-          : themeColors.border.subtle;
-      const iconColor = isMissed
-        ? themeColors.status.danger
-        : isStarted
-          ? themeColors.status.success
-          : themeColors.text.muted;
-      const callIcon = isVideo
-        ? <VideoIcon size={16} color={iconColor} />
-        : <PhoneIcon size={16} color={iconColor} />;
-      const showCallBack = onCallBack && !isStarted;
-
-      return (
-        <Box style={{ paddingVertical: 4, alignItems: 'center' }}>
-          {showUnreadDivider && (
-            <NewMessageDivider style={{ marginBottom: 8, alignSelf: 'stretch' }} />
-          )}
-          <Box style={{ maxWidth: 380, width: '100%' }}>
-            <InlineEventCard
-              visible
-              accentColor={accentColor}
-              icon={callIcon}
-              title={displayText}
-              subtitle={timeStr}
-              actions={showCallBack ? (
-                <Button
-                  variant="tertiary"
-                  size="xs"
-                  onPress={() => onCallBack(isVideo ? 'video' : 'voice')}
-                  testID="call.history-card.callback"
-                >
-                  Call back
-                </Button>
-              ) : undefined}
-              testID="call.history-card"
-            />
-          </Box>
-        </Box>
-      );
+  // Find the last incoming message group to show "Seen" marker (iMessage style)
+  const lastIncomingGroupIdx = (() => {
+    for (let i = groups.length - 1; i >= 0; i--) {
+      if (groups[i][0].senderDid !== myDid) return i;
     }
+    return -1;
+  })();
 
-    // ── Regular message group ──
-    const renderedMessages = group.map((msg) => renderSingleMessage(msg, isInline));
-    const fingerprint = messageGroupFingerprint(group);
-
-    if (isInline) {
-      return (
-        <React.Fragment>
-          {showUnreadDivider && (
-            <NewMessageDivider style={{ marginVertical: 4 }} />
-          )}
-          <InlineMsgGroup
-            sender={senderName}
-            avatarName={senderName}
-            avatarSrc={getSenderAvatar(senderDid)}
-            senderDid={senderDid}
-            timestamp={timeStr}
-            status={isOutgoing ? (firstMsg.status as string) : undefined}
-            senderColor={isGroupChat ? memberColor(senderDid) : undefined}
-            themeColors={themeColors}
-            onShowProfile={onShowProfile}
-            messageFingerprint={fingerprint}
-          >
-            {renderedMessages}
-          </InlineMsgGroup>
-        </React.Fragment>
-      );
-    }
-
-    return (
-      <React.Fragment>
-        {showUnreadDivider && (
-          <NewMessageDivider style={{ marginVertical: 4 }} />
-        )}
-        <MsgGroup
-          align={isOutgoing ? 'outgoing' : 'incoming'}
-          sender={senderName}
-          avatarName={senderName}
-          avatarSrc={getSenderAvatar(senderDid)}
-          senderDid={senderDid}
-          timestamp={timeStr}
-          status={isOutgoing ? (firstMsg.status as string) : undefined}
-          senderColor={isGroupChat && !isOutgoing ? memberColor(senderDid) : undefined}
-          themeColors={themeColors}
-          onShowProfile={onShowProfile}
-          messageFingerprint={fingerprint}
-        >
-          {renderedMessages}
-        </MsgGroup>
-      </React.Fragment>
-    );
-  };
-
-  // Stable key: first message ID in the group. This prevents FlatList from
-  // unmounting/remounting items when a new group is appended (index-based keys
-  // would shift all groups after the new one, causing needless DOM churn).
-  const keyExtractor = (item: Message[]) => item[0]?.id ?? 'empty';
-
-  const listHeader = (
-    <>
+  return (
+    <ScrollView
+      ref={scrollRef}
+      testID={TEST_IDS.CHAT_AREA.MESSAGE_LIST}
+      style={{ flex: 1 }}
+      contentContainerStyle={{ padding: 16, gap: 8 }}
+      onScroll={handleScroll}
+      scrollEventThrottle={100}
+      onContentSizeChange={handleContentSizeChange}
+    >
+      {/* Scrollable header content (e.g. E2EE banner) */}
       {stickyHeader}
+
+      {/* Date divider */}
       <Box style={{ alignItems: 'center', paddingVertical: 8 }}>
         <Text size="xs" style={{ color: themeColors.text.muted }}>Today</Text>
       </Box>
-    </>
-  );
 
-  const listFooter = (
-    <>
+      {groups.map((group, groupIdx) => {
+        const firstMsg = group[0];
+        const senderDid = firstMsg.senderDid;
+        const isOutgoing = senderDid === myDid;
+        const senderName = getSenderName(senderDid);
+        const timeStr = formatTime(firstMsg.timestamp);
+        const firstText = getMessageText(firstMsg);
+
+        // Show "New" divider before the group containing the first unread message
+        const showUnreadDivider = firstUnreadMessageId != null &&
+          group.some((m) => m.id === firstUnreadMessageId);
+
+        // ── Call event: render as an InlineEventCard ──
+        if (isCallEventMessage(firstText)) {
+          const parsed = parseCallEvent(firstText);
+          const displayText = parsed
+            ? formatCallEventDisplay(parsed.callType, parsed.status, parsed.duration)
+            : firstText;
+          const isVideo = parsed?.callType === 'video';
+          const isStarted = parsed?.status === 'started';
+          const isMissed = parsed?.status === 'missed' || parsed?.status === 'declined';
+          const accentColor = isMissed
+            ? themeColors.status.danger
+            : isStarted
+              ? themeColors.status.success
+              : themeColors.border.subtle;
+          const iconColor = isMissed
+            ? themeColors.status.danger
+            : isStarted
+              ? themeColors.status.success
+              : themeColors.text.muted;
+          const callIcon = isVideo
+            ? <VideoIcon size={16} color={iconColor} />
+            : <PhoneIcon size={16} color={iconColor} />;
+          // "Call back" only on ended events, not started
+          const showCallBack = onCallBack && !isStarted;
+
+          return (
+            <Box key={`group-${groupIdx}`} style={{ paddingVertical: 4, alignItems: 'flex-start' }}>
+              {showUnreadDivider && (
+                <NewMessageDivider style={{ marginBottom: 8, alignSelf: 'stretch' }} />
+              )}
+              <Box style={{ maxWidth: 380, width: '100%' }}>
+                <InlineEventCard
+                  visible
+                  accentColor={accentColor}
+                  icon={callIcon}
+                  title={displayText}
+                  subtitle={timeStr}
+                  actions={showCallBack ? (
+                    <Button
+                      variant="tertiary"
+                      size="xs"
+                      onPress={() => onCallBack(isVideo ? 'video' : 'voice')}
+                      testID="call.history-card.callback"
+                    >
+                      Call back
+                    </Button>
+                  ) : undefined}
+                  testID="call.history-card"
+                />
+              </Box>
+            </Box>
+          );
+        }
+
+        // ── Regular message group ──
+
+        // Shared per-message renderer (used by both layouts)
+        const renderMessages = (inlineMode: boolean) =>
+          group.map((msg) => {
+            const rawText = getMessageText(msg);
+            const text = applyTextTransforms(rawText, { senderDid: msg.senderDid, conversationId: msg.conversationId });
+            const name = getSenderName(msg.senderDid);
+            const time = formatTime(msg.timestamp);
+            const isOwn = msg.senderDid === myDid;
+            const fileInfo = tryParseFileMessage(msg);
+
+            const displayContent = fileInfo ? null : (
+              emojiMap.size > 0
+                ? parseMessageContent(text, emojiMap, undefined, {
+                    textColor: themeColors.text.primary,
+                    linkColor: themeColors.text.link ?? '#5865F2',
+                    codeBgColor: themeColors.background.sunken,
+                    codeTextColor: themeColors.text.primary,
+                    spoilerBgColor: themeColors.text.muted,
+                    quoteBorderColor: themeColors.border.subtle,
+                  })
+                : text
+            );
+
+            // Emoji-only messages: hide bubble background in bubble view
+            const emojiOnly = !fileInfo && isEmojiOnlyMessage(text);
+
+            // Build reaction chips for Wisp ChatBubble
+            const reactionChips = msg.reactions?.map((r) => ({
+              emoji: r.emoji,
+              count: r.count ?? r.users?.length ?? 0,
+              active: r.reacted ?? r.users?.includes(myDid) ?? false,
+            }));
+
+            // Build replyTo display
+            const replyTo = msg.replyTo ? {
+              sender: msg.replyTo.senderName || getSenderName(msg.replyTo.senderDid),
+              text: msg.replyTo.text,
+            } : undefined;
+
+            const threadCount = msg.threadReplyCount ?? 0;
+
+            return (
+              <RNAnimated.View
+                key={msg.id}
+                ref={(el: any) => { messageRefs.current[msg.id] = el; }}
+                style={highlightedId === msg.id ? {
+                  backgroundColor: highlightBg,
+                  borderRadius: 8,
+                  marginHorizontal: -4,
+                  paddingHorizontal: 4,
+                } : undefined}
+              >
+                <HoverBubble
+                  id={msg.id}
+                  align={inlineMode ? 'incoming' : (isOwn ? 'outgoing' : 'incoming')}
+                  hoveredMessage={hoveredMessage}
+                  onHoverIn={onHoverIn}
+                  onHoverOut={onHoverOut}
+                  actions={makeActions(msg.id, name, text, time)}
+                  contextActions={makeContextActions(msg.id, name, text, time, isOwn)}
+                  themeColors={themeColors}
+                  message={{ id: msg.id, text, conversationId: msg.conversationId, senderDid: msg.senderDid }}
+                >
+                  {inlineMode ? (
+                    <Box style={{ paddingVertical: 2 }}>
+                      {replyTo && (
+                        <Box
+                          style={{
+                            borderLeftWidth: 2,
+                            borderLeftColor: themeColors.accent.primary,
+                            paddingLeft: 8,
+                            marginBottom: 4,
+                            opacity: 0.7,
+                          }}
+                        >
+                          <Text size="xs" style={{ color: themeColors.text.muted }}>
+                            {replyTo.sender}: {replyTo.text}
+                          </Text>
+                        </Box>
+                      )}
+                      {fileInfo ? (() => {
+                        const upload = isOwn ? activeUploads?.get(fileInfo.fileId) : undefined;
+                        return (
+                          <DmFileMessage
+                            fileId={fileInfo.fileId}
+                            filename={fileInfo.filename}
+                            size={fileInfo.size}
+                            mimeType={fileInfo.mimeType}
+                            thumbnail={fileInfo.thumbnail}
+                            isOutgoing={isOwn}
+                            variant="inline"
+                            onDownload={onFileDownload
+                              ? () => handleFileDownload(fileInfo.fileId, fileInfo.filename, fileInfo.mimeType)
+                              : undefined}
+                            isDownloading={downloadingFileId === fileInfo.fileId}
+                            isUploading={!!upload}
+                            uploadProgress={upload?.progress ?? 0}
+                          />
+                        );
+                      })() : typeof displayContent === 'string' ? (
+                        <Text size="sm" style={{ color: themeColors.text.primary, lineHeight: 20 }}>
+                          {displayContent}
+                        </Text>
+                      ) : (
+                        <Box style={{ minHeight: 20 }}>{displayContent}</Box>
+                      )}
+                      {msg.edited && (
+                        <Text size="xs" style={{ color: themeColors.text.muted }}>(edited)</Text>
+                      )}
+                    </Box>
+                  ) : (
+                    <ChatBubble
+                      align={isOwn ? 'outgoing' : 'incoming'}
+                      reactions={reactionChips}
+                      onReactionClick={(emoji: string) => onToggleReaction?.(msg.id, emoji)}
+                      replyTo={replyTo}
+                      edited={msg.edited}
+                      forwarded={msg.forwarded}
+                    >
+                      {fileInfo ? (() => {
+                        const upload = isOwn ? activeUploads?.get(fileInfo.fileId) : undefined;
+                        return (
+                          <DmFileMessage
+                            fileId={fileInfo.fileId}
+                            filename={fileInfo.filename}
+                            size={fileInfo.size}
+                            mimeType={fileInfo.mimeType}
+                            thumbnail={fileInfo.thumbnail}
+                            isOutgoing={isOwn}
+                            variant="bubble"
+                            onDownload={onFileDownload
+                              ? () => handleFileDownload(fileInfo.fileId, fileInfo.filename, fileInfo.mimeType)
+                              : undefined}
+                            isDownloading={downloadingFileId === fileInfo.fileId}
+                            isUploading={!!upload}
+                            uploadProgress={upload?.progress ?? 0}
+                          />
+                        );
+                      })() : (
+                        displayContent
+                      )}
+                    </ChatBubble>
+                  )}
+                </HoverBubble>
+                <SlotRenderer
+                  slot="message-decorator"
+                  props={{ message: msg, conversationId: msg.conversationId }}
+                />
+                {threadCount > 0 && (
+                  <Button
+                    variant="tertiary"
+                    size="xs"
+                    onPress={() => onOpenThread({ id: msg.id, sender: name, content: text, timestamp: time })}
+                    iconLeft={<ThreadIcon size={12} color={themeColors.accent.primary} />}
+                    style={{
+                      alignSelf: 'flex-start',
+                      marginTop: 2,
+                    }}
+                  >
+                    <Text size="xs" weight="semibold" style={{ color: themeColors.accent.primary }}>
+                      {threadCount} {threadCount === 1 ? 'reply' : 'replies'}
+                    </Text>
+                  </Button>
+                )}
+              </RNAnimated.View>
+            );
+          });
+
+        if (isInline) {
+          // ── Inline layout (Slack/Discord style) ──
+          return (
+            <React.Fragment key={`group-${groupIdx}`}>
+              {showUnreadDivider && (
+                <NewMessageDivider style={{ marginVertical: 4 }} />
+              )}
+              <InlineMsgGroup
+                sender={senderName}
+                avatarName={senderName}
+                avatarSrc={getSenderAvatar(senderDid)}
+                senderDid={senderDid}
+                timestamp={timeStr}
+                status={isOutgoing ? (firstMsg.status as string) : undefined}
+                senderColor={isGroupChat ? memberColor(senderDid) : undefined}
+                themeColors={themeColors}
+                onShowProfile={onShowProfile}
+                messageFingerprint={group.map(m => `${m.id}|${m.edited?1:0}|${m.status||''}|${m.reactions?.length||0}`).join(',')}
+                readReceipts={!isOutgoing && groupIdx === lastIncomingGroupIdx ? (
+                  <Text size="xs" style={{ color: themeColors.text.muted, marginTop: 2 }}>Seen</Text>
+                ) : undefined}
+              >
+                {renderMessages(true)}
+              </InlineMsgGroup>
+            </React.Fragment>
+          );
+        }
+
+        // ── Bubble layout (default) ──
+        return (
+          <React.Fragment key={`group-${groupIdx}`}>
+            {showUnreadDivider && (
+              <NewMessageDivider style={{ marginVertical: 4 }} />
+            )}
+            <MsgGroup
+              align={isOutgoing ? 'outgoing' : 'incoming'}
+              sender={senderName}
+              avatarName={senderName}
+              avatarSrc={getSenderAvatar(senderDid)}
+              senderDid={senderDid}
+              timestamp={timeStr}
+              status={isOutgoing ? (firstMsg.status as string) : undefined}
+              senderColor={isGroupChat && !isOutgoing ? memberColor(senderDid) : undefined}
+              themeColors={themeColors}
+              onShowProfile={onShowProfile}
+              messageFingerprint={group.map(m => `${m.id}|${m.edited?1:0}|${m.status||''}|${m.reactions?.length||0}`).join(',')}
+              readReceipts={!isOutgoing && groupIdx === lastIncomingGroupIdx ? (
+                <Text size="xs" style={{ color: themeColors.text.muted, marginTop: 2 }}>Seen</Text>
+              ) : undefined}
+            >
+              {renderMessages(false)}
+            </MsgGroup>
+          </React.Fragment>
+        );
+      })}
+
+      {/* Active call card — rendered at the bottom of the message stream */}
       {activeCall && (
-        <Box style={{ alignItems: 'center' }}>
+        <Box style={{ alignItems: 'flex-start' }}>
           <Box style={{ maxWidth: 380, width: '100%' }}>
             <InlineCallCardMessage
               activeCall={activeCall}
@@ -845,6 +824,8 @@ export const ChatArea = React.memo(function ChatArea({
           </Box>
         </Box>
       )}
+
+      {/* Typing indicator */}
       {typingUser && (
         <TypingIndicator
           testID={TEST_IDS.CHAT_AREA.TYPING_INDICATOR}
@@ -854,30 +835,6 @@ export const ChatArea = React.memo(function ChatArea({
           sender={typingUser}
         />
       )}
-    </>
+    </ScrollView>
   );
-
-  return (
-    <FlatList
-      ref={listRef}
-      testID={TEST_IDS.CHAT_AREA.MESSAGE_LIST}
-      data={groups}
-      keyExtractor={keyExtractor}
-      renderItem={renderGroupItem}
-      ListHeaderComponent={listHeader}
-      ListFooterComponent={listFooter}
-      style={{ flex: 1 }}
-      contentContainerStyle={{ padding: 16, gap: 8 }}
-      onScroll={handleScroll}
-      scrollEventThrottle={100}
-      onContentSizeChange={handleContentSizeChange}
-      // Virtualization: only render visible groups + small buffer.
-      // This prevents all 50 messages from rendering in a single frame,
-      // which was causing V8 "Ineffective mark-compacts" tab crashes.
-      initialNumToRender={8}
-      maxToRenderPerBatch={4}
-      windowSize={5}
-      removeClippedSubviews={Platform.OS !== 'web'}
-    />
-  );
-});
+}
