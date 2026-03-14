@@ -137,11 +137,16 @@ export function useMessages(conversationId: string | null, groupId?: string | nu
   // Guard against concurrent fetches — prevents racing WASM calls when
   // offline batch completion and initial fetch overlap.
   const fetchingRef = useRef(false);
+  // Track which conversation was last successfully loaded so refreshes
+  // (offlineBatchComplete, reactions) skip the isLoading toggle and avoid
+  // 2 unnecessary re-renders of the entire ChatPage tree per refresh.
+  const loadedConversationRef = useRef<string | null>(null);
 
   const fetchMessages = useCallback(async () => {
     if (!service || !conversationId) {
       setMessages([]);
       setIsLoading(false);
+      loadedConversationRef.current = null;
       return;
     }
     // Skip if already fetching — the in-flight fetch will return the latest data
@@ -151,11 +156,19 @@ export function useMessages(conversationId: string | null, groupId?: string | nu
     }
     fetchingRef.current = true;
 
-    if (__DEV__) dbg.info('messages', `getMessages START`, { conversationId: conversationId.slice(0, 12) }, SRC);
+    // Only show loading spinner for initial loads (new conversation), not
+    // for silent refreshes triggered by events (offlineBatchComplete, reactions).
+    // Toggling isLoading on refreshes caused 2 extra re-renders of the entire
+    // ChatPage tree each time — with 126 offline messages that's a crash.
+    const isInitialLoad = loadedConversationRef.current !== conversationId;
+
+    if (__DEV__) dbg.info('messages', `getMessages START`, { conversationId: conversationId.slice(0, 12), isInitialLoad }, SRC);
     try {
-      setIsLoading(true);
-      initialLoadDoneRef.current = false;
-      setFirstUnreadMessageId(null);
+      if (isInitialLoad) {
+        setIsLoading(true);
+        initialLoadDoneRef.current = false;
+        setFirstUnreadMessageId(null);
+      }
       const endTimer = __DEV__ ? dbg.time(`getMessages(${conversationId.slice(0, 8)})`) : null;
       const result = await service.getMessages(conversationId, {
         limit: PAGE_SIZE,
@@ -167,12 +180,13 @@ export function useMessages(conversationId: string | null, groupId?: string | nu
       offsetRef.current = result.length;
       setHasMore(result.length >= PAGE_SIZE);
       setError(null);
+      loadedConversationRef.current = conversationId;
       initialLoadDoneRef.current = true;
     } catch (err) {
       if (__DEV__) dbg.error('messages', `getMessages FAILED`, { conversationId: conversationId.slice(0, 12), error: err }, SRC);
       setError(err instanceof Error ? err : new Error(String(err)));
     } finally {
-      setIsLoading(false);
+      if (isInitialLoad) setIsLoading(false);
       fetchingRef.current = false;
     }
   }, [service, conversationId]);
@@ -234,6 +248,7 @@ export function useMessages(conversationId: string | null, groupId?: string | nu
 
   const pendingMutationsRef = useRef<MsgMutation[]>([]);
   const flushScheduledRef = useRef(false);
+  const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingMessagesRef = useRef<Message[]>([]);
 
   // Debounced fetchMessages — prevents 22+ concurrent refetches from
@@ -265,11 +280,17 @@ export function useMessages(conversationId: string | null, groupId?: string | nu
   useEffect(() => {
     if (!service || !conversationId) return;
 
-    /** Schedule a unified flush on the next animation frame (idempotent). */
+    /** Schedule a unified flush after a short delay (idempotent).
+     *
+     * Previously this used requestAnimationFrame (~16ms / 60fps), which meant
+     * every animation frame during bulk offline processing (126 msgs) triggered
+     * a setMessages → full ChatPage re-render cascade. With 60 flushes/sec the
+     * render storm crashed the tab. A 150ms timer reduces flushes to ~7/sec
+     * while still feeling instant for individual messages. */
     const scheduleFlush = () => {
       if (!flushScheduledRef.current) {
         flushScheduledRef.current = true;
-        requestAnimationFrame(flushAllMutations);
+        flushTimerRef.current = setTimeout(flushAllMutations, 150);
       }
     };
 
@@ -454,6 +475,10 @@ export function useMessages(conversationId: string | null, groupId?: string | nu
 
     return () => {
       unsubscribe();
+      if (flushTimerRef.current) {
+        clearTimeout(flushTimerRef.current);
+        flushTimerRef.current = null;
+      }
       if (debouncedFetchTimerRef.current) {
         clearTimeout(debouncedFetchTimerRef.current);
       }
