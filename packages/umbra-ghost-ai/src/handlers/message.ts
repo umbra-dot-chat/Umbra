@@ -206,16 +206,12 @@ export async function handleMessage(
   let responseText: string;
 
   if (llm.chatStream) {
-    // Streaming mode: send an initial placeholder, then progressively update
-    const responseMessageId = uuid();
-    const initialText = '...';
-
-    // Send initial placeholder message
-    sendEncryptedMessage(responseMessageId, initialText, identity, relay, friend);
-
-    // Stream LLM response with throttled updates
-    responseText = await llm.chatStream(messages, (accumulated) => {
-      sendMessageUpdate(responseMessageId, accumulated, identity, relay, friend);
+    // Streaming mode: accumulate via chatStream internally, then send
+    // the complete message as a single chat_message once done.
+    // (chat_message_update envelopes are unreliably delivered by the relay,
+    // so we avoid sending placeholder + updates for now.)
+    responseText = await llm.chatStream(messages, () => {
+      // no-op callback — we don't send incremental updates
     });
 
     // Parse and strip tutor score from the final response
@@ -226,19 +222,21 @@ export async function handleMessage(
     if (tutorState) cleanedResponse = cleanedResponse.replace(TUTOR_TAG_STRIP, '');
     if (therapyState?.active) cleanedResponse = cleanedResponse.replace(THERAPY_TAG_STRIP, '');
 
-    // Send final update with tags intact (client plugin parses them)
-    sendMessageUpdate(responseMessageId, responseText, identity, relay, friend);
+    // Send the complete message as a single chat_message
+    const messageId = uuid();
+    const timestamp = Date.now();
+    sendEncryptedMessage(messageId, responseText, identity, relay, friend);
 
     // Save the stripped version to context store (clean LLM history)
     store.saveMessage({
-      id: responseMessageId,
+      id: messageId,
       conversationId: friend.conversationId,
       role: 'assistant',
       content: cleanedResponse,
-      timestamp: Date.now(),
+      timestamp,
     });
 
-    log.info(`Streamed reply to ${friend.displayName}: "${cleanedResponse.slice(0, 100)}${cleanedResponse.length > 100 ? '...' : ''}"`);
+    log.info(`Replied to ${friend.displayName}: "${cleanedResponse.slice(0, 100)}${cleanedResponse.length > 100 ? '...' : ''}"`);
   } else {
     // Non-streaming mode: generate complete response then send
     responseText = await llm.chat(messages);
@@ -334,41 +332,6 @@ function sendEncryptedMessage(
   });
 }
 
-/**
- * Send an encrypted chat_message_update (streaming content update).
- */
-function sendMessageUpdate(
-  messageId: string,
-  text: string,
-  identity: GhostIdentity,
-  relay: RelayClient,
-  friend: StoredFriend,
-): void {
-  const timestamp = Date.now();
-  const { ciphertext, nonce } = encryptMessage(
-    text,
-    identity.encryptionPrivateKey,
-    friend.encryptionKey,
-    identity.did,
-    friend.did,
-    timestamp,
-    friend.conversationId,
-  );
-
-  relay.sendEnvelope(friend.did, {
-    envelope: 'chat_message_update',
-    version: 1,
-    payload: {
-      messageId,
-      conversationId: friend.conversationId,
-      senderDid: identity.did,
-      contentEncrypted: ciphertext,
-      nonce,
-      timestamp,
-    },
-  });
-}
-
 async function sendResponse(
   text: string,
   identity: GhostIdentity,
@@ -424,6 +387,7 @@ function sendTypingIndicator(identity: GhostIdentity, relay: RelayClient, friend
     payload: {
       conversationId: friend.conversationId,
       senderDid: identity.did,
+      senderName: identity.displayName ?? 'Ghost',
       isTyping: true,
       timestamp: Date.now(),
     },

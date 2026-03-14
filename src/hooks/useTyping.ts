@@ -13,10 +13,11 @@
  * ```
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { dbg } from '@/utils/debug';
 import { useUmbra } from '@/contexts/UmbraContext';
 import { useAuth } from '@/contexts/AuthContext';
+import { useFriendsContext } from '@/contexts/FriendsContext';
 import { useNetwork } from '@/hooks/useNetwork';
 import type { MessageEvent } from '@umbra/service';
 
@@ -46,9 +47,17 @@ export function useTyping(
 ): UseTypingResult {
   const { service } = useUmbra();
   const { identity } = useAuth();
+  const { friends } = useFriendsContext();
   const { getRelayWs } = useNetwork();
   const myDid = identity?.did ?? '';
   const myName = identity?.displayName ?? '';
+
+  // Build DID → display name map for fallback resolution
+  const friendNameMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const f of friends) map[f.did] = f.displayName;
+    return map;
+  }, [friends]);
 
   // Track typing users: DID → { name, timeoutId }
   const [typingUsers, setTypingUsers] = useState<Map<string, string>>(new Map());
@@ -68,8 +77,8 @@ export function useTyping(
 
         setTypingUsers((prev) => {
           const next = new Map(prev);
-          // Use sender name from the typing event, fall back to short DID
-          next.set(did, event.senderName || prev.get(did) || did.slice(0, 12) + '...');
+          // Use sender name from the typing event, fall back to friend name lookup, then short DID
+          next.set(did, event.senderName || prev.get(did) || friendNameMap[did] || did.slice(0, 12) + '...');
           return next;
         });
 
