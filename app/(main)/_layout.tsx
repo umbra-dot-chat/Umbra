@@ -37,6 +37,7 @@ import type { Community, Friend, MappedCommunityStructure, CommunityImportResult
 import { createCommunityFromDiscordImport } from '@umbra/service';
 import { useAuth } from '@/contexts/AuthContext';
 import { FriendsProvider } from '@/contexts/FriendsContext';
+import { GroupsProvider } from '@/contexts/GroupsContext';
 import { useUploadProgress } from '@/hooks/useUploadProgress';
 import { CommunityCreateOptionsDialog } from '@/components/community/CommunityCreateOptionsDialog';
 import { JoinCommunityModal } from '@/components/community/invite/JoinCommunityModal';
@@ -1012,7 +1013,8 @@ export default function MainLayout() {
     <SettingsDialogProvider>
       <ActiveConversationProvider>
         <FriendsProvider>
-          <CommunityProvider>
+          <GroupsProvider>
+            <CommunityProvider>
             <CallProvider>
               <VoiceChannelProvider>
                 <NotificationProvider>
@@ -1023,6 +1025,7 @@ export default function MainLayout() {
               </VoiceChannelProvider>
             </CallProvider>
           </CommunityProvider>
+          </GroupsProvider>
         </FriendsProvider>
       </ActiveConversationProvider>
     </SettingsDialogProvider>
