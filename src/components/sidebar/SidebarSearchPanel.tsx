@@ -7,7 +7,7 @@
  * shared search component library.
  */
 
-import React, { useCallback, useEffect, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { ScrollView, type TextInput } from 'react-native';
 import {
   Box,
@@ -17,6 +17,8 @@ import {
   useTheme,
 } from '@coexist/wisp-react-native';
 import { useUnifiedSearch } from '@/contexts/UnifiedSearchContext';
+import { useFriendsContext } from '@/contexts/FriendsContext';
+import { useAuth } from '@/contexts/AuthContext';
 import { FilterPanel } from '@/components/search/FilterPanel';
 import { SearchResultItem } from '@/components/search/SearchResultItem';
 import { IndexStatusBar } from '@/components/search/IndexStatusBar';
@@ -45,6 +47,23 @@ export function SidebarSearchResults() {
     setScope,
     jumpToMessage,
   } = useUnifiedSearch();
+  const { friends } = useFriendsContext();
+  const { identity } = useAuth();
+
+  // Build DID → display name map for resolving sender names
+  const resolveName = useMemo(() => {
+    const myDid = identity?.did ?? '';
+    const myDisplayName = identity?.displayName ?? '';
+    const nameMap: Record<string, string> = {};
+    for (const f of friends) {
+      nameMap[f.did] = f.displayName;
+    }
+    return (did: string): string => {
+      if (!did) return 'Unknown';
+      if (did === myDid) return myDisplayName || 'You';
+      return nameMap[did] || did.slice(0, 16) + '...';
+    };
+  }, [friends, identity?.did, identity?.displayName]);
 
   // Lock scope to current conversation when this panel mounts
   useEffect(() => {
@@ -122,7 +141,7 @@ export function SidebarSearchResults() {
             <SearchResultItem
               key={result.document.id}
               result={result}
-              senderName={result.document.senderDid}
+              senderName={resolveName(result.document.senderDid)}
               onPress={handleResultPress}
             />
           ))
