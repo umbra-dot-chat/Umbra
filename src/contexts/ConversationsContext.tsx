@@ -90,24 +90,38 @@ export function ConversationsProvider({ children }: { children: React.ReactNode 
   const fetchConversationsRef = useRef(fetchConversations);
   fetchConversationsRef.current = fetchConversations;
 
-  // Debounced version for event-triggered refreshes.
-  // Uses ref to avoid depending on fetchConversations identity.
-  const debounceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const debouncedFetch = useCallback(() => {
-    if (debounceTimerRef.current) {
-      clearTimeout(debounceTimerRef.current);
-    }
-    debounceTimerRef.current = setTimeout(() => {
-      debounceTimerRef.current = null;
+  // Throttled version for event-triggered refreshes (leading + trailing).
+  // The old trailing-only debounce starved during sustained bot floods — the
+  // timer kept resetting so getConversations() never fired until the burst
+  // ended.  A throttle fires immediately on the first event, then at most
+  // once per FETCH_DEBOUNCE_MS, with one trailing call to capture the last
+  // batch of events.
+  const lastThrottleFetchRef = useRef(0);
+  const trailingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const throttledFetch = useCallback(() => {
+    const now = Date.now();
+    const elapsed = now - lastThrottleFetchRef.current;
+
+    if (elapsed >= FETCH_DEBOUNCE_MS) {
+      // Leading edge: fire immediately
+      lastThrottleFetchRef.current = now;
       fetchConversationsRef.current();
-    }, FETCH_DEBOUNCE_MS);
+    } else if (!trailingTimerRef.current) {
+      // Schedule trailing edge if not already pending
+      trailingTimerRef.current = setTimeout(() => {
+        trailingTimerRef.current = null;
+        lastThrottleFetchRef.current = Date.now();
+        fetchConversationsRef.current();
+      }, FETCH_DEBOUNCE_MS - elapsed);
+    }
+    // If trailing is already scheduled, do nothing (it will pick up latest data)
   }, []);
 
-  // Clean up debounce timer on unmount
+  // Clean up trailing timer on unmount
   useEffect(() => {
     return () => {
-      if (debounceTimerRef.current) {
-        clearTimeout(debounceTimerRef.current);
+      if (trailingTimerRef.current) {
+        clearTimeout(trailingTimerRef.current);
       }
     };
   }, []);
@@ -128,14 +142,14 @@ export function ConversationsProvider({ children }: { children: React.ReactNode 
     if (__DEV__) dbg.info('conversations', 'subscribing to onMessageEvent (single instance)', undefined, SRC);
     const unsubscribe = service.onMessageEvent((event: MessageEvent) => {
       if (__DEV__) dbg.debug('conversations', 'onMessageEvent → debounced refresh', { type: event.type }, SRC);
-      debouncedFetch();
+      throttledFetch();
     });
 
     return () => {
       if (__DEV__) dbg.info('conversations', 'unsubscribing from onMessageEvent', undefined, SRC);
       unsubscribe();
     };
-  }, [service, debouncedFetch]);
+  }, [service, throttledFetch]);
 
   // Subscribe to friend events — ONE listener for the whole app
   useEffect(() => {
@@ -144,14 +158,14 @@ export function ConversationsProvider({ children }: { children: React.ReactNode 
     if (__DEV__) dbg.info('conversations', 'subscribing to onFriendEvent (single instance)', undefined, SRC);
     const unsubscribe = service.onFriendEvent((event: FriendEvent) => {
       if (__DEV__) dbg.debug('conversations', 'onFriendEvent → debounced refresh', { type: event.type }, SRC);
-      debouncedFetch();
+      throttledFetch();
     });
 
     return () => {
       if (__DEV__) dbg.info('conversations', 'unsubscribing from onFriendEvent', undefined, SRC);
       unsubscribe();
     };
-  }, [service, debouncedFetch]);
+  }, [service, throttledFetch]);
 
   const value = React.useMemo<ConversationsContextValue>(
     () => ({ conversations, isLoading, error, refresh: fetchConversations }),

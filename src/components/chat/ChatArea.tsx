@@ -411,14 +411,23 @@ export const ChatArea = React.memo(function ChatArea({
   // ── Scroll-to-message + highlight ──
   const messageRefs = useRef<Record<string, View | null>>({});
 
+  // Clean up stale message refs only when messages are removed (rare).
+  // During rapid message arrivals the messages array only grows, so this
+  // check is skipped entirely — avoiding an O(N) Set allocation + iteration
+  // on every render during bot floods.
+  const prevMsgLenRef = useRef(messages.length);
   useEffect(() => {
-    const currentIds = new Set(messages.map((m) => m.id));
-    const refs = messageRefs.current;
-    for (const id in refs) {
-      if (!currentIds.has(id)) {
-        delete refs[id];
+    // Only clean up when messages shrink (pagination reset, conversation switch)
+    if (messages.length < prevMsgLenRef.current) {
+      const currentIds = new Set(messages.map((m) => m.id));
+      const refs = messageRefs.current;
+      for (const id in refs) {
+        if (!currentIds.has(id)) {
+          delete refs[id];
+        }
       }
     }
+    prevMsgLenRef.current = messages.length;
   }, [messages]);
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
   const highlightAnim = useRef(new RNAnimated.Value(0)).current;

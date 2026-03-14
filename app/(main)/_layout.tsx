@@ -290,7 +290,10 @@ function MainLayoutInner() {
         avatar: friend?.avatar,
       };
     });
-  }, [conversations, friendMap, groupMap, lastMessages, onlineDids]);
+  // Note: onlineDids is intentionally omitted — it's already captured in
+  // friendMap (which depends on [friends, onlineDids]). Including it here
+  // caused redundant recalculations on every presence change.
+  }, [conversations, friendMap, groupMap, lastMessages]);
 
   // Resizable sidebar
   const SIDEBAR_MIN = 220;
@@ -326,8 +329,14 @@ function MainLayoutInner() {
   const { open: cmdOpen, setOpen: setCmdOpen } = useCommandPalette();
 
   // Load/refresh last messages when conversations change.
-  // Only re-fetches for conversations whose lastMessageAt has changed,
-  // so this is cheap even though it runs on every conversations update.
+  // Only re-fetches for conversations whose lastMessageAt has changed.
+  // Throttled: during rapid message floods the effect fires frequently
+  // (driven by ConversationsProvider), so we limit WASM getMessages calls
+  // to at most once per 2 seconds.
+  const previewFetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastPreviewFetchRef = useRef(0);
+  const PREVIEW_THROTTLE_MS = 2000;
+
   useEffect(() => {
     if (!service || conversations.length === 0) return;
 
@@ -353,7 +362,27 @@ function MainLayoutInner() {
         setLastMessages((prev) => ({ ...prev, ...updates }));
       }
     };
-    loadLastMessages();
+
+    // Throttle: fire immediately if cooldown has elapsed, otherwise schedule trailing
+    const now = Date.now();
+    const elapsed = now - lastPreviewFetchRef.current;
+    if (elapsed >= PREVIEW_THROTTLE_MS) {
+      lastPreviewFetchRef.current = now;
+      loadLastMessages();
+    } else if (!previewFetchTimerRef.current) {
+      previewFetchTimerRef.current = setTimeout(() => {
+        previewFetchTimerRef.current = null;
+        lastPreviewFetchRef.current = Date.now();
+        loadLastMessages();
+      }, PREVIEW_THROTTLE_MS - elapsed);
+    }
+
+    return () => {
+      if (previewFetchTimerRef.current) {
+        clearTimeout(previewFetchTimerRef.current);
+        previewFetchTimerRef.current = null;
+      }
+    };
   }, [service, conversations]);
 
   // Last message previews are refreshed when the `conversations` array
