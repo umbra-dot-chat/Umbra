@@ -22,8 +22,10 @@ export interface InlineMsgGroupProps {
  * All messages are left-aligned. Avatar on the left, sender name + timestamp
  * on the first line, message content below. Subsequent messages in the group
  * are indented to align with the first message (no repeated avatar/name).
+ *
+ * Wrapped in React.memo to prevent re-renders when props haven't changed.
  */
-export function InlineMsgGroup({
+export const InlineMsgGroup = React.memo(function InlineMsgGroup({
   sender,
   avatar,
   timestamp,
@@ -79,4 +81,4 @@ export function InlineMsgGroup({
       </Box>
     </Box>
   );
-}
+});

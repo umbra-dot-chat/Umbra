@@ -131,6 +131,22 @@ export interface PluginContextValue {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const PluginContext = createContext<PluginContextValue | null>(null);
+
+/**
+ * Stable context that holds only the PluginRegistry instance (a ref that never
+ * changes identity).  SlotRenderer subscribes to this instead of the full
+ * PluginContext so it isn't re-rendered by unrelated context changes.
+ */
+const PluginRegistryContext = createContext<PluginRegistry | null>(null);
+
+/**
+ * Stable context that holds only the `applyTextTransforms` function.
+ * The function is created with `useCallback([], [])` so its identity never
+ * changes.  ChatArea uses this instead of the full PluginContext to avoid
+ * re-rendering when unrelated plugin state changes.
+ */
+const TextTransformsContext = createContext<PluginContextValue['applyTextTransforms'] | null>(null);
+
 const SRC = 'PluginProvider';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -627,9 +643,13 @@ export function PluginProvider({ children }: { children: React.ReactNode }) {
   );
 
   return (
-    <PluginContext.Provider value={value}>
-      {children}
-    </PluginContext.Provider>
+    <PluginRegistryContext.Provider value={registry}>
+      <TextTransformsContext.Provider value={applyTextTransforms}>
+        <PluginContext.Provider value={value}>
+          {children}
+        </PluginContext.Provider>
+      </TextTransformsContext.Provider>
+    </PluginRegistryContext.Provider>
   );
 }
 
@@ -641,6 +661,34 @@ export function usePlugins(): PluginContextValue {
   const ctx = useContext(PluginContext);
   if (!ctx) {
     throw new Error('usePlugins must be used within a PluginProvider');
+  }
+  return ctx;
+}
+
+/**
+ * Returns the stable PluginRegistry instance without subscribing to the
+ * full PluginContext.  Used by SlotRenderer + useSlotEntries to avoid
+ * re-rendering on unrelated context changes.
+ */
+export function usePluginRegistry(): PluginRegistry {
+  const registry = useContext(PluginRegistryContext);
+  if (!registry) {
+    throw new Error('usePluginRegistry must be used within a PluginProvider');
+  }
+  return registry;
+}
+
+/**
+ * Returns ONLY the stable `applyTextTransforms` function without subscribing
+ * to the full PluginContext.  The function is created with useCallback([])
+ * in the provider, so its identity never changes.  Using this instead of
+ * `usePlugins()` prevents components like ChatArea from re-rendering when
+ * unrelated plugin state changes (enabledCount, commands, etc.).
+ */
+export function useApplyTextTransforms(): PluginContextValue['applyTextTransforms'] {
+  const ctx = useContext(TextTransformsContext);
+  if (!ctx) {
+    throw new Error('useApplyTextTransforms must be used within a PluginProvider');
   }
   return ctx;
 }

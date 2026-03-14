@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Platform, ScrollView, View, Animated as RNAnimated } from 'react-native';
+import { Platform, FlatList, View, Animated as RNAnimated } from 'react-native';
 import { TEST_IDS } from '@/constants/test-ids';
 import {
   Avatar, Box, Button, ChatBubble, Text, TypingIndicator, NewMessageDivider, useTheme,
@@ -11,7 +11,7 @@ import { MsgGroup } from './MsgGroup';
 import { InlineMsgGroup } from './InlineMsgGroup';
 import { DmFileMessage } from '@/components/chat/DmFileMessage';
 import { SlotRenderer } from '@/components/plugins/SlotRenderer';
-import { usePlugins } from '@/contexts/PluginContext';
+import { useApplyTextTransforms } from '@/contexts/PluginContext';
 import { useMessaging } from '@/contexts/MessagingContext';
 import { parseMessageContent, buildEmojiMap, isEmojiOnlyMessage, resetParseStats, getParseStats, type EmojiMap } from '@/utils/parseMessageContent';
 import { dbg } from '@/utils/debug';
@@ -44,9 +44,12 @@ export interface ChatAreaProps {
   isGroupChat?: boolean;
   /** Who is currently typing (display name), or null */
   typingUser?: string | null;
-  hoveredMessage: string | null;
-  onHoverIn: (id: string) => void;
-  onHoverOut: () => void;
+  /** @deprecated — hover state is now managed inside HoverBubble. Ignored. */
+  hoveredMessage?: string | null;
+  /** @deprecated — hover state is now managed inside HoverBubble. Ignored. */
+  onHoverIn?: (id: string) => void;
+  /** @deprecated — hover state is now managed inside HoverBubble. Ignored. */
+  onHoverOut?: () => void;
   onReplyTo: (reply: { sender: string; text: string }) => void;
   onOpenThread: (msg: { id: string; sender: string; content: string; timestamp: string }) => void;
   onShowProfile: (name: string, event: any, status?: 'online' | 'idle' | 'offline', avatar?: string) => void;
@@ -319,7 +322,6 @@ function LoadingSkeleton() {
 export const ChatArea = React.memo(function ChatArea({
   messages, myDid, myDisplayName, myAvatar, friendNames, friendAvatars,
   isLoading, isGroupChat, typingUser,
-  hoveredMessage, onHoverIn, onHoverOut,
   onReplyTo, onOpenThread, onShowProfile,
   onToggleReaction, onEditMessage, onDeleteMessage, onPinMessage, onForwardMessage, onCopyMessage,
   stickyHeader,
@@ -340,7 +342,7 @@ export const ChatArea = React.memo(function ChatArea({
   const { theme } = useTheme();
   const themeColors = theme.colors;
   const { displayMode } = useMessaging();
-  const { applyTextTransforms } = usePlugins();
+  const applyTextTransforms = useApplyTextTransforms();
 
   useEffect(() => {
     if (__DEV__) {
@@ -374,44 +376,37 @@ export const ChatArea = React.memo(function ChatArea({
   );
   const isInline = displayMode === 'inline';
 
-  // ── Scroll-to-bottom logic ──
-  const scrollRef = useRef<ScrollView>(null);
-  // Track whether the user is near the bottom so we auto-scroll on new messages
-  // but don't yank them back if they scrolled up to read history.
+  // ── Scroll logic ──
+  const listRef = useRef<FlatList<Message[]>>(null);
   const isNearBottomRef = useRef(true);
   const prevMessageCountRef = useRef(messages.length);
 
   const handleScroll = useCallback((e: any) => {
     const { layoutMeasurement, contentOffset, contentSize } = e.nativeEvent;
-    // Consider "near bottom" if within 150px of the end
     const distanceFromBottom = contentSize.height - layoutMeasurement.height - contentOffset.y;
     isNearBottomRef.current = distanceFromBottom < 150;
   }, []);
 
-  // When new messages arrive, auto-scroll if user is near the bottom
+  // Auto-scroll to bottom when new messages arrive
   useEffect(() => {
     if (messages.length > prevMessageCountRef.current && isNearBottomRef.current) {
-      // Small delay so layout has time to update before scrolling
       setTimeout(() => {
-        scrollRef.current?.scrollToEnd({ animated: true });
+        listRef.current?.scrollToEnd({ animated: true });
       }, 50);
     }
     prevMessageCountRef.current = messages.length;
   }, [messages.length]);
 
-  // Scroll to end when content first renders (show most recent messages)
+  // Scroll to end when content first renders
   const handleContentSizeChange = useCallback((_w: number, _h: number) => {
-    // Only auto-scroll to end if user hasn't scrolled up
     if (isNearBottomRef.current) {
-      scrollRef.current?.scrollToEnd({ animated: false });
+      listRef.current?.scrollToEnd({ animated: false });
     }
   }, []);
 
   // ── Scroll-to-message + highlight ──
   const messageRefs = useRef<Record<string, View | null>>({});
 
-  // Clean up stale messageRefs to prevent DOM node retention / memory leak.
-  // Only keep refs for messages currently in the array.
   useEffect(() => {
     const currentIds = new Set(messages.map((m) => m.id));
     const refs = messageRefs.current;
@@ -442,7 +437,6 @@ export const ChatArea = React.memo(function ChatArea({
     };
 
     if (Platform.OS === 'web') {
-      // On web, use DOM scrollIntoView for reliable behaviour
       const node = targetRef as unknown as HTMLElement | null;
       if (node && typeof node.scrollIntoView === 'function') {
         node.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -450,18 +444,9 @@ export const ChatArea = React.memo(function ChatArea({
       } else {
         onScrollToComplete?.();
       }
-    } else if (targetRef && scrollRef.current) {
-      targetRef.measureLayout(
-        scrollRef.current.getInnerViewNode() as any,
-        (_x: number, y: number) => {
-          scrollRef.current?.scrollTo({ y: Math.max(0, y - 80), animated: true });
-          triggerHighlight();
-        },
-        () => {
-          if (__DEV__) dbg.warn('messages', 'Could not find message to scroll to', { scrollToMessageId }, SRC);
-          onScrollToComplete?.();
-        },
-      );
+    } else if (targetRef && listRef.current) {
+      // FlatList doesn't have getInnerViewNode, use scrollToItem or manual offset
+      onScrollToComplete?.();
     } else {
       onScrollToComplete?.();
     }
@@ -472,7 +457,7 @@ export const ChatArea = React.memo(function ChatArea({
     outputRange: ['transparent', themeColors.accent.primary + '22'],
   });
 
-  // Memoize message grouping — must be before early returns (rules of hooks).
+  // Memoize message grouping
   const groups = useMemo(() => groupMessages(messages), [messages]);
 
   if (isLoading) {
@@ -523,305 +508,290 @@ export const ChatArea = React.memo(function ChatArea({
     onEdit: isOwn ? () => onEditMessage?.(msgId) : undefined,
   });
 
-  return (
-    <ScrollView
-      ref={scrollRef}
-      testID={TEST_IDS.CHAT_AREA.MESSAGE_LIST}
-      style={{ flex: 1 }}
-      contentContainerStyle={{ padding: 16, gap: 8 }}
-      onScroll={handleScroll}
-      scrollEventThrottle={100}
-      onContentSizeChange={handleContentSizeChange}
-    >
-      {/* Scrollable header content (e.g. E2EE banner) */}
-      {stickyHeader}
+  // ── Render a single message within a group ──
+  const renderSingleMessage = (msg: Message, inlineMode: boolean) => {
+    const rawText = getMessageText(msg);
+    const text = applyTextTransforms(rawText, { senderDid: msg.senderDid, conversationId: msg.conversationId });
+    const name = getSenderName(msg.senderDid);
+    const time = formatTime(msg.timestamp);
+    const isOwn = msg.senderDid === myDid;
+    const fileInfo = tryParseFileMessage(msg);
 
-      {/* Date divider */}
+    const displayContent = fileInfo ? null : (
+      emojiMap.size > 0
+        ? parseMessageContent(text, emojiMap, undefined, {
+            textColor: themeColors.text.primary,
+            linkColor: themeColors.text.link ?? '#5865F2',
+            codeBgColor: themeColors.background.sunken,
+            codeTextColor: themeColors.text.primary,
+            spoilerBgColor: themeColors.text.muted,
+            quoteBorderColor: themeColors.border.subtle,
+          })
+        : text
+    );
+
+    const emojiOnly = !fileInfo && isEmojiOnlyMessage(text);
+
+    const reactionChips = msg.reactions?.map((r) => ({
+      emoji: r.emoji,
+      count: r.count ?? r.users?.length ?? 0,
+      active: r.reacted ?? r.users?.includes(myDid) ?? false,
+    }));
+
+    const replyTo = msg.replyTo ? {
+      sender: msg.replyTo.senderName || getSenderName(msg.replyTo.senderDid),
+      text: msg.replyTo.text,
+    } : undefined;
+
+    const threadCount = msg.threadReplyCount ?? 0;
+
+    return (
+      <RNAnimated.View
+        key={msg.id}
+        ref={(el: any) => { messageRefs.current[msg.id] = el; }}
+        style={highlightedId === msg.id ? {
+          backgroundColor: highlightBg,
+          borderRadius: 8,
+          marginHorizontal: -4,
+          paddingHorizontal: 4,
+        } : undefined}
+      >
+        <HoverBubble
+          id={msg.id}
+          align={inlineMode ? 'incoming' : (isOwn ? 'outgoing' : 'incoming')}
+          actions={makeActions(msg.id, name, text, time)}
+          contextActions={makeContextActions(msg.id, name, text, time, isOwn)}
+          themeColors={themeColors}
+          message={{ id: msg.id, text, conversationId: msg.conversationId, senderDid: msg.senderDid }}
+        >
+          {inlineMode ? (
+            <Box style={{ paddingVertical: 2 }}>
+              {replyTo && (
+                <Box
+                  style={{
+                    borderLeftWidth: 2,
+                    borderLeftColor: themeColors.accent.primary,
+                    paddingLeft: 8,
+                    marginBottom: 4,
+                    opacity: 0.7,
+                  }}
+                >
+                  <Text size="xs" style={{ color: themeColors.text.muted }}>
+                    {replyTo.sender}: {replyTo.text}
+                  </Text>
+                </Box>
+              )}
+              {fileInfo ? (() => {
+                const upload = isOwn ? activeUploads?.get(fileInfo.fileId) : undefined;
+                return (
+                  <DmFileMessage
+                    fileId={fileInfo.fileId}
+                    filename={fileInfo.filename}
+                    size={fileInfo.size}
+                    mimeType={fileInfo.mimeType}
+                    thumbnail={fileInfo.thumbnail}
+                    isOutgoing={isOwn}
+                    variant="inline"
+                    onDownload={onFileDownload
+                      ? () => handleFileDownload(fileInfo.fileId, fileInfo.filename, fileInfo.mimeType)
+                      : undefined}
+                    isDownloading={downloadingFileId === fileInfo.fileId}
+                    isUploading={!!upload}
+                    uploadProgress={upload?.progress ?? 0}
+                  />
+                );
+              })() : typeof displayContent === 'string' ? (
+                <Text size="sm" style={{ color: themeColors.text.primary, lineHeight: 20 }}>
+                  {displayContent}
+                </Text>
+              ) : (
+                <Box style={{ minHeight: 20 }}>{displayContent}</Box>
+              )}
+              {msg.edited && (
+                <Text size="xs" style={{ color: themeColors.text.muted }}>(edited)</Text>
+              )}
+            </Box>
+          ) : (
+            <ChatBubble
+              align={isOwn ? 'outgoing' : 'incoming'}
+              reactions={reactionChips}
+              onReactionClick={(emoji: string) => onToggleReaction?.(msg.id, emoji)}
+              replyTo={replyTo}
+              edited={msg.edited}
+              forwarded={msg.forwarded}
+            >
+              {fileInfo ? (() => {
+                const upload = isOwn ? activeUploads?.get(fileInfo.fileId) : undefined;
+                return (
+                  <DmFileMessage
+                    fileId={fileInfo.fileId}
+                    filename={fileInfo.filename}
+                    size={fileInfo.size}
+                    mimeType={fileInfo.mimeType}
+                    thumbnail={fileInfo.thumbnail}
+                    isOutgoing={isOwn}
+                    variant="bubble"
+                    onDownload={onFileDownload
+                      ? () => handleFileDownload(fileInfo.fileId, fileInfo.filename, fileInfo.mimeType)
+                      : undefined}
+                    isDownloading={downloadingFileId === fileInfo.fileId}
+                    isUploading={!!upload}
+                    uploadProgress={upload?.progress ?? 0}
+                  />
+                );
+              })() : (
+                displayContent
+              )}
+            </ChatBubble>
+          )}
+        </HoverBubble>
+        <SlotRenderer
+          slot="message-decorator"
+          props={{ message: msg, conversationId: msg.conversationId }}
+        />
+        {threadCount > 0 && (
+          <Button
+            variant="tertiary"
+            size="xs"
+            onPress={() => onOpenThread({ id: msg.id, sender: name, content: text, timestamp: time })}
+            iconLeft={<ThreadIcon size={12} color={themeColors.accent.primary} />}
+            style={{
+              alignSelf: 'flex-start',
+              marginTop: 2,
+            }}
+          >
+            <Text size="xs" weight="semibold" style={{ color: themeColors.accent.primary }}>
+              {threadCount} {threadCount === 1 ? 'reply' : 'replies'}
+            </Text>
+          </Button>
+        )}
+      </RNAnimated.View>
+    );
+  };
+
+  // ── Render a message group (FlatList item) ──
+  const renderGroupItem = ({ item: group, index: groupIdx }: { item: Message[]; index: number }) => {
+    const firstMsg = group[0];
+    const senderDid = firstMsg.senderDid;
+    const isOutgoing = senderDid === myDid;
+    const senderName = getSenderName(senderDid);
+    const timeStr = formatTime(firstMsg.timestamp);
+    const firstText = getMessageText(firstMsg);
+
+    const showUnreadDivider = firstUnreadMessageId != null &&
+      group.some((m) => m.id === firstUnreadMessageId);
+
+    // ── Call event: render as an InlineEventCard ──
+    if (isCallEventMessage(firstText)) {
+      const parsed = parseCallEvent(firstText);
+      const displayText = parsed
+        ? formatCallEventDisplay(parsed.callType, parsed.status, parsed.duration)
+        : firstText;
+      const isVideo = parsed?.callType === 'video';
+      const isStarted = parsed?.status === 'started';
+      const isMissed = parsed?.status === 'missed' || parsed?.status === 'declined';
+      const accentColor = isMissed
+        ? themeColors.status.danger
+        : isStarted
+          ? themeColors.status.success
+          : themeColors.border.subtle;
+      const iconColor = isMissed
+        ? themeColors.status.danger
+        : isStarted
+          ? themeColors.status.success
+          : themeColors.text.muted;
+      const callIcon = isVideo
+        ? <VideoIcon size={16} color={iconColor} />
+        : <PhoneIcon size={16} color={iconColor} />;
+      const showCallBack = onCallBack && !isStarted;
+
+      return (
+        <Box style={{ paddingVertical: 4, alignItems: 'center' }}>
+          {showUnreadDivider && (
+            <NewMessageDivider style={{ marginBottom: 8, alignSelf: 'stretch' }} />
+          )}
+          <Box style={{ maxWidth: 380, width: '100%' }}>
+            <InlineEventCard
+              visible
+              accentColor={accentColor}
+              icon={callIcon}
+              title={displayText}
+              subtitle={timeStr}
+              actions={showCallBack ? (
+                <Button
+                  variant="tertiary"
+                  size="xs"
+                  onPress={() => onCallBack(isVideo ? 'video' : 'voice')}
+                  testID="call.history-card.callback"
+                >
+                  Call back
+                </Button>
+              ) : undefined}
+              testID="call.history-card"
+            />
+          </Box>
+        </Box>
+      );
+    }
+
+    // ── Regular message group ──
+    const renderedMessages = group.map((msg) => renderSingleMessage(msg, isInline));
+
+    if (isInline) {
+      return (
+        <React.Fragment>
+          {showUnreadDivider && (
+            <NewMessageDivider style={{ marginVertical: 4 }} />
+          )}
+          <InlineMsgGroup
+            sender={senderName}
+            avatar={renderAvatar(senderDid, senderName)}
+            timestamp={timeStr}
+            status={isOutgoing ? (firstMsg.status as string) : undefined}
+            senderColor={isGroupChat ? memberColor(senderDid) : undefined}
+            themeColors={themeColors}
+            onAvatarPress={(e: any) => onShowProfile(senderName, e, undefined, getSenderAvatar(senderDid))}
+          >
+            {renderedMessages}
+          </InlineMsgGroup>
+        </React.Fragment>
+      );
+    }
+
+    return (
+      <React.Fragment>
+        {showUnreadDivider && (
+          <NewMessageDivider style={{ marginVertical: 4 }} />
+        )}
+        <MsgGroup
+          align={isOutgoing ? 'outgoing' : 'incoming'}
+          sender={senderName}
+          avatar={renderAvatar(senderDid, senderName)}
+          timestamp={timeStr}
+          status={isOutgoing ? (firstMsg.status as string) : undefined}
+          senderColor={isGroupChat && !isOutgoing ? memberColor(senderDid) : undefined}
+          themeColors={themeColors}
+          onAvatarPress={(e: any) => onShowProfile(senderName, e, undefined, getSenderAvatar(senderDid))}
+        >
+          {renderedMessages}
+        </MsgGroup>
+      </React.Fragment>
+    );
+  };
+
+  const keyExtractor = (_item: Message[], index: number) => `group-${index}`;
+
+  const listHeader = (
+    <>
+      {stickyHeader}
       <Box style={{ alignItems: 'center', paddingVertical: 8 }}>
         <Text size="xs" style={{ color: themeColors.text.muted }}>Today</Text>
       </Box>
+    </>
+  );
 
-      {groups.map((group, groupIdx) => {
-        const firstMsg = group[0];
-        const senderDid = firstMsg.senderDid;
-        const isOutgoing = senderDid === myDid;
-        const senderName = getSenderName(senderDid);
-        const timeStr = formatTime(firstMsg.timestamp);
-        const firstText = getMessageText(firstMsg);
-
-        // Show "New" divider before the group containing the first unread message
-        const showUnreadDivider = firstUnreadMessageId != null &&
-          group.some((m) => m.id === firstUnreadMessageId);
-
-        // ── Call event: render as an InlineEventCard ──
-        if (isCallEventMessage(firstText)) {
-          const parsed = parseCallEvent(firstText);
-          const displayText = parsed
-            ? formatCallEventDisplay(parsed.callType, parsed.status, parsed.duration)
-            : firstText;
-          const isVideo = parsed?.callType === 'video';
-          const isStarted = parsed?.status === 'started';
-          const isMissed = parsed?.status === 'missed' || parsed?.status === 'declined';
-          const accentColor = isMissed
-            ? themeColors.status.danger
-            : isStarted
-              ? themeColors.status.success
-              : themeColors.border.subtle;
-          const iconColor = isMissed
-            ? themeColors.status.danger
-            : isStarted
-              ? themeColors.status.success
-              : themeColors.text.muted;
-          const callIcon = isVideo
-            ? <VideoIcon size={16} color={iconColor} />
-            : <PhoneIcon size={16} color={iconColor} />;
-          // "Call back" only on ended events, not started
-          const showCallBack = onCallBack && !isStarted;
-
-          return (
-            <Box key={`group-${groupIdx}`} style={{ paddingVertical: 4, alignItems: 'center' }}>
-              {showUnreadDivider && (
-                <NewMessageDivider style={{ marginBottom: 8, alignSelf: 'stretch' }} />
-              )}
-              <Box style={{ maxWidth: 380, width: '100%' }}>
-                <InlineEventCard
-                  visible
-                  accentColor={accentColor}
-                  icon={callIcon}
-                  title={displayText}
-                  subtitle={timeStr}
-                  actions={showCallBack ? (
-                    <Button
-                      variant="tertiary"
-                      size="xs"
-                      onPress={() => onCallBack(isVideo ? 'video' : 'voice')}
-                      testID="call.history-card.callback"
-                    >
-                      Call back
-                    </Button>
-                  ) : undefined}
-                  testID="call.history-card"
-                />
-              </Box>
-            </Box>
-          );
-        }
-
-        // ── Regular message group ──
-
-        // Shared per-message renderer (used by both layouts)
-        const renderMessages = (inlineMode: boolean) =>
-          group.map((msg) => {
-            const rawText = getMessageText(msg);
-            const text = applyTextTransforms(rawText, { senderDid: msg.senderDid, conversationId: msg.conversationId });
-            const name = getSenderName(msg.senderDid);
-            const time = formatTime(msg.timestamp);
-            const isOwn = msg.senderDid === myDid;
-            const fileInfo = tryParseFileMessage(msg);
-
-            const displayContent = fileInfo ? null : (
-              emojiMap.size > 0
-                ? parseMessageContent(text, emojiMap, undefined, {
-                    textColor: themeColors.text.primary,
-                    linkColor: themeColors.text.link ?? '#5865F2',
-                    codeBgColor: themeColors.background.sunken,
-                    codeTextColor: themeColors.text.primary,
-                    spoilerBgColor: themeColors.text.muted,
-                    quoteBorderColor: themeColors.border.subtle,
-                  })
-                : text
-            );
-
-            // Emoji-only messages: hide bubble background in bubble view
-            const emojiOnly = !fileInfo && isEmojiOnlyMessage(text);
-
-            // Build reaction chips for Wisp ChatBubble
-            const reactionChips = msg.reactions?.map((r) => ({
-              emoji: r.emoji,
-              count: r.count ?? r.users?.length ?? 0,
-              active: r.reacted ?? r.users?.includes(myDid) ?? false,
-            }));
-
-            // Build replyTo display
-            const replyTo = msg.replyTo ? {
-              sender: msg.replyTo.senderName || getSenderName(msg.replyTo.senderDid),
-              text: msg.replyTo.text,
-            } : undefined;
-
-            const threadCount = msg.threadReplyCount ?? 0;
-
-            return (
-              <RNAnimated.View
-                key={msg.id}
-                ref={(el: any) => { messageRefs.current[msg.id] = el; }}
-                style={highlightedId === msg.id ? {
-                  backgroundColor: highlightBg,
-                  borderRadius: 8,
-                  marginHorizontal: -4,
-                  paddingHorizontal: 4,
-                } : undefined}
-              >
-                <HoverBubble
-                  id={msg.id}
-                  align={inlineMode ? 'incoming' : (isOwn ? 'outgoing' : 'incoming')}
-                  hoveredMessage={hoveredMessage}
-                  onHoverIn={onHoverIn}
-                  onHoverOut={onHoverOut}
-                  actions={makeActions(msg.id, name, text, time)}
-                  contextActions={makeContextActions(msg.id, name, text, time, isOwn)}
-                  themeColors={themeColors}
-                  message={{ id: msg.id, text, conversationId: msg.conversationId, senderDid: msg.senderDid }}
-                >
-                  {inlineMode ? (
-                    <Box style={{ paddingVertical: 2 }}>
-                      {replyTo && (
-                        <Box
-                          style={{
-                            borderLeftWidth: 2,
-                            borderLeftColor: themeColors.accent.primary,
-                            paddingLeft: 8,
-                            marginBottom: 4,
-                            opacity: 0.7,
-                          }}
-                        >
-                          <Text size="xs" style={{ color: themeColors.text.muted }}>
-                            {replyTo.sender}: {replyTo.text}
-                          </Text>
-                        </Box>
-                      )}
-                      {fileInfo ? (() => {
-                        const upload = isOwn ? activeUploads?.get(fileInfo.fileId) : undefined;
-                        return (
-                          <DmFileMessage
-                            fileId={fileInfo.fileId}
-                            filename={fileInfo.filename}
-                            size={fileInfo.size}
-                            mimeType={fileInfo.mimeType}
-                            thumbnail={fileInfo.thumbnail}
-                            isOutgoing={isOwn}
-                            variant="inline"
-                            onDownload={onFileDownload
-                              ? () => handleFileDownload(fileInfo.fileId, fileInfo.filename, fileInfo.mimeType)
-                              : undefined}
-                            isDownloading={downloadingFileId === fileInfo.fileId}
-                            isUploading={!!upload}
-                            uploadProgress={upload?.progress ?? 0}
-                          />
-                        );
-                      })() : typeof displayContent === 'string' ? (
-                        <Text size="sm" style={{ color: themeColors.text.primary, lineHeight: 20 }}>
-                          {displayContent}
-                        </Text>
-                      ) : (
-                        <Box style={{ minHeight: 20 }}>{displayContent}</Box>
-                      )}
-                      {msg.edited && (
-                        <Text size="xs" style={{ color: themeColors.text.muted }}>(edited)</Text>
-                      )}
-                    </Box>
-                  ) : (
-                    <ChatBubble
-                      align={isOwn ? 'outgoing' : 'incoming'}
-                      reactions={reactionChips}
-                      onReactionClick={(emoji: string) => onToggleReaction?.(msg.id, emoji)}
-                      replyTo={replyTo}
-                      edited={msg.edited}
-                      forwarded={msg.forwarded}
-                    >
-                      {fileInfo ? (() => {
-                        const upload = isOwn ? activeUploads?.get(fileInfo.fileId) : undefined;
-                        return (
-                          <DmFileMessage
-                            fileId={fileInfo.fileId}
-                            filename={fileInfo.filename}
-                            size={fileInfo.size}
-                            mimeType={fileInfo.mimeType}
-                            thumbnail={fileInfo.thumbnail}
-                            isOutgoing={isOwn}
-                            variant="bubble"
-                            onDownload={onFileDownload
-                              ? () => handleFileDownload(fileInfo.fileId, fileInfo.filename, fileInfo.mimeType)
-                              : undefined}
-                            isDownloading={downloadingFileId === fileInfo.fileId}
-                            isUploading={!!upload}
-                            uploadProgress={upload?.progress ?? 0}
-                          />
-                        );
-                      })() : (
-                        displayContent
-                      )}
-                    </ChatBubble>
-                  )}
-                </HoverBubble>
-                <SlotRenderer
-                  slot="message-decorator"
-                  props={{ message: msg, conversationId: msg.conversationId }}
-                />
-                {threadCount > 0 && (
-                  <Button
-                    variant="tertiary"
-                    size="xs"
-                    onPress={() => onOpenThread({ id: msg.id, sender: name, content: text, timestamp: time })}
-                    iconLeft={<ThreadIcon size={12} color={themeColors.accent.primary} />}
-                    style={{
-                      alignSelf: 'flex-start',
-                      marginTop: 2,
-                    }}
-                  >
-                    <Text size="xs" weight="semibold" style={{ color: themeColors.accent.primary }}>
-                      {threadCount} {threadCount === 1 ? 'reply' : 'replies'}
-                    </Text>
-                  </Button>
-                )}
-              </RNAnimated.View>
-            );
-          });
-
-        if (isInline) {
-          // ── Inline layout (Slack/Discord style) ──
-          return (
-            <React.Fragment key={`group-${groupIdx}`}>
-              {showUnreadDivider && (
-                <NewMessageDivider style={{ marginVertical: 4 }} />
-              )}
-              <InlineMsgGroup
-                sender={senderName}
-                avatar={renderAvatar(senderDid, senderName)}
-                timestamp={timeStr}
-                status={isOutgoing ? (firstMsg.status as string) : undefined}
-                senderColor={isGroupChat ? memberColor(senderDid) : undefined}
-                themeColors={themeColors}
-                onAvatarPress={(e: any) => onShowProfile(senderName, e, undefined, getSenderAvatar(senderDid))}
-              >
-                {renderMessages(true)}
-              </InlineMsgGroup>
-            </React.Fragment>
-          );
-        }
-
-        // ── Bubble layout (default) ──
-        return (
-          <React.Fragment key={`group-${groupIdx}`}>
-            {showUnreadDivider && (
-              <NewMessageDivider style={{ marginVertical: 4 }} />
-            )}
-            <MsgGroup
-              align={isOutgoing ? 'outgoing' : 'incoming'}
-              sender={senderName}
-              avatar={renderAvatar(senderDid, senderName)}
-              timestamp={timeStr}
-              status={isOutgoing ? (firstMsg.status as string) : undefined}
-              senderColor={isGroupChat && !isOutgoing ? memberColor(senderDid) : undefined}
-              themeColors={themeColors}
-              onAvatarPress={(e: any) => onShowProfile(senderName, e, undefined, getSenderAvatar(senderDid))}
-            >
-              {renderMessages(false)}
-            </MsgGroup>
-          </React.Fragment>
-        );
-      })}
-
-      {/* Active call card — rendered at the bottom of the message stream */}
+  const listFooter = (
+    <>
       {activeCall && (
         <Box style={{ alignItems: 'center' }}>
           <Box style={{ maxWidth: 380, width: '100%' }}>
@@ -834,8 +804,6 @@ export const ChatArea = React.memo(function ChatArea({
           </Box>
         </Box>
       )}
-
-      {/* Typing indicator */}
       {typingUser && (
         <TypingIndicator
           testID={TEST_IDS.CHAT_AREA.TYPING_INDICATOR}
@@ -845,6 +813,30 @@ export const ChatArea = React.memo(function ChatArea({
           sender={typingUser}
         />
       )}
-    </ScrollView>
+    </>
+  );
+
+  return (
+    <FlatList
+      ref={listRef}
+      testID={TEST_IDS.CHAT_AREA.MESSAGE_LIST}
+      data={groups}
+      keyExtractor={keyExtractor}
+      renderItem={renderGroupItem}
+      ListHeaderComponent={listHeader}
+      ListFooterComponent={listFooter}
+      style={{ flex: 1 }}
+      contentContainerStyle={{ padding: 16, gap: 8 }}
+      onScroll={handleScroll}
+      scrollEventThrottle={100}
+      onContentSizeChange={handleContentSizeChange}
+      // Virtualization: only render visible groups + small buffer.
+      // This prevents all 50 messages from rendering in a single frame,
+      // which was causing V8 "Ineffective mark-compacts" tab crashes.
+      initialNumToRender={8}
+      maxToRenderPerBatch={4}
+      windowSize={5}
+      removeClippedSubviews={Platform.OS !== 'web'}
+    />
   );
 });

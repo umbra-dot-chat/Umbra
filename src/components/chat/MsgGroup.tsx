@@ -17,7 +17,7 @@ export interface MsgGroupProps {
   children: React.ReactNode;
 }
 
-export function MsgGroup({
+export const MsgGroup = React.memo(function MsgGroup({
   sender, avatar, timestamp, align, status, senderColor,
   themeColors, readReceipts, onAvatarPress, children,
 }: MsgGroupProps) {
@@ -49,4 +49,4 @@ export function MsgGroup({
       </Box>
     </Box>
   );
-}
+});

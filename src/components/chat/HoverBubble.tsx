@@ -33,9 +33,12 @@ const SCREEN_MARGIN = 8;
 export interface HoverBubbleProps {
   id: string;
   align: 'incoming' | 'outgoing';
-  hoveredMessage: string | null;
-  onHoverIn: (id: string) => void;
-  onHoverOut: () => void;
+  /** @deprecated — hover state is now managed internally. Ignored if passed. */
+  hoveredMessage?: string | null;
+  /** @deprecated — hover state is now managed internally. Ignored if passed. */
+  onHoverIn?: (id: string) => void;
+  /** @deprecated — hover state is now managed internally. Ignored if passed. */
+  onHoverOut?: () => void;
   actions: { key: string; label: string; icon: React.ReactNode; onClick: () => void }[];
   contextActions: {
     onReply: () => void;
@@ -94,16 +97,27 @@ function ContextMenuItem({ icon, label, onPress, danger, colors }: MenuItemProps
 // ---------------------------------------------------------------------------
 // HoverBubble
 // ---------------------------------------------------------------------------
-export function HoverBubble({
-  id, align, hoveredMessage, onHoverIn, onHoverOut,
+export const HoverBubble = React.memo(function HoverBubble({
+  id, align,
   actions, contextActions, themeColors, children, message,
 }: HoverBubbleProps) {
   if (__DEV__) dbg.trackRender('HoverBubble');
   const isOut = align === 'outgoing';
-  const showBar = hoveredMessage === id;
   const { theme } = useTheme();
   const colors = theme.colors;
   const { width: winW, height: winH } = useWindowDimensions();
+
+  // ── Local hover state — eliminates parent re-render cascade ──
+  const [hovered, setHovered] = useState(false);
+  const hoverTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const localHoverIn = useCallback(() => {
+    if (hoverTimeoutRef.current) { clearTimeout(hoverTimeoutRef.current); hoverTimeoutRef.current = null; }
+    setHovered(true);
+  }, []);
+  const localHoverOut = useCallback(() => {
+    hoverTimeoutRef.current = setTimeout(() => setHovered(false), 150);
+  }, []);
+  const showBar = hovered;
 
   // Animated action bar fade
   const { animatedValue: barOpacity, shouldRender: shouldRenderBar } = useAnimatedToggle(showBar, {
@@ -170,8 +184,8 @@ export function HoverBubble({
     <>
       <Pressable
         ref={pressableRef}
-        onHoverIn={() => onHoverIn(id)}
-        onHoverOut={onHoverOut}
+        onHoverIn={localHoverIn}
+        onHoverOut={localHoverOut}
         style={{
           alignSelf: isOut ? 'flex-end' : 'flex-start',
           maxWidth: '85%',
@@ -310,4 +324,15 @@ export function HoverBubble({
       )}
     </>
   );
-}
+}, (prev, next) => {
+  // Custom comparator: skip re-render if the message identity hasn't changed.
+  // Actions/contextActions are new objects every parent render but functionally
+  // identical for the same message, so we compare by message id + children ref.
+  if (prev.id !== next.id) return false;
+  if (prev.align !== next.align) return false;
+  if (prev.children !== next.children) return false;
+  if (prev.message?.id !== next.message?.id) return false;
+  // themeColors is the same object within a theme, only changes on theme switch
+  if (prev.themeColors !== next.themeColors) return false;
+  return true;
+});
