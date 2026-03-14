@@ -89,12 +89,10 @@ function SettingsNavContent({
   const { hasBottomPanel, contentFlex } = useSidebarShellLayout();
 
   return (
+    <Box style={{ flex: contentFlex, ...(hasBottomPanel ? { overflow: 'hidden' as any } : {}) }}>
     <SidebarSection
       style={{
-        flex: contentFlex,
-        borderTopWidth: 1,
-        borderTopColor: tc.border.subtle,
-        ...(hasBottomPanel ? { overflow: 'hidden' as any } : {}),
+        flex: 1,
       }}
     >
       <Box
@@ -211,5 +209,6 @@ function SettingsNavContent({
         })}
       </ScrollView>
     </SidebarSection>
+    </Box>
   );
 }

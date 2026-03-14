@@ -237,7 +237,7 @@ function ChatSidebarContent({
       )}
 
       <SlotRenderer slot="sidebar-section" />
-      <SidebarSection style={{ marginTop: 12, flex: contentFlex, borderTopWidth: 1, borderTopColor: theme.colors.border.subtle, ...(hasBottomPanel ? { overflow: 'hidden' as any } : {}) }}>
+      <Box style={{ marginTop: 12, flex: contentFlex, overflow: 'hidden' as any }}>
         {/* Custom header row: "Conversations" title + inline + button */}
         <Box style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, marginBottom: 8, zIndex: 200 }}>
           <Text size="xs" weight="semibold" style={{ color: theme.colors.text.onRaisedSecondary, textTransform: 'uppercase', letterSpacing: 0.5 }}>
@@ -322,7 +322,7 @@ function ChatSidebarContent({
             ))
           )}
         </ScrollView>
-      </SidebarSection>
+      </Box>
     </>
   );
 }
