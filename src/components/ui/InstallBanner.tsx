@@ -499,7 +499,9 @@ export function InstallBanner({ topInset = 0, onVisibilityChange }: { topInset?:
     }
 
     // Non-web, non-desktop with update available (e.g. future mobile with OTA)
-    else if (update.hasUpdate) {
+    // Also reached by web users when both isDismissed and isInstallDismissed are true
+    // but globallyHidden intentionally skips web dismiss — so guard here too.
+    else if (update.hasUpdate && !update.isDismissed) {
       bannerContent = (
         <Box
           style={{
