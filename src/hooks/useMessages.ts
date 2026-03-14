@@ -209,11 +209,25 @@ export function useMessages(conversationId: string | null, groupId?: string | nu
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isReady, service, conversationId]);
 
-  // Batch incoming messages to prevent render cascade from rapid arrivals.
-  // Messages are collected in a buffer and flushed in a single setState
-  // call on the next animation frame (max ~60 flushes/sec instead of 20+).
-  const pendingMessagesRef = useRef<Message[]>([]);
+  // ── Unified mutation queue ──
+  // ALL message events (new messages, status changes, edits, content updates,
+  // thread replies, deletes, pins) are accumulated in a single queue and flushed
+  // once per animation frame. In a 5-member group chat this coalesces dozens of
+  // individual setMessages calls (each triggering a ChatArea re-render) into one
+  // update per frame — the difference between 20+ renders/sec and ~1-2.
+  type MsgMutation =
+    | { type: 'append'; messages: Message[] }
+    | { type: 'statusChanged'; messageId: string; status: any }
+    | { type: 'edited'; messageId: string; newText: string; editedAt?: number }
+    | { type: 'contentUpdated'; messageId: string; newText: string }
+    | { type: 'deleted'; messageId: string; deletedAt?: number }
+    | { type: 'threadReply'; parentId: string }
+    | { type: 'pinned'; messageId: string; pinnedBy?: string; pinnedAt?: number }
+    | { type: 'unpinned'; messageId: string };
+
+  const pendingMutationsRef = useRef<MsgMutation[]>([]);
   const flushScheduledRef = useRef(false);
+  const pendingMessagesRef = useRef<Message[]>([]);
 
   // Debounced fetchMessages — prevents 22+ concurrent refetches from
   // offline batch completions. Only the last request within 500ms fires.
@@ -244,23 +258,110 @@ export function useMessages(conversationId: string | null, groupId?: string | nu
   useEffect(() => {
     if (!service || !conversationId) return;
 
-    /** Flush batched messages into state in a single update. */
-    const flushPendingMessages = () => {
+    /** Schedule a unified flush on the next animation frame (idempotent). */
+    const scheduleFlush = () => {
+      if (!flushScheduledRef.current) {
+        flushScheduledRef.current = true;
+        requestAnimationFrame(flushAllMutations);
+      }
+    };
+
+    /**
+     * Flush ALL queued mutations (new messages + status changes + edits + …)
+     * into a single setMessages call. This is the critical path that prevents
+     * O(N²) re-renders in group chats with active bots.
+     */
+    const flushAllMutations = () => {
       flushScheduledRef.current = false;
-      const batch = pendingMessagesRef.current;
-      if (batch.length === 0) return;
+
+      // Grab and clear both queues atomically
+      const mutations = pendingMutationsRef.current;
+      const appendBatch = pendingMessagesRef.current;
+      pendingMutationsRef.current = [];
       pendingMessagesRef.current = [];
 
+      if (mutations.length === 0 && appendBatch.length === 0) return;
+
+      if (__DEV__) dbg.debug('messages', `flushAll: ${appendBatch.length} appends + ${mutations.length} mutations`, undefined, SRC);
+
       setMessages((prev) => {
-        const existingIds = new Set(prev.map((m) => m.id));
-        const newMsgs = batch.filter((m) => !existingIds.has(m.id));
-        if (newMsgs.length === 0) {
-          if (__DEV__) dbg.trace('messages', `flush ${batch.length} pending → 0 new (all dupes)`, undefined, SRC);
-          return prev;
+        let next = prev;
+        let changed = false;
+
+        // 1. Append new messages (deduped)
+        if (appendBatch.length > 0) {
+          const existingIds = new Set(next.map((m) => m.id));
+          const newMsgs = appendBatch.filter((m) => !existingIds.has(m.id));
+          if (newMsgs.length > 0) {
+            next = [...next, ...newMsgs];
+            changed = true;
+            if (__DEV__) dbg.debug('messages', `flush append: ${newMsgs.length} new of ${appendBatch.length}`, undefined, SRC);
+          }
         }
-        const next = [...prev, ...newMsgs];
+
+        // 2. Apply all point mutations in a single pass
+        if (mutations.length > 0) {
+          // Build lookup maps for O(1) mutation application
+          const statusMap = new Map<string, any>();
+          const editMap = new Map<string, { newText: string; editedAt?: number }>();
+          const contentMap = new Map<string, string>();
+          const deleteMap = new Map<string, number | undefined>();
+          const threadReplySet = new Set<string>();
+          const pinMap = new Map<string, { pinned: boolean; pinnedBy?: string; pinnedAt?: number }>();
+
+          for (const mut of mutations) {
+            switch (mut.type) {
+              case 'statusChanged': statusMap.set(mut.messageId, mut.status); break;
+              case 'edited': editMap.set(mut.messageId, { newText: mut.newText, editedAt: mut.editedAt }); break;
+              case 'contentUpdated': contentMap.set(mut.messageId, mut.newText); break;
+              case 'deleted': deleteMap.set(mut.messageId, mut.deletedAt); break;
+              case 'threadReply': threadReplySet.add(mut.parentId); break;
+              case 'pinned': pinMap.set(mut.messageId, { pinned: true, pinnedBy: mut.pinnedBy, pinnedAt: mut.pinnedAt }); break;
+              case 'unpinned': pinMap.set(mut.messageId, { pinned: false }); break;
+            }
+          }
+
+          const hasMutations = statusMap.size + editMap.size + contentMap.size +
+            deleteMap.size + threadReplySet.size + pinMap.size > 0;
+
+          if (hasMutations) {
+            next = next.map((m) => {
+              let updated = m;
+              let dirty = false;
+
+              const s = statusMap.get(m.id);
+              if (s !== undefined) { updated = { ...updated, status: s }; dirty = true; }
+
+              const e = editMap.get(m.id);
+              if (e) { updated = { ...updated, content: { type: 'text' as const, text: e.newText }, edited: true, editedAt: e.editedAt }; dirty = true; }
+
+              const c = contentMap.get(m.id);
+              if (c !== undefined) { updated = { ...updated, content: { type: 'text' as const, text: c } }; dirty = true; }
+
+              const d = deleteMap.get(m.id);
+              if (d !== undefined) { updated = { ...updated, deleted: true, deletedAt: d }; dirty = true; }
+
+              if (threadReplySet.has(m.id)) { updated = { ...updated, threadReplyCount: (m.threadReplyCount ?? 0) + 1 }; dirty = true; }
+
+              const p = pinMap.get(m.id);
+              if (p) {
+                updated = p.pinned
+                  ? { ...updated, pinned: true, pinnedBy: p.pinnedBy, pinnedAt: p.pinnedAt }
+                  : { ...updated, pinned: false, pinnedBy: undefined, pinnedAt: undefined };
+                dirty = true;
+              }
+
+              return dirty ? updated : m;
+            });
+            changed = true;
+          }
+        }
+
+        if (!changed) return prev;
+
+        // Cap at 200 messages
         const capped = next.length > 200 ? next.slice(next.length - 200) : next;
-        if (__DEV__) dbg.debug('messages', `flush ${batch.length} pending → state ${prev.length}→${capped.length} msgs (${newMsgs.length} new, ${batch.length - newMsgs.length} dupes)`, undefined, SRC);
+        if (__DEV__) dbg.debug('messages', `flushAll result: ${prev.length}→${capped.length} msgs`, undefined, SRC);
         return capped;
       });
     };
@@ -277,14 +378,8 @@ export function useMessages(conversationId: string | null, groupId?: string | nu
         const msg = event.message;
         // Don't add thread replies to the main chat — they belong in the thread panel
         if (msg.threadId) {
-          // Increment the thread reply count on the parent message
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === msg.threadId
-                ? { ...m, threadReplyCount: (m.threadReplyCount ?? 0) + 1 }
-                : m
-            )
-          );
+          pendingMutationsRef.current.push({ type: 'threadReply', parentId: msg.threadId });
+          scheduleFlush();
           return;
         }
         if (msg.conversationId === conversationId) {
@@ -306,72 +401,38 @@ export function useMessages(conversationId: string | null, groupId?: string | nu
               setFirstUnreadMessageId((prev) => prev ?? msg.id);
             }
           }
-          // Batch message into pending buffer and schedule a single flush
+          // Batch message into pending buffer and schedule a unified flush
           pendingMessagesRef.current.push(msg);
-          if (!flushScheduledRef.current) {
-            flushScheduledRef.current = true;
-            requestAnimationFrame(flushPendingMessages);
-          }
+          scheduleFlush();
         }
       } else if (event.type === 'threadReplyReceived') {
-        // Thread reply received from relay — don't add to main chat,
-        // just increment the reply count on the parent message
         if (event.message?.conversationId === conversationId && event.parentId) {
-          setMessages((prev) =>
-            prev.map((m) =>
-              m.id === event.parentId
-                ? { ...m, threadReplyCount: (m.threadReplyCount ?? 0) + 1 }
-                : m
-            )
-          );
+          pendingMutationsRef.current.push({ type: 'threadReply', parentId: event.parentId });
+          scheduleFlush();
         }
       } else if (event.type === 'messageEdited') {
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === event.messageId
-              ? { ...m, content: { type: 'text' as const, text: event.newText }, edited: true, editedAt: event.editedAt }
-              : m
-          )
-        );
+        pendingMutationsRef.current.push({ type: 'edited', messageId: event.messageId, newText: event.newText, editedAt: event.editedAt });
+        scheduleFlush();
       } else if (event.type === 'messageContentUpdated') {
-        // Streaming/progressive content update — does NOT set edited flag
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === event.messageId
-              ? { ...m, content: { type: 'text' as const, text: event.newText } }
-              : m
-          )
-        );
+        pendingMutationsRef.current.push({ type: 'contentUpdated', messageId: event.messageId, newText: event.newText });
+        scheduleFlush();
       } else if (event.type === 'messageDeleted') {
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === event.messageId
-              ? { ...m, deleted: true, deletedAt: event.deletedAt }
-              : m
-          )
-        );
+        pendingMutationsRef.current.push({ type: 'deleted', messageId: event.messageId, deletedAt: event.deletedAt });
+        scheduleFlush();
       } else if (event.type === 'messageStatusChanged') {
-        setMessages((prev) =>
-          prev.map((m) =>
-            m.id === event.messageId
-              ? { ...m, status: event.status }
-              : m
-          )
-        );
+        pendingMutationsRef.current.push({ type: 'statusChanged', messageId: event.messageId, status: event.status });
+        scheduleFlush();
       } else if (event.type === 'reactionAdded' || event.type === 'reactionRemoved') {
         // Refresh messages to get updated reactions — debounced to prevent flood
         if (__DEV__) dbg.debug('messages', 'reaction event → debounced fetchMessages()', undefined, SRC);
         debouncedFetch();
       } else if (event.type === 'messagePinned' || event.type === 'messageUnpinned') {
-        setMessages((prev) =>
-          prev.map((m) => {
-            if (m.id !== event.messageId) return m;
-            if (event.type === 'messagePinned') {
-              return { ...m, pinned: true, pinnedBy: event.pinnedBy, pinnedAt: event.pinnedAt };
-            }
-            return { ...m, pinned: false, pinnedBy: undefined, pinnedAt: undefined };
-          })
-        );
+        if (event.type === 'messagePinned') {
+          pendingMutationsRef.current.push({ type: 'pinned', messageId: event.messageId, pinnedBy: event.pinnedBy, pinnedAt: event.pinnedAt });
+        } else {
+          pendingMutationsRef.current.push({ type: 'unpinned', messageId: event.messageId });
+        }
+        scheduleFlush();
         fetchPinnedRef.current?.();
       } else if (event.type === 'offlineBatchComplete') {
         // Offline messages were stored in DB without individual dispatches.

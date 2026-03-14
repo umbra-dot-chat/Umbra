@@ -387,12 +387,16 @@ export const ChatArea = React.memo(function ChatArea({
     isNearBottomRef.current = distanceFromBottom < 150;
   }, []);
 
-  // Auto-scroll to bottom when new messages arrive
+  // Auto-scroll to bottom when new messages arrive.
+  // Debounced: rapid arrivals (5 bots responding) coalesce into a single scroll.
+  const scrollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     if (messages.length > prevMessageCountRef.current && isNearBottomRef.current) {
-      setTimeout(() => {
+      if (scrollTimerRef.current) clearTimeout(scrollTimerRef.current);
+      scrollTimerRef.current = setTimeout(() => {
+        scrollTimerRef.current = null;
         listRef.current?.scrollToEnd({ animated: true });
-      }, 50);
+      }, 80);
     }
     prevMessageCountRef.current = messages.length;
   }, [messages.length]);
@@ -779,7 +783,10 @@ export const ChatArea = React.memo(function ChatArea({
     );
   };
 
-  const keyExtractor = (_item: Message[], index: number) => `group-${index}`;
+  // Stable key: first message ID in the group. This prevents FlatList from
+  // unmounting/remounting items when a new group is appended (index-based keys
+  // would shift all groups after the new one, causing needless DOM churn).
+  const keyExtractor = (item: Message[]) => item[0]?.id ?? 'empty';
 
   const listHeader = (
     <>
