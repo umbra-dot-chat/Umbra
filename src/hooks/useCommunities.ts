@@ -36,6 +36,10 @@ export interface UseCommunititesResult {
   leaveCommunity: (communityId: string) => Promise<void>;
 }
 
+/** Throttle interval for event-driven refetches (30 s). Communities rarely
+ *  change, so hammering the DB on every relay event is wasteful. */
+const COMMUNITY_THROTTLE_MS = 30_000;
+
 export function useCommunities(): UseCommunititesResult {
   const { service, isReady } = useUmbra();
   const { identity } = useAuth();
@@ -61,6 +65,11 @@ export function useCommunities(): UseCommunititesResult {
   const fetchCommunitiesRef = useRef(fetchCommunities);
   fetchCommunitiesRef.current = fetchCommunities;
 
+  // Throttle guard: at most one event-driven fetch per COMMUNITY_THROTTLE_MS.
+  // Direct calls (initial load, create, delete, leave) bypass this guard.
+  const lastEventFetchRef = useRef<number>(0);
+  const eventFetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   // Initial fetch
   useEffect(() => {
     if (isReady && service && identity?.did) {
@@ -69,7 +78,8 @@ export function useCommunities(): UseCommunititesResult {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isReady, service, identity?.did]);
 
-  // Subscribe to community events for real-time updates
+  // Subscribe to community events for real-time updates.
+  // Throttled: at most one getCommunities call per 30 seconds from events.
   useEffect(() => {
     if (!service) return;
 
@@ -81,11 +91,29 @@ export function useCommunities(): UseCommunititesResult {
         event.type === 'memberJoined' ||
         event.type === 'memberLeft'
       ) {
-        fetchCommunitiesRef.current();
+        const now = Date.now();
+        if (now - lastEventFetchRef.current >= COMMUNITY_THROTTLE_MS) {
+          lastEventFetchRef.current = now;
+          fetchCommunitiesRef.current();
+        } else if (!eventFetchTimerRef.current) {
+          // Schedule a trailing fetch so we don't miss the last event
+          const remaining = COMMUNITY_THROTTLE_MS - (now - lastEventFetchRef.current);
+          eventFetchTimerRef.current = setTimeout(() => {
+            eventFetchTimerRef.current = null;
+            lastEventFetchRef.current = Date.now();
+            fetchCommunitiesRef.current();
+          }, remaining);
+        }
       }
     });
 
-    return unsubscribe;
+    return () => {
+      unsubscribe();
+      if (eventFetchTimerRef.current) {
+        clearTimeout(eventFetchTimerRef.current);
+        eventFetchTimerRef.current = null;
+      }
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [service]);
 

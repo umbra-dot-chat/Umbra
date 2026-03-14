@@ -74,6 +74,10 @@ export function useAllCustomEmoji() {
   const fetchAllRef = useRef(fetchAll);
   fetchAllRef.current = fetchAll;
 
+  // Throttle guard: at most one event-driven fetch per 30 seconds.
+  const lastEventFetchRef = useRef<number>(0);
+  const eventFetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   useEffect(() => {
     if (isReady && service && identity?.did) {
       fetchAll();
@@ -81,9 +85,11 @@ export function useAllCustomEmoji() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isReady, service, identity?.did]);
 
-  // Listen for emoji/sticker create/delete events to stay in sync
+  // Listen for emoji/sticker create/delete events to stay in sync.
+  // Throttled: at most one refetch per 30 seconds from events.
   useEffect(() => {
     if (!service) return;
+    const THROTTLE_MS = 30_000;
     const unsubscribe = service.onCommunityEvent((event: any) => {
       if (
         event.type === 'emojiCreated' ||
@@ -93,10 +99,27 @@ export function useAllCustomEmoji() {
         event.type === 'stickerPackCreated' ||
         event.type === 'stickerPackDeleted'
       ) {
-        fetchAllRef.current();
+        const now = Date.now();
+        if (now - lastEventFetchRef.current >= THROTTLE_MS) {
+          lastEventFetchRef.current = now;
+          fetchAllRef.current();
+        } else if (!eventFetchTimerRef.current) {
+          const remaining = THROTTLE_MS - (now - lastEventFetchRef.current);
+          eventFetchTimerRef.current = setTimeout(() => {
+            eventFetchTimerRef.current = null;
+            lastEventFetchRef.current = Date.now();
+            fetchAllRef.current();
+          }, remaining);
+        }
       }
     });
-    return unsubscribe;
+    return () => {
+      unsubscribe();
+      if (eventFetchTimerRef.current) {
+        clearTimeout(eventFetchTimerRef.current);
+        eventFetchTimerRef.current = null;
+      }
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [service]);
 
