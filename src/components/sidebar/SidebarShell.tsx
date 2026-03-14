@@ -23,7 +23,10 @@ import { SidebarCallPanel } from '@/components/call/SidebarCallPanel';
 import { SidebarNotificationsPanel } from './SidebarNotificationsPanel';
 import { SidebarAccountPanel } from './SidebarAccountPanel';
 import { SidebarSearchResults } from './SidebarSearchPanel';
+import { SettingsSearchResults } from './SettingsSearchResults';
 import { useUnifiedSearch } from '@/contexts/UnifiedSearchContext';
+import { searchSettings, type SettingsSearchItem } from '@/services/SettingsSearchService';
+import type { SettingsSection } from '@/components/modals/SettingsDialog';
 import { TEST_IDS } from '@/constants/test-ids';
 import { dbg } from '@/utils/debug';
 import type { ActiveCall } from '@/types/call';
@@ -102,6 +105,10 @@ export interface SidebarShellProps {
   };
   /** Placeholder text for the sidebar search input */
   searchPlaceholder?: string;
+  /** Search scope — 'conversations' searches messages, 'settings' searches settings options */
+  searchScope?: 'conversations' | 'settings';
+  /** Called when a settings search result is selected (navigate to section) */
+  onNavigateToSettings?: (section: SettingsSection, subsection?: string) => void;
   /** Called when the Friends / Add User button is pressed */
   onFriendsPress?: () => void;
   /** Number of pending friend requests for badge display */
@@ -124,6 +131,8 @@ export function SidebarShell({
   children,
   sidebarStyle,
   searchPlaceholder = 'Search...',
+  searchScope = 'conversations',
+  onNavigateToSettings,
   onFriendsPress,
   pendingFriendRequests,
   showNotificationsPanel,
@@ -145,20 +154,52 @@ export function SidebarShell({
   const { theme } = useTheme();
 
   // ── Sidebar search ──────────────────────────────────────────────────────
-  const { query, setQuery, sidebarSearchActive, setSidebarSearchActive, results, loading } = useUnifiedSearch();
+  const isSettingsScope = searchScope === 'settings';
 
-  // Only expand search results when there's an active query with results
+  // Conversation search (UnifiedSearch context)
+  const { query: convQuery, setQuery: setConvQuery, sidebarSearchActive, setSidebarSearchActive, loading: convLoading } = useUnifiedSearch();
+
+  // Settings search (local state)
+  const [settingsQuery, setSettingsQuery] = useState('');
+  const [settingsResults, setSettingsResults] = useState<SettingsSearchItem[]>([]);
+
+  const query = isSettingsScope ? settingsQuery : convQuery;
+  const setQuery = isSettingsScope ? setSettingsQuery : setConvQuery;
+
+  // Run settings search on query change
+  useEffect(() => {
+    if (isSettingsScope && settingsQuery.trim()) {
+      setSettingsResults(searchSettings(settingsQuery));
+    } else {
+      setSettingsResults([]);
+    }
+  }, [isSettingsScope, settingsQuery]);
+
+  // Only expand search results when there's an active query
   const hasQuery = query.trim().length > 0;
-  const showSearchResults = sidebarSearchActive && (hasQuery || loading);
+  const showConvSearchResults = !isSettingsScope && sidebarSearchActive && (hasQuery || convLoading);
+  const showSettingsSearchResults = isSettingsScope && hasQuery;
+  const showSearchResults = showConvSearchResults || showSettingsSearchResults;
 
   const handleSearchFocus = useCallback(() => {
-    setSidebarSearchActive(true);
-  }, [setSidebarSearchActive]);
+    if (!isSettingsScope) {
+      setSidebarSearchActive(true);
+    }
+  }, [isSettingsScope, setSidebarSearchActive]);
 
   const handleClearSearch = useCallback(() => {
-    setQuery('');
-    setSidebarSearchActive(false);
-  }, [setQuery, setSidebarSearchActive]);
+    if (isSettingsScope) {
+      setSettingsQuery('');
+    } else {
+      setConvQuery('');
+      setSidebarSearchActive(false);
+    }
+  }, [isSettingsScope, setConvQuery, setSidebarSearchActive]);
+
+  const handleSettingsSelect = useCallback((sectionId: string, subsectionId?: string) => {
+    onNavigateToSettings?.(sectionId as SettingsSection, subsectionId);
+    setSettingsQuery('');
+  }, [onNavigateToSettings]);
 
   // Independent resize ratios for each panel
   const [accountRatio, setAccountRatio] = useState(0.3);
@@ -318,7 +359,11 @@ export function SidebarShell({
         </Box>
 
         {/* When search has a query, replace children with search results */}
-        {showSearchResults ? <SidebarSearchResults /> : children}
+        {showSettingsSearchResults ? (
+          <SettingsSearchResults results={settingsResults} query={settingsQuery} onSelect={handleSettingsSelect} />
+        ) : showConvSearchResults ? (
+          <SidebarSearchResults />
+        ) : children}
 
         {/* Active call footer panel -- pushed to the bottom via margin-top:auto */}
         {activeCall && activeCall.status === 'connected' && activeCall.conversationId !== activeConversationId && onReturnToCall && onToggleMute && onToggleDeafen && onToggleCamera && onEndCall && (
