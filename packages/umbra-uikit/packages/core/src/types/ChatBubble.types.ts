@@ -25,7 +25,7 @@ export type ChatBubbleVariant = (typeof chatBubbleVariants)[number];
 // ---------------------------------------------------------------------------
 
 /** Available delivery status indicators for outgoing messages. */
-export const chatBubbleStatuses = ['sent', 'delivered', 'read'] as const;
+export const chatBubbleStatuses = ['sending', 'sent', 'delivered', 'read', 'failed'] as const;
 
 /** Union of valid status values derived from {@link chatBubbleStatuses}. */
 export type ChatBubbleStatus = (typeof chatBubbleStatuses)[number];

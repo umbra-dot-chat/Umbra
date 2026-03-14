@@ -79,8 +79,8 @@ export { FileUploader } from './file-uploader';
 export type { FileUploaderProps } from './file-uploader';
 
 // Wave 8: Chat
-export { ChatBubble, StatusIcon } from './chat-bubble';
-export type { ChatBubbleProps } from './chat-bubble';
+export { ChatBubble, StatusIcon, MessageStatusLabel } from './chat-bubble';
+export type { ChatBubbleProps, StatusIconProps, MessageStatusLabelProps } from './chat-bubble';
 export { MessageGroup } from './message-group';
 export type { MessageGroupProps } from './message-group';
 export { NewMessageDivider } from './new-message-divider';

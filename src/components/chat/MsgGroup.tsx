@@ -101,6 +101,11 @@ export const MsgGroup = React.memo(function MsgGroup({
             readColor={themeColors.accent.primary}
           />
         )}
+        {status === 'read' && (
+          <Text size="xs" style={{ color: themeColors.accent.primary }}>
+            Read
+          </Text>
+        )}
         {readReceipts}
       </Box>
     </Box>

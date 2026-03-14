@@ -126,7 +126,7 @@ export {
   Command, CommandInput, CommandList, CommandGroup, CommandItem, CommandSeparator, CommandEmpty,
   FileUploader,
   // Wave 8: Chat
-  ChatBubble, StatusIcon, MessageGroup, NewMessageDivider, TypingIndicator,
+  ChatBubble, StatusIcon, MessageStatusLabel, MessageGroup, NewMessageDivider, TypingIndicator,
   // Wave 9: Charts
   ActivityCircles, RadarChart,
   // Wave 10: QR
@@ -219,7 +219,7 @@ export type {
   CommandItemProps, CommandSeparatorProps, CommandEmptyProps,
   FileUploaderProps,
   // Wave 8: Chat
-  ChatBubbleProps, MessageGroupProps, NewMessageDividerProps, TypingIndicatorProps,
+  ChatBubbleProps, StatusIconProps, MessageStatusLabelProps, MessageGroupProps, NewMessageDividerProps, TypingIndicatorProps,
   // Wave 9: Charts
   ActivityCirclesProps, RadarChartProps,
   // Wave 10: QR
@@ -387,3 +387,6 @@ export type { NotificationDrawerProps, NotificationCategory } from './components
 export { E2EEKeyExchangeUI } from './components/e2ee-key-exchange-ui';
 export type { E2EEKeyExchangeUIProps } from './components/e2ee-key-exchange-ui';
 export type { SearchResult, SearchFilter, SearchFilterType } from './components/message-search';
+
+// Core chat types re-exported for convenience
+export type { ChatBubbleStatus, ChatBubbleAlignment, ChatBubbleVariant, ChatBubbleReaction, ChatBubbleReplyTo } from '@coexist/wisp-core/types/ChatBubble.types';

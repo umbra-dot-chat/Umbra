@@ -52,6 +52,15 @@ export interface ChatBubbleProps extends ViewProps {
 // Inline SVG status icons
 // ---------------------------------------------------------------------------
 
+function ClockIcon({ size = 12, color }: { size?: number; color?: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color ?? 'currentColor'} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Z" />
+      <Path d="M12 6v6l4 2" />
+    </Svg>
+  );
+}
+
 function CheckIcon({ size = 12, color }: { size?: number; color?: string }) {
   return (
     <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color ?? 'currentColor'} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
@@ -69,17 +78,77 @@ function CheckCheckIcon({ size = 12, color }: { size?: number; color?: string })
   );
 }
 
-export function StatusIcon({ status, color, readColor }: { status: ChatBubbleStatus; color: string; readColor: string }) {
+function ErrorIcon({ size = 12, color }: { size?: number; color?: string }) {
+  return (
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color ?? 'currentColor'} strokeWidth={2.5} strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Z" />
+      <Path d="m15 9-6 6" />
+      <Path d="m9 9 6 6" />
+    </Svg>
+  );
+}
+
+export interface StatusIconProps {
+  status: ChatBubbleStatus;
+  /** Color used for sent/delivered/sending states (typically muted). */
+  color: string;
+  /** Accent color used for the read state double-check (e.g. blue). */
+  readColor: string;
+  /** Color used for the failed state (defaults to red/danger). */
+  failedColor?: string;
+  /** Icon size in pixels. @default 12 */
+  size?: number;
+}
+
+export function StatusIcon({ status, color, readColor, failedColor, size = 12 }: StatusIconProps) {
   switch (status) {
+    case 'sending':
+      return <ClockIcon size={size} color={color} />;
     case 'sent':
-      return <CheckIcon color={color} />;
+      return <CheckIcon size={size} color={color} />;
     case 'delivered':
-      return <CheckCheckIcon color={color} />;
+      return <CheckCheckIcon size={size} color={color} />;
     case 'read':
-      return <CheckCheckIcon color={readColor} />;
+      return <CheckCheckIcon size={size} color={readColor} />;
+    case 'failed':
+      return <ErrorIcon size={size} color={failedColor ?? color} />;
     default:
       return null;
   }
+}
+
+// ---------------------------------------------------------------------------
+// MessageStatusLabel — iMessage-style "Read" text label
+// ---------------------------------------------------------------------------
+
+export interface MessageStatusLabelProps {
+  /** The label text, e.g. "Read" or "Read 2:31p". */
+  label: string;
+  /** Text color override. Defaults to accent.primary from theme. */
+  color?: string;
+}
+
+/**
+ * A small text label that renders beneath the timestamp to indicate read
+ * status, inspired by iMessage's "Read 2:31 PM" indicator.
+ *
+ * Intended to be used alongside `StatusIcon` in message footers.
+ */
+export function MessageStatusLabel({ label, color }: MessageStatusLabelProps) {
+  const { theme } = useTheme();
+  const labelColor = color ?? theme.colors.accent.primary;
+  return (
+    <Text
+      style={{
+        fontSize: defaultTypography.sizes.xs.fontSize,
+        lineHeight: 14,
+        color: labelColor,
+        fontWeight: defaultTypography.weights.medium,
+      }}
+    >
+      {label}
+    </Text>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -340,7 +409,8 @@ export const ChatBubble = forwardRef<View, ChatBubbleProps>(function ChatBubble(
             <StatusIcon
               status={status}
               color={colors.timestamp}
-              readColor="#0C0C0E"
+              readColor={themeColors.accent.primary}
+              failedColor={themeColors.status.danger}
             />
           )}
         </View>

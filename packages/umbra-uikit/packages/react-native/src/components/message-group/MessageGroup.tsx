@@ -10,7 +10,7 @@ import React, { forwardRef, useMemo, Children, isValidElement, cloneElement } fr
 import { View, Text } from 'react-native';
 import type { ViewProps, ViewStyle, TextStyle } from 'react-native';
 import type { ChatBubbleAlignment, ChatBubbleStatus } from '@coexist/wisp-core/types/ChatBubble.types';
-import { ChatBubble, StatusIcon } from '../chat-bubble/ChatBubble';
+import { ChatBubble, StatusIcon, MessageStatusLabel } from '../chat-bubble/ChatBubble';
 import { defaultSpacing, defaultTypography } from '@coexist/wisp-core/theme/create-theme';
 import { useTheme } from '../../providers';
 
@@ -25,6 +25,11 @@ export interface MessageGroupProps extends ViewProps {
   avatar?: React.ReactNode;
   timestamp?: string;
   status?: ChatBubbleStatus;
+  /**
+   * Optional status label shown below/next to the timestamp.
+   * For read receipts, pass e.g. "Read" or "Read 2:31p" (iMessage-style).
+   */
+  statusLabel?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -39,6 +44,7 @@ export const MessageGroup = forwardRef<View, MessageGroupProps>(function Message
     avatar,
     timestamp,
     status,
+    statusLabel,
     style: userStyle,
     ...rest
   },
@@ -88,7 +94,7 @@ export const MessageGroup = forwardRef<View, MessageGroupProps>(function Message
     color: themeColors.text.muted,
   }), [themeColors]);
 
-  const showFooter = timestamp || status;
+  const showFooter = timestamp || status || statusLabel;
 
   // Inject _inGroup={true} into ChatBubble children only.
   const injectedChildren = useMemo(
@@ -125,8 +131,12 @@ export const MessageGroup = forwardRef<View, MessageGroupProps>(function Message
             <StatusIcon
               status={status}
               color={themeColors.text.muted}
-              readColor="#0C0C0E"
+              readColor={themeColors.accent.primary}
+              failedColor={themeColors.status.danger}
             />
+          )}
+          {statusLabel && (
+            <MessageStatusLabel label={statusLabel} />
           )}
         </View>
       )}
