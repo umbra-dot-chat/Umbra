@@ -491,11 +491,6 @@ export const ChatArea = React.memo(function ChatArea({
     return friendAvatars?.[did];
   };
 
-  const renderAvatar = (did: string, name: string) => {
-    const avatarSrc = getSenderAvatar(did);
-    return <Avatar name={name} src={avatarSrc} size="sm" />;
-  };
-
   const handleCopy = (text: string) => {
     if (onCopyMessage) {
       onCopyMessage(text);
@@ -758,12 +753,14 @@ export const ChatArea = React.memo(function ChatArea({
           )}
           <InlineMsgGroup
             sender={senderName}
-            avatar={renderAvatar(senderDid, senderName)}
+            avatarName={senderName}
+            avatarSrc={getSenderAvatar(senderDid)}
+            senderDid={senderDid}
             timestamp={timeStr}
             status={isOutgoing ? (firstMsg.status as string) : undefined}
             senderColor={isGroupChat ? memberColor(senderDid) : undefined}
             themeColors={themeColors}
-            onAvatarPress={(e: any) => onShowProfile(senderName, e, undefined, getSenderAvatar(senderDid))}
+            onShowProfile={onShowProfile}
           >
             {renderedMessages}
           </InlineMsgGroup>
@@ -779,12 +776,14 @@ export const ChatArea = React.memo(function ChatArea({
         <MsgGroup
           align={isOutgoing ? 'outgoing' : 'incoming'}
           sender={senderName}
-          avatar={renderAvatar(senderDid, senderName)}
+          avatarName={senderName}
+          avatarSrc={getSenderAvatar(senderDid)}
+          senderDid={senderDid}
           timestamp={timeStr}
           status={isOutgoing ? (firstMsg.status as string) : undefined}
           senderColor={isGroupChat && !isOutgoing ? memberColor(senderDid) : undefined}
           themeColors={themeColors}
-          onAvatarPress={(e: any) => onShowProfile(senderName, e, undefined, getSenderAvatar(senderDid))}
+          onShowProfile={onShowProfile}
         >
           {renderedMessages}
         </MsgGroup>
