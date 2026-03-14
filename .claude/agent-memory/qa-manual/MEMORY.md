@@ -2,11 +2,23 @@
 
 ## Key Selectors
 - `[data-testid="chat.area.message.list"]` - ChatArea ScrollView (message list)
-- `[data-testid="main.container"]` - Main layout container (flex: 1, flexDirection: row)
+- `[data-testid="main.container"]` - Main layout container (flex column, takes remaining width)
 - `[data-testid="sidebar.conversation.item"]` - Conversation list item (click to enter chat)
+- `[data-testid="sidebar.conversation.list"]` - Conversation list ScrollView
+- `[data-testid="sidebar.friends.button"]` - Friends nav button in sidebar
+- `[data-testid="sidebar.guide.button"]` - Guide nav button in sidebar
+- `[data-testid="sidebar.marketplace.button"]` - Marketplace nav button in sidebar
+- `[data-testid="sidebar.new.chat.button"]` - New chat button (+)
+- `[data-testid="sidebar.search.input"]` - Search input in sidebar
+- `[data-testid="nav.rail"]` - Icon navigation rail (64px wide, left edge)
+- `[data-testid="nav.settings"]` - Settings gear icon (bottom of nav rail)
+- `[data-testid="nav.home"]` - Home/ghost icon (top of nav rail)
 - `[data-testid="input.container"]` / `[data-testid="input.text"]` - Chat input
 - `[data-testid="chat.header"]` - Chat header bar
 - `[data-testid="chat.call.voice"]` / `[data-testid="chat.call.video"]` - Call buttons
+- `[data-testid="settings.dialog"]` - Settings dialog container
+- `[data-testid="auth.screen"]` - Auth/login screen container
+- `[data-testid="auth.create.button"]` / `[data-testid="auth.import.button"]` - Auth buttons
 - Test IDs defined in `src/constants/test-ids.ts`
 
 ## Layout Architecture
@@ -28,10 +40,17 @@
 - `GET relay.umbra.chat/api/sync/...` returns 404 in dev (no relay server running)
 
 ## Dev Server
-- Launch config: `.claude/launch.json` -> `expo-dev` on port 8083
-- Server name: `expo-dev`
+- Launch config: `.claude/launch.json` -> `expo-dev` on port 8083 / `web-dev` on port 8082
+- Server names: `expo-dev`, `web-dev`
+- Port 8081 is often already occupied by a running Expo server; use 8082+ for new servers
 
 ## Verification Patterns
 - ActiveCallPanel is conditionally rendered; cannot verify its computed styles without an active call
 - Verify source code directly for components that are conditionally rendered
 - On mobile, must click into conversation before inspecting chat area styles (width: 0 when hidden)
+- Settings dialog uses `useIsMobile()` (breakpoint 768px from `src/hooks/useIsMobile.ts`) -- at narrow viewports it renders mobile mode with `width:100%, height:100%`
+- At narrow viewports (<768px), settings dialog in mobile mode has `height: 0` on container but content overflows visually -- this is a layout issue with the Overlay+AuraBurst wrapper
+- `HelpIndicator` components show "?" text intentionally (tooltip triggers) -- not a rendering bug
+- Auth screen renders content twice (normal + inverted/clipped for blob animation) -- the duplicate in snapshot is expected
+- To create a test account: auth.create.button -> fill create.name.input -> create.name.next -> create.seed.next -> create.backup.checkbox + create.backup.next -> pin.skip.button -> create.success.done
+- Settings dialog source: `/Users/mattmattmattmatt/Development/Umbra/src/components/modals/SettingsDialog.tsx`

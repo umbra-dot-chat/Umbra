@@ -3,18 +3,19 @@
 ## Pre-existing Issues
 
 ### Type-check (tsc --noEmit)
-- As of 2026-03-10, `npx tsc --noEmit` has many pre-existing errors (test files, component files, packages).
-- None are in `src/hooks/useNetwork.ts` itself.
-- Key pre-existing errors: `testID` prop issues on Wisp components, `umbra-test-bot` missing module declarations, e2e test type issues, `sendFileMessage.test.ts` missing `fileId` property.
-- `__tests__/settings/useNetwork.test.ts:179` has a pre-existing TS2322 error (`Type 'string' is not assignable to type 'never'`).
-- `app/(main)/_layout.tsx(924,52)`: pre-existing TS2345 (`'"profile"'` not assignable to `SettingsSection | undefined`).
-- `src/components/sidebar/ChatSidebar.tsx(100,16)`: pre-existing TS2322 (Sidebar prop type mismatch with `children`, `testID`, `width`, `style`).
+- As of 2026-03-11 (post-Wisp migration), `npx tsc --noEmit` passes with 0 errors.
+- Previous baseline (pre-Wisp migration): 67 pre-existing errors.
+- The Wisp migration + recent fix commits (e4e3b1f, e9ac8d0, 4bdad50, 202647a, a911fa0) resolved all type errors.
+- Ghost-ai package (`packages/umbra-ghost-ai`): passes `tsc --noEmit` with 0 errors.
 
 ### Unit Tests (npm test)
-- As of 2026-03-10, 85 out of 105 test suites fail. 387/1010 tests fail. These are ALL pre-existing.
-- `useNetwork.test.ts` fails at import time due to `window.addEventListener` in `src/utils/debug.ts:221` (JSDOM environment issue).
-- Two-device e2e-ios tests always fail in Jest (require device sync).
-- Identical results with and without current working changes (verified via `git stash` comparison).
+- As of 2026-03-11 (post-Wisp migration + fix commits): 27/27 test suites pass, 631/631 tests pass.
+- Previous baseline (pre-Wisp migration): 85/105 test suites failed, 387/1010 tests failed.
+- Fix commits (e4e3b1f, e9ac8d0, 4bdad50) excluded e2e-ios tests, fixed debug.ts JSDOM issue, and resolved test file type errors.
+- All tests now passing cleanly with 0 failures.
+
+### Lint
+- No ESLint config at project level. No lint scripts in package.json. Lint is not configured for this project.
 
 ### Dev Server
 - Expo dev server runs on port 8083 via `npx expo start --port 8083 --web`.
