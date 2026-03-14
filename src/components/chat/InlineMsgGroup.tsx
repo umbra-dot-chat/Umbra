@@ -19,6 +19,12 @@ export interface InlineMsgGroupProps {
   readReceipts?: React.ReactNode;
   /** Stable callback from ChatArea — signature: (name, event, status?, avatar?) */
   onShowProfile?: (name: string, event: any, status?: 'online' | 'idle' | 'offline', avatar?: string) => void;
+  /**
+   * Fingerprint string encoding the group's message state, e.g.
+   * "id1|0||0,id2|1|read|2". Used by arePropsEqual instead of comparing
+   * children (which is always a new JSX array from group.map()).
+   */
+  messageFingerprint: string;
   children: React.ReactNode;
 }
 
@@ -27,11 +33,13 @@ export interface InlineMsgGroupProps {
  *
  * We compare only primitive/stable props and deliberately skip:
  * - `onShowProfile` (function reference changes every render but logic is identical)
- * - `children` (JSX recreated every render but visually identical for same messages)
+ * - `children` (JSX recreated every render via group.map() — always a new ref)
  * - `themeColors` (object ref — only changes on theme switch, cheap to compare by ref)
  * - `readReceipts` (ReactNode — recreated each render)
  *
- * This prevents the 56/sec re-render storm caused by unstable parent props.
+ * Instead of comparing `children` (always a new array), we compare
+ * `messageFingerprint` — a string encoding each message's id, edit state,
+ * delivery status, and reaction count. This lets the memo actually work.
  */
 function arePropsEqual(prev: InlineMsgGroupProps, next: InlineMsgGroupProps): boolean {
   return (
@@ -42,7 +50,7 @@ function arePropsEqual(prev: InlineMsgGroupProps, next: InlineMsgGroupProps): bo
     prev.avatarName === next.avatarName &&
     prev.avatarSrc === next.avatarSrc &&
     prev.senderDid === next.senderDid &&
-    prev.children === next.children
+    prev.messageFingerprint === next.messageFingerprint
   );
 }
 

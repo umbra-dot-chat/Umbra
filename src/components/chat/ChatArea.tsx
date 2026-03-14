@@ -250,6 +250,29 @@ function formatCallEventDisplay(callType: string, status: string, duration: numb
 }
 
 /**
+ * Build a lightweight fingerprint for a message group.
+ * Encodes each message's id, edit state, delivery status, and reaction count
+ * so that arePropsEqual on InlineMsgGroup/MsgGroup can compare a single string
+ * instead of a children reference (which is always a new array from group.map).
+ */
+function messageGroupFingerprint(group: Message[]): string {
+  let fp = '';
+  for (let i = 0; i < group.length; i++) {
+    const m = group[i];
+    if (i > 0) fp += ',';
+    fp += m.id;
+    fp += m.edited ? '|1' : '|0';
+    fp += '|';
+    fp += typeof m.status === 'string' ? m.status : '';
+    fp += '|';
+    fp += m.reactions?.length ?? 0;
+    fp += '|';
+    fp += m.threadReplyCount ?? 0;
+  }
+  return fp;
+}
+
+/**
  * Group consecutive messages from the same sender into display groups.
  * Each group shows sender name + avatar once, with multiple bubbles underneath.
  */
@@ -744,6 +767,7 @@ export const ChatArea = React.memo(function ChatArea({
 
     // ── Regular message group ──
     const renderedMessages = group.map((msg) => renderSingleMessage(msg, isInline));
+    const fingerprint = messageGroupFingerprint(group);
 
     if (isInline) {
       return (
@@ -761,6 +785,7 @@ export const ChatArea = React.memo(function ChatArea({
             senderColor={isGroupChat ? memberColor(senderDid) : undefined}
             themeColors={themeColors}
             onShowProfile={onShowProfile}
+            messageFingerprint={fingerprint}
           >
             {renderedMessages}
           </InlineMsgGroup>
@@ -784,6 +809,7 @@ export const ChatArea = React.memo(function ChatArea({
           senderColor={isGroupChat && !isOutgoing ? memberColor(senderDid) : undefined}
           themeColors={themeColors}
           onShowProfile={onShowProfile}
+          messageFingerprint={fingerprint}
         >
           {renderedMessages}
         </MsgGroup>
