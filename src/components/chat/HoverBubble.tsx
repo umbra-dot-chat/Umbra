@@ -51,8 +51,8 @@ export interface HoverBubbleProps {
   };
   themeColors: any;
   children: React.ReactNode;
-  /** Message data for plugin message-actions slot */
-  message?: { id: string; text: string; conversationId?: string; senderDid?: string };
+  /** Message data for plugin message-actions slot + memo fingerprint */
+  message?: { id: string; text: string; conversationId?: string; senderDid?: string; edited?: boolean; reactionsCount?: number; status?: string };
 }
 
 // ---------------------------------------------------------------------------
@@ -325,13 +325,20 @@ export const HoverBubble = React.memo(function HoverBubble({
     </>
   );
 }, (prev, next) => {
-  // Custom comparator: skip re-render if the message identity hasn't changed.
+  // Custom comparator: skip re-render if the message data hasn't changed.
   // Actions/contextActions are new objects every parent render but functionally
-  // identical for the same message, so we compare by message id + children ref.
+  // identical for the same message, so we compare by message fields.
+  //
+  // IMPORTANT: We do NOT compare `children` — the parent recreates children JSX
+  // on every render (new object ref), but the visual output is identical when the
+  // message data is unchanged. Comparing children defeats the entire memo.
   if (prev.id !== next.id) return false;
   if (prev.align !== next.align) return false;
-  if (prev.children !== next.children) return false;
   if (prev.message?.id !== next.message?.id) return false;
+  if (prev.message?.text !== next.message?.text) return false;
+  if (prev.message?.edited !== next.message?.edited) return false;
+  if (prev.message?.reactionsCount !== next.message?.reactionsCount) return false;
+  if (prev.message?.status !== next.message?.status) return false;
   // themeColors is the same object within a theme, only changes on theme switch
   if (prev.themeColors !== next.themeColors) return false;
   return true;

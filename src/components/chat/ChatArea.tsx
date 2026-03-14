@@ -562,7 +562,7 @@ export const ChatArea = React.memo(function ChatArea({
           actions={makeActions(msg.id, name, text, time)}
           contextActions={makeContextActions(msg.id, name, text, time, isOwn)}
           themeColors={themeColors}
-          message={{ id: msg.id, text, conversationId: msg.conversationId, senderDid: msg.senderDid }}
+          message={{ id: msg.id, text, conversationId: msg.conversationId, senderDid: msg.senderDid, edited: msg.edited, reactionsCount: msg.reactions?.length, status: typeof msg.status === 'string' ? msg.status : msg.status ? 'failed' : undefined }}
         >
           {inlineMode ? (
             <Box style={{ paddingVertical: 2 }}>
