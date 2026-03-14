@@ -2,53 +2,24 @@ import { BookOpenIcon, CheckIcon, PlusIcon, ShoppingBagIcon, UsersIcon, XIcon } 
 import {
   Avatar, AvatarGroup, Box, Button,
   ConversationListItem,
+  GradientBorder,
   GradientText,
-  SearchInput,
-  Sidebar, SidebarSection,
+  SidebarSection,
   Skeleton,
   Text,
   useTheme,
 } from '@coexist/wisp-react-native';
 import type { PendingGroupInvite } from '@umbra/service';
 import type { ActiveCall } from '@/types/call';
-import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Platform, ScrollView } from 'react-native';
+import React, { useCallback, useRef, useState } from 'react';
+import { ScrollView } from 'react-native';
 import { NewChatMenu } from './NewChatMenu';
-import { SidebarCallPanel } from '@/components/call/SidebarCallPanel';
+import { SidebarShell, useSidebarShellLayout } from './SidebarShell';
 import { SlotRenderer } from '@/components/plugins/SlotRenderer';
 import { TEST_IDS } from '@/constants/test-ids';
 import { dbg } from '@/utils/debug';
 
-// ─── CSS injection for sidebar layout (web only) ────────────────────────────
-
-const SIDEBAR_CSS_ID = 'sidebar-layout-css';
-
-/**
- * The Wisp Sidebar wraps children in a ScrollView. To push the call panel
- * to the bottom, we make the ScrollView content container a flex column
- * with min-height: 100%, then use margin-top: auto on the call footer.
- */
-function injectSidebarLayoutCSS() {
-  if (Platform.OS !== 'web' || typeof document === 'undefined') return;
-  if (document.getElementById(SIDEBAR_CSS_ID)) return;
-
-  const style = document.createElement('style');
-  style.id = SIDEBAR_CSS_ID;
-  style.textContent = `
-    /* Make the Sidebar ScrollView content container a flex column
-       so margin-top:auto pushes the call panel to the bottom. */
-    [role="menu"] > div:first-child > div {
-      min-height: 100%;
-      display: flex;
-      flex-direction: column;
-    }
-  `;
-  document.head.appendChild(style);
-}
-
 export interface ChatSidebarProps {
-  search: string;
-  onSearchChange: (s: string) => void;
   conversations: { id: string; name: string; last: string; time: string; unread: number; online?: boolean; pinned?: boolean; status?: string; group?: string[]; isGroup?: boolean; avatar?: string }[];
   activeId: string | null;
   onSelectConversation: (id: string) => void;
@@ -84,6 +55,23 @@ export interface ChatSidebarProps {
   isScreenSharing?: boolean;
   /** Toggle screen sharing on/off */
   onToggleScreenShare?: () => void;
+  /** Whether the notifications panel should be shown instead of the conversation list */
+  showNotificationsPanel?: boolean;
+  /** Called when the notifications panel is closed */
+  onCloseNotificationsPanel?: () => void;
+  /** Whether the account panel should be shown */
+  showAccountPanel?: boolean;
+  /** Called when the account panel is closed */
+  onCloseAccountPanel?: () => void;
+  /** Account panel props */
+  accountPanelProps?: {
+    accounts: import('@/contexts/AuthContext').StoredAccount[];
+    activeAccountDid: string | null;
+    onSwitchAccount: (did: string) => void;
+    onActiveAccountPress: () => void;
+    onAddAccount: () => void;
+    onRemoveAccount?: (did: string) => void;
+  };
 }
 
 export function ChatSidebar(props: ChatSidebarProps) {
@@ -92,20 +80,92 @@ export function ChatSidebar(props: ChatSidebarProps) {
 }
 
 function ChatSidebarInner({
-  search, onSearchChange, conversations,
+  conversations,
   activeId, onSelectConversation,
   onFriendsPress, onNewDm, onCreateGroup, onGuidePress, onMarketplacePress, isFriendsActive,
   pendingInvites, onAcceptInvite, onDeclineInvite, loading, pendingFriendRequests,
   activeCall, onReturnToCall, onToggleMute, onToggleDeafen, onToggleCamera, onEndCall,
   isScreenSharing, onToggleScreenShare,
+  showNotificationsPanel, onCloseNotificationsPanel,
+  showAccountPanel, onCloseAccountPanel, accountPanelProps,
 }: ChatSidebarProps) {
-  const { theme } = useTheme();
-  const [menuOpen, setMenuOpen] = useState(false);
+  const shellProps = {
+    showNotificationsPanel,
+    onCloseNotificationsPanel,
+    showAccountPanel,
+    onCloseAccountPanel,
+    accountPanelProps,
+    activeCall,
+    activeConversationId: activeId,
+    onReturnToCall,
+    onToggleMute,
+    onToggleDeafen,
+    onToggleCamera,
+    onEndCall,
+    isScreenSharing,
+    onToggleScreenShare,
+  };
 
-  // Inject CSS to make sidebar ScrollView content a flex column (web only)
-  useEffect(() => {
-    injectSidebarLayoutCSS();
-  }, []);
+  return (
+    <SidebarShell searchPlaceholder="Search conversations..." {...shellProps}>
+      <ChatSidebarContent
+        conversations={conversations}
+        activeId={activeId}
+        onSelectConversation={onSelectConversation}
+        onFriendsPress={onFriendsPress}
+        onNewDm={onNewDm}
+        onCreateGroup={onCreateGroup}
+        onGuidePress={onGuidePress}
+        onMarketplacePress={onMarketplacePress}
+        isFriendsActive={isFriendsActive}
+        pendingInvites={pendingInvites}
+        onAcceptInvite={onAcceptInvite}
+        onDeclineInvite={onDeclineInvite}
+        loading={loading}
+        pendingFriendRequests={pendingFriendRequests}
+      />
+    </SidebarShell>
+  );
+}
+
+// ─── Chat-specific sidebar content ──────────────────────────────────────────
+
+interface ChatSidebarContentProps {
+  conversations: ChatSidebarProps['conversations'];
+  activeId: string | null;
+  onSelectConversation: (id: string) => void;
+  onFriendsPress: () => void;
+  onNewDm?: () => void;
+  onCreateGroup?: () => void;
+  onGuidePress?: () => void;
+  onMarketplacePress?: () => void;
+  isFriendsActive?: boolean;
+  pendingInvites?: PendingGroupInvite[];
+  onAcceptInvite?: (inviteId: string) => void;
+  onDeclineInvite?: (inviteId: string) => void;
+  loading?: boolean;
+  pendingFriendRequests?: number;
+}
+
+function ChatSidebarContent({
+  conversations,
+  activeId,
+  onSelectConversation,
+  onFriendsPress,
+  onNewDm,
+  onCreateGroup,
+  onGuidePress,
+  onMarketplacePress,
+  isFriendsActive,
+  pendingInvites,
+  onAcceptInvite,
+  onDeclineInvite,
+  loading,
+  pendingFriendRequests,
+}: ChatSidebarContentProps) {
+  const { theme } = useTheme();
+  const { hasBottomPanel, contentFlex } = useSidebarShellLayout();
+  const [menuOpen, setMenuOpen] = useState(false);
 
   // Track unread counts to trigger shimmer on new messages
   const prevUnreadsRef = useRef<Record<string, number>>({});
@@ -138,251 +198,212 @@ function ChatSidebarInner({
   }, []);
 
   return (
-      <Sidebar testID={TEST_IDS.SIDEBAR.CONTAINER} width="wide" style={{ paddingHorizontal: 8, paddingTop: 20, width: '100%' }}>
-        {/* Search bar */}
-        <SidebarSection>
-          <Box style={{ paddingHorizontal: 6 }}>
-            <SearchInput
-              testID={TEST_IDS.SIDEBAR.SEARCH_INPUT}
-              value={search}
-              onValueChange={onSearchChange}
-              placeholder="Search..."
-              size="md"
-              fullWidth
+    <>
+      {/* Navigation toolbar -- compact icon row */}
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, flexShrink: 0 }} contentContainerStyle={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingBottom: 4, gap: 4 }}>
+        <Box style={{ position: 'relative' }}>
+          <GradientBorder radius={99} width={1.5} animated speed={3000} visible={!!isFriendsActive}>
+            <Button
+              testID={TEST_IDS.SIDEBAR.FRIENDS_BUTTON}
+              variant={isFriendsActive ? 'secondary' : 'tertiary'}
               onSurface
-              onClear={() => onSearchChange('')}
-              gradientBorder
-            />
-          </Box>
-        </SidebarSection>
+              size="sm"
+              onPress={onFriendsPress}
+              accessibilityLabel="Friends"
+              iconLeft={<UsersIcon size={14} color={isFriendsActive ? theme.colors.text.onRaised : theme.colors.text.onRaisedSecondary} />}
+              shape="pill"
+            >
+              <Text size="xs" style={{ color: isFriendsActive ? theme.colors.text.onRaised : theme.colors.text.onRaisedSecondary }}>Friends</Text>
+            </Button>
+          </GradientBorder>
+          {!!pendingFriendRequests && pendingFriendRequests > 0 && (
+            <Box style={{
+              position: 'absolute',
+              top: -2,
+              right: -2,
+              backgroundColor: theme.colors.status.danger,
+              borderRadius: 99,
+              paddingHorizontal: 3,
+              minWidth: 14,
+              height: 14,
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}>
+              <Text size="xs" weight="bold" style={{ lineHeight: 10, fontSize: 9, color: theme.colors.text.inverse, textAlign: 'center' }}>
+                {pendingFriendRequests > 99 ? '99+' : pendingFriendRequests}
+              </Text>
+            </Box>
+          )}
+        </Box>
+        {onGuidePress && (
+          <Button
+            testID={TEST_IDS.SIDEBAR.GUIDE_BUTTON}
+            variant="tertiary"
+            onSurface
+            size="sm"
+            onPress={onGuidePress}
+            accessibilityLabel="Guide"
+            iconLeft={<BookOpenIcon size={14} color={theme.colors.text.onRaisedSecondary} />}
+            shape="pill"
+          >
+            <Text size="xs" style={{ color: theme.colors.text.onRaisedSecondary }}>Guide</Text>
+          </Button>
+        )}
+        {onMarketplacePress && (
+          <Button
+            testID={TEST_IDS.SIDEBAR.MARKETPLACE_BUTTON}
+            variant="tertiary"
+            onSurface
+            size="sm"
+            onPress={onMarketplacePress}
+            accessibilityLabel="Marketplace"
+            iconLeft={<ShoppingBagIcon size={14} color={theme.colors.text.onRaisedSecondary} />}
+            shape="pill"
+          >
+            <Text size="xs" style={{ color: theme.colors.text.onRaisedSecondary }}>Market</Text>
+          </Button>
+        )}
+      </ScrollView>
 
-        {/* Navigation buttons */}
-        <SidebarSection style={{ marginTop: 12 }}>
-          <Box style={{ marginHorizontal: 6 }}>
-              <Button
-                testID={TEST_IDS.SIDEBAR.FRIENDS_BUTTON}
-                variant={isFriendsActive ? 'secondary' : 'tertiary'}
-                onSurface
-                size="md"
-                fullWidth
-                iconLeft={<UsersIcon size={18} color={isFriendsActive ? theme.colors.text.onRaised : theme.colors.text.onRaisedSecondary} />}
-                onPress={onFriendsPress}
-                accessibilityLabel="Friends"
-                accessibilityActions={[{ name: 'activate', label: 'Friends' }]}
-                onAccessibilityAction={(e: any) => { if (e.nativeEvent.actionName === 'activate') onFriendsPress?.(); }}
-                style={{ justifyContent: 'flex-start' }}
+      {/* Group Invites Section -- only shown when there are pending invites */}
+      {pendingInvites && pendingInvites.length > 0 && (
+        <SidebarSection title={`Group Invites (${pendingInvites.length})`}>
+          <Box style={{ marginHorizontal: 6, gap: 6, marginBottom: 4 }}>
+            {pendingInvites.map((invite) => (
+              <Box
+                key={invite.id}
+                style={{
+                  borderRadius: 8,
+                  borderWidth: 1,
+                  borderColor: theme.colors.border.strong,
+                  backgroundColor: theme.colors.background.sunken,
+                  padding: 10,
+                }}
               >
-                <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                  <Text size="sm">Friends</Text>
-                  {!!pendingFriendRequests && pendingFriendRequests > 0 && (
-                    <Box style={{
-                      backgroundColor: theme.colors.status.danger,
-                      borderRadius: 99,
-                      paddingHorizontal: 4,
-                      minWidth: 16,
-                      height: 16,
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                    }}>
-                      <Text size="xs" weight="bold" style={{ lineHeight: 12, color: theme.colors.text.inverse, textAlign: 'center' }}>
-                        {pendingFriendRequests > 99 ? '99+' : pendingFriendRequests}
-                      </Text>
-                    </Box>
-                  )}
+                <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                  <UsersIcon size={14} color={theme.colors.text.onRaisedSecondary} />
+                  <Box style={{ flex: 1 }}>
+                    <Text size="xs" weight="semibold" style={{ color: theme.colors.text.onRaised }} numberOfLines={1}>
+                      {invite.groupName}
+                    </Text>
+                    <Text size="xs" style={{ color: theme.colors.text.onRaisedSecondary }} numberOfLines={1}>
+                      from {invite.inviterName}
+                    </Text>
+                  </Box>
                 </Box>
-              </Button>
+                <Box style={{ flexDirection: 'row', gap: 6 }}>
+                  <Button
+                    variant="success"
+                    size="xs"
+                    fullWidth
+                    iconLeft={<CheckIcon size={12} color={theme.colors.text.onAccent} />}
+                    onPress={() => onAcceptInvite?.(invite.id)}
+                  >
+                    Accept
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    size="xs"
+                    fullWidth
+                    iconLeft={<XIcon size={12} color={theme.colors.text.onRaisedSecondary} />}
+                    onPress={() => onDeclineInvite?.(invite.id)}
+                  >
+                    Decline
+                  </Button>
+                </Box>
+              </Box>
+            ))}
           </Box>
-          {onGuidePress && (
-            <Box style={{ marginHorizontal: 6, marginTop: 2 }}>
-              <Button
-                testID={TEST_IDS.SIDEBAR.GUIDE_BUTTON}
-                variant="tertiary"
-                onSurface
-                size="md"
-                fullWidth
-                iconLeft={<BookOpenIcon size={18} color={theme.colors.text.onRaisedSecondary} />}
-                onPress={onGuidePress}
-                accessibilityLabel="User Guide"
-                style={{ justifyContent: 'flex-start' }}
-              >
-                Guide
-              </Button>
-            </Box>
-          )}
-          {onMarketplacePress && (
-            <Box style={{ marginHorizontal: 6, marginTop: 2 }}>
-              <Button
-                testID={TEST_IDS.SIDEBAR.MARKETPLACE_BUTTON}
-                variant="tertiary"
-                onSurface
-                size="md"
-                fullWidth
-                iconLeft={<ShoppingBagIcon size={18} color={theme.colors.text.onRaisedSecondary} />}
-                onPress={onMarketplacePress}
-                accessibilityLabel="Marketplace"
-                style={{ justifyContent: 'flex-start' }}
-              >
-                Marketplace
-              </Button>
-            </Box>
-          )}
         </SidebarSection>
+      )}
 
-        {/* Group Invites Section — only shown when there are pending invites */}
-        {pendingInvites && pendingInvites.length > 0 && (
-          <SidebarSection title={`Group Invites (${pendingInvites.length})`}>
-            <Box style={{ marginHorizontal: 6, gap: 6, marginBottom: 4 }}>
-              {pendingInvites.map((invite) => (
+      <SlotRenderer slot="sidebar-section" />
+      <SidebarSection style={{ marginTop: 12, flex: contentFlex, borderTopWidth: 1, borderTopColor: theme.colors.border.subtle, ...(hasBottomPanel ? { overflow: 'hidden' as any } : {}) }}>
+        {/* Custom header row: "Conversations" title + inline + button */}
+        <Box style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, marginBottom: 8, zIndex: 200 }}>
+          <Text size="xs" weight="semibold" style={{ color: theme.colors.text.onRaisedSecondary, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+            Conversations
+          </Text>
+          {(onNewDm || onCreateGroup) && (
+            <Box style={{ position: 'relative', zIndex: 200 }}>
+              <Button
+                testID={TEST_IDS.SIDEBAR.NEW_CHAT_BUTTON}
+                variant="tertiary"
+                onSurface
+                size="xs"
+                onPress={handleToggleMenu}
+                accessibilityLabel="New conversation"
+                iconLeft={<PlusIcon size={13} color={theme.colors.text.onRaisedSecondary} />}
+                shape="pill"
+              />
+
+              <NewChatMenu
+                visible={menuOpen}
+                onClose={handleCloseMenu}
+                onNewDm={onNewDm ?? (() => {})}
+                onNewGroup={onCreateGroup ?? (() => {})}
+              />
+            </Box>
+          )}
+        </Box>
+        <ScrollView testID={TEST_IDS.SIDEBAR.CONVERSATION_LIST} style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
+          {loading ? (
+            /* Skeleton conversation list items */
+            <>
+              {[1, 2, 3, 4, 5].map((i) => (
                 <Box
-                  key={invite.id}
+                  key={i}
                   style={{
-                    borderRadius: 8,
-                    borderWidth: 1,
-                    borderColor: theme.colors.border.strong,
-                    backgroundColor: theme.colors.background.sunken,
-                    padding: 10,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    gap: 10,
+                    paddingHorizontal: 12,
+                    paddingVertical: 10,
                   }}
                 >
-                  <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>
-                    <UsersIcon size={14} color={theme.colors.text.onRaisedSecondary} />
-                    <Box style={{ flex: 1 }}>
-                      <Text size="xs" weight="semibold" style={{ color: theme.colors.text.onRaised }} numberOfLines={1}>
-                        {invite.groupName}
-                      </Text>
-                      <Text size="xs" style={{ color: theme.colors.text.onRaisedSecondary }} numberOfLines={1}>
-                        from {invite.inviterName}
-                      </Text>
-                    </Box>
-                  </Box>
-                  <Box style={{ flexDirection: 'row', gap: 6 }}>
-                    <Button
-                      variant="success"
-                      size="xs"
-                      fullWidth
-                      iconLeft={<CheckIcon size={12} color={theme.colors.text.onAccent} />}
-                      onPress={() => onAcceptInvite?.(invite.id)}
-                    >
-                      Accept
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      size="xs"
-                      fullWidth
-                      iconLeft={<XIcon size={12} color={theme.colors.text.onRaisedSecondary} />}
-                      onPress={() => onDeclineInvite?.(invite.id)}
-                    >
-                      Decline
-                    </Button>
+                  <Skeleton variant="circular" width={36} height={36} />
+                  <Box style={{ flex: 1, gap: 6 }}>
+                    <Skeleton variant="rectangular" height={12} radius={4} width="60%" />
+                    <Skeleton variant="rectangular" height={10} radius={4} width="85%" />
                   </Box>
                 </Box>
               ))}
+            </>
+          ) : conversations.length === 0 ? (
+            <Box testID={TEST_IDS.SIDEBAR.EMPTY_STATE} style={{ alignItems: 'center', paddingVertical: 24 }}>
+              <GradientText animated speed={4000} style={{ fontSize: 13 }}>No conversations yet</GradientText>
             </Box>
-          </SidebarSection>
-        )}
-
-        <SlotRenderer slot="sidebar-section" />
-        <SidebarSection style={{ marginTop: 12, flex: 1 }}>
-          {/* Custom header row: "Conversations" title + inline + button */}
-          <Box style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, marginBottom: 8, zIndex: 200 }}>
-            <Text size="xs" weight="semibold" style={{ color: theme.colors.text.onRaisedSecondary, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-              Conversations
-            </Text>
-            {(onNewDm || onCreateGroup) && (
-              <Box style={{ position: 'relative', zIndex: 200 }}>
-                <Button
-                  testID={TEST_IDS.SIDEBAR.NEW_CHAT_BUTTON}
-                  variant="tertiary"
-                  onSurface
-                  size="xs"
-                  onPress={handleToggleMenu}
-                  accessibilityLabel="New conversation"
-                  iconLeft={<PlusIcon size={13} color={theme.colors.text.onRaisedSecondary} />}
-                  shape="pill"
-                />
-
-                <NewChatMenu
-                  visible={menuOpen}
-                  onClose={handleCloseMenu}
-                  onNewDm={onNewDm ?? (() => {})}
-                  onNewGroup={onCreateGroup ?? (() => {})}
-                />
-              </Box>
-            )}
-          </Box>
-          <ScrollView testID={TEST_IDS.SIDEBAR.CONVERSATION_LIST} style={{ flex: 1 }} showsVerticalScrollIndicator={false}>
-            {loading ? (
-              /* Skeleton conversation list items */
-              <>
-                {[1, 2, 3, 4, 5].map((i) => (
-                  <Box
-                    key={i}
-                    style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      gap: 10,
-                      paddingHorizontal: 12,
-                      paddingVertical: 10,
-                    }}
-                  >
-                    <Skeleton variant="circular" width={36} height={36} />
-                    <Box style={{ flex: 1, gap: 6 }}>
-                      <Skeleton variant="rectangular" height={12} radius={4} width="60%" />
-                      <Skeleton variant="rectangular" height={10} radius={4} width="85%" />
-                    </Box>
-                  </Box>
-                ))}
-              </>
-            ) : conversations.length === 0 ? (
-              <Box testID={TEST_IDS.SIDEBAR.EMPTY_STATE} style={{ alignItems: 'center', paddingVertical: 24 }}>
-                <GradientText animated speed={4000} style={{ fontSize: 13 }}>No conversations yet</GradientText>
-              </Box>
-            ) : (
-              conversations.map((c) => (
-                <ConversationListItem
-                  key={c.id}
-                  testID={TEST_IDS.SIDEBAR.CONVERSATION_ITEM}
-                  name={c.name}
-                  lastMessage={c.last}
-                  timestamp={c.time}
-                  unreadCount={c.unread}
-                  shimmer={shimmerCounters[c.id] ?? 0}
-                  online={c.online}
-                  pinned={c.pinned}
-                  status={c.status as any}
-                  active={c.id === activeId}
-                  onPress={() => onSelectConversation(c.id)}
-                  avatar={
-                    c.group ? (
-                      <AvatarGroup max={2} size="sm" spacing={10} onSurface>
-                        {c.group.map((name) => (
-                          <Avatar key={name} name={name} size="sm" />
-                        ))}
-                      </AvatarGroup>
-                    ) : (
-                      <Avatar name={c.name} src={c.avatar} size="md" onSurface />
-                    )
-                  }
-                />
-              ))
-            )}
-          </ScrollView>
-        </SidebarSection>
-
-        {/* Active call footer panel — pushed to the bottom via margin-top:auto */}
-        {activeCall && activeCall.status === 'connected' && activeCall.conversationId !== activeId && onReturnToCall && onToggleMute && onToggleDeafen && onToggleCamera && onEndCall && (
-          <Box style={{ marginTop: 'auto' as any, marginHorizontal: -4 }}>
-            <SidebarCallPanel
-              activeCall={activeCall}
-              onReturnToCall={onReturnToCall}
-              onToggleMute={onToggleMute}
-              onToggleDeafen={onToggleDeafen}
-              onToggleCamera={onToggleCamera}
-              onEndCall={onEndCall}
-              isScreenSharing={isScreenSharing}
-              onToggleScreenShare={onToggleScreenShare}
-            />
-          </Box>
-        )}
-      </Sidebar>
+          ) : (
+            conversations.map((c) => (
+              <ConversationListItem
+                key={c.id}
+                testID={TEST_IDS.SIDEBAR.CONVERSATION_ITEM}
+                name={c.name}
+                lastMessage={c.last}
+                timestamp={c.time}
+                unreadCount={c.unread}
+                shimmer={shimmerCounters[c.id] ?? 0}
+                online={c.online}
+                pinned={c.pinned}
+                status={c.status as any}
+                active={c.id === activeId}
+                onPress={() => onSelectConversation(c.id)}
+                avatar={
+                  c.group ? (
+                    <AvatarGroup max={2} size="sm" spacing={10} onSurface>
+                      {c.group.map((name) => (
+                        <Avatar key={name} name={name} size="sm" />
+                      ))}
+                    </AvatarGroup>
+                  ) : (
+                    <Avatar name={c.name} src={c.avatar} size="md" onSurface />
+                  )
+                }
+              />
+            ))
+          )}
+        </ScrollView>
+      </SidebarSection>
+    </>
   );
 }

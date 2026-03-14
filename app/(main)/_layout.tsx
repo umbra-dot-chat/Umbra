@@ -12,9 +12,11 @@ import { useGroups } from '@/hooks/useGroups';
 import { useMessageNotifications } from '@/hooks/useMessageNotifications';
 import { NotificationProvider, useNotifications } from '@/contexts/NotificationContext';
 import { useNotificationListener } from '@/hooks/useNotificationListener';
-import { NotificationDrawerContainer } from '@/components/ui/NotificationDrawerContainer';
+// NotificationDrawerContainer removed — notifications now render inline via SidebarNotificationsPanel
 import { ChatSidebar } from '@/components/sidebar/ChatSidebar';
+import { SettingsNavSidebar } from '@/components/sidebar/SettingsNavSidebar';
 import { SettingsDialog } from '@/components/modals/SettingsDialog';
+import { PluginMarketplace } from '@/components/modals/PluginMarketplace';
 import { GuideDialog } from '@/components/modals/GuideDialog';
 import { CreateGroupDialog } from '@/components/groups/CreateGroupDialog';
 import { NewDmDialog } from '@/components/modals/NewDmDialog';
@@ -22,10 +24,11 @@ import { ProfilePopover } from '@/components/modals/ProfilePopover';
 import { ProfilePopoverProvider, useProfilePopoverContext } from '@/contexts/ProfilePopoverContext';
 import { CallProvider, useCallContext } from '@/contexts/CallContext';
 import { IncomingCallOverlay } from '@/components/call/IncomingCallOverlay';
-import { CommandPalette } from '@/components/modals/CommandPalette';
-import { PluginMarketplace } from '@/components/modals/PluginMarketplace';
+import { UnifiedSearchProvider } from '@/contexts/UnifiedSearchContext';
+import { SettingsNavigationProvider } from '@/contexts/SettingsNavigationContext';
 import { InstallBanner } from '@/components/ui/InstallBanner';
 import { useCommandPalette } from '@/hooks/useCommandPalette';
+import { CommandPalette } from '@/components/modals/CommandPalette';
 import { SettingsDialogProvider, useSettingsDialog } from '@/contexts/SettingsDialogContext';
 import { CommunityProvider, useCommunityContext } from '@/contexts/CommunityContext';
 import { VoiceChannelProvider } from '@/contexts/VoiceChannelContext';
@@ -33,11 +36,9 @@ import { useCommunities } from '@/hooks/useCommunities';
 import { NavigationRail } from '@/components/navigation/NavigationRail';
 import { AccountSwitcher } from '@/components/navigation/AccountSwitcher';
 import { CommunityLayoutSidebar } from '@/components/sidebar/CommunityLayoutSidebar';
-import type { Community, Friend, MappedCommunityStructure, CommunityImportResult } from '@umbra/service';
+import type { Community, Friend, MessageEvent, MappedCommunityStructure, CommunityImportResult } from '@umbra/service';
 import { createCommunityFromDiscordImport } from '@umbra/service';
 import { useAuth } from '@/contexts/AuthContext';
-import { FriendsProvider } from '@/contexts/FriendsContext';
-import { GroupsProvider } from '@/contexts/GroupsContext';
 import { useUploadProgress } from '@/hooks/useUploadProgress';
 import { CommunityCreateOptionsDialog } from '@/components/community/CommunityCreateOptionsDialog';
 import { JoinCommunityModal } from '@/components/community/invite/JoinCommunityModal';
@@ -46,9 +47,7 @@ import { useSound } from '@/contexts/SoundContext';
 import { ResizeHandle } from '@/components/ui/ResizeHandle';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import { useNetwork } from '@/hooks/useNetwork';
-import { dbg } from '@/utils/debug';
 
-const SRC = 'MainLayout';
 
 /** Format a relative time string from a Unix timestamp. */
 function formatRelativeTime(ts?: number): string {
@@ -70,7 +69,6 @@ function formatRelativeTime(ts?: number): string {
 }
 
 function MainLayoutInner() {
-  if (__DEV__) dbg.trackRender('MainLayoutInner');
   const { theme } = useTheme();
   const router = useRouter();
   const pathname = usePathname();
@@ -80,15 +78,6 @@ function MainLayoutInner() {
   const { width: screenWidth } = useWindowDimensions();
   const { activeChannelId: communityActiveChannelId } = useCommunityContext();
   const insets = Platform.OS !== 'web' ? useSafeAreaInsets() : { top: 0, bottom: 0, left: 0, right: 0 };
-
-  // Log route changes for debugging
-  const prevPathRef = useRef(pathname);
-  useEffect(() => {
-    if (__DEV__ && pathname !== prevPathRef.current) {
-      dbg.info('lifecycle', `route: ${prevPathRef.current} → ${pathname}`, undefined, SRC);
-      prevPathRef.current = pathname;
-    }
-  }, [pathname]);
 
   // Mobile sidebar ↔ content swipe gesture
   // swipeProgress: 0 = sidebar visible, 1 = content visible
@@ -228,8 +217,9 @@ function MainLayoutInner() {
   // Notification listener — creates persistent notification records from events
   useNotificationListener();
 
-  // Notification drawer state
-  const { totalUnread, openDrawer: openNotificationDrawer } = useNotifications();
+  // Notification panel state (inline sidebar panel)
+  const { totalUnread } = useNotifications();
+  const [notificationsPanelOpen, setNotificationsPanelOpen] = useState(false);
 
   // Upload progress for nav rail ring indicator
   const { uploadRingProgress } = useUploadProgress();
@@ -257,8 +247,7 @@ function MainLayoutInner() {
 
   // Last message previews for sidebar
   const [lastMessages, setLastMessages] = useState<Record<string, string>>({});
-  // Track lastMessageAt per conversation so we only refetch when a new message arrived
-  const lastMessageAtRef = useRef<Record<string, number | undefined>>({});
+  const lastMessagesLoadedRef = useRef<Set<string>>(new Set());
 
   // Transform Conversation[] to sidebar-compatible shape
   const sidebarConversations = useMemo(() => {
@@ -292,10 +281,7 @@ function MainLayoutInner() {
         avatar: friend?.avatar,
       };
     });
-  // Note: onlineDids is intentionally omitted — it's already captured in
-  // friendMap (which depends on [friends, onlineDids]). Including it here
-  // caused redundant recalculations on every presence change.
-  }, [conversations, friendMap, groupMap, lastMessages]);
+  }, [conversations, friendMap, groupMap, lastMessages, onlineDids]);
 
   // Resizable sidebar
   const SIDEBAR_MIN = 220;
@@ -310,8 +296,6 @@ function MainLayoutInner() {
     setSidebarWidth(newWidth);
   }, []);
 
-  // Sidebar state
-  const [search, setSearch] = useState('');
   const { activeId, setActiveId, requestSearchPanel } = useActiveConversation();
 
   // Message notifications for non-active conversations
@@ -320,33 +304,25 @@ function MainLayoutInner() {
   const [guideOpen, setGuideOpen] = useState(false);
   const [createGroupOpen, setCreateGroupOpen] = useState(false);
   const [newDmOpen, setNewDmOpen] = useState(false);
-  const [marketplaceOpen, setMarketplaceOpen] = useState(false);
   const [createCommunityOptionsOpen, setCreateCommunityOptionsOpen] = useState(false);
   const [createCommunityOpen, setCreateCommunityOpen] = useState(false);
   const [discordImportOpen, setDiscordImportOpen] = useState(false);
   const [joinCommunityOpen, setJoinCommunityOpen] = useState(false);
-  const [accountSwitcherOpen, setAccountSwitcherOpen] = useState(false);
+  const [accountSwitcherOpen, setAccountSwitcherOpen] = useState(true);
   const [communitySubmitting, setCommunitySubmitting] = useState(false);
   const [communityError, setCommunityError] = useState<string | undefined>();
-  const { open: cmdOpen, setOpen: setCmdOpen } = useCommandPalette();
+  const [marketplaceOpen, setMarketplaceOpen] = useState(false);
+  // Cmd+K opens command palette, Cmd+Shift+F opens sidebar search
+  const { open: commandPaletteOpen, setOpen: setCommandPaletteOpen, openPalette } = useCommandPalette();
 
-  // Load/refresh last messages when conversations change.
-  // Only re-fetches for conversations whose lastMessageAt has changed.
-  // Throttled: during rapid message floods the effect fires frequently
-  // (driven by ConversationsProvider), so we limit WASM getMessages calls
-  // to at most once per 2 seconds.
-  const previewFetchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastPreviewFetchRef = useRef(0);
-  const PREVIEW_THROTTLE_MS = 2000;
-
+  // Load last messages for all conversations
   useEffect(() => {
     if (!service || conversations.length === 0) return;
 
     const loadLastMessages = async () => {
       const updates: Record<string, string> = {};
       for (const c of conversations) {
-        // Skip if lastMessageAt hasn't changed since our last fetch
-        if (lastMessageAtRef.current[c.id] === c.lastMessageAt) continue;
+        if (lastMessagesLoadedRef.current.has(c.id)) continue;
         try {
           const msgs = await service.getMessages(c.id, { limit: 1 });
           if (msgs.length > 0) {
@@ -355,7 +331,7 @@ function MainLayoutInner() {
               updates[c.id] = content.text;
             }
           }
-          lastMessageAtRef.current[c.id] = c.lastMessageAt;
+          lastMessagesLoadedRef.current.add(c.id);
         } catch {
           // Ignore errors for individual conversations
         }
@@ -364,34 +340,29 @@ function MainLayoutInner() {
         setLastMessages((prev) => ({ ...prev, ...updates }));
       }
     };
-
-    // Throttle: fire immediately if cooldown has elapsed, otherwise schedule trailing
-    const now = Date.now();
-    const elapsed = now - lastPreviewFetchRef.current;
-    if (elapsed >= PREVIEW_THROTTLE_MS) {
-      lastPreviewFetchRef.current = now;
-      loadLastMessages();
-    } else if (!previewFetchTimerRef.current) {
-      previewFetchTimerRef.current = setTimeout(() => {
-        previewFetchTimerRef.current = null;
-        lastPreviewFetchRef.current = Date.now();
-        loadLastMessages();
-      }, PREVIEW_THROTTLE_MS - elapsed);
-    }
-
-    return () => {
-      if (previewFetchTimerRef.current) {
-        clearTimeout(previewFetchTimerRef.current);
-        previewFetchTimerRef.current = null;
-      }
-    };
+    loadLastMessages();
   }, [service, conversations]);
 
-  // Last message previews are refreshed when the `conversations` array
-  // changes (driven by ConversationsProvider's debounced refetch).
-  // We no longer keep a separate onMessageEvent listener here because
-  // it caused the ENTIRE layout tree to re-render on every single
-  // incoming message — the #1 contributor to the OOM render cascade.
+  // Listen for new messages to update last message in real-time
+  useEffect(() => {
+    if (!service) return;
+
+    const unsubscribe = service.onMessageEvent((event: MessageEvent) => {
+      if (
+        (event.type === 'messageReceived' || event.type === 'messageSent')
+      ) {
+        const content = event.message?.content;
+        if (content?.type === 'text') {
+          setLastMessages((prev) => ({
+            ...prev,
+            [event.message.conversationId]: content.text,
+          }));
+        }
+      }
+    });
+
+    return unsubscribe;
+  }, [service]);
 
   // Handle group created — auto-select the new conversation
   const handleGroupCreated = useCallback((groupId: string, conversationId: string) => {
@@ -435,6 +406,32 @@ function MainLayoutInner() {
       router.push('/');
     }
   }, [service, refreshConversations, pathname, router]);
+
+  // Listen for custom events from UnifiedSearchOverlay (settings, marketplace, DM)
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+
+    const onOpenSettings = () => { playSound('tab_switch'); router.push('/settings'); };
+    const onOpenMarketplace = () => { playSound('dialog_open'); setMarketplaceOpen(true); };
+    const onOpenDm = (e: Event) => {
+      const did = (e as CustomEvent).detail?.did;
+      if (did) {
+        const friend = friends.find((f) => f.did === did);
+        if (friend) {
+          handleDmFriendSelected(friend);
+        }
+      }
+    };
+
+    window.addEventListener('umbra:open-settings', onOpenSettings);
+    window.addEventListener('umbra:open-marketplace', onOpenMarketplace);
+    window.addEventListener('umbra:open-dm', onOpenDm);
+    return () => {
+      window.removeEventListener('umbra:open-settings', onOpenSettings);
+      window.removeEventListener('umbra:open-marketplace', onOpenMarketplace);
+      window.removeEventListener('umbra:open-dm', onOpenDm);
+    };
+  }, [playSound, openSettings, friends, handleDmFriendSelected]);
 
   // Handle community creation
   const handleCommunityCreated = useCallback(async (data: { name: string; description: string }) => {
@@ -536,16 +533,21 @@ function MainLayoutInner() {
     }
   }, [pathname, router, playSound]);
 
-  // Home is active when NOT on a community page and NOT on files page
-  const isHomeActive = !pathname.startsWith('/community/') && pathname !== '/files';
-
-  // Whether the files page is active
+  // Home is active when NOT on a community page and NOT on files/settings page
   const isFilesActive = pathname === '/files';
+  const isSettingsActive = pathname === '/settings';
+  const isHomeActive = !pathname.startsWith('/community/') && !isFilesActive && !isSettingsActive;
 
   // Navigate to files page
   const handleFilesPress = useCallback(() => {
     playSound('tab_switch');
     router.push('/files');
+  }, [router, playSound]);
+
+  // Navigate to settings page
+  const handleSettingsPress = useCallback(() => {
+    playSound('tab_switch');
+    router.push('/settings');
   }, [router, playSound]);
 
   // Return to the active call conversation
@@ -564,28 +566,6 @@ function MainLayoutInner() {
     return match ? match[1] : null;
   }, [pathname]);
 
-  // Derived — search across conversation name, last message preview, and friend names
-  const filtered = useMemo(() => {
-    if (!search.trim()) return sidebarConversations;
-    const lowerSearch = search.toLowerCase();
-    // Pre-compute matching friend names for the search term
-    const matchingFriendDids = new Set(
-      friends
-        .filter((f) => f.displayName.toLowerCase().includes(lowerSearch))
-        .map((f) => f.did)
-    );
-    return sidebarConversations.filter((c) => {
-      // Match by conversation name
-      if (c.name.toLowerCase().includes(lowerSearch)) return true;
-      // Match by last message preview
-      if (c.last && c.last.toLowerCase().includes(lowerSearch)) return true;
-      // Match by friend name in conversation (for DMs, check if friend matches)
-      const conv = conversations.find((conv) => conv.id === c.id);
-      if (conv?.friendDid && matchingFriendDids.has(conv.friendDid)) return true;
-      return false;
-    });
-  }, [sidebarConversations, search, friends, conversations]);
-
   const isFriendsActive = pathname === '/friends';
 
   // When not on the main chat page, no conversation is "active" in the sidebar.
@@ -597,13 +577,14 @@ function MainLayoutInner() {
     activeId ||                                           // DM chat is open
     isFilesActive ||                                      // Files page
     isFriendsActive ||                                    // Friends page
+    isSettingsActive ||                                   // Settings page
     (activeCommunityId && communityActiveChannelId)        // Community channel selected
   );
 
   // Drive sidebar ↔ content animation on mobile when state changes programmatically.
   // We track a "navigation key" that changes whenever the user selects a new destination,
   // so even if mobileShowContent stays true (switching chats), we re-animate to content.
-  const mobileNavKey = `${activeId}|${activeCommunityId}|${communityActiveChannelId}|${isFilesActive}|${isFriendsActive}`;
+  const mobileNavKey = `${activeId}|${activeCommunityId}|${communityActiveChannelId}|${isFilesActive}|${isFriendsActive}|${isSettingsActive}`;
   const prevNavKeyRef = useRef(mobileNavKey);
 
   useEffect(() => {
@@ -652,6 +633,43 @@ function MainLayoutInner() {
   // double spacing.
   const [bannerVisible, setBannerVisible] = useState(false);
   const showColumnInset = effectiveTopInset > 0 && !bannerVisible;
+
+  // Shared shell props for sidebars (ChatSidebar, SettingsNavSidebar)
+  const sidebarShellProps = {
+    showNotificationsPanel: notificationsPanelOpen,
+    onCloseNotificationsPanel: () => { playSound('dialog_close'); setNotificationsPanelOpen(false); },
+    showAccountPanel: accountSwitcherOpen,
+    onCloseAccountPanel: () => { playSound('dialog_close'); setAccountSwitcherOpen(false); },
+    accountPanelProps: {
+      accounts,
+      activeAccountDid: identity?.did ?? null,
+      onSwitchAccount: switchAccount,
+      onActiveAccountPress: () => { setAccountSwitcherOpen(false); openSettings(); },
+      onAddAccount: async () => {
+        setAccountSwitcherOpen(false);
+        if (identity && recoveryPhrase) {
+          const alreadyRegistered = accounts.some((a) => a.did === identity.did);
+          if (!alreadyRegistered) {
+            addAccount({ did: identity.did, displayName: identity.displayName ?? '', avatar: identity.avatar, recoveryPhrase, pin: pin ?? undefined, rememberMe, addedAt: identity.createdAt ?? Date.now() });
+          }
+        }
+        try { const { flushAndCloseSqlBridge } = await import('@umbra/wasm'); await flushAndCloseSqlBridge(); } catch {}
+        try { const { UmbraService } = await import('@umbra/service'); if (UmbraService.isInitialized) await UmbraService.shutdown(); } catch {}
+        try { const { resetWasm } = await import('@umbra/wasm'); resetWasm(); } catch {}
+        logout();
+      },
+      onRemoveAccount: removeAccount,
+    },
+    activeCall,
+    activeConversationId: sidebarActiveId,
+    onReturnToCall: handleReturnToCall,
+    onToggleMute: toggleMute,
+    onToggleDeafen: toggleDeafen,
+    onToggleCamera: toggleCamera,
+    onEndCall: () => endCall(),
+    isScreenSharing,
+    onToggleScreenShare: isScreenSharing ? stopScreenShare : startScreenShare,
+  };
 
   return (
     <Box style={{ flex: 1, backgroundColor: theme.colors.background.canvas }}>
@@ -702,30 +720,42 @@ function MainLayoutInner() {
                   onHomePress={handleHomePress}
                   isFilesActive={isFilesActive}
                   onFilesPress={handleFilesPress}
+                  isSettingsActive={isSettingsActive}
+
                   uploadRingProgress={uploadRingProgress}
                   communities={communities}
                   activeCommunityId={activeCommunityId}
                   onCommunityPress={handleCommunityPress}
                   onCreateCommunity={() => { playSound('dialog_open'); setCreateCommunityOptionsOpen(true); }}
-                  onOpenSettings={() => { playSound('dialog_open'); openSettings(); }}
+                  onOpenSettings={handleSettingsPress}
                   userAvatar={identity?.avatar}
                   userDisplayName={identity?.displayName}
-                  onAvatarPress={() => { playSound('dialog_open'); setAccountSwitcherOpen(true); }}
+                  onAvatarPress={() => {
+                    if (!accountSwitcherOpen) setNotificationsPanelOpen(false);
+                    playSound(accountSwitcherOpen ? 'dialog_close' : 'dialog_open');
+                    setAccountSwitcherOpen(v => !v);
+                  }}
                   loading={coreLoading || communitiesLoading}
                   homeNotificationCount={homeNotificationCount}
                   notificationCount={totalUnread}
-                  onNotificationsPress={() => { playSound('dialog_open'); openNotificationDrawer(); }}
+                  onNotificationsPress={() => {
+                    if (!notificationsPanelOpen) setAccountSwitcherOpen(false);
+                    playSound(notificationsPanelOpen ? 'dialog_close' : 'dialog_open');
+                    setNotificationsPanelOpen(v => !v);
+                  }}
+                  isNotificationsPanelOpen={notificationsPanelOpen}
+                  isAccountPanelOpen={accountSwitcherOpen}
                   safeAreaTop={0}
                   safeAreaBottom={insets.bottom}
                 />
                 <Box style={{ flex: 1 }}>
                   {activeCommunityId ? (
                     <CommunityLayoutSidebar communityId={activeCommunityId} />
+                  ) : isSettingsActive ? (
+                    <SettingsNavSidebar searchPlaceholder="Search settings..." {...sidebarShellProps} />
                   ) : (
                     <ChatSidebar
-                      search={search}
-                      onSearchChange={setSearch}
-                      conversations={filtered}
+                      conversations={sidebarConversations}
                       activeId={sidebarActiveId}
                       onSelectConversation={(id) => {
                         setActiveId(id);
@@ -744,14 +774,7 @@ function MainLayoutInner() {
                       onDeclineInvite={handleDeclineInvite}
                       loading={coreLoading || conversationsLoading}
                       pendingFriendRequests={incomingRequests.length}
-                      activeCall={activeCall}
-                      onReturnToCall={handleReturnToCall}
-                      onToggleMute={toggleMute}
-                      onToggleDeafen={toggleDeafen}
-                      onToggleCamera={toggleCamera}
-                      onEndCall={() => endCall()}
-                      isScreenSharing={isScreenSharing}
-                      onToggleScreenShare={isScreenSharing ? stopScreenShare : startScreenShare}
+                      {...sidebarShellProps}
                     />
                   )}
                 </Box>
@@ -797,30 +820,42 @@ function MainLayoutInner() {
                 onHomePress={handleHomePress}
                 isFilesActive={isFilesActive}
                 onFilesPress={handleFilesPress}
+                isSettingsActive={isSettingsActive}
+
                 uploadRingProgress={uploadRingProgress}
                 communities={communities}
                 activeCommunityId={activeCommunityId}
                 onCommunityPress={handleCommunityPress}
                 onCreateCommunity={() => { playSound('dialog_open'); setCreateCommunityOptionsOpen(true); }}
-                onOpenSettings={() => { playSound('dialog_open'); openSettings(); }}
+                onOpenSettings={handleSettingsPress}
                 userAvatar={identity?.avatar}
                 userDisplayName={identity?.displayName}
-                onAvatarPress={() => { playSound('dialog_open'); setAccountSwitcherOpen(true); }}
+                onAvatarPress={() => {
+                  if (!accountSwitcherOpen) setNotificationsPanelOpen(false);
+                  playSound(accountSwitcherOpen ? 'dialog_close' : 'dialog_open');
+                  setAccountSwitcherOpen(v => !v);
+                }}
                 loading={coreLoading || communitiesLoading}
                 homeNotificationCount={homeNotificationCount}
                 notificationCount={totalUnread}
-                onNotificationsPress={() => { playSound('dialog_open'); openNotificationDrawer(); }}
+                onNotificationsPress={() => {
+                  if (!notificationsPanelOpen) setAccountSwitcherOpen(false);
+                  playSound(notificationsPanelOpen ? 'dialog_close' : 'dialog_open');
+                  setNotificationsPanelOpen(v => !v);
+                }}
+                isNotificationsPanelOpen={notificationsPanelOpen}
+                isAccountPanelOpen={accountSwitcherOpen}
                 safeAreaTop={0}
                 safeAreaBottom={insets.bottom}
               />
               <Box style={{ flex: 1 }}>
                 {activeCommunityId ? (
                   <CommunityLayoutSidebar communityId={activeCommunityId} />
+                ) : isSettingsActive ? (
+                  <SettingsNavSidebar searchPlaceholder="Search settings..." {...sidebarShellProps} />
                 ) : (
                   <ChatSidebar
-                    search={search}
-                    onSearchChange={setSearch}
-                    conversations={filtered}
+                    conversations={sidebarConversations}
                     activeId={sidebarActiveId}
                     onSelectConversation={(id) => {
                       setActiveId(id);
@@ -839,14 +874,7 @@ function MainLayoutInner() {
                     onDeclineInvite={handleDeclineInvite}
                     loading={coreLoading || conversationsLoading}
                     pendingFriendRequests={incomingRequests.length}
-                    activeCall={activeCall}
-                    onReturnToCall={handleReturnToCall}
-                    onToggleMute={toggleMute}
-                    onToggleDeafen={toggleDeafen}
-                    onToggleCamera={toggleCamera}
-                    onEndCall={() => endCall()}
-                    isScreenSharing={isScreenSharing}
-                    onToggleScreenShare={isScreenSharing ? stopScreenShare : startScreenShare}
+                    {...sidebarShellProps}
                   />
                 )}
               </Box>
@@ -930,26 +958,11 @@ function MainLayoutInner() {
       />
 
       <CommandPalette
-        open={cmdOpen}
-        onOpenChange={setCmdOpen}
-        onOpenSettings={() => {
-          setCmdOpen(false);
-          playSound('dialog_open');
-          openSettings();
-        }}
-        onOpenMarketplace={() => {
-          setCmdOpen(false);
-          playSound('dialog_open');
-          setMarketplaceOpen(true);
-        }}
-        onSearchMessages={() => {
-          setCmdOpen(false);
-          // Navigate to chat if not already there, then open search panel
-          if (pathname !== '/') {
-            router.push('/');
-          }
-          requestSearchPanel();
-        }}
+        open={commandPaletteOpen}
+        onOpenChange={setCommandPaletteOpen}
+        onOpenSettings={() => { playSound('tab_switch'); router.push('/settings'); }}
+        onOpenMarketplace={() => { playSound('dialog_open'); setMarketplaceOpen(true); }}
+        hasActiveConversation={!!activeId}
       />
 
       <PluginMarketplace
@@ -957,53 +970,9 @@ function MainLayoutInner() {
         onClose={() => { playSound('dialog_close'); setMarketplaceOpen(false); }}
       />
 
-      <AccountSwitcher
-        open={accountSwitcherOpen}
-        onClose={() => { playSound('dialog_close'); setAccountSwitcherOpen(false); }}
-        accounts={accounts}
-        activeAccountDid={identity?.did ?? null}
-        onSwitchAccount={(did) => switchAccount(did)}
-        onActiveAccountPress={() => { openSettings('account'); }}
-        onRemoveAccount={(did) => removeAccount(did)}
-        onAddAccount={async () => {
-          // Ensure the current account is registered in the multi-account list
-          // before logging out. This handles the case where the account was
-          // created before multi-account support was added.
-          if (identity && recoveryPhrase) {
-            const alreadyRegistered = accounts.some((a) => a.did === identity.did);
-            if (!alreadyRegistered) {
-              addAccount({
-                did: identity.did,
-                displayName: identity.displayName ?? '',
-                avatar: identity.avatar,
-                recoveryPhrase,
-                pin: pin ?? undefined,
-                rememberMe,
-                addedAt: identity.createdAt ?? Date.now(),
-              });
-            }
-          }
-          // Graceful shutdown: flush DB → shutdown service → reset WASM
-          try {
-            const { flushAndCloseSqlBridge } = await import('@umbra/wasm');
-            await flushAndCloseSqlBridge();
-          } catch { /* ignore if not web */ }
-          try {
-            const { UmbraService } = await import('@umbra/service');
-            if (UmbraService.isInitialized) await UmbraService.shutdown();
-          } catch { /* ignore */ }
-          try {
-            const { resetWasm } = await import('@umbra/wasm');
-            resetWasm();
-          } catch { /* ignore */ }
-          // Clear active session (accounts list preserved in STORAGE_KEY_ACCOUNTS).
-          // AuthGate will redirect to /(auth) once identity is null.
-          logout();
-        }}
-      />
+      {/* AccountSwitcher popover removed — now rendered inline via SidebarAccountPanel */}
 
       <IncomingCallOverlay />
-      <NotificationDrawerContainer />
     </Box>
   );
 }
@@ -1012,21 +981,21 @@ export default function MainLayout() {
   return (
     <SettingsDialogProvider>
       <ActiveConversationProvider>
-        <FriendsProvider>
-          <GroupsProvider>
-            <CommunityProvider>
-            <CallProvider>
-              <VoiceChannelProvider>
-                <NotificationProvider>
-                  <ProfilePopoverProvider>
-                    <MainLayoutInner />
-                  </ProfilePopoverProvider>
-                </NotificationProvider>
-              </VoiceChannelProvider>
-            </CallProvider>
-          </CommunityProvider>
-          </GroupsProvider>
-        </FriendsProvider>
+        <CommunityProvider>
+          <CallProvider>
+            <VoiceChannelProvider>
+              <NotificationProvider>
+                <ProfilePopoverProvider>
+                  <UnifiedSearchProvider>
+                    <SettingsNavigationProvider>
+                      <MainLayoutInner />
+                    </SettingsNavigationProvider>
+                  </UnifiedSearchProvider>
+                </ProfilePopoverProvider>
+              </NotificationProvider>
+            </VoiceChannelProvider>
+          </CallProvider>
+        </CommunityProvider>
       </ActiveConversationProvider>
     </SettingsDialogProvider>
   );
