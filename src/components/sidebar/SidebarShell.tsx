@@ -12,6 +12,7 @@ import React, { createContext, useCallback, useContext, useEffect, useRef, useSt
 import { Platform, type View } from 'react-native';
 import {
   Box,
+  GradientBorder,
   SearchInput,
   Sidebar,
   useTheme,
@@ -257,16 +258,18 @@ export function SidebarShell({
       >
         {/* Persistent search bar at the top of every sidebar */}
         <Box style={{ paddingHorizontal: 12, paddingTop: 8, paddingBottom: 4 }}>
-          <SearchInput
-            value={query}
-            onValueChange={setQuery}
-            placeholder={searchPlaceholder}
-            size="sm"
-            fullWidth
-            onSurface
-            onClear={handleClearSearch}
-            onFocus={handleSearchFocus}
-          />
+          <GradientBorder radius={10} width={1.5} animated speed={3000} visible={sidebarSearchActive}>
+            <SearchInput
+              value={query}
+              onValueChange={setQuery}
+              placeholder={searchPlaceholder}
+              size="sm"
+              fullWidth
+              onSurface
+              onClear={handleClearSearch}
+              onFocus={handleSearchFocus}
+            />
+          </GradientBorder>
         </Box>
 
         {/* When search is active, replace children with search results */}
