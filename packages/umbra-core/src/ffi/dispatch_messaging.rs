@@ -337,8 +337,15 @@ pub fn messaging_store_incoming(args: &str) -> DResult {
 
 pub fn messaging_build_typing_envelope(args: &str) -> DResult {
     let data = json_parse(args)?;
-    let to_did = require_str(&data, "to_did")?;
     let conv_id = require_str(&data, "conversation_id")?;
+    // Accept both "to_did" (legacy) and "recipient_did" (matches WASM/TS service)
+    let to_did = data["recipient_did"]
+        .as_str()
+        .or_else(|| data["to_did"].as_str())
+        .ok_or_else(|| err(2, "Missing recipient_did or to_did"))?;
+    let sender_name = data["sender_name"].as_str().unwrap_or("");
+    let is_typing = data["is_typing"].as_bool().unwrap_or(true);
+
     let state = get_state().map_err(|e| err(100, e))?;
     let state = state.read();
     let identity = state
@@ -346,9 +353,17 @@ pub fn messaging_build_typing_envelope(args: &str) -> DResult {
         .as_ref()
         .ok_or_else(|| err(200, "No identity loaded"))?;
 
+    let timestamp = crate::time::now_timestamp_millis();
+
     let envelope = serde_json::json!({
         "envelope": "typing_indicator", "version": 1,
-        "payload": { "conversationId": conv_id, "senderDid": identity.did_string() }
+        "payload": {
+            "conversationId": conv_id,
+            "senderDid": identity.did_string(),
+            "senderName": sender_name,
+            "isTyping": is_typing,
+            "timestamp": timestamp,
+        }
     });
     ok_json(serde_json::json!({ "to_did": to_did, "payload": envelope.to_string() }))
 }
@@ -441,6 +456,31 @@ pub fn messaging_edit(args: &str) -> DResult {
         "content_encrypted": base64::engine::general_purpose::STANDARD.encode(&ciphertext),
         "nonce": hex::encode(&nonce.0),
     }))
+}
+
+pub fn messaging_update_incoming_content(args: &str) -> DResult {
+    let data = json_parse(args)?;
+    let msg_id = require_str(&data, "message_id")?;
+    let ct_b64 = require_str(&data, "content_encrypted")?;
+    let nonce_hex = require_str(&data, "nonce")?;
+    let state = get_state().map_err(|e| err(100, e))?;
+    let state = state.read();
+    let db = state
+        .database
+        .as_ref()
+        .ok_or_else(|| err(400, "Database not initialized"))?;
+
+    let ciphertext = base64::engine::general_purpose::STANDARD
+        .decode(ct_b64)
+        .map_err(|e| err(704, format!("Invalid base64: {}", e)))?;
+    let nonce_bytes = hex::decode(nonce_hex).map_err(|e| err(704, e))?;
+
+    let edited_at = crate::time::now_timestamp_millis();
+
+    db.edit_message(msg_id, &ciphertext, &nonce_bytes, edited_at)
+        .map_err(|e| err(e.code(), e))?;
+
+    ok_success()
 }
 
 pub fn messaging_delete(args: &str) -> DResult {
