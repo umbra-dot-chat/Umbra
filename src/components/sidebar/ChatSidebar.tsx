@@ -1,4 +1,4 @@
-import { BookOpenIcon, CheckIcon, PlusIcon, ShoppingBagIcon, UsersIcon, XIcon } from '@/components/ui';
+import { BookOpenIcon, CheckIcon, PlusIcon, UsersIcon, XIcon } from '@/components/ui';
 import {
   Avatar, AvatarGroup, Box, Button,
   ConversationListItem,
@@ -27,7 +27,6 @@ export interface ChatSidebarProps {
   onNewDm?: () => void;
   onCreateGroup?: () => void;
   onGuidePress?: () => void;
-  onMarketplacePress?: () => void;
   isFriendsActive?: boolean;
   /** Pending group invites to display above conversations */
   pendingInvites?: PendingGroupInvite[];
@@ -82,7 +81,7 @@ export function ChatSidebar(props: ChatSidebarProps) {
 function ChatSidebarInner({
   conversations,
   activeId, onSelectConversation,
-  onFriendsPress, onNewDm, onCreateGroup, onGuidePress, onMarketplacePress, isFriendsActive,
+  onFriendsPress, onNewDm, onCreateGroup, onGuidePress, isFriendsActive,
   pendingInvites, onAcceptInvite, onDeclineInvite, loading, pendingFriendRequests,
   activeCall, onReturnToCall, onToggleMute, onToggleDeafen, onToggleCamera, onEndCall,
   isScreenSharing, onToggleScreenShare,
@@ -116,7 +115,6 @@ function ChatSidebarInner({
         onNewDm={onNewDm}
         onCreateGroup={onCreateGroup}
         onGuidePress={onGuidePress}
-        onMarketplacePress={onMarketplacePress}
         isFriendsActive={isFriendsActive}
         pendingInvites={pendingInvites}
         onAcceptInvite={onAcceptInvite}
@@ -138,7 +136,6 @@ interface ChatSidebarContentProps {
   onNewDm?: () => void;
   onCreateGroup?: () => void;
   onGuidePress?: () => void;
-  onMarketplacePress?: () => void;
   isFriendsActive?: boolean;
   pendingInvites?: PendingGroupInvite[];
   onAcceptInvite?: (inviteId: string) => void;
@@ -155,7 +152,6 @@ function ChatSidebarContent({
   onNewDm,
   onCreateGroup,
   onGuidePress,
-  onMarketplacePress,
   isFriendsActive,
   pendingInvites,
   onAcceptInvite,
@@ -247,20 +243,6 @@ function ChatSidebarContent({
             shape="pill"
           >
             <Text size="xs" style={{ color: theme.colors.text.onRaisedSecondary }}>Guide</Text>
-          </Button>
-        )}
-        {onMarketplacePress && (
-          <Button
-            testID={TEST_IDS.SIDEBAR.MARKETPLACE_BUTTON}
-            variant="tertiary"
-            onSurface
-            size="sm"
-            onPress={onMarketplacePress}
-            accessibilityLabel="Marketplace"
-            iconLeft={<ShoppingBagIcon size={14} color={theme.colors.text.onRaisedSecondary} />}
-            shape="pill"
-          >
-            <Text size="xs" style={{ color: theme.colors.text.onRaisedSecondary }}>Market</Text>
           </Button>
         )}
       </ScrollView>

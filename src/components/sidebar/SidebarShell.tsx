@@ -136,7 +136,11 @@ export function SidebarShell({
   const { theme } = useTheme();
 
   // ── Sidebar search ──────────────────────────────────────────────────────
-  const { query, setQuery, sidebarSearchActive, setSidebarSearchActive } = useUnifiedSearch();
+  const { query, setQuery, sidebarSearchActive, setSidebarSearchActive, results, loading } = useUnifiedSearch();
+
+  // Only expand search results when there's an active query with results
+  const hasQuery = query.trim().length > 0;
+  const showSearchResults = sidebarSearchActive && (hasQuery || loading);
 
   const handleSearchFocus = useCallback(() => {
     setSidebarSearchActive(true);
@@ -270,8 +274,8 @@ export function SidebarShell({
           />
         </Box>
 
-        {/* When search is active, replace children with search results */}
-        {sidebarSearchActive ? <SidebarSearchResults /> : children}
+        {/* When search has a query, replace children with search results */}
+        {showSearchResults ? <SidebarSearchResults /> : children}
 
         {/* Active call footer panel -- pushed to the bottom via margin-top:auto */}
         {activeCall && activeCall.status === 'connected' && activeCall.conversationId !== activeConversationId && onReturnToCall && onToggleMute && onToggleDeafen && onToggleCamera && onEndCall && (

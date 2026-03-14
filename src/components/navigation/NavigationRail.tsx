@@ -20,7 +20,7 @@ import { Animated, Image, Platform, Pressable, ScrollView, View } from 'react-na
 import { Box } from '@coexist/wisp-react-native';
 import Svg, { Circle } from 'react-native-svg';
 import { Text, Skeleton, useTheme, NotificationBadge } from '@coexist/wisp-react-native';
-import { UmbraIcon, FolderIcon, PlusIcon, SettingsIcon, BellIcon } from '@/components/ui';
+import { UmbraIcon, FolderIcon, PlusIcon, SettingsIcon, BellIcon, ShoppingBagIcon } from '@/components/ui';
 import type { Community } from '@umbra/service';
 import { TEST_IDS } from '@/constants/test-ids';
 import { dbg } from '@/utils/debug';
@@ -76,6 +76,8 @@ export interface NavigationRailProps {
   onCommunityPress: (communityId: string) => void;
   /** Open community creation dialog */
   onCreateCommunity: () => void;
+  /** Open the plugin marketplace */
+  onMarketplacePress?: () => void;
   /** Open settings dialog */
   onOpenSettings?: () => void;
   /** Current user's avatar (base64 data URI) */
@@ -118,6 +120,7 @@ export function NavigationRail({
   activeCommunityId,
   onCommunityPress,
   onCreateCommunity,
+  onMarketplacePress,
   onOpenSettings,
   userAvatar,
   userDisplayName,
@@ -445,6 +448,22 @@ export function NavigationRail({
           <FolderIcon
             size={22}
             color={isFilesActive ? theme.colors.text.onAccent : theme.colors.text.secondary}
+          />
+        </RailItem>
+      )}
+
+      {/* Marketplace button */}
+      {onMarketplacePress && (
+        <RailItem
+          itemKey="_marketplace"
+          registerRef={registerItemRef}
+          active={false}
+          onPress={onMarketplacePress}
+          theme={theme}
+        >
+          <ShoppingBagIcon
+            size={22}
+            color={theme.colors.text.secondary}
           />
         </RailItem>
       )}

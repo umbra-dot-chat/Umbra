@@ -54,7 +54,7 @@ export function HighlightedText({
     <Text size={size} color={color as any} numberOfLines={numberOfLines}>
       {segments.map((seg, i) =>
         seg.highlight ? (
-          <GradientText key={i} animated speed={3000} style={{ fontWeight: '600' }}>
+          <GradientText key={i} animated speed={3000} style={{ fontSize: 'inherit' as any, lineHeight: 'inherit' as any }}>
             {seg.text}
           </GradientText>
         ) : (

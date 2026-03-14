@@ -727,6 +727,7 @@ function MainLayoutInner() {
                   activeCommunityId={activeCommunityId}
                   onCommunityPress={handleCommunityPress}
                   onCreateCommunity={() => { playSound('dialog_open'); setCreateCommunityOptionsOpen(true); }}
+                  onMarketplacePress={() => { playSound('dialog_open'); setMarketplaceOpen(true); }}
                   onOpenSettings={handleSettingsPress}
                   userAvatar={identity?.avatar}
                   userDisplayName={identity?.displayName}
@@ -767,7 +768,6 @@ function MainLayoutInner() {
                       onNewDm={() => { playSound('dialog_open'); setNewDmOpen(true); }}
                       onCreateGroup={() => { playSound('dialog_open'); setCreateGroupOpen(true); }}
                       onGuidePress={() => { playSound('dialog_open'); setGuideOpen(true); }}
-                      onMarketplacePress={() => { playSound('dialog_open'); setMarketplaceOpen(true); }}
                       isFriendsActive={isFriendsActive}
                       pendingInvites={pendingInvites}
                       onAcceptInvite={handleAcceptInvite}
@@ -827,6 +827,7 @@ function MainLayoutInner() {
                 activeCommunityId={activeCommunityId}
                 onCommunityPress={handleCommunityPress}
                 onCreateCommunity={() => { playSound('dialog_open'); setCreateCommunityOptionsOpen(true); }}
+                onMarketplacePress={() => { playSound('dialog_open'); setMarketplaceOpen(true); }}
                 onOpenSettings={handleSettingsPress}
                 userAvatar={identity?.avatar}
                 userDisplayName={identity?.displayName}
@@ -867,7 +868,6 @@ function MainLayoutInner() {
                     onNewDm={() => { playSound('dialog_open'); setNewDmOpen(true); }}
                     onCreateGroup={() => { playSound('dialog_open'); setCreateGroupOpen(true); }}
                     onGuidePress={() => { playSound('dialog_open'); setGuideOpen(true); }}
-                    onMarketplacePress={() => { playSound('dialog_open'); setMarketplaceOpen(true); }}
                     isFriendsActive={isFriendsActive}
                     pendingInvites={pendingInvites}
                     onAcceptInvite={handleAcceptInvite}
