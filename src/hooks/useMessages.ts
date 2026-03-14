@@ -117,6 +117,8 @@ export function useMessages(conversationId: string | null, groupId?: string | nu
   const eventCountRef = useRef(0);
   const lastSoundRef = useRef<number>(0);
   const markAsReadReceiptTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Message count at the last successful markAsRead — skip WASM call when unchanged. */
+  const lastMarkedCountRef = useRef<number>(0);
 
   // Stable refs for functions used inside the event subscription effect.
   // This prevents the effect from re-subscribing (and causing an infinite
@@ -547,14 +549,19 @@ export function useMessages(conversationId: string | null, groupId?: string | nu
     [service, conversationId, groupId, getRelayWs, playSound, myDid]
   );
 
-  // Debounce read-receipt relay sends — when messages stream in rapidly the
-  // caller (useEffect on messages.length) fires markAsRead on every arrival.
-  // We mark locally immediately but coalesce the expensive relay receipts
-  // into a single batch every 2 seconds.
+  // Mark conversation as read + coalesce relay read-receipt sends.
+  // Skips the WASM/DB call entirely when message count hasn't changed
+  // since the last mark (the DB UPDATE is a no-op anyway, but we avoid
+  // the WASM FFI overhead + 2 SQL execute round-trips).
   const markAsRead = useCallback(async () => {
     if (!service || !conversationId) return;
     try {
-      // Always mark locally so unread badges update (cheap DB op)
+      // Skip if no new messages since we last marked — avoids 2 SQL
+      // execute round-trips that are guaranteed no-ops.
+      const currentCount = messagesRef.current.length;
+      if (currentCount === lastMarkedCountRef.current && currentCount > 0) return;
+
+      lastMarkedCountRef.current = currentCount;
       await service.markAsRead(conversationId);
 
       // Skip per-message read receipts for group chats — they generate N

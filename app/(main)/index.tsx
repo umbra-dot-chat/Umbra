@@ -160,31 +160,23 @@ export default function ChatPage() {
   } = useMessages(resolvedConversationId, activeConversation?.groupId);
 
   // Mark messages as read when viewing a conversation.
-  // Debounced: fires once immediately when conversation opens, then at most
-  // once per 2 seconds to avoid flooding WASM/DB during rapid message arrival.
-  const markAsReadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastMarkRef = useRef<number>(0);
+  //
+  // Strategy: fire once immediately when the conversation opens, then poll
+  // every 5 seconds while the conversation is active. This replaces the
+  // previous messages.length-triggered effect which fired on EVERY new
+  // message arrival (582 DB executes / 60 min with 5 bots). The DB call
+  // is a no-op when unread_count is already 0, so infrequent polling is
+  // both cheaper and sufficient.
   useEffect(() => {
-    if (!msgsLoading && resolvedConversationId && messages.length > 0) {
-      const now = Date.now();
-      if (now - lastMarkRef.current >= 2000) {
-        lastMarkRef.current = now;
-        markAsRead();
-      } else if (!markAsReadTimerRef.current) {
-        markAsReadTimerRef.current = setTimeout(() => {
-          markAsReadTimerRef.current = null;
-          lastMarkRef.current = Date.now();
-          markAsRead();
-        }, 2000);
-      }
+    if (!msgsLoading && resolvedConversationId) {
+      // Mark immediately on conversation open
+      markAsRead();
+
+      // Then poll every 5 seconds for new unreads while viewing
+      const interval = setInterval(() => { markAsRead(); }, 5000);
+      return () => clearInterval(interval);
     }
-    return () => {
-      if (markAsReadTimerRef.current) {
-        clearTimeout(markAsReadTimerRef.current);
-        markAsReadTimerRef.current = null;
-      }
-    };
-  }, [msgsLoading, resolvedConversationId, messages.length, markAsRead]);
+  }, [msgsLoading, resolvedConversationId, markAsRead]);
 
   // Group member count for the active conversation
   const [activeMemberCount, setActiveMemberCount] = useState<number | undefined>(undefined);
