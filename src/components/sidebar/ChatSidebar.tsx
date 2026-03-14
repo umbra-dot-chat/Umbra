@@ -32,6 +32,10 @@ export interface ChatSidebarProps {
   onDeclineInvite?: (inviteId: string) => void;
   /** Whether conversations are still loading */
   loading?: boolean;
+  /** Called when the Friends / Add User button is pressed (passed through to SidebarShell) */
+  onFriendsPress?: () => void;
+  /** Number of pending friend requests for badge display (passed through to SidebarShell) */
+  pendingFriendRequests?: number;
   /** Active call to show in the sidebar footer panel */
   activeCall?: ActiveCall | null;
   /** Navigate back to the active call conversation */
@@ -77,6 +81,7 @@ function ChatSidebarInner({
   activeId, onSelectConversation,
   onNewDm, onCreateGroup,
   pendingInvites, onAcceptInvite, onDeclineInvite, loading,
+  onFriendsPress, pendingFriendRequests,
   activeCall, onReturnToCall, onToggleMute, onToggleDeafen, onToggleCamera, onEndCall,
   isScreenSharing, onToggleScreenShare,
   showNotificationsPanel, onCloseNotificationsPanel,
@@ -88,6 +93,8 @@ function ChatSidebarInner({
     showAccountPanel,
     onCloseAccountPanel,
     accountPanelProps,
+    onFriendsPress,
+    pendingFriendRequests,
     activeCall,
     activeConversationId: activeId,
     onReturnToCall,
