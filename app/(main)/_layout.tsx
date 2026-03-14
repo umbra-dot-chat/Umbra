@@ -36,6 +36,7 @@ import { CommunityLayoutSidebar } from '@/components/sidebar/CommunityLayoutSide
 import type { Community, Friend, MappedCommunityStructure, CommunityImportResult } from '@umbra/service';
 import { createCommunityFromDiscordImport } from '@umbra/service';
 import { useAuth } from '@/contexts/AuthContext';
+import { FriendsProvider } from '@/contexts/FriendsContext';
 import { useUploadProgress } from '@/hooks/useUploadProgress';
 import { CommunityCreateOptionsDialog } from '@/components/community/CommunityCreateOptionsDialog';
 import { JoinCommunityModal } from '@/components/community/invite/JoinCommunityModal';
@@ -1010,17 +1011,19 @@ export default function MainLayout() {
   return (
     <SettingsDialogProvider>
       <ActiveConversationProvider>
-        <CommunityProvider>
-          <CallProvider>
-            <VoiceChannelProvider>
-              <NotificationProvider>
-                <ProfilePopoverProvider>
-                  <MainLayoutInner />
-                </ProfilePopoverProvider>
-              </NotificationProvider>
-            </VoiceChannelProvider>
-          </CallProvider>
-        </CommunityProvider>
+        <FriendsProvider>
+          <CommunityProvider>
+            <CallProvider>
+              <VoiceChannelProvider>
+                <NotificationProvider>
+                  <ProfilePopoverProvider>
+                    <MainLayoutInner />
+                  </ProfilePopoverProvider>
+                </NotificationProvider>
+              </VoiceChannelProvider>
+            </CallProvider>
+          </CommunityProvider>
+        </FriendsProvider>
       </ActiveConversationProvider>
     </SettingsDialogProvider>
   );
