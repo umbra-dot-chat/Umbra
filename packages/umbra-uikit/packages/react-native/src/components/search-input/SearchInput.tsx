@@ -87,6 +87,10 @@ export interface SearchInputProps extends ViewProps {
   onSurface?: boolean;
   /** When true, shows an animated gradient border on focus. @default false */
   gradientBorder?: boolean;
+  /** Callback fired when the input gains focus. */
+  onFocus?: () => void;
+  /** Callback fired when the input loses focus. */
+  onBlur?: () => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -110,6 +114,8 @@ export const SearchInput = forwardRef<View, SearchInputProps>(
       rounded = false,
       onSurface = false,
       gradientBorder = false,
+      onFocus: onFocusProp,
+      onBlur: onBlurProp,
       style: userStyle,
       ...rest
     },
@@ -224,8 +230,8 @@ export const SearchInput = forwardRef<View, SearchInputProps>(
           placeholder={placeholder}
           placeholderTextColor={mutedColor}
           editable={!disabled}
-          onFocus={() => setFocused(true)}
-          onBlur={() => setFocused(false)}
+          onFocus={() => { setFocused(true); onFocusProp?.(); }}
+          onBlur={() => { setFocused(false); onBlurProp?.(); }}
           onSubmitEditing={handleSubmit}
           returnKeyType="search"
           style={inputStyle}
