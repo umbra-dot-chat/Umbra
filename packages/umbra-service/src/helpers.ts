@@ -111,11 +111,17 @@ export function utf8ToBase64(str: string): string {
 /**
  * Decode a base64 string back to a UTF-8 string.
  * Reverse of `utf8ToBase64`.
+ *
+ * Uses TextDecoder to avoid thousands of intermediate string allocations
+ * that the previous Array.from().join() approach created, which contributed
+ * to V8 GC pressure and "Ineffective mark-compacts" crashes when decoding
+ * 50+ messages in a tight loop.
  */
 export function base64ToUtf8(b64: string): string {
-  return decodeURIComponent(
-    Array.from(atob(b64), (c) =>
-      '%' + c.charCodeAt(0).toString(16).padStart(2, '0'),
-    ).join(''),
-  );
+  const binary = atob(b64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return new TextDecoder().decode(bytes);
 }
