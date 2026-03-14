@@ -1,8 +1,7 @@
-import { BookOpenIcon, CheckIcon, PlusIcon, UsersIcon, XIcon } from '@/components/ui';
+import { CheckIcon, PlusIcon, UsersIcon, XIcon } from '@/components/ui';
 import {
   Avatar, AvatarGroup, Box, Button,
   ConversationListItem,
-  GradientBorder,
   GradientText,
   SidebarSection,
   Skeleton,
@@ -23,11 +22,8 @@ export interface ChatSidebarProps {
   conversations: { id: string; name: string; last: string; time: string; unread: number; online?: boolean; pinned?: boolean; status?: string; group?: string[]; isGroup?: boolean; avatar?: string }[];
   activeId: string | null;
   onSelectConversation: (id: string) => void;
-  onFriendsPress: () => void;
   onNewDm?: () => void;
   onCreateGroup?: () => void;
-  onGuidePress?: () => void;
-  isFriendsActive?: boolean;
   /** Pending group invites to display above conversations */
   pendingInvites?: PendingGroupInvite[];
   /** Accept a group invite */
@@ -36,8 +32,6 @@ export interface ChatSidebarProps {
   onDeclineInvite?: (inviteId: string) => void;
   /** Whether conversations are still loading */
   loading?: boolean;
-  /** Number of pending friend requests for badge display */
-  pendingFriendRequests?: number;
   /** Active call to show in the sidebar footer panel */
   activeCall?: ActiveCall | null;
   /** Navigate back to the active call conversation */
@@ -81,8 +75,8 @@ export function ChatSidebar(props: ChatSidebarProps) {
 function ChatSidebarInner({
   conversations,
   activeId, onSelectConversation,
-  onFriendsPress, onNewDm, onCreateGroup, onGuidePress, isFriendsActive,
-  pendingInvites, onAcceptInvite, onDeclineInvite, loading, pendingFriendRequests,
+  onNewDm, onCreateGroup,
+  pendingInvites, onAcceptInvite, onDeclineInvite, loading,
   activeCall, onReturnToCall, onToggleMute, onToggleDeafen, onToggleCamera, onEndCall,
   isScreenSharing, onToggleScreenShare,
   showNotificationsPanel, onCloseNotificationsPanel,
@@ -111,16 +105,12 @@ function ChatSidebarInner({
         conversations={conversations}
         activeId={activeId}
         onSelectConversation={onSelectConversation}
-        onFriendsPress={onFriendsPress}
         onNewDm={onNewDm}
         onCreateGroup={onCreateGroup}
-        onGuidePress={onGuidePress}
-        isFriendsActive={isFriendsActive}
         pendingInvites={pendingInvites}
         onAcceptInvite={onAcceptInvite}
         onDeclineInvite={onDeclineInvite}
         loading={loading}
-        pendingFriendRequests={pendingFriendRequests}
       />
     </SidebarShell>
   );
@@ -132,32 +122,24 @@ interface ChatSidebarContentProps {
   conversations: ChatSidebarProps['conversations'];
   activeId: string | null;
   onSelectConversation: (id: string) => void;
-  onFriendsPress: () => void;
   onNewDm?: () => void;
   onCreateGroup?: () => void;
-  onGuidePress?: () => void;
-  isFriendsActive?: boolean;
   pendingInvites?: PendingGroupInvite[];
   onAcceptInvite?: (inviteId: string) => void;
   onDeclineInvite?: (inviteId: string) => void;
   loading?: boolean;
-  pendingFriendRequests?: number;
 }
 
 function ChatSidebarContent({
   conversations,
   activeId,
   onSelectConversation,
-  onFriendsPress,
   onNewDm,
   onCreateGroup,
-  onGuidePress,
-  isFriendsActive,
   pendingInvites,
   onAcceptInvite,
   onDeclineInvite,
   loading,
-  pendingFriendRequests,
 }: ChatSidebarContentProps) {
   const { theme } = useTheme();
   const { hasBottomPanel, contentFlex } = useSidebarShellLayout();
@@ -195,58 +177,6 @@ function ChatSidebarContent({
 
   return (
     <>
-      {/* Navigation toolbar -- compact icon row */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, flexShrink: 0 }} contentContainerStyle={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingBottom: 4, gap: 4 }}>
-        <Box style={{ position: 'relative' }}>
-          <GradientBorder radius={99} width={1.5} animated speed={3000} visible={!!isFriendsActive}>
-            <Button
-              testID={TEST_IDS.SIDEBAR.FRIENDS_BUTTON}
-              variant={isFriendsActive ? 'secondary' : 'tertiary'}
-              onSurface
-              size="sm"
-              onPress={onFriendsPress}
-              accessibilityLabel="Friends"
-              iconLeft={<UsersIcon size={14} color={isFriendsActive ? theme.colors.text.onRaised : theme.colors.text.onRaisedSecondary} />}
-              shape="pill"
-            >
-              <Text size="xs" style={{ color: isFriendsActive ? theme.colors.text.onRaised : theme.colors.text.onRaisedSecondary }}>Friends</Text>
-            </Button>
-          </GradientBorder>
-          {!!pendingFriendRequests && pendingFriendRequests > 0 && (
-            <Box style={{
-              position: 'absolute',
-              top: -2,
-              right: -2,
-              backgroundColor: theme.colors.status.danger,
-              borderRadius: 99,
-              paddingHorizontal: 3,
-              minWidth: 14,
-              height: 14,
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}>
-              <Text size="xs" weight="bold" style={{ lineHeight: 10, fontSize: 9, color: theme.colors.text.inverse, textAlign: 'center' }}>
-                {pendingFriendRequests > 99 ? '99+' : pendingFriendRequests}
-              </Text>
-            </Box>
-          )}
-        </Box>
-        {onGuidePress && (
-          <Button
-            testID={TEST_IDS.SIDEBAR.GUIDE_BUTTON}
-            variant="tertiary"
-            onSurface
-            size="sm"
-            onPress={onGuidePress}
-            accessibilityLabel="Guide"
-            iconLeft={<BookOpenIcon size={14} color={theme.colors.text.onRaisedSecondary} />}
-            shape="pill"
-          >
-            <Text size="xs" style={{ color: theme.colors.text.onRaisedSecondary }}>Guide</Text>
-          </Button>
-        )}
-      </ScrollView>
-
       {/* Group Invites Section -- only shown when there are pending invites */}
       {pendingInvites && pendingInvites.length > 0 && (
         <SidebarSection title={`Group Invites (${pendingInvites.length})`}>

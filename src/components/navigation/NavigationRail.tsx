@@ -20,7 +20,7 @@ import { Animated, Image, Platform, Pressable, ScrollView, View } from 'react-na
 import { Box } from '@coexist/wisp-react-native';
 import Svg, { Circle } from 'react-native-svg';
 import { Text, Skeleton, useTheme, NotificationBadge } from '@coexist/wisp-react-native';
-import { UmbraIcon, FolderIcon, PlusIcon, SettingsIcon, BellIcon, ShoppingBagIcon } from '@/components/ui';
+import { UmbraIcon, FolderIcon, PlusIcon, SettingsIcon, BellIcon, ShoppingBagIcon, BookOpenIcon } from '@/components/ui';
 import type { Community } from '@umbra/service';
 import { TEST_IDS } from '@/constants/test-ids';
 import { dbg } from '@/utils/debug';
@@ -78,6 +78,8 @@ export interface NavigationRailProps {
   onCreateCommunity: () => void;
   /** Open the plugin marketplace */
   onMarketplacePress?: () => void;
+  /** Open the guide dialog */
+  onGuidePress?: () => void;
   /** Open settings dialog */
   onOpenSettings?: () => void;
   /** Current user's avatar (base64 data URI) */
@@ -121,6 +123,7 @@ export function NavigationRail({
   onCommunityPress,
   onCreateCommunity,
   onMarketplacePress,
+  onGuidePress,
   onOpenSettings,
   userAvatar,
   userDisplayName,
@@ -640,6 +643,23 @@ export function NavigationRail({
                 />
               </RailItem>
             </View>
+          )}
+
+          {/* Guide button — above settings */}
+          {onGuidePress && (
+            <RailItem
+              itemKey="_guide"
+              registerRef={registerItemRef}
+              active={false}
+              onPress={onGuidePress}
+              theme={theme}
+              testID={TEST_IDS.SIDEBAR.GUIDE_BUTTON}
+            >
+              <BookOpenIcon
+                size={20}
+                color={theme.colors.text.secondary}
+              />
+            </RailItem>
           )}
 
           <RailItem

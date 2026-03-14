@@ -12,10 +12,13 @@ import React, { createContext, useCallback, useContext, useEffect, useRef, useSt
 import { Platform, type View } from 'react-native';
 import {
   Box,
+  Button,
   SearchInput,
   Sidebar,
+  Text,
   useTheme,
 } from '@coexist/wisp-react-native';
+import { UserPlusIcon } from '@/components/ui';
 import { SidebarCallPanel } from '@/components/call/SidebarCallPanel';
 import { SidebarNotificationsPanel } from './SidebarNotificationsPanel';
 import { SidebarAccountPanel } from './SidebarAccountPanel';
@@ -99,6 +102,10 @@ export interface SidebarShellProps {
   };
   /** Placeholder text for the sidebar search input */
   searchPlaceholder?: string;
+  /** Called when the Friends / Add User button is pressed */
+  onFriendsPress?: () => void;
+  /** Number of pending friend requests for badge display */
+  pendingFriendRequests?: number;
   /** Active call */
   activeCall?: ActiveCall | null;
   activeConversationId?: string | null;
@@ -117,6 +124,8 @@ export function SidebarShell({
   children,
   sidebarStyle,
   searchPlaceholder = 'Search...',
+  onFriendsPress,
+  pendingFriendRequests,
   showNotificationsPanel,
   onCloseNotificationsPanel,
   showAccountPanel,
@@ -260,18 +269,52 @@ export function SidebarShell({
         style={sidebarStyle ?? { paddingHorizontal: 8, paddingTop: 20, width: '100%' }}
       >
         {/* Persistent search bar at the top of every sidebar */}
-        <Box style={{ paddingHorizontal: 12, paddingTop: 8, paddingBottom: 4 }}>
-          <SearchInput
-            value={query}
-            onValueChange={setQuery}
-            placeholder={searchPlaceholder}
-            size="sm"
-            fullWidth
-            onSurface
-            gradientBorder
-            onClear={handleClearSearch}
-            onFocus={handleSearchFocus}
-          />
+        <Box style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingTop: 8, paddingBottom: 4, gap: 6 }}>
+          <Box style={{ flex: 1 }}>
+            <SearchInput
+              value={query}
+              onValueChange={setQuery}
+              placeholder={searchPlaceholder}
+              size="sm"
+              fullWidth
+              onSurface
+              gradientBorder
+              onClear={handleClearSearch}
+              onFocus={handleSearchFocus}
+            />
+          </Box>
+          {onFriendsPress && (
+            <Box style={{ position: 'relative' }}>
+              <Button
+                testID={TEST_IDS.SIDEBAR.FRIENDS_BUTTON}
+                variant="tertiary"
+                onSurface
+                size="sm"
+                onPress={onFriendsPress}
+                accessibilityLabel="Friends"
+                iconLeft={<UserPlusIcon size={16} color={theme.colors.text.onRaisedSecondary} />}
+                shape="pill"
+              />
+              {!!pendingFriendRequests && pendingFriendRequests > 0 && (
+                <Box style={{
+                  position: 'absolute',
+                  top: -2,
+                  right: -2,
+                  backgroundColor: theme.colors.status.danger,
+                  borderRadius: 99,
+                  paddingHorizontal: 3,
+                  minWidth: 14,
+                  height: 14,
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}>
+                  <Text size="xs" weight="bold" style={{ lineHeight: 10, fontSize: 9, color: theme.colors.text.inverse, textAlign: 'center' }}>
+                    {pendingFriendRequests > 99 ? '99+' : pendingFriendRequests}
+                  </Text>
+                </Box>
+              )}
+            </Box>
+          )}
         </Box>
 
         {/* When search has a query, replace children with search results */}

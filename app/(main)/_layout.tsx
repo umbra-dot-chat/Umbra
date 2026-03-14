@@ -669,6 +669,8 @@ function MainLayoutInner() {
     onEndCall: () => endCall(),
     isScreenSharing,
     onToggleScreenShare: isScreenSharing ? stopScreenShare : startScreenShare,
+    onFriendsPress: () => router.push('/friends'),
+    pendingFriendRequests: incomingRequests.length,
   };
 
   return (
@@ -728,6 +730,7 @@ function MainLayoutInner() {
                   onCommunityPress={handleCommunityPress}
                   onCreateCommunity={() => { playSound('dialog_open'); setCreateCommunityOptionsOpen(true); }}
                   onMarketplacePress={() => { playSound('dialog_open'); setMarketplaceOpen(true); }}
+                  onGuidePress={() => { playSound('dialog_open'); setGuideOpen(true); }}
                   onOpenSettings={handleSettingsPress}
                   userAvatar={identity?.avatar}
                   userDisplayName={identity?.displayName}
@@ -764,16 +767,12 @@ function MainLayoutInner() {
                           router.push('/');
                         }
                       }}
-                      onFriendsPress={() => router.push('/friends')}
                       onNewDm={() => { playSound('dialog_open'); setNewDmOpen(true); }}
                       onCreateGroup={() => { playSound('dialog_open'); setCreateGroupOpen(true); }}
-                      onGuidePress={() => { playSound('dialog_open'); setGuideOpen(true); }}
-                      isFriendsActive={isFriendsActive}
                       pendingInvites={pendingInvites}
                       onAcceptInvite={handleAcceptInvite}
                       onDeclineInvite={handleDeclineInvite}
                       loading={coreLoading || conversationsLoading}
-                      pendingFriendRequests={incomingRequests.length}
                       {...sidebarShellProps}
                     />
                   )}
@@ -828,6 +827,7 @@ function MainLayoutInner() {
                 onCommunityPress={handleCommunityPress}
                 onCreateCommunity={() => { playSound('dialog_open'); setCreateCommunityOptionsOpen(true); }}
                 onMarketplacePress={() => { playSound('dialog_open'); setMarketplaceOpen(true); }}
+                onGuidePress={() => { playSound('dialog_open'); setGuideOpen(true); }}
                 onOpenSettings={handleSettingsPress}
                 userAvatar={identity?.avatar}
                 userDisplayName={identity?.displayName}
@@ -864,16 +864,12 @@ function MainLayoutInner() {
                         router.push('/');
                       }
                     }}
-                    onFriendsPress={() => router.push('/friends')}
                     onNewDm={() => { playSound('dialog_open'); setNewDmOpen(true); }}
                     onCreateGroup={() => { playSound('dialog_open'); setCreateGroupOpen(true); }}
-                    onGuidePress={() => { playSound('dialog_open'); setGuideOpen(true); }}
-                    isFriendsActive={isFriendsActive}
                     pendingInvites={pendingInvites}
                     onAcceptInvite={handleAcceptInvite}
                     onDeclineInvite={handleDeclineInvite}
                     loading={coreLoading || conversationsLoading}
-                    pendingFriendRequests={incomingRequests.length}
                     {...sidebarShellProps}
                   />
                 )}
