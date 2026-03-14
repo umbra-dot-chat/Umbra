@@ -15,11 +15,15 @@ if (Platform.OS === 'web' && typeof __DEV__ !== 'undefined' && __DEV__) {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
   const whyDidYouRender = require('@welldone-software/why-did-you-render');
   whyDidYouRender(React, {
-    trackAllPureComponents: true,
-    trackHooks: true,
+    // IMPORTANT: trackAllPureComponents was disabled because it deep-compares
+    // ALL props on every React.memo component render. With 50+ messages in
+    // ChatArea, each creating HoverBubble + ChatBubble + Avatar + Text, wdyr
+    // does hundreds of deep comparisons per render cycle — enough to exhaust
+    // V8's GC budget and crash the tab.
+    // Enable per-component with: ComponentName.whyDidYouRender = true;
+    trackAllPureComponents: false,
+    trackHooks: false,
     logOnDifferentValues: false,
-    // Only log renders that took >2ms to avoid noise
-    // (whyDidYouRender doesn't have a threshold option, so we filter manually)
     collapseGroups: true,
     titleColor: '#6366f1',
     diffNameColor: '#ff9800',
