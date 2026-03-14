@@ -45,11 +45,13 @@ function injectIndicatorKeyframes(): void {
   document.head.appendChild(sheet);
 }
 
+
 const RAIL_WIDTH = 64;
 const ICON_SIZE = 40;
 const ICON_RADIUS = 12;
 const ACTIVE_INDICATOR_WIDTH = 4;
 const INDICATOR_HEIGHT = 32;
+const PANEL_DOT_SIZE = 8;
 
 // ---------------------------------------------------------------------------
 // Props
@@ -90,6 +92,12 @@ export interface NavigationRailProps {
   notificationCount?: number;
   /** Called when the notification bell is pressed */
   onNotificationsPress?: () => void;
+  /** Whether the settings dialog is currently open */
+  isSettingsActive?: boolean;
+  /** Whether the notifications sidebar panel is currently open */
+  isNotificationsPanelOpen?: boolean;
+  /** Whether the account sidebar panel is currently open */
+  isAccountPanelOpen?: boolean;
   /** Safe area top inset passed from parent layout. @default 0 */
   safeAreaTop?: number;
   /** Safe area bottom inset passed from parent layout. @default 0 */
@@ -117,7 +125,10 @@ export function NavigationRail({
   loading,
   homeNotificationCount,
   notificationCount,
+  isSettingsActive,
   onNotificationsPress,
+  isNotificationsPanelOpen,
+  isAccountPanelOpen,
   safeAreaTop = 0,
   safeAreaBottom = 0,
 }: NavigationRailProps) {
@@ -150,7 +161,9 @@ export function NavigationRail({
     ? 'home'
     : isFilesActive
       ? 'files'
-      : activeCommunityId ?? null;
+      : isSettingsActive
+        ? 'settings'
+        : activeCommunityId ?? null;
 
   const indicatorY = useRef(new Animated.Value(0)).current;
   const indicatorOpacity = useRef(new Animated.Value(0)).current;
@@ -250,7 +263,7 @@ export function NavigationRail({
     [activeCommunityId, measureItem],
   );
 
-  // Gradient indicator fill style
+  // Gradient fill style (shared by main indicator and panel dot)
   const indicatorFillStyle =
     Platform.OS === 'web'
       ? ({
@@ -269,6 +282,98 @@ export function NavigationRail({
           height: '100%',
           backgroundColor: theme.colors.text.primary,
         };
+
+  // ── Panel dot indicator (slides between avatar & bell) ──────────────────
+  const bottomSectionRef = useRef<View>(null);
+  const panelItemRefs = useRef(new Map<string, View>()).current;
+  const registerPanelRef = useCallback((key: string, node: View | null) => {
+    if (node) panelItemRefs.set(key, node);
+    else panelItemRefs.delete(key);
+  }, []);
+
+  const panelDotY = useRef(new Animated.Value(0)).current;
+  const panelDotOpacity = useRef(new Animated.Value(0)).current;
+  const panelDotScale = useRef(new Animated.Value(0.5)).current;
+  const panelDotAppearedRef = useRef(false);
+
+  const activePanelKey = isAccountPanelOpen
+    ? 'account'
+    : isNotificationsPanelOpen
+      ? 'notifications'
+      : null;
+
+  const measurePanelItem = useCallback((key: string, callback: (y: number) => void) => {
+    const itemNode = panelItemRefs.get(key);
+    const containerNode = bottomSectionRef.current;
+    if (!itemNode || !containerNode) return;
+
+    if (Platform.OS === 'web') {
+      requestAnimationFrame(() => {
+        const containerEl = containerNode as unknown as HTMLElement;
+        const itemEl = itemNode as unknown as HTMLElement;
+        if (!containerEl.getBoundingClientRect || !itemEl.getBoundingClientRect) return;
+        const containerRect = containerEl.getBoundingClientRect();
+        const itemRect = itemEl.getBoundingClientRect();
+        callback(itemRect.top - containerRect.top + (itemRect.height - PANEL_DOT_SIZE) / 2);
+      });
+    } else {
+      (itemNode as any).measureLayout(
+        containerNode,
+        (_x: number, y: number, _w: number, h: number) => {
+          callback(y + (h - PANEL_DOT_SIZE) / 2);
+        },
+        () => {},
+      );
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!activePanelKey) {
+      // Fade out
+      Animated.timing(panelDotOpacity, {
+        toValue: 0,
+        duration: 150,
+        useNativeDriver: true,
+      }).start(() => {
+        panelDotAppearedRef.current = false;
+        panelDotScale.setValue(0.5);
+      });
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      measurePanelItem(activePanelKey, (targetY) => {
+        if (!panelDotAppearedRef.current) {
+          // First appear — snap to position, then fade + scale in
+          panelDotY.setValue(targetY);
+          Animated.parallel([
+            Animated.timing(panelDotOpacity, {
+              toValue: 1,
+              duration: 150,
+              useNativeDriver: true,
+            }),
+            Animated.spring(panelDotScale, {
+              toValue: 1,
+              tension: 300,
+              friction: 20,
+              useNativeDriver: true,
+            }),
+          ]).start();
+          panelDotAppearedRef.current = true;
+        } else {
+          // Subsequent changes — slide to new position
+          Animated.spring(panelDotY, {
+            toValue: targetY,
+            tension: 300,
+            friction: 25,
+            useNativeDriver: true,
+          }).start();
+        }
+      });
+    }, 50);
+
+    return () => clearTimeout(timer);
+  }, [activePanelKey]);
 
   return (
     <View
@@ -423,7 +528,30 @@ export function NavigationRail({
 
       {/* Settings button — anchored to the bottom */}
       {onOpenSettings && (
-        <Box style={{ paddingBottom: Math.round(safeAreaBottom / 3) + 12, paddingTop: 8, alignItems: 'center', width: '100%' }}>
+        <View ref={bottomSectionRef} style={{ paddingBottom: Math.round(safeAreaBottom / 3) + 12, paddingTop: 8, alignItems: 'center', width: '100%' }}>
+          {/* Panel dot indicator — single animated dot on the right edge */}
+          <Animated.View
+            pointerEvents="none"
+            style={{
+              position: 'absolute',
+              right: 0,
+              top: 0,
+              width: PANEL_DOT_SIZE,
+              height: PANEL_DOT_SIZE,
+              borderRadius: PANEL_DOT_SIZE / 2,
+              opacity: panelDotOpacity,
+              transform: [
+                { translateY: panelDotY },
+                { scaleY: panelDotScale },
+                { scaleX: panelDotScale },
+              ],
+              zIndex: 10,
+              overflow: 'hidden',
+            }}
+          >
+            <Box style={indicatorFillStyle} />
+          </Animated.View>
+
           <Box
             style={{
               width: 28,
@@ -436,7 +564,10 @@ export function NavigationRail({
 
           {/* Account avatar bubble — above settings gear, matches RailItem size */}
           {onAvatarPress && (
-            <Box style={{ marginBottom: 4, width: '100%', alignItems: 'center' }}>
+            <View
+              ref={(node) => registerPanelRef('account', node)}
+              style={{ marginBottom: 4, width: '100%', alignItems: 'center' } as any}
+            >
               <Pressable
                 testID={TEST_IDS.NAV.AVATAR}
                 onPress={onAvatarPress}
@@ -466,41 +597,47 @@ export function NavigationRail({
                   </Text>
                 )}
               </Pressable>
-            </Box>
+            </View>
           )}
 
           {/* Notification bell — between avatar and settings */}
           {onNotificationsPress && (
-            <RailItem
-              itemKey="_notifications"
-              registerRef={registerItemRef}
-              active={false}
-              onPress={onNotificationsPress}
-              theme={theme}
-              badgeCount={notificationCount || undefined}
-              testID={TEST_IDS.NAV.NOTIFICATIONS}
+            <View
+              ref={(node) => registerPanelRef('notifications', node)}
+              style={{ width: '100%', alignItems: 'center' } as any}
             >
-              <BellIcon
-                size={20}
-                color={theme.colors.text.secondary}
-              />
-            </RailItem>
+              <RailItem
+                itemKey="_notifications"
+                registerRef={registerItemRef}
+                active={false}
+                onPress={onNotificationsPress}
+                theme={theme}
+                badgeCount={notificationCount || undefined}
+                testID={TEST_IDS.NAV.NOTIFICATIONS}
+              >
+                <BellIcon
+                  size={20}
+                  color={isNotificationsPanelOpen ? theme.colors.text.primary : theme.colors.text.secondary}
+                />
+              </RailItem>
+            </View>
           )}
 
           <RailItem
-            itemKey="_settings"
+            itemKey="settings"
             registerRef={registerItemRef}
-            active={false}
+            active={!!isSettingsActive}
             onPress={onOpenSettings}
+            accentColor={theme.colors.accent.primary}
             theme={theme}
             testID={TEST_IDS.NAV.SETTINGS}
           >
             <SettingsIcon
               size={20}
-              color={theme.colors.text.secondary}
+              color={isSettingsActive ? theme.colors.text.onAccent : theme.colors.text.secondary}
             />
           </RailItem>
-        </Box>
+        </View>
       )}
     </View>
   );
@@ -637,3 +774,4 @@ function RailItem({ itemKey, registerRef, active, onPress, accentColor, theme, c
     </Animated.View>
   );
 }
+
