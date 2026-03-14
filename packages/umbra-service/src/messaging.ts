@@ -223,10 +223,21 @@ export async function getMessages(
     let text = '';
     try {
       if (m.conversationId.startsWith('group-')) {
-        // Group messages store pre-decrypted plaintext as UTF-8-safe base64.
-        // WASM stores the raw bytes and returns them as base64 on load.
+        // Group messages store pre-decrypted plaintext as UTF-8 bytes.
+        // WASM returns the raw bytes as base64 on load.
         try {
           text = base64ToUtf8(m.contentEncrypted);
+          // Guard: detect garbled ciphertext that was stored before the
+          // plaintext-storage fix. Ciphertext decoded as UTF-8 produces
+          // replacement chars (U+FFFD) and non-printable control chars.
+          if (text.length > 0) {
+            const sample = text.slice(0, 40);
+            // eslint-disable-next-line no-control-regex
+            const badChars = (sample.match(/[\uFFFD\u0000-\u0008\u000E-\u001F\u25C8]/g) || []).length;
+            if (badChars > sample.length * 0.15) {
+              text = '[Unable to decode message]';
+            }
+          }
         } catch {
           // Fallback: may be raw plaintext from before the encoding change.
           // Guard against raw ciphertext — if it looks like base64 gibberish

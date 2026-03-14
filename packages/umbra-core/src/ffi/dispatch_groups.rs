@@ -1238,14 +1238,16 @@ pub fn groups_send_message(args: &str) -> DResult {
     let (nonce, ciphertext) = crate::crypto::encrypt(&enc_key, text.as_bytes(), aad.as_bytes())
         .map_err(|e| err(704, format!("Encryption failed: {}", e)))?;
 
-    // Store locally
+    // Store plaintext locally — the WASM DM decrypt path can't re-decrypt
+    // group-encrypted messages, so getMessages() needs readable content.
+    // The ciphertext only lives in the relay envelope for transit.
     database
         .store_message(
             &msg_id,
             conversation_id,
             &our_did,
-            &ciphertext,
-            &nonce.0,
+            text.as_bytes(),
+            &[0u8; 12],
             timestamp,
         )
         .map_err(|e| err(400, format!("Failed to store message: {}", e)))?;

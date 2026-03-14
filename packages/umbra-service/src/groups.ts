@@ -4,7 +4,7 @@
  * @packageDocumentation
  */
 
-import { wasm, parseWasm, utf8ToBase64 } from './helpers';
+import { wasm, parseWasm } from './helpers';
 import type {
   Group,
   GroupMember,
@@ -415,20 +415,8 @@ export async function sendGroupMessage(
     }
   }
 
-  // Overwrite stored message with plaintext so group messages survive page
-  // reloads. WASM DM decrypt can't re-decrypt group-encrypted messages, so
-  // we store the pre-decrypted text in content_encrypted for group convos.
-  try {
-    const overwriteJson = JSON.stringify({
-      message_id: raw.message.id,
-      conversation_id: raw.message.conversationId,
-      sender_did: raw.message.senderDid,
-      content_encrypted: utf8ToBase64(text),
-      nonce: '000000000000000000000000',
-      timestamp: raw.message.timestamp,
-    });
-    wasm().umbra_wasm_messaging_store_incoming(overwriteJson);
-  } catch { /* not critical — real-time display still works */ }
+  // Rust now stores plaintext directly (not ciphertext) for group messages,
+  // so the previous overwrite-via-storeIncoming is no longer needed.
 
   return {
     id: raw.message.id,
