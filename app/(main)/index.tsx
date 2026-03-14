@@ -159,11 +159,31 @@ export default function ChatPage() {
     firstUnreadMessageId, markAsRead,
   } = useMessages(resolvedConversationId, activeConversation?.groupId);
 
-  // Mark messages as read when viewing a conversation
+  // Mark messages as read when viewing a conversation.
+  // Debounced: fires once immediately when conversation opens, then at most
+  // once per 2 seconds to avoid flooding WASM/DB during rapid message arrival.
+  const markAsReadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastMarkRef = useRef<number>(0);
   useEffect(() => {
     if (!msgsLoading && resolvedConversationId && messages.length > 0) {
-      markAsRead();
+      const now = Date.now();
+      if (now - lastMarkRef.current >= 2000) {
+        lastMarkRef.current = now;
+        markAsRead();
+      } else if (!markAsReadTimerRef.current) {
+        markAsReadTimerRef.current = setTimeout(() => {
+          markAsReadTimerRef.current = null;
+          lastMarkRef.current = Date.now();
+          markAsRead();
+        }, 2000);
+      }
     }
+    return () => {
+      if (markAsReadTimerRef.current) {
+        clearTimeout(markAsReadTimerRef.current);
+        markAsReadTimerRef.current = null;
+      }
+    };
   }, [msgsLoading, resolvedConversationId, messages.length, markAsRead]);
 
   // Group member count for the active conversation
