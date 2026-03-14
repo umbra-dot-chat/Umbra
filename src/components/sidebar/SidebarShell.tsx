@@ -1,0 +1,344 @@
+/**
+ * SidebarShell — Reusable wrapper providing shared sidebar chrome.
+ *
+ * Extracts the universal panels (account, notifications, call, resize handles)
+ * and CSS injection from ChatSidebar so that multiple sidebar variants
+ * (ChatSidebar, SettingsNavSidebar, etc.) can share them.
+ *
+ * Children receive layout info via SidebarShellContext (hasBottomPanel, contentFlex).
+ */
+
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { Platform, type View } from 'react-native';
+import {
+  Box,
+  SearchInput,
+  Sidebar,
+  useTheme,
+} from '@coexist/wisp-react-native';
+import { SidebarCallPanel } from '@/components/call/SidebarCallPanel';
+import { SidebarNotificationsPanel } from './SidebarNotificationsPanel';
+import { SidebarAccountPanel } from './SidebarAccountPanel';
+import { SidebarSearchResults } from './SidebarSearchPanel';
+import { useUnifiedSearch } from '@/contexts/UnifiedSearchContext';
+import { TEST_IDS } from '@/constants/test-ids';
+import { dbg } from '@/utils/debug';
+import type { ActiveCall } from '@/types/call';
+import type { StoredAccount } from '@/contexts/AuthContext';
+
+// ─── CSS injection for sidebar layout (web only) ────────────────────────────
+
+const SIDEBAR_CSS_ID = 'sidebar-layout-css';
+
+/**
+ * The Wisp Sidebar wraps children in a ScrollView. To push the call panel
+ * to the bottom, we make the ScrollView content container a flex column
+ * with min-height: 100%, then use margin-top: auto on the call footer.
+ */
+function injectSidebarLayoutCSS() {
+  if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+  if (document.getElementById(SIDEBAR_CSS_ID)) return;
+
+  const style = document.createElement('style');
+  style.id = SIDEBAR_CSS_ID;
+  style.textContent = `
+    /* Make the Sidebar ScrollView content container a flex column
+       so margin-top:auto pushes the call panel to the bottom. */
+    [role="menu"] > div:first-child > div {
+      min-height: 100%;
+      display: flex;
+      flex-direction: column;
+    }
+    /* When notifications panel is open, lock the sidebar to exact
+       viewport height and disable ScrollView overflow so flex
+       children split the space 50/50 instead of overflowing. */
+    [role="menu"].notif-open > div:first-child {
+      overflow: hidden !important;
+    }
+    [role="menu"].notif-open > div:first-child > div {
+      min-height: unset;
+      height: 100%;
+    }
+  `;
+  document.head.appendChild(style);
+}
+
+// ─── Context ─────────────────────────────────────────────────────────────────
+
+interface SidebarShellLayoutValue {
+  hasBottomPanel: boolean;
+  contentFlex: number;
+}
+
+const SidebarShellContext = createContext<SidebarShellLayoutValue>({
+  hasBottomPanel: false,
+  contentFlex: 1,
+});
+
+export const useSidebarShellLayout = () => useContext(SidebarShellContext);
+
+// ─── Props ───────────────────────────────────────────────────────────────────
+
+export interface SidebarShellProps {
+  children: React.ReactNode;
+  /** Sidebar style overrides */
+  sidebarStyle?: any;
+  /** Whether the notifications panel should be shown */
+  showNotificationsPanel?: boolean;
+  onCloseNotificationsPanel?: () => void;
+  /** Whether the account panel should be shown */
+  showAccountPanel?: boolean;
+  onCloseAccountPanel?: () => void;
+  accountPanelProps?: {
+    accounts: StoredAccount[];
+    activeAccountDid: string | null;
+    onSwitchAccount: (did: string) => void;
+    onActiveAccountPress: () => void;
+    onAddAccount: () => void;
+    onRemoveAccount?: (did: string) => void;
+  };
+  /** Placeholder text for the sidebar search input */
+  searchPlaceholder?: string;
+  /** Active call */
+  activeCall?: ActiveCall | null;
+  activeConversationId?: string | null;
+  onReturnToCall?: () => void;
+  onToggleMute?: () => void;
+  onToggleDeafen?: () => void;
+  onToggleCamera?: () => void;
+  onEndCall?: () => void;
+  isScreenSharing?: boolean;
+  onToggleScreenShare?: () => void;
+}
+
+// ─── Component ───────────────────────────────────────────────────────────────
+
+export function SidebarShell({
+  children,
+  sidebarStyle,
+  searchPlaceholder = 'Search...',
+  showNotificationsPanel,
+  onCloseNotificationsPanel,
+  showAccountPanel,
+  onCloseAccountPanel,
+  accountPanelProps,
+  activeCall,
+  activeConversationId,
+  onReturnToCall,
+  onToggleMute,
+  onToggleDeafen,
+  onToggleCamera,
+  onEndCall,
+  isScreenSharing,
+  onToggleScreenShare,
+}: SidebarShellProps) {
+  if (__DEV__) dbg.trackRender('SidebarShell');
+  const { theme } = useTheme();
+
+  // ── Sidebar search ──────────────────────────────────────────────────────
+  const { query, setQuery, sidebarSearchActive, setSidebarSearchActive } = useUnifiedSearch();
+
+  const handleSearchFocus = useCallback(() => {
+    setSidebarSearchActive(true);
+  }, [setSidebarSearchActive]);
+
+  const handleClearSearch = useCallback(() => {
+    setQuery('');
+    setSidebarSearchActive(false);
+  }, [setQuery, setSidebarSearchActive]);
+
+  // Independent resize ratios for each panel
+  const [accountRatio, setAccountRatio] = useState(0.3);
+  const [notifRatio, setNotifRatio] = useState(0.35);
+  const accountHandleRef = useRef<View>(null);
+  const notifHandleRef = useRef<View>(null);
+
+  // Attach resize drag for account panel handle
+  useEffect(() => {
+    if (Platform.OS !== 'web' || !showAccountPanel) return;
+    const node = accountHandleRef.current as unknown as HTMLElement | null;
+    if (!node || typeof node.addEventListener !== 'function') return;
+
+    const handleMouseDown = (e: MouseEvent) => {
+      e.preventDefault();
+      let lastY = e.clientY;
+      const sidebar = document.querySelector('[role="menu"]');
+      const sidebarHeight = sidebar?.clientHeight ?? 600;
+
+      const onMouseMove = (ev: MouseEvent) => {
+        const dy = ev.clientY - lastY;
+        if (dy !== 0) {
+          setAccountRatio((prev) => Math.min(0.6, Math.max(0.1, prev + (-dy / sidebarHeight))));
+          lastY = ev.clientY;
+        }
+      };
+      const onMouseUp = () => {
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onMouseUp);
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      };
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('mouseup', onMouseUp);
+      document.body.style.cursor = 'row-resize';
+      document.body.style.userSelect = 'none';
+    };
+
+    node.addEventListener('mousedown', handleMouseDown);
+    return () => node.removeEventListener('mousedown', handleMouseDown);
+  }, [showAccountPanel]);
+
+  // Attach resize drag for notifications panel handle
+  useEffect(() => {
+    if (Platform.OS !== 'web' || !showNotificationsPanel) return;
+    const node = notifHandleRef.current as unknown as HTMLElement | null;
+    if (!node || typeof node.addEventListener !== 'function') return;
+
+    const handleMouseDown = (e: MouseEvent) => {
+      e.preventDefault();
+      let lastY = e.clientY;
+      const sidebar = document.querySelector('[role="menu"]');
+      const sidebarHeight = sidebar?.clientHeight ?? 600;
+
+      const onMouseMove = (ev: MouseEvent) => {
+        const dy = ev.clientY - lastY;
+        if (dy !== 0) {
+          setNotifRatio((prev) => Math.min(0.6, Math.max(0.1, prev + (-dy / sidebarHeight))));
+          lastY = ev.clientY;
+        }
+      };
+      const onMouseUp = () => {
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onMouseUp);
+        document.body.style.cursor = '';
+        document.body.style.userSelect = '';
+      };
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('mouseup', onMouseUp);
+      document.body.style.cursor = 'row-resize';
+      document.body.style.userSelect = 'none';
+    };
+
+    node.addEventListener('mousedown', handleMouseDown);
+    return () => node.removeEventListener('mousedown', handleMouseDown);
+  }, [showNotificationsPanel]);
+
+  // Inject CSS to make sidebar ScrollView content a flex column (web only)
+  useEffect(() => {
+    injectSidebarLayoutCSS();
+  }, []);
+
+  // Toggle .notif-open class on the Sidebar's [role="menu"] element
+  const hasBottomPanel = !!(showNotificationsPanel || showAccountPanel);
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+    const el = document.querySelector('[role="menu"]');
+    if (!el) return;
+    if (hasBottomPanel) {
+      el.classList.add('notif-open');
+    } else {
+      el.classList.remove('notif-open');
+    }
+  }, [hasBottomPanel]);
+
+  // Compute content flex for children
+  const contentFlex = hasBottomPanel
+    ? Math.max(0.1, 1 - (showAccountPanel ? accountRatio : 0) - (showNotificationsPanel ? notifRatio : 0))
+    : 1;
+
+  const layoutValue: SidebarShellLayoutValue = { hasBottomPanel, contentFlex };
+
+  return (
+    <SidebarShellContext.Provider value={layoutValue}>
+      <Sidebar
+        testID={TEST_IDS.SIDEBAR.CONTAINER}
+        width="wide"
+        style={sidebarStyle ?? { paddingHorizontal: 8, paddingTop: 20, width: '100%' }}
+      >
+        {/* Persistent search bar at the top of every sidebar */}
+        <Box style={{ paddingHorizontal: 12, paddingTop: 8, paddingBottom: 4 }}>
+          <SearchInput
+            value={query}
+            onValueChange={setQuery}
+            placeholder={searchPlaceholder}
+            size="sm"
+            fullWidth
+            onSurface
+            onClear={handleClearSearch}
+            onFocus={handleSearchFocus}
+          />
+        </Box>
+
+        {/* When search is active, replace children with search results */}
+        {sidebarSearchActive ? <SidebarSearchResults /> : children}
+
+        {/* Active call footer panel -- pushed to the bottom via margin-top:auto */}
+        {activeCall && activeCall.status === 'connected' && activeCall.conversationId !== activeConversationId && onReturnToCall && onToggleMute && onToggleDeafen && onToggleCamera && onEndCall && (
+          <Box style={{ marginTop: 'auto' as any, marginHorizontal: -4 }}>
+            <SidebarCallPanel
+              activeCall={activeCall}
+              onReturnToCall={onReturnToCall}
+              onToggleMute={onToggleMute}
+              onToggleDeafen={onToggleDeafen}
+              onToggleCamera={onToggleCamera}
+              onEndCall={onEndCall}
+              isScreenSharing={isScreenSharing}
+              onToggleScreenShare={onToggleScreenShare}
+            />
+          </Box>
+        )}
+
+        {/* Account panel with its own resize handle */}
+        {showAccountPanel && accountPanelProps && (
+          <>
+            <Box
+              ref={accountHandleRef}
+              nativeID="sidebar-section-accounts"
+              style={{
+                height: 8,
+                justifyContent: 'center',
+                alignItems: 'center',
+                borderTopWidth: 1,
+                borderTopColor: theme.colors.border.subtle,
+                ...(Platform.OS === 'web' ? { cursor: 'row-resize' } as any : {}),
+                zIndex: 10,
+              }}
+            >
+              <Box style={{ width: 32, height: 3, borderRadius: 2, backgroundColor: theme.colors.border.strong }} />
+            </Box>
+            <Box style={{ flex: accountRatio, minHeight: 80, overflow: 'hidden' as any }}>
+              <SidebarAccountPanel
+                onClose={onCloseAccountPanel}
+                {...accountPanelProps}
+              />
+            </Box>
+          </>
+        )}
+
+        {/* Notifications panel with its own resize handle */}
+        {showNotificationsPanel && (
+          <>
+            <Box
+              ref={notifHandleRef}
+              nativeID="sidebar-section-notifications"
+              style={{
+                height: 8,
+                justifyContent: 'center',
+                alignItems: 'center',
+                borderTopWidth: 1,
+                borderTopColor: theme.colors.border.subtle,
+                ...(Platform.OS === 'web' ? { cursor: 'row-resize' } as any : {}),
+                zIndex: 10,
+              }}
+            >
+              <Box style={{ width: 32, height: 3, borderRadius: 2, backgroundColor: theme.colors.border.strong }} />
+            </Box>
+            <Box style={{ flex: notifRatio, minHeight: 80, overflow: 'hidden' as any }}>
+              <SidebarNotificationsPanel onClose={onCloseNotificationsPanel} />
+            </Box>
+          </>
+        )}
+      </Sidebar>
+    </SidebarShellContext.Provider>
+  );
+}
