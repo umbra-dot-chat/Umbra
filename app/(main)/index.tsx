@@ -161,22 +161,28 @@ export default function ChatPage() {
 
   // Mark messages as read when viewing a conversation.
   //
-  // Strategy: fire once immediately when the conversation opens, then poll
-  // every 5 seconds while the conversation is active. This replaces the
-  // previous messages.length-triggered effect which fired on EVERY new
-  // message arrival (582 DB executes / 60 min with 5 bots). The DB call
-  // is a no-op when unread_count is already 0, so infrequent polling is
-  // both cheaper and sufficient.
-  useEffect(() => {
-    if (!msgsLoading && resolvedConversationId) {
-      // Mark immediately on conversation open
-      markAsRead();
+  // Uses a ref for markAsRead to avoid restarting the interval when the
+  // callback identity changes (its deps include service, conversationId,
+  // getRelayWs, myDid — any change created a new callback → effect re-ran
+  // → cleared interval → called markAsRead immediately → new interval,
+  // causing hundreds of WASM calls that froze the app).
+  const markAsReadRef = useRef(markAsRead);
+  markAsReadRef.current = markAsRead;
 
-      // Then poll every 5 seconds for new unreads while viewing
-      const interval = setInterval(() => { markAsRead(); }, 5000);
-      return () => clearInterval(interval);
-    }
-  }, [msgsLoading, resolvedConversationId, markAsRead]);
+  useEffect(() => {
+    if (!resolvedConversationId) return;
+
+    // Mark once after a short delay (let messages load first)
+    const timeout = setTimeout(() => markAsReadRef.current(), 500);
+
+    // Then poll every 5 seconds for new unreads while viewing
+    const interval = setInterval(() => { markAsReadRef.current(); }, 5000);
+
+    return () => {
+      clearTimeout(timeout);
+      clearInterval(interval);
+    };
+  }, [resolvedConversationId]);
 
   // Group member count for the active conversation
   const [activeMemberCount, setActiveMemberCount] = useState<number | undefined>(undefined);

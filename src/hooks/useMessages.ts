@@ -200,6 +200,11 @@ export function useMessages(conversationId: string | null, groupId?: string | nu
   // they depend on the same [service, conversationId] already listed,
   // and including them caused cascading re-subscriptions.
   useEffect(() => {
+    // Reset the markAsRead guard when switching conversations —
+    // otherwise two conversations with the same message count would
+    // incorrectly skip the first markAsRead on the new conversation.
+    lastMarkedCountRef.current = 0;
+
     if (isReady && service && conversationId) {
       fetchMessages();
       fetchPinned();
@@ -556,10 +561,13 @@ export function useMessages(conversationId: string | null, groupId?: string | nu
   const markAsRead = useCallback(async () => {
     if (!service || !conversationId) return;
     try {
+      // Skip if no messages loaded yet (nothing to mark as read).
+      const currentCount = messagesRef.current.length;
+      if (currentCount === 0) return;
+
       // Skip if no new messages since we last marked — avoids 2 SQL
       // execute round-trips that are guaranteed no-ops.
-      const currentCount = messagesRef.current.length;
-      if (currentCount === lastMarkedCountRef.current && currentCount > 0) return;
+      if (currentCount === lastMarkedCountRef.current) return;
 
       lastMarkedCountRef.current = currentCount;
       await service.markAsRead(conversationId);
