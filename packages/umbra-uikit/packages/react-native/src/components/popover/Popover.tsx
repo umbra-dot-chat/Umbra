@@ -1,5 +1,5 @@
-import React, { forwardRef, useMemo, useState, useCallback, useRef, createContext, useContext } from 'react';
-import { View, Pressable, Modal, StyleSheet } from 'react-native';
+import React, { forwardRef, useMemo, useState, useCallback, useRef, useEffect, createContext, useContext } from 'react';
+import { View, Pressable, Modal, StyleSheet, Dimensions } from 'react-native';
 import type { ViewStyle } from 'react-native';
 import { defaultSpacing, defaultRadii } from '@coexist/wisp-core/theme/create-theme';
 import { useTheme } from '../../providers';
@@ -122,8 +122,26 @@ export const PopoverContent = forwardRef<View, PopoverContentProps>(function Pop
   ref,
 ) {
   const { theme } = useTheme();
-  const { open, setOpen } = usePopoverContext();
+  const { open, setOpen, triggerRef, placement } = usePopoverContext();
   const themeColors = theme.colors;
+  const [triggerLayout, setTriggerLayout] = useState<{
+    x: number; y: number; width: number; height: number;
+  } | null>(null);
+  const contentRef = useRef<View>(null);
+  const [contentSize, setContentSize] = useState<{ width: number; height: number } | null>(null);
+
+  useEffect(() => {
+    if (open && triggerRef.current) {
+      triggerRef.current.measureInWindow((x, y, width, height) => {
+        if (typeof x === 'number' && typeof y === 'number') {
+          setTriggerLayout({ x, y, width, height });
+        }
+      });
+    } else if (!open) {
+      setTriggerLayout(null);
+      setContentSize(null);
+    }
+  }, [open, triggerRef]);
 
   const contentStyle = useMemo<ViewStyle>(
     () => ({
@@ -140,7 +158,52 @@ export const PopoverContent = forwardRef<View, PopoverContentProps>(function Pop
     [themeColors],
   );
 
+  const positionStyle = useMemo<ViewStyle>(() => {
+    if (!triggerLayout) return { opacity: 0 };
+
+    const screen = Dimensions.get('window');
+    const gap = 8;
+    let top: number;
+    let left: number;
+
+    if (placement === 'top') {
+      top = triggerLayout.y - (contentSize?.height ?? 0) - gap;
+      left = triggerLayout.x + triggerLayout.width / 2 - (contentSize?.width ?? 0) / 2;
+    } else if (placement === 'bottom') {
+      top = triggerLayout.y + triggerLayout.height + gap;
+      left = triggerLayout.x + triggerLayout.width / 2 - (contentSize?.width ?? 0) / 2;
+    } else if (placement === 'left') {
+      top = triggerLayout.y + triggerLayout.height / 2 - (contentSize?.height ?? 0) / 2;
+      left = triggerLayout.x - (contentSize?.width ?? 0) - gap;
+    } else {
+      // right
+      top = triggerLayout.y + triggerLayout.height / 2 - (contentSize?.height ?? 0) / 2;
+      left = triggerLayout.x + triggerLayout.width + gap;
+    }
+
+    // Clamp to screen edges
+    const padding = 8;
+    if (contentSize) {
+      left = Math.max(padding, Math.min(left, screen.width - contentSize.width - padding));
+      top = Math.max(padding, Math.min(top, screen.height - contentSize.height - padding));
+    }
+
+    // If we don't have contentSize yet, render off-screen to measure
+    if (!contentSize) {
+      return { position: 'absolute', top: -9999, left: -9999, opacity: 0 };
+    }
+
+    return { position: 'absolute', top, left, opacity: 1 };
+  }, [triggerLayout, contentSize, placement]);
+
   if (!open) return null;
+
+  const handleContentLayout = (e: any) => {
+    const { width, height } = e.nativeEvent.layout;
+    if (!contentSize || contentSize.width !== width || contentSize.height !== height) {
+      setContentSize({ width, height });
+    }
+  };
 
   return (
     <Modal
@@ -151,11 +214,14 @@ export const PopoverContent = forwardRef<View, PopoverContentProps>(function Pop
       statusBarTranslucent
     >
       <Pressable style={StyleSheet.absoluteFill} onPress={() => setOpen(false)}>
-        <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
-          <Pressable onPress={(e) => e.stopPropagation()} ref={ref} style={[contentStyle, userStyle]}>
-            {children}
-          </Pressable>
-        </View>
+        <Pressable
+          onPress={(e) => e.stopPropagation()}
+          ref={ref}
+          onLayout={handleContentLayout}
+          style={[contentStyle, positionStyle, userStyle]}
+        >
+          {children}
+        </Pressable>
       </Pressable>
     </Modal>
   );
