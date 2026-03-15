@@ -112,6 +112,7 @@ import { IdentityCardDialog } from '@/components/modals/IdentityCardDialog';
 import { useSync, markSyncDirty } from '@/contexts/SyncContext';
 import { useDeveloperSettings } from '@/hooks/useDeveloperSettings';
 import { dbg } from '@/utils/debug';
+import { useSettingsNavigation } from '@/contexts/SettingsNavigationContext';
 
 const SRC = 'SettingsDialog';
 
@@ -195,15 +196,17 @@ export interface SettingsDialogProps {
   onClose: () => void;
   onOpenMarketplace?: () => void;
   initialSection?: SettingsSection;
+  /** When true, renders content pane only (no modal wrapper). Used by /settings route. */
+  inline?: boolean;
 }
 
-interface NavItem {
+export interface NavItem {
   id: SettingsSection;
   label: string;
   icon: React.ComponentType<{ size?: number; color?: string }>;
 }
 
-const NAV_ITEMS: NavItem[] = [
+export const NAV_ITEMS: NavItem[] = [
   { id: 'account', label: 'Account', icon: WalletIcon },
   { id: 'appearance', label: 'Appearance', icon: PaletteIcon },
   { id: 'messaging', label: 'Messaging', icon: MessageIcon },
@@ -251,9 +254,9 @@ const SECTION_TEST_IDS: Record<SettingsSection, string> = {
   'developer': TEST_IDS.SETTINGS.SECTION_DEVELOPER,
 };
 
-interface SubNavItem { id: string; label: string; }
+export interface SubNavItem { id: string; label: string; }
 
-const SUBCATEGORIES: Partial<Record<SettingsSection, SubNavItem[]>> = {
+export const SUBCATEGORIES: Partial<Record<SettingsSection, SubNavItem[]>> = {
   account: [
     { id: 'profile', label: 'Profile' },
     { id: 'identity', label: 'Identity' },
@@ -5158,7 +5161,7 @@ function MessagingSection() {
 // SettingsDialog
 // ---------------------------------------------------------------------------
 
-export function SettingsDialog({ open, onClose, onOpenMarketplace, initialSection }: SettingsDialogProps) {
+export function SettingsDialog({ open, onClose, onOpenMarketplace, initialSection, inline }: SettingsDialogProps) {
   if (__DEV__) dbg.trackRender('SettingsDialog');
   const { theme, mode } = useTheme();
   const tc = theme.colors;
@@ -5166,10 +5169,24 @@ export function SettingsDialog({ open, onClose, onOpenMarketplace, initialSectio
   const isMobile = useIsMobile();
   const insets = Platform.OS !== 'web' ? useSafeAreaInsets() : { top: 0, bottom: 0, left: 0, right: 0 };
   const [mobileShowSidebar, setMobileShowSidebar] = useState(true);
-  const [activeSection, setActiveSection] = useState<SettingsSection>('account');
-  const [activeSubsection, setActiveSubsection] = useState<string | null>(
+
+  // Always call useSettingsNavigation (can't call hooks conditionally),
+  // but only use its values when inline is true.
+  const settingsNav = useSettingsNavigation();
+
+  const [localSection, setLocalSection] = useState<SettingsSection>('account');
+  const [localSubsection, setLocalSubsection] = useState<string | null>(
     SUBCATEGORIES.account ? SUBCATEGORIES.account[0].id : null,
   );
+
+  const activeSection = inline ? settingsNav.activeSection : localSection;
+  const activeSubsection = inline ? settingsNav.activeSubsection : localSubsection;
+  const setActiveSection = inline
+    ? (s: SettingsSection) => settingsNav.setActiveSection(s)
+    : setLocalSection;
+  const setActiveSubsection = inline
+    ? (s: string | null) => settingsNav.setActiveSection(settingsNav.activeSection, s)
+    : setLocalSubsection;
 
   const contentScrollRef = useRef<ScrollView>(null);
 
@@ -5213,7 +5230,19 @@ export function SettingsDialog({ open, onClose, onOpenMarketplace, initialSectio
     }
   }, [open, isMobile]);
 
+  // Helper to set both section + subsection atomically (avoids stale closure in inline mode)
+  const setSectionAndSub = useCallback((sectionId: SettingsSection, subId: string | null) => {
+    if (inline) {
+      settingsNav.setActiveSection(sectionId, subId);
+    } else {
+      setLocalSection(sectionId);
+      setLocalSubsection(subId);
+    }
+  }, [inline, settingsNav]);
+
   const handleSectionChange = useCallback((sectionId: SettingsSection) => {
+    const subs = SUBCATEGORIES[sectionId];
+    const firstSub = subs ? subs[0].id : null;
     // On desktop: crossfade content when switching sections
     if (!isMobile && !isFadingRef.current) {
       isFadingRef.current = true;
@@ -5223,9 +5252,7 @@ export function SettingsDialog({ open, onClose, onOpenMarketplace, initialSectio
         easing: Easing.out(Easing.ease),
         useNativeDriver: true,
       }).start(() => {
-        setActiveSection(sectionId);
-        const subs = SUBCATEGORIES[sectionId];
-        setActiveSubsection(subs ? subs[0].id : null);
+        setSectionAndSub(sectionId, firstSub);
         // Scroll to top on section change
         contentScrollRef.current?.scrollTo?.({ y: 0, animated: false });
         Animated.timing(contentOpacity, {
@@ -5238,12 +5265,10 @@ export function SettingsDialog({ open, onClose, onOpenMarketplace, initialSectio
         });
       });
     } else {
-      setActiveSection(sectionId);
-      const subs = SUBCATEGORIES[sectionId];
-      setActiveSubsection(subs ? subs[0].id : null);
+      setSectionAndSub(sectionId, firstSub);
     }
     if (isMobile) setMobileShowSidebar(false);
-  }, [isMobile, contentOpacity]);
+  }, [isMobile, contentOpacity, setSectionAndSub]);
 
   const handleSubsectionClick = useCallback((subId: string) => {
     setActiveSubsection(subId);
@@ -5291,7 +5316,7 @@ export function SettingsDialog({ open, onClose, onOpenMarketplace, initialSectio
       borderRadius: 16,
       overflow: 'hidden',
       // Glassmorphism: translucent background with blur
-      backgroundColor: isDark ? 'rgba(30, 30, 34, 0.94)' : 'rgba(255, 255, 255, 0.92)',
+      backgroundColor: isDark ? 'rgba(30, 30, 34, 0.98)' : 'rgba(255, 255, 255, 0.97)',
       borderWidth: 1,
       borderColor: isDark ? 'rgba(255,255,255,0.12)' : 'rgba(255,255,255,0.6)',
       shadowColor: '#000',
@@ -5333,12 +5358,12 @@ export function SettingsDialog({ open, onClose, onOpenMarketplace, initialSectio
 
   const sidebarTitleStyle = useMemo<TextStyle>(
     () => ({
-      fontSize: 13,
-      fontWeight: '700',
-      color: tc.text.secondary,
+      fontSize: 11,
+      fontWeight: '600',
+      color: tc.text.onRaisedSecondary ?? tc.text.secondary,
       textTransform: 'uppercase',
       letterSpacing: 0.5,
-      paddingHorizontal: 8,
+      paddingHorizontal: 12,
       marginBottom: 8,
     }),
     [tc],
@@ -5379,7 +5404,7 @@ export function SettingsDialog({ open, onClose, onOpenMarketplace, initialSectio
 
   const sidebarContent = (
     <ScrollArea style={sidebarStyle}>
-      <Box style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: isMobile ? 8 : 0 }}>
+      <Box style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: isMobile ? 8 : 0, paddingTop: 4 }}>
         <Text style={sidebarTitleStyle}>Settings</Text>
         {isMobile && (
           <Pressable
@@ -5534,6 +5559,25 @@ export function SettingsDialog({ open, onClose, onOpenMarketplace, initialSectio
       </ScrollView>
     </Box>
   );
+
+  // Inline mode: render content pane only (no modal wrapper).
+  // The sidebar navigation is handled by SettingsNavSidebar.
+  if (inline) {
+    return (
+      <Box style={{ flex: 1 }}>
+        <ScrollView
+          ref={contentScrollRef}
+          style={{ flex: 1 }}
+          contentContainerStyle={{ padding: 28 }}
+          showsVerticalScrollIndicator={false}
+        >
+          <Animated.View style={{ opacity: contentOpacity }} testID={SECTION_TEST_IDS[activeSection]}>
+            {renderSection()}
+          </Animated.View>
+        </ScrollView>
+      </Box>
+    );
+  }
 
   return (
     <Overlay
