@@ -17,6 +17,7 @@
     "outDir": "dist",
     "rootDir": "src",
     "baseUrl": ".",
+    "noEmit": true,
     "paths": {
       "@wisp/*": ["src/*"]
     }
