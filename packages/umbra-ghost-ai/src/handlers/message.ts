@@ -206,28 +206,23 @@ export async function handleMessage(
   let responseText: string;
 
   if (llm.chatStream) {
-    // Streaming mode: send an initial placeholder, then progressively
-    // update the message content via chat_message_update envelopes.
-    const messageId = uuid();
-    const timestamp = Date.now();
+    // Streaming mode: keep typing indicator alive during generation,
+    // then send the complete message as a single chat_message.
+    // (chat_message_update envelopes are unreliably delivered by the relay,
+    // so we use typing indicator pulses to show activity instead.)
+    const TYPING_PULSE_MS = 2500;
+    let typingInterval: ReturnType<typeof setInterval> | null = setInterval(() => {
+      sendTypingIndicator(identity, relay, friend);
+    }, TYPING_PULSE_MS);
 
-    // Send initial placeholder so the client shows a message bubble immediately
-    sendEncryptedMessage(messageId, '...', identity, relay, friend);
-
-    responseText = await llm.chatStream(messages, (accumulated: string) => {
-      // Send progressive update with accumulated text so far
-      try {
-        sendEncryptedUpdate(messageId, accumulated, identity, relay, friend);
-      } catch {
-        // Silently ignore relay errors during streaming — final message will be sent
-      }
-    });
-
-    // Send final update with the complete text to ensure nothing was lost
     try {
-      sendEncryptedUpdate(messageId, responseText, identity, relay, friend);
-    } catch {
-      // If final update fails, the initial message still exists
+      responseText = await llm.chatStream(messages, () => {
+        // Typing indicator is pulsed via interval above — callback is a no-op
+      });
+    } finally {
+      if (typingInterval) { clearInterval(typingInterval); typingInterval = null; }
+      // Send typing stopped so indicator disappears
+      sendStopTypingIndicator(identity, relay, friend);
     }
 
     // Parse and strip tutor score from the final response
@@ -237,6 +232,11 @@ export async function handleMessage(
     let cleanedResponse = responseText;
     if (tutorState) cleanedResponse = cleanedResponse.replace(TUTOR_TAG_STRIP, '');
     if (therapyState?.active) cleanedResponse = cleanedResponse.replace(THERAPY_TAG_STRIP, '');
+
+    // Send the complete message as a single chat_message
+    const messageId = uuid();
+    const timestamp = Date.now();
+    sendEncryptedMessage(messageId, responseText, identity, relay, friend);
 
     // Save the stripped version to context store (clean LLM history)
     store.saveMessage({
@@ -427,7 +427,7 @@ function sendEncryptedUpdate(
 }
 
 function sendTypingIndicator(identity: GhostIdentity, relay: RelayClient, friend: StoredFriend): void {
-  const envelope = {
+  relay.sendEnvelope(friend.did, {
     envelope: 'typing_indicator',
     version: 1,
     payload: {
@@ -437,6 +437,19 @@ function sendTypingIndicator(identity: GhostIdentity, relay: RelayClient, friend
       isTyping: true,
       timestamp: Date.now(),
     },
-  };
-  relay.sendEnvelope(friend.did, envelope);
+  });
+}
+
+function sendStopTypingIndicator(identity: GhostIdentity, relay: RelayClient, friend: StoredFriend): void {
+  relay.sendEnvelope(friend.did, {
+    envelope: 'typing_indicator',
+    version: 1,
+    payload: {
+      conversationId: friend.conversationId,
+      senderDid: identity.did,
+      senderName: identity.displayName ?? 'Ghost',
+      isTyping: false,
+      timestamp: Date.now(),
+    },
+  });
 }
