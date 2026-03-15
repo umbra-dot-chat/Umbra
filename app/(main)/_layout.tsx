@@ -308,7 +308,7 @@ function MainLayoutInner() {
   const [createCommunityOpen, setCreateCommunityOpen] = useState(false);
   const [discordImportOpen, setDiscordImportOpen] = useState(false);
   const [joinCommunityOpen, setJoinCommunityOpen] = useState(false);
-  const [accountSwitcherOpen, setAccountSwitcherOpen] = useState(true);
+  const [accountSwitcherOpen, setAccountSwitcherOpen] = useState(false);
   const [communitySubmitting, setCommunitySubmitting] = useState(false);
   const [communityError, setCommunityError] = useState<string | undefined>();
   const [marketplaceOpen, setMarketplaceOpen] = useState(false);
