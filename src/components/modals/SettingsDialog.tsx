@@ -1705,20 +1705,21 @@ function AccountSection() {
 function AppearanceSection() {
   const { mode, theme } = useTheme();
   const { activeTheme, themes, installedThemeIds, setTheme, accentColor, setAccentColor, showModeToggle, textSize, setTextSize, motionPreferences, setMotionPreferences, switchMode } = useAppTheme();
+  const { t } = useTranslation('settings');
   const tc = theme.colors;
 
   // Build theme dropdown options (only installed themes)
   const themeOptions = useMemo<InlineDropdownOption[]>(() => {
-    const installed = themes.filter((t) => installedThemeIds.has(t.id));
+    const installed = themes.filter((th) => installedThemeIds.has(th.id));
     return [
-      { value: 'default', label: 'Default', description: 'Umbra default theme' },
-      ...installed.map((t) => ({
-        value: t.id,
-        label: t.name,
-        description: t.description,
+      { value: 'default', label: 'Default', description: t('defaultThemeDesc') },
+      ...installed.map((th) => ({
+        value: th.id,
+        label: th.name,
+        description: th.description,
       })),
     ];
-  }, [themes, installedThemeIds]);
+  }, [themes, installedThemeIds, t]);
 
   const handleAccentChange = useCallback(
     (color: string) => {
@@ -1729,15 +1730,15 @@ function AppearanceSection() {
 
   return (
     <Box style={{ gap: 20 }}>
-      <SectionHeader title="Appearance" description="Customize the look and feel of the application." />
+      <SectionHeader title={t('sectionAppearance')} description={t('sectionAppearanceDesc')} />
 
       <Box nativeID="sub-theme">
-        <SettingRow label="Theme" description="Choose a color theme for the entire app." vertical>
+        <SettingRow label={t('subTheme')} description={t('themeDesc')} vertical>
           <InlineDropdown
             options={themeOptions}
             value={activeTheme?.id ?? 'default'}
             onChange={(id) => setTheme(id === 'default' ? null : id)}
-            placeholder="Select theme"
+            placeholder={t('selectTheme')}
             testID={TEST_IDS.SETTINGS.THEME_SELECTOR}
           />
           {activeTheme && (
@@ -1762,12 +1763,12 @@ function AppearanceSection() {
 
       <Box nativeID="sub-dark-mode">
         {showModeToggle && (
-        <SettingRow label="Dark Mode" description="Switch between light and dark themes.">
+        <SettingRow label={t('subDarkMode')} description={t('darkModeDesc')}>
           <SoundToggle
             checked={mode === 'dark'}
             onChange={switchMode}
             testID={TEST_IDS.SETTINGS.DARK_MODE_TOGGLE}
-            accessibilityActions={[{ name: 'activate', label: 'Toggle dark mode' }]}
+            accessibilityActions={[{ name: 'activate', label: t('subDarkMode') }]}
             onAccessibilityAction={(e: { nativeEvent: { actionName: string } }) => {
               if (e.nativeEvent.actionName === 'activate') switchMode();
             }}
@@ -1777,7 +1778,7 @@ function AppearanceSection() {
       </Box>
 
       <Box nativeID="sub-colors" testID={TEST_IDS.SETTINGS.ACCENT_COLOR} accessibilityValue={{ text: accentColor ?? '' }}>
-        <SettingRow label="Accent Color" description="Choose a primary color for buttons, links, and highlights." vertical>
+        <SettingRow label={t('subColors')} description={t('accentColorDesc')} vertical>
           <ColorPicker
             value={accentColor ?? theme.colors.accent.primary}
             onChange={handleAccentChange}
@@ -1787,7 +1788,7 @@ function AppearanceSection() {
           />
           {accentColor && (
             <Button size="sm" variant="tertiary" onPress={() => setAccentColor(null)} style={{ alignSelf: 'flex-start', marginTop: 8 }}>
-              Reset to theme default
+              {t('resetToDefault')}
             </Button>
           )}
         </SettingRow>
@@ -1806,19 +1807,19 @@ function AppearanceSection() {
       </Box>
 
       <Box nativeID="sub-motion">
-        <SettingRow label="Animations" description="Enable or disable all UI animations.">
+        <SettingRow label={t('animationsLabel')} description={t('animationsDesc')}>
           <SoundToggle
             checked={motionPreferences.enableAnimations}
             onChange={() => setMotionPreferences({ enableAnimations: !motionPreferences.enableAnimations })}
           />
         </SettingRow>
-        <SettingRow label="Shimmer Effects" description="Toggle shimmer sweeps and gradient shifts.">
+        <SettingRow label={t('shimmerLabel')} description={t('shimmerDesc')}>
           <SoundToggle
             checked={motionPreferences.enableShimmer}
             onChange={() => setMotionPreferences({ enableShimmer: !motionPreferences.enableShimmer })}
           />
         </SettingRow>
-        <SettingRow label="Reduce Motion" description="Minimize motion for accessibility. Overrides all animation settings.">
+        <SettingRow label={t('reduceMotionLabel')} description={t('reduceMotionDesc')}>
           <SoundToggle
             checked={motionPreferences.reduceMotion}
             onChange={() => setMotionPreferences({ reduceMotion: !motionPreferences.reduceMotion })}
@@ -1830,8 +1831,9 @@ function AppearanceSection() {
 }
 
 function TextSizeSettingRow({ value, onChange }: { value: string; onChange: (v: TextSize) => void }) {
+  const { t } = useTranslation('settings');
   return (
-    <SettingRow label="Text Size" description="Adjust the base text size across the app." vertical>
+    <SettingRow label={t('subTextSize')} description={t('textSizeDesc')} vertical>
       <InlineDropdown
         options={TEXT_SIZE_OPTIONS}
         value={value}
@@ -1846,6 +1848,7 @@ function TextSizeSettingRow({ value, onChange }: { value: string; onChange: (v: 
 function FontSettingRow() {
   const { activeFont, fonts, installedFontIds, setActiveFont } = useFonts();
   const { theme } = useTheme();
+  const { t } = useTranslation('settings');
   const tc = theme.colors;
 
   // Build options from installed fonts + system default
@@ -1865,12 +1868,12 @@ function FontSettingRow() {
   }, [setActiveFont]);
 
   return (
-    <SettingRow label="Font Family" description="Choose a typeface for the entire app. Install more fonts from the Marketplace." vertical>
+    <SettingRow label={t('subFont')} description={t('fontDesc')} vertical>
       <InlineDropdown
         options={fontOptions}
         value={activeFont.id}
         onChange={handleFontChange}
-        placeholder="Select font"
+        placeholder={t('selectFont')}
       />
 
       {/* Preview of active font */}
@@ -1895,7 +1898,7 @@ function FontSettingRow() {
 }
 
 function LanguageSettingRow() {
-  const { i18n } = useTranslation();
+  const { i18n, t } = useTranslation('settings');
   const { service } = useUmbra();
 
   const languageOptions = useMemo<InlineDropdownOption[]>(() =>
@@ -1915,12 +1918,12 @@ function LanguageSettingRow() {
   }, [i18n, service]);
 
   return (
-    <SettingRow label="Language" description="Choose the display language for the app interface." vertical>
+    <SettingRow label={t('subLanguage')} description={t('languageDesc')} vertical>
       <InlineDropdown
         options={languageOptions}
         value={i18n.language?.split('-')[0] || 'en'}
         onChange={handleLanguageChange}
-        placeholder="Select language"
+        placeholder={t('selectLanguage')}
       />
     </SettingRow>
   );
