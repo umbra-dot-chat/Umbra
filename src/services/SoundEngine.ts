@@ -448,15 +448,38 @@ export class SoundEngine {
   // ── Playback ─────────────────────────────────────────────────────────
 
   playSound(name: SoundName): void {
-    if (this._muted) return;
+    console.log('[SoundEngine] playSound called:', name, {
+      muted: this._muted,
+      category: SOUND_CATEGORY_MAP[name],
+      categoryEnabled: this._categoryEnabled[SOUND_CATEGORY_MAP[name]],
+      catVol: this._categoryVolumes[SOUND_CATEGORY_MAP[name]],
+      masterVol: this._masterVolume,
+      theme: this._activeTheme,
+    });
+
+    if (this._muted) {
+      console.log('[SoundEngine] Blocked: muted');
+      return;
+    }
 
     const category = SOUND_CATEGORY_MAP[name];
-    if (!this._categoryEnabled[category]) return;
+    if (!this._categoryEnabled[category]) {
+      console.log('[SoundEngine] Blocked: category disabled:', category);
+      return;
+    }
     const catVol = this._categoryVolumes[category] ?? 1.0;
-    if (catVol <= 0) return;
+    if (catVol <= 0) {
+      console.log('[SoundEngine] Blocked: category volume is 0');
+      return;
+    }
 
     const audio = this.ensureContext();
-    if (!audio) return;
+    if (!audio) {
+      console.log('[SoundEngine] Blocked: no AudioContext');
+      return;
+    }
+
+    console.log('[SoundEngine] AudioContext state:', audio.ctx.state);
 
     if (audio.ctx.state === 'suspended') {
       audio.ctx.resume().catch(() => {});
@@ -475,6 +498,7 @@ export class SoundEngine {
       } else {
         this.playSynth(name, audio.ctx, soundGain);
       }
+      console.log('[SoundEngine] Sound scheduled successfully:', name);
     } catch (err) {
       if (__DEV__) dbg.warn('lifecycle', 'Failed to play sound', { name, error: String(err) }, SRC);
     }

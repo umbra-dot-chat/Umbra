@@ -447,10 +447,13 @@ export function useAppUpdate(): AppUpdateState {
     : null;
 
   // Dismiss handler (for version update banners)
+  // Also dismisses the install prompt so the banner fully closes with one click.
   const dismiss = useCallback(() => {
     const version = latestVersion || APP_VERSION;
     setStorageItem(`${DISMISS_KEY_PREFIX}${version}`, 'true');
     setIsDismissed(true);
+    setStorageItem(INSTALL_DISMISS_KEY, 'true');
+    setIsInstallDismissed(true);
   }, [latestVersion]);
 
   // Dismiss handler for web install-as-app prompt

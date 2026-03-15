@@ -35,6 +35,8 @@ export interface CommandProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSelect?: (value: string) => void;
+  /** Called whenever the internal search value changes */
+  onSearchChange?: (search: string) => void;
   size?: CommandSize;
   filter?: (value: string, search: string, keywords?: string[]) => boolean;
   loading?: boolean;
@@ -43,13 +45,18 @@ export interface CommandProps {
   style?: ViewStyle;
 }
 
-export function Command({ open, onOpenChange, onSelect, size = 'md', filter, loading = false, closeOnSelect = true, children, style: userStyle }: CommandProps) {
+export function Command({ open, onOpenChange, onSelect, onSearchChange: onSearchChangeProp, size = 'md', filter, loading = false, closeOnSelect = true, children, style: userStyle }: CommandProps) {
   const { theme, mode } = useTheme();
   const tc = theme.colors;
   const isDark = mode === 'dark';
   const [search, setSearch] = useState('');
 
-  useEffect(() => { if (open) setSearch(''); }, [open]);
+  const handleSearchChange = useCallback((v: string) => {
+    setSearch(v);
+    onSearchChangeProp?.(v);
+  }, [onSearchChangeProp]);
+
+  useEffect(() => { if (open) { setSearch(''); onSearchChangeProp?.(''); } }, [open]);
 
   const handleItemSelect = useCallback((value: string) => {
     onSelect?.(value);
@@ -57,8 +64,8 @@ export function Command({ open, onOpenChange, onSelect, size = 'md', filter, loa
   }, [onSelect, closeOnSelect, onOpenChange]);
 
   const contextValue = useMemo<CommandContextValue>(() => ({
-    search, onSearchChange: setSearch, onItemSelect: handleItemSelect, filter, size, loading,
-  }), [search, handleItemSelect, filter, size, loading]);
+    search, onSearchChange: handleSearchChange, onItemSelect: handleItemSelect, filter, size, loading,
+  }), [search, handleSearchChange, handleItemSelect, filter, size, loading]);
 
   if (!open) return null;
 
