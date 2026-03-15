@@ -19,6 +19,7 @@ import {
   useTheme,
 } from '@coexist/wisp-react-native';
 import { MessageIcon } from '@/components/ui';
+import { useTranslation } from 'react-i18next';
 import { useConversations } from '@/hooks/useConversations';
 import { useFriends } from '@/hooks/useFriends';
 import { useGroups } from '@/hooks/useGroups';
@@ -35,6 +36,7 @@ export function ForwardDialog({ open, onClose, onSelectConversation }: ForwardDi
   if (__DEV__) dbg.trackRender('ForwardDialog');
   const { theme } = useTheme();
   const tc = theme.colors;
+  const { t } = useTranslation('chat');
   const { conversations } = useConversations();
   const { friends } = useFriends();
   const { groups } = useGroups();
@@ -93,7 +95,7 @@ export function ForwardDialog({ open, onClose, onSelectConversation }: ForwardDi
     <Dialog
       open={open}
       onClose={handleClose}
-      title="Forward Message"
+      title={t('forwardMessage')}
       description="Choose a conversation to forward to."
       icon={<MessageIcon size={22} color={tc.accent.primary} />}
       size="md"

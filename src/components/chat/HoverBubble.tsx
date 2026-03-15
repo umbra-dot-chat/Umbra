@@ -4,6 +4,7 @@ import { Box, Text, useTheme, MessageActionBar } from '@coexist/wisp-react-nativ
 import { ReplyIcon, ThreadIcon, CopyIcon, ForwardIcon, PinIcon, TrashIcon, EditIcon } from '@/components/ui';
 import { SlotRenderer } from '@/components/plugins/SlotRenderer';
 import { useAnimatedToggle } from '@/hooks/useAnimatedToggle';
+import { useTranslation } from 'react-i18next';
 import { AnimatedPresence } from '@/components/ui/AnimatedPresence';
 import { dbg } from '@/utils/debug';
 
@@ -106,6 +107,7 @@ export const HoverBubble = React.memo(function HoverBubble({
   const { theme } = useTheme();
   const colors = theme.colors;
   const { width: winW, height: winH } = useWindowDimensions();
+  const { t } = useTranslation('chat');
 
   // ── Local hover state — eliminates parent re-render cascade ──
   const [hovered, setHovered] = useState(false);
@@ -265,7 +267,7 @@ export const HoverBubble = React.memo(function HoverBubble({
             >
             <ContextMenuItem
               icon={<ReplyIcon size={14} color={colors.text.secondary} />}
-              label="Reply"
+              label={t('reply')}
               onPress={() => handleAction(contextActions.onReply)}
               colors={colors}
             />
@@ -277,27 +279,27 @@ export const HoverBubble = React.memo(function HoverBubble({
             />
             <ContextMenuItem
               icon={<CopyIcon size={14} color={colors.text.secondary} />}
-              label="Copy Text"
+              label={t('copyMessage')}
               onPress={() => handleAction(contextActions.onCopy)}
               colors={colors}
             />
             {contextActions.onEdit && (
               <ContextMenuItem
                 icon={<EditIcon size={14} color={colors.text.secondary} />}
-                label="Edit Message"
+                label={t('editMessageAction')}
                 onPress={() => handleAction(contextActions.onEdit!)}
                 colors={colors}
               />
             )}
             <ContextMenuItem
               icon={<ForwardIcon size={14} color={colors.text.secondary} />}
-              label="Forward"
+              label={t('forward')}
               onPress={() => handleAction(contextActions.onForward)}
               colors={colors}
             />
             <ContextMenuItem
               icon={<PinIcon size={14} color={colors.text.secondary} />}
-              label="Pin Message"
+              label={t('pinMessage')}
               onPress={() => handleAction(contextActions.onPin)}
               colors={colors}
             />
@@ -312,7 +314,7 @@ export const HoverBubble = React.memo(function HoverBubble({
             />
             <ContextMenuItem
               icon={<TrashIcon size={14} color={colors.status.danger} />}
-              label="Delete Message"
+              label={t('deleteMessage')}
               onPress={() => handleAction(contextActions.onDelete)}
               danger
               colors={colors}

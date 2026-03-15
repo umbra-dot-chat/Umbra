@@ -10,6 +10,7 @@ import type { RightPanel } from '@/types/panels';
 import { SearchIcon, PinIcon, UsersIcon, PhoneIcon, VideoIcon, FolderIcon, ArrowLeftIcon, MoreIcon, XIcon, SettingsIcon } from '@/components/ui';
 import { useIsMobile } from '@/hooks/useIsMobile';
 import { useUnifiedSearch } from '@/contexts/UnifiedSearchContext';
+import { useTranslation } from 'react-i18next';
 
 export interface ChatHeaderProps {
   active: { name: string; online?: boolean; group?: string[]; memberCount?: number; avatar?: string } | undefined;
@@ -33,6 +34,8 @@ export function ChatHeader({ active, rightPanel, togglePanel, onShowProfile, onV
   const themeColors = theme.colors;
   const isMobile = useIsMobile();
   const { setSidebarSearchActive } = useUnifiedSearch();
+  const { t } = useTranslation('chat');
+  const { t: tc } = useTranslation('common');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   // Slide animation for mobile menu
@@ -53,7 +56,7 @@ export function ChatHeader({ active, rightPanel, togglePanel, onShowProfile, onV
         variant="tertiary"
         size="sm"
         onPress={() => { setSidebarSearchActive(true); setMobileMenuOpen(false); }}
-        accessibilityLabel="Search messages"
+        accessibilityLabel={t('searchMessages')}
         iconLeft={<SearchIcon size={18} color={themeColors.text.secondary} />}
       />
       {showFilesButton && (
@@ -62,7 +65,7 @@ export function ChatHeader({ active, rightPanel, togglePanel, onShowProfile, onV
           variant={rightPanel === 'files' ? 'secondary' : 'tertiary'}
           size="sm"
           onPress={() => { togglePanel('files'); setMobileMenuOpen(false); }}
-          accessibilityLabel="Toggle shared files"
+          accessibilityLabel={t('toggleSharedFiles')}
           iconLeft={<FolderIcon size={18} color={themeColors.text.secondary} />}
         />
       )}
@@ -71,7 +74,7 @@ export function ChatHeader({ active, rightPanel, togglePanel, onShowProfile, onV
         variant={rightPanel === 'pins' ? 'secondary' : 'tertiary'}
         size="sm"
         onPress={() => { togglePanel('pins'); setMobileMenuOpen(false); }}
-        accessibilityLabel="Toggle pinned messages"
+        accessibilityLabel={t('togglePinnedMessages')}
         iconLeft={<PinIcon size={18} color={themeColors.text.secondary} />}
       />
       <Button
@@ -79,7 +82,7 @@ export function ChatHeader({ active, rightPanel, togglePanel, onShowProfile, onV
         variant={rightPanel === 'members' ? 'secondary' : 'tertiary'}
         size="sm"
         onPress={() => { togglePanel('members'); setMobileMenuOpen(false); }}
-        accessibilityLabel="Toggle members"
+        accessibilityLabel={t('toggleMembers')}
         iconLeft={<UsersIcon size={18} color={themeColors.text.secondary} />}
       />
       {active?.group && onGroupSettings && (
@@ -87,7 +90,7 @@ export function ChatHeader({ active, rightPanel, togglePanel, onShowProfile, onV
           variant="tertiary"
           size="sm"
           onPress={() => { onGroupSettings(); setMobileMenuOpen(false); }}
-          accessibilityLabel="Group settings"
+          accessibilityLabel={t('groupSettings')}
           iconLeft={<SettingsIcon size={18} color={themeColors.text.secondary} />}
         />
       )}
@@ -130,7 +133,7 @@ export function ChatHeader({ active, rightPanel, togglePanel, onShowProfile, onV
             onPress={onBack}
             hitSlop={8}
             style={{ padding: 8 }}
-            accessibilityLabel="Back to conversations"
+            accessibilityLabel={t('chat')}
           >
             <ArrowLeftIcon size={20} color={themeColors.text.secondary} />
           </Pressable>
@@ -163,11 +166,11 @@ export function ChatHeader({ active, rightPanel, togglePanel, onShowProfile, onV
             {!mobileMenuOpen && (
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Text testID={TEST_IDS.CHAT.HEADER_NAME} size="md" weight="bold" numberOfLines={1}>
-                  {active ? active.name : 'Chat'}
+                  {active ? active.name : t('chat')}
                 </Text>
                 {active && active.group && active.memberCount != null && (
                   <Text testID={TEST_IDS.CHAT.HEADER_STATUS} size="xs" style={{ color: themeColors.text.secondary }}>
-                    {active.memberCount} {active.memberCount === 1 ? 'member' : 'members'}
+                    {active.memberCount} {active.memberCount === 1 ? tc('member') : tc('members')}
                   </Text>
                 )}
               </View>
@@ -189,14 +192,14 @@ export function ChatHeader({ active, rightPanel, togglePanel, onShowProfile, onV
                   <Pressable
                     onPress={() => { onVoiceCall?.(); setMobileMenuOpen(false); }}
                     style={{ padding: 8 }}
-                    accessibilityLabel="Voice call"
+                    accessibilityLabel={t('voiceCall')}
                   >
                     <PhoneIcon size={18} color={themeColors.text.secondary} />
                   </Pressable>
                   <Pressable
                     onPress={() => { onVideoCall?.(); setMobileMenuOpen(false); }}
                     style={{ padding: 8 }}
-                    accessibilityLabel="Video call"
+                    accessibilityLabel={t('videoCall')}
                   >
                     <VideoIcon size={18} color={themeColors.text.secondary} />
                   </Pressable>
@@ -217,7 +220,7 @@ export function ChatHeader({ active, rightPanel, togglePanel, onShowProfile, onV
                   onPress={onVoiceCall}
                   hitSlop={4}
                   style={{ padding: 8 }}
-                  accessibilityLabel="Voice call"
+                  accessibilityLabel={t('voiceCall')}
                 >
                   <PhoneIcon size={18} color={themeColors.text.secondary} />
                 </Pressable>
@@ -226,7 +229,7 @@ export function ChatHeader({ active, rightPanel, togglePanel, onShowProfile, onV
                   onPress={onVideoCall}
                   hitSlop={4}
                   style={{ padding: 8 }}
-                  accessibilityLabel="Video call"
+                  accessibilityLabel={t('videoCall')}
                 >
                   <VideoIcon size={18} color={themeColors.text.secondary} />
                 </Pressable>
@@ -236,7 +239,7 @@ export function ChatHeader({ active, rightPanel, togglePanel, onShowProfile, onV
               onPress={() => setMobileMenuOpen(true)}
               hitSlop={4}
               style={{ padding: 8 }}
-              accessibilityLabel="More options"
+              accessibilityLabel={t('moreOptions')}
             >
               <MoreIcon size={18} color={themeColors.text.secondary} />
             </Pressable>
@@ -246,7 +249,7 @@ export function ChatHeader({ active, rightPanel, togglePanel, onShowProfile, onV
             onPress={() => setMobileMenuOpen(false)}
             hitSlop={8}
             style={{ padding: 8 }}
-            accessibilityLabel="Close menu"
+            accessibilityLabel={t('closeMenu')}
           >
             <XIcon size={18} color={themeColors.text.secondary} />
           </Pressable>
@@ -278,11 +281,11 @@ export function ChatHeader({ active, rightPanel, togglePanel, onShowProfile, onV
           )}
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text testID={TEST_IDS.CHAT.HEADER_NAME} size="md" weight="bold" numberOfLines={1}>
-              {active ? active.name : 'Chat'}
+              {active ? active.name : t('chat')}
             </Text>
             {active && active.group && active.memberCount != null && (
               <Text testID={TEST_IDS.CHAT.HEADER_STATUS} size="xs" style={{ color: themeColors.text.secondary }}>
-                {active.memberCount} {active.memberCount === 1 ? 'member' : 'members'}
+                {active.memberCount} {active.memberCount === 1 ? tc('member') : tc('members')}
               </Text>
             )}
           </View>
@@ -296,7 +299,7 @@ export function ChatHeader({ active, rightPanel, togglePanel, onShowProfile, onV
               variant="tertiary"
               size="sm"
               onPress={onVoiceCall}
-              accessibilityLabel="Voice call"
+              accessibilityLabel={t('voiceCall')}
               iconLeft={<PhoneIcon size={18} color={themeColors.text.secondary} />}
             />
             <Button
@@ -304,7 +307,7 @@ export function ChatHeader({ active, rightPanel, togglePanel, onShowProfile, onV
               variant="tertiary"
               size="sm"
               onPress={onVideoCall}
-              accessibilityLabel="Video call"
+              accessibilityLabel={t('videoCall')}
               iconLeft={<VideoIcon size={18} color={themeColors.text.secondary} />}
             />
           </>
