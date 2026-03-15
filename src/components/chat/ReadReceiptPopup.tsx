@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from 'react';
 import { Pressable } from 'react-native';
 import { Avatar, Box, Text, StatusIcon, useTheme } from '@coexist/wisp-react-native';
+import { useTranslation } from 'react-i18next';
 
 export interface ReadReceiptMember {
   did: string;
@@ -25,13 +26,14 @@ interface ReadReceiptPopupProps {
 export function ReadReceiptPopup({ readers, totalParticipants, themeColors }: ReadReceiptPopupProps) {
   const [expanded, setExpanded] = useState(false);
   const toggle = useCallback(() => setExpanded(prev => !prev), []);
+  const { t } = useTranslation('chat');
 
   if (readers.length === 0) return null;
 
   const allRead = readers.length >= totalParticipants;
   const label = allRead
-    ? 'Read by all'
-    : `Read by ${readers.length}`;
+    ? t('readByAll')
+    : t('readByCount', { count: readers.length });
 
   return (
     <Box style={{ alignItems: 'flex-end', marginTop: 2 }}>

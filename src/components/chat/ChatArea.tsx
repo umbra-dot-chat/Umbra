@@ -18,6 +18,7 @@ import { parseMessageContent, buildEmojiMap, isEmojiOnlyMessage, type EmojiMap }
 import type { Message, CommunityEmoji } from '@umbra/service';
 import type { ActiveCall } from '@/types/call';
 import { InlineCallCardMessage } from '@/components/call/InlineCallCardMessage';
+import { useTranslation } from 'react-i18next';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -337,6 +338,7 @@ export function ChatArea({
   const themeColors = theme.colors;
   const { displayMode } = useMessaging();
   const { applyTextTransforms } = usePlugins();
+  const { t } = useTranslation('chat');
 
   // ── Download state ──
   const [downloadingFileId, setDownloadingFileId] = useState<string | null>(null);
@@ -789,7 +791,7 @@ export function ChatArea({
                   isOutgoing && isGroupChat && firstMsg.status === 'read' ? (
                     <ReadReceiptPopup readers={groupReaders} totalParticipants={groupReaders.length} themeColors={themeColors} />
                   ) : !isOutgoing && groupIdx === lastIncomingGroupIdx ? (
-                    <Text size="xs" style={{ color: themeColors.text.muted, marginTop: 2 }}>Seen</Text>
+                    <Text size="xs" style={{ color: themeColors.text.muted, marginTop: 2 }}>{t('seen')}</Text>
                   ) : undefined
                 }
               >
@@ -821,7 +823,7 @@ export function ChatArea({
                 isOutgoing && isGroupChat && firstMsg.status === 'read' ? (
                   <ReadReceiptPopup readers={groupReaders} totalParticipants={groupReaders.length} themeColors={themeColors} />
                 ) : !isOutgoing && groupIdx === lastIncomingGroupIdx ? (
-                  <Text size="xs" style={{ color: themeColors.text.muted, marginTop: 2 }}>Seen</Text>
+                  <Text size="xs" style={{ color: themeColors.text.muted, marginTop: 2 }}>{t('seen')}</Text>
                 ) : undefined
               }
             >

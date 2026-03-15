@@ -19,5 +19,8 @@
   "forwardMessage": "Переслать сообщение",
   "copyMessage": "Копировать",
   "sendMessageToStart": "Отправьте сообщение, чтобы начать беседу.",
-  "sending": "Отправка {{percent}}%"
+  "sending": "Отправка {{percent}}%",
+  "readByAll": "Прочитано всеми",
+  "readByCount": "Прочитано {{count}}",
+  "seen": "Просмотрено"
 }

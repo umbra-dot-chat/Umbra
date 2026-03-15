@@ -19,5 +19,8 @@
   "forwardMessage": "Forward Message",
   "copyMessage": "Copy",
   "sendMessageToStart": "Send a message to start the conversation.",
-  "sending": "Sending {{percent}}%"
+  "sending": "Sending {{percent}}%",
+  "readByAll": "Read by all",
+  "readByCount": "Read by {{count}}",
+  "seen": "Seen"
 }

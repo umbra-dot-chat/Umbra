@@ -19,5 +19,8 @@
   "forwardMessage": "Reenviar mensaje",
   "copyMessage": "Copiar",
   "sendMessageToStart": "Envía un mensaje para iniciar la conversación.",
-  "sending": "Enviando {{percent}}%"
+  "sending": "Enviando {{percent}}%",
+  "readByAll": "Leído por todos",
+  "readByCount": "Leído por {{count}}",
+  "seen": "Visto"
 }

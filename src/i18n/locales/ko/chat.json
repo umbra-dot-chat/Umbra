@@ -19,5 +19,8 @@
   "forwardMessage": "메시지 전달",
   "copyMessage": "복사",
   "sendMessageToStart": "메시지를 보내 대화를 시작하세요.",
-  "sending": "전송 중 {{percent}}%"
+  "sending": "전송 중 {{percent}}%",
+  "readByAll": "모두 읽음",
+  "readByCount": "{{count}}명 읽음",
+  "seen": "읽음"
 }
