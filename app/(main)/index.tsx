@@ -200,7 +200,7 @@ export default function ChatPage() {
       setActiveMemberCount(undefined);
       setActiveMemberNames([]);
     }
-  }, [activeConversation, getMembers]);
+  }, [activeConversation, getMembers, groups]);
 
   // Compute participant DIDs for the active conversation
   const participantDids = useMemo(() => {
