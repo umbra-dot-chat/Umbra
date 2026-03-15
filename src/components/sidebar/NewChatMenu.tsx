@@ -10,6 +10,7 @@ import React, { useEffect, useRef, useCallback } from 'react';
 import { Platform } from 'react-native';
 import { Box, Button, Text, useTheme } from '@coexist/wisp-react-native';
 import { UsersIcon, MessageIcon } from '@/components/ui';
+import { useTranslation } from 'react-i18next';
 import { dbg } from '@/utils/debug';
 
 export interface NewChatMenuProps {
@@ -23,6 +24,7 @@ export function NewChatMenu({ visible, onClose, onNewDm, onNewGroup }: NewChatMe
   if (__DEV__) dbg.trackRender('NewChatMenu');
   const { theme } = useTheme();
   const tc = theme.colors;
+  const { t } = useTranslation('sidebar');
   const menuRef = useRef<any>(null);
   // Track whether an internal item was clicked so the outside-click handler skips closing
   const internalClickRef = useRef(false);
@@ -102,7 +104,7 @@ export function NewChatMenu({ visible, onClose, onNewDm, onNewGroup }: NewChatMe
         iconLeft={<MessageIcon size={16} color={tc.text.onRaisedSecondary} />}
         style={{ justifyContent: 'flex-start', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 0 }}
       >
-        <Text size="sm" weight="medium" style={{ color: tc.text.onRaised }}>New DM</Text>
+        <Text size="sm" weight="medium" style={{ color: tc.text.onRaised }}>{t('newDm')}</Text>
       </Button>
 
       <Box style={{ height: 1, backgroundColor: tc.border.strong }} />
@@ -115,7 +117,7 @@ export function NewChatMenu({ visible, onClose, onNewDm, onNewGroup }: NewChatMe
         iconLeft={<UsersIcon size={16} color={tc.text.onRaisedSecondary} />}
         style={{ justifyContent: 'flex-start', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 0 }}
       >
-        <Text size="sm" weight="medium" style={{ color: tc.text.onRaised }}>New Group</Text>
+        <Text size="sm" weight="medium" style={{ color: tc.text.onRaised }}>{t('newGroup')}</Text>
       </Button>
     </Box>
   );

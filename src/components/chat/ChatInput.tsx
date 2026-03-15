@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Platform, Pressable } from 'react-native';
 import type { View } from 'react-native';
 import { TEST_IDS } from '@/constants/test-ids';
@@ -84,6 +85,7 @@ export function ChatInput({
   friendDid, friendDisplayName, onClearChat,
 }: ChatInputProps) {
   if (__DEV__) dbg.trackRender('ChatInput');
+  const { t } = useTranslation('chat');
   const { theme } = useTheme();
   const { motionPreferences } = useAppTheme();
   const { friends } = useFriends();
@@ -603,7 +605,7 @@ export function ChatInput({
                 if (editing && onCancelEdit) onCancelEdit();
                 onSubmit(msg);
               }}
-              placeholder={editing ? 'Edit message...' : 'Type a message...'}
+              placeholder={editing ? t('editMessage') : t('typeMessage')}
               variant="pill"
               showAttachment={!editing}
               onAttachmentClick={onAttachmentClick}

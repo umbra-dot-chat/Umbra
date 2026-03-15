@@ -19,12 +19,13 @@ import {
 } from '@/contexts/MarketplaceNavigationContext';
 import { PuzzleIcon, PaletteIcon, ShoppingBagIcon } from '@/components/ui';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useTranslation } from 'react-i18next';
 
 // ─── Section data ────────────────────────────────────────────────────────────
 
 interface SectionItem {
   id: MarketplaceSection;
-  label: string;
+  labelKey: string;
   icon: React.ComponentType<{ size?: number; color?: string }>;
   color: string;
   secondaryColor: string;
@@ -42,9 +43,9 @@ function FontIcon({ size = 16, color }: { size?: number; color?: string }) {
 }
 
 const SECTIONS: SectionItem[] = [
-  { id: 'plugins', label: 'Plugins', icon: PuzzleIcon, color: '#8B5CF6', secondaryColor: '#a78bfa' },
-  { id: 'themes', label: 'Themes', icon: PaletteIcon, color: '#EC4899', secondaryColor: '#f472b6' },
-  { id: 'fonts', label: 'Fonts', icon: FontIcon, color: '#3B82F6', secondaryColor: '#60a5fa' },
+  { id: 'plugins', labelKey: 'plugins', icon: PuzzleIcon, color: '#8B5CF6', secondaryColor: '#a78bfa' },
+  { id: 'themes', labelKey: 'themes', icon: PaletteIcon, color: '#EC4899', secondaryColor: '#f472b6' },
+  { id: 'fonts', labelKey: 'fonts', icon: FontIcon, color: '#3B82F6', secondaryColor: '#60a5fa' },
 ];
 
 // ─── Props ──────────────────────────────────────────────────────────────────
@@ -85,6 +86,7 @@ function MarketplaceNavContent({
   const { theme, mode } = useTheme();
   const tc = theme.colors;
   const isDark = mode === 'dark';
+  const { t } = useTranslation('sidebar');
   const { contentFlex } = useSidebarShellLayout();
 
   return (
@@ -171,7 +173,7 @@ function MarketplaceNavContent({
                     color: isActive ? tc.text.primary : tc.text.secondary,
                   }}
                 >
-                  {sec.label}
+                  {t(sec.labelKey)}
                 </Text>
               </Pressable>
             </Box>

@@ -8,6 +8,7 @@
  */
 
 import React, { useCallback, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Pressable, Platform, ScrollView } from 'react-native';
 import {
   Box,
@@ -82,6 +83,7 @@ function SettingsNavContent({
   onSectionPress: (id: SettingsSection) => void;
   onSubPress: (sectionId: SettingsSection, subId: string) => void;
 }) {
+  const { t } = useTranslation('settings');
   const { theme, mode } = useTheme();
   const tc = theme.colors;
   const isDark = mode === 'dark';
@@ -108,7 +110,7 @@ function SettingsNavContent({
             letterSpacing: 0.5,
           }}
         >
-          Settings
+          {t('title')}
         </Text>
       </Box>
 
