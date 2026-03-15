@@ -9,6 +9,7 @@ import { InlineEventCard } from '@/components/ui/InlineEventCard';
 import { HoverBubble } from './HoverBubble';
 import { MsgGroup } from './MsgGroup';
 import { InlineMsgGroup } from './InlineMsgGroup';
+import { ReadReceiptPopup } from './ReadReceiptPopup';
 import { DmFileMessage } from '@/components/chat/DmFileMessage';
 import { SlotRenderer } from '@/components/plugins/SlotRenderer';
 import { usePlugins } from '@/contexts/PluginContext';
@@ -443,6 +444,17 @@ export function ChatArea({
     outputRange: ['transparent', themeColors.accent.primary + '22'],
   });
 
+  // Build group reader list for tap-to-expand read receipts in group chats
+  // (must be before early returns to satisfy Rules of Hooks)
+  const groupReaders = useMemo(() => {
+    if (!isGroupChat) return [];
+    return Object.entries(friendNames).map(([did, name]) => ({
+      did,
+      name,
+      avatar: friendAvatars?.[did],
+    }));
+  }, [isGroupChat, friendNames, friendAvatars]);
+
   if (isLoading) {
     return <LoadingSkeleton />;
   }
@@ -768,14 +780,18 @@ export function ChatArea({
                 avatarSrc={getSenderAvatar(senderDid)}
                 senderDid={senderDid}
                 timestamp={timeStr}
-                status={isOutgoing ? (firstMsg.status as string) : undefined}
+                status={isOutgoing && !(isGroupChat && firstMsg.status === 'read') ? (firstMsg.status as string) : undefined}
                 senderColor={isGroupChat ? memberColor(senderDid) : undefined}
                 themeColors={themeColors}
                 onShowProfile={onShowProfile}
                 messageFingerprint={group.map(m => `${m.id}|${m.edited?1:0}|${m.status||''}|${m.reactions?.length||0}`).join(',')}
-                readReceipts={!isOutgoing && groupIdx === lastIncomingGroupIdx ? (
-                  <Text size="xs" style={{ color: themeColors.text.muted, marginTop: 2 }}>Seen</Text>
-                ) : undefined}
+                readReceipts={
+                  isOutgoing && isGroupChat && firstMsg.status === 'read' ? (
+                    <ReadReceiptPopup readers={groupReaders} totalParticipants={groupReaders.length} themeColors={themeColors} />
+                  ) : !isOutgoing && groupIdx === lastIncomingGroupIdx ? (
+                    <Text size="xs" style={{ color: themeColors.text.muted, marginTop: 2 }}>Seen</Text>
+                  ) : undefined
+                }
               >
                 {renderMessages(true)}
               </InlineMsgGroup>
@@ -796,14 +812,18 @@ export function ChatArea({
               avatarSrc={getSenderAvatar(senderDid)}
               senderDid={senderDid}
               timestamp={timeStr}
-              status={isOutgoing ? (firstMsg.status as string) : undefined}
+              status={isOutgoing && !(isGroupChat && firstMsg.status === 'read') ? (firstMsg.status as string) : undefined}
               senderColor={isGroupChat && !isOutgoing ? memberColor(senderDid) : undefined}
               themeColors={themeColors}
               onShowProfile={onShowProfile}
               messageFingerprint={group.map(m => `${m.id}|${m.edited?1:0}|${m.status||''}|${m.reactions?.length||0}`).join(',')}
-              readReceipts={!isOutgoing && groupIdx === lastIncomingGroupIdx ? (
-                <Text size="xs" style={{ color: themeColors.text.muted, marginTop: 2 }}>Seen</Text>
-              ) : undefined}
+              readReceipts={
+                isOutgoing && isGroupChat && firstMsg.status === 'read' ? (
+                  <ReadReceiptPopup readers={groupReaders} totalParticipants={groupReaders.length} themeColors={themeColors} />
+                ) : !isOutgoing && groupIdx === lastIncomingGroupIdx ? (
+                  <Text size="xs" style={{ color: themeColors.text.muted, marginTop: 2 }}>Seen</Text>
+                ) : undefined
+              }
             >
               {renderMessages(false)}
             </MsgGroup>
