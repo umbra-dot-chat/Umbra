@@ -53,6 +53,7 @@ import type { PluginPermission, PluginInstance } from '@umbra/plugin-sdk';
 import { TEST_IDS } from '@/constants/test-ids';
 import { LinearGradient } from 'expo-linear-gradient';
 import { dbg } from '@/utils/debug';
+import { useMarketplaceNavigation } from '@/contexts/MarketplaceNavigationContext';
 
 const SRC = 'PluginMarketplace';
 
@@ -1370,8 +1371,14 @@ export function PluginMarketplace({ open, onClose, inline }: PluginMarketplacePr
     registry, marketplace, installPlugin, uninstallPlugin, enablePlugin, disablePlugin, enabledCount,
   } = usePlugins();
 
-  const [activeSection, setActiveSection] = useState<Section>('plugins');
-  const [pluginTab, setPluginTab] = useState<PluginTab>('browse');
+  // When inline, use shared context so the sidebar nav stays in sync
+  const ctx = useMarketplaceNavigation();
+  const [localSection, setLocalSection] = useState<Section>('plugins');
+  const [localTab, setLocalTab] = useState<PluginTab>('browse');
+  const activeSection: Section = inline ? ctx.activeSection : localSection;
+  const setActiveSection = inline ? ctx.setActiveSection as (s: Section) => void : setLocalSection;
+  const pluginTab: PluginTab = inline ? ctx.activeTab : localTab;
+  const setPluginTab = inline ? ctx.setActiveTab as (t: PluginTab) => void : setLocalTab;
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [listings, setListings] = useState<MarketplaceListing[]>([]);
@@ -1599,166 +1606,100 @@ export function PluginMarketplace({ open, onClose, inline }: PluginMarketplacePr
 
   // ── Render ──────────────────────────────────────────────────────────────
 
-  // Inline mode: render without Overlay wrapper (for route-based rendering)
+  // Inline mode: render content pane only (sidebar is external in MarketplaceNavSidebar)
   if (inline) {
     return (
       <Box
         testID={TEST_IDS.PLUGINS.MARKETPLACE}
         style={{
           flex: 1,
-          flexDirection: isMobile ? 'column' : 'row',
           backgroundColor: isDark ? tc.background.raised : tc.background.canvas,
         }}
       >
-        {isMobile ? (
-          <>
-            {/* Horizontal Section Picker */}
-            <Box
-              style={{
-                flexDirection: 'row',
-                borderBottomWidth: 1,
-                borderBottomColor: tc.border.subtle,
-                paddingHorizontal: 12,
-                paddingVertical: 8,
-                gap: 6,
-              }}
-            >
-              {SECTIONS.map((sec) => {
-                const isActive = activeSection === sec.id;
-                const Icon = sec.icon;
-                return (
-                  <Pressable
-                    key={sec.id}
-                    onPress={() => { setActiveSection(sec.id); setSelectedListing(null); }}
-                    style={{
-                      flex: 1,
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: 6,
-                      paddingVertical: 8,
-                      borderRadius: 8,
-                      backgroundColor: isActive ? tc.accent.primary : tc.accent.highlight,
-                    }}
-                  >
-                    <LinearGradient
-                      colors={[sec.color, sec.secondaryColor]}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 1 }}
-                      style={{
-                        width: 20,
-                        height: 20,
-                        borderRadius: 5,
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        opacity: isActive ? 1 : 0.6,
-                      }}
-                    >
-                      <Icon size={11} color="#FFF" />
-                    </LinearGradient>
-                    <Text
-                      style={{
-                        fontSize: 12,
-                        color: isActive ? tc.text.onAccent : tc.text.secondary,
-                      }}
-                      weight={isActive ? 'semibold' : undefined}
-                      numberOfLines={1}
-                    >
-                      {sec.label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </Box>
-            <Box style={{ flex: 1 }}>
-              {renderSectionContent()}
-            </Box>
-          </>
-        ) : (
-          <>
-            {/* Left Sidebar */}
-            <Box
-              style={{
-                width: 210,
-                backgroundColor: isDark
-                  ? 'rgba(255, 255, 255, 0.04)'
-                  : 'rgba(0, 0, 0, 0.03)',
-                borderRightWidth: 1,
-                borderRightColor: isDark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
-                paddingVertical: 16, paddingHorizontal: 10,
-              }}
-            >
-              <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 8, marginBottom: 16 }}>
-                <Box style={{ width: 30, height: 30, borderRadius: 8, backgroundColor: '#F59E0B', alignItems: 'center', justifyContent: 'center' }}>
-                  <ShoppingBagIcon size={16} color={tc.text.onAccent} />
-                </Box>
-                <Text style={{ fontSize: 15, fontWeight: '700', color: tc.text.primary }}>Marketplace</Text>
-              </Box>
-              <ScrollArea showsVerticalScrollIndicator={false} style={{ flex: 1 }}>
-                {SECTIONS.map((sec) => {
-                  const isActive = activeSection === sec.id;
-                  const Icon = sec.icon;
-                  return (
-                    <Pressable
-                      key={sec.id}
-                      onPress={() => { setActiveSection(sec.id); setSelectedListing(null); }}
-                      style={({ pressed }) => ({
-                        flexDirection: 'row', alignItems: 'center', gap: 10,
-                        paddingVertical: 9, paddingHorizontal: 10, borderRadius: 8,
-                        backgroundColor: isActive ? tc.accent.primary : pressed ? tc.accent.highlight : 'transparent',
-                        marginBottom: 2,
-                      })}
-                    >
-                      <LinearGradient
-                        colors={[sec.color, sec.secondaryColor]}
-                        start={{ x: 0, y: 0 }}
-                        end={{ x: 1, y: 1 }}
-                        style={{ width: 24, height: 24, borderRadius: 6, alignItems: 'center', justifyContent: 'center', opacity: isActive ? 1 : 0.7 }}
-                      >
-                        <Icon size={13} color="#FFF" />
-                      </LinearGradient>
-                      <Text style={{ fontSize: 13, fontWeight: isActive ? '600' : '400', color: isActive ? tc.text.onAccent : tc.text.secondary, flex: 1 }} numberOfLines={1}>
-                        {sec.label}
-                      </Text>
-                      {sec.id === 'plugins' && allPlugins.length > 0 && (
-                        <Box style={{ paddingHorizontal: 6, paddingVertical: 1, borderRadius: 8, backgroundColor: isActive ? 'rgba(255,255,255,0.2)' : tc.accent.highlight }}>
-                          <Text style={{ fontSize: 10, fontWeight: '600', color: isActive ? tc.text.onAccent : tc.text.muted }}>{allPlugins.length}</Text>
-                        </Box>
-                      )}
-                    </Pressable>
-                  );
-                })}
-              </ScrollArea>
-              <Text style={{ fontSize: 11, color: tc.text.muted, textAlign: 'center', marginTop: 12 }}>
-                Umbra Marketplace
-              </Text>
-            </Box>
-            {/* Right Content */}
-            <Box style={{ flex: 1 }}>
-              <Box
-                style={{
-                  flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
-                  paddingHorizontal: 28, paddingVertical: 16,
-                  borderBottomWidth: 1,
-                  borderBottomColor: tc.border.subtle,
-                }}
-              >
-                <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+        {isMobile && (
+          /* Horizontal Section Picker (mobile only — sidebar hidden on mobile) */
+          <Box
+            style={{
+              flexDirection: 'row',
+              borderBottomWidth: 1,
+              borderBottomColor: tc.border.subtle,
+              paddingHorizontal: 12,
+              paddingVertical: 8,
+              gap: 6,
+            }}
+          >
+            {SECTIONS.map((sec) => {
+              const isActive = activeSection === sec.id;
+              const Icon = sec.icon;
+              return (
+                <Pressable
+                  key={sec.id}
+                  onPress={() => { setActiveSection(sec.id); setSelectedListing(null); }}
+                  style={{
+                    flex: 1,
+                    flexDirection: 'row',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 6,
+                    paddingVertical: 8,
+                    borderRadius: 8,
+                    backgroundColor: isActive ? tc.accent.primary : tc.accent.highlight,
+                  }}
+                >
                   <LinearGradient
-                    colors={[activeSectionInfo.color, activeSectionInfo.secondaryColor]}
+                    colors={[sec.color, sec.secondaryColor]}
                     start={{ x: 0, y: 0 }}
                     end={{ x: 1, y: 1 }}
-                    style={{ width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' }}
+                    style={{
+                      width: 20,
+                      height: 20,
+                      borderRadius: 5,
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      opacity: isActive ? 1 : 0.6,
+                    }}
                   >
-                    <activeSectionInfo.icon size={18} color="#FFF" />
+                    <Icon size={11} color="#FFF" />
                   </LinearGradient>
-                  <Text style={{ fontSize: 18, fontWeight: '700', color: tc.text.primary }}>{activeSectionInfo.label}</Text>
-                </Box>
-              </Box>
-              {renderSectionContent()}
-            </Box>
-          </>
+                  <Text
+                    style={{
+                      fontSize: 12,
+                      color: isActive ? tc.text.onAccent : tc.text.secondary,
+                    }}
+                    weight={isActive ? 'semibold' : undefined}
+                    numberOfLines={1}
+                  >
+                    {sec.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </Box>
         )}
+        {/* Section header (desktop only) */}
+        {!isMobile && (
+          <Box
+            style={{
+              flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+              paddingHorizontal: 28, paddingVertical: 16,
+              borderBottomWidth: 1,
+              borderBottomColor: tc.border.subtle,
+            }}
+          >
+            <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <LinearGradient
+                colors={[activeSectionInfo.color, activeSectionInfo.secondaryColor]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={{ width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center' }}
+              >
+                <activeSectionInfo.icon size={18} color="#FFF" />
+              </LinearGradient>
+              <Text style={{ fontSize: 18, fontWeight: '700', color: tc.text.primary }}>{activeSectionInfo.label}</Text>
+            </Box>
+          </Box>
+        )}
+        {renderSectionContent()}
       </Box>
     );
   }
