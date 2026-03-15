@@ -10,5 +10,11 @@
   "joining": "Uniéndose...",
   "declining": "Rechazando...",
   "from": "de {{name}}",
-  "backToConversations": "Volver a conversaciones"
+  "backToConversations": "Volver a conversaciones",
+  "newDm": "Nuevo mensaje directo",
+  "newGroup": "Nuevo grupo",
+  "searchSettings": "Buscar ajustes...",
+  "plugins": "Complementos",
+  "themes": "Temas",
+  "fonts": "Fuentes"
 }

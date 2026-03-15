@@ -10,5 +10,11 @@
   "joining": "참여 중...",
   "declining": "거절 중...",
   "from": "{{name}}님이 보냄",
-  "backToConversations": "대화 목록으로 돌아가기"
+  "backToConversations": "대화 목록으로 돌아가기",
+  "newDm": "새 DM",
+  "newGroup": "새 그룹",
+  "searchSettings": "설정 검색...",
+  "plugins": "플러그인",
+  "themes": "테마",
+  "fonts": "글꼴"
 }

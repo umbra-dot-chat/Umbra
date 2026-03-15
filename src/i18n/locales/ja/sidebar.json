@@ -10,5 +10,11 @@
   "joining": "参加中...",
   "declining": "辞退中...",
   "from": "{{name}}から",
-  "backToConversations": "会話一覧に戻る"
+  "backToConversations": "会話一覧に戻る",
+  "newDm": "新しいDM",
+  "newGroup": "新しいグループ",
+  "searchSettings": "設定を検索...",
+  "plugins": "プラグイン",
+  "themes": "テーマ",
+  "fonts": "フォント"
 }

@@ -10,5 +10,11 @@
   "joining": "加入中...",
   "declining": "拒绝中...",
   "from": "来自 {{name}}",
-  "backToConversations": "返回会话"
+  "backToConversations": "返回会话",
+  "newDm": "新建私信",
+  "newGroup": "新建群组",
+  "searchSettings": "搜索设置...",
+  "plugins": "插件",
+  "themes": "主题",
+  "fonts": "字体"
 }

@@ -10,5 +10,11 @@
   "joining": "Connexion...",
   "declining": "Refus...",
   "from": "de {{name}}",
-  "backToConversations": "Retour aux conversations"
+  "backToConversations": "Retour aux conversations",
+  "newDm": "Nouveau message privé",
+  "newGroup": "Nouveau groupe",
+  "searchSettings": "Rechercher dans les paramètres...",
+  "plugins": "Extensions",
+  "themes": "Thèmes",
+  "fonts": "Polices"
 }

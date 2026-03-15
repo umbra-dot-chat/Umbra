@@ -10,5 +10,11 @@
   "joining": "Присоединение...",
   "declining": "Отклонение...",
   "from": "от {{name}}",
-  "backToConversations": "Назад к беседам"
+  "backToConversations": "Назад к беседам",
+  "newDm": "Новое личное сообщение",
+  "newGroup": "Новая группа",
+  "searchSettings": "Поиск настроек...",
+  "plugins": "Плагины",
+  "themes": "Темы",
+  "fonts": "Шрифты"
 }
