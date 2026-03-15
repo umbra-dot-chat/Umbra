@@ -6,30 +6,17 @@
  * Displayed at the top of the All Friends tab.
  */
 
-import React, { useCallback, useState } from 'react';
-import { Pressable } from 'react-native';
+import React, { useMemo } from 'react';
 import {
-  Box, Text, Button, Card, GradientBorder, Avatar, HStack, VStack,
+  Text, Button, Card, Box, GradientBorder, Avatar, HStack, VStack,
   useTheme,
 } from '@coexist/wisp-react-native';
 import Svg, { Path, Circle } from 'react-native-svg';
 import { AI_AGENTS, type AIAgentConfig } from '@/config/network';
 import { MessageIcon } from '@/components/ui';
-import { dbg } from '@/utils/debug';
+import { getAgentAvatarUri } from '@/utils/agentAvatar';
 
 // ─── Icons ──────────────────────────────────────────────────────────────────
-
-function BotIcon({ size = 20, color }: { size?: number; color: string }) {
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <Path d="M12 8V4H8" />
-      <Path d="M2 14h2" />
-      <Path d="M20 14h2" />
-      <Path d="M15 13a3 3 0 1 0-6 0" />
-      <Path d="M6 9a6 6 0 0 1 12 0v5a6 6 0 0 1-12 0Z" />
-    </Svg>
-  );
-}
 
 function SparklesIcon({ size = 14, color }: { size?: number; color: string }) {
   return (
@@ -90,7 +77,6 @@ export function AIAgentBanner({
   addingDid,
   onDismiss,
 }: AIAgentBannerProps) {
-  if (__DEV__) dbg.trackRender('AIAgentBanner');
   const { theme } = useTheme();
   const tc = theme.colors;
 
@@ -100,27 +86,26 @@ export function AIAgentBanner({
   if (availableAgents.length === 0) return null;
 
   return (
-    <GradientBorder radius={12} width={1} style={{ marginBottom: 16 }}>
+    <GradientBorder radius={12} width={2} style={{ marginBottom: 16 }}>
       <Card variant="filled" padding="md" style={{ borderRadius: 12 }}>
         {/* Header */}
-        <HStack style={{ alignItems: 'center', marginBottom: 10, gap: 8 }}>
-          <SparklesIcon size={16} color={tc.accent.primary ?? '#6366f1'} />
+        <HStack style={{ alignItems: 'center', marginBottom: 12, gap: 8 }}>
+          <SparklesIcon size={16} color={tc.accent.primary} />
           <Text size="sm" weight="bold" style={{ flex: 1 }}>
             AI Agents
           </Text>
           {onDismiss && (
-            <Pressable
+            <Button
+              variant="tertiary"
+              size="xs"
               onPress={onDismiss}
-              style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1, padding: 2 })}
               accessibilityLabel="Dismiss AI agents banner"
-              accessibilityRole="button"
-            >
-              <XCloseIcon size={14} color={tc.text.muted} />
-            </Pressable>
+              iconLeft={<XCloseIcon size={14} color={tc.text.muted} />}
+            />
           )}
         </HStack>
 
-        <Text size="xs" color="muted" style={{ marginBottom: 12 }}>
+        <Text size="xs" color="tertiary" style={{ marginBottom: 12 }}>
           Chat with AI companions powered by local LLMs. They can answer questions about Umbra, set reminders, translate, and more.
         </Text>
 
@@ -161,47 +146,48 @@ function AIAgentRow({
   const { theme } = useTheme();
   const tc = theme.colors;
 
+  const avatarUri = useMemo(
+    () => agent.avatar ?? getAgentAvatarUri(agent.displayName),
+    [agent.avatar, agent.displayName],
+  );
+
   return (
     <HStack
       style={{
         alignItems: 'center',
-        gap: 10,
-        paddingVertical: 6,
+        gap: 12,
+        paddingVertical: 8,
         paddingHorizontal: 4,
       }}
     >
-      {/* Bot Avatar */}
-      <Box
-        style={{
-          width: 36,
-          height: 36,
-          borderRadius: 18,
-          backgroundColor: `${tc.accent.primary ?? '#6366f1'}18`,
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <BotIcon size={20} color={tc.accent.primary ?? '#6366f1'} />
-      </Box>
+      {/* Agent Avatar */}
+      <Avatar
+        src={avatarUri}
+        name={agent.displayName}
+        size="sm"
+        onSurface
+      />
 
       {/* Info */}
-      <VStack style={{ flex: 1, gap: 1 }}>
-        <HStack style={{ alignItems: 'center', gap: 6 }}>
+      <VStack style={{ flex: 1, gap: 2 }}>
+        <HStack style={{ alignItems: 'center', gap: 8 }}>
           <Text size="sm" weight="medium">
             {agent.displayName}
           </Text>
-          <Box
-            style={{
-              paddingHorizontal: 6,
-              paddingVertical: 1,
-              borderRadius: 4,
-              backgroundColor: `${tc.accent.primary ?? '#6366f1'}18`,
-            }}
-          >
-            <Text size="xs" weight="medium" style={{ color: tc.accent.primary ?? '#6366f1' }}>
-              AI
-            </Text>
-          </Box>
+          <GradientBorder radius={4} width={1} animated speed={3000}>
+            <Box
+              style={{
+                paddingHorizontal: 6,
+                paddingVertical: 1,
+                borderRadius: 4,
+                backgroundColor: tc.background.surface,
+              }}
+            >
+              <Text size="xs" weight="medium" style={{ color: tc.text.primary }}>
+                AI
+              </Text>
+            </Box>
+          </GradientBorder>
         </HStack>
         <Text size="xs" style={{ color: tc.text.muted }}>
           {agent.description}
@@ -228,7 +214,7 @@ function AIAgentRow({
           size="xs"
           onPress={onAdd}
           disabled={isAdding}
-          iconLeft={<UserPlusIcon size={12} color="#fff" />}
+          iconLeft={<UserPlusIcon size={12} color={tc.text.inverse} />}
         >
           {isAdding ? 'Adding...' : 'Add'}
         </Button>

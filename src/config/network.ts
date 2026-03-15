@@ -178,6 +178,8 @@ export interface AIAgentConfig {
   language: 'en' | 'ko';
   /** Which relay server the agent connects to */
   relay: string;
+  /** Optional wisp-generated SVG data URI for the agent's avatar */
+  avatar?: string;
 }
 
 /**
