@@ -391,7 +391,10 @@ export type MessageEvent =
   | { type: 'sharedFileDeleted'; conversationId: string; fileId: string }
   // Batch event: signals that offline processing is complete and all
   // conversations should re-fetch from DB instead of applying individual updates
-  | { type: 'offlineBatchComplete'; conversationIds: string[] };
+  | { type: 'offlineBatchComplete'; conversationIds: string[] }
+  // Optimistic unread-count reset: fired after markAsRead() succeeds so that
+  // ConversationsContext can zero-out the badge without a full DB refetch.
+  | { type: 'messagesRead'; conversationId: string };
 
 /**
  * Network status

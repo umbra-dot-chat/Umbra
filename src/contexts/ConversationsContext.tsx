@@ -141,6 +141,20 @@ export function ConversationsProvider({ children }: { children: React.ReactNode 
 
     if (__DEV__) dbg.info('conversations', 'subscribing to onMessageEvent (single instance)', undefined, SRC);
     const unsubscribe = service.onMessageEvent((event: MessageEvent) => {
+      // Optimistic update: zero-out the unread badge immediately without
+      // a full DB refetch — markAsRead already wrote to the database.
+      if (event.type === 'messagesRead') {
+        if (__DEV__) dbg.debug('conversations', 'onMessageEvent → optimistic unread reset', { conversationId: event.conversationId }, SRC);
+        setConversations(prev =>
+          prev.map(c =>
+            c.id === event.conversationId && c.unreadCount > 0
+              ? { ...c, unreadCount: 0 }
+              : c,
+          ),
+        );
+        return;
+      }
+
       if (__DEV__) dbg.debug('conversations', 'onMessageEvent → debounced refresh', { type: event.type }, SRC);
       throttledFetch();
     });

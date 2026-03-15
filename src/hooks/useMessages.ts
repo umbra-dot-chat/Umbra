@@ -623,6 +623,10 @@ export function useMessages(conversationId: string | null, groupId?: string | nu
       lastMarkedCountRef.current = currentCount;
       await service.markAsRead(conversationId);
 
+      // Notify ConversationsContext so it can optimistically zero-out
+      // the unread badge without a full DB refetch.
+      service.dispatchMessageEvent({ type: 'messagesRead', conversationId });
+
       // Skip per-message read receipts for group chats — they generate N
       // build_receipt_envelope WASM calls per member, which freezes the UI
       // when bots send messages rapidly. DMs still get individual receipts.
