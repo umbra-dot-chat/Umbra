@@ -15,7 +15,17 @@
  */
 
 import type { UmbraWasmModule } from './loader';
-import type { NativeUmbraCore } from '../../modules/expo-umbra-core/src';
+// NativeUmbraCore type — inlined to avoid cross-package relative import
+// that breaks when this package is copied to node_modules/@umbra/wasm.
+// Source of truth: modules/expo-umbra-core/src/index.ts
+interface NativeUmbraCore {
+  initialize(storagePath: string): string;
+  initDatabase(): string;
+  shutdown(): string;
+  version(): string;
+  identityCreate(displayName: string): string;
+  [key: string]: (...args: any[]) => any;
+}
 
 // ─────────────────────────────────────────────────────────────────────────
 // Native module loader
