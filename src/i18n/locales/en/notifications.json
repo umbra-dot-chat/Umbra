@@ -1,0 +1,19 @@
+{
+  "title": "Notifications",
+  "noNotifications": "No notifications",
+  "markAllRead": "Mark all read",
+  "closeNotifications": "Close notifications",
+  "categoryAll": "All",
+  "categorySocial": "Social",
+  "categoryCalls": "Calls",
+  "categoryMentions": "Mentions",
+  "categorySystem": "System",
+  "dateToday": "Today",
+  "dateYesterday": "Yesterday",
+  "dateThisWeek": "This Week",
+  "dateOlder": "Older",
+  "join": "Join",
+  "joining": "Joining...",
+  "decline": "Decline",
+  "declining": "Declining..."
+}
