@@ -137,6 +137,30 @@ interface ChatSidebarContentProps {
   loading?: boolean;
 }
 
+/** Format a timestamp as a relative time string (e.g., "2h ago") */
+function formatRelativeTime(timestamp: number): string {
+  const now = Date.now();
+  const diffMs = now - timestamp;
+  const diffMins = Math.floor(diffMs / (1000 * 60));
+  if (diffMins < 1) return 'Just now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  const diffHours = Math.floor(diffMins / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return new Date(timestamp).toLocaleDateString();
+}
+
+/** Parse membersJson to get member count */
+function getMemberCount(membersJson: string): number {
+  try {
+    const parsed = JSON.parse(membersJson);
+    return Array.isArray(parsed) ? parsed.length : 0;
+  } catch {
+    return 0;
+  }
+}
+
 function ChatSidebarContent({
   conversations,
   activeId,
@@ -151,6 +175,25 @@ function ChatSidebarContent({
   const { theme } = useTheme();
   const { hasBottomPanel, contentFlex } = useSidebarShellLayout();
   const [menuOpen, setMenuOpen] = useState(false);
+  const [processingInviteId, setProcessingInviteId] = useState<string | null>(null);
+
+  const handleAccept = useCallback(async (inviteId: string) => {
+    setProcessingInviteId(inviteId);
+    try {
+      await onAcceptInvite?.(inviteId);
+    } finally {
+      setProcessingInviteId(null);
+    }
+  }, [onAcceptInvite]);
+
+  const handleDecline = useCallback(async (inviteId: string) => {
+    setProcessingInviteId(inviteId);
+    try {
+      await onDeclineInvite?.(inviteId);
+    } finally {
+      setProcessingInviteId(null);
+    }
+  }, [onDeclineInvite]);
 
   // Track unread counts to trigger shimmer on new messages
   const prevUnreadsRef = useRef<Record<string, number>>({});
@@ -199,7 +242,7 @@ function ChatSidebarContent({
                   padding: 10,
                 }}
               >
-                <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 6 }}>
+                <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                   <UsersIcon size={14} color={theme.colors.text.onRaisedSecondary} />
                   <Box style={{ flex: 1 }}>
                     <Text size="xs" weight="semibold" style={{ color: theme.colors.text.onRaised }} numberOfLines={1}>
@@ -209,25 +252,43 @@ function ChatSidebarContent({
                       from {invite.inviterName}
                     </Text>
                   </Box>
+                  <Text size="xs" style={{ color: theme.colors.text.muted }}>
+                    {formatRelativeTime(invite.createdAt)}
+                  </Text>
                 </Box>
+                {invite.description ? (
+                  <Text size="xs" style={{ color: theme.colors.text.onRaisedSecondary, marginBottom: 4, marginLeft: 22 }} numberOfLines={2}>
+                    {invite.description}
+                  </Text>
+                ) : null}
+                {(() => {
+                  const memberCount = getMemberCount(invite.membersJson);
+                  return memberCount > 0 ? (
+                    <Text size="xs" style={{ color: theme.colors.text.muted, marginBottom: 6, marginLeft: 22 }}>
+                      {memberCount} {memberCount === 1 ? 'member' : 'members'}
+                    </Text>
+                  ) : null;
+                })()}
                 <Box style={{ flexDirection: 'row', gap: 6 }}>
                   <Button
                     variant="success"
                     size="xs"
                     fullWidth
+                    disabled={processingInviteId !== null}
                     iconLeft={<CheckIcon size={12} color={theme.colors.text.onAccent} />}
-                    onPress={() => onAcceptInvite?.(invite.id)}
+                    onPress={() => handleAccept(invite.id)}
                   >
-                    Accept
+                    {processingInviteId === invite.id ? 'Joining...' : 'Accept'}
                   </Button>
                   <Button
                     variant="secondary"
                     size="xs"
                     fullWidth
+                    disabled={processingInviteId !== null}
                     iconLeft={<XIcon size={12} color={theme.colors.text.onRaisedSecondary} />}
-                    onPress={() => onDeclineInvite?.(invite.id)}
+                    onPress={() => handleDecline(invite.id)}
                   >
-                    Decline
+                    {processingInviteId === invite.id ? 'Declining...' : 'Decline'}
                   </Button>
                 </Box>
               </Box>
