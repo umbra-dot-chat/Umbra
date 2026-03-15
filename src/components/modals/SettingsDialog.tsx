@@ -29,6 +29,7 @@ import {
   AuraBurst,
   MemberStatusDisplay,
   MemberStatusPicker,
+  Collapse,
   useTheme,
 } from '@coexist/wisp-react-native';
 import { defaultRadii } from '@coexist/wisp-core/theme/create-theme';
@@ -70,6 +71,7 @@ import {
   ArrowLeftIcon,
   FileTextIcon,
   CodeIcon,
+  ChevronRightIcon,
 } from '@/components/ui';
 import { useNetwork } from '@/hooks/useNetwork';
 import { useCall } from '@/hooks/useCall';
@@ -616,6 +618,73 @@ function SoundToggle({ checked, onChange, ...rest }: React.ComponentProps<typeof
     [onChange, playSound],
   );
   return <Toggle checked={checked} onChange={handleChange} {...rest} />;
+}
+
+/**
+ * Subsection header with improved visual prominence.
+ * Renders a bold title with optional description and a subtle bottom border.
+ */
+function SubsectionHeader({ title, description }: { title: string; description?: string }) {
+  const { theme } = useTheme();
+  const tc = theme.colors;
+
+  return (
+    <Box style={{ marginTop: 24, paddingBottom: 8, borderBottomWidth: 1, borderBottomColor: tc.border.subtle }}>
+      <Text style={{ fontSize: 15, fontWeight: '700', color: tc.text.primary }}>
+        {title}
+      </Text>
+      {description && (
+        <Text style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
+          {description}
+        </Text>
+      )}
+    </Box>
+  );
+}
+
+/**
+ * Collapsible disclosure section using Wisp's Collapse component.
+ * Used to hide advanced settings behind a toggle.
+ */
+function CollapsibleSection({ title, children, defaultOpen = false }: {
+  title: string;
+  children: React.ReactNode;
+  defaultOpen?: boolean;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  const { theme } = useTheme();
+  const tc = theme.colors;
+
+  return (
+    <Box>
+      <Pressable
+        onPress={() => setOpen(!open)}
+        accessibilityRole="button"
+        accessibilityLabel={`${open ? 'Collapse' : 'Expand'} ${title}`}
+        style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 8 }}
+      >
+        <Box style={{
+          transform: [{ rotate: open ? '90deg' : '0deg' }],
+        }}>
+          <ChevronRightIcon size={12} color={tc.text.muted} />
+        </Box>
+        <Text style={{
+          fontSize: 11,
+          fontWeight: '600',
+          color: tc.text.secondary,
+          textTransform: 'uppercase',
+          letterSpacing: 0.5,
+        }}>
+          {title}
+        </Text>
+      </Pressable>
+      <Collapse open={open}>
+        <Box style={{ gap: 16, paddingTop: 8 }}>
+          {children}
+        </Box>
+      </Collapse>
+    </Box>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -2463,14 +2532,7 @@ function AudioVideoSection() {
       <Box nativeID="sub-calling">
       {/* Calling */}
       <Box style={{ gap: 16 }}>
-        <Box>
-          <Text style={{ fontSize: 15, fontWeight: '600', color: tc.text.primary }}>
-            Calling
-          </Text>
-          <Text style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
-            Configure incoming call behavior and ring volume.
-          </Text>
-        </Box>
+        <SubsectionHeader title="Calling" description="Configure incoming call behavior and ring volume." />
 
         <SettingRow label="Incoming Call Display" description="How incoming calls appear when the app is open." vertical>
           <SegmentedControl
@@ -2510,14 +2572,7 @@ function AudioVideoSection() {
 
       {/* Test Video — live preview with effects applied */}
       <Box style={{ gap: 16 }}>
-        <Box>
-          <Text style={{ fontSize: 15, fontWeight: '600', color: tc.text.primary }}>
-            Test Video
-          </Text>
-          <Text style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
-            Preview your camera with the current video effect applied.
-          </Text>
-        </Box>
+        <SubsectionHeader title="Test Video" description="Preview your camera with the current video effect applied." />
 
         {Platform.OS === 'web' ? (
           /* Web: canvas-based preview */
@@ -2801,15 +2856,7 @@ function AudioVideoSection() {
       {audioQuality !== 'pcm' && (
         <>
           <Separator spacing="sm" />
-          <Box style={{ gap: 16 }}>
-            <Box>
-              <Text style={{ fontSize: 15, fontWeight: '600', color: tc.text.primary }}>
-                Opus Configuration
-              </Text>
-              <Text style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
-                Fine-tune the Opus audio encoder for your needs.
-              </Text>
-            </Box>
+          <CollapsibleSection title="Opus Configuration — Advanced">
 
             {/* Application Mode */}
             <SettingRow label="Application Mode" description="Optimize encoding for voice, music, or low latency." vertical>
@@ -2885,7 +2932,7 @@ function AudioVideoSection() {
                 onChange={(val) => handleOpusConfigChange({ dtx: val })}
               />
             </SettingRow>
-          </Box>
+          </CollapsibleSection>
         </>
       )}
 
@@ -2893,14 +2940,7 @@ function AudioVideoSection() {
 
       {/* Volume Controls */}
       <Box style={{ gap: 16 }}>
-        <Box>
-          <Text style={{ fontSize: 15, fontWeight: '600', color: tc.text.primary }}>
-            Volume Controls
-          </Text>
-          <Text style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
-            Adjust input and output volume levels.
-          </Text>
-        </Box>
+        <SubsectionHeader title="Volume Controls" description="Adjust input and output volume levels." />
 
         <SettingRow label="Microphone Volume" description={`${inputVolume}%`} vertical>
           <Slider
@@ -2988,16 +3028,12 @@ function AudioVideoSection() {
       <Box nativeID="sub-devices">
       {/* Devices section */}
       <Box style={{ gap: 16 }}>
-        <Box>
-          <Text style={{ fontSize: 15, fontWeight: '600', color: tc.text.primary }}>
-            Devices
-          </Text>
-          <Text style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
-            {Platform.OS === 'web'
-              ? 'Your available audio and video input/output devices.'
-              : 'Camera and microphone are managed by your device.'}
-          </Text>
-        </Box>
+        <SubsectionHeader
+          title="Devices"
+          description={Platform.OS === 'web'
+            ? 'Your available audio and video input/output devices.'
+            : 'Camera and microphone are managed by your device.'}
+        />
 
         {Platform.OS === 'web' ? (
           <>
@@ -3199,14 +3235,7 @@ function AudioVideoSection() {
 
       {/* Audio Processing */}
       <Box style={{ gap: 16 }}>
-        <Box>
-          <Text style={{ fontSize: 15, fontWeight: '600', color: tc.text.primary }}>
-            Audio Processing
-          </Text>
-          <Text style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
-            Enhance audio quality during calls.
-          </Text>
-        </Box>
+        <SubsectionHeader title="Audio Processing" description="Enhance audio quality during calls." />
 
         <SettingRow label="Noise Suppression" description="Reduce background noise from your microphone.">
           <SoundToggle checked={noiseSuppression} onChange={setNoiseSuppression} />
@@ -3224,14 +3253,7 @@ function AudioVideoSection() {
       {/* Encryption (web only — Insertable Streams / RTCRtpScriptTransform) */}
       {Platform.OS === 'web' && (
       <Box style={{ gap: 16 }}>
-        <Box>
-          <Text style={{ fontSize: 15, fontWeight: '600', color: tc.text.primary }}>
-            Encryption
-          </Text>
-          <Text style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
-            Call signaling is always end-to-end encrypted. Optionally encrypt media frames too.
-          </Text>
-        </Box>
+        <SubsectionHeader title="Encryption" description="Call signaling is always end-to-end encrypted. Optionally encrypt media frames too." />
 
         <SettingRow
           label="End-to-End Media Encryption"
@@ -4641,51 +4663,46 @@ function DeveloperSection() {
         )}
       </Box>
 
-      {/* ── Media Capture ────────────────────────────────────────────────── */}
+      {/* ── Media Capture & Testing ────────────────────────────────────── */}
       <Box nativeID="sub-capture">
-        <Text style={{ fontSize: 14, fontWeight: '600', color: tc.text.primary, marginBottom: 12 }}>
-          Media Capture
-        </Text>
+        <CollapsibleSection title="Media Capture">
+          <SettingRow
+            label="Raw Media Capture"
+            description="Dump raw PCM audio (.wav) and I420 video (.yuv) to disk before encoding"
+          >
+            <Toggle
+              checked={dev.rawMediaCapture}
+              onChange={handleToggle(dev.setRawMediaCapture)}
+              disabled={!dev.diagnosticsEnabled}
+            />
+          </SettingRow>
 
-        <SettingRow
-          label="Raw Media Capture"
-          description="Dump raw PCM audio (.wav) and I420 video (.yuv) to disk before encoding"
-        >
-          <Toggle
-            checked={dev.rawMediaCapture}
-            onChange={handleToggle(dev.setRawMediaCapture)}
-            disabled={!dev.diagnosticsEnabled}
-          />
-        </SettingRow>
-
-        <SettingRow
-          label="A/V Sync Validation"
-          description="Enable frame counter, click track, and timestamp sync checks"
-        >
-          <Toggle
-            checked={dev.avSyncValidation}
-            onChange={handleToggle(dev.setAvSyncValidation)}
-            disabled={!dev.diagnosticsEnabled}
-          />
-        </SettingRow>
+          <SettingRow
+            label="A/V Sync Validation"
+            description="Enable frame counter, click track, and timestamp sync checks"
+          >
+            <Toggle
+              checked={dev.avSyncValidation}
+              onChange={handleToggle(dev.setAvSyncValidation)}
+              disabled={!dev.diagnosticsEnabled}
+            />
+          </SettingRow>
+        </CollapsibleSection>
       </Box>
 
-      {/* ── Testing ──────────────────────────────────────────────────────── */}
       <Box nativeID="sub-testing">
-        <Text style={{ fontSize: 14, fontWeight: '600', color: tc.text.primary, marginBottom: 12 }}>
-          Testing
-        </Text>
-
-        <SettingRow
-          label="Reference Signal Mode"
-          description="Replace all media with a 440Hz sine wave test tone for quality validation"
-        >
-          <Toggle
-            checked={dev.referenceSignalMode}
-            onChange={handleToggle(dev.setReferenceSignalMode)}
-            disabled={!dev.diagnosticsEnabled}
-          />
-        </SettingRow>
+        <CollapsibleSection title="Testing">
+          <SettingRow
+            label="Reference Signal Mode"
+            description="Replace all media with a 440Hz sine wave test tone for quality validation"
+          >
+            <Toggle
+              checked={dev.referenceSignalMode}
+              onChange={handleToggle(dev.setReferenceSignalMode)}
+              disabled={!dev.diagnosticsEnabled}
+            />
+          </SettingRow>
+        </CollapsibleSection>
       </Box>
 
       {/* ── Danger Zone ────────────────────────────────────────────────── */}
