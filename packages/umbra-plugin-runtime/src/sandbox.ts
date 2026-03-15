@@ -130,28 +130,28 @@ export function createSandboxedAPI(
     getMyProfile: () => bridge.getMyProfile(),
 
     // ── Events (no permission needed for subscribing) ──────────────────
-    onMessage: (cb) => {
+    onMessage: (cb: (event: MessageEventPayload) => void) => {
       const unsub = bridge.onMessage(cb);
       subscriptions.push(unsub);
       return unsub;
     },
-    onFriend: (cb) => {
+    onFriend: (cb: (event: FriendEventPayload) => void) => {
       const unsub = bridge.onFriend(cb);
       subscriptions.push(unsub);
       return unsub;
     },
-    onConversation: (cb) => {
+    onConversation: (cb: (event: ConversationEventPayload) => void) => {
       const unsub = bridge.onConversation(cb);
       subscriptions.push(unsub);
       return unsub;
     },
 
     // ── Messages ───────────────────────────────────────────────────────
-    getMessages: async (conversationId, limit) => {
+    getMessages: async (conversationId: string, limit?: number) => {
       requirePermission('messages:read', 'getMessages');
       return bridge.getMessages(conversationId, limit);
     },
-    sendMessage: async (conversationId, text) => {
+    sendMessage: async (conversationId: string, text: string) => {
       requirePermission('messages:write', 'sendMessage');
       return bridge.sendMessage(conversationId, text);
     },
@@ -170,19 +170,19 @@ export function createSandboxedAPI(
 
     // ── Storage ────────────────────────────────────────────────────────
     kv: {
-      get: async (key) => {
+      get: async (key: string) => {
         requirePermission('storage:kv', 'kv.get');
         return storage.kv.get(key);
       },
-      set: async (key, value) => {
+      set: async (key: string, value: string) => {
         requirePermission('storage:kv', 'kv.set');
         return storage.kv.set(key, value);
       },
-      delete: async (key) => {
+      delete: async (key: string) => {
         requirePermission('storage:kv', 'kv.delete');
         return storage.kv.delete(key);
       },
-      list: async (prefix) => {
+      list: async (prefix?: string) => {
         requirePermission('storage:kv', 'kv.list');
         return storage.kv.list(prefix);
       },
@@ -190,7 +190,7 @@ export function createSandboxedAPI(
 
     sql: storage.sql
       ? {
-          execute: async (query, params) => {
+          execute: async (query: string, params?: any[]) => {
             requirePermission('storage:sql', 'sql.execute');
             return storage.sql!.execute(query, params);
           },
@@ -198,22 +198,22 @@ export function createSandboxedAPI(
       : undefined,
 
     // ── UI ──────────────────────────────────────────────────────────────
-    showToast: (message, type) => {
+    showToast: (message: string, type?: 'info' | 'success' | 'error') => {
       requirePermission('notifications', 'showToast');
       bridge.showToast(message, type);
     },
-    openPanel: (panelId, props) => {
+    openPanel: (panelId: string, props?: Record<string, any>) => {
       bridge.openPanel(panelId, props);
     },
 
     // ── Commands ────────────────────────────────────────────────────────
-    registerCommand: (cmd) => {
+    registerCommand: (cmd: PluginCommand) => {
       requirePermission('commands', 'registerCommand');
       const unsub = bridge.registerCommand(pluginId, cmd);
       subscriptions.push(unsub);
       return unsub;
     },
-    registerSlashCommand: (cmd) => {
+    registerSlashCommand: (cmd: PluginSlashCommand) => {
       requirePermission('commands', 'registerSlashCommand');
       const unsub = bridge.registerSlashCommand(pluginId, cmd);
       subscriptions.push(unsub);
@@ -229,7 +229,7 @@ export function createSandboxedAPI(
       requirePermission('voice:read', 'getVoiceParticipants');
       return bridge.getVoiceParticipants();
     },
-    getVoiceStream: (did) => {
+    getVoiceStream: (did: string) => {
       requirePermission('voice:read', 'getVoiceStream');
       return bridge.getVoiceStream(did);
     },
@@ -241,7 +241,7 @@ export function createSandboxedAPI(
       requirePermission('voice:read', 'getScreenShareStream');
       return bridge.getScreenShareStream();
     },
-    onVoiceParticipant: (cb) => {
+    onVoiceParticipant: (cb: (event: VoiceParticipantEvent) => void) => {
       requirePermission('voice:read', 'onVoiceParticipant');
       const unsub = bridge.onVoiceParticipant(cb);
       subscriptions.push(unsub);
@@ -249,11 +249,11 @@ export function createSandboxedAPI(
     },
 
     // ── Call signaling ────────────────────────────────────────────────
-    sendCallSignal: (payload) => {
+    sendCallSignal: (payload: any) => {
       requirePermission('voice:read', 'sendCallSignal');
       bridge.sendCallSignal(payload);
     },
-    onCallSignal: (cb) => {
+    onCallSignal: (cb: (event: any) => void) => {
       requirePermission('voice:read', 'onCallSignal');
       const unsub = bridge.onCallSignal(cb);
       subscriptions.push(unsub);
@@ -261,7 +261,7 @@ export function createSandboxedAPI(
     },
 
     // ── Text transforms ────────────────────────────────────────────────
-    registerTextTransform: (transform) => {
+    registerTextTransform: (transform: TextTransform) => {
       requirePermission('commands', 'registerTextTransform');
       const unsub = bridge.registerTextTransform(pluginId, transform);
       subscriptions.push(unsub);
@@ -269,7 +269,7 @@ export function createSandboxedAPI(
     },
 
     // ── Shortcuts ─────────────────────────────────────────────────────
-    registerShortcut: (shortcut) => {
+    registerShortcut: (shortcut: PluginShortcut) => {
       requirePermission('shortcuts', 'registerShortcut');
       const unsub = bridge.registerShortcut(pluginId, shortcut);
       subscriptions.push(unsub);

@@ -42,8 +42,9 @@ export function validateManifest(manifest: unknown): ValidationResult {
   const m = manifest as Record<string, unknown>;
 
   for (const field of REQUIRED_MANIFEST_FIELDS) {
-    if (m[field] === undefined || m[field] === null) {
-      errors.push(`Missing required field: "${field}".`);
+    const key = field as string;
+    if (m[key] === undefined || m[key] === null) {
+      errors.push(`Missing required field: "${key}".`);
     }
   }
 
