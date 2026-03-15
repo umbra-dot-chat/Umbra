@@ -4640,14 +4640,16 @@ pub fn umbra_wasm_groups_send_message(json: &str) -> Result<JsValue, JsValue> {
     let ciphertext_hex = hex::encode(&ciphertext);
     let nonce_hex = hex::encode(&nonce.0);
 
-    // Store locally
+    // Store plaintext locally — the group-message load path decodes
+    // content_encrypted as UTF-8, not ciphertext. The ciphertext only
+    // lives in the relay envelope for transit to other members.
     database
         .store_message(
             &message_id,
             conversation_id,
             &our_did,
-            &ciphertext,
-            &nonce.0,
+            text.as_bytes(),
+            &[0u8; 12],
             now,
         )
         .map_err(|e| JsValue::from_str(&format!("DB error: {}", e)))?;
