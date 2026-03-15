@@ -1,0 +1,14 @@
+{
+  "conversations": "会话",
+  "newConversation": "新建会话",
+  "searchConversations": "搜索会话...",
+  "searchPlaceholder": "搜索...",
+  "noConversations": "暂无会话",
+  "groupInvites": "群组邀请 ({{count}})",
+  "accept": "接受",
+  "decline": "拒绝",
+  "joining": "加入中...",
+  "declining": "拒绝中...",
+  "from": "来自 {{name}}",
+  "backToConversations": "返回会话"
+}

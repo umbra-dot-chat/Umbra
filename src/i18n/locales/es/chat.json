@@ -1,0 +1,23 @@
+{
+  "typeMessage": "Escribe un mensaje...",
+  "editMessage": "Editar mensaje...",
+  "chat": "Chat",
+  "searchMessages": "Buscar mensajes",
+  "togglePinnedMessages": "Alternar mensajes fijados",
+  "toggleMembers": "Alternar miembros",
+  "toggleSharedFiles": "Alternar archivos compartidos",
+  "groupSettings": "Ajustes del grupo",
+  "voiceCall": "Llamada de voz",
+  "videoCall": "Videollamada",
+  "moreOptions": "Más opciones",
+  "closeMenu": "Cerrar menú",
+  "reply": "Responder",
+  "editMessageAction": "Editar mensaje",
+  "deleteMessage": "Eliminar mensaje",
+  "pinMessage": "Fijar mensaje",
+  "forward": "Reenviar",
+  "forwardMessage": "Reenviar mensaje",
+  "copyMessage": "Copiar",
+  "sendMessageToStart": "Envía un mensaje para iniciar la conversación.",
+  "sending": "Enviando {{percent}}%"
+}

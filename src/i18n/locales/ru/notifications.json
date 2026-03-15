@@ -1,0 +1,19 @@
+{
+  "title": "Уведомления",
+  "noNotifications": "Нет уведомлений",
+  "markAllRead": "Отметить все как прочитанные",
+  "closeNotifications": "Закрыть уведомления",
+  "categoryAll": "Все",
+  "categorySocial": "Социальные",
+  "categoryCalls": "Звонки",
+  "categoryMentions": "Упоминания",
+  "categorySystem": "Системные",
+  "dateToday": "Сегодня",
+  "dateYesterday": "Вчера",
+  "dateThisWeek": "На этой неделе",
+  "dateOlder": "Ранее",
+  "join": "Присоединиться",
+  "joining": "Присоединение...",
+  "decline": "Отклонить",
+  "declining": "Отклонение..."
+}

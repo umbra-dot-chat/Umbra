@@ -1,0 +1,19 @@
+{
+  "title": "Benachrichtigungen",
+  "noNotifications": "Keine Benachrichtigungen",
+  "markAllRead": "Alle als gelesen markieren",
+  "closeNotifications": "Benachrichtigungen schließen",
+  "categoryAll": "Alle",
+  "categorySocial": "Soziales",
+  "categoryCalls": "Anrufe",
+  "categoryMentions": "Erwähnungen",
+  "categorySystem": "System",
+  "dateToday": "Heute",
+  "dateYesterday": "Gestern",
+  "dateThisWeek": "Diese Woche",
+  "dateOlder": "Älter",
+  "join": "Beitreten",
+  "joining": "Beitritt...",
+  "decline": "Ablehnen",
+  "declining": "Wird abgelehnt..."
+}

@@ -1,0 +1,14 @@
+{
+  "conversations": "会話",
+  "newConversation": "新しい会話",
+  "searchConversations": "会話を検索...",
+  "searchPlaceholder": "検索...",
+  "noConversations": "会話はまだありません",
+  "groupInvites": "グループ招待 ({{count}})",
+  "accept": "承認",
+  "decline": "辞退",
+  "joining": "参加中...",
+  "declining": "辞退中...",
+  "from": "{{name}}から",
+  "backToConversations": "会話一覧に戻る"
+}

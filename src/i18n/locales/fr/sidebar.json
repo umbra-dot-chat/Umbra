@@ -1,0 +1,14 @@
+{
+  "conversations": "Conversations",
+  "newConversation": "Nouvelle conversation",
+  "searchConversations": "Rechercher des conversations...",
+  "searchPlaceholder": "Rechercher...",
+  "noConversations": "Aucune conversation",
+  "groupInvites": "Invitations de groupe ({{count}})",
+  "accept": "Accepter",
+  "decline": "Refuser",
+  "joining": "Connexion...",
+  "declining": "Refus...",
+  "from": "de {{name}}",
+  "backToConversations": "Retour aux conversations"
+}

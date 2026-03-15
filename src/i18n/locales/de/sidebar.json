@@ -1,0 +1,14 @@
+{
+  "conversations": "Unterhaltungen",
+  "newConversation": "Neue Unterhaltung",
+  "searchConversations": "Unterhaltungen durchsuchen...",
+  "searchPlaceholder": "Suchen...",
+  "noConversations": "Noch keine Unterhaltungen",
+  "groupInvites": "Gruppeneinladungen ({{count}})",
+  "accept": "Annehmen",
+  "decline": "Ablehnen",
+  "joining": "Beitritt...",
+  "declining": "Wird abgelehnt...",
+  "from": "von {{name}}",
+  "backToConversations": "Zurück zu Unterhaltungen"
+}

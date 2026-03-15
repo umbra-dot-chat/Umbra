@@ -1,0 +1,19 @@
+{
+  "title": "Notificações",
+  "noNotifications": "Sem notificações",
+  "markAllRead": "Marcar todas como lidas",
+  "closeNotifications": "Fechar notificações",
+  "categoryAll": "Todas",
+  "categorySocial": "Social",
+  "categoryCalls": "Chamadas",
+  "categoryMentions": "Menções",
+  "categorySystem": "Sistema",
+  "dateToday": "Hoje",
+  "dateYesterday": "Ontem",
+  "dateThisWeek": "Esta Semana",
+  "dateOlder": "Mais Antigas",
+  "join": "Entrar",
+  "joining": "Entrando...",
+  "decline": "Recusar",
+  "declining": "Recusando..."
+}

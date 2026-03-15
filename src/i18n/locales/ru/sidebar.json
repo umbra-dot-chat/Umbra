@@ -1,0 +1,14 @@
+{
+  "conversations": "Беседы",
+  "newConversation": "Новая беседа",
+  "searchConversations": "Поиск бесед...",
+  "searchPlaceholder": "Поиск...",
+  "noConversations": "Бесед пока нет",
+  "groupInvites": "Приглашения в группы ({{count}})",
+  "accept": "Принять",
+  "decline": "Отклонить",
+  "joining": "Присоединение...",
+  "declining": "Отклонение...",
+  "from": "от {{name}}",
+  "backToConversations": "Назад к беседам"
+}

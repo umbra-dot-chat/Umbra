@@ -1,0 +1,19 @@
+{
+  "title": "通知",
+  "noNotifications": "通知はありません",
+  "markAllRead": "すべて既読にする",
+  "closeNotifications": "通知を閉じる",
+  "categoryAll": "すべて",
+  "categorySocial": "ソーシャル",
+  "categoryCalls": "通話",
+  "categoryMentions": "メンション",
+  "categorySystem": "システム",
+  "dateToday": "今日",
+  "dateYesterday": "昨日",
+  "dateThisWeek": "今週",
+  "dateOlder": "それ以前",
+  "join": "参加",
+  "joining": "参加中...",
+  "decline": "辞退",
+  "declining": "辞退中..."
+}

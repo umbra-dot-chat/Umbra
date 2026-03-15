@@ -1,0 +1,19 @@
+{
+  "title": "알림",
+  "noNotifications": "알림이 없습니다",
+  "markAllRead": "모두 읽음 처리",
+  "closeNotifications": "알림 닫기",
+  "categoryAll": "전체",
+  "categorySocial": "소셜",
+  "categoryCalls": "통화",
+  "categoryMentions": "멘션",
+  "categorySystem": "시스템",
+  "dateToday": "오늘",
+  "dateYesterday": "어제",
+  "dateThisWeek": "이번 주",
+  "dateOlder": "이전",
+  "join": "참여",
+  "joining": "참여 중...",
+  "decline": "거절",
+  "declining": "거절 중..."
+}

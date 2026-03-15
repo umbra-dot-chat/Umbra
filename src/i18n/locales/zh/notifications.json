@@ -1,0 +1,19 @@
+{
+  "title": "通知",
+  "noNotifications": "暂无通知",
+  "markAllRead": "全部标为已读",
+  "closeNotifications": "关闭通知",
+  "categoryAll": "全部",
+  "categorySocial": "社交",
+  "categoryCalls": "通话",
+  "categoryMentions": "提及",
+  "categorySystem": "系统",
+  "dateToday": "今天",
+  "dateYesterday": "昨天",
+  "dateThisWeek": "本周",
+  "dateOlder": "更早",
+  "join": "加入",
+  "joining": "加入中...",
+  "decline": "拒绝",
+  "declining": "拒绝中..."
+}

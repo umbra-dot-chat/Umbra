@@ -1,0 +1,23 @@
+{
+  "typeMessage": "Nachricht eingeben...",
+  "editMessage": "Nachricht bearbeiten...",
+  "chat": "Chat",
+  "searchMessages": "Nachrichten durchsuchen",
+  "togglePinnedMessages": "Angeheftete Nachrichten anzeigen",
+  "toggleMembers": "Mitglieder anzeigen",
+  "toggleSharedFiles": "Geteilte Dateien anzeigen",
+  "groupSettings": "Gruppeneinstellungen",
+  "voiceCall": "Sprachanruf",
+  "videoCall": "Videoanruf",
+  "moreOptions": "Weitere Optionen",
+  "closeMenu": "Menü schließen",
+  "reply": "Antworten",
+  "editMessageAction": "Nachricht bearbeiten",
+  "deleteMessage": "Nachricht löschen",
+  "pinMessage": "Nachricht anheften",
+  "forward": "Weiterleiten",
+  "forwardMessage": "Nachricht weiterleiten",
+  "copyMessage": "Kopieren",
+  "sendMessageToStart": "Sende eine Nachricht, um die Unterhaltung zu starten.",
+  "sending": "Wird gesendet {{percent}} %"
+}
