@@ -276,6 +276,9 @@ pub fn dispatch(method: &str, args: &str) -> DResult {
             dispatch_messaging::messaging_build_receipt_envelope(args)
         }
         "messaging_edit" => dispatch_messaging::messaging_edit(args),
+        "messaging_update_incoming_content" => {
+            dispatch_messaging::messaging_update_incoming_content(args)
+        }
         "messaging_delete" => dispatch_messaging::messaging_delete(args),
         "messaging_pin" => dispatch_messaging::messaging_pin(args),
         "messaging_unpin" => dispatch_messaging::messaging_unpin(args),

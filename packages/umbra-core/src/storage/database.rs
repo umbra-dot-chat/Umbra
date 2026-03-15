@@ -231,6 +231,13 @@ impl Database {
                             Error::DatabaseError(format!("Migration v16→v17 failed: {}", e))
                         })?;
                 }
+                if v < 18 {
+                    tracing::info!("Running migration v17 → v18 (FTS5 community messages)");
+                    conn.execute_batch(schema::MIGRATE_V17_TO_V18)
+                        .map_err(|e| {
+                            Error::DatabaseError(format!("Migration v17→v18 failed: {}", e))
+                        })?;
+                }
 
                 tracing::info!(
                     "All migrations complete (now at version {})",
@@ -613,7 +620,7 @@ impl Database {
         let conn = self.conn.lock();
 
         conn.execute(
-            "INSERT OR IGNORE INTO messages (id, conversation_id, sender_did, content_encrypted, nonce, timestamp)
+            "INSERT OR REPLACE INTO messages (id, conversation_id, sender_did, content_encrypted, nonce, timestamp)
              VALUES (?, ?, ?, ?, ?, ?)",
             params![
                 id,
@@ -4807,7 +4814,8 @@ impl Database {
 
     // ── Search (Phase 3) ────────────────────────────────────────────────
 
-    /// Search messages in a channel by content (plaintext only)
+    /// Search messages in a channel by content using FTS5.
+    /// Falls back to LIKE if FTS5 table is unavailable.
     pub fn search_community_messages(
         &self,
         channel_id: &str,
@@ -4815,13 +4823,54 @@ impl Database {
         limit: usize,
     ) -> Result<Vec<CommunityMessageRecord>> {
         let conn = self.conn.lock();
-        let like_query = format!("%{}%", query);
-        let mut stmt = conn.prepare(
-            "SELECT id, channel_id, sender_did, content_encrypted, content_plaintext, nonce, key_version, is_e2ee, reply_to_id, thread_id, has_embed, has_attachment, content_warning, edited_at, deleted_for_everyone, created_at FROM community_messages WHERE channel_id = ? AND content_plaintext LIKE ? AND deleted_for_everyone = 0 ORDER BY created_at DESC LIMIT ?",
-        ).map_err(|e| Error::DatabaseError(e.to_string()))?;
+
+        // Try FTS5 first — join community_messages_fts with community_messages
+        let fts_sql = "SELECT cm.id, cm.channel_id, cm.sender_did, cm.content_encrypted, cm.content_plaintext, cm.nonce, cm.key_version, cm.is_e2ee, cm.reply_to_id, cm.thread_id, cm.has_embed, cm.has_attachment, cm.content_warning, cm.edited_at, cm.deleted_for_everyone, cm.created_at, cm.metadata_json \
+            FROM community_messages cm \
+            INNER JOIN community_messages_fts fts ON cm.rowid = fts.rowid \
+            WHERE fts.content_plaintext MATCH ? AND cm.channel_id = ? AND cm.deleted_for_everyone = 0 \
+            ORDER BY cm.created_at DESC LIMIT ?";
+
+        let result = conn.prepare(fts_sql);
+        let mut stmt = match result {
+            Ok(s) => s,
+            Err(_) => {
+                // FTS5 table not available — fall back to LIKE
+                let like_query = format!("%{}%", query);
+                let mut stmt = conn.prepare(
+                    "SELECT id, channel_id, sender_did, content_encrypted, content_plaintext, nonce, key_version, is_e2ee, reply_to_id, thread_id, has_embed, has_attachment, content_warning, edited_at, deleted_for_everyone, created_at, metadata_json FROM community_messages WHERE channel_id = ? AND content_plaintext LIKE ? AND deleted_for_everyone = 0 ORDER BY created_at DESC LIMIT ?",
+                ).map_err(|e| Error::DatabaseError(e.to_string()))?;
+                let rows = stmt.query_map(params![channel_id, like_query, limit as i64], |row| {
+                    Ok(CommunityMessageRecord {
+                        id: row.get(0)?,
+                        channel_id: row.get(1)?,
+                        sender_did: row.get(2)?,
+                        content_encrypted: row.get(3)?,
+                        content_plaintext: row.get(4)?,
+                        nonce: row.get(5)?,
+                        key_version: row.get(6)?,
+                        is_e2ee: row.get::<_, i32>(7)? != 0,
+                        reply_to_id: row.get(8)?,
+                        thread_id: row.get(9)?,
+                        has_embed: row.get::<_, i32>(10)? != 0,
+                        has_attachment: row.get::<_, i32>(11)? != 0,
+                        content_warning: row.get(12)?,
+                        edited_at: row.get(13)?,
+                        deleted_for_everyone: row.get::<_, i32>(14)? != 0,
+                        created_at: row.get(15)?,
+                        metadata_json: row.get(16)?,
+                    })
+                }).map_err(|e| Error::DatabaseError(e.to_string()))?;
+                let mut messages = Vec::new();
+                for row in rows {
+                    messages.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?);
+                }
+                return Ok(messages);
+            }
+        };
 
         let rows = stmt
-            .query_map(params![channel_id, like_query, limit as i64], |row| {
+            .query_map(params![query, channel_id, limit as i64], |row| {
                 Ok(CommunityMessageRecord {
                     id: row.get(0)?,
                     channel_id: row.get(1)?,
@@ -5189,10 +5238,21 @@ impl Database {
         // Not deleted
         conditions.push("deleted_for_everyone = 0".to_string());
 
-        // Content query (LIKE)
+        // Content query — use FTS5 MATCH when available, fall back to LIKE
+        let use_fts = query.is_some() && {
+            conn.prepare("SELECT 1 FROM community_messages_fts LIMIT 0").is_ok()
+        };
         if let Some(q) = query {
-            conditions.push("content_plaintext LIKE ?".to_string());
-            param_values.push(Box::new(format!("%{}%", q)));
+            if use_fts {
+                conditions.push(
+                    "rowid IN (SELECT rowid FROM community_messages_fts WHERE content_plaintext MATCH ?)"
+                        .to_string(),
+                );
+                param_values.push(Box::new(q.to_string()));
+            } else {
+                conditions.push("content_plaintext LIKE ?".to_string());
+                param_values.push(Box::new(format!("%{}%", q)));
+            }
         }
 
         // From user
@@ -5246,7 +5306,7 @@ impl Database {
         };
 
         let sql = format!(
-            "SELECT id, channel_id, sender_did, content_encrypted, content_plaintext, nonce, key_version, is_e2ee, reply_to_id, thread_id, has_embed, has_attachment, content_warning, edited_at, deleted_for_everyone, created_at FROM community_messages WHERE {} ORDER BY created_at DESC LIMIT ?",
+            "SELECT id, channel_id, sender_did, content_encrypted, content_plaintext, nonce, key_version, is_e2ee, reply_to_id, thread_id, has_embed, has_attachment, content_warning, edited_at, deleted_for_everyone, created_at, metadata_json FROM community_messages WHERE {} ORDER BY created_at DESC LIMIT ?",
             where_clause
         );
         param_values.push(Box::new(limit as i64));

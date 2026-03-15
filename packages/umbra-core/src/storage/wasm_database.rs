@@ -530,7 +530,7 @@ impl Database {
         timestamp: i64,
     ) -> Result<()> {
         self.exec(
-            "INSERT INTO messages (id, conversation_id, sender_did, content_encrypted, nonce, timestamp) VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT OR REPLACE INTO messages (id, conversation_id, sender_did, content_encrypted, nonce, timestamp) VALUES (?, ?, ?, ?, ?, ?)",
             json!([id, conversation_id, sender_did, hex::encode(content_encrypted), hex::encode(nonce), timestamp]),
         )?;
         self.exec(
@@ -674,6 +674,25 @@ impl Database {
         )
     }
 
+    /// Update incoming message content + timestamp (for streaming updates).
+    /// Unlike edit_message, this also updates the timestamp (used as AAD for decryption)
+    /// and does NOT set the edited flag.
+    pub fn update_incoming_content(
+        &self,
+        message_id: &str,
+        new_content_encrypted: &[u8],
+        new_nonce: &[u8],
+        timestamp: i64,
+        _edited_at: i64,
+    ) -> Result<i32> {
+        let ct_hex = hex::encode(new_content_encrypted);
+        let nonce_hex = hex::encode(new_nonce);
+        self.exec(
+            "UPDATE messages SET content_encrypted = ?, nonce = ?, timestamp = ? WHERE id = ?",
+            json!([ct_hex, nonce_hex, timestamp, message_id]),
+        )
+    }
+
     /// Soft-delete a message
     pub fn delete_message(&self, message_id: &str, deleted_at: i64) -> Result<i32> {
         self.exec(
@@ -736,7 +755,7 @@ impl Database {
         let ct_hex = hex::encode(content_encrypted);
         let nonce_hex = hex::encode(nonce);
         self.exec(
-            "INSERT INTO messages (id, conversation_id, sender_did, content_encrypted, nonce, timestamp, \
+            "INSERT OR REPLACE INTO messages (id, conversation_id, sender_did, content_encrypted, nonce, timestamp, \
              reply_to_id, thread_id, forwarded_from) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
             json!([id, conversation_id, sender_did, ct_hex, nonce_hex, timestamp,
                    reply_to_id, thread_id, forwarded_from]),
@@ -2387,11 +2406,21 @@ impl Database {
         query: &str,
         limit: usize,
     ) -> Result<Vec<CommunityMessageRecord>> {
-        let like_query = format!("%{}%", query);
-        let rows = self.query(
-            "SELECT id, channel_id, sender_did, content_encrypted, content_plaintext, nonce, key_version, is_e2ee, reply_to_id, thread_id, has_embed, has_attachment, content_warning, edited_at, deleted_for_everyone, created_at FROM community_messages WHERE channel_id = ? AND content_plaintext LIKE ? ORDER BY created_at DESC LIMIT ?",
-            json!([channel_id, like_query, limit as i64]),
-        )?;
+        // Try FTS5 first, fall back to LIKE
+        let fts_result = self.query(
+            "SELECT cm.id, cm.channel_id, cm.sender_did, cm.content_encrypted, cm.content_plaintext, cm.nonce, cm.key_version, cm.is_e2ee, cm.reply_to_id, cm.thread_id, cm.has_embed, cm.has_attachment, cm.content_warning, cm.edited_at, cm.deleted_for_everyone, cm.created_at FROM community_messages cm INNER JOIN community_messages_fts fts ON cm.rowid = fts.rowid WHERE fts.content_plaintext MATCH ? AND cm.channel_id = ? AND cm.deleted_for_everyone = 0 ORDER BY cm.created_at DESC LIMIT ?",
+            json!([query, channel_id, limit as i64]),
+        );
+        let rows = match fts_result {
+            Ok(r) => r,
+            Err(_) => {
+                let like_query = format!("%{}%", query);
+                self.query(
+                    "SELECT id, channel_id, sender_did, content_encrypted, content_plaintext, nonce, key_version, is_e2ee, reply_to_id, thread_id, has_embed, has_attachment, content_warning, edited_at, deleted_for_everyone, created_at FROM community_messages WHERE channel_id = ? AND content_plaintext LIKE ? AND deleted_for_everyone = 0 ORDER BY created_at DESC LIMIT ?",
+                    json!([channel_id, like_query, limit as i64]),
+                )?
+            }
+        };
         Ok(rows.iter().map(Self::parse_community_message).collect())
     }
 
@@ -2424,9 +2453,21 @@ impl Database {
 
         conditions.push("deleted_for_everyone = 0".to_string());
 
+        // Content query — try FTS5 MATCH, fall back to LIKE
+        let fts_available = query.is_some() && {
+            self.query("SELECT 1 FROM community_messages_fts LIMIT 0", json!([])).is_ok()
+        };
         if let Some(q) = query {
-            conditions.push("content_plaintext LIKE ?".to_string());
-            param_values.push(json!(format!("%{}%", q)));
+            if fts_available {
+                conditions.push(
+                    "rowid IN (SELECT rowid FROM community_messages_fts WHERE content_plaintext MATCH ?)"
+                        .to_string(),
+                );
+                param_values.push(json!(q));
+            } else {
+                conditions.push("content_plaintext LIKE ?".to_string());
+                param_values.push(json!(format!("%{}%", q)));
+            }
         }
         if let Some(did) = from_did {
             conditions.push("sender_did = ?".to_string());

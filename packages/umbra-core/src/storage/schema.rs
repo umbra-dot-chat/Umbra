@@ -53,7 +53,7 @@
 //! ```
 
 /// Current schema version
-pub const SCHEMA_VERSION: i32 = 17;
+pub const SCHEMA_VERSION: i32 = 18;
 
 /// SQL to create all tables
 pub const CREATE_TABLES: &str = r#"
@@ -1716,6 +1716,55 @@ ALTER TABLE communities ADD COLUMN origin_community_id TEXT;
 CREATE INDEX IF NOT EXISTS idx_communities_origin ON communities(origin_community_id);
 
 UPDATE schema_version SET version = 17;
+"#;
+
+/// Migration v17 → v18: Add FTS5 full-text search index for community messages.
+///
+/// Creates a content-synced FTS5 virtual table that mirrors `content_plaintext`
+/// from `community_messages`. Triggers keep the FTS index in sync on
+/// insert, update, and delete.
+pub const MIGRATE_V17_TO_V18: &str = r#"
+CREATE VIRTUAL TABLE IF NOT EXISTS community_messages_fts USING fts5(
+    content_plaintext,
+    content=community_messages,
+    content_rowid=rowid
+);
+
+-- Populate the FTS index with existing messages
+INSERT INTO community_messages_fts(rowid, content_plaintext)
+    SELECT rowid, COALESCE(content_plaintext, '')
+    FROM community_messages
+    WHERE content_plaintext IS NOT NULL AND deleted_for_everyone = 0;
+
+-- Trigger: keep FTS in sync on INSERT
+CREATE TRIGGER IF NOT EXISTS community_messages_fts_insert
+AFTER INSERT ON community_messages
+WHEN NEW.content_plaintext IS NOT NULL AND NEW.deleted_for_everyone = 0
+BEGIN
+    INSERT INTO community_messages_fts(rowid, content_plaintext)
+        VALUES (NEW.rowid, NEW.content_plaintext);
+END;
+
+-- Trigger: keep FTS in sync on UPDATE
+CREATE TRIGGER IF NOT EXISTS community_messages_fts_update
+AFTER UPDATE ON community_messages
+WHEN NEW.content_plaintext IS NOT NULL
+BEGIN
+    INSERT INTO community_messages_fts(community_messages_fts, rowid, content_plaintext)
+        VALUES ('delete', OLD.rowid, COALESCE(OLD.content_plaintext, ''));
+    INSERT INTO community_messages_fts(rowid, content_plaintext)
+        VALUES (NEW.rowid, CASE WHEN NEW.deleted_for_everyone = 0 THEN NEW.content_plaintext ELSE '' END);
+END;
+
+-- Trigger: keep FTS in sync on DELETE
+CREATE TRIGGER IF NOT EXISTS community_messages_fts_delete
+AFTER DELETE ON community_messages
+BEGIN
+    INSERT INTO community_messages_fts(community_messages_fts, rowid, content_plaintext)
+        VALUES ('delete', OLD.rowid, COALESCE(OLD.content_plaintext, ''));
+END;
+
+UPDATE schema_version SET version = 18;
 "#;
 
 /// SQL to drop all tables (for testing/reset)

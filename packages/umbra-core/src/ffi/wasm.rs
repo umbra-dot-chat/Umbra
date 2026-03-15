@@ -2010,6 +2010,51 @@ pub fn umbra_wasm_messaging_edit(json: &str) -> Result<JsValue, JsValue> {
     Ok(JsValue::from_str(&result.to_string()))
 }
 
+/// Update an incoming message's encrypted content (no sender check).
+/// Used for streaming/progressive message updates from remote peers (e.g. Ghost AI).
+///
+/// Takes JSON: { "message_id": "...", "content_encrypted": "base64...", "nonce": "hex..." }
+#[cfg_attr(feature = "debug-trace", trace_ffi)]
+#[wasm_bindgen]
+pub fn umbra_wasm_messaging_update_incoming_content(json: &str) -> Result<JsValue, JsValue> {
+    let state = get_state()?;
+    let state = state.read();
+
+    let database = state
+        .database
+        .as_ref()
+        .ok_or_else(|| JsValue::from_str("Database not initialized"))?;
+
+    let data: serde_json::Value =
+        serde_json::from_str(json).map_err(|e| JsValue::from_str(&e.to_string()))?;
+
+    let message_id = data["message_id"]
+        .as_str()
+        .ok_or_else(|| JsValue::from_str("Missing message_id"))?;
+    let ct_b64 = data["content_encrypted"]
+        .as_str()
+        .ok_or_else(|| JsValue::from_str("Missing content_encrypted"))?;
+    let nonce_hex = data["nonce"]
+        .as_str()
+        .ok_or_else(|| JsValue::from_str("Missing nonce"))?;
+    // Timestamp used as AAD during encryption — must be stored so decryption works on reload
+    let timestamp = data["timestamp"].as_i64().unwrap_or(0);
+
+    let ciphertext = base64::engine::general_purpose::STANDARD
+        .decode(ct_b64)
+        .map_err(|e| JsValue::from_str(&format!("Invalid base64: {}", e)))?;
+    let nonce_bytes = hex::decode(nonce_hex)
+        .map_err(|e| JsValue::from_str(&format!("Invalid nonce hex: {}", e)))?;
+
+    let edited_at = crate::time::now_timestamp_millis();
+
+    database
+        .update_incoming_content(message_id, &ciphertext, &nonce_bytes, timestamp, edited_at)
+        .map_err(|e| JsValue::from_str(&format!("Failed to update: {}", e)))?;
+
+    Ok(JsValue::from_str("ok"))
+}
+
 /// Soft-delete a message.
 ///
 /// Only the original sender can delete their own messages.
