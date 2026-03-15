@@ -466,6 +466,10 @@ export class UmbraService {
     return messaging.editMessage(messageId, newText);
   }
 
+  updateIncomingMessageContent(messageId: string, contentEncrypted: string, nonce: string, timestamp: number): Promise<void> {
+    return messaging.updateIncomingMessageContent(messageId, contentEncrypted, nonce, timestamp);
+  }
+
   deleteMessage(messageId: string): Promise<void> {
     return messaging.deleteMessage(messageId);
   }

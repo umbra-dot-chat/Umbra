@@ -2,8 +2,8 @@
  * Message handler — receives encrypted messages, processes with LLM, sends encrypted responses.
  *
  * Supports streaming: if the LLM provider implements `chatStream`, Ghost sends
- * an initial placeholder message then progressively updates it via
- * `chat_message_update` envelopes.
+ * every chunk as a regular `chat_message` envelope with the same messageId.
+ * The client deduplicates — first creates, subsequent update in-place.
  */
 
 import { decryptMessage, encryptMessage, uuid, type GhostIdentity } from '../crypto.js';
@@ -206,40 +206,23 @@ export async function handleMessage(
   let responseText: string;
 
   if (llm.chatStream) {
-    // Streaming mode: send initial chat_message with first chunk, then
-    // progressively update it via chat_message_update envelopes so the
-    // user sees text appear word-by-word like ChatGPT.
+    // Streaming mode: send EVERY chunk as a regular chat_message with the
+    // same messageId. The client handles dedup — first one creates the
+    // message, subsequent ones update it in-place via messageContentUpdated.
     const messageId = uuid();
-    let initialSent = false;
     let lastSentText = '';
 
     responseText = await llm.chatStream(messages, (accumulated: string) => {
-      if (!initialSent) {
-        // Send the first chunk as a regular chat_message so the client
-        // creates the message in its store. Subsequent updates will find it.
+      if (accumulated !== lastSentText) {
         sendEncryptedMessage(messageId, accumulated, identity, relay, friend);
         lastSentText = accumulated;
-        initialSent = true;
-        log.debug(`[STREAM] initial message sent (${accumulated.length} chars)`);
-      } else if (accumulated !== lastSentText) {
-        // Send progressive update — the client will update the message in-place
-        sendEncryptedUpdate(messageId, accumulated, identity, relay, friend);
-        lastSentText = accumulated;
-        log.debug(`[STREAM] update sent (${accumulated.length} chars)`);
+        log.debug(`[STREAM] chunk sent (${accumulated.length} chars)`);
       }
     });
 
-    // If streaming produced content but initial was never sent (edge case),
-    // send the full response as a regular message
-    if (!initialSent && responseText) {
+    // Ensure the final complete response is sent
+    if (responseText && responseText !== lastSentText) {
       sendEncryptedMessage(messageId, responseText, identity, relay, friend);
-      lastSentText = responseText;
-    }
-
-    // Send final update if the last chunk wasn't sent yet
-    // (the Ollama stream emits a final onChunk, but in case it was throttled)
-    if (initialSent && responseText !== lastSentText) {
-      sendEncryptedUpdate(messageId, responseText, identity, relay, friend);
     }
 
     // Parse and strip tutor score from the final response
@@ -287,6 +270,9 @@ export async function handleMessage(
 
     log.info(`Replied to ${friend.displayName}: "${cleanedResponse.slice(0, 100)}${cleanedResponse.length > 100 ? '...' : ''}"`);
   }
+
+  // Always clear typing indicator when done
+  sendStopTypingIndicator(identity, relay, friend);
 }
 
 // ── Tutor score parsing ───────────────────────────────────────────────────────

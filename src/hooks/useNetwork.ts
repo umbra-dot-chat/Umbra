@@ -688,10 +688,34 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
               // Ensure conversation exists before decrypt (handles edge cases where
               // friend acceptance relay was missed or conversation wasn't created yet)
               try { await service.createDmConversation(chatPayload.senderDid); } catch { /* friend may not exist yet */ }
-              await service.storeIncomingMessage(chatPayload);
+
+              // Try to store the message. If it already exists (streaming duplicate),
+              // treat this as a content update instead of a new message.
+              let isUpdate = false;
+              try {
+                await service.storeIncomingMessage(chatPayload);
+              } catch (storeErr) {
+                // Message already exists — this is a streaming update with the same messageId
+                isUpdate = true;
+              }
+
               const decryptedText = await service.decryptIncomingMessage(chatPayload);
               if (!decryptedText) {
                 if (__DEV__) dbg.warn('network', 'decryption failed, skipping dispatch', { messageId: chatPayload.messageId }, SRC);
+              } else if (isUpdate) {
+                // Streaming update — update existing message content in-place
+                service.dispatchMessageEvent({
+                  type: 'messageContentUpdated',
+                  messageId: chatPayload.messageId,
+                  newText: decryptedText,
+                });
+                // Persist the updated content
+                service.updateIncomingMessageContent(
+                  chatPayload.messageId,
+                  chatPayload.contentEncrypted,
+                  chatPayload.nonce,
+                  chatPayload.timestamp,
+                ).catch((err: any) => { console.error('[STREAM] persist failed:', err); });
               } else if (chatPayload.threadId) {
                 service.dispatchMessageEvent({ type: 'threadReplyReceived', message: { id: chatPayload.messageId, conversationId: chatPayload.conversationId, senderDid: chatPayload.senderDid, content: { type: 'text', text: decryptedText }, timestamp: chatPayload.timestamp, read: false, delivered: true, status: 'delivered', threadId: chatPayload.threadId }, parentId: chatPayload.threadId });
               } else {
@@ -711,9 +735,11 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
           } else if (envelope.envelope === 'chat_message_update' && envelope.version === 1) {
             // Streaming/progressive update — decrypt and update existing message in-place
             const updatePayload = envelope.payload as ChatMessageUpdatePayload;
+            console.log('[STREAM] chat_message_update received', { mid: updatePayload.messageId?.slice(0, 8), ts: updatePayload.timestamp });
             try {
               // Reuse decryptIncomingMessage with the same payload shape
               const decryptedText = await service.decryptIncomingMessage(updatePayload as ChatMessagePayload);
+              console.log('[STREAM] decrypted:', decryptedText ? decryptedText.slice(0, 50) : 'NULL');
               if (decryptedText) {
                 // Dispatch content update (NOT messageEdited — avoids "(edited)" label)
                 service.dispatchMessageEvent({
@@ -722,11 +748,17 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
                   newText: decryptedText,
                 });
                 // Persist streamed content to storage so it survives page reload
-                service.editMessage(updatePayload.messageId, decryptedText).catch((err: any) =>
-                  { if (__DEV__) dbg.warn('network', 'failed to persist streaming update', { error: String(err) }, SRC); }
+                // Use updateIncomingMessageContent (no sender check) since this is a remote peer's message
+                service.updateIncomingMessageContent(
+                  updatePayload.messageId,
+                  updatePayload.contentEncrypted,
+                  updatePayload.nonce,
+                  updatePayload.timestamp,
+                ).catch((err: any) =>
+                  { console.error('[STREAM] persist failed:', err); }
                 );
               }
-            } catch (err) { if (__DEV__) dbg.warn('network', 'failed to process chat_message_update', { error: String(err) }, SRC); }
+            } catch (err) { console.error('[STREAM] chat_message_update FAILED:', err); }
 
           } else if (envelope.envelope === 'group_invite' && envelope.version === 1) {
             const invitePayload = envelope.payload as GroupInvitePayload;
@@ -1014,9 +1046,18 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
                 }
               }
             } else if (envelope.envelope === 'chat_message_update' && envelope.version === 1) {
-              // Skip individual dispatch — covered by offlineBatchComplete refresh
+              // Persist streaming content so it survives reload (updates timestamp for AAD match)
               const updatePayload = envelope.payload as ChatMessageUpdatePayload;
               if (updatePayload.conversationId) _offlineConversationIds.add(updatePayload.conversationId);
+              try {
+                await service.updateIncomingMessageContent(
+                  updatePayload.messageId,
+                  updatePayload.contentEncrypted,
+                  updatePayload.nonce,
+                  updatePayload.timestamp,
+                );
+                _wasmCallCount++;
+              } catch (err) { if (__DEV__) dbg.warn('network', 'failed to persist offline streaming update', { error: String(err) }, SRC); }
             } else if (envelope.envelope === 'group_invite' && envelope.version === 1) {
               const invitePayload = envelope.payload as GroupInvitePayload;
               try { await service.storeGroupInvite(invitePayload); _wasmCallCount++; service.dispatchGroupEvent({ type: 'inviteReceived', invite: { id: invitePayload.inviteId, groupId: invitePayload.groupId, groupName: invitePayload.groupName, description: invitePayload.description, inviterDid: invitePayload.inviterDid, inviterName: invitePayload.inviterName, encryptedGroupKey: invitePayload.encryptedGroupKey, nonce: invitePayload.nonce, membersJson: invitePayload.membersJson, status: 'pending', createdAt: invitePayload.timestamp } }); } catch (err) { if (__DEV__) dbg.warn('network', 'failed to store offline group invite', { error: String(err) }, SRC); }
