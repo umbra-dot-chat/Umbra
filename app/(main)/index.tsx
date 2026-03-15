@@ -184,15 +184,21 @@ export default function ChatPage() {
     };
   }, [resolvedConversationId]);
 
-  // Group member count for the active conversation
+  // Group member info for the active conversation (count + names for AvatarGroup)
   const [activeMemberCount, setActiveMemberCount] = useState<number | undefined>(undefined);
+  const [activeMemberNames, setActiveMemberNames] = useState<string[]>([]);
   useEffect(() => {
     if (activeConversation?.type === 'group' && activeConversation.groupId) {
       getMembers(activeConversation.groupId).then((members) => {
         setActiveMemberCount(members.length);
-      }).catch(() => setActiveMemberCount(undefined));
+        setActiveMemberNames(members.map(m => m.displayName || m.memberDid.slice(0, 8)));
+      }).catch(() => {
+        setActiveMemberCount(undefined);
+        setActiveMemberNames([]);
+      });
     } else {
       setActiveMemberCount(undefined);
+      setActiveMemberNames([]);
     }
   }, [activeConversation, getMembers]);
 
@@ -287,9 +293,10 @@ export default function ChatPage() {
 
     if (activeConversation.type === 'group' && activeConversation.groupId) {
       const group = groups.find((g) => g.id === activeConversation.groupId);
-      const memberNames = group
-        ? [group.name] // Use group name as display; members shown via AvatarGroup
-        : ['Group'];
+      // Use actual member names for AvatarGroup, fall back to group name
+      const memberNames = activeMemberNames.length > 0
+        ? activeMemberNames
+        : [group?.name ?? 'Group'];
       return {
         name: group?.name ?? 'Group',
         group: memberNames,
@@ -308,7 +315,7 @@ export default function ChatPage() {
         ? friendAvatars[activeConversation.friendDid]
         : undefined,
     };
-  }, [activeConversation, groups, friendNames, friendAvatars, onlineDids, activeMemberCount]);
+  }, [activeConversation, groups, friendNames, friendAvatars, onlineDids, activeMemberCount, activeMemberNames]);
 
   // Handle sending a message (or editing)
   const handleSubmit = useCallback(async (msg: string) => {
