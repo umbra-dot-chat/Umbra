@@ -192,6 +192,23 @@ for (const pkgDir of [CORE_DEST, RN_DEST]) {
   }
 }
 
+// ── Deduplicate React in Wisp packages ───────────────────────────────────────
+// Wisp packages may install their own react/react-native in nested node_modules,
+// causing "ReactCurrentDispatcher" errors from duplicate React instances.
+// Remove nested copies so the root versions are used instead.
+const DEDUP_PACKAGES = ['react', 'react-dom', 'react-native', '@react-native'];
+for (const dest of [CORE_DEST, RN_DEST]) {
+  const nestedNM = path.join(dest, 'node_modules');
+  if (!fs.existsSync(nestedNM)) continue;
+  for (const pkg of DEDUP_PACKAGES) {
+    const nested = path.join(nestedNM, pkg);
+    if (fs.existsSync(nested)) {
+      fs.rmSync(nested, { recursive: true, force: true });
+      console.log(`[postinstall] Removed duplicate ${pkg} from ${path.basename(dest)}/node_modules/`);
+    }
+  }
+}
+
 // ── Configure git hooks ──────────────────────────────────────────────────────
 // Point git to .githooks/ so the pre-commit XCFramework check runs automatically.
 // This is a no-op if already configured or if we're in CI (no .git directory).

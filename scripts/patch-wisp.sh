@@ -272,4 +272,17 @@ if [ -f "$FUPZ" ]; then
   sed_i "s/(uploadProgress ?? 0) + '%'/(\`\${uploadProgress ?? 0}%\` as any)/" "$FUPZ"
 fi
 
+# ── Deduplicate React in Wisp packages ─────────────────────────────────────────
+# Remove nested react/react-native from Wisp packages to prevent duplicate
+# React instances causing "ReactCurrentDispatcher" errors at runtime.
+for pkg in react react-dom react-native @react-native; do
+  for dest in "$CORE_DEST" "$RN_DEST"; do
+    nested="$dest/node_modules/$pkg"
+    if [ -d "$nested" ]; then
+      rm -rf "$nested"
+      echo "  Removed duplicate $pkg from $(basename "$dest")/node_modules/"
+    fi
+  done
+done
+
 echo "Done. Wisp packages patched successfully."

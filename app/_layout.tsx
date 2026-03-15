@@ -1,7 +1,7 @@
 import '@/utils/wdyr'; // Must be before React — patches React for render profiling
-import '@/i18n/config'; // Initialize i18next before any component renders
 import 'react-native-gesture-handler';
 import React, { Profiler, useEffect, useState, useMemo, useCallback, useRef } from 'react';
+import '@/i18n/config'; // Initialize i18next after React is loaded
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { Slot, useSegments, useRouter, useNavigationContainerRef } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
