@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useCallback, useMemo } from 'react';
+import { Platform } from 'react-native';
 import { useRouter } from 'expo-router';
 import {
   Command, CommandInput, CommandList, CommandGroup,
@@ -9,8 +10,8 @@ import {
 import { useFriends } from '@/hooks/useFriends';
 import { useNetwork } from '@/hooks/useNetwork';
 import { usePlugins } from '@/contexts/PluginContext';
+import { useUnifiedSearch } from '@/contexts/UnifiedSearchContext';
 import { UsersIcon, SearchIcon, SettingsIcon, MessageIcon, ZapIcon, DownloadIcon } from '@/components/ui';
-import { dbg } from '@/utils/debug';
 
 type IconComponent = React.ComponentType<{ size?: number | string; color?: string }>;
 const Users = UsersIcon as IconComponent;
@@ -23,20 +24,60 @@ export interface CommandPaletteProps {
   onOpenChange: (open: boolean) => void;
   onOpenSettings: () => void;
   onOpenMarketplace?: () => void;
-  /** Open the in-conversation message search panel */
-  onSearchMessages?: () => void;
+  /** Whether there is an active conversation (to show "Search in this conversation") */
+  hasActiveConversation?: boolean;
 }
 
 const Zap = ZapIcon as IconComponent;
 const Download = DownloadIcon as IconComponent;
 
-export function CommandPalette({ open, onOpenChange, onOpenSettings, onOpenMarketplace, onSearchMessages }: CommandPaletteProps) {
-  if (__DEV__) dbg.trackRender('CommandPalette');
+export function CommandPalette({ open, onOpenChange, onOpenSettings, onOpenMarketplace, hasActiveConversation }: CommandPaletteProps) {
   const router = useRouter();
   const { friends } = useFriends();
   const { onlineDids } = useNetwork();
   const { pluginCommands } = usePlugins();
   const { mode } = useTheme();
+  const {
+    setQuery,
+    searchHistory,
+    results,
+    jumpToMessage,
+    setSidebarSearchActive,
+    activeConversationId,
+  } = useUnifiedSearch();
+
+  // Flatten results into a display-friendly list (up to 10)
+  const flatResults = useMemo(() => {
+    const items: Array<{
+      messageId: string;
+      conversationId: string;
+      senderDid: string;
+      text: string;
+      matchedTerms: string[];
+    }> = [];
+    for (const group of results) {
+      for (const r of group.results) {
+        items.push({
+          messageId: r.document.id,
+          conversationId: r.document.conversationId,
+          senderDid: r.document.senderDid,
+          text: r.document.text,
+          matchedTerms: r.matchedTerms,
+        });
+        if (items.length >= 10) break;
+      }
+      if (items.length >= 10) break;
+    }
+    return items;
+  }, [results]);
+
+  // Track the current command input search value for conditional rendering
+  const [commandSearch, setCommandSearch] = React.useState('');
+
+  const handleSearchChange = useCallback((search: string) => {
+    setCommandSearch(search);
+    setQuery(search);
+  }, [setQuery]);
 
   const handleSelect = (value: string) => {
     if (value === 'nav:friends') {
@@ -47,10 +88,29 @@ export function CommandPalette({ open, onOpenChange, onOpenSettings, onOpenMarke
       onOpenSettings();
     } else if (value === 'nav:marketplace') {
       onOpenMarketplace?.();
-    } else if (value === 'nav:search-messages') {
-      onSearchMessages?.();
+    } else if (value === 'nav:search-in-conversation') {
+      onOpenChange(false);
+      setSidebarSearchActive(true);
+    } else if (value.startsWith('msg:')) {
+      // Message result selected — parse conversationId and messageId
+      const [, convId, msgId] = value.split(':');
+      if (convId && msgId && jumpToMessage) {
+        jumpToMessage(convId, msgId);
+      }
+      onOpenChange(false);
+    } else if (value.startsWith('history:')) {
+      // Recent search selected — set the query to that term
+      const term = value.slice('history:'.length);
+      setQuery(term);
+      setCommandSearch(term);
+    } else if (value.startsWith('user:')) {
+      // Friend selected — emit custom event to open DM
+      const did = value.slice('user:'.length);
+      if (Platform.OS === 'web' && typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('umbra:open-dm', { detail: { did } }));
+      }
+      onOpenChange(false);
     }
-    // user: items are no-op for now — could navigate to DM
   };
 
   // In light mode, override the raised surface to be light-colored instead of the
@@ -67,17 +127,39 @@ export function CommandPalette({ open, onOpenChange, onOpenSettings, onOpenMarke
     },
   } : undefined;
 
+  const hasQuery = commandSearch.trim().length > 0;
+
   return (
     <WispProvider mode={mode} overrides={lightRaisedOverrides}>
     <Command
       open={open}
       onOpenChange={onOpenChange}
       onSelect={handleSelect}
+      onSearchChange={handleSearchChange}
       size="md"
       style={mode === 'light' ? { borderWidth: 1, borderColor: lightBorderSubtle, shadowOpacity: 0.15 } : undefined}
     >
       <CommandInput placeholder="Search users, messages, or type a command..." />
       <CommandList>
+        {/* Recent Searches — shown when query is empty */}
+        {!hasQuery && searchHistory.length > 0 && (
+          <>
+            <CommandGroup heading="Recent Searches">
+              {searchHistory.slice(0, 5).map((term) => (
+                <CommandItem
+                  key={`history-${term}`}
+                  value={`history:${term}`}
+                  icon={Search}
+                  keywords={[term]}
+                >
+                  {term}
+                </CommandItem>
+              ))}
+            </CommandGroup>
+            <CommandSeparator />
+          </>
+        )}
+
         <CommandGroup heading="Navigation">
           <CommandItem
             value="nav:friends"
@@ -100,13 +182,13 @@ export function CommandPalette({ open, onOpenChange, onOpenSettings, onOpenMarke
           >
             Open Settings
           </CommandItem>
-          {onSearchMessages && (
+          {(hasActiveConversation || activeConversationId) && (
             <CommandItem
-              value="nav:search-messages"
+              value="nav:search-in-conversation"
               icon={Search}
-              keywords={['search', 'find', 'messages', 'lookup']}
+              keywords={['search', 'find', 'messages', 'conversation', 'current']}
             >
-              Search Messages
+              Search in this conversation
             </CommandItem>
           )}
           {onOpenMarketplace && (
@@ -119,6 +201,30 @@ export function CommandPalette({ open, onOpenChange, onOpenSettings, onOpenMarke
             </CommandItem>
           )}
         </CommandGroup>
+
+        {/* Message search results — shown when query is non-empty */}
+        {hasQuery && flatResults.length > 0 && (
+          <>
+            <CommandSeparator />
+            <CommandGroup heading="Messages">
+              {flatResults.map((r) => {
+                const senderName = r.senderDid.slice(0, 16);
+                const snippet = r.text.length > 60 ? r.text.slice(0, 57) + '...' : r.text;
+                return (
+                  <CommandItem
+                    key={`msg-${r.messageId}`}
+                    value={`msg:${r.conversationId}:${r.messageId}`}
+                    icon={Message}
+                    keywords={[r.text, r.senderDid]}
+                    description={snippet}
+                  >
+                    {senderName}
+                  </CommandItem>
+                );
+              })}
+            </CommandGroup>
+          </>
+        )}
 
         {friends.length > 0 && (
           <>
