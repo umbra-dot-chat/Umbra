@@ -16,6 +16,7 @@ import { PlusIcon, CheckIcon, TrashIcon } from '@/components/ui';
 import { GrowablePinInput } from '@/components/auth/GrowablePinInput';
 import type { StoredAccount } from '@/contexts/AuthContext';
 import { TEST_IDS } from '@/constants/test-ids';
+import { useTranslation } from 'react-i18next';
 import { dbg } from '@/utils/debug';
 
 // ---------------------------------------------------------------------------
@@ -68,6 +69,7 @@ export function AccountSwitcher({
   if (__DEV__) dbg.trackRender('AccountSwitcher');
   const { theme } = useTheme();
   const tc = theme.colors;
+  const { t } = useTranslation('common');
 
   // Remove account flow state
   const [removeTarget, setRemoveTarget] = useState<StoredAccount | null>(null);
@@ -138,7 +140,7 @@ export function AccountSwitcher({
       onRemoveAccount?.(removeTarget.did);
       resetRemoveState();
     } else {
-      setPinError('Incorrect PIN');
+      setPinError(t('incorrectPin'));
       setPinValue('');
       triggerShake();
     }
@@ -176,15 +178,15 @@ export function AccountSwitcher({
             zIndex: 9998,
           }}
           accessibilityRole="button"
-          accessibilityLabel="Close account switcher"
+          accessibilityLabel={t('closeAccountSwitcher')}
         />
         <Box style={popoverStyle}>
           <Box style={{ padding: 16, alignItems: 'center' }}>
             <Text size="sm" weight="semibold" style={{ color: tc.text.primary, marginBottom: 4 }}>
-              Remove Account
+              {t('removeAccount')}
             </Text>
             <Text size="xs" align="center" style={{ color: tc.text.secondary, marginBottom: 16 }}>
-              Enter PIN for {removeTarget.displayName}
+              {t('enterPinFor', { name: removeTarget.displayName })}
             </Text>
 
             <Animated.View style={{ transform: [{ translateX: shakeAnim }] }}>
@@ -210,7 +212,7 @@ export function AccountSwitcher({
 
             <Button variant="tertiary" size="xs" onPress={resetRemoveState} style={{ marginTop: 12 }}>
               <Text size="xs" style={{ color: tc.text.secondary, textDecorationLine: 'underline' }}>
-                Cancel
+                {t('cancel')}
               </Text>
             </Button>
           </Box>
@@ -233,7 +235,7 @@ export function AccountSwitcher({
           zIndex: 9998,
         }}
         accessibilityRole="button"
-        accessibilityLabel="Close account switcher"
+        accessibilityLabel={t('closeAccountSwitcher')}
       />
 
       {/* Popover */}
@@ -249,7 +251,7 @@ export function AccountSwitcher({
           }}
         >
           <Text size="sm" weight="semibold" style={{ color: tc.text.primary }}>
-            Accounts
+            {t('accounts')}
           </Text>
         </Box>
 
@@ -382,7 +384,7 @@ export function AccountSwitcher({
             <PlusIcon size={16} color={tc.text.secondary} />
           </Box>
           <Text size="sm" style={{ color: tc.text.secondary }}>
-            Add Account
+            {t('addAccount')}
           </Text>
         </Pressable>
       </Box>

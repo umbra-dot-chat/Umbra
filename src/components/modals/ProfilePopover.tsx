@@ -9,6 +9,7 @@ import { Pressable, Dimensions, Platform } from 'react-native';
 import type { ViewStyle } from 'react-native';
 import { Avatar, Box, useTheme, UserProfileCard } from '@coexist/wisp-react-native';
 import type { ProfileMember } from '@/hooks/useProfilePopover';
+import { useTranslation } from 'react-i18next';
 import { dbg } from '@/utils/debug';
 
 export interface ProfilePopoverProps {
@@ -21,6 +22,7 @@ export function ProfilePopover({ selectedMember, anchor, onClose }: ProfilePopov
   if (__DEV__) dbg.trackRender('ProfilePopover');
   const { theme } = useTheme();
   const tc = theme.colors;
+  const { t } = useTranslation('common');
 
   if (!selectedMember || !anchor) return null;
 
@@ -61,7 +63,7 @@ export function ProfilePopover({ selectedMember, anchor, onClose }: ProfilePopov
           zIndex: 9998,
         }}
         accessibilityRole="button"
-        accessibilityLabel="Close profile"
+        accessibilityLabel={t('closeProfile')}
       />
 
       {/* Profile card */}
@@ -78,7 +80,7 @@ export function ProfilePopover({ selectedMember, anchor, onClose }: ProfilePopov
           bannerColor={tc.accent.primary}
           onClose={onClose}
           actions={[
-            { id: 'message', label: 'Message' },
+            { id: 'message', label: t('friends:message') },
           ]}
         />
       </Box>

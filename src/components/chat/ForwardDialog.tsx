@@ -96,7 +96,7 @@ export function ForwardDialog({ open, onClose, onSelectConversation }: ForwardDi
       open={open}
       onClose={handleClose}
       title={t('forwardMessage')}
-      description="Choose a conversation to forward to."
+      description={t('common:chooseConversationForward')}
       icon={<MessageIcon size={22} color={tc.accent.primary} />}
       size="md"
     >

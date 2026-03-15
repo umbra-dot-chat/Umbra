@@ -27,6 +27,7 @@ import { useNetwork } from '@/hooks/useNetwork';
 import { useGroups } from '@/hooks/useGroups';
 import type { Friend } from '@umbra/service';
 import { TEST_IDS } from '@/constants/test-ids';
+import { useTranslation } from 'react-i18next';
 import { dbg } from '@/utils/debug';
 
 const SRC = 'CreateGroupDialog';
@@ -40,6 +41,7 @@ export interface CreateGroupDialogProps {
 export function CreateGroupDialog({ open, onClose, onCreated }: CreateGroupDialogProps) {
   if (__DEV__) dbg.trackRender('CreateGroupDialog');
   const theme = useTheme();
+  const { t } = useTranslation('common');
   const { friends } = useFriends();
   const { onlineDids } = useNetwork();
   const { createGroup, sendInvite } = useGroups();
@@ -72,15 +74,15 @@ export function CreateGroupDialog({ open, onClose, onCreated }: CreateGroupDialo
   const handleCreate = useCallback(async () => {
     // Validation
     if (!name.trim()) {
-      setValidationError('Group name is required.');
+      setValidationError(t('groupNameRequired'));
       return;
     }
     if (selectedFriends.size === 0) {
-      setValidationError('Select at least 1 friend to invite.');
+      setValidationError(t('selectMinFriend'));
       return;
     }
     if (selectedFriends.size > 255) {
-      setValidationError('Maximum 255 members allowed.');
+      setValidationError(t('maxMembersAllowed'));
       return;
     }
     setValidationError(null);
@@ -97,7 +99,7 @@ export function CreateGroupDialog({ open, onClose, onCreated }: CreateGroupDialo
         onCreated?.(result.groupId, result.conversationId);
 
         // Show success message briefly before closing
-        setSuccessMessage(`Invitations sent to ${selectedFriends.size} friend${selectedFriends.size === 1 ? '' : 's'}!`);
+        setSuccessMessage(t('invitationsSent', { count: selectedFriends.size }));
         setTimeout(() => {
           setSuccessMessage(null);
           setName('');
@@ -109,7 +111,7 @@ export function CreateGroupDialog({ open, onClose, onCreated }: CreateGroupDialo
     } catch (err) {
       if (__DEV__) dbg.error('groups', 'Failed to create group', err, SRC);
       const msg = err instanceof Error ? err.message : String(err);
-      let userMessage = 'Failed to create group. Please try again.';
+      let userMessage = t('failedCreateGroup');
       if (msg.length > 0 && msg.length < 200) {
         userMessage = `Failed to create group: ${msg}`;
       }
@@ -157,16 +159,16 @@ export function CreateGroupDialog({ open, onClose, onCreated }: CreateGroupDialo
       <Box style={styles.container} testID={TEST_IDS.GROUPS.CREATE_DIALOG}>
         <HStack style={{ alignItems: 'center', gap: 8 }}>
           <UsersIcon size={20} color={theme.colors.accent.primary} />
-          <Text style={styles.header}>Create Group & Invite Members</Text>
+          <Text style={styles.header}>{t('createGroupInvite')}</Text>
         </HStack>
 
         <VStack style={{ gap: 12 }}>
           <VStack style={{ gap: 4 }}>
-            <Text style={styles.label}>Group Name *</Text>
+            <Text style={styles.label}>{t('groupName')} *</Text>
             <Input
               value={name}
               onChangeText={setName}
-              placeholder="Enter group name..."
+              placeholder={t('enterGroupName')}
               style={{ width: '100%' }}
               testID={TEST_IDS.GROUPS.NAME_INPUT}
               gradientBorder
@@ -174,11 +176,11 @@ export function CreateGroupDialog({ open, onClose, onCreated }: CreateGroupDialo
           </VStack>
 
           <VStack style={{ gap: 4 }}>
-            <Text style={styles.label}>Description (optional)</Text>
+            <Text style={styles.label}>{t('descriptionOptional')}</Text>
             <TextArea
               value={description}
               onChangeText={setDescription}
-              placeholder="What's this group about?"
+              placeholder={t('whatsGroupAbout')}
               numberOfLines={2}
               style={{ width: '100%' }}
               testID={TEST_IDS.GROUPS.DESCRIPTION_INPUT}
@@ -188,16 +190,16 @@ export function CreateGroupDialog({ open, onClose, onCreated }: CreateGroupDialo
 
           <VStack style={{ gap: 4 }}>
             <Text style={styles.label}>
-              Invite Members (min 1)
+              {t('inviteMembersMin')}
             </Text>
             <UserPicker
               users={pickerUsers}
               selected={selectedFriends}
               onSelectionChange={handleSelectionChange}
               max={255}
-              emptyMessage="No friends to add yet"
+              emptyMessage={t('noFriendsToAdd')}
               maxHeight={200}
-              searchPlaceholder="Search friends..."
+              searchPlaceholder={t('searchFriends')}
               testID={TEST_IDS.GROUPS.MEMBER_PICKER}
             />
           </VStack>
@@ -219,14 +221,14 @@ export function CreateGroupDialog({ open, onClose, onCreated }: CreateGroupDialo
 
         <Box style={styles.buttons}>
           <Button variant="tertiary" onPress={handleClose} testID={TEST_IDS.GROUPS.CANCEL_BUTTON}>
-            Cancel
+            {t('cancel')}
           </Button>
           <Button
             onPress={handleCreate}
             disabled={!name.trim() || selectedFriends.size === 0 || selectedFriends.size > 255 || isCreating || !!successMessage}
             testID={TEST_IDS.GROUPS.CREATE_BUTTON}
           >
-            {isCreating ? 'Sending Invites...' : 'Create & Invite'}
+            {isCreating ? t('sendingInvites') : t('createAndInvite')}
           </Button>
         </Box>
       </Box>

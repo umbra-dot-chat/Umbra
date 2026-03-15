@@ -37,6 +37,7 @@ import { ResizeHandle } from '@/components/ui/ResizeHandle';
 import { useAllCustomEmoji } from '@/hooks/useAllCustomEmoji';
 import { useNetwork } from '@/hooks/useNetwork';
 import { useFileTransfer } from '@/hooks/useFileTransfer';
+import { useTranslation } from 'react-i18next';
 import { dbg } from '@/utils/debug';
 
 const SRC = 'ChatPage';
@@ -52,6 +53,7 @@ const ghostBlack = require('@/assets/images/ghost-black.png');
 const ghostWhite = require('@/assets/images/ghost-white.png');
 
 function EmptyConversation() {
+  const { t: tc } = useTranslation('common');
   const { theme, mode } = useTheme();
   const isDark = mode === 'dark';
   const ghostSource = isDark ? ghostWhite : ghostBlack;
@@ -66,7 +68,7 @@ function EmptyConversation() {
         resizeMode="contain"
       />
       <Text testID={TEST_IDS.MAIN.WELCOME_TEXT} size={isCompact ? 'lg' : 'display-sm'} weight="bold" style={{ color: theme.colors.text.primary, marginBottom: 8 }}>
-        Welcome to Umbra
+        {tc('welcomeToUmbra')}
       </Text>
       <GradientText
         colors={['#8B5CF6', '#EC4899', '#3B82F6', '#8B5CF6']}
@@ -74,24 +76,24 @@ function EmptyConversation() {
         speed={10000}
         style={{ fontSize: isCompact ? 13 : 14, textAlign: 'center', maxWidth: 400, marginBottom: 16 } as any}
       >
-        Add a friend to start chatting. Your messages are end-to-end encrypted and delivered peer-to-peer.
+        {tc('welcomeDescription')}
       </GradientText>
       <HelpIndicator
         id="chat-empty"
-        title="Getting Started"
+        title={tc('gettingStarted')}
         icon="i"
         priority={80}
         size={18}
       >
         <HelpText>
-          To start a conversation, go to the Friends page and add someone by their DID.
+          {tc('helpStartConversation')}
         </HelpText>
         <HelpHighlight icon={<MessageIcon size={22} color={theme.colors.accent.primary} />}>
-          Once you're friends, a conversation is created automatically. Messages are end-to-end encrypted — only you and the recipient can read them.
+          {tc('helpFriendConversation')}
         </HelpHighlight>
-        <HelpListItem>Navigate to Friends from the sidebar</HelpListItem>
-        <HelpListItem>Paste a DID to send a friend request</HelpListItem>
-        <HelpListItem>Once accepted, your conversation appears here</HelpListItem>
+        <HelpListItem>{tc('helpNavFriends')}</HelpListItem>
+        <HelpListItem>{tc('helpPasteDid')}</HelpListItem>
+        <HelpListItem>{tc('helpAcceptedConvo')}</HelpListItem>
       </HelpIndicator>
     </Box>
   );

@@ -24,6 +24,7 @@ import { useFriends } from '@/hooks/useFriends';
 import { useNetwork } from '@/hooks/useNetwork';
 import { useConversations } from '@/hooks/useConversations';
 import type { Friend } from '@umbra/service';
+import { useTranslation } from 'react-i18next';
 import { dbg } from '@/utils/debug';
 
 export interface NewDmDialogProps {
@@ -38,6 +39,7 @@ export function NewDmDialog({ open, onClose, onSelectFriend }: NewDmDialogProps)
   if (__DEV__) dbg.trackRender('NewDmDialog');
   const { theme } = useTheme();
   const tc = theme.colors;
+  const { t } = useTranslation('common');
   const { friends } = useFriends();
   const { onlineDids } = useNetwork();
   const { conversations } = useConversations();
@@ -84,8 +86,8 @@ export function NewDmDialog({ open, onClose, onSelectFriend }: NewDmDialogProps)
     <Dialog
       open={open}
       onClose={handleClose}
-      title="Start a Conversation"
-      description="Choose a friend to message."
+      title={t('startConversation')}
+      description={t('chooseFriendToMessage')}
       icon={<MessageIcon size={22} color={tc.accent.primary} />}
       size="md"
     >
@@ -93,7 +95,7 @@ export function NewDmDialog({ open, onClose, onSelectFriend }: NewDmDialogProps)
         <SearchInput
           value={search}
           onValueChange={setSearch}
-          placeholder="Search friends..."
+          placeholder={t('searchFriends')}
           size="sm"
           fullWidth
           onClear={() => setSearch('')}
@@ -113,8 +115,8 @@ export function NewDmDialog({ open, onClose, onSelectFriend }: NewDmDialogProps)
             <Box style={{ padding: 24, alignItems: 'center' }}>
               <Text size="sm" style={{ color: tc.text.muted }}>
                 {friends.length === 0
-                  ? 'No friends yet. Add friends first!'
-                  : 'No friends match your search.'}
+                  ? t('noFriendsYet')
+                  : t('noFriendsMatch')}
               </Text>
             </Box>
           ) : (
@@ -179,7 +181,7 @@ export function NewDmDialog({ open, onClose, onSelectFriend }: NewDmDialogProps)
                           weight="semibold"
                           style={{ color: tc.accent.primary }}
                         >
-                          Already chatting
+                          {t('alreadyChatting')}
                         </Text>
                       </Box>
                     )}
