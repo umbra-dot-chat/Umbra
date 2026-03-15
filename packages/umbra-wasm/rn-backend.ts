@@ -258,6 +258,7 @@ function createNativeBackend(native: NativeUmbraCore): UmbraWasmModule {
 
     // ── Messaging Extended (via dispatcher) ─────────────────────────────
     umbra_wasm_messaging_edit: (json: string) => call('messaging_edit', JSON.parse(json)),
+    umbra_wasm_messaging_update_incoming_content: (json: string) => call('messaging_update_incoming_content', JSON.parse(json)),
     umbra_wasm_messaging_delete: (json: string) => call('messaging_delete', JSON.parse(json)),
     umbra_wasm_messaging_pin: (json: string) => call('messaging_pin', JSON.parse(json)),
     umbra_wasm_messaging_unpin: (json: string) => call('messaging_unpin', JSON.parse(json)),
@@ -627,6 +628,7 @@ function createStubBackend(): UmbraWasmModule {
     umbra_wasm_messaging_build_typing_envelope: () => notImplemented('messaging_build_typing_envelope'),
     umbra_wasm_messaging_build_receipt_envelope: () => notImplemented('messaging_build_receipt_envelope'),
     umbra_wasm_messaging_edit: () => notImplemented('messaging_edit'),
+    umbra_wasm_messaging_update_incoming_content: () => notImplemented('messaging_update_incoming_content'),
     umbra_wasm_messaging_delete: () => notImplemented('messaging_delete'),
     umbra_wasm_messaging_pin: () => notImplemented('messaging_pin'),
     umbra_wasm_messaging_unpin: () => notImplemented('messaging_unpin'),

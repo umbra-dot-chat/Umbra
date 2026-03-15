@@ -315,6 +315,24 @@ export async function editMessage(messageId: string, newText: string): Promise<M
 }
 
 /**
+ * Update an incoming message's encrypted content (no sender check).
+ * Used for streaming/progressive message updates from remote peers (e.g. Ghost AI).
+ */
+export async function updateIncomingMessageContent(
+  messageId: string,
+  contentEncrypted: string,
+  nonce: string,
+  timestamp: number,
+): Promise<void> {
+  const json = JSON.stringify({ message_id: messageId, content_encrypted: contentEncrypted, nonce, timestamp });
+  const _t0 = performance.now();
+  wasm().umbra_wasm_messaging_update_incoming_content(json);
+  const _dur = performance.now() - _t0;
+  _dbg()?.tracePerf?.('service', `wasm.messaging_update_incoming_content dur=${_dur.toFixed(1)}ms`, _dur, 'messaging');
+  if (_dur > 50) _dbg()?.warn?.('service', `SLOW wasm.messaging_update_incoming_content: ${_dur.toFixed(1)}ms`, { mid: messageId.slice(0, 8) }, 'messaging');
+}
+
+/**
  * Delete a message
  */
 export async function deleteMessage(messageId: string): Promise<void> {

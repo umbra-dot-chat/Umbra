@@ -268,6 +268,10 @@ export function createTauriBackend(
       return call('messaging_edit', json) as any;
     },
 
+    umbra_wasm_messaging_update_incoming_content: (json: string) => {
+      return call('messaging_update_incoming_content', json) as any;
+    },
+
     umbra_wasm_messaging_delete: (json: string) => {
       return call('messaging_delete', json) as any;
     },

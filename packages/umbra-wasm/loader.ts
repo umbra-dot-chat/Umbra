@@ -104,6 +104,7 @@ export interface UmbraWasmModule {
 
   // Messaging (extended — implemented in Rust WASM, take JSON args)
   umbra_wasm_messaging_edit(json: string): string;
+  umbra_wasm_messaging_update_incoming_content(json: string): string;
   umbra_wasm_messaging_delete(json: string): string;
   umbra_wasm_messaging_pin(json: string): string;
   umbra_wasm_messaging_unpin(json: string): string;
@@ -763,7 +764,7 @@ async function doInitWasm(did?: string): Promise<UmbraWasmModule> {
 
   // Step 1.5: Initialize OPFS bridge (sets globalThis.__umbra_opfs for Rust WASM)
   _cs('1.5-opfs-bridge');
-  const { initOpfsBridge } = await import('../umbra-service/src/opfs-bridge');
+  const { initOpfsBridge } = await import('@umbra/service/src/opfs-bridge');
   const opfsReady = initOpfsBridge();
   console.log(`[umbra-wasm] OPFS bridge: ${opfsReady ? 'initialized' : 'not available (non-web or unsupported)'}`);
   _cs('1.5-opfs-done');
@@ -1231,6 +1232,8 @@ function buildModule(wasmPkg: any): UmbraWasmModule {
     // ── Extended messaging (real WASM — take JSON args) ────────────
     umbra_wasm_messaging_edit: (json: string) =>
       wasmPkg.umbra_wasm_messaging_edit(json),
+    umbra_wasm_messaging_update_incoming_content: (json: string) =>
+      wasmPkg.umbra_wasm_messaging_update_incoming_content(json),
     umbra_wasm_messaging_delete: (json: string) =>
       wasmPkg.umbra_wasm_messaging_delete(json),
     umbra_wasm_messaging_pin: (json: string) =>
