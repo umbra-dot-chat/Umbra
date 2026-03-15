@@ -206,23 +206,40 @@ export async function handleMessage(
   let responseText: string;
 
   if (llm.chatStream) {
-    // Streaming mode: keep typing indicator alive during generation,
-    // then send the complete message as a single chat_message.
-    // (chat_message_update envelopes are unreliably delivered by the relay,
-    // so we use typing indicator pulses to show activity instead.)
-    const TYPING_PULSE_MS = 2500;
-    let typingInterval: ReturnType<typeof setInterval> | null = setInterval(() => {
-      sendTypingIndicator(identity, relay, friend);
-    }, TYPING_PULSE_MS);
+    // Streaming mode: send initial chat_message with first chunk, then
+    // progressively update it via chat_message_update envelopes so the
+    // user sees text appear word-by-word like ChatGPT.
+    const messageId = uuid();
+    let initialSent = false;
+    let lastSentText = '';
 
-    try {
-      responseText = await llm.chatStream(messages, () => {
-        // Typing indicator is pulsed via interval above — callback is a no-op
-      });
-    } finally {
-      if (typingInterval) { clearInterval(typingInterval); typingInterval = null; }
-      // Send typing stopped so indicator disappears
-      sendStopTypingIndicator(identity, relay, friend);
+    responseText = await llm.chatStream(messages, (accumulated: string) => {
+      if (!initialSent) {
+        // Send the first chunk as a regular chat_message so the client
+        // creates the message in its store. Subsequent updates will find it.
+        sendEncryptedMessage(messageId, accumulated, identity, relay, friend);
+        lastSentText = accumulated;
+        initialSent = true;
+        log.debug(`[STREAM] initial message sent (${accumulated.length} chars)`);
+      } else if (accumulated !== lastSentText) {
+        // Send progressive update — the client will update the message in-place
+        sendEncryptedUpdate(messageId, accumulated, identity, relay, friend);
+        lastSentText = accumulated;
+        log.debug(`[STREAM] update sent (${accumulated.length} chars)`);
+      }
+    });
+
+    // If streaming produced content but initial was never sent (edge case),
+    // send the full response as a regular message
+    if (!initialSent && responseText) {
+      sendEncryptedMessage(messageId, responseText, identity, relay, friend);
+      lastSentText = responseText;
+    }
+
+    // Send final update if the last chunk wasn't sent yet
+    // (the Ollama stream emits a final onChunk, but in case it was throttled)
+    if (initialSent && responseText !== lastSentText) {
+      sendEncryptedUpdate(messageId, responseText, identity, relay, friend);
     }
 
     // Parse and strip tutor score from the final response
@@ -233,18 +250,13 @@ export async function handleMessage(
     if (tutorState) cleanedResponse = cleanedResponse.replace(TUTOR_TAG_STRIP, '');
     if (therapyState?.active) cleanedResponse = cleanedResponse.replace(THERAPY_TAG_STRIP, '');
 
-    // Send the complete message as a single chat_message
-    const messageId = uuid();
-    const timestamp = Date.now();
-    sendEncryptedMessage(messageId, responseText, identity, relay, friend);
-
     // Save the stripped version to context store (clean LLM history)
     store.saveMessage({
       id: messageId,
       conversationId: friend.conversationId,
       role: 'assistant',
       content: cleanedResponse,
-      timestamp,
+      timestamp: Date.now(),
     });
 
     log.info(`Replied (streamed) to ${friend.displayName}: "${cleanedResponse.slice(0, 100)}${cleanedResponse.length > 100 ? '...' : ''}"`);

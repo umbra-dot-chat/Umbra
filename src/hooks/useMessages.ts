@@ -250,6 +250,8 @@ export function useMessages(conversationId: string | null, groupId?: string | nu
   const flushScheduledRef = useRef(false);
   const flushTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingMessagesRef = useRef<Message[]>([]);
+  // Buffer for content updates that arrive before their message exists (streaming race condition)
+  const earlyContentUpdatesRef = useRef<Map<string, string>>(new Map());
 
   // Debounced fetchMessages — prevents 22+ concurrent refetches from
   // offline batch completions. Only the last request within 500ms fires.
@@ -321,7 +323,19 @@ export function useMessages(conversationId: string | null, groupId?: string | nu
           const existingIds = new Set(next.map((m) => m.id));
           const newMsgs = appendBatch.filter((m) => !existingIds.has(m.id));
           if (newMsgs.length > 0) {
-            next = [...next, ...newMsgs];
+            // Apply any buffered early content updates to newly appended messages
+            const earlyUpdates = earlyContentUpdatesRef.current;
+            const resolvedNewMsgs = earlyUpdates.size > 0
+              ? newMsgs.map((m) => {
+                  const earlyText = earlyUpdates.get(m.id);
+                  if (earlyText !== undefined) {
+                    earlyUpdates.delete(m.id);
+                    return { ...m, content: { type: 'text' as const, text: earlyText } };
+                  }
+                  return m;
+                })
+              : newMsgs;
+            next = [...next, ...resolvedNewMsgs];
             changed = true;
             if (__DEV__) dbg.debug('messages', `flush append: ${newMsgs.length} new of ${appendBatch.length}`, undefined, SRC);
           }
@@ -353,6 +367,7 @@ export function useMessages(conversationId: string | null, groupId?: string | nu
             deleteMap.size + threadReplySet.size + pinMap.size > 0;
 
           if (hasMutations) {
+            const existingIds = new Set(next.map((m) => m.id));
             next = next.map((m) => {
               let updated = m;
               let dirty = false;
@@ -364,7 +379,7 @@ export function useMessages(conversationId: string | null, groupId?: string | nu
               if (e) { updated = { ...updated, content: { type: 'text' as const, text: e.newText }, edited: true, editedAt: e.editedAt }; dirty = true; }
 
               const c = contentMap.get(m.id);
-              if (c !== undefined) { updated = { ...updated, content: { type: 'text' as const, text: c } }; dirty = true; }
+              if (c !== undefined) { updated = { ...updated, content: { type: 'text' as const, text: c } }; dirty = true; contentMap.delete(m.id); }
 
               const d = deleteMap.get(m.id);
               if (d !== undefined) { updated = { ...updated, deleted: true, deletedAt: d }; dirty = true; }
@@ -382,6 +397,17 @@ export function useMessages(conversationId: string | null, groupId?: string | nu
               return dirty ? updated : m;
             });
             changed = true;
+
+            // Buffer content updates that couldn't be applied (message not yet in state).
+            // This handles the streaming race condition where chat_message_update arrives
+            // before the initial chat_message has been stored and appended.
+            if (contentMap.size > 0) {
+              for (const [mid, text] of contentMap) {
+                if (!existingIds.has(mid)) {
+                  earlyContentUpdatesRef.current.set(mid, text);
+                }
+              }
+            }
           }
         }
 
