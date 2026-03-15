@@ -88,6 +88,10 @@ pub struct Profile {
     /// Optional banner/header image (base64 or IPFS CID)
     #[serde(default)]
     pub banner: Option<String>,
+
+    /// Preferred UI language (ISO 639-1 code, e.g. "en", "ko", "ja")
+    #[serde(default)]
+    pub language: Option<String>,
 }
 
 impl Profile {
@@ -98,6 +102,7 @@ impl Profile {
             status: None,
             avatar: None,
             banner: None,
+            language: None,
         }
     }
 
@@ -232,6 +237,16 @@ impl Profile {
                 }
                 self.banner = banner;
             }
+            ProfileUpdate::Language(language) => {
+                if let Some(ref l) = language {
+                    if l.len() > 10 {
+                        return Err(Error::ProfileUpdateFailed(
+                            "Language code too long: max 10 characters".into(),
+                        ));
+                    }
+                }
+                self.language = language;
+            }
         }
         Ok(())
     }
@@ -251,6 +266,9 @@ pub enum ProfileUpdate {
 
     /// Update the banner (None to clear)
     Banner(Option<String>),
+
+    /// Update the preferred language (None to use browser default)
+    Language(Option<String>),
 }
 
 // ============================================================================

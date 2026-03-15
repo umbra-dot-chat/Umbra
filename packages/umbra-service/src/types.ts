@@ -48,6 +48,8 @@ export interface Identity {
   avatar?: string;
   /** Banner/header image */
   banner?: string;
+  /** Preferred UI language (ISO 639-1 code) */
+  language?: string;
   /** When created (Unix timestamp) */
   createdAt: number;
 }
@@ -59,7 +61,8 @@ export type ProfileUpdate =
   | { type: 'displayName'; value: string }
   | { type: 'status'; value: string | null }
   | { type: 'avatar'; value: string | null }
-  | { type: 'banner'; value: string | null };
+  | { type: 'banner'; value: string | null }
+  | { type: 'language'; value: string | null };
 
 /**
  * Result of creating an identity

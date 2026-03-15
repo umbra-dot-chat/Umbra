@@ -1896,6 +1896,7 @@ function FontSettingRow() {
 
 function LanguageSettingRow() {
   const { i18n } = useTranslation();
+  const { service } = useUmbra();
 
   const languageOptions = useMemo<InlineDropdownOption[]>(() =>
     supportedLanguages.map((lang) => ({
@@ -1905,9 +1906,13 @@ function LanguageSettingRow() {
     })),
   []);
 
-  const handleLanguageChange = useCallback((lang: string) => {
+  const handleLanguageChange = useCallback(async (lang: string) => {
     i18n.changeLanguage(lang);
-  }, [i18n]);
+    // Persist language preference to profile (synced via relay)
+    try {
+      await service?.updateProfile({ type: 'language', value: lang });
+    } catch { /* best-effort persist */ }
+  }, [i18n, service]);
 
   return (
     <SettingRow label="Language" description="Choose the display language for the app interface." vertical>

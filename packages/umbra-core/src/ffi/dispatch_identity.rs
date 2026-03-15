@@ -76,7 +76,7 @@ pub fn identity_get_profile() -> DResult {
     let p = id.profile();
     ok_json(serde_json::json!({
         "did": id.did_string(), "display_name": p.display_name,
-        "status": p.status, "avatar": p.avatar,
+        "status": p.status, "avatar": p.avatar, "language": p.language,
         "signing_key": hex::encode(&id.keypair().signing.public_bytes()),
         "encryption_key": hex::encode(&id.keypair().encryption.public_bytes()),
     }))
@@ -115,6 +115,16 @@ pub fn identity_update_profile(args: &str) -> DResult {
         };
         profile
             .apply_update(ProfileUpdate::Avatar(av))
+            .map_err(|e| err(205, e))?;
+    }
+    if let Some(l) = updates.get("language") {
+        let lv = if l.is_null() {
+            None
+        } else {
+            l.as_str().map(|x| x.to_string())
+        };
+        profile
+            .apply_update(ProfileUpdate::Language(lv))
             .map_err(|e| err(205, e))?;
     }
     ok_success()

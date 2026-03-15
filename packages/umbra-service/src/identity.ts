@@ -150,6 +150,9 @@ export async function updateProfile(update: ProfileUpdate): Promise<void> {
     case 'avatar':
       json.avatar = update.value;
       break;
+    case 'language':
+      json.language = update.value;
+      break;
   }
   await wasm().umbra_wasm_identity_update_profile(JSON.stringify(json));
 }
