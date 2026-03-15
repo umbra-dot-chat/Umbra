@@ -14,9 +14,11 @@ import { dbg } from '@/utils/debug';
 interface MobileBackButtonProps {
   onPress: () => void;
   label?: string;
+  /** When true, show the label text next to the arrow icon */
+  showLabel?: boolean;
 }
 
-export function MobileBackButton({ onPress, label = 'Back' }: MobileBackButtonProps) {
+export function MobileBackButton({ onPress, label = 'Back', showLabel = false }: MobileBackButtonProps) {
   if (__DEV__) dbg.trackRender('MobileBackButton');
   const isMobile = useIsMobile();
   const { theme } = useTheme();
@@ -30,6 +32,8 @@ export function MobileBackButton({ onPress, label = 'Back' }: MobileBackButtonPr
       onPress={onPress}
       accessibilityLabel={label}
       iconLeft={<ArrowLeftIcon size={20} color={theme.colors.text.secondary} />}
-    />
+    >
+      {showLabel ? label : undefined}
+    </Button>
   );
 }
