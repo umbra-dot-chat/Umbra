@@ -117,6 +117,8 @@ import { useSync, markSyncDirty } from '@/contexts/SyncContext';
 import { useDeveloperSettings } from '@/hooks/useDeveloperSettings';
 import { dbg } from '@/utils/debug';
 import { useSettingsNavigation } from '@/contexts/SettingsNavigationContext';
+import { useTranslation } from 'react-i18next';
+import { supportedLanguages, languageLabels } from '@/i18n';
 
 const SRC = 'SettingsDialog';
 
@@ -274,6 +276,7 @@ export const SUBCATEGORIES: Partial<Record<SettingsSection, SubNavItem[]>> = {
     { id: 'colors', label: 'Colors' },
     { id: 'text-size', label: 'Text Size' },
     { id: 'font', label: 'Font' },
+    { id: 'language', label: 'Language' },
   ],
   privacy: [
     { id: 'discovery', label: 'Friend Discovery' },
@@ -1798,6 +1801,10 @@ function AppearanceSection() {
         <FontSettingRow />
       </Box>
 
+      <Box nativeID="sub-language">
+        <LanguageSettingRow />
+      </Box>
+
       <Box nativeID="sub-motion">
         <SettingRow label="Animations" description="Enable or disable all UI animations.">
           <SoundToggle
@@ -1883,6 +1890,33 @@ function FontSettingRow() {
           </Text>
         </Box>
       )}
+    </SettingRow>
+  );
+}
+
+function LanguageSettingRow() {
+  const { i18n } = useTranslation();
+
+  const languageOptions = useMemo<InlineDropdownOption[]>(() =>
+    supportedLanguages.map((lang) => ({
+      value: lang,
+      label: languageLabels[lang],
+      description: lang === 'en' ? 'Default' : undefined,
+    })),
+  []);
+
+  const handleLanguageChange = useCallback((lang: string) => {
+    i18n.changeLanguage(lang);
+  }, [i18n]);
+
+  return (
+    <SettingRow label="Language" description="Choose the display language for the app interface." vertical>
+      <InlineDropdown
+        options={languageOptions}
+        value={i18n.language?.split('-')[0] || 'en'}
+        onChange={handleLanguageChange}
+        placeholder="Select language"
+      />
     </SettingRow>
   );
 }
