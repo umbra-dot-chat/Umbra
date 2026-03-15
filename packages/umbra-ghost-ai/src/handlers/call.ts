@@ -801,6 +801,13 @@ export class CallHandler {
   private async startScreenShare(call: ActiveCall): Promise<void> {
     if (call.isScreenSharing || !call.peer) return;
 
+    // Pick a video file for screen share — prefer a different one from the main track
+    const screenVideo = this.mediaManager.getRandomVideoFile();
+    if (!screenVideo) {
+      this.log.warn(`[CALL ${call.callId}] No video files available for screen share`);
+      return;
+    }
+
     // Create a second RTCVideoSource for screen share
     const { nonstandard } = this.wrtc;
     const screenSource = new nonstandard.RTCVideoSource();
@@ -809,14 +816,38 @@ export class CallHandler {
     // Add the screen track to the peer connection
     call.screenVideoSender = call.peer.addTrack(screenTrack);
 
-    // Create VideoSource and start with FFmpeg test pattern
+    // Create VideoSource and start with a real video file
     call.screenVideoSource = new VideoSource(screenSource, this.ffmpegPath, this.log);
 
-    // Use FFmpeg's testsrc2 filter — generates a test pattern with moving timestamps
-    call.screenVideoSource.startFromFilter(
-      `testsrc2=size=${call.videoWidth}x${call.videoHeight}:rate=${call.videoFps}`,
-      { width: call.videoWidth, height: call.videoHeight, fps: call.videoFps },
-    );
+    const res = screenVideo.resolution ? parseResolution(screenVideo.resolution) : null;
+    const nativeW = res?.width ?? call.videoWidth;
+    const nativeH = res?.height ?? call.videoHeight;
+    const { width, height } = fitToBox(nativeW, nativeH, call.videoWidth, call.videoHeight);
+    const fps = call.videoFps;
+
+    this.log.info(`[CALL ${call.callId}] Screen share: ${screenVideo.name} (${width}x${height}@${fps}fps)`);
+
+    call.screenVideoSource.start(screenVideo.path, {
+      width,
+      height,
+      fps,
+      loop: true,
+      onTrackEnded: () => {
+        // Switch to next video when current ends (non-loop mode)
+        const next = this.mediaManager.getNextVideoFile();
+        if (next && call.screenVideoSource) {
+          const nextRes = next.resolution ? parseResolution(next.resolution) : null;
+          const nextNW = nextRes?.width ?? call.videoWidth;
+          const nextNH = nextRes?.height ?? call.videoHeight;
+          const fit = fitToBox(nextNW, nextNH, call.videoWidth, call.videoHeight);
+          call.screenVideoSource.switchVideo(next.path, {
+            width: fit.width,
+            height: fit.height,
+            fps: call.videoFps,
+          });
+        }
+      },
+    });
 
     call.isScreenSharing = true;
 
@@ -826,12 +857,12 @@ export class CallHandler {
         call.dataChannel.send(JSON.stringify({
           type: 'screen-share-state',
           isScreenSharing: true,
-          source: 'test-pattern',
+          source: screenVideo.name,
         }));
       } catch { /* ignore */ }
     }
 
-    this.log.info(`[CALL ${call.callId}] Screen share started (test pattern)`);
+    this.log.info(`[CALL ${call.callId}] Screen share started: ${screenVideo.name}`);
   }
 
   private stopScreenShare(call: ActiveCall): void {
