@@ -902,6 +902,7 @@ function AccountSection() {
   const { theme, mode } = useTheme();
   const tc = theme.colors;
   const isDark = mode === 'dark';
+  const { t } = useTranslation('settings');
   const [didCopied, setDidCopied] = useState(false);
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
   const [showIdentityCard, setShowIdentityCard] = useState(false);
@@ -1180,8 +1181,8 @@ function AccountSection() {
   return (
     <Box style={{ gap: 24 }}>
       <SectionHeader
-        title="Account"
-        description="Your identity, profile, and connection details."
+        title={t('sectionAccount')}
+        description={t('sectionAccountDesc')}
       />
 
       {/* ── Profile subsection ─────────────────────────────────────────── */}
@@ -1932,11 +1933,12 @@ function LanguageSettingRow() {
 function NotificationsSection() {
   const [pushEnabled, setPushEnabled] = useState(true);
   const [messagePreview, setMessagePreview] = useState(true);
+  const { t } = useTranslation('settings');
 
   return (
     <Box style={{ gap: 20 }}>
       <SectionHeader
-        title="Notifications"
+        title={t('sectionNotifications')}
         description="Control how and when you receive alerts and updates."
       />
 
@@ -1954,6 +1956,7 @@ function NotificationsSection() {
 function SoundsSection() {
   const { theme } = useTheme();
   const tc = theme.colors;
+  const { t } = useTranslation('settings');
   const {
     playSound,
     masterVolume,
@@ -1986,7 +1989,7 @@ function SoundsSection() {
   return (
     <Box style={{ gap: 20 }}>
       <SectionHeader
-        title="Sounds"
+        title={t('sectionSounds')}
         description="Choose a sound theme and control which sounds play."
       />
 
@@ -2095,6 +2098,7 @@ const KV_READ_RECEIPTS = 'privacy_read_receipts';
 function PrivacySection() {
   const { theme } = useTheme();
   const tc = theme.colors;
+  const { t } = useTranslation('settings');
   const { identity, hasPin, setPin, verifyPin } = useAuth();
   const { preferencesReady } = useUmbra();
   const [readReceipts, setReadReceipts] = useState(true);
@@ -2194,7 +2198,7 @@ function PrivacySection() {
   return (
     <Box style={{ gap: 20 }}>
       <SectionHeader
-        title="Privacy"
+        title={t('sectionPrivacy')}
         description="Manage your visibility and control what others can see."
       />
 
@@ -2331,6 +2335,7 @@ function PrivacySection() {
 function AudioVideoSection() {
   const { theme } = useTheme();
   const tc = theme.colors;
+  const { t } = useTranslation('settings');
   const {
     videoQuality, audioQuality, setVideoQuality, setAudioQuality, isScreenSharing,
     noiseSuppression, echoCancellation, autoGainControl,
@@ -2569,7 +2574,7 @@ function AudioVideoSection() {
 
   return (
     <Box style={{ gap: 20 }}>
-      <SectionHeader title="Audio & Video" description="Configure your camera, microphone, and call quality settings." />
+      <SectionHeader title={t('sectionAudioVideo')} description="Configure your camera, microphone, and call quality settings." />
 
       <Box nativeID="sub-calling">
       {/* Calling */}
@@ -3332,6 +3337,7 @@ function AudioVideoSection() {
 }
 
 function NetworkSection() {
+  const { t } = useTranslation('settings');
   const {
     isConnected, peerCount, listenAddresses,
     startNetwork, stopNetwork,
@@ -3543,7 +3549,7 @@ function NetworkSection() {
 
   return (
     <Box style={{ gap: 20 }}>
-      <SectionHeader title="Network" description="Manage your peer-to-peer network connection." />
+      <SectionHeader title={t('sectionNetwork')} description="Manage your peer-to-peer network connection." />
 
       <Box nativeID="sub-connection">
       {/* Connection Status */}
@@ -4012,6 +4018,7 @@ function DataManagementSection() {
   const { service } = useUmbra();
   const { theme } = useTheme();
   const tc = theme.colors;
+  const { t } = useTranslation('settings');
   const { storageUsage, isLoading: storageLoading, formatBytes: fmtBytes } = useStorageManager();
   const [showClearMessagesConfirm, setShowClearMessagesConfirm] = useState(false);
   const [showClearAllConfirm, setShowClearAllConfirm] = useState(false);
@@ -4099,7 +4106,7 @@ function DataManagementSection() {
   return (
     <Box style={{ gap: 24 }}>
       <SectionHeader
-        title="Data Management"
+        title={t('sectionData')}
         description="Manage your locally stored data. All data is stored on this device only."
       />
 
@@ -4320,6 +4327,7 @@ function PluginsSection({ onOpenMarketplace }: { onOpenMarketplace?: () => void 
   const { theme, mode } = useTheme();
   const tc = theme.colors;
   const isDark = mode === 'dark';
+  const { t } = useTranslation('settings');
   const { registry, enabledCount, enablePlugin, disablePlugin, uninstallPlugin } = usePlugins();
 
   const allPlugins = registry.getAllPlugins();
@@ -4352,7 +4360,7 @@ function PluginsSection({ onOpenMarketplace }: { onOpenMarketplace?: () => void 
       <Box style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' }}>
         <Box style={{ flex: 1 }}>
           <Text style={{ fontSize: 18, fontWeight: '700', color: tc.text.primary, marginBottom: 4 }}>
-            Plugins
+            {t('sectionPlugins')}
           </Text>
           <Text style={{ fontSize: 13, color: tc.text.secondary }}>
             Extend Umbra with plugins. {enabledCount} plugin{enabledCount !== 1 ? 's' : ''} active.
@@ -4536,12 +4544,13 @@ function PluginSettingsCard({
 function KeyboardShortcutsSection() {
   const { theme } = useTheme();
   const tc = theme.colors;
+  const { t } = useTranslation('settings');
   const allShortcuts = ShortcutRegistry.getAllFlat();
 
   return (
     <Box style={{ gap: 16 }}>
       <Text size="lg" weight="bold" style={{ color: tc.text.primary }}>
-        Keyboard Shortcuts
+        {t('sectionShortcuts')}
       </Text>
       <Text size="sm" style={{ color: tc.text.muted }}>
         Shortcuts registered by plugins and the app. Press the key combination to trigger the action.
@@ -4608,6 +4617,7 @@ function KeyboardShortcutsSection() {
 function DeveloperSection() {
   const { theme } = useTheme();
   const tc = theme.colors;
+  const { t } = useTranslation('settings');
   const { playSound } = useSound();
   const dev = useDeveloperSettings();
 
@@ -4622,7 +4632,7 @@ function DeveloperSection() {
   return (
     <Box style={{ gap: 20 }}>
       <SectionHeader
-        title="Developer"
+        title={t('sectionDeveloper')}
         description="Diagnostic tools for debugging WebRTC calls, media quality, and performance."
       />
 
@@ -4871,6 +4881,7 @@ function DangerZoneSubsection() {
 function AboutSection() {
   const { theme } = useTheme();
   const tc = theme.colors;
+  const { t } = useTranslation('settings');
   const update = useAppUpdate();
   const [showAllPlatforms, setShowAllPlatforms] = useState(false);
 
@@ -4898,7 +4909,7 @@ function AboutSection() {
 
   return (
     <Box>
-      <Text style={{ fontSize: 20, fontWeight: '700', color: tc.text.primary, marginBottom: 20 }}>About</Text>
+      <Text style={{ fontSize: 20, fontWeight: '700', color: tc.text.primary, marginBottom: 20 }}>{t('sectionAbout')}</Text>
 
       <Card style={{ padding: 16, marginBottom: 16 }}>
         <Text style={{ fontSize: 16, fontWeight: '600', color: tc.text.primary, marginBottom: 12 }}>
@@ -5206,12 +5217,13 @@ function MessageDisplayPreview({
 function MessagingSection() {
   const { theme } = useTheme();
   const tc = theme.colors;
+  const { t } = useTranslation('settings');
   const { displayMode, setDisplayMode } = useMessaging();
 
   return (
     <Box style={{ gap: 20 }}>
       <SectionHeader
-        title="Messaging"
+        title={t('sectionMessaging')}
         description="Choose how messages are displayed in conversations."
       />
 
@@ -5268,8 +5280,54 @@ export function SettingsDialog({ open, onClose, onOpenMarketplace, initialSectio
   const tc = theme.colors;
   const isDark = mode === 'dark';
   const isMobile = useIsMobile();
+  const { t } = useTranslation('settings');
   const insets = Platform.OS !== 'web' ? useSafeAreaInsets() : { top: 0, bottom: 0, left: 0, right: 0 };
   const [mobileShowSidebar, setMobileShowSidebar] = useState(true);
+
+  // Translated labels for NAV_ITEMS (module-level constant can't use hooks)
+  const navLabels: Record<SettingsSection, string> = useMemo(() => ({
+    account: t('sectionAccount'),
+    appearance: t('sectionAppearance'),
+    messaging: t('sectionMessaging'),
+    notifications: t('sectionNotifications'),
+    sounds: t('sectionSounds'),
+    privacy: t('sectionPrivacy'),
+    'audio-video': t('sectionAudioVideo'),
+    network: t('sectionNetwork'),
+    data: t('sectionData'),
+    plugins: t('sectionPlugins'),
+    'keyboard-shortcuts': t('sectionShortcuts'),
+    about: t('sectionAbout'),
+    developer: t('sectionDeveloper'),
+  }), [t]);
+
+  // Translated labels for SUBCATEGORIES (module-level constant can't use hooks)
+  const subLabels: Record<string, string> = useMemo(() => ({
+    profile: t('subProfile'),
+    identity: t('subIdentity'),
+    sharing: t('subSharing'),
+    sync: t('subSync'),
+    danger: t('subDangerZone'),
+    theme: t('subTheme'),
+    'dark-mode': t('subDarkMode'),
+    colors: t('subColors'),
+    'text-size': t('subTextSize'),
+    font: t('subFont'),
+    language: t('subLanguage'),
+    discovery: t('subFriendDiscovery'),
+    visibility: t('subVisibility'),
+    security: t('subSecurity'),
+    calling: t('subCalling'),
+    video: t('subVideo'),
+    audio: t('subAudio'),
+    devices: t('subDevices'),
+    connection: t('subConnection'),
+    relays: t('subRelays'),
+    peers: t('subPeers'),
+    diagnostics: t('subCallDiagnostics'),
+    capture: t('subMediaCapture'),
+    testing: t('subTesting'),
+  }), [t]);
 
   // Always call useSettingsNavigation (can't call hooks conditionally),
   // but only use its values when inline is true.
@@ -5506,7 +5564,7 @@ export function SettingsDialog({ open, onClose, onOpenMarketplace, initialSectio
   const sidebarContent = (
     <ScrollArea style={sidebarStyle}>
       <Box style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: isMobile ? 8 : 0, paddingTop: 4 }}>
-        <Text style={sidebarTitleStyle}>Settings</Text>
+        <Text style={sidebarTitleStyle}>{t('title')}</Text>
         {isMobile && (
           <Pressable
             onPress={onClose}
@@ -5532,7 +5590,7 @@ export function SettingsDialog({ open, onClose, onOpenMarketplace, initialSectio
             <Pressable
               onPress={() => handleSectionChange(item.id)}
               testID={NAV_TEST_IDS[item.id]}
-              accessibilityActions={[{ name: 'activate', label: item.label }]}
+              accessibilityActions={[{ name: 'activate', label: navLabels[item.id] }]}
               onAccessibilityAction={(e: any) => { if (e.nativeEvent.actionName === 'activate') handleSectionChange(item.id); }}
               style={({ pressed }) => ({
                 flexDirection: 'row',
@@ -5564,7 +5622,7 @@ export function SettingsDialog({ open, onClose, onOpenMarketplace, initialSectio
                   color: isActive ? tc.text.primary : tc.text.secondary,
                 }}
               >
-                {item.label}
+                {navLabels[item.id]}
               </Text>
             </Pressable>
 
@@ -5615,7 +5673,7 @@ export function SettingsDialog({ open, onClose, onOpenMarketplace, initialSectio
                               : tc.text.secondary,
                           }}
                         >
-                          {sub.label}
+                          {subLabels[sub.id] ?? sub.label}
                         </Text>
                       </Pressable>
                     </Box>
@@ -5644,7 +5702,7 @@ export function SettingsDialog({ open, onClose, onOpenMarketplace, initialSectio
             <ArrowLeftIcon size={20} color={tc.text.secondary} />
           </Pressable>
           <Text style={{ fontSize: 16, fontWeight: '600', color: tc.text.primary }}>
-            {NAV_ITEMS.find((n) => n.id === activeSection)?.label ?? 'Settings'}
+            {navLabels[activeSection] ?? t('title')}
           </Text>
         </Box>
       )}
