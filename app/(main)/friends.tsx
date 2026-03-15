@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useRef, useMemo } from 'react';
 import { ScrollView } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import {
   Tabs, TabList, Tab, TabPanel,
   Text,
@@ -49,13 +50,7 @@ import { dbg } from '@/utils/debug';
 
 type SearchPlatform = 'umbra' | 'discord' | 'github' | 'steam' | 'bluesky';
 
-const SEARCH_PLATFORM_OPTIONS = [
-  { value: 'umbra', label: 'Umbra' },
-  { value: 'discord', label: 'Discord' },
-  { value: 'github', label: 'GitHub' },
-  { value: 'steam', label: 'Steam' },
-  { value: 'bluesky', label: 'Bluesky' },
-];
+// SEARCH_PLATFORM_OPTIONS built inside FriendsPage with t() for i18n
 
 /** Human-readable platform names for UI text. */
 const PLATFORM_LABELS: Record<Exclude<SearchPlatform, 'umbra'>, string> = {
@@ -85,20 +80,20 @@ function toAvatarStatus(status: FriendStatus): 'online' | 'offline' | 'busy' | '
   }
 }
 
-function formatRelativeTime(timestamp: number): string {
+function formatRelativeTime(timestamp: number, tc: (key: string, options?: Record<string, unknown>) => string): string {
   // Handle timestamps in seconds (Unix) vs milliseconds
   // If timestamp is less than year 2000 in ms, it's probably in seconds
   const timestampMs = timestamp < 1000000000000 ? timestamp * 1000 : timestamp;
   const now = Date.now();
   const diff = now - timestampMs;
   const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'Just now';
-  if (mins < 60) return `${mins} minutes ago`;
+  if (mins < 1) return tc('justNow');
+  if (mins < 60) return tc('minutesAgoLong', { count: mins });
   const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours} hours ago`;
+  if (hours < 24) return tc('hoursAgoLong', { count: hours });
   const days = Math.floor(hours / 24);
-  if (days === 1) return '1 day ago';
-  return `${days} days ago`;
+  if (days === 1) return tc('dayAgo');
+  return tc('daysAgoLong', { count: days });
 }
 
 // ---------------------------------------------------------------------------
@@ -107,6 +102,8 @@ function formatRelativeTime(timestamp: number): string {
 
 export default function FriendsPage() {
   if (__DEV__) dbg.trackRender('FriendsPage');
+  const { t } = useTranslation('friends');
+  const { t: tc } = useTranslation('common');
   const { theme } = useTheme();
   const router = useRouter();
   const { identity } = useAuth();
@@ -128,6 +125,14 @@ export default function FriendsPage() {
   const { conversations } = useConversations();
   const { setActiveId } = useActiveConversation();
   const { onlineDids } = useNetwork();
+
+  const searchPlatformOptions = useMemo(() => [
+    { value: 'umbra', label: t('searchUmbra') },
+    { value: 'discord', label: t('searchDiscord') },
+    { value: 'github', label: t('searchGithub') },
+    { value: 'steam', label: t('searchSteam') },
+    { value: 'bluesky', label: t('searchBluesky') },
+  ], [t]);
 
   // AI Agent banner dismissal
   const [agentBannerDismissed, setAgentBannerDismissed] = useState(() => {
@@ -442,7 +447,7 @@ export default function FriendsPage() {
   const friendActions = (friend: Friend) => [
     {
       id: 'message',
-      label: 'Message',
+      label: t('message'),
       icon: <MessageIcon size={20} color={iconColor} />,
       onPress: () => handleMessageFriend(friend.did),
     },
@@ -476,7 +481,7 @@ export default function FriendsPage() {
       username={req.fromDid.slice(0, 20) + '...'}
       avatar={<Avatar name={req.fromDisplayName || 'Unknown'} src={req.fromAvatar} size="md" />}
       type="incoming"
-      timestamp={formatRelativeTime(req.createdAt)}
+      timestamp={formatRelativeTime(req.createdAt, tc)}
       onAccept={() => handleAcceptRequest(req.id)}
       onDecline={() => handleDeclineRequest(req.id)}
       flat
@@ -494,7 +499,7 @@ export default function FriendsPage() {
         username={req.toDid.slice(0, 20) + '...'}
         avatar={<Avatar name={recipientLabel} size="md" />}
         type="outgoing"
-        timestamp={formatRelativeTime(req.createdAt)}
+        timestamp={formatRelativeTime(req.createdAt, tc)}
         onCancel={() => handleCancelRequest(req.id)}
         flat
       />
@@ -504,7 +509,7 @@ export default function FriendsPage() {
   if (isLoading) {
     return (
       <Box style={{ flex: 1, backgroundColor: theme.colors.background.canvas, alignItems: 'center', justifyContent: 'center' }}>
-        <Text size="sm" style={{ color: theme.colors.text.muted }}>Loading friends...</Text>
+        <Text size="sm" style={{ color: theme.colors.text.muted }}>{t('loadingFriends')}</Text>
       </Box>
     );
   }
@@ -529,7 +534,7 @@ export default function FriendsPage() {
             {!isMobile && (
               <>
                 <UsersIcon size={20} color={theme.colors.text.primary} />
-                <Text size="lg" weight="bold">Friends</Text>
+                <Text size="lg" weight="bold">{t('title')}</Text>
               </>
             )}
           </Box>
@@ -540,14 +545,14 @@ export default function FriendsPage() {
               testID={TEST_IDS.FRIENDS.TAB_ALL}
               icon={<UsersIcon size={18} color={activeTab === 'all' ? theme.colors.text.primary : theme.colors.text.secondary} />}
             >
-              {isMobile && activeTab !== 'all' ? null : 'All'}
+              {isMobile && activeTab !== 'all' ? null : t('tabAll')}
             </Tab>
             <Tab
               value="online"
               testID={TEST_IDS.FRIENDS.TAB_ONLINE}
               icon={<GlobeIcon size={18} color={activeTab === 'online' ? theme.colors.text.primary : theme.colors.text.secondary} />}
             >
-              {isMobile && activeTab !== 'online' ? null : 'Online'}
+              {isMobile && activeTab !== 'online' ? null : t('tabOnline')}
             </Tab>
             <Tab
               value="pending"
@@ -555,14 +560,14 @@ export default function FriendsPage() {
               badge={incomingRequests.length > 0 ? incomingRequests.length : undefined}
               icon={<UserPlusIcon size={18} color={activeTab === 'pending' ? theme.colors.text.primary : theme.colors.text.secondary} />}
             >
-              {isMobile && activeTab !== 'pending' ? null : 'Pending'}
+              {isMobile && activeTab !== 'pending' ? null : t('tabPending')}
             </Tab>
             <Tab
               value="blocked"
               testID={TEST_IDS.FRIENDS.TAB_BLOCKED}
               icon={<BlockIcon size={18} color={activeTab === 'blocked' ? theme.colors.text.primary : theme.colors.text.secondary} />}
             >
-              {isMobile && activeTab !== 'blocked' ? null : 'Blocked'}
+              {isMobile && activeTab !== 'blocked' ? null : t('tabBlocked')}
             </Tab>
           </TabList>
 
@@ -573,7 +578,7 @@ export default function FriendsPage() {
             size="sm"
             onPress={() => setQrCardOpen(true)}
             iconLeft={<QrCodeIcon size={20} color={theme.colors.text.secondary} />}
-            accessibilityLabel="Open QR code"
+            accessibilityLabel={t('openQrCode')}
           />
 
         </Box>
@@ -600,7 +605,7 @@ export default function FriendsPage() {
                 <Text size="xs" color="tertiary" style={{ marginBottom: 6 }}>Search on</Text>
                 <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                   <SegmentedControl
-                    options={SEARCH_PLATFORM_OPTIONS}
+                    options={searchPlatformOptions}
                     value={searchPlatform}
                     onChange={handlePlatformChange}
                     size="sm"
@@ -771,13 +776,13 @@ export default function FriendsPage() {
 
             {friends.length === 0 ? (
               <FriendSection
-                title="All Friends"
+                title={t('allFriends')}
                 count={0}
                 emptyMessage="No friends yet. Add someone by their DID to get started!"
               />
             ) : (
               <>
-                <FriendSection title="Online" count={onlineFriends.length}>
+                <FriendSection title={t('onlineFriends')} count={onlineFriends.length}>
                   {onlineFriends.map(renderFriendItem)}
                 </FriendSection>
 
@@ -793,12 +798,12 @@ export default function FriendsPage() {
         <TabPanel value="online" style={{ flex: 1 }}>
           <ScrollArea style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }}>
             {onlineFriends.length > 0 ? (
-              <FriendSection title="Online" count={onlineFriends.length}>
+              <FriendSection title={t('onlineFriends')} count={onlineFriends.length}>
                 {onlineFriends.map(renderFriendItem)}
               </FriendSection>
             ) : (
               <FriendSection
-                title="Online"
+                title={t('onlineFriends')}
                 count={0}
                 emptyMessage="No friends online right now."
               />
@@ -848,7 +853,7 @@ export default function FriendsPage() {
         <TabPanel value="blocked" style={{ flex: 1 }}>
           <ScrollArea style={{ flex: 1 }} contentContainerStyle={{ padding: 16 }}>
             <FriendSection
-              title="Blocked Users"
+              title={t('blockedUsers')}
               count={blockedUsers.length}
               emptyMessage="No blocked users."
             >
@@ -856,7 +861,7 @@ export default function FriendsPage() {
                 <FriendListItem
                   key={blocked.did}
                   name={blocked.did.slice(0, 24) + '...'}
-                  username={blocked.reason ? `Reason: ${blocked.reason}` : formatRelativeTime(blocked.blockedAt)}
+                  username={blocked.reason ? `Reason: ${blocked.reason}` : formatRelativeTime(blocked.blockedAt, tc)}
                   avatar={<Avatar name={blocked.did.slice(8, 12)} size="md" />}
                   status="offline"
                   actions={[
@@ -905,7 +910,7 @@ export default function FriendsPage() {
               if (contextMenuFriend) handleMessageFriend(contextMenuFriend.did);
             }}
           >
-            Message
+            {t('message')}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
           <DropdownMenuItem
@@ -914,7 +919,7 @@ export default function FriendsPage() {
               setConfirmRemoveOpen(true);
             }}
           >
-            Remove Friend
+            {t('removeFriend')}
           </DropdownMenuItem>
           <DropdownMenuItem
             danger

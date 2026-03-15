@@ -12,6 +12,7 @@ import {
   useTheme,
 } from '@coexist/wisp-react-native';
 import Svg, { Path, Circle } from 'react-native-svg';
+import { useTranslation } from 'react-i18next';
 import { AI_AGENTS, type AIAgentConfig } from '@/config/network';
 import { MessageIcon } from '@/components/ui';
 import { getAgentAvatarUri } from '@/utils/agentAvatar';
@@ -79,6 +80,7 @@ export function AIAgentBanner({
 }: AIAgentBannerProps) {
   const { theme } = useTheme();
   const tc = theme.colors;
+  const { t } = useTranslation('friends');
 
   // Only show agents that have DIDs configured
   const availableAgents = AI_AGENTS.filter((a) => a.did.length > 0);
@@ -92,21 +94,21 @@ export function AIAgentBanner({
         <HStack style={{ alignItems: 'center', marginBottom: 12, gap: 8 }}>
           <SparklesIcon size={16} color={tc.accent.primary} />
           <Text size="sm" weight="bold" style={{ flex: 1 }}>
-            AI Agents
+            {t('aiAgents')}
           </Text>
           {onDismiss && (
             <Button
               variant="tertiary"
               size="xs"
               onPress={onDismiss}
-              accessibilityLabel="Dismiss AI agents banner"
+              accessibilityLabel={t('dismissAiAgentsBanner')}
               iconLeft={<XCloseIcon size={14} color={tc.text.muted} />}
             />
           )}
         </HStack>
 
         <Text size="xs" color="tertiary" style={{ marginBottom: 12 }}>
-          Chat with AI companions powered by local LLMs. They can answer questions about Umbra, set reminders, translate, and more.
+          {t('aiAgentsDescription')}
         </Text>
 
         {/* Agent rows */}
@@ -145,6 +147,7 @@ function AIAgentRow({
 }) {
   const { theme } = useTheme();
   const tc = theme.colors;
+  const { t } = useTranslation('friends');
 
   const avatarUri = useMemo(
     () => agent.avatar ?? getAgentAvatarUri(agent.displayName),
@@ -184,7 +187,7 @@ function AIAgentRow({
               }}
             >
               <Text size="xs" weight="medium" style={{ color: tc.text.primary }}>
-                AI
+                {t('ai')}
               </Text>
             </Box>
           </GradientBorder>
@@ -202,11 +205,11 @@ function AIAgentRow({
           onPress={onMessage}
           iconLeft={<MessageIcon size={12} color={tc.text.primary} />}
         >
-          Message
+          {t('message')}
         </Button>
       ) : isPending ? (
         <Button variant="secondary" size="xs" disabled>
-          Pending
+          {t('pending')}
         </Button>
       ) : (
         <Button
@@ -216,7 +219,7 @@ function AIAgentRow({
           disabled={isAdding}
           iconLeft={<UserPlusIcon size={12} color={tc.text.inverse} />}
         >
-          {isAdding ? 'Adding...' : 'Add'}
+          {isAdding ? t('adding') : t('add')}
         </Button>
       )}
     </HStack>
