@@ -3,11 +3,12 @@
 ## Last Known-Good Deploy
 - **Service**: ghost-en (Ghost AI Bot)
 - **Server**: root@45.77.149.94:/opt/ghost-ai/
-- **Date**: 2026-03-12 ~00:41 UTC
-- **Commit**: `0ce1380` on main (rollback to `dd04477` for ghost-ai-only)
-- **Changes deployed**: Ghost + Wisps integration (umbra-wisps package, wisp swarm orchestrator, deploy script ghost command)
+- **Date**: 2026-03-15 ~00:36 UTC
+- **Commit**: `b1f9b0e` on main (typing indicator pulses instead of streaming)
+- **Changes deployed**: Switched from chat_message_update streaming envelopes to typing indicator pulses for text delivery
 - **Deploy method**: `./scripts/deploy.sh ghost` (builds wisps, builds ghost, rsyncs dist + wisps + package.json + media.config, npm install, systemd env, restart)
-- **Test results**: Voice 99.4/100, Video 94.9/100, 0 underruns, 0 drops, GPU confirmed
+- **Test results**: Voice 99.9/100, Video 96/100, 0 underruns, 0 drops, GPU confirmed
+- **Previous known-good**: 2026-03-14 commit `b20cd10`
 - **Wisps**: 4 active (Nyx, Flicker, Bramble, Pixel), control API on port 3334, WISPS_ENABLED=true via systemd drop-in
 
 ## Known Non-Critical Warnings

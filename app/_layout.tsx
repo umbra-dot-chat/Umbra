@@ -15,6 +15,8 @@ import { SoundProvider } from '@/contexts/SoundContext';
 import { MessagingProvider } from '@/contexts/MessagingContext';
 import { SyncProvider } from '@/contexts/SyncContext';
 import { ConversationsProvider } from '@/contexts/ConversationsContext';
+import { FriendsProvider } from '@/contexts/FriendsContext';
+import { GroupsProvider } from '@/contexts/GroupsContext';
 import { HelpPopoverHost } from '@/components/ui/HelpPopoverHost';
 import { PinLockScreen } from '@/components/auth/PinLockScreen';
 import { LoadingScreen } from '@/components/ui/LoadingScreen';
@@ -244,6 +246,8 @@ export default function RootLayout() {
                   <SyncProvider>
                   <PluginProvider>
                   <ConversationsProvider>
+                  <FriendsProvider>
+                  <GroupsProvider>
                     <HelpProvider>
                       <DynamicStatusBar />
                       {__DEV__ ? (
@@ -256,6 +260,8 @@ export default function RootLayout() {
                       <HelpPopoverHost />
                       <DebugVitalsOverlay />
                     </HelpProvider>
+                  </GroupsProvider>
+                  </FriendsProvider>
                   </ConversationsProvider>
                   </PluginProvider>
                   </SyncProvider>

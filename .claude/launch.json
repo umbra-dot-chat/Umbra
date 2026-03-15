@@ -4,14 +4,16 @@
     {
       "name": "web-dev",
       "runtimeExecutable": "npx",
-      "runtimeArgs": ["expo", "start", "--web", "--port", "8081"],
-      "port": 8081
+      "runtimeArgs": ["expo", "start", "--web"],
+      "port": 8081,
+      "autoPort": false
     },
     {
       "name": "expo-dev",
-      "runtimeExecutable": "npx",
-      "runtimeArgs": ["expo", "start", "--port", "8083", "--web"],
-      "port": 8083
+      "runtimeExecutable": "/Users/mattmattmattmatt/Development/Umbra/.claude/start-expo.sh",
+      "runtimeArgs": [],
+      "port": 8083,
+      "autoPort": false
     },
     {
       "name": "umbra-site",
