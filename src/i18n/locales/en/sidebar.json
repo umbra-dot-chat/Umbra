@@ -10,5 +10,11 @@
   "joining": "Joining...",
   "declining": "Declining...",
   "from": "from {{name}}",
-  "backToConversations": "Back to conversations"
+  "backToConversations": "Back to conversations",
+  "newDm": "New DM",
+  "newGroup": "New Group",
+  "searchSettings": "Search settings...",
+  "plugins": "Plugins",
+  "themes": "Themes",
+  "fonts": "Fonts"
 }
