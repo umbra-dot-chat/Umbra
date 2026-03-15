@@ -7,6 +7,7 @@
  */
 
 import React, { useMemo, useCallback, useRef, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Animated, Easing, Pressable, ScrollView } from 'react-native';
 import {
   Box,
@@ -29,12 +30,12 @@ const ANIM_DURATION_IN = 200;
 const ANIM_DURATION_OUT = 150;
 const SLIDE_DISTANCE = 80;
 
-const CATEGORIES: { key: NotificationCategory; label: string }[] = [
-  { key: 'all', label: 'All' },
-  { key: 'social', label: 'Social' },
-  { key: 'calls', label: 'Calls' },
-  { key: 'mentions', label: 'Mentions' },
-  { key: 'system', label: 'System' },
+const CATEGORY_KEYS: { key: NotificationCategory; labelKey: string }[] = [
+  { key: 'all', labelKey: 'categoryAll' },
+  { key: 'social', labelKey: 'categorySocial' },
+  { key: 'calls', labelKey: 'categoryCalls' },
+  { key: 'mentions', labelKey: 'categoryMentions' },
+  { key: 'system', labelKey: 'categorySystem' },
 ];
 
 // ---------------------------------------------------------------------------
@@ -53,30 +54,30 @@ const TYPE_TO_CATEGORY: Record<string, NotificationCategory> = {
   system: 'system',
 };
 
-function getDateGroup(timestamp: number): string {
+function getDateGroup(timestamp: number, t: (key: string) => string): string {
   const now = new Date();
   const date = new Date(timestamp);
   const diffMs = now.getTime() - date.getTime();
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
 
-  if (diffDays === 0 && now.getDate() === date.getDate()) return 'Today';
-  if (diffDays <= 1 && now.getDate() - date.getDate() === 1) return 'Yesterday';
-  if (diffDays <= 7) return 'This Week';
-  return 'Older';
+  if (diffDays === 0 && now.getDate() === date.getDate()) return t('dateToday');
+  if (diffDays <= 1 && now.getDate() - date.getDate() === 1) return t('dateYesterday');
+  if (diffDays <= 7) return t('dateThisWeek');
+  return t('dateOlder');
 }
 
-function formatTimestamp(timestamp: number): string {
+function formatTimestamp(timestamp: number, tc: (key: string, opts?: Record<string, unknown>) => string): string {
   const now = new Date();
   const date = new Date(timestamp);
   const diffMs = now.getTime() - date.getTime();
   const diffMins = Math.floor(diffMs / (1000 * 60));
 
-  if (diffMins < 1) return 'Just now';
-  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffMins < 1) return tc('justNow');
+  if (diffMins < 60) return tc('minutesAgo', { count: diffMins });
   const diffHours = Math.floor(diffMins / 60);
-  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffHours < 24) return tc('hoursAgo', { count: diffHours });
   const diffDays = Math.floor(diffHours / 24);
-  if (diffDays < 7) return `${diffDays}d ago`;
+  if (diffDays < 7) return tc('daysAgo', { count: diffDays });
   return date.toLocaleDateString();
 }
 
@@ -85,12 +86,12 @@ interface GroupedNotifications {
   notifications: NotificationRecord[];
 }
 
-function groupByDate(notifications: NotificationRecord[]): GroupedNotifications[] {
+function groupByDate(notifications: NotificationRecord[], t: (key: string) => string): GroupedNotifications[] {
   const groups: Record<string, NotificationRecord[]> = {};
-  const order = ['Today', 'Yesterday', 'This Week', 'Older'];
+  const order = [t('dateToday'), t('dateYesterday'), t('dateThisWeek'), t('dateOlder')];
 
   for (const n of notifications) {
-    const group = getDateGroup(n.createdAt);
+    const group = getDateGroup(n.createdAt, t);
     if (!groups[group]) groups[group] = [];
     groups[group].push(n);
   }
@@ -119,6 +120,8 @@ export function SidebarNotificationsPanel({ onClose }: SidebarNotificationsPanel
     markAllRead,
     dismiss,
   } = useNotifications();
+  const { t } = useTranslation('notifications');
+  const { t: tCommon } = useTranslation('common');
   const { theme } = useTheme();
   const tc = theme.colors;
   const { acceptInvite, declineInvite } = useGroupsContext();
@@ -176,7 +179,7 @@ export function SidebarNotificationsPanel({ onClose }: SidebarNotificationsPanel
   }, [notifications, activeCategory]);
 
   // Group by date
-  const grouped = useMemo(() => groupByDate(filtered), [filtered]);
+  const grouped = useMemo(() => groupByDate(filtered, t), [filtered, t]);
 
   const handleCategoryChange = useCallback(
     (cat: NotificationCategory) => setActiveCategory(cat),
@@ -222,7 +225,7 @@ export function SidebarNotificationsPanel({ onClose }: SidebarNotificationsPanel
       {/* Section header — matches "CONVERSATIONS" pattern */}
       <Box style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, paddingTop: 12, paddingBottom: 8 }}>
         <Text size="xs" weight="semibold" style={{ color: tc.text.onRaisedSecondary, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-          Notifications
+          {t('title')}
         </Text>
         <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
           {totalUnread > 0 && (
@@ -231,7 +234,7 @@ export function SidebarNotificationsPanel({ onClose }: SidebarNotificationsPanel
               onSurface
               size="xs"
               onPress={markAllRead}
-              accessibilityLabel="Mark all read"
+              accessibilityLabel={t('markAllRead')}
               iconLeft={<CheckIcon size={12} color={tc.text.onRaisedSecondary} />}
               shape="pill"
             />
@@ -241,7 +244,7 @@ export function SidebarNotificationsPanel({ onClose }: SidebarNotificationsPanel
             onSurface
             size="xs"
             onPress={handleClose}
-            accessibilityLabel="Close notifications"
+            accessibilityLabel={t('closeNotifications')}
             iconLeft={<XIcon size={13} color={tc.text.onRaisedSecondary} />}
             shape="pill"
           />
@@ -255,7 +258,7 @@ export function SidebarNotificationsPanel({ onClose }: SidebarNotificationsPanel
         style={{ flexGrow: 0, paddingHorizontal: 8, marginBottom: 4 }}
         contentContainerStyle={{ gap: 4, paddingHorizontal: 4 }}
       >
-        {CATEGORIES.map(({ key, label }) => {
+        {CATEGORY_KEYS.map(({ key, labelKey }) => {
           const isActive = activeCategory === key;
           const count = unreadCounts?.[key] ?? 0;
 
@@ -280,7 +283,7 @@ export function SidebarNotificationsPanel({ onClose }: SidebarNotificationsPanel
                 weight={isActive ? 'semibold' : 'regular'}
                 style={{ color: isActive ? tc.text.onRaised : tc.text.onRaisedSecondary }}
               >
-                {label}
+                {t(labelKey)}
               </Text>
               {count > 0 && !isActive && (
                 <Box style={{
@@ -311,7 +314,7 @@ export function SidebarNotificationsPanel({ onClose }: SidebarNotificationsPanel
         {grouped.length === 0 ? (
           <Box style={{ paddingVertical: 24, alignItems: 'center' }}>
             <Text size="sm" style={{ color: tc.text.muted }}>
-              No notifications
+              {t('noNotifications')}
             </Text>
           </Box>
         ) : (
@@ -330,7 +333,7 @@ export function SidebarNotificationsPanel({ onClose }: SidebarNotificationsPanel
                     type={n.type as any}
                     title={n.title}
                     description={n.description}
-                    timestamp={formatTimestamp(n.createdAt)}
+                    timestamp={formatTimestamp(n.createdAt, tCommon)}
                     read={n.read}
                     avatar={n.avatar}
                     onPress={() => handleNotificationPress(n)}
@@ -344,7 +347,7 @@ export function SidebarNotificationsPanel({ onClose }: SidebarNotificationsPanel
                         disabled={processingInvite !== null}
                         onPress={() => handleJoinInvite(n.id, n.relatedId!)}
                       >
-                        {processingInvite?.id === n.relatedId && processingInvite.action === 'join' ? 'Joining...' : 'Join'}
+                        {processingInvite?.id === n.relatedId && processingInvite.action === 'join' ? t('joining') : t('join')}
                       </Button>
                       <Button
                         variant="secondary"
@@ -352,7 +355,7 @@ export function SidebarNotificationsPanel({ onClose }: SidebarNotificationsPanel
                         disabled={processingInvite !== null}
                         onPress={() => handleDeclineInvite(n.id, n.relatedId!)}
                       >
-                        {processingInvite?.id === n.relatedId && processingInvite.action === 'decline' ? 'Declining...' : 'Decline'}
+                        {processingInvite?.id === n.relatedId && processingInvite.action === 'decline' ? t('declining') : t('decline')}
                       </Button>
                     </Box>
                   )}

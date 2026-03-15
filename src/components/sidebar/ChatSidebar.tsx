@@ -11,6 +11,7 @@ import {
 import type { PendingGroupInvite } from '@umbra/service';
 import type { ActiveCall } from '@/types/call';
 import React, { useCallback, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ScrollView } from 'react-native';
 import { NewChatMenu } from './NewChatMenu';
 import { SidebarShell, useSidebarShellLayout } from './SidebarShell';
@@ -87,6 +88,7 @@ function ChatSidebarInner({
   showNotificationsPanel, onCloseNotificationsPanel,
   showAccountPanel, onCloseAccountPanel, accountPanelProps,
 }: ChatSidebarProps) {
+  const { t } = useTranslation('sidebar');
   const shellProps = {
     showNotificationsPanel,
     onCloseNotificationsPanel,
@@ -107,7 +109,7 @@ function ChatSidebarInner({
   };
 
   return (
-    <SidebarShell searchPlaceholder="Search conversations..." {...shellProps}>
+    <SidebarShell searchPlaceholder={t('searchConversations')} {...shellProps}>
       <ChatSidebarContent
         conversations={conversations}
         activeId={activeId}
@@ -138,16 +140,16 @@ interface ChatSidebarContentProps {
 }
 
 /** Format a timestamp as a relative time string (e.g., "2h ago") */
-function formatRelativeTime(timestamp: number): string {
+function formatRelativeTime(timestamp: number, tc: (key: string, opts?: Record<string, unknown>) => string): string {
   const now = Date.now();
   const diffMs = now - timestamp;
   const diffMins = Math.floor(diffMs / (1000 * 60));
-  if (diffMins < 1) return 'Just now';
-  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffMins < 1) return tc('justNow');
+  if (diffMins < 60) return tc('minutesAgo', { count: diffMins });
   const diffHours = Math.floor(diffMins / 60);
-  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffHours < 24) return tc('hoursAgo', { count: diffHours });
   const diffDays = Math.floor(diffHours / 24);
-  if (diffDays < 7) return `${diffDays}d ago`;
+  if (diffDays < 7) return tc('daysAgo', { count: diffDays });
   return new Date(timestamp).toLocaleDateString();
 }
 
@@ -173,6 +175,8 @@ function ChatSidebarContent({
   loading,
 }: ChatSidebarContentProps) {
   const { theme } = useTheme();
+  const { t } = useTranslation('sidebar');
+  const { t: tc } = useTranslation('common');
   const { hasBottomPanel, contentFlex } = useSidebarShellLayout();
   const [menuOpen, setMenuOpen] = useState(false);
   const [processingInviteId, setProcessingInviteId] = useState<string | null>(null);
@@ -229,7 +233,7 @@ function ChatSidebarContent({
     <>
       {/* Group Invites Section -- only shown when there are pending invites */}
       {pendingInvites && pendingInvites.length > 0 && (
-        <SidebarSection title={`Group Invites (${pendingInvites.length})`}>
+        <SidebarSection title={t('groupInvites', { count: pendingInvites.length })}>
           <Box style={{ marginHorizontal: 6, gap: 6, marginBottom: 4 }}>
             {pendingInvites.map((invite) => (
               <Box
@@ -249,11 +253,11 @@ function ChatSidebarContent({
                       {invite.groupName}
                     </Text>
                     <Text size="xs" style={{ color: theme.colors.text.onRaisedSecondary }} numberOfLines={1}>
-                      from {invite.inviterName}
+                      {t('from', { name: invite.inviterName })}
                     </Text>
                   </Box>
                   <Text size="xs" style={{ color: theme.colors.text.muted }}>
-                    {formatRelativeTime(invite.createdAt)}
+                    {formatRelativeTime(invite.createdAt, tc)}
                   </Text>
                 </Box>
                 {invite.description ? (
@@ -265,7 +269,7 @@ function ChatSidebarContent({
                   const memberCount = getMemberCount(invite.membersJson);
                   return memberCount > 0 ? (
                     <Text size="xs" style={{ color: theme.colors.text.muted, marginBottom: 6, marginLeft: 22 }}>
-                      {memberCount} {memberCount === 1 ? 'member' : 'members'}
+                      {memberCount} {memberCount === 1 ? tc('member') : tc('members')}
                     </Text>
                   ) : null;
                 })()}
@@ -278,7 +282,7 @@ function ChatSidebarContent({
                     iconLeft={<CheckIcon size={12} color={theme.colors.text.onAccent} />}
                     onPress={() => handleAccept(invite.id)}
                   >
-                    {processingInviteId === invite.id ? 'Joining...' : 'Accept'}
+                    {processingInviteId === invite.id ? t('joining') : t('accept')}
                   </Button>
                   <Button
                     variant="secondary"
@@ -288,7 +292,7 @@ function ChatSidebarContent({
                     iconLeft={<XIcon size={12} color={theme.colors.text.onRaisedSecondary} />}
                     onPress={() => handleDecline(invite.id)}
                   >
-                    {processingInviteId === invite.id ? 'Declining...' : 'Decline'}
+                    {processingInviteId === invite.id ? t('declining') : t('decline')}
                   </Button>
                 </Box>
               </Box>
@@ -302,7 +306,7 @@ function ChatSidebarContent({
         {/* Custom header row: "Conversations" title + inline + button */}
         <Box style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 12, marginBottom: 8, zIndex: 200 }}>
           <Text size="xs" weight="semibold" style={{ color: theme.colors.text.onRaisedSecondary, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-            Conversations
+            {t('conversations')}
           </Text>
           {(onNewDm || onCreateGroup) && (
             <Box style={{ position: 'relative', zIndex: 200 }}>
@@ -351,7 +355,7 @@ function ChatSidebarContent({
             </>
           ) : conversations.length === 0 ? (
             <Box testID={TEST_IDS.SIDEBAR.EMPTY_STATE} style={{ alignItems: 'center', paddingVertical: 24 }}>
-              <GradientText animated speed={4000} style={{ fontSize: 13 }}>No conversations yet</GradientText>
+              <GradientText animated speed={4000} style={{ fontSize: 13 }}>{t('noConversations')}</GradientText>
             </Box>
           ) : (
             conversations.map((c) => (
