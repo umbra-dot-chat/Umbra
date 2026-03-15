@@ -11,7 +11,6 @@ import React, { useCallback, useMemo } from 'react';
 import { Pressable, Platform, ScrollView } from 'react-native';
 import {
   Box,
-  SidebarSection,
   Text,
   useTheme,
 } from '@coexist/wisp-react-native';
@@ -89,18 +88,15 @@ function SettingsNavContent({
   const { hasBottomPanel, contentFlex } = useSidebarShellLayout();
 
   return (
-    <Box style={{ flex: contentFlex, ...(hasBottomPanel ? { overflow: 'hidden' as any } : {}) }}>
-    <SidebarSection
-      style={{
-        flex: 1,
-      }}
-    >
+    <Box style={{ marginTop: 12, flex: contentFlex, overflow: 'hidden' as any }}>
       <Box
         style={{
           flexDirection: 'row',
           alignItems: 'center',
+          justifyContent: 'space-between',
           paddingHorizontal: 12,
           marginBottom: 8,
+          zIndex: 200,
         }}
       >
         <Text
@@ -208,7 +204,6 @@ function SettingsNavContent({
           );
         })}
       </ScrollView>
-    </SidebarSection>
     </Box>
   );
 }
