@@ -3,8 +3,8 @@
   "configurations": [
     {
       "name": "web-dev",
-      "runtimeExecutable": "npx",
-      "runtimeArgs": ["expo", "start", "--web"],
+      "runtimeExecutable": "/Users/mattmattmattmatt/Development/Umbra/.claude/start-web.sh",
+      "runtimeArgs": [],
       "port": 8081,
       "autoPort": false
     },
