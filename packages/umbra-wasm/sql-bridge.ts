@@ -414,6 +414,43 @@ const bridge = {
 (globalThis as any).__umbra_sql = bridge;
 
 // ─────────────────────────────────────────────────────────────────────────
+// Page unload safety — flush pending saves before the page is discarded
+// ─────────────────────────────────────────────────────────────────────────
+
+if (typeof globalThis.addEventListener === 'function') {
+  // 'pagehide' fires reliably on all modern browsers (including mobile Safari)
+  // where 'beforeunload' may be suppressed. We cancel the debounce timer
+  // and synchronously export the database, then kick off the IndexedDB write.
+  // The browser gives us a short window to start the async operation.
+  globalThis.addEventListener('pagehide', () => {
+    if (!persistenceEnabled || !currentDid || !db) return;
+    // Cancel the debounce — we're saving now
+    if (saveTimer !== null) {
+      clearTimeout(saveTimer);
+      saveTimer = null;
+    }
+    try {
+      const data = db.export();
+      // Fire-and-forget — the browser may or may not finish this
+      saveDatabaseExport(currentDid, data).catch(() => {});
+    } catch {
+      // Best effort — page is closing
+    }
+  });
+
+  // Also listen to visibilitychange to flush when the tab is hidden
+  // (e.g. user switches tabs, which on mobile may lead to termination)
+  globalThis.document?.addEventListener?.('visibilitychange', () => {
+    if (document.visibilityState === 'hidden' && saveTimer !== null) {
+      // A save is pending — flush it now while we still have time
+      clearTimeout(saveTimer);
+      saveTimer = null;
+      doSave();
+    }
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────────────
 // Public initialization functions
 // ─────────────────────────────────────────────────────────────────────────
 
