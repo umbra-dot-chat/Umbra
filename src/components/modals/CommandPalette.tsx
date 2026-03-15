@@ -1,6 +1,7 @@
 import React, { useCallback, useMemo } from 'react';
 import { Platform } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import {
   Command, CommandInput, CommandList, CommandGroup,
   CommandItem, CommandSeparator, CommandEmpty,
@@ -37,6 +38,7 @@ export function CommandPalette({ open, onOpenChange, onOpenSettings, onOpenMarke
   const { onlineDids } = useNetwork();
   const { pluginCommands } = usePlugins();
   const { mode } = useTheme();
+  const { t } = useTranslation('common');
   const {
     setQuery,
     searchHistory,
@@ -139,12 +141,12 @@ export function CommandPalette({ open, onOpenChange, onOpenSettings, onOpenMarke
       size="md"
       style={mode === 'light' ? { borderWidth: 1, borderColor: lightBorderSubtle, shadowOpacity: 0.15 } : undefined}
     >
-      <CommandInput placeholder="Search users, messages, or type a command..." />
+      <CommandInput placeholder={t('searchCommandPlaceholder')} />
       <CommandList>
         {/* Recent Searches — shown when query is empty */}
         {!hasQuery && searchHistory.length > 0 && (
           <>
-            <CommandGroup heading="Recent Searches">
+            <CommandGroup heading={t('recentSearches')}>
               {searchHistory.slice(0, 5).map((term) => (
                 <CommandItem
                   key={`history-${term}`}
@@ -160,27 +162,27 @@ export function CommandPalette({ open, onOpenChange, onOpenSettings, onOpenMarke
           </>
         )}
 
-        <CommandGroup heading="Navigation">
+        <CommandGroup heading={t('navigation')}>
           <CommandItem
             value="nav:friends"
             icon={Users}
             keywords={['friends', 'people', 'users']}
           >
-            Go to Friends
+            {t('goToFriends')}
           </CommandItem>
           <CommandItem
             value="nav:chat"
             icon={Message}
             keywords={['chat', 'messages', 'conversations', 'home']}
           >
-            Go to Chat
+            {t('goToChat')}
           </CommandItem>
           <CommandItem
             value="nav:settings"
             icon={Settings}
             keywords={['settings', 'preferences', 'config']}
           >
-            Open Settings
+            {t('openSettings')}
           </CommandItem>
           {(hasActiveConversation || activeConversationId) && (
             <CommandItem
@@ -188,7 +190,7 @@ export function CommandPalette({ open, onOpenChange, onOpenSettings, onOpenMarke
               icon={Search}
               keywords={['search', 'find', 'messages', 'conversation', 'current']}
             >
-              Search in this conversation
+              {t('searchInConversation')}
             </CommandItem>
           )}
           {onOpenMarketplace && (
@@ -197,7 +199,7 @@ export function CommandPalette({ open, onOpenChange, onOpenSettings, onOpenMarke
               icon={Download}
               keywords={['plugins', 'marketplace', 'extensions', 'addons', 'install']}
             >
-              Plugin Marketplace
+              {t('pluginMarketplace')}
             </CommandItem>
           )}
         </CommandGroup>
@@ -206,7 +208,7 @@ export function CommandPalette({ open, onOpenChange, onOpenSettings, onOpenMarke
         {hasQuery && flatResults.length > 0 && (
           <>
             <CommandSeparator />
-            <CommandGroup heading="Messages">
+            <CommandGroup heading={t('messages')}>
               {flatResults.map((r) => {
                 const senderName = r.senderDid.slice(0, 16);
                 const snippet = r.text.length > 60 ? r.text.slice(0, 57) + '...' : r.text;
@@ -230,14 +232,14 @@ export function CommandPalette({ open, onOpenChange, onOpenSettings, onOpenMarke
           <>
             <CommandSeparator />
 
-            <CommandGroup heading="Friends">
+            <CommandGroup heading={t('friends')}>
               {friends.map((f) => (
                 <CommandItem
                   key={f.did}
                   value={`user:${f.did}`}
                   keywords={[f.displayName, f.displayName.toLowerCase().replace(/\s/g, '')]}
                   icon={Users}
-                  description={onlineDids.has(f.did) ? 'online' : 'offline'}
+                  description={onlineDids.has(f.did) ? t('online') : t('offline')}
                 >
                   {f.displayName}
                 </CommandItem>
@@ -249,7 +251,7 @@ export function CommandPalette({ open, onOpenChange, onOpenSettings, onOpenMarke
         {pluginCommands.length > 0 && (
           <>
             <CommandSeparator />
-            <CommandGroup heading="Plugins">
+            <CommandGroup heading={t('plugins')}>
               {pluginCommands.map((cmd) => (
                 <CommandItem
                   key={cmd.id}
@@ -265,7 +267,7 @@ export function CommandPalette({ open, onOpenChange, onOpenSettings, onOpenMarke
           </>
         )}
 
-        <CommandEmpty>No results found.</CommandEmpty>
+        <CommandEmpty>{t('noResultsFound')}</CommandEmpty>
       </CommandList>
     </Command>
     </WispProvider>

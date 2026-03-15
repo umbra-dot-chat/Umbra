@@ -13,6 +13,7 @@ import React, { useState, useMemo, useCallback } from 'react';
 import { Pressable, Platform, useWindowDimensions } from 'react-native';
 import type { ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useTranslation } from 'react-i18next';
 import { Overlay, Box, Text, ScrollArea, useTheme } from '@coexist/wisp-react-native';
 import {
   BookOpenIcon,
@@ -67,24 +68,24 @@ type Chapter =
 
 interface ChapterItem {
   id: Chapter;
-  label: string;
+  labelKey: string;
   icon: React.ComponentType<{ size?: number; color?: string }>;
   color: string;
 }
 
 const CHAPTERS: ChapterItem[] = [
-  { id: 'getting-started', label: 'Getting Started', icon: PlusIcon, color: '#22C55E' },
-  { id: 'friends', label: 'Friends', icon: UsersIcon, color: '#8B5CF6' },
-  { id: 'messaging', label: 'Messaging', icon: MessageIcon, color: '#3B82F6' },
-  { id: 'groups', label: 'Groups', icon: UsersIcon, color: '#EC4899' },
-  { id: 'communities', label: 'Communities', icon: GlobeIcon, color: '#F97316' },
-  { id: 'calling', label: 'Calling', icon: PhoneIcon, color: '#10B981' },
-  { id: 'data', label: 'Data Management', icon: SettingsIcon, color: '#F59E0B' },
-  { id: 'security', label: 'Security & Privacy', icon: ShieldIcon, color: '#EAB308' },
-  { id: 'network', label: 'Network', icon: SettingsIcon, color: '#06B6D4' },
-  { id: 'plugins', label: 'Plugins', icon: PuzzleIcon, color: '#8B5CF6' },
-  { id: 'limitations', label: 'Limitations', icon: BookOpenIcon, color: '#F97316' },
-  { id: 'technical', label: 'Tech Reference', icon: SettingsIcon, color: '#6366F1' },
+  { id: 'getting-started', labelKey: 'guideGettingStarted', icon: PlusIcon, color: '#22C55E' },
+  { id: 'friends', labelKey: 'guideFriends', icon: UsersIcon, color: '#8B5CF6' },
+  { id: 'messaging', labelKey: 'guideMessaging', icon: MessageIcon, color: '#3B82F6' },
+  { id: 'groups', labelKey: 'guideGroups', icon: UsersIcon, color: '#EC4899' },
+  { id: 'communities', labelKey: 'guideCommunities', icon: GlobeIcon, color: '#F97316' },
+  { id: 'calling', labelKey: 'guideCalling', icon: PhoneIcon, color: '#10B981' },
+  { id: 'data', labelKey: 'guideDataManagement', icon: SettingsIcon, color: '#F59E0B' },
+  { id: 'security', labelKey: 'guideSecurityPrivacy', icon: ShieldIcon, color: '#EAB308' },
+  { id: 'network', labelKey: 'guideNetwork', icon: SettingsIcon, color: '#06B6D4' },
+  { id: 'plugins', labelKey: 'guidePlugins', icon: PuzzleIcon, color: '#8B5CF6' },
+  { id: 'limitations', labelKey: 'guideLimitations', icon: BookOpenIcon, color: '#F97316' },
+  { id: 'technical', labelKey: 'guideTechReference', icon: SettingsIcon, color: '#6366F1' },
 ];
 
 /** Breakpoint below which we use the compact mobile layout. */
@@ -97,6 +98,7 @@ const MOBILE_BREAKPOINT = 600;
 export function GuideDialog({ open, onClose }: GuideDialogProps) {
   if (__DEV__) dbg.trackRender('GuideDialog');
   const { theme, mode } = useTheme();
+  const { t } = useTranslation('common');
   const tc = theme.colors;
   const isDark = mode === 'dark';
   const { width: windowWidth, height: windowHeight } = useWindowDimensions();
@@ -218,7 +220,7 @@ export function GuideDialog({ open, onClose }: GuideDialogProps) {
                 <BookOpenIcon size={14} color={tc.text.onAccent} />
               </Box>
               <Text size="md" weight="bold" style={{ color: tc.text.primary }}>
-                User Guide
+                {t('userGuide')}
               </Text>
             </Box>
             <Pressable
@@ -230,7 +232,7 @@ export function GuideDialog({ open, onClose }: GuideDialogProps) {
                 alignItems: 'center',
                 justifyContent: 'center',
               }}
-              accessibilityLabel="Close guide"
+              accessibilityLabel={t('closeGuide')}
             >
               <XIcon size={18} color={tc.text.secondary} />
             </Pressable>
@@ -281,7 +283,7 @@ export function GuideDialog({ open, onClose }: GuideDialogProps) {
                     style={{ color: isActive ? tc.text.onAccent : tc.text.secondary }}
                     numberOfLines={1}
                   >
-                    {ch.label}
+                    {t(ch.labelKey)}
                   </Text>
                 </Pressable>
               );
@@ -308,7 +310,7 @@ export function GuideDialog({ open, onClose }: GuideDialogProps) {
                 <activeInfo.icon size={16} color={tc.text.onAccent} />
               </Box>
               <Text size="md" weight="bold" style={{ color: tc.text.primary }}>
-                {activeInfo.label}
+                {t(activeInfo.labelKey)}
               </Text>
             </Box>
             {renderChapter()}
@@ -350,7 +352,7 @@ export function GuideDialog({ open, onClose }: GuideDialogProps) {
             >
               <BookOpenIcon size={16} color={tc.text.onAccent} />
             </Box>
-            <Text size="sm" weight="bold" style={{ color: tc.text.primary }}>User Guide</Text>
+            <Text size="sm" weight="bold" style={{ color: tc.text.primary }}>{t('userGuide')}</Text>
           </Box>
 
           {/* Chapter List */}
@@ -399,7 +401,7 @@ export function GuideDialog({ open, onClose }: GuideDialogProps) {
                     }}
                     numberOfLines={1}
                   >
-                    {ch.label}
+                    {t(ch.labelKey)}
                   </Text>
                 </Pressable>
               );
@@ -408,7 +410,7 @@ export function GuideDialog({ open, onClose }: GuideDialogProps) {
 
           {/* Footer */}
           <Text size="xs" style={{ color: tc.text.muted, textAlign: 'center', marginTop: 12 }}>
-            Umbra v0.1.0
+            {t('umbraVersion', { version: '0.1.0' })}
           </Text>
         </Box>
 
@@ -440,7 +442,7 @@ export function GuideDialog({ open, onClose }: GuideDialogProps) {
                 <activeInfo.icon size={18} color={tc.text.onAccent} />
               </Box>
               <Text size="lg" weight="bold" style={{ color: tc.text.primary }}>
-                {activeInfo.label}
+                {t(activeInfo.labelKey)}
               </Text>
             </Box>
 
@@ -453,7 +455,7 @@ export function GuideDialog({ open, onClose }: GuideDialogProps) {
                 alignItems: 'center',
                 justifyContent: 'center',
               }}
-              accessibilityLabel="Close guide"
+              accessibilityLabel={t('closeGuide')}
             >
               <XIcon size={16} color={tc.text.secondary} />
             </Pressable>

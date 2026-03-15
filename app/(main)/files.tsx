@@ -19,6 +19,7 @@ import { useCommunities } from '@/hooks/useCommunities';
 import { useUmbra } from '@/contexts/UmbraContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'expo-router';
+import { useTranslation } from 'react-i18next';
 import {
   FolderIcon,
   FileTextIcon,
@@ -37,6 +38,7 @@ const SRC = 'FilesPage';
 // ---------------------------------------------------------------------------
 
 function ActiveTransfersSection() {
+  const { t } = useTranslation('common');
   const { theme } = useTheme();
   const {
     activeTransfers,
@@ -64,7 +66,7 @@ function ActiveTransfersSection() {
           marginBottom: 12,
         }}
       >
-        Active Transfers ({activeTransfers.length})
+        {t('activeTransfers', { count: activeTransfers.length })}
       </Text>
 
       <Box
@@ -143,7 +145,7 @@ function ActiveTransfersSection() {
                     }}
                   >
                     <Text size="xs" style={{ color: theme.colors.text.muted }}>
-                      {transfer.transportType === 'webrtc' ? 'Direct' : transfer.transportType === 'relay' ? 'Relay' : 'P2P'}
+                      {transfer.transportType === 'webrtc' ? t('direct') : transfer.transportType === 'relay' ? t('relay') : t('p2p')}
                     </Text>
                   </Box>
                 </Box>
@@ -176,7 +178,7 @@ function ActiveTransfersSection() {
                     size="xs"
                     onPress={() => pauseTransfer(transfer.transferId)}
                   >
-                    Pause
+                    {t('pause')}
                   </Button>
                 )}
                 {transfer.state === 'paused' && (
@@ -185,7 +187,7 @@ function ActiveTransfersSection() {
                     size="xs"
                     onPress={() => resumeTransfer(transfer.transferId)}
                   >
-                    Resume
+                    {t('resume')}
                   </Button>
                 )}
                 <Button
@@ -193,7 +195,7 @@ function ActiveTransfersSection() {
                   size="xs"
                   onPress={() => cancelTransfer(transfer.transferId)}
                 >
-                  Cancel
+                  {t('cancel')}
                 </Button>
               </Box>
             </Box>
@@ -205,7 +207,7 @@ function ActiveTransfersSection() {
       <Box style={{ flexDirection: 'row', gap: 16, marginTop: 8 }}>
         {totalUploadSpeed > 0 && (
           <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-            <Text size="xs" style={{ color: theme.colors.text.muted }}>Upload:</Text>
+            <Text size="xs" style={{ color: theme.colors.text.muted }}>{t('upload')}:</Text>
             <AnimatedCounter
               value={totalUploadSpeed}
               duration={400}
@@ -216,7 +218,7 @@ function ActiveTransfersSection() {
         )}
         {totalDownloadSpeed > 0 && (
           <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-            <Text size="xs" style={{ color: theme.colors.text.muted }}>Download:</Text>
+            <Text size="xs" style={{ color: theme.colors.text.muted }}>{t('download')}:</Text>
             <AnimatedCounter
               value={totalDownloadSpeed}
               duration={400}
@@ -243,6 +245,7 @@ function SharedFoldersSection({
   onOpenFolder: (folderId: string) => void;
   onCloseFolder: () => void;
 }) {
+  const { t } = useTranslation('common');
   const { theme } = useTheme();
   const { sharedFolders, isLoading, syncFolder } = useSharedFolders();
 
@@ -273,13 +276,13 @@ function SharedFoldersSection({
             letterSpacing: 0.5,
           }}
         >
-          Shared Folders
+          {t('sharedFolders')}
         </Text>
       </Box>
 
       {isLoading ? (
         <Text size="sm" style={{ color: theme.colors.text.muted }}>
-          Loading shared folders...
+          {t('loadingSharedFolders')}
         </Text>
       ) : sharedFolders.length === 0 ? (
         <Box
@@ -294,10 +297,10 @@ function SharedFoldersSection({
         >
           <FolderIcon size={32} color={theme.colors.text.muted} />
           <Text size="sm" style={{ color: theme.colors.text.muted, marginTop: 8 }}>
-            No shared folders yet
+            {t('noSharedFoldersYet')}
           </Text>
           <Text size="xs" style={{ color: theme.colors.text.muted, marginTop: 4, textAlign: 'center' }}>
-            Create a shared folder from a DM conversation to start sharing files with friends.
+            {t('noSharedFoldersDesc')}
           </Text>
         </Box>
       ) : (
@@ -407,6 +410,7 @@ function FolderDetailView({
   onBack: () => void;
   onSync: () => void;
 }) {
+  const { t } = useTranslation('common');
   const { theme } = useTheme();
   const { service } = useUmbra();
   const { identity } = useAuth();
@@ -604,7 +608,7 @@ function FolderDetailView({
       {/* Header with back button + upload button */}
       <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 12, marginBottom: 16 }}>
         <Button variant="tertiary" size="sm" onPress={onBack}>
-          Back
+          {t('back')}
         </Button>
         <FolderIcon size={20} color={theme.colors.text.primary} />
         <Text size="md" weight="bold" style={{ color: theme.colors.text.primary, flex: 1 }}>
@@ -629,10 +633,10 @@ function FolderDetailView({
           disabled={isUploading}
           iconLeft={<PlusIcon size={14} />}
         >
-          {isUploading ? 'Uploading...' : 'Upload'}
+          {isUploading ? t('uploading') : t('upload')}
         </Button>
         <Button variant="secondary" size="xs" onPress={onSync}>
-          Sync Now
+          {t('syncNow')}
         </Button>
       </Box>
 
@@ -663,14 +667,14 @@ function FolderDetailView({
         >
           <PlusIcon size={32} color={theme.colors.accent.primary} />
           <Text size="sm" weight="medium" style={{ color: theme.colors.accent.primary, marginTop: 8 }}>
-            Drop files to upload
+            {t('dropFilesToUpload')}
           </Text>
         </Box>
       )}
 
       {/* File list */}
       {loadingFiles ? (
-        <Text size="sm" style={{ color: theme.colors.text.muted }}>Loading files...</Text>
+        <Text size="sm" style={{ color: theme.colors.text.muted }}>{t('loadingFiles')}</Text>
       ) : files.length === 0 && !isDragOver ? (
         <Box
           style={{
@@ -684,10 +688,10 @@ function FolderDetailView({
         >
           <FileTextIcon size={32} color={theme.colors.text.muted} />
           <Text size="sm" style={{ color: theme.colors.text.muted, marginTop: 8 }}>
-            No files in this folder yet
+            {t('noFilesInFolder')}
           </Text>
           <Text size="xs" style={{ color: theme.colors.text.muted, marginTop: 4, textAlign: 'center' }}>
-            Drag and drop files here or click Upload above.
+            {t('noFilesDesc')}
           </Text>
         </Box>
       ) : files.length > 0 ? (
@@ -768,6 +772,7 @@ function FolderDetailView({
 // ---------------------------------------------------------------------------
 
 function CommunityFilesSection() {
+  const { t } = useTranslation('common');
   const { theme } = useTheme();
   const { communities } = useCommunities();
   const router = useRouter();
@@ -786,7 +791,7 @@ function CommunityFilesSection() {
           marginBottom: 12,
         }}
       >
-        Community Files
+        {t('communityFiles')}
       </Text>
 
       <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
@@ -847,6 +852,7 @@ function injectStorageBarKeyframes(): void {
 }
 
 function StorageSection() {
+  const { t } = useTranslation('common');
   const { theme } = useTheme();
   const {
     storageUsage,
@@ -896,7 +902,7 @@ function StorageSection() {
           marginBottom: 12,
         }}
       >
-        Storage
+        {t('storage')}
       </Text>
 
       <Box
@@ -911,10 +917,10 @@ function StorageSection() {
         {/* Usage bar */}
         <Box style={{ flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 }}>
           <Text size="sm" weight="medium" style={{ color: theme.colors.text.primary }}>
-            {formatBytes(storageUsage.total)} used
+            {formatBytes(storageUsage.total)} {t('used')}
           </Text>
           <Text size="sm" style={{ color: theme.colors.text.muted }}>
-            {formatBytes(limitBytes)} total
+            {formatBytes(limitBytes)} {t('total')}
           </Text>
         </Box>
 
@@ -970,7 +976,7 @@ function StorageSection() {
         {cleanupSuggestions.length > 0 && (
           <Box style={{ marginBottom: 12 }}>
             <Text size="xs" weight="medium" style={{ color: theme.colors.text.secondary, marginBottom: 4 }}>
-              Suggestions
+              {t('suggestions')}
             </Text>
             {cleanupSuggestions.slice(0, 3).map((s, i) => (
               <Text key={i} size="xs" style={{ color: theme.colors.text.muted, marginTop: 2 }}>
@@ -988,12 +994,12 @@ function StorageSection() {
           onPress={smartCleanup}
           disabled={isCleaningUp}
         >
-          {isCleaningUp ? 'Cleaning up...' : 'Smart Cleanup'}
+          {isCleaningUp ? t('cleaningUp') : t('smartCleanup')}
         </Button>
 
         {lastCleanupResult && (
           <Text size="xs" style={{ color: theme.colors.text.muted, marginTop: 8, textAlign: 'center' }}>
-            Last cleanup freed {formatBytes(lastCleanupResult.bytesFreed)}
+            {t('lastCleanupFreed', { size: formatBytes(lastCleanupResult.bytesFreed) })}
           </Text>
         )}
 
@@ -1004,16 +1010,16 @@ function StorageSection() {
           onPress={() => setShowRules((prev) => !prev)}
           style={{ marginTop: 12, alignSelf: 'flex-start' }}
         >
-          {showRules ? 'Hide' : 'Show'} Auto-Cleanup Rules
+          {showRules ? t('hide') : t('show')} {t('autoCleanupRules')}
         </Button>
 
         {showRules && (
           <Box style={{ marginTop: 8, gap: 8 }}>
             <AutoCleanupRuleRow
-              label="Max storage"
+              label={t('maxStorage')}
               value={autoCleanupRules.maxTotalBytes
                 ? formatBytes(autoCleanupRules.maxTotalBytes)
-                : 'Unlimited'}
+                : t('unlimited')}
               options={[
                 { label: '1 GB', value: 1 * 1024 * 1024 * 1024 },
                 { label: '2 GB', value: 2 * 1024 * 1024 * 1024 },
@@ -1023,10 +1029,10 @@ function StorageSection() {
               onSelect={(v) => setAutoCleanupRules({ maxTotalBytes: v })}
             />
             <AutoCleanupRuleRow
-              label="Delete old transfers after"
+              label={t('deleteOldTransfers')}
               value={autoCleanupRules.maxTransferAge
                 ? `${Math.round(autoCleanupRules.maxTransferAge / 86400)} days`
-                : 'Never'}
+                : t('never')}
               options={[
                 { label: '1 day', value: 86400 },
                 { label: '7 days', value: 604800 },
@@ -1035,10 +1041,10 @@ function StorageSection() {
               onSelect={(v) => setAutoCleanupRules({ maxTransferAge: v })}
             />
             <AutoCleanupRuleRow
-              label="Clear cache after"
+              label={t('clearCacheAfter')}
               value={autoCleanupRules.maxCacheAge
                 ? `${Math.round(autoCleanupRules.maxCacheAge / 3600)} hours`
-                : 'Never'}
+                : t('never')}
               options={[
                 { label: '1 hour', value: 3600 },
                 { label: '24 hours', value: 86400 },
@@ -1110,6 +1116,7 @@ function AutoCleanupRuleRow({
 
 export default function FilesPage() {
   if (__DEV__) dbg.trackRender('FilesPage');
+  const { t } = useTranslation('common');
   const { theme } = useTheme();
   const router = useRouter();
   const { hasActiveUploads, uploadRingProgress } = useUploadProgress();
@@ -1129,10 +1136,10 @@ export default function FilesPage() {
         }}
       >
         <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-          <MobileBackButton onPress={() => router.back()} label="Back to conversations" />
+          <MobileBackButton onPress={() => router.back()} label={t('sidebar:backToConversations')} />
           <FolderIcon size={24} color={theme.colors.text.primary} />
           <Text size="lg" weight="bold" style={{ color: theme.colors.text.primary }}>
-            Files
+            {t('files')}
           </Text>
           {hasActiveUploads && (
             <Box

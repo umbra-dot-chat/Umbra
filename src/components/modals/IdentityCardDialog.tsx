@@ -10,6 +10,7 @@
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { Platform } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import {
   Dialog,
   Button,
@@ -47,6 +48,7 @@ export function IdentityCardDialog({ open, onClose }: IdentityCardDialogProps) {
   const { theme } = useTheme();
   const tc = theme.colors;
   const { identity, recoveryPhrase } = useAuth();
+  const { t } = useTranslation('common');
 
   const [includePhrase, setIncludePhrase] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
@@ -98,7 +100,7 @@ export function IdentityCardDialog({ open, onClose }: IdentityCardDialogProps) {
     <Dialog
       open={open}
       onClose={onClose}
-      title="Account Recovery Details"
+      title={t('accountRecoveryDetails')}
       size="lg"
     >
       <Box style={{ gap: 16, paddingVertical: 8 }}>
@@ -116,11 +118,10 @@ export function IdentityCardDialog({ open, onClose }: IdentityCardDialogProps) {
           <FileTextIcon size={18} color={tc.text.secondary} />
           <Box style={{ flex: 1 }}>
             <Text size="sm" weight="semibold" style={{ color: tc.text.primary }}>
-              Printable Recovery Document
+              {t('printableRecoveryDoc')}
             </Text>
             <Text size="xs" style={{ color: tc.text.secondary, marginTop: 2 }}>
-              Generate a black-and-white PDF with your account details and QR code.
-              Print it and store it somewhere safe.
+              {t('printableRecoveryDesc')}
             </Text>
           </Box>
         </Box>
@@ -142,7 +143,7 @@ export function IdentityCardDialog({ open, onClose }: IdentityCardDialogProps) {
                 border: 'none',
                 borderRadius: 10,
               }}
-              title="Account Recovery Details Preview"
+              title={t('recoveryPreviewTitle')}
             />
           </Box>
         )}
@@ -158,7 +159,7 @@ export function IdentityCardDialog({ open, onClose }: IdentityCardDialogProps) {
             borderColor: tc.border.subtle,
           }}>
             <Text size="sm" style={{ color: tc.text.muted }}>
-              PDF preview is available on web only.
+              {t('pdfPreviewWebOnly')}
             </Text>
           </Box>
         )}
@@ -190,15 +191,15 @@ export function IdentityCardDialog({ open, onClose }: IdentityCardDialogProps) {
               <Text size="sm" weight="semibold" style={{
                 color: includePhrase ? tc.status.danger : tc.text.primary,
               }}>
-                Include Recovery Phrase
+                {t('includeRecoveryPhrase')}
               </Text>
               <Text size="xs" style={{
                 color: includePhrase ? tc.status.danger : tc.text.secondary,
                 marginTop: 1,
               }}>
                 {includePhrase
-                  ? 'Anyone with this document can access your account!'
-                  : 'Your 24-word phrase will be printed on the document'}
+                  ? t('recoveryPhraseWarning')
+                  : t('recoveryPhraseNote')}
               </Text>
             </Box>
           </Box>
@@ -214,14 +215,14 @@ export function IdentityCardDialog({ open, onClose }: IdentityCardDialogProps) {
           onPress={handleDownload}
           iconLeft={<DownloadIcon size={16} color={tc.text.inverse} />}
         >
-          Download PDF
+          {t('downloadPdf')}
         </Button>
 
         {/* Footer note */}
         <Text size="xs" style={{ color: tc.text.muted, textAlign: 'center' }}>
           {includePhrase
-            ? 'This document contains sensitive recovery data. Store it securely.'
-            : 'This document contains your public DID and QR code only.'}
+            ? t('recoveryDocSensitive')
+            : t('recoveryDocPublic')}
         </Text>
       </Box>
     </Dialog>

@@ -4,6 +4,7 @@
 
 import React from 'react';
 import { Pressable, Linking } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { Overlay, Box, Text, ScrollArea, useTheme } from '@coexist/wisp-react-native';
 import type { PlatformDownload } from '@/types/version';
 import {
@@ -66,6 +67,7 @@ export function AllPlatformsDialog({ open, onClose, downloads, version, releaseU
   if (__DEV__) dbg.trackRender('AllPlatformsDialog');
   const { theme } = useTheme();
   const tc = theme.colors;
+  const { t } = useTranslation('common');
 
   if (!open) return null;
 
@@ -123,7 +125,7 @@ export function AllPlatformsDialog({ open, onClose, downloads, version, releaseU
           <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
             <DownloadIcon size={20} color={tc.accent.primary} />
             <Text size="md" weight="bold" style={{ color: tc.text.primary }}>
-              Download Umbra v{version}
+              {t('downloadUmbraVersion', { version })}
             </Text>
           </Box>
           <Pressable
@@ -146,7 +148,7 @@ export function AllPlatformsDialog({ open, onClose, downloads, version, releaseU
           {/* Desktop */}
           {desktop.length > 0 && (
             <>
-              <Text size="xs" weight="semibold" style={sectionTitleStyle}>Desktop</Text>
+              <Text size="xs" weight="semibold" style={sectionTitleStyle}>{t('desktop')}</Text>
               {desktop.map((d) => (
                 <Pressable
                   key={d.platform}
@@ -178,7 +180,7 @@ export function AllPlatformsDialog({ open, onClose, downloads, version, releaseU
           {/* Mobile */}
           {mobile.length > 0 && (
             <>
-              <Text size="xs" weight="semibold" style={sectionTitleStyle}>Mobile</Text>
+              <Text size="xs" weight="semibold" style={sectionTitleStyle}>{t('mobile')}</Text>
               {mobile.map((d) => (
                 <Pressable
                   key={d.platform}
@@ -203,7 +205,7 @@ export function AllPlatformsDialog({ open, onClose, downloads, version, releaseU
           {/* Web */}
           {web.length > 0 && (
             <>
-              <Text size="xs" weight="semibold" style={sectionTitleStyle}>Web</Text>
+              <Text size="xs" weight="semibold" style={sectionTitleStyle}>{t('web')}</Text>
               {web.map((d) => (
                 <Pressable
                   key={d.platform}
@@ -241,7 +243,7 @@ export function AllPlatformsDialog({ open, onClose, downloads, version, releaseU
               })}
             >
               <Text size="sm" weight="medium" style={{ color: tc.text.link }}>
-                View on GitHub
+                {t('viewOnGithub')}
               </Text>
               <ExternalLinkIcon size={14} color={tc.text.link} />
             </Pressable>

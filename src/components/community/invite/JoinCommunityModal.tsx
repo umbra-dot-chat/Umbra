@@ -17,6 +17,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'expo-router';
 import { resolveInviteFromRelay } from '@umbra/service';
 import { DEFAULT_RELAY_SERVERS } from '@/config';
+import { useTranslation } from 'react-i18next';
 import { dbg } from '@/utils/debug';
 
 const SRC = 'JoinCommunityModal';
@@ -67,6 +68,7 @@ export function JoinCommunityModal({
 }: JoinCommunityModalProps) {
   if (__DEV__) dbg.trackRender('JoinCommunityModal');
   const { theme } = useTheme();
+  const { t } = useTranslation('common');
   const tc = theme.colors;
   const { service, isReady } = useUmbra();
   const { identity } = useAuth();
@@ -109,7 +111,7 @@ export function JoinCommunityModal({
 
     const code = extractInviteCode(rawInput);
     if (!code) {
-      setError('Please enter a valid invite code or link.');
+      setError(t('invalidInviteCode'));
       return;
     }
 
@@ -134,7 +136,7 @@ export function JoinCommunityModal({
         router.push(`/community/${communityId}`);
         return;
       }
-      setError('Failed to join community. The invite may be invalid.');
+      setError(t('failedJoinCommunity'));
     } catch (err: any) {
       const msg = err?.message || String(err);
       const isNotFound = msg.includes('not found') || msg.includes('NotFound') || msg.includes('404');
@@ -189,20 +191,15 @@ export function JoinCommunityModal({
             } catch (retryErr: any) {
               const retryMsg = retryErr?.message || String(retryErr);
               if (retryMsg.includes('already') || retryMsg.includes('AlreadyMember')) {
-                setError("You're already a member of this community.");
+                setError(t('alreadyMember'));
               } else {
                 // Show community preview info even if join failed
-                setError(
-                  `Found "${resolved.community_name}" (${resolved.member_count} members) but couldn't join. ` +
-                  'The community owner may need to share an updated invite.',
-                );
+                setError(t('communityFoundButFailed', { name: resolved.community_name, count: resolved.member_count }));
               }
               return;
             }
 
-            setError(
-              `Found "${resolved.community_name}" but couldn't complete the join. Please try again.`,
-            );
+            setError(t('communityFoundRetryFailed', { name: resolved.community_name }));
             return;
           }
         } catch (relayErr) {
@@ -210,20 +207,17 @@ export function JoinCommunityModal({
         }
 
         // Neither local nor relay resolution found the invite
-        setError(
-          "This invite couldn't be found. Check the code and try again, or " +
-          'ask the community owner to send you an invite from within the app.',
-        );
+        setError(t('inviteNotFound'));
       } else if (msg.includes('expired') || msg.includes('Expired')) {
-        setError('This invite has expired.');
+        setError(t('inviteExpired'));
       } else if (msg.includes('max') || msg.includes('MaxUses')) {
-        setError('This invite has reached its maximum number of uses.');
+        setError(t('inviteMaxUses'));
       } else if (msg.includes('already') || msg.includes('AlreadyMember')) {
-        setError("You're already a member of this community.");
+        setError(t('alreadyMember'));
       } else if (msg.includes('banned') || msg.includes('Banned')) {
-        setError('You are banned from this community.');
+        setError(t('bannedFromCommunity'));
       } else {
-        setError(msg || 'Failed to join community.');
+        setError(msg || t('failedJoinCommunity'));
       }
     } finally {
       setIsJoining(false);
@@ -237,12 +231,12 @@ export function JoinCommunityModal({
     <Dialog
       open={open}
       onClose={onClose}
-      title="Join Community"
+      title={t('joinCommunity')}
       size="sm"
     >
       <Box style={{ gap: defaultSpacing.md }}>
         <Text size="sm" style={{ color: tc.text.muted }}>
-          Enter an invite code or paste an invite link to join an existing community.
+          {t('joinCommunityDesc')}
         </Text>
 
         <Input
@@ -251,7 +245,7 @@ export function JoinCommunityModal({
             setRawInput(text);
             setError(null);
           }}
-          placeholder="abc12def or https://umbra.chat/invite/..."
+          placeholder={t('inviteCodePlaceholder')}
           autoFocus
           editable={!isJoining}
           onSubmitEditing={canJoin ? handleJoin : undefined}
@@ -271,7 +265,7 @@ export function JoinCommunityModal({
             onPress={onClose}
             disabled={isJoining}
           >
-            Cancel
+            {t('cancel')}
           </Button>
           <Button
             variant="primary"
@@ -279,7 +273,7 @@ export function JoinCommunityModal({
             disabled={!canJoin}
             isLoading={isJoining}
           >
-            Join Community
+            {t('joinCommunity')}
           </Button>
         </Box>
       </Box>

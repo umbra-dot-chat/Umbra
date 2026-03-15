@@ -12,6 +12,7 @@ import type { ViewStyle, TextStyle } from 'react-native';
 import { Dialog, Input, Button, Text, useTheme } from '@coexist/wisp-react-native';
 import { defaultSpacing, defaultRadii } from '@coexist/wisp-core/theme/create-theme';
 import Svg, { Path, Circle, Line, Polyline, Rect } from 'react-native-svg';
+import { useTranslation } from 'react-i18next';
 import { dbg } from '@/utils/debug';
 
 // ---------------------------------------------------------------------------
@@ -22,8 +23,8 @@ export type CreateChannelType = 'text' | 'voice' | 'announcement' | 'forum' | 'f
 
 interface ChannelTypeOption {
   type: CreateChannelType;
-  label: string;
-  description: string;
+  labelKey: string;
+  descriptionKey: string;
   icon: (props: { size: number; color: string }) => React.ReactNode;
 }
 
@@ -82,36 +83,11 @@ function FilesChannelIcon({ size, color }: { size: number; color: string }) {
 // ---------------------------------------------------------------------------
 
 const CHANNEL_TYPES: ChannelTypeOption[] = [
-  {
-    type: 'text',
-    label: 'Text',
-    description: 'Send messages, images, and files',
-    icon: TextChannelIcon,
-  },
-  {
-    type: 'voice',
-    label: 'Voice',
-    description: 'Talk with voice and video',
-    icon: VoiceChannelIcon,
-  },
-  {
-    type: 'announcement',
-    label: 'Announcement',
-    description: 'Important updates (only admins can post)',
-    icon: AnnouncementChannelIcon,
-  },
-  {
-    type: 'forum',
-    label: 'Forum',
-    description: 'Organized discussions with threads',
-    icon: ForumChannelIcon,
-  },
-  {
-    type: 'files',
-    label: 'Files',
-    description: 'Shared file storage with folders',
-    icon: FilesChannelIcon,
-  },
+  { type: 'text', labelKey: 'channelTypeText', descriptionKey: 'channelDescText', icon: TextChannelIcon },
+  { type: 'voice', labelKey: 'channelTypeVoice', descriptionKey: 'channelDescVoice', icon: VoiceChannelIcon },
+  { type: 'announcement', labelKey: 'channelTypeAnnouncement', descriptionKey: 'channelDescAnnouncement', icon: AnnouncementChannelIcon },
+  { type: 'forum', labelKey: 'channelTypeForum', descriptionKey: 'channelDescForum', icon: ForumChannelIcon },
+  { type: 'files', labelKey: 'channelTypeFiles', descriptionKey: 'channelDescFiles', icon: FilesChannelIcon },
 ];
 
 // ---------------------------------------------------------------------------
@@ -141,6 +117,7 @@ export function ChannelCreateDialog({
 }: ChannelCreateDialogProps) {
   if (__DEV__) dbg.trackRender('ChannelCreateDialog');
   const { theme } = useTheme();
+  const { t } = useTranslation('common');
   const tc = theme.colors;
   const [name, setName] = useState('');
   const [channelType, setChannelType] = useState<CreateChannelType>('text');
@@ -158,18 +135,18 @@ export function ChannelCreateDialog({
   const handleSubmit = useCallback(async () => {
     const trimmed = name.trim();
     if (!trimmed) {
-      setError('Channel name is required.');
+      setError(t('channelNameRequired'));
       return;
     }
     if (trimmed.length > 100) {
-      setError('Channel name must be 100 characters or less.');
+      setError(t('channelNameMaxLength'));
       return;
     }
     setError(null);
     try {
       await onSubmit(trimmed, channelType);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create channel.');
+      setError(err instanceof Error ? err.message : t('failedCreateChannel'));
     }
   }, [name, channelType, onSubmit]);
 
@@ -186,15 +163,15 @@ export function ChannelCreateDialog({
     <Dialog
       open={open}
       onClose={handleClose}
-      title="Create Channel"
+      title={t('createChannel')}
       size="sm"
       footer={
         <>
           <Button variant="tertiary" onPress={handleClose} disabled={submitting}>
-            Cancel
+            {t('cancel')}
           </Button>
           <Button onPress={handleSubmit} disabled={!canSubmit}>
-            {submitting ? 'Creating...' : 'Create Channel'}
+            {submitting ? t('creating') : t('createChannel')}
           </Button>
         </>
       }
@@ -211,7 +188,7 @@ export function ChannelCreateDialog({
               letterSpacing: 0.6,
             }}
           >
-            Channel Type
+            {t('channelType')}
           </Text>
           <View style={{ gap: 4 }}>
             {CHANNEL_TYPES.map((option) => {
@@ -260,14 +237,14 @@ export function ChannelCreateDialog({
                       weight="medium"
                       style={{ color: tc.text.primary }}
                     >
-                      {option.label}
+                      {t(option.labelKey)}
                     </Text>
                     <Text
                       size="xs"
                       style={{ color: tc.text.muted }}
                       numberOfLines={1}
                     >
-                      {option.description}
+                      {t(option.descriptionKey)}
                     </Text>
                   </View>
                   {/* Radio indicator */}
@@ -310,7 +287,7 @@ export function ChannelCreateDialog({
               letterSpacing: 0.6,
             }}
           >
-            Channel Name
+            {t('channelName')}
           </Text>
           <Input
             value={name}

@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { Dialog, Button, Text, useTheme, Box } from '@coexist/wisp-react-native';
 import { dbg } from '@/utils/debug';
 
@@ -17,28 +18,28 @@ export function RestartUpdateDialog({
 }: RestartUpdateDialogProps) {
   if (__DEV__) dbg.trackRender('RestartUpdateDialog');
   const { theme } = useTheme();
+  const { t } = useTranslation('common');
 
   return (
     <Dialog
       open={open}
       onClose={onClose}
-      title="Update Ready"
+      title={t('updateReady')}
       size="sm"
       footer={
         <>
           <Button variant="tertiary" onPress={onClose}>
-            Later
+            {t('later')}
           </Button>
           <Button variant="primary" onPress={onRestart}>
-            Restart Now
+            {t('restartNow')}
           </Button>
         </>
       }
     >
       <Box style={{ gap: 8 }}>
         <Text size="sm" style={{ color: theme.colors.text.secondary }}>
-          Umbra v{version} has been downloaded and is ready to install. The app
-          will restart to apply the update.
+          {t('updateReadyDesc', { version })}
         </Text>
       </Box>
     </Dialog>
