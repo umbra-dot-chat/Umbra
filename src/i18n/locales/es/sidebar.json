@@ -16,5 +16,7 @@
   "searchSettings": "Buscar ajustes...",
   "plugins": "Complementos",
   "themes": "Temas",
-  "fonts": "Fuentes"
+  "fonts": "Fuentes",
+  "noSettingsFound": "No se encontraron ajustes",
+  "marketplace": "Tienda"
 }

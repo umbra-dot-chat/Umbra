@@ -16,5 +16,7 @@
   "searchSettings": "設定を検索...",
   "plugins": "プラグイン",
   "themes": "テーマ",
-  "fonts": "フォント"
+  "fonts": "フォント",
+  "noSettingsFound": "設定が見つかりません",
+  "marketplace": "マーケットプレイス"
 }

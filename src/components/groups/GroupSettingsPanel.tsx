@@ -37,6 +37,7 @@ import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { useGroups } from '@/hooks/useGroups';
 import { useAuth } from '@/contexts/AuthContext';
 import type { Group, GroupMember } from '@umbra/service';
+import { useTranslation } from 'react-i18next';
 import { dbg } from '@/utils/debug';
 
 const SRC = 'GroupSettingsPanel';
@@ -112,6 +113,7 @@ function SettingRow({ label, description, children, vertical = false }: {
 
 export function GroupSettingsPanel({ groupId, onClose }: GroupSettingsPanelProps) {
   if (__DEV__) dbg.trackRender('GroupSettingsPanel');
+  const { t } = useTranslation('settings');
   const { theme } = useTheme();
   const tc = theme.colors;
   const { identity } = useAuth();
@@ -287,43 +289,43 @@ export function GroupSettingsPanel({ groupId, onClose }: GroupSettingsPanelProps
              ══════════════════════════════════════════════════════════════ */}
           <Box>
             <SectionHeader
-              title="General"
-              description="Group name and description"
+              title={t('groupGeneral')}
+              description={t('groupGeneralDesc')}
               icon={<SettingsIcon size={13} color={tc.text.secondary} />}
             />
 
             {isEditing ? (
               <VStack style={{ gap: 10 }}>
-                <SettingRow label="Group Name" vertical>
+                <SettingRow label={t('groupName')} vertical>
                   <Input
                     value={editName}
                     onChangeText={setEditName}
-                    placeholder="Group name"
+                    placeholder={t('groupNamePlaceholder')}
                     gradientBorder
                   />
                 </SettingRow>
-                <SettingRow label="Description" vertical>
+                <SettingRow label={t('groupDescription')} vertical>
                   <TextArea
                     value={editDescription}
                     onChangeText={setEditDescription}
-                    placeholder="What's this group about?"
+                    placeholder={t('groupDescriptionPlaceholder')}
                     numberOfLines={2}
                     gradientBorder
                   />
                 </SettingRow>
                 <HStack style={{ gap: 8, justifyContent: 'flex-end', marginTop: 4 }}>
                   <Button variant="tertiary" size="sm" onPress={() => setIsEditing(false)}>
-                    Cancel
+                    {t('cancel')}
                   </Button>
                   <Button size="sm" onPress={handleSave} disabled={isSaving || !editName.trim()}>
-                    {isSaving ? 'Saving...' : 'Save'}
+                    {isSaving ? t('saving') : t('save')}
                   </Button>
                 </HStack>
               </VStack>
             ) : (
               <VStack style={{ gap: 4 }}>
                 <Text style={{ fontSize: 16, fontWeight: '600', color: tc.text.primary } as TextStyle}>
-                  {group?.name || 'Loading...'}
+                  {group?.name || t('loading')}
                 </Text>
                 {group?.description ? (
                   <Text style={{ fontSize: 13, color: tc.text.secondary } as TextStyle}>
@@ -331,7 +333,7 @@ export function GroupSettingsPanel({ groupId, onClose }: GroupSettingsPanelProps
                   </Text>
                 ) : (
                   <Text style={{ fontSize: 13, color: tc.text.muted, fontStyle: 'italic' } as TextStyle}>
-                    No description
+                    {t('groupNoDescription')}
                   </Text>
                 )}
                 <Button
@@ -340,7 +342,7 @@ export function GroupSettingsPanel({ groupId, onClose }: GroupSettingsPanelProps
                   onPress={startEditing}
                   style={{ alignSelf: 'flex-start', marginTop: 4 }}
                 >
-                  Edit
+                  {t('edit')}
                 </Button>
               </VStack>
             )}
@@ -353,14 +355,14 @@ export function GroupSettingsPanel({ groupId, onClose }: GroupSettingsPanelProps
              ══════════════════════════════════════════════════════════════ */}
           <Box>
             <SectionHeader
-              title="Members"
-              description="Manage group members"
+              title={t('groupMembers')}
+              description={t('groupMembersDesc')}
               icon={<UsersIcon size={13} color={tc.text.secondary} />}
             />
 
             {members.length === 0 ? (
               <Text style={{ fontSize: 13, color: tc.text.muted, fontStyle: 'italic' } as TextStyle}>
-                Loading members...
+                {t('groupLoadingMembers')}
               </Text>
             ) : (
               <VStack style={{ gap: 2 }}>
@@ -380,11 +382,11 @@ export function GroupSettingsPanel({ groupId, onClose }: GroupSettingsPanelProps
                           </Text>
                           {member.role === 'admin' && (
                             <Box style={styles.roleBadge}>
-                              <Text style={styles.roleText}>Admin</Text>
+                              <Text style={styles.roleText}>{t('groupAdmin')}</Text>
                             </Box>
                           )}
                           {member.memberDid === identity?.did && (
-                            <Text style={{ fontSize: 11, color: tc.text.muted } as TextStyle}>(you)</Text>
+                            <Text style={{ fontSize: 11, color: tc.text.muted } as TextStyle}>{t('groupYou')}</Text>
                           )}
                         </HStack>
                         <Text style={styles.memberDid} numberOfLines={1}>
@@ -414,22 +416,22 @@ export function GroupSettingsPanel({ groupId, onClose }: GroupSettingsPanelProps
              ══════════════════════════════════════════════════════════════ */}
           <Box>
             <SectionHeader
-              title="Security"
-              description="Encryption and key management"
+              title={t('groupSecurity')}
+              description={t('groupSecurityDesc')}
               icon={<ShieldIcon size={13} color={tc.text.secondary} />}
             />
 
             <VStack style={{ gap: 12 }}>
               <SettingRow
-                label="End-to-end encrypted"
-                description="Messages are encrypted with a shared group key"
+                label={t('groupE2ee')}
+                description={t('groupE2eeDesc')}
               >
                 <ShieldIcon size={16} color={tc.accent.primary} />
               </SettingRow>
 
               <SettingRow
-                label="Rotate Key"
-                description="Generate a new encryption key. Recommended after removing a member."
+                label={t('groupRotateKey')}
+                description={t('groupRotateKeyDesc')}
               >
                 <Button
                   variant="secondary"
@@ -438,7 +440,7 @@ export function GroupSettingsPanel({ groupId, onClose }: GroupSettingsPanelProps
                   disabled={isRotating}
                   iconLeft={<KeyIcon size={14} color={tc.text.secondary} />}
                 >
-                  {isRotating ? 'Rotating...' : rotateSuccess ? 'Rotated!' : 'Rotate'}
+                  {isRotating ? t('rotating') : rotateSuccess ? t('rotated') : t('rotate')}
                 </Button>
               </SettingRow>
             </VStack>
@@ -451,15 +453,15 @@ export function GroupSettingsPanel({ groupId, onClose }: GroupSettingsPanelProps
              ══════════════════════════════════════════════════════════════ */}
           <Box>
             <SectionHeader
-              title="Danger Zone"
-              description="Irreversible actions"
+              title={t('groupDangerZone')}
+              description={t('groupDangerDesc')}
               icon={<AlertTriangleIcon size={13} color={tc.status?.danger || '#ef4444'} />}
             />
 
             <VStack style={{ gap: 12 }}>
               <SettingRow
-                label="Leave Group"
-                description="You will no longer receive messages from this group"
+                label={t('groupLeave')}
+                description={t('groupLeaveDesc')}
               >
                 <Button
                   variant="destructive"
@@ -467,21 +469,21 @@ export function GroupSettingsPanel({ groupId, onClose }: GroupSettingsPanelProps
                   onPress={() => setConfirmLeave(true)}
                   iconLeft={<LogOutIcon size={14} color="#fff" />}
                 >
-                  Leave
+                  {t('leave')}
                 </Button>
               </SettingRow>
 
               {isAdmin && (
                 <SettingRow
-                  label="Delete Group"
-                  description="Permanently remove this group for all members"
+                  label={t('groupDelete')}
+                  description={t('groupDeleteDesc')}
                 >
                   <Button
                     variant="destructive"
                     size="sm"
                     onPress={() => setConfirmDelete(true)}
                   >
-                    Delete
+                    {t('delete')}
                   </Button>
                 </SettingRow>
               )}
@@ -494,9 +496,9 @@ export function GroupSettingsPanel({ groupId, onClose }: GroupSettingsPanelProps
       <ConfirmDialog
         open={confirmLeave}
         onClose={() => setConfirmLeave(false)}
-        title="Leave Group"
-        message={`Are you sure you want to leave "${group?.name || 'this group'}"? You will no longer receive messages and will need a new invite to rejoin.`}
-        confirmLabel="Leave Group"
+        title={t('groupLeaveTitle')}
+        message={t('groupLeaveConfirm', { name: group?.name || 'this group' })}
+        confirmLabel={t('groupLeave')}
         onConfirm={handleLeave}
         submitting={isSubmitting}
       />
@@ -504,9 +506,9 @@ export function GroupSettingsPanel({ groupId, onClose }: GroupSettingsPanelProps
       <ConfirmDialog
         open={confirmDelete}
         onClose={() => setConfirmDelete(false)}
-        title="Delete Group"
-        message={`Are you sure you want to permanently delete "${group?.name || 'this group'}"? This action cannot be undone and will remove the group for all members.`}
-        confirmLabel="Delete Group"
+        title={t('groupDeleteTitle')}
+        message={t('groupDeleteConfirm', { name: group?.name || 'this group' })}
+        confirmLabel={t('groupDelete')}
         onConfirm={handleDelete}
         submitting={isSubmitting}
       />
@@ -514,9 +516,9 @@ export function GroupSettingsPanel({ groupId, onClose }: GroupSettingsPanelProps
       <ConfirmDialog
         open={confirmRemoveDid !== null}
         onClose={() => setConfirmRemoveDid(null)}
-        title="Remove Member"
-        message={`Are you sure you want to remove ${confirmRemoveName} from the group? You should rotate the group key after removing a member.`}
-        confirmLabel="Remove"
+        title={t('groupRemoveMemberTitle')}
+        message={t('groupRemoveMemberConfirm', { name: confirmRemoveName })}
+        confirmLabel={t('groupRemove')}
         onConfirm={handleRemoveMember}
         submitting={isSubmitting}
       />

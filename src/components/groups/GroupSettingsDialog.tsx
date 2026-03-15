@@ -12,6 +12,7 @@ import { Box, Button, Overlay, HStack, Text, useTheme } from '@coexist/wisp-reac
 import { SettingsIcon, XIcon } from '@/components/ui';
 import { GroupSettingsPanel } from './GroupSettingsPanel';
 import { useIsMobile } from '@/hooks/useIsMobile';
+import { useTranslation } from 'react-i18next';
 import { dbg } from '@/utils/debug';
 
 export interface GroupSettingsDialogProps {
@@ -22,6 +23,7 @@ export interface GroupSettingsDialogProps {
 
 export function GroupSettingsDialog({ open, onClose, groupId }: GroupSettingsDialogProps) {
   if (__DEV__) dbg.trackRender('GroupSettingsDialog');
+  const { t } = useTranslation('settings');
   const { theme } = useTheme();
   const tc = theme.colors;
   const isDark = theme.mode === 'dark';
@@ -77,7 +79,7 @@ export function GroupSettingsDialog({ open, onClose, groupId }: GroupSettingsDia
           <HStack style={{ alignItems: 'center', gap: 8 }}>
             <SettingsIcon size={18} color={tc.text.primary} />
             <Text style={{ fontSize: 16, fontWeight: '600', color: tc.text.primary } as TextStyle}>
-              Group Settings
+              {t('groupSettingsTitle')}
             </Text>
           </HStack>
           <Button variant="tertiary" onPress={onClose} accessibilityLabel="Close group settings" iconLeft={<XIcon size={18} color={tc.text.secondary} />} size="sm" />

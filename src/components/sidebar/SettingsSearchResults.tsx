@@ -8,6 +8,7 @@
 import React from 'react';
 import { Pressable, ScrollView } from 'react-native';
 import { Box, Text, useTheme } from '@coexist/wisp-react-native';
+import { useTranslation } from 'react-i18next';
 import { HighlightedText } from '@/components/search/HighlightedText';
 import type { SettingsSearchItem } from '@/services/SettingsSearchService';
 
@@ -19,6 +20,7 @@ interface SettingsSearchResultsProps {
 
 export function SettingsSearchResults({ results, query, onSelect }: SettingsSearchResultsProps) {
   const { theme, mode } = useTheme();
+  const { t } = useTranslation('sidebar');
   const tc = theme.colors;
   const isDark = mode === 'dark';
   const terms = query.trim().split(/\s+/).filter(Boolean);
@@ -27,7 +29,7 @@ export function SettingsSearchResults({ results, query, onSelect }: SettingsSear
     return (
       <Box style={{ alignItems: 'center', paddingVertical: 24 }}>
         <Text size="sm" style={{ color: tc.text.secondary }}>
-          No settings found
+          {t('noSettingsFound')}
         </Text>
       </Box>
     );

@@ -16,5 +16,7 @@
   "searchSettings": "Поиск настроек...",
   "plugins": "Плагины",
   "themes": "Темы",
-  "fonts": "Шрифты"
+  "fonts": "Шрифты",
+  "noSettingsFound": "Настройки не найдены",
+  "marketplace": "Маркетплейс"
 }

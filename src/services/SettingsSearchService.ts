@@ -3,6 +3,9 @@
  *
  * Builds a flat index from NAV_ITEMS and SUBCATEGORIES, with extra keywords
  * for discoverability. Returns matching items for a given query string.
+ *
+ * Accepts an optional translation function so labels are searched in the
+ * user's current language while keywords remain in English for fallback.
  */
 
 import { NAV_ITEMS, SUBCATEGORIES } from '@/components/modals/SettingsDialog';
@@ -16,6 +19,50 @@ export interface SettingsSearchItem {
   keywords: string[];
   icon: React.ComponentType<{ size?: number; color?: string }>;
 }
+
+/** Translation key mapping for section and subsection labels */
+const SECTION_LABEL_KEYS: Record<SettingsSection, string> = {
+  account: 'sectionAccount',
+  appearance: 'sectionAppearance',
+  messaging: 'sectionMessaging',
+  notifications: 'sectionNotifications',
+  sounds: 'sectionSounds',
+  privacy: 'sectionPrivacy',
+  'audio-video': 'sectionAudioVideo',
+  network: 'sectionNetwork',
+  data: 'sectionData',
+  plugins: 'sectionPlugins',
+  'keyboard-shortcuts': 'sectionShortcuts',
+  about: 'sectionAbout',
+  developer: 'sectionDeveloper',
+};
+
+const SUB_LABEL_KEYS: Record<string, string> = {
+  profile: 'subProfile',
+  identity: 'subIdentity',
+  sharing: 'subSharing',
+  sync: 'subSync',
+  danger: 'subDangerZone',
+  theme: 'subTheme',
+  'dark-mode': 'subDarkMode',
+  colors: 'subColors',
+  'text-size': 'subTextSize',
+  font: 'subFont',
+  language: 'subLanguage',
+  discovery: 'subFriendDiscovery',
+  visibility: 'subVisibility',
+  security: 'subSecurity',
+  calling: 'subCalling',
+  video: 'subVideo',
+  audio: 'subAudio',
+  devices: 'subDevices',
+  connection: 'subConnection',
+  relays: 'subRelays',
+  peers: 'subPeers',
+  diagnostics: 'subCallDiagnostics',
+  capture: 'subMediaCapture',
+  testing: 'subTesting',
+};
 
 /** Extra keywords per section/subsection for discoverability */
 const KEYWORDS: Partial<Record<string, string[]>> = {
@@ -60,16 +107,20 @@ const KEYWORDS: Partial<Record<string, string[]>> = {
   'developer/testing': ['test', 'debug', 'swarm'],
 };
 
+type TranslationFn = (key: string) => string;
+
 /** Build the flat search index from NAV_ITEMS + SUBCATEGORIES */
-function buildIndex(): SettingsSearchItem[] {
+function buildIndex(t?: TranslationFn): SettingsSearchItem[] {
   const items: SettingsSearchItem[] = [];
 
   for (const nav of NAV_ITEMS) {
+    const translatedLabel = t ? t(SECTION_LABEL_KEYS[nav.id]) : nav.label;
+
     // Add top-level section
     items.push({
       sectionId: nav.id,
-      label: nav.label,
-      keywords: KEYWORDS[nav.id] ?? [],
+      label: translatedLabel,
+      keywords: [...(KEYWORDS[nav.id] ?? []), nav.label.toLowerCase()],
       icon: nav.icon,
     });
 
@@ -77,12 +128,16 @@ function buildIndex(): SettingsSearchItem[] {
     const subs = SUBCATEGORIES[nav.id];
     if (subs) {
       for (const sub of subs) {
+        const translatedSubLabel = t && SUB_LABEL_KEYS[sub.id]
+          ? t(SUB_LABEL_KEYS[sub.id])
+          : sub.label;
+
         items.push({
           sectionId: nav.id,
           subsectionId: sub.id,
-          label: sub.label,
-          parentLabel: nav.label,
-          keywords: KEYWORDS[`${nav.id}/${sub.id}`] ?? [],
+          label: translatedSubLabel,
+          parentLabel: translatedLabel,
+          keywords: [...(KEYWORDS[`${nav.id}/${sub.id}`] ?? []), sub.label.toLowerCase()],
           icon: nav.icon,
         });
       }
@@ -92,22 +147,19 @@ function buildIndex(): SettingsSearchItem[] {
   return items;
 }
 
-let _index: SettingsSearchItem[] | null = null;
-
-function getIndex(): SettingsSearchItem[] {
-  if (!_index) _index = buildIndex();
-  return _index;
-}
-
 /**
  * Search settings by query string. Returns matching items sorted by relevance
  * (label match first, then keyword match).
+ *
+ * @param query  The search string
+ * @param t      Optional translation function (from useTranslation('settings').t)
+ *               to search against translated labels
  */
-export function searchSettings(query: string): SettingsSearchItem[] {
+export function searchSettings(query: string, t?: TranslationFn): SettingsSearchItem[] {
   const q = query.trim().toLowerCase();
   if (!q) return [];
 
-  const index = getIndex();
+  const index = buildIndex(t);
   const terms = q.split(/\s+/).filter(Boolean);
 
   const scored: Array<{ item: SettingsSearchItem; score: number }> = [];

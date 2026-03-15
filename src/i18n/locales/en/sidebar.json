@@ -16,5 +16,7 @@
   "searchSettings": "Search settings...",
   "plugins": "Plugins",
   "themes": "Themes",
-  "fonts": "Fonts"
+  "fonts": "Fonts",
+  "noSettingsFound": "No settings found",
+  "marketplace": "Marketplace"
 }

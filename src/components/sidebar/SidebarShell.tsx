@@ -8,7 +8,8 @@
  * Children receive layout info via SidebarShellContext (hasBottomPanel, contentFlex).
  */
 
-import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Platform, type View } from 'react-native';
 import {
   Box,
@@ -152,6 +153,7 @@ export function SidebarShell({
 }: SidebarShellProps) {
   if (__DEV__) dbg.trackRender('SidebarShell');
   const { theme } = useTheme();
+  const { t: tSettings } = useTranslation('settings');
 
   // ── Sidebar search ──────────────────────────────────────────────────────
   const isSettingsScope = searchScope === 'settings';
@@ -166,14 +168,14 @@ export function SidebarShell({
   const query = isSettingsScope ? settingsQuery : convQuery;
   const setQuery = isSettingsScope ? setSettingsQuery : setConvQuery;
 
-  // Run settings search on query change
+  // Run settings search on query change (pass tSettings for translated labels)
   useEffect(() => {
     if (isSettingsScope && settingsQuery.trim()) {
-      setSettingsResults(searchSettings(settingsQuery));
+      setSettingsResults(searchSettings(settingsQuery, tSettings));
     } else {
       setSettingsResults([]);
     }
-  }, [isSettingsScope, settingsQuery]);
+  }, [isSettingsScope, settingsQuery, tSettings]);
 
   // Only expand search results when there's an active query
   const hasQuery = query.trim().length > 0;

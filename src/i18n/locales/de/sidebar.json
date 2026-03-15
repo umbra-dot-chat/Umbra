@@ -16,5 +16,7 @@
   "searchSettings": "Einstellungen durchsuchen...",
   "plugins": "Plugins",
   "themes": "Designs",
-  "fonts": "Schriftarten"
+  "fonts": "Schriftarten",
+  "noSettingsFound": "Keine Einstellungen gefunden",
+  "marketplace": "Marktplatz"
 }

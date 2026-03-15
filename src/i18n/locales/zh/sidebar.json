@@ -16,5 +16,7 @@
   "searchSettings": "搜索设置...",
   "plugins": "插件",
   "themes": "主题",
-  "fonts": "字体"
+  "fonts": "字体",
+  "noSettingsFound": "未找到设置",
+  "marketplace": "市场"
 }

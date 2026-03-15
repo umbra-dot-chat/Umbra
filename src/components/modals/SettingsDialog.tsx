@@ -698,6 +698,7 @@ function AccountSyncSubsection() {
   const { identity } = useAuth();
   const { theme } = useTheme();
   const tc = theme.colors;
+  const { t } = useTranslation('settings');
   const {
     syncEnabled, syncStatus, lastSyncedAt, syncError,
     setSyncEnabled, triggerSync, deleteSyncData,
@@ -737,43 +738,43 @@ function AccountSyncSubsection() {
     }
   }, [deleteSyncData]);
 
-  const statusLabel = syncStatus === 'synced' ? 'Synced'
-    : syncStatus === 'syncing' ? 'Syncing...'
-    : syncStatus === 'error' ? 'Sync error'
-    : syncStatus === 'disabled' ? 'Disabled'
-    : 'Idle';
+  const statusLabel = syncStatus === 'synced' ? t('syncStatusSynced')
+    : syncStatus === 'syncing' ? t('syncStatusSyncing')
+    : syncStatus === 'error' ? t('syncStatusError')
+    : syncStatus === 'disabled' ? t('syncStatusDisabled')
+    : t('syncStatusIdle');
 
   const statusColor = syncStatus === 'synced' ? tc.status.success
     : syncStatus === 'error' ? tc.status.danger
     : tc.text.muted;
 
   const lastSyncLabel = lastSyncedAt
-    ? `Last synced ${new Date(lastSyncedAt).toLocaleString()}`
-    : 'Never synced';
+    ? t('syncLastSynced', { date: new Date(lastSyncedAt).toLocaleString() })
+    : t('syncNeverSynced');
 
   return (
     <Box style={{ gap: 12 }} testID={TEST_IDS.SYNC.SETTINGS_SECTION}>
       <Box>
         <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
           <Text style={{ fontSize: 15, fontWeight: '600', color: tc.text.primary }}>
-            Cross-Device Sync
+            {t('syncCrossDevice')}
           </Text>
           <HelpIndicator
             id="settings-sync"
-            title="Account Sync"
+            title={t('syncTitle')}
             priority={45}
             size={14}
           >
             <HelpText>
-              Keep your friends, groups, preferences, and blocked users synced across all your devices.
+              {t('syncHelp')}
             </HelpText>
-            <HelpListItem>Data is encrypted with your recovery phrase</HelpListItem>
-            <HelpListItem>Only you can decrypt your synced data</HelpListItem>
-            <HelpListItem>Messages and files are NOT synced</HelpListItem>
+            <HelpListItem>{t('syncHelpEncrypted')}</HelpListItem>
+            <HelpListItem>{t('syncHelpOnlyYou')}</HelpListItem>
+            <HelpListItem>{t('syncHelpNoMessages')}</HelpListItem>
           </HelpIndicator>
         </Box>
         <Text style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
-          Encrypted sync of account data across devices.
+          {t('syncDescription')}
         </Text>
       </Box>
 
@@ -781,10 +782,10 @@ function AccountSyncSubsection() {
       <Box style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
         <Box style={{ flex: 1 }}>
           <Text style={{ fontSize: 14, color: tc.text.primary }}>
-            Enable sync
+            {t('syncEnable')}
           </Text>
           <Text style={{ fontSize: 12, color: tc.text.muted }}>
-            Automatically sync friends, groups, and preferences
+            {t('syncAutoDesc')}
           </Text>
         </Box>
         <Toggle checked={syncEnabled} onChange={setSyncEnabled} testID={TEST_IDS.SYNC.ENABLE_TOGGLE} />
@@ -828,7 +829,7 @@ function AccountSyncSubsection() {
               }}
             >
               <Text style={{ fontSize: 13, fontWeight: '600', color: tc.text.primary }}>
-                {isSyncing ? 'Syncing...' : 'Sync Now'}
+                {isSyncing ? t('syncing') : t('syncNow')}
               </Text>
             </Button>
 
@@ -840,13 +841,13 @@ function AccountSyncSubsection() {
               iconLeft={<TrashIcon size={14} color={tc.status.danger} />}
               style={{ borderColor: tc.status.dangerBorder, backgroundColor: tc.status.dangerSurface }}
               disabled={isDeleting}
-              accessibilityActions={[{ name: 'activate', label: 'Delete Synced Data' }]}
+              accessibilityActions={[{ name: 'activate', label: t('syncDeleteData') }]}
               onAccessibilityAction={(e: { nativeEvent: { actionName: string } }) => {
                 if (e.nativeEvent.actionName === 'activate') setShowDeleteConfirm(true);
               }}
             >
               <Text style={{ fontSize: 13, fontWeight: '600', color: tc.status.danger }}>
-                Delete Synced Data
+                {t('syncDeleteData')}
               </Text>
             </Button>
           </Box>
@@ -857,13 +858,13 @@ function AccountSyncSubsection() {
       <Dialog
         open={showDeleteConfirm}
         onClose={() => setShowDeleteConfirm(false)}
-        title="Delete Synced Data?"
+        title={t('syncDeleteTitle')}
         icon={<TrashIcon size={24} color={tc.status.danger} />}
         size="sm"
         footer={
           <HStack gap="sm" style={{ justifyContent: 'flex-end' }}>
             <Button variant="tertiary" onPress={() => setShowDeleteConfirm(false)}>
-              Cancel
+              {t('cancel')}
             </Button>
             <Button
               variant="secondary"
@@ -871,20 +872,20 @@ function AccountSyncSubsection() {
               testID={TEST_IDS.SYNC.DELETE_CONFIRM}
               style={{ borderColor: tc.status.dangerBorder, backgroundColor: tc.status.dangerSurface }}
               disabled={isDeleting}
-              accessibilityActions={[{ name: 'activate', label: 'Delete' }]}
+              accessibilityActions={[{ name: 'activate', label: t('delete') }]}
               onAccessibilityAction={(e: { nativeEvent: { actionName: string } }) => {
                 if (e.nativeEvent.actionName === 'activate') handleDelete();
               }}
             >
               <Text style={{ color: tc.status.danger, fontWeight: '600', fontSize: 14 }}>
-                {isDeleting ? 'Deleting...' : 'Delete'}
+                {isDeleting ? t('deleting') : t('delete')}
               </Text>
             </Button>
           </HStack>
         }
       >
         <Text style={{ fontSize: 13, color: tc.text.secondary, textAlign: 'center', lineHeight: 18 }}>
-          This will permanently delete your synced data from the relay server. Your local data will not be affected. This cannot be undone.
+          {t('syncDeleteWarning')}
         </Text>
       </Dialog>
     </Box>
@@ -1187,7 +1188,7 @@ function AccountSection() {
 
       {/* ── Profile subsection ─────────────────────────────────────────── */}
       <Box nativeID="sub-profile" style={{ gap: 16 }}>
-        <SettingRow label="Banner" description="A wide header image for your profile." vertical>
+        <SettingRow label={t('profileBanner')} description={t('profileBannerDesc')} vertical>
           <Pressable onPress={handleBannerPick}>
             <Box
               style={{
@@ -1211,7 +1212,7 @@ function AccountSection() {
                 />
               ) : (
                 <Text style={{ color: tc.text.muted, fontSize: 13 }}>
-                  Click to upload a banner image
+                  {t('profileBannerUpload')}
                 </Text>
               )}
             </Box>
@@ -1219,7 +1220,7 @@ function AccountSection() {
           {bannerPreview && (
             <HStack gap="sm" style={{ marginTop: 4 }}>
               <Button variant="tertiary" size="sm" onPress={handleBannerPick}>
-                Change Banner
+                {t('profileChangeBanner')}
               </Button>
               <Button
                 variant="tertiary"
@@ -1230,7 +1231,7 @@ function AccountSection() {
                   setBannerRemoved(true);
                 }}
               >
-                Remove Banner
+                {t('profileRemoveBanner')}
               </Button>
             </HStack>
           )}
@@ -1242,7 +1243,7 @@ function AccountSection() {
           )}
         </SettingRow>
 
-        <SettingRow label="Avatar" description="Your profile picture. Click to upload a new image." vertical>
+        <SettingRow label={t('profileAvatar')} description={t('profileAvatarDesc')} vertical>
           <HStack gap="md" style={{ alignItems: 'center' }}>
             <Pressable onPress={handleAvatarPick}>
               <Box
@@ -1269,7 +1270,7 @@ function AccountSection() {
               </Box>
             </Pressable>
             <Button variant="tertiary" size="sm" onPress={handleAvatarPick}>
-              Upload Photo
+              {t('profileUploadPhoto')}
             </Button>
           </HStack>
           {avatarError && (
@@ -1280,11 +1281,11 @@ function AccountSection() {
           )}
         </SettingRow>
 
-        <SettingRow label="Display Name" description="How others see you in conversations." vertical>
+        <SettingRow label={t('profileDisplayName')} description={t('profileDisplayNameDesc')} vertical>
           <Input
             value={displayName}
             onChangeText={setDisplayName}
-            placeholder="Your display name"
+            placeholder={t('profileDisplayNamePlaceholder')}
             icon={UserInputIcon}
             size="md"
             fullWidth
@@ -1293,18 +1294,18 @@ function AccountSection() {
           />
         </SettingRow>
 
-        <SettingRow label="Status" description="Set your availability status." vertical>
+        <SettingRow label={t('profileStatus')} description={t('profileStatusDesc')} vertical>
           <Select
             options={STATUS_OPTIONS}
             value={status}
             onChange={setStatus}
-            placeholder="Select status"
+            placeholder={t('profileSelectStatus')}
             size="md"
             fullWidth
           />
         </SettingRow>
 
-        <SettingRow label="Custom Status" description="Set a custom status message with emoji." vertical>
+        <SettingRow label={t('profileCustomStatus')} description={t('profileCustomStatusDesc')} vertical>
           {(customStatusText || customStatusEmoji) && (
             <MemberStatusDisplay
               text={customStatusText}
@@ -1313,7 +1314,7 @@ function AccountSection() {
             />
           )}
           <Button variant="secondary" size="sm" onPress={() => setStatusPickerOpen(true)}>
-            {customStatusText ? 'Edit Status' : 'Set Status'}
+            {customStatusText ? t('profileEditStatus') : t('profileSetStatus')}
           </Button>
         </SettingRow>
 
@@ -1329,7 +1330,7 @@ function AccountSection() {
           <HStack gap="xs" style={{ justifyContent: 'flex-end', alignItems: 'center' }}>
             {saved ? <CheckIcon size={14} color={tc.status.success} /> : null}
             <Text style={{ color: saved ? tc.status.success : tc.text.muted, fontSize: 12 }}>
-              {saving ? 'Saving...' : 'Saved'}
+              {saving ? t('saving') : t('saved')}
             </Text>
           </HStack>
         )}
@@ -1368,7 +1369,7 @@ function AccountSection() {
                     {identity.displayName}
                   </Text>
                   <Text style={{ fontSize: 12, color: tc.text.muted, marginTop: 2 }}>
-                    Member since {memberSince}
+                    {t('identityMemberSince', { date: memberSince })}
                   </Text>
                 </Box>
               </Box>
@@ -1378,22 +1379,22 @@ function AccountSection() {
               <Box>
                 <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
                   <Text style={{ fontSize: 11, fontWeight: '600', color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                    Decentralized ID
+                    {t('identityDecentralizedId')}
                   </Text>
                   <HelpIndicator
                     id="settings-did"
-                    title="Your Decentralized ID"
+                    title={t('identityDidTitle')}
                     priority={40}
                     size={14}
                   >
                     <HelpText>
-                      Your DID is derived from your cryptographic keys. It's your permanent, verifiable identity on the network.
+                      {t('identityDidHelp')}
                     </HelpText>
                     <HelpHighlight icon={<KeyIcon size={22} color={tc.accent.primary} />}>
-                      Unlike usernames, a DID can't be impersonated — it's mathematically tied to your private keys.
+                      {t('identityDidHighlight')}
                     </HelpHighlight>
-                    <HelpListItem>Share it with friends to connect</HelpListItem>
-                    <HelpListItem>It never changes unless you create a new wallet</HelpListItem>
+                    <HelpListItem>{t('identityShareHelp')}</HelpListItem>
+                    <HelpListItem>{t('identityNeverChanges')}</HelpListItem>
                   </HelpIndicator>
                 </Box>
                 <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -1485,24 +1486,24 @@ function AccountSection() {
             <Box>
               <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
                 <Text style={{ fontSize: 15, fontWeight: '600', color: tc.text.primary }}>
-                  Share Your Identity
+                  {t('sharingShareIdentity')}
                 </Text>
                 <HelpIndicator
                   id="settings-qr"
-                  title="QR Code Sharing"
+                  title={t('sharingQrTitle')}
                   priority={45}
                   size={14}
                 >
                   <HelpText>
-                    Others can scan this QR code with Umbra to instantly add you as a friend.
+                    {t('sharingQrHelp')}
                   </HelpText>
-                  <HelpListItem>The QR code contains your DID</HelpListItem>
-                  <HelpListItem>It's safe to share — it only contains your public identity</HelpListItem>
-                  <HelpListItem>Scanning initiates a friend request automatically</HelpListItem>
+                  <HelpListItem>{t('sharingQrContains')}</HelpListItem>
+                  <HelpListItem>{t('sharingQrSafe')}</HelpListItem>
+                  <HelpListItem>{t('sharingQrScan')}</HelpListItem>
                 </HelpIndicator>
               </Box>
               <Text style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
-                Others can scan this code to connect with you.
+                {t('sharingScanDesc')}
               </Text>
             </Box>
 
@@ -1534,25 +1535,25 @@ function AccountSection() {
         <Box>
           <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
             <Text style={{ fontSize: 15, fontWeight: '600', color: tc.status.danger }}>
-              Danger Zone
+              {t('dangerZone')}
             </Text>
             <HelpIndicator
               id="settings-danger"
-              title="Before You Log Out"
+              title={t('dangerLogoutHelpTitle')}
               icon="!"
               priority={50}
               size={14}
             >
               <HelpText>
-                Logging out removes your identity from this device. Make sure you've saved your recovery phrase first!
+                {t('dangerLogoutHelp')}
               </HelpText>
               <HelpHighlight icon={<AlertTriangleIcon size={22} color={tc.status.danger} />} color={tc.status.danger}>
-                Without your recovery phrase, you'll lose access to your identity, friends, and message history permanently.
+                {t('dangerLogoutHighlight')}
               </HelpHighlight>
             </HelpIndicator>
           </Box>
           <Text style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
-            Logging out will clear your current session.
+            {t('dangerLogoutDesc')}
           </Text>
         </Box>
 
@@ -1562,11 +1563,11 @@ function AccountSection() {
           iconLeft={<KeyIcon size={16} color={tc.status.danger} />}
           style={{ borderColor: tc.status.dangerBorder, backgroundColor: tc.status.dangerSurface }}
           testID={TEST_IDS.SETTINGS.ROTATE_KEY_BUTTON}
-          accessibilityActions={[{ name: 'activate', label: 'Rotate Encryption Key' }]}
+          accessibilityActions={[{ name: 'activate', label: t('dangerRotateKey') }]}
           onAccessibilityAction={(e: any) => { if (e.nativeEvent.actionName === 'activate') setShowRotateKeyConfirm(true); }}
         >
           <Text style={{ color: tc.status.danger, fontWeight: '600', fontSize: 14 }}>
-            Rotate Encryption Key
+            {t('dangerRotateKey')}
           </Text>
         </Button>
 
@@ -1576,11 +1577,11 @@ function AccountSection() {
           iconLeft={<LogOutIcon size={16} color={tc.status.danger} />}
           style={{ borderColor: tc.status.dangerBorder, backgroundColor: tc.status.dangerSurface }}
           testID={TEST_IDS.SETTINGS.LOGOUT_BUTTON}
-          accessibilityActions={[{ name: 'activate', label: 'Log Out' }]}
+          accessibilityActions={[{ name: 'activate', label: t('dangerLogOut') }]}
           onAccessibilityAction={(e: any) => { if (e.nativeEvent.actionName === 'activate') setShowLogoutConfirm(true); }}
         >
           <Text style={{ color: tc.status.danger, fontWeight: '600', fontSize: 14 }}>
-            Log Out
+            {t('dangerLogOut')}
           </Text>
         </Button>
       </Box>
@@ -1589,14 +1590,14 @@ function AccountSection() {
       <Dialog
         open={showRotateKeyConfirm}
         onClose={() => setShowRotateKeyConfirm(false)}
-        title="Rotate Encryption Key?"
+        title={t('dangerRotateKeyTitle')}
         icon={<KeyIcon size={24} color={tc.status.danger} />}
         size="sm"
         testID={TEST_IDS.SETTINGS.ROTATE_KEY_DIALOG}
         footer={
           <HStack gap="sm" style={{ justifyContent: 'flex-end' }}>
             <Button variant="tertiary" onPress={() => setShowRotateKeyConfirm(false)} testID={TEST_IDS.SETTINGS.ROTATE_KEY_CANCEL}>
-              Cancel
+              {t('cancel')}
             </Button>
             <Button
               variant="secondary"
@@ -1605,7 +1606,7 @@ function AccountSection() {
               testID={TEST_IDS.SETTINGS.ROTATE_KEY_CONFIRM}
             >
               <Text style={{ color: tc.status.danger, fontWeight: '600', fontSize: 14 }}>
-                {isRotatingKey ? 'Rotating...' : 'Rotate Key'}
+                {isRotatingKey ? t('rotating') : t('rotateKey')}
               </Text>
             </Button>
           </HStack>
@@ -1613,11 +1614,11 @@ function AccountSection() {
       >
         <Box style={{ gap: 12 }}>
           <Text style={{ fontSize: 13, color: tc.text.secondary, lineHeight: 18 }} testID={TEST_IDS.SETTINGS.ROTATE_KEY_WARNING}>
-            This will regenerate your encryption keys and notify all connected friends. Messages sent with your old key will no longer be decryptable by new sessions.
+            {t('dangerRotateKeyWarning')}
           </Text>
           <Box style={{ backgroundColor: tc.status.dangerSurface, borderRadius: 8, padding: 12, borderWidth: 1, borderColor: tc.status.dangerBorder }}>
             <Text style={{ fontSize: 12, color: tc.status.danger, fontWeight: '600' }}>
-              Warning: This action cannot be undone. Your friends will need to re-establish encrypted sessions.
+              {t('resetWarningMessage')} {t('dangerRotateKeyReestablish')}
             </Text>
           </Box>
         </Box>
@@ -1628,19 +1629,19 @@ function AccountSection() {
         <Dialog
           open={!!rotateKeyResult}
           onClose={() => setRotateKeyResult(null)}
-          title="Key Rotation Complete"
+          title={t('dangerRotateComplete')}
           icon={<KeyIcon size={24} color={tc.status.success} />}
           size="sm"
           testID={TEST_IDS.SETTINGS.ROTATE_KEY_SUCCESS}
           footer={
             <Button variant="primary" onPress={() => setRotateKeyResult(null)}>
-              Done
+              {t('done')}
             </Button>
           }
         >
           <Box style={{ gap: 8 }}>
             <Text style={{ fontSize: 13, color: tc.text.secondary, lineHeight: 18 }}>
-              Your encryption key has been rotated successfully. {rotateKeyResult.friendCount} friend{rotateKeyResult.friendCount !== 1 ? 's were' : ' was'} notified.
+              {t('keyRotationSuccess', { count: rotateKeyResult.friendCount })}
             </Text>
           </Box>
         </Dialog>
@@ -1650,12 +1651,12 @@ function AccountSection() {
         <Dialog
           open={!!rotateKeyError}
           onClose={() => setRotateKeyError(null)}
-          title="Key Rotation Failed"
+          title={t('keyRotationFailed')}
           icon={<AlertTriangleIcon size={24} color={tc.status.danger} />}
           size="sm"
           footer={
             <Button variant="primary" onPress={() => setRotateKeyError(null)}>
-              OK
+              {t('ok')}
             </Button>
           }
         >
@@ -1669,14 +1670,14 @@ function AccountSection() {
       <Dialog
         open={showLogoutConfirm}
         onClose={() => setShowLogoutConfirm(false)}
-        title="Log Out?"
+        title={t('logoutTitle')}
         icon={<LogOutIcon size={24} color={tc.status.danger} />}
         size="sm"
         testID={TEST_IDS.COMMON.CONFIRM_DIALOG}
         footer={
           <HStack gap="sm" style={{ justifyContent: 'flex-end' }}>
             <Button variant="tertiary" onPress={() => setShowLogoutConfirm(false)} testID={TEST_IDS.COMMON.CONFIRM_NO}>
-              Cancel
+              {t('cancel')}
             </Button>
             <Button
               variant="secondary"
@@ -1685,7 +1686,7 @@ function AccountSection() {
               testID={TEST_IDS.COMMON.CONFIRM_YES}
             >
               <Text style={{ color: tc.status.danger, fontWeight: '600', fontSize: 14 }}>
-                Log Out
+                {t('logoutButton')}
               </Text>
             </Button>
           </HStack>
@@ -1694,7 +1695,7 @@ function AccountSection() {
         <Box style={{ alignItems: 'center', gap: 12 }}>
           <Image source={umbraDeadImage} style={{ width: 160, height: 160 }} resizeMode="contain" />
           <Text style={{ fontSize: 13, color: tc.text.secondary, textAlign: 'center', lineHeight: 18 }}>
-            You'll be signed out of this account. Your account data is saved and you can sign back in from the login screen.
+            {t('logoutMessage')}
           </Text>
         </Box>
       </Dialog>
@@ -1713,7 +1714,7 @@ function AppearanceSection() {
   const themeOptions = useMemo<InlineDropdownOption[]>(() => {
     const installed = themes.filter((th) => installedThemeIds.has(th.id));
     return [
-      { value: 'default', label: 'Default', description: t('defaultThemeDesc') },
+      { value: 'default', label: t('defaultThemeOption'), description: t('defaultThemeDesc') },
       ...installed.map((th) => ({
         value: th.id,
         label: th.name,
@@ -1839,7 +1840,7 @@ function TextSizeSettingRow({ value, onChange }: { value: string; onChange: (v: 
         options={TEXT_SIZE_OPTIONS}
         value={value}
         onChange={(v) => onChange(v as TextSize)}
-        placeholder="Select size"
+        placeholder={t('selectSize')}
         testID={TEST_IDS.SETTINGS.FONT_SIZE}
       />
     </SettingRow>
@@ -1939,14 +1940,14 @@ function NotificationsSection() {
     <Box style={{ gap: 20 }}>
       <SectionHeader
         title={t('sectionNotifications')}
-        description="Control how and when you receive alerts and updates."
+        description={t('notificationsDesc')}
       />
 
-      <SettingRow label="Push Notifications" description="Receive push notifications for new messages and mentions.">
+      <SettingRow label={t('notifPush')} description={t('notifPushDesc')}>
         <SoundToggle checked={pushEnabled} onChange={() => setPushEnabled((p) => !p)} />
       </SettingRow>
 
-      <SettingRow label="Message Preview" description="Show message content in notification banners.">
+      <SettingRow label={t('notifPreview')} description={t('notifPreviewDesc')}>
         <SoundToggle checked={messagePreview} onChange={() => setMessagePreview((p) => !p)} />
       </SettingRow>
     </Box>
@@ -1990,21 +1991,21 @@ function SoundsSection() {
     <Box style={{ gap: 20 }}>
       <SectionHeader
         title={t('sectionSounds')}
-        description="Choose a sound theme and control which sounds play."
+        description={t('soundsDesc')}
       />
 
-      <SettingRow label="Enable Sounds" description="Master toggle for all UI sounds.">
+      <SettingRow label={t('soundsEnable')} description={t('soundsEnableDesc')}>
         <SoundToggle checked={!muted} onChange={() => setMuted(!muted)} />
       </SettingRow>
 
       {!muted && (
         <>
-          <SettingRow label="Sound Theme" description="Choose the style of sounds." vertical>
+          <SettingRow label={t('soundsTheme')} description={t('soundsThemeDesc')} vertical>
             <Select
               options={themeOptions}
               value={activeTheme}
               onChange={(v) => setActiveTheme(v as SoundThemeId)}
-              placeholder="Select theme"
+              placeholder={t('soundsSelectTheme')}
               size="md"
               fullWidth
             />
@@ -2018,7 +2019,7 @@ function SoundsSection() {
             })()}
           </SettingRow>
 
-          <SettingRow label="Master Volume" description={`${masterPct}%`} vertical>
+          <SettingRow label={t('soundsMasterVolume')} description={`${masterPct}%`} vertical>
             <Slider
               value={masterPct}
               min={0}
@@ -2199,7 +2200,7 @@ function PrivacySection() {
     <Box style={{ gap: 20 }}>
       <SectionHeader
         title={t('sectionPrivacy')}
-        description="Manage your visibility and control what others can see."
+        description={t('privacyDesc')}
       />
 
       <Box nativeID="sub-discovery">
@@ -2209,44 +2210,44 @@ function PrivacySection() {
       <Box nativeID="sub-visibility">
           <Box style={{ gap: 20 }}>
             <SettingRow
-              label="Read Receipts"
-              description="Let others know when you've seen their messages."
+              label={t('privacyReadReceipts')}
+              description={t('privacyReadReceiptsDesc')}
               helpIndicator={
                 <HelpIndicator
                   id="settings-read-receipts"
-                  title="Read Receipts"
+                  title={t('privacyReadReceiptsHelpTitle')}
                   priority={60}
                   size={14}
                 >
                   <HelpText>
                     When enabled, others can see when you've read their messages (shown as a double checkmark).
                   </HelpText>
-                  <HelpListItem>This is a two-way setting — you also see when they've read yours</HelpListItem>
-                  <HelpListItem>Disable for more privacy</HelpListItem>
+                  <HelpListItem>{t('privacyReadReceiptsHelp1')}</HelpListItem>
+                  <HelpListItem>{t('privacyReadReceiptsHelp2')}</HelpListItem>
                 </HelpIndicator>
               }
             >
               <SoundToggle checked={readReceipts} onChange={handleReadReceiptsToggle} />
             </SettingRow>
 
-            <SettingRow label="Typing Indicators" description="Show when you are typing a message to others.">
+            <SettingRow label={t('privacyTypingIndicators')} description={t('privacyTypingIndicatorsDesc')}>
               <SoundToggle checked={typingIndicators} onChange={() => setTypingIndicators((p) => !p)} />
             </SettingRow>
           </Box>
 
-          <SettingRow label="Online Status" description="Show your online status to other users.">
+          <SettingRow label={t('privacyOnlineStatus')} description={t('privacyOnlineStatusDesc')}>
             <SoundToggle checked={showOnline} onChange={() => setShowOnline((p) => !p)} />
           </SettingRow>
       </Box>
 
       <Box nativeID="sub-security">
           <SettingRow
-            label="PIN Lock"
-            description="Require a PIN to unlock the app and access your keys."
+            label={t('privacyPinLock')}
+            description={t('privacyPinLockDesc')}
             helpIndicator={
               <HelpIndicator
                 id="settings-pin"
-                title="PIN Lock"
+                title={t('privacyPinLockHelpTitle')}
                 priority={55}
                 size={14}
               >
@@ -2256,8 +2257,8 @@ function PrivacySection() {
                 <HelpHighlight icon={<LockIcon size={22} color={tc.accent.primary} />}>
                   The PIN is stored locally on your device and required every time you open the app.
                 </HelpHighlight>
-                <HelpListItem>Your private keys stay encrypted behind the PIN</HelpListItem>
-                <HelpListItem>You can change or remove the PIN anytime</HelpListItem>
+                <HelpListItem>{t('privacyPinLockHelp1')}</HelpListItem>
+                <HelpListItem>{t('privacyPinLockHelp2')}</HelpListItem>
               </HelpIndicator>
             }
           >
@@ -2517,31 +2518,31 @@ function AudioVideoSection() {
   }, []);
 
   const videoQualityOptions: InlineDropdownOption[] = [
-    { value: 'auto', label: 'Auto', description: 'Adapts to network conditions' },
-    { value: '720p', label: '720p HD', description: '~2.5 Mbps' },
-    { value: '1080p', label: '1080p Full HD', description: '~5 Mbps' },
-    { value: '1440p', label: '1440p QHD', description: '~8 Mbps' },
-    { value: '4k', label: '4K Ultra HD', description: '~16 Mbps' },
+    { value: 'auto', label: t('qualityAuto'), description: t('qualityAutoDesc') },
+    { value: '720p', label: t('quality720p'), description: t('quality720pDesc') },
+    { value: '1080p', label: t('quality1080p'), description: t('quality1080pDesc') },
+    { value: '1440p', label: t('quality1440p'), description: t('quality1440pDesc') },
+    { value: '4k', label: t('quality4k'), description: t('quality4kDesc') },
   ];
 
   const audioQualityOptions: InlineDropdownOption[] = [
-    { value: 'opus-voice', label: 'Voice (VoIP)', description: 'Optimized for speech, lower bandwidth' },
-    { value: 'opus-music', label: 'Music (Full Band)', description: 'Full-band audio, higher quality' },
-    { value: 'opus-low', label: 'Low Latency', description: 'Minimum delay, real-time interaction' },
-    { value: 'pcm', label: 'PCM Lossless', description: '~1.4 Mbps, uncompressed audio' },
+    { value: 'opus-voice', label: t('audioVoice'), description: t('audioVoiceDesc') },
+    { value: 'opus-music', label: t('audioMusic'), description: t('audioMusicDesc') },
+    { value: 'opus-low', label: t('audioLowLatency'), description: t('audioLowLatencyDesc') },
+    { value: 'pcm', label: t('audioPCM'), description: t('audioPCMDesc') },
   ];
 
   const opusApplicationOptions: InlineDropdownOption[] = [
-    { value: 'voip', label: 'Voice (VoIP)', description: 'Best for speech and calls' },
-    { value: 'audio', label: 'Music (Full Band)', description: 'Best for music and high-fidelity' },
-    { value: 'lowdelay', label: 'Low Latency', description: 'Minimum encoding delay' },
+    { value: 'voip', label: t('opusVoip'), description: t('opusVoipDesc') },
+    { value: 'audio', label: t('opusMusic'), description: t('opusMusicDesc') },
+    { value: 'lowdelay', label: t('opusLowDelay'), description: t('opusLowDelayDesc') },
   ];
 
   const bitratePresets = [
-    { value: 24, label: 'Low (24 kbps)' },
-    { value: 48, label: 'Medium (48 kbps)' },
-    { value: 96, label: 'High (96 kbps)' },
-    { value: 128, label: 'Max (128 kbps)' },
+    { value: 24, label: t('bitrateLow') },
+    { value: 48, label: t('bitrateMedium') },
+    { value: 96, label: t('bitrateHigh') },
+    { value: 128, label: t('bitrateMax') },
   ];
 
   // Handlers that sync both context and persisted settings
@@ -2574,25 +2575,25 @@ function AudioVideoSection() {
 
   return (
     <Box style={{ gap: 20 }}>
-      <SectionHeader title={t('sectionAudioVideo')} description="Configure your camera, microphone, and call quality settings." />
+      <SectionHeader title={t('sectionAudioVideo')} description={t('sectionAudioVideoDesc')} />
 
       <Box nativeID="sub-calling">
       {/* Calling */}
       <Box style={{ gap: 16 }}>
-        <SubsectionHeader title="Calling" description="Configure incoming call behavior and ring volume." />
+        <SubsectionHeader title={t('subCalling')} description={t('callingDesc')} />
 
-        <SettingRow label="Incoming Call Display" description="How incoming calls appear when the app is open." vertical>
+        <SettingRow label={t('incomingCallDisplayLabel')} description={t('incomingCallDisplayDesc')} vertical>
           <SegmentedControl
             options={[
-              { value: 'fullscreen', label: 'Fullscreen' },
-              { value: 'toast', label: 'Toast' },
+              { value: 'fullscreen', label: t('fullscreen') },
+              { value: 'toast', label: t('toast') },
             ]}
             value={incomingCallDisplay}
             onChange={(v) => setIncomingCallDisplay(v as 'fullscreen' | 'toast')}
           />
         </SettingRow>
 
-        <SettingRow label="Ring Volume" description={`Volume: ${ringVolume}%`} vertical>
+        <SettingRow label={t('ringVolumeLabel')} description={`Volume: ${ringVolume}%`} vertical>
           <Slider
             value={ringVolume}
             min={0}
@@ -2606,12 +2607,12 @@ function AudioVideoSection() {
 
       <Box nativeID="sub-video">
       {/* Video Quality */}
-      <SettingRow label="Video Quality" description="Set the default video quality for calls." vertical>
+      <SettingRow label={t('videoQualityLabel')} description={t('videoQualityDesc')} vertical>
         <InlineDropdown
           options={videoQualityOptions}
           value={videoQuality}
           onChange={(v) => setVideoQuality(v as VideoQuality)}
-          placeholder="Select quality"
+          placeholder={t('selectQuality')}
         />
       </SettingRow>
 
@@ -2619,7 +2620,7 @@ function AudioVideoSection() {
 
       {/* Test Video — live preview with effects applied */}
       <Box style={{ gap: 16 }}>
-        <SubsectionHeader title="Test Video" description="Preview your camera with the current video effect applied." />
+        <SubsectionHeader title={t('testVideoTitle')} description={t('testVideoDesc')} />
 
         {Platform.OS === 'web' ? (
           /* Web: canvas-based preview */
@@ -2661,7 +2662,7 @@ function AudioVideoSection() {
                       backgroundColor: tc.status.success,
                     }} />
                     <Text style={{ fontSize: 10, color: '#fff', fontWeight: '500' }}>
-                      {videoEffect === 'blur' ? 'Blur active' : 'Background active'}
+                      {videoEffect === 'blur' ? t('blurActive') : t('backgroundActive')}
                     </Text>
                   </Box>
                 )}
@@ -2677,14 +2678,14 @@ function AudioVideoSection() {
                     borderRadius: 6,
                   }}>
                     <Text style={{ fontSize: 10, color: '#fff', opacity: 0.8 }}>
-                      No effect
+                      {t('noEffect')}
                     </Text>
                   </Box>
                 )}
               </Box>
 
               <Button variant="secondary" size="sm" onPress={stopEffectsPreview}>
-                Stop Preview
+                {t('stopPreview')}
               </Button>
             </Box>
           ) : (
@@ -2694,7 +2695,7 @@ function AudioVideoSection() {
               onPress={startEffectsPreview}
               iconLeft={<VideoIcon size={14} color={tc.text.secondary} />}
             >
-              Start Camera Preview
+              {t('startCameraPreview')}
             </Button>
           )
         ) : (
@@ -2728,7 +2729,7 @@ function AudioVideoSection() {
                   backgroundColor: tc.status.success,
                 }} />
                 <Text style={{ fontSize: 11, color: tc.text.muted }}>
-                  {videoEffect === 'blur' ? 'Background blur active' : 'Virtual background active'}
+                  {videoEffect === 'blur' ? t('backgroundBlurActive') : t('virtualBackgroundActive')}
                 </Text>
               </Box>
             )}
@@ -2742,19 +2743,19 @@ function AudioVideoSection() {
       <Box style={{ gap: 16 }}>
         <Box>
           <Text style={{ fontSize: 15, fontWeight: '600', color: tc.text.primary }}>
-            Video Effects
+            {t('videoEffects')}
           </Text>
           <Text style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
-            Apply background effects to your camera during calls.
+            {t('videoEffectsDesc')}
           </Text>
         </Box>
 
-        <SettingRow label="Background Effect" description="Choose how your background appears on video calls." vertical>
+        <SettingRow label={t('backgroundEffect')} description={t('backgroundEffectDesc')} vertical>
           <SegmentedControl
             options={[
-              { value: 'none', label: 'None' },
-              { value: 'blur', label: 'Blur' },
-              { value: 'virtual-background', label: 'Image' },
+              { value: 'none', label: t('effectNone') },
+              { value: 'blur', label: t('effectBlur') },
+              { value: 'virtual-background', label: t('effectImage') },
             ]}
             value={videoEffect}
             onChange={(v) => setVideoEffect(v as VideoEffect)}
@@ -2762,7 +2763,7 @@ function AudioVideoSection() {
         </SettingRow>
 
         {videoEffect === 'blur' && (
-          <SettingRow label="Blur Intensity" description={`${blurIntensity}px`} vertical>
+          <SettingRow label={t('blurIntensity')} description={`${blurIntensity}px`} vertical>
             <Slider
               value={blurIntensity}
               min={1}
@@ -2776,7 +2777,7 @@ function AudioVideoSection() {
         {videoEffect === 'virtual-background' && (
           <Box style={{ gap: 10 }}>
             <Text style={{ fontSize: 11, fontWeight: '600', color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-              Background Image
+              {t('backgroundImage')}
             </Text>
 
             {/* Preset grid */}
@@ -2852,7 +2853,7 @@ function AudioVideoSection() {
             {/* Custom URL input */}
             <Box style={{ gap: 4 }}>
               <Text style={{ fontSize: 11, color: tc.text.muted }}>
-                Or use a custom image URL:
+                {t('customImageUrl')}
               </Text>
               <Input
                 placeholder="https://example.com/background.jpg"
@@ -2872,12 +2873,12 @@ function AudioVideoSection() {
 
       <Box nativeID="sub-audio">
       {/* Audio Quality Preset */}
-      <SettingRow label="Audio Quality" description="Choose an audio codec and quality preset." vertical>
+      <SettingRow label={t('audioQualityLabel')} description={t('audioQualityDesc')} vertical>
         <InlineDropdown
           options={audioQualityOptions}
           value={audioQuality}
           onChange={(v) => handleAudioQualityChange(v as AudioQuality)}
-          placeholder="Select quality"
+          placeholder={t('selectAudioQuality')}
         />
         {audioQuality === 'pcm' && (
           <Box style={{
@@ -2893,7 +2894,7 @@ function AudioVideoSection() {
           }}>
             <AlertTriangleIcon size={16} color={tc.status.warning} />
             <Text style={{ fontSize: 12, color: tc.status.warning, flex: 1 }}>
-              Lossless audio uses ~1.4 Mbps. Ensure you have a stable connection.
+              {t('pcmWarning')}
             </Text>
           </Box>
         )}
@@ -2903,20 +2904,20 @@ function AudioVideoSection() {
       {audioQuality !== 'pcm' && (
         <>
           <Separator spacing="sm" />
-          <CollapsibleSection title="Opus Configuration — Advanced">
+          <CollapsibleSection title={t('opusConfigTitle')}>
 
             {/* Application Mode */}
-            <SettingRow label="Application Mode" description="Optimize encoding for voice, music, or low latency." vertical>
+            <SettingRow label={t('applicationMode')} description={t('applicationModeDesc')} vertical>
               <InlineDropdown
                 options={opusApplicationOptions}
                 value={opusConfig.application}
                 onChange={(v) => handleOpusConfigChange({ application: v as OpusApplication })}
-                placeholder="Select mode"
+                placeholder={t('selectMode')}
               />
             </SettingRow>
 
             {/* Bitrate Slider */}
-            <SettingRow label="Bitrate" description={`${opusConfig.bitrate} kbps`} vertical>
+            <SettingRow label={t('bitrateLabel')} description={`${opusConfig.bitrate} kbps`} vertical>
               <Box style={{ gap: 8 }}>
                 <Slider
                   value={opusConfig.bitrate}
@@ -2954,7 +2955,7 @@ function AudioVideoSection() {
             </SettingRow>
 
             {/* Complexity Slider */}
-            <SettingRow label="Complexity" description={`Level ${opusConfig.complexity} — ${opusConfig.complexity >= 8 ? 'High quality, more CPU' : opusConfig.complexity >= 4 ? 'Balanced' : 'Low CPU usage'}`} vertical>
+            <SettingRow label={t('complexityLabel')} description={`${t('complexityLevel', { level: opusConfig.complexity })} — ${opusConfig.complexity >= 8 ? t('complexityHigh') : opusConfig.complexity >= 4 ? t('complexityBalanced') : t('complexityLow')}`} vertical>
               <Slider
                 value={opusConfig.complexity}
                 min={0}
@@ -2965,7 +2966,7 @@ function AudioVideoSection() {
             </SettingRow>
 
             {/* Forward Error Correction */}
-            <SettingRow label="Forward Error Correction" description="Adds redundancy to resist packet loss.">
+            <SettingRow label={t('fecLabel')} description={t('fecDesc')}>
               <Toggle
                 checked={opusConfig.fec}
                 onChange={(val) => handleOpusConfigChange({ fec: val })}
@@ -2973,7 +2974,7 @@ function AudioVideoSection() {
             </SettingRow>
 
             {/* DTX */}
-            <SettingRow label="Discontinuous Transmission" description="Save bandwidth during silence.">
+            <SettingRow label={t('dtxLabel')} description={t('dtxDesc')}>
               <Toggle
                 checked={opusConfig.dtx}
                 onChange={(val) => handleOpusConfigChange({ dtx: val })}
@@ -2987,9 +2988,9 @@ function AudioVideoSection() {
 
       {/* Volume Controls */}
       <Box style={{ gap: 16 }}>
-        <SubsectionHeader title="Volume Controls" description="Adjust input and output volume levels." />
+        <SubsectionHeader title={t('volumeControls')} description={t('volumeControlsDesc')} />
 
-        <SettingRow label="Microphone Volume" description={`${inputVolume}%`} vertical>
+        <SettingRow label={t('microphoneVolume')} description={`${inputVolume}%`} vertical>
           <Slider
             value={inputVolume}
             min={0}
@@ -3005,10 +3006,10 @@ function AudioVideoSection() {
           <Box style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
             <Box>
               <Text style={{ fontSize: 13, fontWeight: '600', color: tc.text.primary }}>
-                Voice Meter
+                {t('voiceMeter')}
               </Text>
               <Text style={{ fontSize: 11, color: tc.text.secondary }}>
-                Test your microphone levels and check for clipping.
+                {t('voiceMeterDesc')}
               </Text>
             </Box>
             <Button
@@ -3016,7 +3017,7 @@ function AudioVideoSection() {
               size="sm"
               onPress={micTestActive ? stopMicTest : startMicTest}
             >
-              {micTestActive ? 'Stop' : 'Test Mic'}
+              {micTestActive ? t('stop') : t('testMic')}
             </Button>
           </Box>
           {micTestActive && (
@@ -3049,7 +3050,7 @@ function AudioVideoSection() {
               {/* Labels */}
               <Box style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
                 <Text style={{ fontSize: 10, color: tc.text.muted }}>
-                  {micTestLevel > 85 ? '⚠ Clipping — lower your mic volume' : micTestLevel > 50 ? 'Good level' : micTestLevel > 10 ? 'Low — speak louder or raise mic volume' : 'Waiting for input...'}
+                  {micTestLevel > 85 ? t('clippingWarning') : micTestLevel > 50 ? t('goodLevel') : micTestLevel > 10 ? t('lowLevel') : t('waitingForInput')}
                 </Text>
                 <Text style={{ fontSize: 10, fontWeight: '600', fontVariant: ['tabular-nums'], color: micTestLevel > 85 ? tc.status.danger : tc.text.muted }}>
                   {micTestLevel}%
@@ -3060,7 +3061,7 @@ function AudioVideoSection() {
         </Box>
         )}
 
-        <SettingRow label="Output Volume" description={`${volume}%`} vertical>
+        <SettingRow label={t('outputVolume')} description={`${volume}%`} vertical>
           <Slider
             value={volume}
             min={0}
@@ -3076,10 +3077,10 @@ function AudioVideoSection() {
       {/* Devices section */}
       <Box style={{ gap: 16 }}>
         <SubsectionHeader
-          title="Devices"
+          title={t('subDevices')}
           description={Platform.OS === 'web'
-            ? 'Your available audio and video input/output devices.'
-            : 'Camera and microphone are managed by your device.'}
+            ? t('devicesDesc')
+            : t('devicesDescMobile')}
         />
 
         {Platform.OS === 'web' ? (
@@ -3087,10 +3088,10 @@ function AudioVideoSection() {
             {/* Microphones */}
             <Box style={{ gap: 6 }}>
               <Text style={{ fontSize: 11, fontWeight: '600', color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                Microphones
+                {t('microphonesLabel')}
               </Text>
               {audioInputs.length === 0 ? (
-                <Text style={{ fontSize: 13, color: tc.text.secondary }}>No microphones detected</Text>
+                <Text style={{ fontSize: 13, color: tc.text.secondary }}>{t('noMicrophonesDetected')}</Text>
               ) : (
                 audioInputs.map((device) => (
                   <Box key={device.deviceId} style={{
@@ -3110,10 +3111,10 @@ function AudioVideoSection() {
             {/* Cameras */}
             <Box style={{ gap: 6 }}>
               <Text style={{ fontSize: 11, fontWeight: '600', color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                Cameras
+                {t('camerasLabel')}
               </Text>
               {videoInputs.length === 0 ? (
-                <Text style={{ fontSize: 13, color: tc.text.secondary }}>No cameras detected</Text>
+                <Text style={{ fontSize: 13, color: tc.text.secondary }}>{t('noCamerasDetected')}</Text>
               ) : (
                 videoInputs.map((device) => (
                   <Box key={device.deviceId} style={{
@@ -3133,10 +3134,10 @@ function AudioVideoSection() {
             {/* Speakers */}
             <Box style={{ gap: 6 }}>
               <Text style={{ fontSize: 11, fontWeight: '600', color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                Speakers
+                {t('speakersLabel')}
               </Text>
               {audioOutputs.length === 0 ? (
-                <Text style={{ fontSize: 13, color: tc.text.secondary }}>No speakers detected</Text>
+                <Text style={{ fontSize: 13, color: tc.text.secondary }}>{t('noSpeakersDetected')}</Text>
               ) : (
                 audioOutputs.map((device) => (
                   <Box key={device.deviceId} style={{
@@ -3160,7 +3161,7 @@ function AudioVideoSection() {
                 borderWidth: 1, borderColor: tc.status.warningBorder,
               }}>
                 <Text style={{ fontSize: 12, color: tc.status.warning }}>
-                  Media devices are not available in this browser or environment.
+                  {t('mediaDevicesUnavailable')}
                 </Text>
               </Box>
             )}
@@ -3169,7 +3170,7 @@ function AudioVideoSection() {
             <Separator spacing="sm" />
             <Box>
               <Text style={{ fontSize: 11, fontWeight: '600', color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                Test Devices
+                {t('testDevicesLabel')}
               </Text>
             </Box>
 
@@ -3192,7 +3193,7 @@ function AudioVideoSection() {
                 {/* Mic level meter */}
                 <Box style={{ gap: 4 }}>
                   <Text style={{ fontSize: 11, fontWeight: '600', color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                    Microphone Level
+                    {t('microphoneLevel')}
                   </Text>
                   <Box style={{ height: 8, borderRadius: 4, backgroundColor: tc.background.sunken, overflow: 'hidden' }}>
                     <Box style={{
@@ -3205,12 +3206,12 @@ function AudioVideoSection() {
                 </Box>
 
                 <Button variant="secondary" size="sm" onPress={stopTestPreview}>
-                  Stop Test
+                  {t('stopTest')}
                 </Button>
               </Box>
             ) : (
               <Button variant="secondary" size="sm" onPress={startTestPreview}>
-                Test Camera & Microphone
+                {t('testCameraAndMic')}
               </Button>
             )}
           </>
@@ -3219,7 +3220,7 @@ function AudioVideoSection() {
             {/* Mobile device display — simplified */}
             <Box style={{ gap: 6 }}>
               <Text style={{ fontSize: 11, fontWeight: '600', color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                Camera
+                {t('cameraSection')}
               </Text>
               <Box style={{
                 flexDirection: 'row', alignItems: 'center', gap: 8,
@@ -3228,10 +3229,10 @@ function AudioVideoSection() {
               }}>
                 <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: tc.status.success }} />
                 <Text style={{ fontSize: 13, color: tc.text.primary, flex: 1 }}>
-                  Front Camera
+                  {t('frontCamera')}
                 </Text>
                 <Text style={{ fontSize: 11, color: tc.text.muted }}>
-                  Default
+                  {t('default')}
                 </Text>
               </Box>
               <Box style={{
@@ -3241,17 +3242,17 @@ function AudioVideoSection() {
               }}>
                 <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: tc.status.success }} />
                 <Text style={{ fontSize: 13, color: tc.text.primary, flex: 1 }}>
-                  Back Camera
+                  {t('backCamera')}
                 </Text>
               </Box>
               <Text style={{ fontSize: 11, color: tc.text.muted, marginTop: 2 }}>
-                Switch cameras during a call using the camera flip button.
+                {t('switchCameraHint')}
               </Text>
             </Box>
 
             <Box style={{ gap: 6 }}>
               <Text style={{ fontSize: 11, fontWeight: '600', color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                Microphone
+                {t('microphoneSection')}
               </Text>
               <Box style={{
                 flexDirection: 'row', alignItems: 'center', gap: 8,
@@ -3260,7 +3261,7 @@ function AudioVideoSection() {
               }}>
                 <Box style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: tc.status.success }} />
                 <Text style={{ fontSize: 13, color: tc.text.primary, flex: 1 }}>
-                  Default Microphone
+                  {t('defaultMicrophone')}
                 </Text>
               </Box>
             </Box>
@@ -3271,8 +3272,7 @@ function AudioVideoSection() {
               borderWidth: 1, borderColor: tc.status.infoBorder,
             }}>
               <Text style={{ fontSize: 12, color: tc.status.info }}>
-                Device permissions are managed by your device settings. Camera and microphone
-                access will be requested when you start a call.
+                {t('devicePermissionsHint')}
               </Text>
             </Box>
           </>
@@ -3282,15 +3282,15 @@ function AudioVideoSection() {
 
       {/* Audio Processing */}
       <Box style={{ gap: 16 }}>
-        <SubsectionHeader title="Audio Processing" description="Enhance audio quality during calls." />
+        <SubsectionHeader title={t('audioProcessing')} description={t('audioProcessingDesc')} />
 
-        <SettingRow label="Noise Suppression" description="Reduce background noise from your microphone.">
+        <SettingRow label={t('noiseSuppression')} description={t('noiseSuppressionDesc')}>
           <SoundToggle checked={noiseSuppression} onChange={setNoiseSuppression} />
         </SettingRow>
-        <SettingRow label="Echo Cancellation" description="Prevent audio feedback loops.">
+        <SettingRow label={t('echoCancellation')} description={t('echoCancellationDesc')}>
           <SoundToggle checked={echoCancellation} onChange={setEchoCancellation} />
         </SettingRow>
-        <SettingRow label="Auto Gain Control" description="Automatically adjust microphone volume.">
+        <SettingRow label={t('autoGainControl')} description={t('autoGainControlDesc')}>
           <SoundToggle checked={autoGainControl} onChange={setAutoGainControl} />
         </SettingRow>
       </Box>
@@ -3300,14 +3300,14 @@ function AudioVideoSection() {
       {/* Encryption (web only — Insertable Streams / RTCRtpScriptTransform) */}
       {Platform.OS === 'web' && (
       <Box style={{ gap: 16 }}>
-        <SubsectionHeader title="Encryption" description="Call signaling is always end-to-end encrypted. Optionally encrypt media frames too." />
+        <SubsectionHeader title={t('encryption')} description={t('encryptionDesc')} />
 
         <SettingRow
-          label="End-to-End Media Encryption"
+          label={t('mediaE2EELabel')}
           description={
             typeof window !== 'undefined' && 'RTCRtpScriptTransform' in window
-              ? 'Encrypts audio and video frames with AES-256-GCM. May increase CPU usage.'
-              : 'Not available in this browser. Supported in Chrome and Edge.'
+              ? t('mediaE2EEAvailable')
+              : t('mediaE2EEUnavailable')
           }
         >
           <Toggle
@@ -3324,8 +3324,7 @@ function AudioVideoSection() {
             borderWidth: 1, borderColor: tc.status.infoBorder,
           }}>
             <Text style={{ fontSize: 12, color: tc.status.info }}>
-              Media E2EE is enabled. Both peers must have this setting enabled for encrypted media.
-              Call signaling (SDP, ICE) is always encrypted regardless of this setting.
+              {t('mediaE2EEWarning')}
             </Text>
           </Box>
         )}
@@ -3433,13 +3432,13 @@ function NetworkSection() {
 
     // Validate URL format
     if (!trimmed.startsWith('wss://') && !trimmed.startsWith('ws://')) {
-      setRelayError('URL must start with wss:// or ws://');
+      setRelayError(t('invalidRelayUrl'));
       return;
     }
 
     // Check for duplicates
     if (relays.some((r) => r.url === trimmed)) {
-      setRelayError('This relay is already in the list.');
+      setRelayError(t('duplicateRelay'));
       return;
     }
 
@@ -3528,13 +3527,13 @@ function NetworkSection() {
   }, [pasteInput, acceptOffer, completeHandshake]);
 
   const connectionStateLabel = {
-    idle: 'Ready to connect',
-    creating_offer: 'Creating offer...',
-    waiting_for_answer: 'Waiting for answer — share the offer below',
-    accepting_offer: 'Accepting offer...',
-    completing_handshake: 'Completing handshake...',
-    connected: 'Connected!',
-    error: networkError?.message || 'Connection failed',
+    idle: t('connectionStateIdle'),
+    creating_offer: t('connectionStateCreatingOffer'),
+    waiting_for_answer: t('connectionStateWaitingForAnswer'),
+    accepting_offer: t('connectionStateAcceptingOffer'),
+    completing_handshake: t('connectionStateCompletingHandshake'),
+    connected: t('connectionStateConnected'),
+    error: networkError?.message || t('connectionStateFailed'),
   }[connectionState];
 
   const connectionStateColor = {
@@ -3549,7 +3548,7 @@ function NetworkSection() {
 
   return (
     <Box style={{ gap: 20 }}>
-      <SectionHeader title={t('sectionNetwork')} description="Manage your peer-to-peer network connection." />
+      <SectionHeader title={t('sectionNetwork')} description={t('sectionNetworkDesc')} />
 
       <Box nativeID="sub-connection">
       {/* Connection Status */}
@@ -3561,15 +3560,15 @@ function NetworkSection() {
               backgroundColor: isConnected ? tc.status.success : tc.status.danger,
             }} />
             <Text style={{ fontSize: 16, fontWeight: '600', color: tc.text.primary }}>
-              {isConnected ? 'Connected' : 'Disconnected'}
+              {isConnected ? t('connectedStatus') : t('disconnectedStatus')}
             </Text>
           </Box>
           <Box style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
             <Text style={{ fontSize: 13, color: tc.text.secondary }}>
-              Peers: {peerCount}
+              {t('peersCount', { count: peerCount })}
             </Text>
             <Text style={{ fontSize: 13, color: tc.text.secondary }}>
-              Addresses: {listenAddresses?.length ?? 0}
+              {t('addressesCount', { count: listenAddresses?.length ?? 0 })}
             </Text>
           </Box>
         </Box>
@@ -3577,23 +3576,23 @@ function NetworkSection() {
 
       {/* Network Toggle */}
       <SettingRow
-        label="P2P Network"
-        description="Start or stop the peer-to-peer network."
+        label={t('p2pNetworkLabel')}
+        description={t('p2pNetworkDesc')}
         helpIndicator={
           <HelpIndicator
             id="settings-p2p"
-            title="Peer-to-Peer Network"
+            title={t('helpP2pNetworkTitle')}
             priority={65}
             size={14}
           >
             <HelpText>
-              The P2P network connects you directly to friends without any central server. Messages travel directly between devices.
+              {t('helpP2pNetworkText')}
             </HelpText>
             <HelpHighlight icon={<GlobeIcon size={22} color={tc.accent.primary} />}>
-              When enabled, your device participates in the decentralized network and can exchange messages in real-time.
+              {t('helpP2pNetworkHighlight')}
             </HelpHighlight>
-            <HelpListItem>Uses WebRTC for browser-to-browser connections</HelpListItem>
-            <HelpListItem>Falls back to relay server for offline message delivery</HelpListItem>
+            <HelpListItem>{t('helpP2pWebrtc')}</HelpListItem>
+            <HelpListItem>{t('helpP2pFallback')}</HelpListItem>
           </HelpIndicator>
         }
       >
@@ -3606,10 +3605,10 @@ function NetworkSection() {
       <Box style={{ gap: 12 }} testID={TEST_IDS.SETTINGS.RELAY_STATUS}>
         <Box>
           <Text style={{ fontSize: 15, fontWeight: '600', color: tc.text.primary }}>
-            Relay Servers
+            {t('relayServersTitle')}
           </Text>
           <Text style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
-            Relay servers store messages while you or your friends are offline.
+            {t('relayServersDesc')}
           </Text>
         </Box>
 
@@ -3650,7 +3649,7 @@ function NetworkSection() {
                       backgroundColor: `${tc.text.muted}20`,
                     }}>
                       <Text style={{ fontSize: 9, color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5, fontWeight: '700' }}>
-                        Default
+                        {t('defaultLabel')}
                       </Text>
                     </Box>
                   )}
@@ -3679,7 +3678,7 @@ function NetworkSection() {
                     <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
                       <UsersIcon size={10} color={tc.text.muted} />
                       <Text style={{ fontSize: 11, color: tc.text.muted }}>
-                        {info.online} online
+                        {t('onlineCount', { count: info.online })}
                       </Text>
                     </Box>
                   )}
@@ -3687,7 +3686,7 @@ function NetworkSection() {
                     <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
                       <ZapIcon size={10} color={tc.accent.primary} />
                       <Text style={{ fontSize: 11, color: tc.accent.primary }}>
-                        {info.connectedPeers} {info.connectedPeers === 1 ? 'peer' : 'peers'}
+                        {t('peerCount', { count: info.connectedPeers })}
                       </Text>
                     </Box>
                   )}
@@ -3695,7 +3694,7 @@ function NetworkSection() {
                     <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
                       <NetworkIcon size={10} color={tc.text.muted} />
                       <Text style={{ fontSize: 11, color: tc.text.muted }}>
-                        {info.meshOnline} mesh
+                        {t('meshCount', { count: info.meshOnline })}
                       </Text>
                     </Box>
                   )}
@@ -3728,7 +3727,7 @@ function NetworkSection() {
                 setNewRelayUrl(text);
                 if (relayError) setRelayError(null);
               }}
-              placeholder="wss://relay.example.com/ws"
+              placeholder={t('relayUrlPlaceholder')}
               size="sm"
               fullWidth
               gradientBorder
@@ -3741,7 +3740,7 @@ function NetworkSection() {
             disabled={!newRelayUrl.trim()}
             iconLeft={<PlusIcon size={14} />}
           >
-            Add
+            {t('addButton')}
           </Button>
         </Box>
         {relayError && (
@@ -3782,10 +3781,10 @@ function NetworkSection() {
           </Box>
           <Box style={{ flex: 1, gap: 2 }}>
             <Text style={{ fontSize: 14, fontWeight: '600', color: tc.text.primary }}>
-              Run Your Own Relay
+              {t('runOwnRelay')}
             </Text>
             <Text style={{ fontSize: 12, color: tc.text.secondary }}>
-              Download the relay binary and host your own server
+              {t('runOwnRelayDesc')}
             </Text>
           </Box>
           <ExternalLinkIcon size={16} color={tc.text.muted} />
@@ -3799,19 +3798,19 @@ function NetworkSection() {
         <Box style={{ gap: 8 }}>
           <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
             <Text style={{ fontSize: 11, fontWeight: '600', color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-              Peer ID
+              {t('peerIdLabel')}
             </Text>
             <HelpIndicator
               id="settings-peer-id"
-              title="Peer ID"
+              title={t('helpPeerIdTitle')}
               priority={70}
               size={14}
             >
               <HelpText>
-                Your Peer ID is used by the P2P network to identify your device. It's different from your DID.
+                {t('helpPeerIdText')}
               </HelpText>
-              <HelpListItem>DID = your identity (persists across devices)</HelpListItem>
-              <HelpListItem>Peer ID = this device's network address (changes per session)</HelpListItem>
+              <HelpListItem>{t('helpPeerIdDid')}</HelpListItem>
+              <HelpListItem>{t('helpPeerIdDevice')}</HelpListItem>
             </HelpIndicator>
           </Box>
           <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
@@ -3828,7 +3827,7 @@ function NetworkSection() {
             >
               <CopyIcon size={14} color={peerIdCopied ? '#22c55e' : tc.text.secondary} />
               <Text style={{ fontSize: 11, color: peerIdCopied ? '#22c55e' : tc.text.secondary, fontWeight: '500' }}>
-                {peerIdCopied ? 'Copied' : 'Copy'}
+                {peerIdCopied ? t('copied') : t('copy')}
               </Text>
             </Pressable>
           </Box>
@@ -3842,27 +3841,27 @@ function NetworkSection() {
         <Box>
           <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
             <Text style={{ fontSize: 15, fontWeight: '600', color: tc.text.primary }}>
-              Connect to Peer
+              {t('connectToPeer')}
             </Text>
             <HelpIndicator
               id="settings-connect-peer"
-              title="Direct P2P Connection"
+              title={t('helpDirectP2pTitle')}
               priority={75}
               size={14}
             >
               <HelpText>
-                Exchange offer/answer data to establish a direct encrypted connection with another Umbra user.
+                {t('helpDirectP2pText')}
               </HelpText>
               <HelpHighlight icon={<HandshakeIcon size={22} color={tc.accent.primary} />}>
-                This creates a WebRTC data channel — messages travel directly between browsers with no server in between.
+                {t('helpDirectP2pHighlight')}
               </HelpHighlight>
-              <HelpListItem>Step 1: Create an offer and share it</HelpListItem>
-              <HelpListItem>Step 2: Your peer pastes your offer and generates an answer</HelpListItem>
-              <HelpListItem>Step 3: Paste their answer to complete the connection</HelpListItem>
+              <HelpListItem>{t('helpDirectP2pStep1')}</HelpListItem>
+              <HelpListItem>{t('helpDirectP2pStep2')}</HelpListItem>
+              <HelpListItem>{t('helpDirectP2pStep3')}</HelpListItem>
             </HelpIndicator>
           </Box>
           <Text style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
-            Exchange connection data with another user to establish a direct P2P link.
+            {t('connectToPeerDesc')}
           </Text>
         </Box>
 
@@ -3878,7 +3877,7 @@ function NetworkSection() {
         {connectionState === 'idle' && (
           <Box style={{ flexDirection: 'row', gap: 8 }}>
             <Button size="sm" onPress={createOffer} style={{ flex: 1 }}>
-              Create Offer (I invite)
+              {t('createOffer')}
             </Button>
           </Box>
         )}
@@ -3888,13 +3887,13 @@ function NetworkSection() {
           <Card variant="outlined" padding="md" style={{ width: '100%' }}>
             <Box style={{ gap: 8 }}>
               <Text style={{ fontSize: 11, fontWeight: '600', color: tc.text.muted, textTransform: 'uppercase' }}>
-                Your Offer (share with peer)
+                {t('offerShareLabel')}
               </Text>
               <Text style={{ fontSize: 10, color: tc.text.secondary, fontFamily: 'monospace' }} numberOfLines={3}>
                 {offerData.slice(0, 200)}...
               </Text>
               <Button size="sm" variant={offerCopied ? 'tertiary' : 'secondary'} onPress={handleCopyOffer}>
-                {offerCopied ? 'Copied!' : 'Copy Offer'}
+                {offerCopied ? t('copiedOffer') : t('copyOffer')}
               </Button>
             </Box>
           </Card>
@@ -3905,13 +3904,13 @@ function NetworkSection() {
           <Card variant="outlined" padding="md" style={{ width: '100%' }}>
             <Box style={{ gap: 8 }}>
               <Text style={{ fontSize: 11, fontWeight: '600', color: tc.text.muted, textTransform: 'uppercase' }}>
-                Your Answer (share with peer)
+                {t('answerShareLabel')}
               </Text>
               <Text style={{ fontSize: 10, color: tc.text.secondary, fontFamily: 'monospace' }} numberOfLines={3}>
                 {answerData.slice(0, 200)}...
               </Text>
               <Button size="sm" variant={answerCopied ? 'tertiary' : 'secondary'} onPress={handleCopyAnswer}>
-                {answerCopied ? 'Copied!' : 'Copy Answer'}
+                {answerCopied ? t('copiedAnswer') : t('copyAnswer')}
               </Button>
             </Box>
           </Card>
@@ -3922,13 +3921,13 @@ function NetworkSection() {
           <Box style={{ gap: 8 }}>
             <Text style={{ fontSize: 11, fontWeight: '600', color: tc.text.muted, textTransform: 'uppercase' }}>
               {connectionState === 'waiting_for_answer'
-                ? 'Paste Answer from Peer'
-                : 'Paste Offer from Peer'}
+                ? t('pasteAnswer')
+                : t('pasteOffer')}
             </Text>
             <TextArea
               value={pasteInput}
               onChangeText={setPasteInput}
-              placeholder="Paste the connection data here..."
+              placeholder={t('pasteInputPlaceholder')}
               numberOfLines={3}
               fullWidth
               gradientBorder
@@ -3938,7 +3937,7 @@ function NetworkSection() {
               onPress={handlePasteSubmit}
               disabled={!pasteInput.trim()}
             >
-              {connectionState === 'waiting_for_answer' ? 'Complete Connection' : 'Accept Offer'}
+              {connectionState === 'waiting_for_answer' ? t('completeConnection') : t('acceptOffer')}
             </Button>
           </Box>
         )}
@@ -3947,7 +3946,7 @@ function NetworkSection() {
         {connectionState === 'connected' && (
           <Card variant="outlined" padding="md" style={{ width: '100%', backgroundColor: tc.status.successSurface }}>
             <Text style={{ fontSize: 14, fontWeight: '600', color: tc.status.success, textAlign: 'center' }}>
-              Peer connected successfully!
+              {t('connectedSuccess')}
             </Text>
           </Card>
         )}
@@ -3960,7 +3959,7 @@ function NetworkSection() {
                 {networkError.message}
               </Text>
               <Button size="sm" variant="secondary" onPress={resetSignaling}>
-                Try Again
+                {t('tryAgain')}
               </Button>
             </Box>
           </Card>
@@ -3969,7 +3968,7 @@ function NetworkSection() {
         {/* Reset button for non-idle states */}
         {connectionState !== 'idle' && connectionState !== 'error' && (
           <Button size="sm" variant="tertiary" onPress={resetSignaling}>
-            Reset
+            {t('reset')}
           </Button>
         )}
       </Box>
@@ -3981,10 +3980,10 @@ function NetworkSection() {
         <Box style={{ gap: 12 }}>
           <Box>
             <Text style={{ fontSize: 15, fontWeight: '600', color: tc.text.primary }}>
-              Your DID
+              {t('yourDid')}
             </Text>
             <Text style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
-              Share your DID for others to add you as a friend.
+              {t('didShareDesc')}
             </Text>
           </Box>
           <Card variant="outlined" padding="lg" style={{ alignItems: 'center' }}>
@@ -4023,12 +4022,14 @@ function DataManagementSection() {
   const [showClearMessagesConfirm, setShowClearMessagesConfirm] = useState(false);
   const [showClearAllConfirm, setShowClearAllConfirm] = useState(false);
   const [clearStatus, setClearStatus] = useState<string | null>(null);
+  const [clearError, setClearError] = useState(false);
 
   // Selective wipe: delete specific tables from the in-memory sql.js database
   // and then re-persist to IndexedDB
   const handleClearMessages = useCallback(async () => {
     setShowClearMessagesConfirm(false);
-    setClearStatus('Clearing messages...');
+    setClearStatus(t('clearingMessages'));
+    setClearError(false);
 
     try {
       const db = getSqlDatabase();
@@ -4054,11 +4055,13 @@ function DataManagementSection() {
         service.dispatchMessageEvent({ type: 'messagesCleared' } as any);
         service.dispatchGroupEvent({ type: 'dataCleared' } as any);
       }
-      setClearStatus('Messages cleared successfully.');
+      setClearStatus(t('messagesCleared'));
+      setClearError(false);
       setTimeout(() => setClearStatus(null), 3000);
     } catch (err) {
       if (__DEV__) dbg.error('state', 'Failed to clear messages', err, SRC);
-      setClearStatus('Failed to clear messages.');
+      setClearStatus(t('failedClearMessages'));
+      setClearError(true);
       setTimeout(() => setClearStatus(null), 3000);
     }
   }, [service]);
@@ -4066,7 +4069,8 @@ function DataManagementSection() {
   // Full wipe: clear the entire IndexedDB database for the current DID
   const handleClearAllData = useCallback(async () => {
     setShowClearAllConfirm(false);
-    setClearStatus('Clearing all data...');
+    setClearStatus(t('clearingAllData'));
+    setClearError(false);
 
     try {
       if (identity?.did) {
@@ -4094,11 +4098,13 @@ function DataManagementSection() {
         service.dispatchMessageEvent({ type: 'messagesCleared' } as any);
         service.dispatchGroupEvent({ type: 'dataCleared' } as any);
       }
-      setClearStatus('All data cleared.');
+      setClearStatus(t('allDataCleared'));
+      setClearError(false);
       setTimeout(() => setClearStatus(null), 5000);
     } catch (err) {
       if (__DEV__) dbg.error('state', 'Failed to clear all data', err, SRC);
-      setClearStatus('Failed to clear data.');
+      setClearStatus(t('failedClearData'));
+      setClearError(true);
       setTimeout(() => setClearStatus(null), 3000);
     }
   }, [identity, service]);
@@ -4107,7 +4113,7 @@ function DataManagementSection() {
     <Box style={{ gap: 24 }}>
       <SectionHeader
         title={t('sectionData')}
-        description="Manage your locally stored data. All data is stored on this device only."
+        description={t('sectionDataDesc')}
       />
 
       <Box nativeID="sub-storage">
@@ -4117,12 +4123,11 @@ function DataManagementSection() {
               <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
                 <DatabaseIcon size={18} color={tc.accent.primary} />
                 <Text style={{ fontSize: 14, fontWeight: '600', color: tc.text.primary }}>
-                  Local Storage
+                  {t('localStorage')}
                 </Text>
               </Box>
               <Text style={{ fontSize: 12, color: tc.text.secondary, lineHeight: 18 }}>
-                Your messages, friends, and conversations are stored locally using IndexedDB.
-                Data is isolated per identity and persists across page refreshes.
+                {t('localStorageDesc')}
               </Text>
               {identity && (
                 <Text style={{ fontSize: 11, color: tc.text.muted, fontFamily: 'monospace', marginTop: 4 }}>
@@ -4136,7 +4141,7 @@ function DataManagementSection() {
                   <Progress
                     value={storageUsage.total}
                     max={storageUsage.total * 2}
-                    label="Storage Used"
+                    label={t('storageUsed')}
                     showValue
                     formatValue={() => fmtBytes(storageUsage.total)}
                     size="md"
@@ -4147,22 +4152,22 @@ function DataManagementSection() {
                   <Box style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 12, marginTop: 2 }}>
                     {storageUsage.byContext.community > 0 && (
                       <Text style={{ fontSize: 11, color: tc.text.muted }}>
-                        Communities: {fmtBytes(storageUsage.byContext.community)}
+                        {t('communitiesStorage')} {fmtBytes(storageUsage.byContext.community)}
                       </Text>
                     )}
                     {storageUsage.byContext.dm > 0 && (
                       <Text style={{ fontSize: 11, color: tc.text.muted }}>
-                        DMs: {fmtBytes(storageUsage.byContext.dm)}
+                        {t('dmStorage')} {fmtBytes(storageUsage.byContext.dm)}
                       </Text>
                     )}
                     {storageUsage.byContext.sharedFolders > 0 && (
                       <Text style={{ fontSize: 11, color: tc.text.muted }}>
-                        Shared Folders: {fmtBytes(storageUsage.byContext.sharedFolders)}
+                        {t('sharedFoldersStorage')} {fmtBytes(storageUsage.byContext.sharedFolders)}
                       </Text>
                     )}
                     {storageUsage.byContext.cache > 0 && (
                       <Text style={{ fontSize: 11, color: tc.text.muted }}>
-                        Cache: {fmtBytes(storageUsage.byContext.cache)}
+                        {t('cacheStorage')} {fmtBytes(storageUsage.byContext.cache)}
                       </Text>
                     )}
                   </Box>
@@ -4170,7 +4175,7 @@ function DataManagementSection() {
               )}
               {storageLoading && (
                 <Text style={{ fontSize: 11, color: tc.text.muted, marginTop: 8 }}>
-                  Loading storage info...
+                  {t('loadingStorageInfo')}
                 </Text>
               )}
             </Box>
@@ -4183,12 +4188,12 @@ function DataManagementSection() {
               padding="md"
               style={{
                 width: '100%',
-                backgroundColor: clearStatus.includes('Failed') ? tc.status.dangerSurface : tc.status.successSurface,
+                backgroundColor: clearError ? tc.status.dangerSurface : tc.status.successSurface,
               }}
             >
               <Text style={{
                 fontSize: 13,
-                color: clearStatus.includes('Failed') ? tc.status.danger : tc.status.success,
+                color: clearError ? tc.status.danger : tc.status.success,
                 fontWeight: '500',
                 textAlign: 'center',
               }}>
@@ -4203,10 +4208,10 @@ function DataManagementSection() {
       <Box style={{ gap: 12 }}>
         <Box>
           <Text style={{ fontSize: 15, fontWeight: '600', color: tc.text.primary }}>
-            Clear Messages
+            {t('clearMessages')}
           </Text>
           <Text style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
-            Delete all messages, reactions, pins, and threads. Your friends, groups, and conversations will be kept.
+            {t('clearMessagesDesc')}
           </Text>
         </Box>
 
@@ -4217,7 +4222,7 @@ function DataManagementSection() {
           style={{ borderColor: tc.status.warningBorder, backgroundColor: tc.status.warningSurface }}
         >
           <Text style={{ color: tc.status.warning, fontWeight: '600', fontSize: 14 }}>
-            Clear Messages
+            {t('clearMessages')}
           </Text>
         </Button>
       </Box>
@@ -4229,25 +4234,25 @@ function DataManagementSection() {
         <Box>
           <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
             <Text style={{ fontSize: 15, fontWeight: '600', color: tc.status.danger }}>
-              Clear All Data
+              {t('clearAllData')}
             </Text>
             <HelpIndicator
               id="settings-clear-all"
-              title="Clear All Data"
+              title={t('helpClearAllDataTitle')}
               icon="!"
               priority={80}
               size={14}
             >
               <HelpText>
-                This removes all locally stored data including messages, friends, groups, and conversations.
+                {t('helpClearAllDataText')}
               </HelpText>
               <HelpHighlight icon={<AlertTriangleIcon size={22} color={tc.status.danger} />} color={tc.status.danger}>
-                Your identity and recovery phrase are NOT affected. You can still log back in, but you'll need to re-add friends and start new conversations.
+                {t('helpClearAllDataHighlight')}
               </HelpHighlight>
             </HelpIndicator>
           </Box>
           <Text style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
-            Delete everything: messages, friends, groups, and conversations. Your identity is preserved.
+            {t('clearAllDataDesc')}
           </Text>
         </Box>
 
@@ -4258,7 +4263,7 @@ function DataManagementSection() {
           style={{ borderColor: tc.status.dangerBorder, backgroundColor: tc.status.dangerSurface }}
         >
           <Text style={{ color: tc.status.danger, fontWeight: '600', fontSize: 14 }}>
-            Clear All Data
+            {t('clearAllData')}
           </Text>
         </Button>
       </Box>
@@ -4267,14 +4272,14 @@ function DataManagementSection() {
       <Dialog
         open={showClearMessagesConfirm}
         onClose={() => setShowClearMessagesConfirm(false)}
-        title="Clear Messages?"
-        description="This will permanently delete all messages, reactions, pins, and threads from this device. Your friends and groups will be kept. This action cannot be undone."
+        title={t('clearMessagesTitle')}
+        description={t('clearMessagesDialogDesc')}
         icon={<TrashIcon size={24} color={tc.status.warning} />}
         size="sm"
         footer={
           <HStack gap="sm" style={{ justifyContent: 'flex-end' }}>
             <Button variant="tertiary" onPress={() => setShowClearMessagesConfirm(false)}>
-              Cancel
+              {t('cancel')}
             </Button>
             <Button
               variant="secondary"
@@ -4282,7 +4287,7 @@ function DataManagementSection() {
               style={{ borderColor: tc.status.warningBorder, backgroundColor: tc.status.warningSurface }}
             >
               <Text style={{ color: tc.status.warning, fontWeight: '600', fontSize: 14 }}>
-                Clear Messages
+                {t('clearMessages')}
               </Text>
             </Button>
           </HStack>
@@ -4293,14 +4298,14 @@ function DataManagementSection() {
       <Dialog
         open={showClearAllConfirm}
         onClose={() => setShowClearAllConfirm(false)}
-        title="Clear All Data?"
-        description="This will permanently delete ALL locally stored data including messages, friends, groups, and conversations. Your identity and recovery phrase are NOT affected. This action cannot be undone."
+        title={t('clearAllDataTitle')}
+        description={t('clearAllDataDialogDesc')}
         icon={<AlertTriangleIcon size={24} color={tc.status.danger} />}
         size="sm"
         footer={
           <HStack gap="sm" style={{ justifyContent: 'flex-end' }}>
             <Button variant="tertiary" onPress={() => setShowClearAllConfirm(false)}>
-              Cancel
+              {t('cancel')}
             </Button>
             <Button
               variant="secondary"
@@ -4308,7 +4313,7 @@ function DataManagementSection() {
               style={{ borderColor: tc.status.dangerBorder, backgroundColor: tc.status.dangerSurface }}
             >
               <Text style={{ color: tc.status.danger, fontWeight: '600', fontSize: 14 }}>
-                Clear All Data
+                {t('clearAllData')}
               </Text>
             </Button>
           </HStack>
@@ -4363,7 +4368,7 @@ function PluginsSection({ onOpenMarketplace }: { onOpenMarketplace?: () => void 
             {t('sectionPlugins')}
           </Text>
           <Text style={{ fontSize: 13, color: tc.text.secondary }}>
-            Extend Umbra with plugins. {enabledCount} plugin{enabledCount !== 1 ? 's' : ''} active.
+            {t('pluginsDesc', { count: enabledCount })}
           </Text>
         </Box>
         {onOpenMarketplace && (
@@ -4395,14 +4400,14 @@ function PluginsSection({ onOpenMarketplace }: { onOpenMarketplace?: () => void 
         >
           <ZapIcon size={24} color={tc.text.muted} />
           <Text style={{ fontSize: 14, fontWeight: '600', color: tc.text.primary }}>
-            No plugins installed
+            {t('noPluginsInstalled')}
           </Text>
           <Text style={{ fontSize: 12, color: tc.text.secondary, textAlign: 'center' }}>
-            Browse the marketplace to discover and install plugins that extend Umbra's functionality.
+            {t('browseMarketplace')}
           </Text>
           {onOpenMarketplace && (
             <Text style={{ fontSize: 12, color: tc.accent.primary, fontWeight: '600', marginTop: 4 }}>
-              Open Marketplace
+              {t('openMarketplace')}
             </Text>
           )}
         </Pressable>
@@ -4437,6 +4442,7 @@ function PluginSettingsCard({
   onToggle: () => void;
   onUninstall: () => void;
 }) {
+  const { t } = useTranslation('settings');
   const [showConfirm, setShowConfirm] = useState(false);
 
   return (
@@ -4496,7 +4502,7 @@ function PluginSettingsCard({
           ))}
           {plugin.manifest.permissions.length > 4 && (
             <Text style={{ fontSize: 9, color: tc.text.muted, alignSelf: 'center' }}>
-              +{plugin.manifest.permissions.length - 4} more
+              {t('permissionsMore', { count: plugin.manifest.permissions.length - 4 })}
             </Text>
           )}
         </Box>
@@ -4506,17 +4512,17 @@ function PluginSettingsCard({
       {showConfirm ? (
         <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingLeft: 44 }}>
           <Text style={{ fontSize: 11, color: tc.status.danger, flex: 1 }}>
-            Remove plugin and data?
+            {t('removePluginConfirm')}
           </Text>
           <Button
             size="xs"
             variant="destructive"
             onPress={() => { onUninstall(); setShowConfirm(false); }}
           >
-            Remove
+            {t('removeButton')}
           </Button>
           <Button size="xs" variant="tertiary" onPress={() => setShowConfirm(false)}>
-            Cancel
+            {t('cancel')}
           </Button>
         </Box>
       ) : (
@@ -4527,7 +4533,7 @@ function PluginSettingsCard({
             onPress={() => setShowConfirm(true)}
             iconLeft={<TrashIcon size={11} color={tc.text.muted} />}
           >
-            Uninstall
+            {t('uninstall')}
           </Button>
         </Box>
       )}
@@ -4553,14 +4559,14 @@ function KeyboardShortcutsSection() {
         {t('sectionShortcuts')}
       </Text>
       <Text size="sm" style={{ color: tc.text.muted }}>
-        Shortcuts registered by plugins and the app. Press the key combination to trigger the action.
+        {t('shortcutsDesc')}
       </Text>
 
       {allShortcuts.length === 0 ? (
         <Card style={{ padding: 24, alignItems: 'center' }}>
           <KeyIcon size={32} color={tc.text.muted} />
           <Text size="sm" style={{ color: tc.text.muted, marginTop: 8 }}>
-            No keyboard shortcuts registered yet. Install plugins that register shortcuts to see them here.
+            {t('noShortcuts')}
           </Text>
         </Card>
       ) : (
@@ -4633,26 +4639,25 @@ function DeveloperSection() {
     <Box style={{ gap: 20 }}>
       <SectionHeader
         title={t('sectionDeveloper')}
-        description="Diagnostic tools for debugging WebRTC calls, media quality, and performance."
+        description={t('sectionDeveloperDesc')}
       />
 
       {/* Warning banner */}
       <Card style={{ padding: 12, borderColor: tc.status.warning ?? '#ff9800', borderWidth: 1 }}>
         <Text style={{ fontSize: 12, color: tc.text.secondary, lineHeight: 18 }}>
-          These settings are for debugging. Raw media capture uses significant disk space.
-          Some options may affect call performance when enabled.
+          {t('devToolsWarning')}
         </Text>
       </Card>
 
       {/* ── Call Diagnostics ─────────────────────────────────────────────── */}
       <Box nativeID="sub-diagnostics">
         <Text style={{ fontSize: 14, fontWeight: '600', color: tc.text.primary, marginBottom: 12 }}>
-          Call Diagnostics
+          {t('callDiagnostics')}
         </Text>
 
         <SettingRow
-          label="Enable Call Diagnostics"
-          description="Master switch for all diagnostic features"
+          label={t('enableDiagnostics')}
+          description={t('enableDiagnosticsDesc')}
         >
           <Toggle
             checked={dev.diagnosticsEnabled}
@@ -4661,8 +4666,8 @@ function DeveloperSection() {
         </SettingRow>
 
         <SettingRow
-          label="Show Stats Overlay"
-          description="Real-time stats overlay during active calls"
+          label={t('statsOverlay')}
+          description={t('statsOverlayDesc')}
         >
           <Toggle
             checked={dev.statsOverlay}
@@ -4673,8 +4678,8 @@ function DeveloperSection() {
         {dev.diagnosticsEnabled && (
           <>
             <SettingRow
-              label="Frame Timing Alerts"
-              description="Log alerts when frame intervals drift >5ms from target"
+              label={t('frameTimingAlerts')}
+              description={t('frameTimingAlertsDesc')}
             >
               <Toggle
                 checked={dev.frameTimingAlerts}
@@ -4683,8 +4688,8 @@ function DeveloperSection() {
             </SettingRow>
 
             <SettingRow
-              label="Ring Buffer Logging"
-              description="Log audio ring buffer state per frame for garble detection"
+              label={t('ringBufferLogging')}
+              description={t('ringBufferLoggingDesc')}
             >
               <Toggle
                 checked={dev.ringBufferLogging}
@@ -4693,8 +4698,8 @@ function DeveloperSection() {
             </SettingRow>
 
             <SettingRow
-              label="Codec Negotiation Log"
-              description="Log SDP codec negotiation on both sides and diff for mismatches"
+              label={t('codecNegotiationLog')}
+              description={t('codecNegotiationLogDesc')}
             >
               <Toggle
                 checked={dev.codecNegotiationLog}
@@ -4703,8 +4708,8 @@ function DeveloperSection() {
             </SettingRow>
 
             <SettingRow
-              label="Degradation Detection"
-              description="Auto-capture state snapshots when quality metrics degrade"
+              label={t('degradationDetection')}
+              description={t('degradationDetectionDesc')}
             >
               <Toggle
                 checked={dev.degradationDetection}
@@ -4717,10 +4722,10 @@ function DeveloperSection() {
 
       {/* ── Media Capture & Testing ────────────────────────────────────── */}
       <Box nativeID="sub-capture">
-        <CollapsibleSection title="Media Capture">
+        <CollapsibleSection title={t('mediaCapture')}>
           <SettingRow
-            label="Raw Media Capture"
-            description="Dump raw PCM audio (.wav) and I420 video (.yuv) to disk before encoding"
+            label={t('rawMediaCapture')}
+            description={t('rawMediaCaptureDesc')}
           >
             <Toggle
               checked={dev.rawMediaCapture}
@@ -4730,8 +4735,8 @@ function DeveloperSection() {
           </SettingRow>
 
           <SettingRow
-            label="A/V Sync Validation"
-            description="Enable frame counter, click track, and timestamp sync checks"
+            label={t('avSyncValidation')}
+            description={t('avSyncValidationDesc')}
           >
             <Toggle
               checked={dev.avSyncValidation}
@@ -4743,10 +4748,10 @@ function DeveloperSection() {
       </Box>
 
       <Box nativeID="sub-testing">
-        <CollapsibleSection title="Testing">
+        <CollapsibleSection title={t('testing')}>
           <SettingRow
-            label="Reference Signal Mode"
-            description="Replace all media with a 440Hz sine wave test tone for quality validation"
+            label={t('referenceSignalMode')}
+            description={t('referenceSignalModeDesc')}
           >
             <Toggle
               checked={dev.referenceSignalMode}
@@ -4766,6 +4771,7 @@ function DeveloperSection() {
 function DangerZoneSubsection() {
   const { theme } = useTheme();
   const tc = theme.colors;
+  const { t } = useTranslation('settings');
   const [showConfirm, setShowConfirm] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
 
@@ -4820,32 +4826,31 @@ function DangerZoneSubsection() {
   return (
     <Box nativeID="sub-danger">
       <Text style={{ fontSize: 14, fontWeight: '600', color: tc.status.danger, marginBottom: 12 }}>
-        Danger Zone
+        {t('dangerZone')}
       </Text>
 
       <Card style={{ padding: 16, borderColor: tc.status.danger, borderWidth: 1 }}>
         <Text style={{ fontSize: 14, fontWeight: '600', color: tc.text.primary, marginBottom: 4 }}>
-          Full Browser Reset
+          {t('fullBrowserReset')}
         </Text>
         <Text style={{ fontSize: 12, color: tc.text.secondary, lineHeight: 18, marginBottom: 12 }}>
-          Wipe all local data: databases, localStorage, sessionStorage, caches, and service workers.
-          You will be logged out and all local data will be permanently deleted.
+          {t('fullBrowserResetDesc')}
         </Text>
         <Button variant="destructive" onPress={() => setShowConfirm(true)}>
-          Reset All Browser Data
+          {t('resetAllBrowserData')}
         </Button>
       </Card>
 
       <Dialog
         open={showConfirm}
         onClose={() => setShowConfirm(false)}
-        title="Confirm Full Reset"
+        title={t('confirmFullReset')}
         icon={<TrashIcon size={24} color={tc.status.danger} />}
         size="sm"
         footer={
           <HStack gap="sm" style={{ justifyContent: 'flex-end' }}>
             <Button variant="tertiary" onPress={() => setShowConfirm(false)} disabled={isResetting}>
-              Cancel
+              {t('cancel')}
             </Button>
             <Button
               variant="secondary"
@@ -4854,7 +4859,7 @@ function DangerZoneSubsection() {
               disabled={isResetting}
             >
               <Text style={{ color: tc.status.danger, fontWeight: '600', fontSize: 14 }}>
-                {isResetting ? 'Resetting...' : 'Yes, Delete Everything'}
+                {isResetting ? t('resettingButton') : t('confirmResetButton')}
               </Text>
             </Button>
           </HStack>
@@ -4862,12 +4867,11 @@ function DangerZoneSubsection() {
       >
         <Box style={{ gap: 12 }}>
           <Text style={{ fontSize: 13, color: tc.text.secondary, lineHeight: 18 }}>
-            This will permanently delete ALL local data including your wallet, messages,
-            contacts, and settings. You will need to re-import your wallet to use Umbra again.
+            {t('resetConfirmWarning')}
           </Text>
           <Box style={{ backgroundColor: tc.status.dangerSurface, borderRadius: 8, padding: 12, borderWidth: 1, borderColor: tc.status.dangerBorder }}>
             <Text style={{ fontSize: 12, color: tc.status.danger, fontWeight: '600' }}>
-              Warning: This action cannot be undone.
+              {t('resetWarningMessage')}
             </Text>
           </Box>
         </Box>
@@ -4913,24 +4917,24 @@ function AboutSection() {
 
       <Card style={{ padding: 16, marginBottom: 16 }}>
         <Text style={{ fontSize: 16, fontWeight: '600', color: tc.text.primary, marginBottom: 12 }}>
-          Umbra
+          {t('appName')}
         </Text>
 
-        <Text style={labelStyle}>App Version</Text>
+        <Text style={labelStyle}>{t('appVersionLabel')}</Text>
         <Text style={valueStyle}>{update.currentVersion}</Text>
 
         {coreVersion ? (
           <>
-            <Text style={labelStyle}>Core Version</Text>
+            <Text style={labelStyle}>{t('coreVersionLabel')}</Text>
             <Text style={valueStyle}>{coreVersion}</Text>
           </>
         ) : null}
 
-        <Text style={labelStyle}>Latest Available</Text>
+        <Text style={labelStyle}>{t('latestAvailableLabel')}</Text>
         <Text style={valueStyle}>
-          {update.isLoading ? 'Checking...' : update.latestVersion || update.currentVersion}
+          {update.isLoading ? t('checkingVersion') : update.latestVersion || update.currentVersion}
           {update.hasUpdate && !update.isWebUser && (
-            <Text style={{ color: tc.status.success, fontSize: 12 }}> (update available)</Text>
+            <Text style={{ color: tc.status.success, fontSize: 12 }}> {t('updateAvailable')}</Text>
           )}
         </Text>
 
@@ -4940,7 +4944,7 @@ function AboutSection() {
             size="sm"
             onPress={update.checkForUpdate}
           >
-            Check for Updates
+            {t('checkForUpdates')}
           </Button>
           <Button
             variant="secondary"
@@ -4948,13 +4952,13 @@ function AboutSection() {
             onPress={() => setShowAllPlatforms(true)}
             iconLeft={<DownloadIcon size={14} color={tc.text.secondary} />}
           >
-            All Downloads
+            {t('allDownloads')}
           </Button>
         </HStack>
       </Card>
 
       <Card style={{ padding: 16, marginBottom: 16 }}>
-        <Text style={{ fontSize: 14, fontWeight: '600', color: tc.text.primary, marginBottom: 10 }}>Links</Text>
+        <Text style={{ fontSize: 14, fontWeight: '600', color: tc.text.primary, marginBottom: 10 }}>{t('links')}</Text>
 
         <Pressable
           onPress={() => {
@@ -4963,7 +4967,7 @@ function AboutSection() {
           style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8 }}
         >
           <ExternalLinkIcon size={14} color={tc.text.link} />
-          <Text style={{ fontSize: 13, color: tc.text.link }}>GitHub Repository</Text>
+          <Text style={{ fontSize: 13, color: tc.text.link }}>{t('githubRepository')}</Text>
         </Pressable>
 
         {update.releaseUrl && (
@@ -4972,7 +4976,7 @@ function AboutSection() {
             style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8 }}
           >
             <ExternalLinkIcon size={14} color={tc.text.link} />
-            <Text style={{ fontSize: 13, color: tc.text.link }}>Release Notes</Text>
+            <Text style={{ fontSize: 13, color: tc.text.link }}>{t('releaseNotes')}</Text>
           </Pressable>
         )}
 
@@ -4981,14 +4985,13 @@ function AboutSection() {
           style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 8 }}
         >
           <GlobeIcon size={14} color={tc.text.link} />
-          <Text style={{ fontSize: 13, color: tc.text.link }}>Web App</Text>
+          <Text style={{ fontSize: 13, color: tc.text.link }}>{t('webApp')}</Text>
         </Pressable>
       </Card>
 
       <Card style={{ padding: 16 }}>
         <Text style={{ fontSize: 12, color: tc.text.muted, lineHeight: 18 }}>
-          Umbra is a private, peer-to-peer messaging application with end-to-end encryption.
-          Built with Ed25519/X25519/AES-256-GCM cryptography and WebRTC for direct communication.
+          {t('aboutDescription')}
         </Text>
       </Card>
 
@@ -5025,6 +5028,7 @@ function MessageDisplayPreview({
   const { theme } = useTheme();
   const tc = theme.colors;
   const isDark = theme.mode === 'dark';
+  const { t } = useTranslation('settings');
 
   return (
     <Pressable
@@ -5061,7 +5065,7 @@ function MessageDisplayPreview({
             color: selected ? tc.accent.primary : tc.text.primary,
           }}
         >
-          {mode === 'bubble' ? 'Bubbles' : 'Inline'}
+          {mode === 'bubble' ? t('bubbles') : t('inline')}
         </Text>
         {selected && (
           <Box
@@ -5224,7 +5228,7 @@ function MessagingSection() {
     <Box style={{ gap: 20 }}>
       <SectionHeader
         title={t('sectionMessaging')}
-        description="Choose how messages are displayed in conversations."
+        description={t('sectionMessagingDesc')}
       />
 
       <Box nativeID="sub-display">
@@ -5238,7 +5242,7 @@ function MessagingSection() {
             marginBottom: 10,
           }}
         >
-          Display Style
+          {t('displayStyle')}
         </Text>
 
         <Box style={{ flexDirection: 'row', gap: 12 }}>
@@ -5262,8 +5266,8 @@ function MessagingSection() {
           }}
         >
           {displayMode === 'bubble'
-            ? 'Messages appear in colored bubbles. Your messages are on the right, theirs on the left.'
-            : 'All messages are left-aligned with sender name and timestamp. Similar to Slack or Discord.'}
+            ? t('bubbleDisplayDesc')
+            : t('inlineDisplayDesc')}
         </Text>
       </Box>
     </Box>

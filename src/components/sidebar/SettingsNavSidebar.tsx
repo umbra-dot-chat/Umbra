@@ -89,6 +89,51 @@ function SettingsNavContent({
   const isDark = mode === 'dark';
   const { hasBottomPanel, contentFlex } = useSidebarShellLayout();
 
+  // Translated labels for NAV_ITEMS (module-level constant can't use hooks)
+  const navLabels: Record<SettingsSection, string> = useMemo(() => ({
+    account: t('sectionAccount'),
+    appearance: t('sectionAppearance'),
+    messaging: t('sectionMessaging'),
+    notifications: t('sectionNotifications'),
+    sounds: t('sectionSounds'),
+    privacy: t('sectionPrivacy'),
+    'audio-video': t('sectionAudioVideo'),
+    network: t('sectionNetwork'),
+    data: t('sectionData'),
+    plugins: t('sectionPlugins'),
+    'keyboard-shortcuts': t('sectionShortcuts'),
+    about: t('sectionAbout'),
+    developer: t('sectionDeveloper'),
+  }), [t]);
+
+  // Translated labels for SUBCATEGORIES
+  const subLabels: Record<string, string> = useMemo(() => ({
+    profile: t('subProfile'),
+    identity: t('subIdentity'),
+    sharing: t('subSharing'),
+    sync: t('subSync'),
+    danger: t('subDangerZone'),
+    theme: t('subTheme'),
+    'dark-mode': t('subDarkMode'),
+    colors: t('subColors'),
+    'text-size': t('subTextSize'),
+    font: t('subFont'),
+    language: t('subLanguage'),
+    discovery: t('subFriendDiscovery'),
+    visibility: t('subVisibility'),
+    security: t('subSecurity'),
+    calling: t('subCalling'),
+    video: t('subVideo'),
+    audio: t('subAudio'),
+    devices: t('subDevices'),
+    connection: t('subConnection'),
+    relays: t('subRelays'),
+    peers: t('subPeers'),
+    diagnostics: t('subCallDiagnostics'),
+    capture: t('subMediaCapture'),
+    testing: t('subTesting'),
+  }), [t]);
+
   return (
     <Box style={{ marginTop: 12, flex: contentFlex, overflow: 'hidden' as any }}>
       <Box
@@ -148,7 +193,7 @@ function SettingsNavContent({
                     color: isActive ? tc.text.primary : tc.text.secondary,
                   }}
                 >
-                  {item.label}
+                  {navLabels[item.id] ?? item.label}
                 </Text>
               </Pressable>
 
@@ -194,7 +239,7 @@ function SettingsNavContent({
                               color: isSubActive ? tc.text.primary : tc.text.secondary,
                             }}
                           >
-                            {sub.label}
+                            {subLabels[sub.id] ?? sub.label}
                           </Text>
                         </Pressable>
                       </Box>

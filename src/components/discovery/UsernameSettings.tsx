@@ -6,6 +6,7 @@
  */
 
 import React, { useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Pressable } from 'react-native';
 import type { ViewStyle } from 'react-native';
 import {
@@ -90,6 +91,7 @@ export interface UsernameSettingsProps {
 export function UsernameSettings({ did, style }: UsernameSettingsProps) {
   if (__DEV__) dbg.trackRender('UsernameSettings');
   const { theme } = useTheme();
+  const { t } = useTranslation('settings');
   const tc = theme.colors;
 
   const {
@@ -168,7 +170,7 @@ export function UsernameSettings({ did, style }: UsernameSettingsProps) {
         <HStack gap="sm" style={{ alignItems: 'center' }}>
           <UserTagIcon size={18} color={tc.text.primary} />
           <Text size="sm" weight="semibold">
-            Username
+            {t('usernameTitle')}
           </Text>
         </HStack>
 
@@ -181,7 +183,7 @@ export function UsernameSettings({ did, style }: UsernameSettingsProps) {
 
         {/* Error */}
         {error && (
-          <Alert variant="danger" title="Error" description={error.message} />
+          <Alert variant="danger" title={t('error')} description={error.message} />
         )}
 
         {/* Current username display */}
@@ -194,7 +196,7 @@ export function UsernameSettings({ did, style }: UsernameSettingsProps) {
                     {username}
                   </Text>
                   <Text size="xs" color="muted">
-                    Share this with friends so they can find you
+                    {t('usernameShareHelp')}
                   </Text>
                 </VStack>
                 <HStack gap="sm">
@@ -231,7 +233,7 @@ export function UsernameSettings({ did, style }: UsernameSettingsProps) {
         {!username && !editing && !isLoading && (
           <VStack gap="sm">
             <Text size="sm" color="secondary">
-              Set a username so friends can find you by name instead of DID.
+              {t('usernamePrompt')}
             </Text>
             <Button
               variant="secondary"
@@ -241,7 +243,7 @@ export function UsernameSettings({ did, style }: UsernameSettingsProps) {
                 setEditing(true);
               }}
             >
-              Set Username
+              {t('usernameSet')}
             </Button>
           </VStack>
         )}
@@ -250,8 +252,8 @@ export function UsernameSettings({ did, style }: UsernameSettingsProps) {
         {editing && (
           <VStack gap="md">
             <Input
-              label={username ? 'New Username' : 'Username'}
-              placeholder="e.g., Matt"
+              label={username ? t('usernameNew') : t('usernameTitle')}
+              placeholder={t('usernamePlaceholder')}
               value={inputValue}
               onChangeText={setInputValue}
               fullWidth
@@ -262,14 +264,13 @@ export function UsernameSettings({ did, style }: UsernameSettingsProps) {
             />
 
             <Text size="xs" color="muted">
-              1-32 characters. Letters, numbers, underscores, and hyphens only. A
-              numeric tag will be auto-assigned.
+              {t('usernameRules')}
             </Text>
 
             {username && (
               <Alert
                 variant="warning"
-                description="Changing your username will assign a new tag. Your old username will become available for others."
+                description={t('usernameChangeWarning')}
               />
             )}
 
@@ -281,7 +282,7 @@ export function UsernameSettings({ did, style }: UsernameSettingsProps) {
                   onPress={handleRelease}
                   disabled={isLoading}
                 >
-                  Remove Username
+                  {t('usernameRemove')}
                 </Button>
               )}
               <Box style={{ flex: 1 }} />
@@ -291,7 +292,7 @@ export function UsernameSettings({ did, style }: UsernameSettingsProps) {
                 onPress={handleCancelEdit}
                 disabled={isLoading}
               >
-                Cancel
+                {t('cancel')}
               </Button>
               <Button
                 variant="primary"
@@ -299,7 +300,7 @@ export function UsernameSettings({ did, style }: UsernameSettingsProps) {
                 onPress={handleSave}
                 disabled={!inputValue.trim() || isLoading}
               >
-                {isLoading ? 'Saving...' : username ? 'Change' : 'Register'}
+                {isLoading ? t('saving') : username ? t('usernameChange') : t('usernameRegister')}
               </Button>
             </HStack>
           </VStack>

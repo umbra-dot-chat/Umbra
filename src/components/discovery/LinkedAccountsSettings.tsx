@@ -5,6 +5,7 @@
  */
 
 import React, { useCallback, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { ViewStyle } from 'react-native';
 import { VStack, HStack, Text, Card, Alert, Spinner, useTheme } from '@coexist/wisp-react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
@@ -49,6 +50,7 @@ export interface LinkedAccountsSettingsProps {
 export function LinkedAccountsSettings({ did, style }: LinkedAccountsSettingsProps) {
   if (__DEV__) dbg.trackRender('LinkedAccountsSettings');
   const { theme } = useTheme();
+  const { t } = useTranslation('settings');
 
   const textPrimary = theme.colors.text.primary;
   const textMuted = theme.colors.text.muted;
@@ -104,7 +106,7 @@ export function LinkedAccountsSettings({ did, style }: LinkedAccountsSettingsPro
     return (
       <Card variant="outlined" padding="lg" style={style}>
         <Text size="sm" color="tertiary" style={{ textAlign: 'center' }}>
-          Sign in to manage linked accounts
+          {t('linkedSignIn')}
         </Text>
       </Card>
     );
@@ -117,11 +119,11 @@ export function LinkedAccountsSettings({ did, style }: LinkedAccountsSettingsPro
         <HStack gap="sm" style={{ alignItems: 'center' }}>
           <UsersIcon size={18} color={textPrimary} />
           <Text size="md" weight="semibold">
-            Friend Discovery
+            {t('linkedFriendDiscovery')}
           </Text>
         </HStack>
         <Text size="xs" color="tertiary">
-          Link your accounts from other platforms so friends can find you on Umbra.
+          {t('linkedDescription')}
         </Text>
       </VStack>
 
@@ -143,7 +145,7 @@ export function LinkedAccountsSettings({ did, style }: LinkedAccountsSettingsPro
               color="tertiary"
               style={{ textTransform: 'uppercase', letterSpacing: 0.5 }}
             >
-              Linked Accounts
+              {t('linkedAccounts')}
             </Text>
           </HStack>
 
@@ -204,7 +206,7 @@ export function LinkedAccountsSettings({ did, style }: LinkedAccountsSettingsPro
         <HStack gap="sm" style={{ alignItems: 'center', justifyContent: 'center' }}>
           <Spinner size="sm" />
           <Text size="xs" color="tertiary">
-            Loading...
+            {t('loading')}
           </Text>
         </HStack>
       )}

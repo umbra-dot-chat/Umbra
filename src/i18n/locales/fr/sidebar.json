@@ -16,5 +16,7 @@
   "searchSettings": "Rechercher dans les paramètres...",
   "plugins": "Extensions",
   "themes": "Thèmes",
-  "fonts": "Polices"
+  "fonts": "Polices",
+  "noSettingsFound": "Aucun paramètre trouvé",
+  "marketplace": "Marketplace"
 }

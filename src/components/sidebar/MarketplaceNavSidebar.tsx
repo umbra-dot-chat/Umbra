@@ -122,7 +122,7 @@ function MarketplaceNavContent({
             letterSpacing: 0.5,
           }}
         >
-          Marketplace
+          {t('marketplace')}
         </Text>
       </Box>
 

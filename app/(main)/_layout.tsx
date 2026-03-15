@@ -24,6 +24,7 @@ import { ProfilePopover } from '@/components/modals/ProfilePopover';
 import { ProfilePopoverProvider, useProfilePopoverContext } from '@/contexts/ProfilePopoverContext';
 import { CallProvider, useCallContext } from '@/contexts/CallContext';
 import { IncomingCallOverlay } from '@/components/call/IncomingCallOverlay';
+import { useTranslation } from 'react-i18next';
 import { UnifiedSearchProvider } from '@/contexts/UnifiedSearchContext';
 import { SettingsNavigationProvider } from '@/contexts/SettingsNavigationContext';
 import { MarketplaceNavigationProvider } from '@/contexts/MarketplaceNavigationContext';
@@ -75,6 +76,7 @@ function MainLayoutInner() {
   const pathname = usePathname();
   const { selectedMember, popoverAnchor, closeProfile } = useProfilePopoverContext();
   const { playSound } = useSound();
+  const { t: tSidebar } = useTranslation('sidebar');
   const isMobile = useIsMobile();
   const { width: screenWidth } = useWindowDimensions();
   const { activeChannelId: communityActiveChannelId } = useCommunityContext();
@@ -765,7 +767,7 @@ function MainLayoutInner() {
                   {activeCommunityId ? (
                     <CommunityLayoutSidebar communityId={activeCommunityId} />
                   ) : isSettingsActive ? (
-                    <SettingsNavSidebar searchPlaceholder="Search settings..." {...sidebarShellProps} />
+                    <SettingsNavSidebar searchPlaceholder={tSidebar('searchSettings')} {...sidebarShellProps} />
                   ) : isMarketplaceActive ? (
                     <MarketplaceNavSidebar {...sidebarShellProps} />
                   ) : (
@@ -865,7 +867,7 @@ function MainLayoutInner() {
                 {activeCommunityId ? (
                   <CommunityLayoutSidebar communityId={activeCommunityId} />
                 ) : isSettingsActive ? (
-                  <SettingsNavSidebar searchPlaceholder="Search settings..." {...sidebarShellProps} />
+                  <SettingsNavSidebar searchPlaceholder={tSidebar('searchSettings')} {...sidebarShellProps} />
                 ) : isMarketplaceActive ? (
                   <MarketplaceNavSidebar {...sidebarShellProps} />
                 ) : (
