@@ -15,8 +15,8 @@ import { useNotificationListener } from '@/hooks/useNotificationListener';
 // NotificationDrawerContainer removed — notifications now render inline via SidebarNotificationsPanel
 import { ChatSidebar } from '@/components/sidebar/ChatSidebar';
 import { SettingsNavSidebar } from '@/components/sidebar/SettingsNavSidebar';
+import { MarketplaceNavSidebar } from '@/components/sidebar/MarketplaceNavSidebar';
 import { SettingsDialog } from '@/components/modals/SettingsDialog';
-import { PluginMarketplace } from '@/components/modals/PluginMarketplace';
 import { GuideDialog } from '@/components/modals/GuideDialog';
 import { CreateGroupDialog } from '@/components/groups/CreateGroupDialog';
 import { NewDmDialog } from '@/components/modals/NewDmDialog';
@@ -26,6 +26,7 @@ import { CallProvider, useCallContext } from '@/contexts/CallContext';
 import { IncomingCallOverlay } from '@/components/call/IncomingCallOverlay';
 import { UnifiedSearchProvider } from '@/contexts/UnifiedSearchContext';
 import { SettingsNavigationProvider } from '@/contexts/SettingsNavigationContext';
+import { MarketplaceNavigationProvider } from '@/contexts/MarketplaceNavigationContext';
 import { InstallBanner } from '@/components/ui/InstallBanner';
 import { useCommandPalette } from '@/hooks/useCommandPalette';
 import { CommandPalette } from '@/components/modals/CommandPalette';
@@ -311,7 +312,6 @@ function MainLayoutInner() {
   const [accountSwitcherOpen, setAccountSwitcherOpen] = useState(false);
   const [communitySubmitting, setCommunitySubmitting] = useState(false);
   const [communityError, setCommunityError] = useState<string | undefined>();
-  const [marketplaceOpen, setMarketplaceOpen] = useState(false);
   // Cmd+K opens command palette, Cmd+Shift+F opens sidebar search
   const { open: commandPaletteOpen, setOpen: setCommandPaletteOpen, openPalette } = useCommandPalette();
 
@@ -412,7 +412,7 @@ function MainLayoutInner() {
     if (Platform.OS !== 'web') return;
 
     const onOpenSettings = () => { playSound('tab_switch'); router.push('/settings'); };
-    const onOpenMarketplace = () => { playSound('dialog_open'); setMarketplaceOpen(true); };
+    const onOpenMarketplace = () => { playSound('tab_switch'); router.push('/marketplace'); };
     const onOpenDm = (e: Event) => {
       const did = (e as CustomEvent).detail?.did;
       if (did) {
@@ -533,10 +533,11 @@ function MainLayoutInner() {
     }
   }, [pathname, router, playSound]);
 
-  // Home is active when NOT on a community page and NOT on files/settings page
+  // Home is active when NOT on a community page and NOT on files/settings/marketplace page
   const isFilesActive = pathname === '/files';
   const isSettingsActive = pathname === '/settings';
-  const isHomeActive = !pathname.startsWith('/community/') && !isFilesActive && !isSettingsActive;
+  const isMarketplaceActive = pathname === '/marketplace';
+  const isHomeActive = !pathname.startsWith('/community/') && !isFilesActive && !isSettingsActive && !isMarketplaceActive;
 
   // Navigate to files page
   const handleFilesPress = useCallback(() => {
@@ -548,6 +549,12 @@ function MainLayoutInner() {
   const handleSettingsPress = useCallback(() => {
     playSound('tab_switch');
     router.push('/settings');
+  }, [router, playSound]);
+
+  // Navigate to marketplace page
+  const handleMarketplacePress = useCallback(() => {
+    playSound('tab_switch');
+    router.push('/marketplace');
   }, [router, playSound]);
 
   // Return to the active call conversation
@@ -578,13 +585,14 @@ function MainLayoutInner() {
     isFilesActive ||                                      // Files page
     isFriendsActive ||                                    // Friends page
     isSettingsActive ||                                   // Settings page
+    isMarketplaceActive ||                                // Marketplace page
     (activeCommunityId && communityActiveChannelId)        // Community channel selected
   );
 
   // Drive sidebar ↔ content animation on mobile when state changes programmatically.
   // We track a "navigation key" that changes whenever the user selects a new destination,
   // so even if mobileShowContent stays true (switching chats), we re-animate to content.
-  const mobileNavKey = `${activeId}|${activeCommunityId}|${communityActiveChannelId}|${isFilesActive}|${isFriendsActive}|${isSettingsActive}`;
+  const mobileNavKey = `${activeId}|${activeCommunityId}|${communityActiveChannelId}|${isFilesActive}|${isFriendsActive}|${isSettingsActive}|${isMarketplaceActive}`;
   const prevNavKeyRef = useRef(mobileNavKey);
 
   useEffect(() => {
@@ -729,7 +737,8 @@ function MainLayoutInner() {
                   activeCommunityId={activeCommunityId}
                   onCommunityPress={handleCommunityPress}
                   onCreateCommunity={() => { playSound('dialog_open'); setCreateCommunityOptionsOpen(true); }}
-                  onMarketplacePress={() => { playSound('dialog_open'); setMarketplaceOpen(true); }}
+                  onMarketplacePress={handleMarketplacePress}
+                  isMarketplaceActive={isMarketplaceActive}
                   onGuidePress={() => { playSound('dialog_open'); setGuideOpen(true); }}
                   onOpenSettings={handleSettingsPress}
                   userAvatar={identity?.avatar}
@@ -757,6 +766,8 @@ function MainLayoutInner() {
                     <CommunityLayoutSidebar communityId={activeCommunityId} />
                   ) : isSettingsActive ? (
                     <SettingsNavSidebar searchPlaceholder="Search settings..." {...sidebarShellProps} />
+                  ) : isMarketplaceActive ? (
+                    <MarketplaceNavSidebar {...sidebarShellProps} />
                   ) : (
                     <ChatSidebar
                       conversations={sidebarConversations}
@@ -826,7 +837,8 @@ function MainLayoutInner() {
                 activeCommunityId={activeCommunityId}
                 onCommunityPress={handleCommunityPress}
                 onCreateCommunity={() => { playSound('dialog_open'); setCreateCommunityOptionsOpen(true); }}
-                onMarketplacePress={() => { playSound('dialog_open'); setMarketplaceOpen(true); }}
+                onMarketplacePress={handleMarketplacePress}
+                  isMarketplaceActive={isMarketplaceActive}
                 onGuidePress={() => { playSound('dialog_open'); setGuideOpen(true); }}
                 onOpenSettings={handleSettingsPress}
                 userAvatar={identity?.avatar}
@@ -854,6 +866,8 @@ function MainLayoutInner() {
                   <CommunityLayoutSidebar communityId={activeCommunityId} />
                 ) : isSettingsActive ? (
                   <SettingsNavSidebar searchPlaceholder="Search settings..." {...sidebarShellProps} />
+                ) : isMarketplaceActive ? (
+                  <MarketplaceNavSidebar {...sidebarShellProps} />
                 ) : (
                   <ChatSidebar
                     conversations={sidebarConversations}
@@ -903,8 +917,8 @@ function MainLayoutInner() {
         initialSection={settingsInitialSection}
         onOpenMarketplace={() => {
           closeSettings();
-          playSound('dialog_open');
-          setMarketplaceOpen(true);
+          playSound('tab_switch');
+          router.push('/marketplace');
         }}
       />
 
@@ -957,14 +971,11 @@ function MainLayoutInner() {
         open={commandPaletteOpen}
         onOpenChange={setCommandPaletteOpen}
         onOpenSettings={() => { playSound('tab_switch'); router.push('/settings'); }}
-        onOpenMarketplace={() => { playSound('dialog_open'); setMarketplaceOpen(true); }}
+        onOpenMarketplace={() => { playSound('tab_switch'); router.push('/marketplace'); }}
         hasActiveConversation={!!activeId}
       />
 
-      <PluginMarketplace
-        open={marketplaceOpen}
-        onClose={() => { playSound('dialog_close'); setMarketplaceOpen(false); }}
-      />
+      {/* PluginMarketplace removed — now rendered inline via /marketplace route */}
 
       {/* AccountSwitcher popover removed — now rendered inline via SidebarAccountPanel */}
 
@@ -984,7 +995,9 @@ export default function MainLayout() {
                 <ProfilePopoverProvider>
                   <UnifiedSearchProvider>
                     <SettingsNavigationProvider>
-                      <MainLayoutInner />
+                      <MarketplaceNavigationProvider>
+                        <MainLayoutInner />
+                      </MarketplaceNavigationProvider>
                     </SettingsNavigationProvider>
                   </UnifiedSearchProvider>
                 </ProfilePopoverProvider>

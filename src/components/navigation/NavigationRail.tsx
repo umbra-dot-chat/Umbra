@@ -96,8 +96,10 @@ export interface NavigationRailProps {
   notificationCount?: number;
   /** Called when the notification bell is pressed */
   onNotificationsPress?: () => void;
-  /** Whether the settings dialog is currently open */
+  /** Whether the settings page is currently active */
   isSettingsActive?: boolean;
+  /** Whether the marketplace page is currently active */
+  isMarketplaceActive?: boolean;
   /** Whether the notifications sidebar panel is currently open */
   isNotificationsPanelOpen?: boolean;
   /** Whether the account sidebar panel is currently open */
@@ -132,6 +134,7 @@ export function NavigationRail({
   homeNotificationCount,
   notificationCount,
   isSettingsActive,
+  isMarketplaceActive,
   onNotificationsPress,
   isNotificationsPanelOpen,
   isAccountPanelOpen,
@@ -460,13 +463,13 @@ export function NavigationRail({
         <RailItem
           itemKey="_marketplace"
           registerRef={registerItemRef}
-          active={false}
+          active={!!isMarketplaceActive}
           onPress={onMarketplacePress}
           theme={theme}
         >
           <ShoppingBagIcon
             size={22}
-            color={theme.colors.text.secondary}
+            color={isMarketplaceActive ? theme.colors.text.onAccent : theme.colors.text.secondary}
           />
         </RailItem>
       )}
