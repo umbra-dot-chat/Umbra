@@ -71,6 +71,10 @@ export function ProfilePopover({ selectedMember, anchor, onClose }: ProfilePopov
           username={`@${selectedMember.name.toLowerCase().replace(/\s/g, '')}`}
           avatar={<Avatar name={selectedMember.name} src={selectedMember.avatar} size="lg" status={status === 'online' ? 'online' : status === 'idle' ? 'away' : undefined} />}
           status={status as any}
+          // TODO: Pass statusText once ProfileMember carries custom status data
+          // from the backend. Currently only the local user can set a custom status
+          // via SettingsDialog; other members' custom statuses aren't synced yet.
+          // statusText={selectedMember.statusText}
           bannerColor={tc.accent.primary}
           onClose={onClose}
           actions={[

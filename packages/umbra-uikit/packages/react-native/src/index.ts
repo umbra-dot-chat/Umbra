@@ -183,6 +183,9 @@ export {
   ConflictResolutionDialog, FileTypeAllowlistSettings,
   // FormatToolbar
   FormatToolbar,
+  // MemberStatus
+  MemberStatusDisplay,
+  MemberStatusPicker,
 } from './components';
 export type {
   // Wave 1
@@ -297,6 +300,9 @@ export type {
   FileTypeAllowlistSettingsProps, FileTypePreset,
   // FormatToolbar
   FormatToolbarProps,
+  // MemberStatus
+  MemberStatusDisplayProps,
+  MemberStatusPickerProps,
 } from './components';
 
 // ---------------------------------------------------------------------------

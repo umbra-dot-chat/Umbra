@@ -27,6 +27,8 @@ import {
   Progress,
   GradientText,
   AuraBurst,
+  MemberStatusDisplay,
+  MemberStatusPicker,
   useTheme,
 } from '@coexist/wisp-react-native';
 import { defaultRadii } from '@coexist/wisp-core/theme/create-theme';
@@ -849,6 +851,25 @@ function AccountSection() {
   const [avatarError, setAvatarError] = useState<string | null>(null);
   const [bannerError, setBannerError] = useState<string | null>(null);
 
+  // ── Custom status state ──────────────────────────────────────────────
+  const [statusPickerOpen, setStatusPickerOpen] = useState(false);
+  const [customStatusText, setCustomStatusText] = useState('');
+  const [customStatusEmoji, setCustomStatusEmoji] = useState('');
+
+  const handleStatusSubmit = useCallback((data: { text?: string; emoji?: string }) => {
+    setCustomStatusText(data.text ?? '');
+    setCustomStatusEmoji(data.emoji ?? '');
+    setStatusPickerOpen(false);
+    // TODO: Persist via updateProfile when backend adds a dedicated statusEmoji field.
+    // For now custom status is local-only (lost on reload).
+  }, []);
+
+  const handleStatusClear = useCallback(() => {
+    setCustomStatusText('');
+    setCustomStatusEmoji('');
+    setStatusPickerOpen(false);
+  }, []);
+
   const hasProfileChanges =
     displayName !== (identity?.displayName ?? '') ||
     status !== (identity?.status ?? 'online') ||
@@ -1209,6 +1230,27 @@ function AccountSection() {
             fullWidth
           />
         </SettingRow>
+
+        <SettingRow label="Custom Status" description="Set a custom status message with emoji." vertical>
+          {(customStatusText || customStatusEmoji) && (
+            <MemberStatusDisplay
+              text={customStatusText}
+              emoji={customStatusEmoji}
+              size="sm"
+            />
+          )}
+          <Button variant="secondary" size="sm" onPress={() => setStatusPickerOpen(true)}>
+            {customStatusText ? 'Edit Status' : 'Set Status'}
+          </Button>
+        </SettingRow>
+
+        <MemberStatusPicker
+          open={statusPickerOpen}
+          onClose={() => setStatusPickerOpen(false)}
+          onSubmit={handleStatusSubmit}
+          onClear={handleStatusClear}
+          currentStatus={{ text: customStatusText, emoji: customStatusEmoji }}
+        />
 
         {(saving || saved) && (
           <HStack gap="xs" style={{ justifyContent: 'flex-end', alignItems: 'center' }}>

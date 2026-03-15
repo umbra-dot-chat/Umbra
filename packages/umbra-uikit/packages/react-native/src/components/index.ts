@@ -174,6 +174,14 @@ export type { UserProfileCardProps, ProfileRole, ProfileAction, UserStatus } fro
 export { MemberList } from './member-list';
 export type { MemberListProps, MemberListSection, MemberListMember } from './member-list';
 
+// MemberStatusDisplay
+export { MemberStatusDisplay } from './member-status-display';
+export type { MemberStatusDisplayProps } from './member-status-display';
+
+// MemberStatusPicker
+export { MemberStatusPicker } from './member-status-picker';
+export type { MemberStatusPickerProps } from './member-status-picker';
+
 // ChannelList
 export { ChannelList } from './channel-list';
 export type { ChannelListProps, ChannelCategory, ChannelItem, ChannelType } from './channel-list';
