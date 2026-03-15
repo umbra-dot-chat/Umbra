@@ -122,9 +122,14 @@ load_credentials() {
             log_info "Install with: brew install hudochenkov/sshpass/sshpass"
             exit 1
         fi
-        SSH_CMD="sshpass -p '$SSH_PASSWORD' ssh -o StrictHostKeyChecking=no"
-        SCP_CMD="sshpass -p '$SSH_PASSWORD' scp -o StrictHostKeyChecking=no"
-        RSYNC_SSH="sshpass -p '$SSH_PASSWORD' ssh -o StrictHostKeyChecking=no"
+        # Use temp file for password to avoid shell escaping issues with
+        # special characters (!, ], etc.) in sshpass -p or -e modes.
+        SSH_PASS_FILE=$(mktemp)
+        printf '%s' "$SSH_PASSWORD" > "$SSH_PASS_FILE"
+        trap "rm -f '$SSH_PASS_FILE'" EXIT
+        SSH_CMD="sshpass -f $SSH_PASS_FILE ssh -o StrictHostKeyChecking=no"
+        SCP_CMD="sshpass -f $SSH_PASS_FILE scp -o StrictHostKeyChecking=no"
+        RSYNC_SSH="sshpass -f $SSH_PASS_FILE ssh -o StrictHostKeyChecking=no"
         log_info "Using password authentication"
     elif [[ -n "$SSH_KEY_PATH" ]]; then
         # Key authentication
@@ -352,11 +357,14 @@ deploy_relay_to_host() {
     local local_ssh_cmd="$SSH_CMD"
     local local_rsync_ssh="$RSYNC_SSH"
 
-    # Override SSH commands if a specific password is provided
+    # Override SSH commands if a specific password is provided (temp file avoids escaping issues)
     if [[ -n "$password" ]]; then
-        export SSHPASS="$password"
-        local_ssh_cmd="sshpass -e ssh -o StrictHostKeyChecking=no"
-        local_rsync_ssh="sshpass -e ssh -o StrictHostKeyChecking=no"
+        local relay_pass_file
+        relay_pass_file=$(mktemp)
+        printf '%s' "$password" > "$relay_pass_file"
+        trap "rm -f '$SSH_PASS_FILE' '$GHOST_PASS_FILE' '$relay_pass_file'" EXIT
+        local_ssh_cmd="sshpass -f $relay_pass_file ssh -o StrictHostKeyChecking=no"
+        local_rsync_ssh="sshpass -f $relay_pass_file ssh -o StrictHostKeyChecking=no"
     fi
 
     log_info "Deploying relay to $host ($ssh_target)..."
@@ -525,11 +533,13 @@ deploy_ghost() {
     local ghost_ssh_cmd="$SSH_CMD"
     local ghost_rsync_ssh="$RSYNC_SSH"
 
-    # Use Ghost-specific password if set
+    # Use Ghost-specific password if set (temp file avoids shell escaping issues)
     if [[ -n "$GHOST_PASSWORD" ]]; then
-        export SSHPASS="$GHOST_PASSWORD"
-        ghost_ssh_cmd="sshpass -e ssh -o StrictHostKeyChecking=no"
-        ghost_rsync_ssh="sshpass -e ssh -o StrictHostKeyChecking=no"
+        GHOST_PASS_FILE=$(mktemp)
+        printf '%s' "$GHOST_PASSWORD" > "$GHOST_PASS_FILE"
+        trap "rm -f '$SSH_PASS_FILE' '$GHOST_PASS_FILE'" EXIT
+        ghost_ssh_cmd="sshpass -f $GHOST_PASS_FILE ssh -o StrictHostKeyChecking=no"
+        ghost_rsync_ssh="sshpass -f $GHOST_PASS_FILE ssh -o StrictHostKeyChecking=no"
     fi
 
     local ghost_path="${GHOST_PATH:-/opt/ghost-ai}"
