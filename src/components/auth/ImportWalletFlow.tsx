@@ -23,6 +23,7 @@ import {
   useTheme,
 } from '@coexist/wisp-react-native';
 import type { ProgressStep } from '@coexist/wisp-react-native';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/contexts/AuthContext';
 import { useWalletFlow } from '@/hooks/useWalletFlow';
 import { WalletFlowLayout } from './WalletFlowLayout';
@@ -55,12 +56,7 @@ const SRC = 'ImportWalletFlow';
 // Step definitions
 // ---------------------------------------------------------------------------
 
-const STEPS: ProgressStep[] = [
-  { id: 'seed', label: 'Recovery Phrase' },
-  { id: 'name', label: 'Display Name' },
-  { id: 'pin', label: 'Security PIN' },
-  { id: 'complete', label: 'Complete' },
-];
+const STEP_KEYS = ['stepRecoveryPhrase', 'stepDisplayName', 'stepSecurityPin', 'stepComplete'] as const;
 
 // ---------------------------------------------------------------------------
 // Props
@@ -86,8 +82,15 @@ function createEmptyWords(): string[] {
 export function ImportWalletFlow({ open, onClose }: ImportWalletFlowProps) {
   if (__DEV__) dbg.trackRender('ImportWalletFlow');
   const { login, setPin, setRecoveryPhrase, setRememberMe, addAccount } = useAuth();
+  const { t } = useTranslation('auth');
+  const { t: tCommon } = useTranslation('common');
   const { theme } = useTheme();
   const colors = theme.colors;
+
+  const STEPS: ProgressStep[] = STEP_KEYS.map((key, i) => ({
+    id: ['seed', 'name', 'pin', 'complete'][i],
+    label: t(key),
+  }));
 
   // Flow state
   const [words, setWords] = useState<string[]>(createEmptyWords);
@@ -282,11 +285,11 @@ export function ImportWalletFlow({ open, onClose }: ImportWalletFlowProps) {
           <VStack gap="lg">
             <VStack gap="xs">
               <Text size="xl" weight="bold">
+                {/* TODO: add i18n key for "Enter Your Recovery Phrase" */}
                 Enter Your Recovery Phrase
               </Text>
               <Text size="sm" color="secondary">
-                Enter all 24 words of your recovery phrase in the correct order
-                to restore your account.
+                {t('importAccountHelp')}
               </Text>
             </VStack>
 
@@ -306,16 +309,17 @@ export function ImportWalletFlow({ open, onClose }: ImportWalletFlowProps) {
           <VStack gap="lg">
             <VStack gap="xs">
               <Text size="xl" weight="bold">
-                Choose Your Name
+                {t('stepDisplayName')}
               </Text>
               <Text size="sm" color="secondary">
+                {/* TODO: add i18n key for display name description */}
                 This is how others will see you. You can change it anytime.
               </Text>
             </VStack>
             <Input
               icon={UserIcon}
-              label="Display Name"
-              placeholder="Enter your name"
+              label={t('stepDisplayName')}
+              placeholder="Enter your name" // TODO: add i18n key for placeholder
               value={displayName}
               onChangeText={setDisplayName}
               fullWidth
@@ -340,6 +344,7 @@ export function ImportWalletFlow({ open, onClose }: ImportWalletFlowProps) {
             <VStack gap="lg" style={{ alignItems: 'center', paddingVertical: 32 }}>
               <Spinner />
               <Text size="sm" color="muted">
+                {/* TODO: add i18n key for "Restoring your account..." */}
                 Restoring your account...
               </Text>
             </VStack>
@@ -351,11 +356,11 @@ export function ImportWalletFlow({ open, onClose }: ImportWalletFlowProps) {
             <VStack gap="lg" style={{ alignItems: 'center', paddingVertical: 16 }} testID={TEST_IDS.IMPORT.ERROR_SCREEN} accessibilityLabel="Import error screen">
               <Alert
                 variant="danger"
-                title="Restore Failed"
+                title="Restore Failed" // TODO: add i18n key for "Restore Failed"
                 description={error}
               />
-              <Button variant="primary" onPress={handleRetry} testID={TEST_IDS.IMPORT.RETRY_BUTTON} accessibilityLabel="Try again">
-                Try Again
+              <Button variant="primary" onPress={handleRetry} testID={TEST_IDS.IMPORT.RETRY_BUTTON} accessibilityLabel={tCommon('retry')}>
+                {tCommon('retry')}
               </Button>
             </VStack>
           );
@@ -370,10 +375,11 @@ export function ImportWalletFlow({ open, onClose }: ImportWalletFlowProps) {
             <Presence visible animation="fadeIn" duration={400}>
               <VStack gap="xs" style={{ alignItems: 'center' }}>
                 <Text size="xl" weight="bold">
+                  {/* TODO: add i18n key for "Account Restored!" */}
                   Account Restored!
                 </Text>
                 <Text size="sm" color="secondary" align="center">
-                  Your identity has been recovered. Welcome back!
+                  {t('welcomeBack')}
                 </Text>
               </VStack>
             </Presence>
@@ -383,7 +389,7 @@ export function ImportWalletFlow({ open, onClose }: ImportWalletFlowProps) {
                 <Card variant="outlined" padding="md" style={{ width: '100%' }}>
                   <VStack gap="sm">
                     <HStack gap="sm" style={{ alignItems: 'center' }}>
-                      <Text size="sm" color="muted">Name:</Text>
+                      <Text size="sm" color="muted">{/* TODO: add i18n key */}Name:</Text>
                       <Text size="sm" weight="semibold">{identity.displayName}</Text>
                     </HStack>
                     <HStack gap="sm" style={{ alignItems: 'center' }}>
@@ -405,9 +411,11 @@ export function ImportWalletFlow({ open, onClose }: ImportWalletFlowProps) {
                 <Card variant="outlined" padding="md" style={{ width: '100%' }} testID={TEST_IDS.SYNC.RESTORE_CARD}>
                   <VStack gap="sm">
                     <Text size="sm" weight="semibold">
+                      {/* TODO: add i18n key for "Synced Data Found" */}
                       Synced Data Found
                     </Text>
                     <Text size="xs" color="secondary">
+                      {/* TODO: add i18n key for sync description */}
                       We found synced data from another device:
                     </Text>
                     <VStack gap="xs" testID={TEST_IDS.SYNC.RESTORE_SUMMARY}>
@@ -470,6 +478,7 @@ export function ImportWalletFlow({ open, onClose }: ImportWalletFlowProps) {
                         }}
                         disabled={syncRestoring}
                       >
+                        {/* TODO: add i18n keys for "Restoring..." and "Restore" */}
                         {syncRestoring ? 'Restoring...' : 'Restore'}
                       </Button>
                       <Button
@@ -478,7 +487,7 @@ export function ImportWalletFlow({ open, onClose }: ImportWalletFlowProps) {
                         testID={TEST_IDS.SYNC.SKIP_BUTTON}
                         onPress={() => setSyncCheckDone(false)}
                       >
-                        Skip
+                        {t('skipForNow')}
                       </Button>
                     </HStack>
                   </VStack>
@@ -491,7 +500,7 @@ export function ImportWalletFlow({ open, onClose }: ImportWalletFlowProps) {
                 <Card variant="outlined" padding="sm" style={{ width: '100%' }} testID={TEST_IDS.SYNC.RESTORE_SUCCESS}>
                   <HStack gap="sm" style={{ alignItems: 'center', justifyContent: 'center' }}>
                     <CheckCircleIcon size={16} color={colors.status.success} />
-                    <Text size="sm" color="secondary">Synced data restored successfully</Text>
+                    <Text size="sm" color="secondary">{/* TODO: add i18n key */}Synced data restored successfully</Text>
                   </HStack>
                 </Card>
               </Presence>
@@ -520,6 +529,7 @@ export function ImportWalletFlow({ open, onClose }: ImportWalletFlowProps) {
               testID={TEST_IDS.IMPORT.SEED_NEXT}
               accessibilityLabel="Continue to next step"
             >
+              {/* TODO: add i18n key for "Continue" */}
               Continue
             </Button>
           </HStack>
@@ -535,11 +545,12 @@ export function ImportWalletFlow({ open, onClose }: ImportWalletFlowProps) {
               iconRight={<ArrowRightIcon size={16} color={colors.text.inverse} />}
               testID={TEST_IDS.IMPORT.NAME_NEXT}
               accessibilityLabel="Continue to next step"
-              accessibilityActions={[{ name: 'activate', label: 'Continue' }]}
+              accessibilityActions={[{ name: 'activate', label: 'Continue' }]} // TODO: add i18n key for "Continue"
               onAccessibilityAction={(e: { nativeEvent: { actionName: string } }) => {
                 if (e.nativeEvent.actionName === 'activate') goNext();
               }}
             >
+              {/* TODO: add i18n key for "Continue" */}
               Continue
             </Button>
           </HStack>
@@ -554,6 +565,7 @@ export function ImportWalletFlow({ open, onClose }: ImportWalletFlowProps) {
           return (
             <HStack gap="md" style={{ justifyContent: 'flex-end' }}>
               <Button variant="primary" disabled>
+                {/* TODO: add i18n key for "Restoring..." */}
                 Restoring...
               </Button>
             </HStack>
@@ -568,8 +580,9 @@ export function ImportWalletFlow({ open, onClose }: ImportWalletFlowProps) {
                 onPress={handleRetry}
                 iconLeft={<ArrowLeftIcon size={16} />}
                 testID={TEST_IDS.IMPORT.RETRY_BUTTON}
-                accessibilityLabel="Start over"
+                accessibilityLabel="Start over" // TODO: add i18n key for "Start over"
               >
+                {/* TODO: add i18n key for "Start Over" */}
                 Start Over
               </Button>
             </HStack>
@@ -586,6 +599,7 @@ export function ImportWalletFlow({ open, onClose }: ImportWalletFlowProps) {
               testID={TEST_IDS.IMPORT.DONE_BUTTON}
               accessibilityLabel="Get started"
             >
+              {/* TODO: add i18n key for "Get Started" */}
               Get Started
             </Button>
           </HStack>
@@ -606,9 +620,9 @@ export function ImportWalletFlow({ open, onClose }: ImportWalletFlowProps) {
       allowBackdropClose={isFirstStep}
       footer={renderFooter()}
       testID={TEST_IDS.IMPORT.FLOW}
-      accessibilityLabel="Import wallet flow"
+      accessibilityLabel={t('importExistingAccountAccessibility')}
       backButtonTestID={TEST_IDS.IMPORT.BACK_BUTTON}
-      backButtonAccessibilityLabel="Back"
+      backButtonAccessibilityLabel={tCommon('back')}
     >
       {renderStepContent()}
     </WalletFlowLayout>

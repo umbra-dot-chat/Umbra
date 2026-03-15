@@ -26,6 +26,7 @@ import {
   useTheme,
 } from '@coexist/wisp-react-native';
 import type { ProgressStep } from '@coexist/wisp-react-native';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/contexts/AuthContext';
 import { useWalletFlow } from '@/hooks/useWalletFlow';
 import { WalletFlowLayout } from './WalletFlowLayout';
@@ -53,13 +54,7 @@ const SRC = 'CreateWalletFlow';
 // Step definitions
 // ---------------------------------------------------------------------------
 
-const STEPS: ProgressStep[] = [
-  { id: 'username', label: 'Username' },
-  { id: 'seed', label: 'Recovery Phrase' },
-  { id: 'confirm', label: 'Confirm Backup' },
-  { id: 'pin', label: 'Security PIN' },
-  { id: 'complete', label: 'Complete' },
-];
+const STEP_KEYS = ['stepUsername', 'stepRecoveryPhrase', 'stepConfirmBackup', 'stepSecurityPin', 'stepComplete'] as const;
 
 // ---------------------------------------------------------------------------
 // Props
@@ -77,8 +72,15 @@ export interface CreateWalletFlowProps {
 export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
   if (__DEV__) dbg.trackRender('CreateWalletFlow');
   const { login, setPin, setRememberMe: setAuthRememberMe, setRecoveryPhrase, addAccount } = useAuth();
+  const { t } = useTranslation('auth');
+  const { t: tCommon } = useTranslation('common');
   const { theme } = useTheme();
   const colors = theme.colors;
+
+  const STEPS: ProgressStep[] = STEP_KEYS.map((key, i) => ({
+    id: ['username', 'seed', 'confirm', 'pin', 'complete'][i],
+    label: t(key),
+  }));
 
   // Flow state
   const [displayName, setDisplayName] = useState('');
@@ -318,16 +320,18 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
           <VStack gap="lg">
             <VStack gap="xs">
               <Text size="xl" weight="bold">
+                {/* TODO: add i18n key for "Choose a Username" */}
                 Choose a Username
               </Text>
               <Text size="sm" color="secondary">
+                {/* TODO: add i18n key for username step description */}
                 This is how others will see you and how friends can find you. You can change it anytime.
               </Text>
             </VStack>
             <Input
               icon={UserIcon}
-              label="Username"
-              placeholder="e.g., Matt"
+              label={t('stepUsername')}
+              placeholder="e.g., Matt" // TODO: add i18n key for placeholder
               value={displayName}
               onChangeText={setDisplayName}
               fullWidth
@@ -353,9 +357,11 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
               <VStack gap="md">
                 <HStack style={{ justifyContent: 'space-between', alignItems: 'center' }}>
                   <Text size="sm" weight="semibold" color="secondary">
+                    {/* TODO: add i18n key for "Profile Imported" */}
                     Profile Imported
                   </Text>
                   <Button variant="tertiary" size="sm" onPress={handleClearImport}>
+                    {/* TODO: add i18n key for "Change" */}
                     Change
                   </Button>
                 </HStack>
@@ -401,29 +407,30 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
           <VStack gap="lg">
             <VStack gap="xs">
               <Text size="xl" weight="bold">
+                {/* TODO: add i18n key for "Your Recovery Phrase" */}
                 Your Recovery Phrase
               </Text>
               <Text size="sm" color="secondary">
-                Write down these 24 words in order. This is the only way to
-                recover your account if you lose access to your device.
+                {t('recoveryPhraseHelp')}
               </Text>
             </VStack>
 
             <Alert
               variant="warning"
-              title="Important"
-              description="Never share your recovery phrase with anyone. Anyone with these words can access your account."
+              title="Important" // TODO: add i18n key for "Important"
+              description="Never share your recovery phrase with anyone. Anyone with these words can access your account." // TODO: add i18n key
             />
 
             {isLoading ? (
               <Box style={{ alignItems: 'center', paddingVertical: 32 }}>
                 <Spinner />
                 <Text size="sm" color="muted" style={{ marginTop: 12 }}>
+                  {/* TODO: add i18n key for "Generating your account..." */}
                   Generating your account...
                 </Text>
               </Box>
             ) : error ? (
-              <Alert variant="danger" title="Error" description={error} />
+              <Alert variant="danger" title={tCommon('error')} description={error} />
             ) : seedPhrase ? (
               <Box testID={TEST_IDS.CREATE.SEED_PHRASE_GRID} accessibilityLabel="Recovery seed phrase grid">
                 <SeedPhraseGrid words={seedPhrase} showCopy />
@@ -437,9 +444,10 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
           <VStack gap="lg">
             <VStack gap="xs">
               <Text size="xl" weight="bold">
-                Confirm Your Backup
+                {t('stepConfirmBackup')}
               </Text>
               <Text size="sm" color="secondary">
+                {/* TODO: add i18n key for confirm backup description */}
                 Make sure you have written down your recovery phrase and stored
                 it in a safe place. You will not be able to see it again.
               </Text>
@@ -447,15 +455,15 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
 
             <Alert
               variant="info"
-              title="Why this matters"
-              description="Your recovery phrase is the master key to your account. Without it, your messages and identity cannot be recovered."
+              title="Why this matters" // TODO: add i18n key for "Why this matters"
+              description="Your recovery phrase is the master key to your account. Without it, your messages and identity cannot be recovered." // TODO: add i18n key
             />
 
             <Checkbox
               checked={backupConfirmed}
               onChange={setBackupConfirmed}
-              label="I have written down my recovery phrase and stored it securely"
-              description="I understand that losing this phrase means losing access to my account forever."
+              label="I have written down my recovery phrase and stored it securely" // TODO: add i18n key
+              description="I understand that losing this phrase means losing access to my account forever." // TODO: add i18n key
               testID={TEST_IDS.CREATE.BACKUP_CHECKBOX}
               accessibilityLabel="Confirm backup checkbox"
             />
@@ -481,9 +489,11 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
             <Presence visible animation="fadeIn" duration={400}>
               <VStack gap="xs" style={{ alignItems: 'center' }}>
                 <Text size="xl" weight="bold">
+                  {/* TODO: add i18n key for "Account Created!" */}
                   Account Created!
                 </Text>
                 <Text size="sm" color="secondary" align="center">
+                  {/* TODO: add i18n key for success description */}
                   Your identity has been created. You're ready to start using Umbra.
                 </Text>
               </VStack>
@@ -494,12 +504,12 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
                 <Card variant="outlined" padding="md">
                   <VStack gap="sm">
                     <HStack gap="sm" style={{ alignItems: 'center' }}>
-                      <Text size="sm" color="muted">Name:</Text>
+                      <Text size="sm" color="muted">{/* TODO: add i18n key */}Name:</Text>
                       <Text size="sm" weight="semibold">{identity.displayName}</Text>
                     </HStack>
                     {usernameResult?.username && (
                       <HStack gap="sm" style={{ alignItems: 'center' }}>
-                        <Text size="sm" color="muted">Username:</Text>
+                        <Text size="sm" color="muted">{t('stepUsername')}:</Text>
                         <Text size="sm" weight="semibold">{usernameResult.username}</Text>
                       </HStack>
                     )}
@@ -520,8 +530,8 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
               <Checkbox
                 checked={rememberMe}
                 onChange={setRememberMe}
-                label="Remember me on this device"
-                description="Stay logged in between sessions. Your identity will be stored locally."
+                label="Remember me on this device" // TODO: add i18n key
+                description="Stay logged in between sessions. Your identity will be stored locally." // TODO: add i18n key
                 testID={TEST_IDS.CREATE.REMEMBER_ME_CHECKBOX}
                 accessibilityLabel="Remember me checkbox"
               />
@@ -531,8 +541,8 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
               <Checkbox
                 checked={syncOptIn}
                 onChange={setSyncOptIn}
-                label="Enable account sync"
-                description="Keep friends, groups, and preferences synced across devices. Encrypted with your recovery phrase."
+                label="Enable account sync" // TODO: add i18n key
+                description="Keep friends, groups, and preferences synced across devices. Encrypted with your recovery phrase." // TODO: add i18n key
                 accessibilityLabel="Enable account sync checkbox"
                 testID={TEST_IDS.SYNC.OPT_IN_CHECKBOX}
               />
@@ -562,6 +572,7 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
               testID={TEST_IDS.CREATE.NAME_NEXT}
               accessibilityLabel="Continue to next step"
             >
+              {/* TODO: add i18n key for "Continue" */}
               Continue
             </Button>
           </HStack>
@@ -578,6 +589,7 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
               testID={TEST_IDS.CREATE.SEED_NEXT}
               accessibilityLabel="Continue after seed phrase"
             >
+              {/* TODO: add i18n key for "Continue" */}
               Continue
             </Button>
           </HStack>
@@ -594,6 +606,7 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
               testID={TEST_IDS.CREATE.BACKUP_NEXT}
               accessibilityLabel="Continue after backup confirmation"
             >
+              {/* TODO: add i18n key for "Continue" */}
               Continue
             </Button>
           </HStack>
@@ -614,6 +627,7 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
               testID={TEST_IDS.CREATE.SUCCESS_DONE}
               accessibilityLabel="Get started"
             >
+              {/* TODO: add i18n key for "Get Started" */}
               Get Started
             </Button>
           </HStack>
@@ -635,9 +649,9 @@ export function CreateWalletFlow({ open, onClose }: CreateWalletFlowProps) {
         allowBackdropClose={isFirstStep}
         footer={renderFooter()}
         testID={TEST_IDS.CREATE.FLOW}
-        accessibilityLabel="Create wallet flow"
+        accessibilityLabel={t('createNewAccountAccessibility')}
         backButtonTestID={TEST_IDS.CREATE.BACK_BUTTON}
-        backButtonAccessibilityLabel="Go back"
+        backButtonAccessibilityLabel={t('goBack')}
       >
         {renderStepContent()}
       </WalletFlowLayout>
