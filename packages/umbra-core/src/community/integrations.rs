@@ -268,6 +268,7 @@ impl super::CommunityService {
 }
 
 /// Generate a random webhook token (32-char hex).
+#[allow(unused_variables)]
 fn generate_webhook_token() -> String {
     let timestamp = crate::time::now_timestamp_millis() as u64;
 

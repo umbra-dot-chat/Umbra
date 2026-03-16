@@ -156,6 +156,7 @@ impl super::CommunityService {
 }
 
 /// Generate a random invite code (8 alphanumeric chars).
+#[allow(unused_variables)]
 fn generate_invite_code() -> String {
     let timestamp = crate::time::now_timestamp_millis() as u64;
 

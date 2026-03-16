@@ -110,9 +110,10 @@ use tokio::sync::{broadcast, mpsc, oneshot};
 #[cfg(not(target_arch = "wasm32"))]
 use tokio::task::JoinHandle;
 
-use libp2p::{
-    identity::Keypair as Libp2pKeypair, noise, yamux, Multiaddr, PeerId, Swarm, SwarmBuilder,
-};
+use libp2p::{identity::Keypair as Libp2pKeypair, Multiaddr, PeerId, Swarm, SwarmBuilder};
+
+#[cfg(not(target_arch = "wasm32"))]
+use libp2p::{noise, yamux};
 
 #[cfg(not(target_arch = "wasm32"))]
 use libp2p::tcp;

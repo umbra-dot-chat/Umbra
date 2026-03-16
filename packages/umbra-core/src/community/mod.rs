@@ -53,5 +53,4 @@ pub use messaging::{parse_mentions, MentionType};
 pub use permissions::{Permission, Permissions};
 pub use roles::RolePreset;
 pub use seats::SeatInput;
-pub(crate) use service::generate_id;
 pub use service::CommunityService;
