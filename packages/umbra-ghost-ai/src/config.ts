@@ -120,7 +120,7 @@ export function loadConfig(opts: Record<string, string | undefined>): GhostConfi
 
     // Wisp swarm defaults
     wispsEnabled: (opts.wisps || process.env.WISPS_ENABLED || 'false') === 'true',
-    wispCount: parseInt(opts.wispCount || process.env.WISP_COUNT || '4', 10),
+    wispCount: parseInt(opts.wispCount || process.env.WISP_COUNT || '12', 10),
     wispModel: opts.wispModel || process.env.WISP_MODEL || 'llama3.2:1b',
     wispDataDir: opts.wispDataDir || process.env.WISP_DATA_DIR || './wisp-data',
     wispHttpPort: parseInt(opts.wispHttpPort || process.env.WISP_HTTP_PORT || '3334', 10),
