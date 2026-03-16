@@ -8,15 +8,20 @@
  * Usage:
  *   ELEVENLABS_API_KEY=... npx tsx packages/umbra-wisps/scripts/generate-babble.ts
  *
+ * Output directories:
+ *   - packages/umbra-wisps/babble/{wisp-name}/{001..075}.mp3  (primary)
+ *   - packages/umbra-ghost-ai/babble/{wisp-name}/{001..075}.mp3  (copy for runtime)
+ *
  * Resume support: existing files are skipped automatically.
  */
 
-import { mkdir, writeFile, stat } from 'fs/promises';
+import { mkdir, writeFile, stat, copyFile } from 'fs/promises';
 import { join } from 'path';
 
 // ── Configuration ─────────────────────────────────────────────────────────────
 
 const BABBLE_DIR = join(import.meta.dirname, '..', 'babble');
+const GHOST_AI_BABBLE_DIR = join(import.meta.dirname, '..', '..', 'umbra-ghost-ai', 'babble');
 const CLIPS_PER_WISP = 75; // Target clips per wisp
 
 /** Distribution: 40% short, 40% medium, 20% long */
@@ -250,7 +255,9 @@ async function main(): Promise<void> {
 
   for (const [wispName, voiceId] of Object.entries(WISP_VOICES)) {
     const wispDir = join(BABBLE_DIR, wispName.toLowerCase());
+    const ghostAiWispDir = join(GHOST_AI_BABBLE_DIR, wispName.toLowerCase());
     await mkdir(wispDir, { recursive: true });
+    await mkdir(ghostAiWispDir, { recursive: true });
 
     // Build clip schedule: short clips first, then medium, then long
     const schedule: Array<{ index: number; duration: 'short' | 'medium' | 'long' }> = [];
@@ -283,6 +290,11 @@ async function main(): Promise<void> {
       try {
         const audio = await synthesize(apiKey, voiceId, text);
         await writeFile(filepath, audio);
+
+        // Copy to ghost-ai package for runtime access
+        const ghostAiPath = join(ghostAiWispDir, filename);
+        await copyFile(filepath, ghostAiPath);
+
         generated++;
 
         if (generated % 10 === 0) {
