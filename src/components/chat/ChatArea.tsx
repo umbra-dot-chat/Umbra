@@ -16,6 +16,7 @@ import { usePlugins } from '@/contexts/PluginContext';
 import { useMessaging } from '@/contexts/MessagingContext';
 import { parseMessageContent, buildEmojiMap, isEmojiOnlyMessage, type EmojiMap } from '@/utils/parseMessageContent';
 import type { Message, CommunityEmoji } from '@umbra/service';
+import { getGroupReadReceipts } from '@umbra/service';
 import type { ActiveCall } from '@/types/call';
 import { InlineCallCardMessage } from '@/components/call/InlineCallCardMessage';
 import { useTranslation } from 'react-i18next';
@@ -25,6 +26,8 @@ import { useTranslation } from 'react-i18next';
 // ─────────────────────────────────────────────────────────────────────────────
 
 export interface ChatAreaProps {
+  /** Group ID (for fetching read receipt watermarks in group chats) */
+  groupId?: string | null;
   /** Messages to display */
   messages: Message[];
   /** Current user's DID — used to determine incoming vs outgoing */
@@ -316,6 +319,7 @@ function LoadingSkeleton() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function ChatArea({
+  groupId,
   messages, myDid, myDisplayName, myAvatar, friendNames, friendAvatars,
   isLoading, isGroupChat, typingUser,
   hoveredMessage, onHoverIn, onHoverOut,
@@ -446,16 +450,35 @@ export function ChatArea({
     outputRange: ['transparent', themeColors.accent.primary + '22'],
   });
 
-  // Build group reader list for tap-to-expand read receipts in group chats
-  // (must be before early returns to satisfy Rules of Hooks)
-  const groupReaders = useMemo(() => {
-    if (!isGroupChat) return [];
-    return Object.entries(friendNames).map(([did, name]) => ({
-      did,
-      name,
-      avatar: friendAvatars?.[did],
-    }));
-  }, [isGroupChat, friendNames, friendAvatars]);
+  // Fetch group read receipt watermarks for real per-message reader computation
+  const [groupReadReceipts, setGroupReadReceipts] = useState<
+    Array<{ member_did: string; last_read_timestamp: number }>
+  >([]);
+
+  useEffect(() => {
+    if (!isGroupChat || !groupId) return;
+    try {
+      const receipts = getGroupReadReceipts(groupId);
+      setGroupReadReceipts(receipts);
+    } catch (e) {
+      console.warn('Failed to fetch group read receipts:', e);
+    }
+  }, [isGroupChat, groupId, messages]);
+
+  // Compute readers for a specific message based on watermark timestamps
+  const getReadersForMessage = useCallback(
+    (messageTimestamp: number) => {
+      if (!isGroupChat) return [];
+      return groupReadReceipts
+        .filter((r) => r.last_read_timestamp >= messageTimestamp && r.member_did !== myDid)
+        .map((r) => ({
+          did: r.member_did,
+          name: friendNames[r.member_did] || r.member_did.slice(0, 8),
+          avatar: friendAvatars?.[r.member_did],
+        }));
+    },
+    [isGroupChat, groupReadReceipts, friendNames, friendAvatars, myDid],
+  );
 
   if (isLoading) {
     return <LoadingSkeleton />;
@@ -787,13 +810,18 @@ export function ChatArea({
                 themeColors={themeColors}
                 onShowProfile={onShowProfile}
                 messageFingerprint={group.map(m => `${m.id}|${m.edited?1:0}|${m.status||''}|${m.reactions?.length||0}`).join(',')}
-                readReceipts={
-                  isOutgoing && isGroupChat && firstMsg.status === 'read' ? (
-                    <ReadReceiptPopup readers={groupReaders} totalParticipants={groupReaders.length} themeColors={themeColors} />
-                  ) : !isOutgoing && groupIdx === lastIncomingGroupIdx ? (
-                    <StatusIcon status="read" color={themeColors.text.muted} readColor={themeColors.accent.primary} />
-                  ) : undefined
-                }
+                readReceipts={(() => {
+                  if (isOutgoing && isGroupChat) {
+                    const readers = getReadersForMessage(firstMsg.timestamp);
+                    return readers.length > 0 ? (
+                      <ReadReceiptPopup readers={readers} totalParticipants={readers.length} themeColors={themeColors} />
+                    ) : undefined;
+                  }
+                  if (!isOutgoing && groupIdx === lastIncomingGroupIdx) {
+                    return <StatusIcon status="read" color={themeColors.text.muted} readColor={themeColors.accent.primary} />;
+                  }
+                  return undefined;
+                })()}
               >
                 {renderMessages(true)}
               </InlineMsgGroup>
@@ -819,13 +847,18 @@ export function ChatArea({
               themeColors={themeColors}
               onShowProfile={onShowProfile}
               messageFingerprint={group.map(m => `${m.id}|${m.edited?1:0}|${m.status||''}|${m.reactions?.length||0}`).join(',')}
-              readReceipts={
-                isOutgoing && isGroupChat && firstMsg.status === 'read' ? (
-                  <ReadReceiptPopup readers={groupReaders} totalParticipants={groupReaders.length} themeColors={themeColors} />
-                ) : !isOutgoing && groupIdx === lastIncomingGroupIdx ? (
-                  <StatusIcon status="read" color={themeColors.text.muted} readColor={themeColors.accent.primary} />
-                ) : undefined
-              }
+              readReceipts={(() => {
+                  if (isOutgoing && isGroupChat) {
+                    const readers = getReadersForMessage(firstMsg.timestamp);
+                    return readers.length > 0 ? (
+                      <ReadReceiptPopup readers={readers} totalParticipants={readers.length} themeColors={themeColors} />
+                    ) : undefined;
+                  }
+                  if (!isOutgoing && groupIdx === lastIncomingGroupIdx) {
+                    return <StatusIcon status="read" color={themeColors.text.muted} readColor={themeColors.accent.primary} />;
+                  }
+                  return undefined;
+                })()}
             >
               {renderMessages(false)}
             </MsgGroup>

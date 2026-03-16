@@ -624,10 +624,55 @@ export function useMessages(conversationId: string | null, groupId?: string | nu
       // the unread badge without a full DB refetch.
       service.dispatchMessageEvent({ type: 'messagesRead', conversationId });
 
-      // Skip per-message read receipts for group chats — they generate N
-      // build_receipt_envelope WASM calls per member, which freezes the UI
-      // when bots send messages rapidly. DMs still get individual receipts.
-      if (groupId) return;
+      // Group chats: send a single watermark update instead of per-message
+      // read receipts (which generate N WASM calls per member and freeze the UI).
+      if (groupId) {
+        const msgs = messagesRef.current;
+        const lastMsg = msgs[msgs.length - 1];
+        if (!lastMsg) return;
+
+        try {
+          service.groupMarkRead(groupId, myDid, lastMsg.id, lastMsg.timestamp);
+        } catch (err) {
+          if (__DEV__) dbg.warn('messages', 'Failed to persist group read watermark', { error: String(err) }, SRC);
+        }
+
+        // Broadcast watermark to group members via relay
+        const relayWs = getRelayWs();
+        if (relayWs && relayWs.readyState === WebSocket.OPEN) {
+          const envelope = JSON.stringify({
+            envelope: 'group_read_receipt',
+            version: 1,
+            payload: {
+              groupId,
+              memberDid: myDid,
+              lastReadMessageId: lastMsg.id,
+              lastReadTimestamp: lastMsg.timestamp,
+            },
+          });
+          // Build relay messages via service to get proper encryption
+          // For now, send raw envelope to each member (group read receipts
+          // don't need encryption — they contain no message content)
+          const sendToMembers = async () => {
+            try {
+              const members = await service.getGroupMembers(groupId);
+              for (const member of members) {
+                if (member.memberDid !== myDid) {
+                  relayWs.send(JSON.stringify({
+                    type: 'send',
+                    to_did: member.memberDid,
+                    payload: envelope,
+                  }));
+                }
+              }
+            } catch (err) {
+              if (__DEV__) dbg.warn('messages', 'Failed to broadcast group read receipt', { error: String(err) }, SRC);
+            }
+          };
+          sendToMembers();
+        }
+        return;
+      }
 
       // Debounce the relay receipt sends — skip if a flush is already scheduled
       if (markAsReadReceiptTimerRef.current) return;

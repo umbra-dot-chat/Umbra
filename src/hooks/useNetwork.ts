@@ -44,6 +44,7 @@ import type {
   GroupMessagePayload,
   GroupKeyRotationPayload,
   GroupMemberRemovedPayload,
+  GroupReadReceiptPayload,
   KeyRotationPayload,
   MessageStatusPayload,
   FriendRequest,
@@ -836,6 +837,15 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
             const statusPayload = envelope.payload as MessageStatusPayload;
             try { await service.updateMessageStatus(statusPayload.messageId, statusPayload.status); service.dispatchMessageEvent({ type: 'messageStatusChanged', messageId: statusPayload.messageId, status: statusPayload.status }); } catch (err) { if (__DEV__) dbg.warn('network', 'failed to update message status', { error: String(err) }, SRC); }
 
+          } else if (envelope.envelope === 'group_read_receipt' && envelope.version === 1) {
+            const grr = envelope.payload as GroupReadReceiptPayload;
+            try {
+              service.groupMarkRead(grr.groupId, grr.memberDid, grr.lastReadMessageId, grr.lastReadTimestamp);
+              // Trigger a UI refresh by dispatching a messagesRead event for the group's conversation
+              // ChatArea will re-fetch watermarks when messages change
+              service.dispatchMessageEvent({ type: 'messagesRead', conversationId: `group-${grr.groupId}` });
+            } catch (err) { if (__DEV__) dbg.warn('network', 'failed to process group read receipt', { error: String(err) }, SRC); }
+
           } else if (envelope.envelope === 'typing_indicator' && envelope.version === 1) {
             const typingPayload = envelope.payload as TypingIndicatorPayload;
             // Throttle typing dispatches to prevent render cascade (bots send typing at ~20/sec)
@@ -1100,6 +1110,9 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
             } else if (envelope.envelope === 'message_status' && envelope.version === 1) {
               const statusPayload = envelope.payload as MessageStatusPayload;
               try { await service.updateMessageStatus(statusPayload.messageId, statusPayload.status); _wasmCallCount++; } catch (err) { if (__DEV__) dbg.warn('network', 'failed to update offline message status', { error: String(err) }, SRC); }
+            } else if (envelope.envelope === 'group_read_receipt' && envelope.version === 1) {
+              const grr = envelope.payload as GroupReadReceiptPayload;
+              try { service.groupMarkRead(grr.groupId, grr.memberDid, grr.lastReadMessageId, grr.lastReadTimestamp); _wasmCallCount++; } catch (err) { if (__DEV__) dbg.warn('network', 'failed to process offline group read receipt', { error: String(err) }, SRC); }
             } else if (envelope.envelope === 'community_event' && envelope.version === 1) {
               const communityPayload = envelope.payload as CommunityEventPayload;
               const offlineEvent = communityPayload.event;

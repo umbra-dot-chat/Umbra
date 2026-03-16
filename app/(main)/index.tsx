@@ -630,6 +630,7 @@ export default function ChatPage() {
           />
         )}
         <ChatArea
+          groupId={activeConversation?.groupId}
           messages={messages}
           myDid={myDid}
           myDisplayName={identity?.displayName}
