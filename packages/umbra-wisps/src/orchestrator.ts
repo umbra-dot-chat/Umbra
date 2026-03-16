@@ -17,6 +17,7 @@ import { bytesToHex } from '@noble/curves/abstract/utils';
 import { runScenario, getScenario, listScenarios } from './scenarios/index.js';
 import { startHealthServer } from './health-server.js';
 import { CommunityActivity, type CommunityInfo, type RecentMessage } from './community-activity.js';
+import { PresenceScheduler, type WispShift } from './presence-scheduler.js';
 import type { Server } from 'node:http';
 
 // Register all built-in scenarios (side-effect imports)
@@ -43,6 +44,7 @@ export class WispOrchestrator {
   private config: OrchestratorConfig;
   private conversationLoop: ConversationLoop | null = null;
   private communityActivity: CommunityActivity | null = null;
+  private presenceScheduler: PresenceScheduler | null = null;
   private httpServer: Server | null = null;
   private _running = false;
 
@@ -69,6 +71,8 @@ export class WispOrchestrator {
 
   async stop(): Promise<void> {
     this.conversationLoop?.stop();
+    this.presenceScheduler?.stop();
+    this.presenceScheduler = null;
     this.communityActivity?.stop();
     this.communityActivity = null;
     this.httpServer?.close();
@@ -263,6 +267,26 @@ export class WispOrchestrator {
 
   /** List registered scenario names. */
   getAvailableScenarios(): string[] { return listScenarios(); }
+
+  /** Enable shift-based presence scheduling for wisps. */
+  enablePresenceScheduling(): void {
+    if (this.presenceScheduler) return;
+    this.presenceScheduler = new PresenceScheduler(
+      (name) => this.getWisp(name),
+      () => this.getAllWispNames(),
+    );
+    this.presenceScheduler.start();
+    console.log('[Orchestrator] Presence scheduling enabled');
+  }
+
+  /** Get presence scheduler status (shifts, online/offline lists). */
+  getPresenceStatus(): { online: string[]; offline: string[]; shifts: WispShift[] } | null {
+    return this.presenceScheduler?.getStatus() ?? null;
+  }
+
+  private getAllWispNames(): string[] {
+    return Array.from(this.wisps.keys());
+  }
 
   getStatus() {
     return {
