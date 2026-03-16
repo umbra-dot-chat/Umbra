@@ -837,6 +837,14 @@ export function createTauriBackend(
       return call('community_mark_read', json) as any;
     },
 
+    // ── Group — Read Receipts ────────────────────────────────────────
+    umbra_wasm_group_mark_read: (json: string) => {
+      return call('group_mark_read', json) as any;
+    },
+    umbra_wasm_group_read_receipts: (json: string) => {
+      return call('group_read_receipts', json) as any;
+    },
+
     // ── Community — Files ──────────────────────────────────────────
     umbra_wasm_community_upload_file: (json: string) => {
       return call('community_upload_file', json) as any;

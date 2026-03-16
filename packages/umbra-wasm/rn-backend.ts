@@ -496,6 +496,10 @@ function createNativeBackend(native: NativeUmbraCore): UmbraWasmModule {
     // ── Community — Read Receipts (via dispatcher) ──────────────────────
     umbra_wasm_community_mark_read: (json: string) => call('community_mark_read', JSON.parse(json)),
 
+    // ── Group — Read Receipts (via dispatcher) ────────────────────────
+    umbra_wasm_group_mark_read: (json: string) => call('group_mark_read', JSON.parse(json)),
+    umbra_wasm_group_read_receipts: (json: string) => call('group_read_receipts', JSON.parse(json)),
+
     // ── Community — Files (via dispatcher) ──────────────────────────────
     umbra_wasm_community_upload_file: (json: string) => call('community_upload_file', JSON.parse(json)),
     umbra_wasm_community_get_files: (json: string) => call('community_get_files', JSON.parse(json)),
@@ -783,6 +787,8 @@ function createStubBackend(): UmbraWasmModule {
     umbra_wasm_community_thread_list: () => notImplemented('community_thread_list'),
     umbra_wasm_community_thread_messages: () => notImplemented('community_thread_messages'),
     umbra_wasm_community_mark_read: () => notImplemented('community_mark_read'),
+    umbra_wasm_group_mark_read: () => notImplemented('group_mark_read'),
+    umbra_wasm_group_read_receipts: () => notImplemented('group_read_receipts'),
     umbra_wasm_community_upload_file: () => notImplemented('community_upload_file'),
     umbra_wasm_community_get_files: () => notImplemented('community_get_files'),
     umbra_wasm_community_get_file: () => notImplemented('community_get_file'),

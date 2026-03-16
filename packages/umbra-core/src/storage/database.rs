@@ -238,6 +238,13 @@ impl Database {
                             Error::DatabaseError(format!("Migration v17→v18 failed: {}", e))
                         })?;
                 }
+                if v < 19 {
+                    tracing::info!("Running migration v18 → v19 (group read receipts)");
+                    conn.execute_batch(schema::MIGRATE_V18_TO_V19)
+                        .map_err(|e| {
+                            Error::DatabaseError(format!("Migration v18→v19 failed: {}", e))
+                        })?;
+                }
 
                 tracing::info!(
                     "All migrations complete (now at version {})",
@@ -3539,6 +3546,54 @@ impl Database {
         Ok(receipts)
     }
 
+    // ── Group Read Receipts ────────────────────────────────────────────
+
+    /// Upsert a group read receipt (watermark)
+    pub fn update_group_read_receipt(
+        &self,
+        group_id: &str,
+        member_did: &str,
+        last_read_message_id: &str,
+        last_read_timestamp: i64,
+        read_at: i64,
+    ) -> Result<()> {
+        let conn = self.conn.lock();
+        conn.execute(
+            "INSERT OR REPLACE INTO group_read_receipts (group_id, member_did, last_read_message_id, last_read_timestamp, read_at) VALUES (?, ?, ?, ?, ?)",
+            params![group_id, member_did, last_read_message_id, last_read_timestamp, read_at],
+        ).map_err(|e| Error::DatabaseError(e.to_string()))?;
+        Ok(())
+    }
+
+    /// Get all read receipts for a group
+    pub fn get_group_read_receipts(
+        &self,
+        group_id: &str,
+    ) -> Result<Vec<GroupReadReceiptRecord>> {
+        let conn = self.conn.lock();
+        let mut stmt = conn.prepare(
+            "SELECT group_id, member_did, last_read_message_id, last_read_timestamp, read_at FROM group_read_receipts WHERE group_id = ?",
+        ).map_err(|e| Error::DatabaseError(e.to_string()))?;
+
+        let rows = stmt
+            .query_map(params![group_id], |row| {
+                Ok(GroupReadReceiptRecord {
+                    group_id: row.get(0)?,
+                    member_did: row.get(1)?,
+                    last_read_message_id: row.get(2)?,
+                    last_read_timestamp: row.get(3)?,
+                    read_at: row.get(4)?,
+                })
+            })
+            .map_err(|e| Error::DatabaseError(e.to_string()))?;
+
+        let mut receipts = Vec::new();
+        for row in rows {
+            receipts.push(row.map_err(|e| Error::DatabaseError(e.to_string()))?);
+        }
+        Ok(receipts)
+    }
+
     // ── Pins (Phase 2 / Phase 10) ──────────────────────────────────────
 
     /// Pin a message
@@ -6809,6 +6864,17 @@ pub struct CommunityReadReceiptRecord {
     pub channel_id: String,
     pub member_did: String,
     pub last_read_message_id: String,
+    pub read_at: i64,
+}
+
+/// A group read receipt record (watermark per member)
+#[allow(missing_docs)]
+#[derive(Debug, Clone)]
+pub struct GroupReadReceiptRecord {
+    pub group_id: String,
+    pub member_did: String,
+    pub last_read_message_id: String,
+    pub last_read_timestamp: i64,
     pub read_at: i64,
 }
 

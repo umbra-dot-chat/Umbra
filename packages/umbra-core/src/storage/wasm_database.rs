@@ -199,6 +199,23 @@ impl Database {
             sql_bridge_execute_batch(schema::MIGRATE_V16_TO_V17).map_err(js_err)?;
             tracing::info!("Migration v16 → v17 complete");
         }
+        // v17→v18 is FTS5 (native-only, skipped on WASM)
+        if from_version < 19 {
+            tracing::info!("Running migration v18 → v19 (group read receipts)");
+            sql_bridge_execute_batch(
+                "CREATE TABLE IF NOT EXISTS group_read_receipts (
+                    group_id TEXT NOT NULL,
+                    member_did TEXT NOT NULL,
+                    last_read_message_id TEXT NOT NULL,
+                    last_read_timestamp INTEGER NOT NULL,
+                    read_at INTEGER NOT NULL,
+                    PRIMARY KEY (group_id, member_did)
+                );
+                UPDATE schema_version SET version = 19;",
+            )
+            .map_err(js_err)?;
+            tracing::info!("Migration v18 → v19 complete");
+        }
         Ok(())
     }
 
@@ -2596,6 +2613,48 @@ impl Database {
             .collect())
     }
 
+    // ── Group Read Receipts ────────────────────────────────────────────
+
+    /// Upsert a group read receipt (watermark)
+    pub fn update_group_read_receipt(
+        &self,
+        group_id: &str,
+        member_did: &str,
+        last_read_message_id: &str,
+        last_read_timestamp: i64,
+        read_at: i64,
+    ) -> Result<()> {
+        self.exec(
+            "INSERT OR REPLACE INTO group_read_receipts (group_id, member_did, last_read_message_id, last_read_timestamp, read_at) VALUES (?, ?, ?, ?, ?)",
+            json!([group_id, member_did, last_read_message_id, last_read_timestamp, read_at]),
+        )?;
+        Ok(())
+    }
+
+    /// Get all read receipts for a group
+    pub fn get_group_read_receipts(
+        &self,
+        group_id: &str,
+    ) -> Result<Vec<GroupReadReceiptRecord>> {
+        let rows = self.query(
+            "SELECT group_id, member_did, last_read_message_id, last_read_timestamp, read_at FROM group_read_receipts WHERE group_id = ?",
+            json!([group_id]),
+        )?;
+        Ok(rows
+            .iter()
+            .map(|row| GroupReadReceiptRecord {
+                group_id: row["group_id"].as_str().unwrap_or("").to_string(),
+                member_did: row["member_did"].as_str().unwrap_or("").to_string(),
+                last_read_message_id: row["last_read_message_id"]
+                    .as_str()
+                    .unwrap_or("")
+                    .to_string(),
+                last_read_timestamp: row["last_read_timestamp"].as_i64().unwrap_or(0),
+                read_at: row["read_at"].as_i64().unwrap_or(0),
+            })
+            .collect())
+    }
+
     // ── Pins ─────────────────────────────────────────────────────────────
 
     /// Pin a community message
@@ -4928,6 +4987,7 @@ impl Database {
 }
 
 /// Statistics from a database import operation
+#[allow(missing_docs)]
 #[derive(Debug, Clone, Default)]
 pub struct ImportStats {
     /// Number of settings imported
@@ -4947,6 +5007,7 @@ pub struct ImportStats {
 // ============================================================================
 
 /// A friend record from the database
+#[allow(missing_docs)]
 #[derive(Debug, Clone)]
 pub struct FriendRecord {
     /// Database ID
@@ -4970,6 +5031,7 @@ pub struct FriendRecord {
 }
 
 /// A conversation record from the database
+#[allow(missing_docs)]
 #[derive(Debug, Clone)]
 pub struct ConversationRecord {
     /// Conversation ID
@@ -4989,6 +5051,7 @@ pub struct ConversationRecord {
 }
 
 /// A message record from the database
+#[allow(missing_docs)]
 #[derive(Debug, Clone)]
 pub struct MessageRecord {
     /// Message ID
@@ -5030,6 +5093,7 @@ pub struct MessageRecord {
 }
 
 /// A reaction record from the database
+#[allow(missing_docs)]
 #[derive(Debug, Clone)]
 pub struct ReactionRecord {
     /// Reaction ID
@@ -5045,6 +5109,7 @@ pub struct ReactionRecord {
 }
 
 /// A group record from the database
+#[allow(missing_docs)]
 #[derive(Debug, Clone)]
 pub struct GroupRecord {
     /// Group ID
@@ -5064,6 +5129,7 @@ pub struct GroupRecord {
 }
 
 /// A group member record from the database
+#[allow(missing_docs)]
 #[derive(Debug, Clone)]
 pub struct GroupMemberRecord {
     /// Group ID
@@ -5079,6 +5145,7 @@ pub struct GroupMemberRecord {
 }
 
 /// A group encryption key record
+#[allow(missing_docs)]
 #[derive(Debug, Clone)]
 pub struct GroupKeyRecord {
     /// Group ID
@@ -5092,6 +5159,7 @@ pub struct GroupKeyRecord {
 }
 
 /// A group invite record
+#[allow(missing_docs)]
 #[derive(Debug, Clone)]
 pub struct GroupInviteRecord {
     /// Invite ID
@@ -5119,6 +5187,7 @@ pub struct GroupInviteRecord {
 }
 
 /// A friend request record from the database
+#[allow(missing_docs)]
 #[derive(Debug, Clone)]
 pub struct FriendRequestRecord {
     /// Request ID
@@ -5146,6 +5215,7 @@ pub struct FriendRequestRecord {
 }
 
 /// A plugin bundle record from the database
+#[allow(missing_docs)]
 #[derive(Debug, Clone)]
 pub struct PluginBundleRecord {
     /// Plugin ID (reverse-domain, e.g. "com.example.translator")
@@ -5163,6 +5233,7 @@ pub struct PluginBundleRecord {
 // ============================================================================
 
 /// A call history record from the database
+#[allow(missing_docs)]
 #[derive(Debug, Clone)]
 pub struct CallHistoryRecord {
     pub id: String,
@@ -5182,6 +5253,7 @@ pub struct CallHistoryRecord {
 // ============================================================================
 
 /// A notification record from the database
+#[allow(missing_docs)]
 #[derive(Debug, Clone)]
 pub struct NotificationRecord {
     pub id: String,
@@ -5203,6 +5275,7 @@ pub struct NotificationRecord {
 // ============================================================================
 
 /// A community record from the database
+#[allow(missing_docs)]
 #[derive(Debug, Clone)]
 pub struct CommunityRecord {
     pub id: String,
@@ -5221,6 +5294,7 @@ pub struct CommunityRecord {
 }
 
 /// A community space record
+#[allow(missing_docs)]
 #[derive(Debug, Clone)]
 pub struct CommunitySpaceRecord {
     pub id: String,
@@ -5232,6 +5306,7 @@ pub struct CommunitySpaceRecord {
 }
 
 /// A community category record (channel grouping within a space)
+#[allow(missing_docs)]
 #[derive(Debug, Clone)]
 pub struct CommunityCategoryRecord {
     pub id: String,
@@ -5244,6 +5319,7 @@ pub struct CommunityCategoryRecord {
 }
 
 /// A community channel record
+#[allow(missing_docs)]
 #[derive(Debug, Clone)]
 pub struct CommunityChannelRecord {
     pub id: String,
@@ -5262,6 +5338,7 @@ pub struct CommunityChannelRecord {
 }
 
 /// A community role record
+#[allow(missing_docs)]
 #[derive(Debug, Clone)]
 pub struct CommunityRoleRecord {
     pub id: String,
@@ -5280,6 +5357,7 @@ pub struct CommunityRoleRecord {
 }
 
 /// A community member-role assignment record
+#[allow(missing_docs)]
 #[derive(Debug, Clone)]
 pub struct CommunityMemberRoleRecord {
     pub community_id: String,
@@ -5290,6 +5368,7 @@ pub struct CommunityMemberRoleRecord {
 }
 
 /// A channel permission override record
+#[allow(missing_docs)]
 #[derive(Debug, Clone)]
 pub struct ChannelPermissionOverrideRecord {
     pub id: String,
@@ -5301,6 +5380,7 @@ pub struct ChannelPermissionOverrideRecord {
 }
 
 /// A community member record
+#[allow(missing_docs)]
 #[derive(Debug, Clone)]
 pub struct CommunityMemberRecord {
     pub community_id: String,
@@ -5312,6 +5392,7 @@ pub struct CommunityMemberRecord {
 }
 
 /// A community message record
+#[allow(missing_docs)]
 #[derive(Debug, Clone)]
 pub struct CommunityMessageRecord {
     pub id: String,
@@ -5334,6 +5415,7 @@ pub struct CommunityMessageRecord {
 }
 
 /// A community reaction record
+#[allow(missing_docs)]
 #[derive(Debug, Clone)]
 pub struct CommunityReactionRecord {
     pub message_id: String,
@@ -5344,6 +5426,7 @@ pub struct CommunityReactionRecord {
 }
 
 /// A community invite record
+#[allow(missing_docs)]
 #[derive(Debug, Clone)]
 pub struct CommunityInviteRecord {
     pub id: String,
@@ -5358,6 +5441,7 @@ pub struct CommunityInviteRecord {
 }
 
 /// A community ban record
+#[allow(missing_docs)]
 #[derive(Debug, Clone)]
 pub struct CommunityBanRecord {
     pub community_id: String,
@@ -5370,6 +5454,7 @@ pub struct CommunityBanRecord {
 }
 
 /// A community warning record
+#[allow(missing_docs)]
 #[derive(Debug, Clone)]
 pub struct CommunityWarningRecord {
     pub id: String,
@@ -5382,6 +5467,7 @@ pub struct CommunityWarningRecord {
 }
 
 /// A community audit log entry
+#[allow(missing_docs)]
 #[derive(Debug, Clone)]
 pub struct CommunityAuditLogRecord {
     pub id: String,
@@ -5396,6 +5482,7 @@ pub struct CommunityAuditLogRecord {
 }
 
 /// A community thread record
+#[allow(missing_docs)]
 #[derive(Debug, Clone)]
 pub struct CommunityThreadRecord {
     pub id: String,
@@ -5409,6 +5496,7 @@ pub struct CommunityThreadRecord {
 }
 
 /// A boost node record
+#[allow(missing_docs)]
 #[derive(Debug, Clone)]
 pub struct BoostNodeRecord {
     pub id: String,
@@ -5433,6 +5521,7 @@ pub struct BoostNodeRecord {
 // ============================================================================
 
 /// A community read receipt record
+#[allow(missing_docs)]
 #[derive(Debug, Clone)]
 pub struct CommunityReadReceiptRecord {
     pub channel_id: String,
@@ -5441,7 +5530,19 @@ pub struct CommunityReadReceiptRecord {
     pub read_at: i64,
 }
 
+/// A group read receipt record (watermark per member)
+#[allow(missing_docs)]
+#[derive(Debug, Clone)]
+pub struct GroupReadReceiptRecord {
+    pub group_id: String,
+    pub member_did: String,
+    pub last_read_message_id: String,
+    pub last_read_timestamp: i64,
+    pub read_at: i64,
+}
+
 /// A community pin record
+#[allow(missing_docs)]
 #[derive(Debug, Clone)]
 pub struct CommunityPinRecord {
     pub channel_id: String,
@@ -5451,6 +5552,7 @@ pub struct CommunityPinRecord {
 }
 
 /// A community file record
+#[allow(missing_docs)]
 #[derive(Debug, Clone)]
 pub struct CommunityFileRecord {
     pub id: String,
@@ -5469,6 +5571,7 @@ pub struct CommunityFileRecord {
 }
 
 /// A community file folder record
+#[allow(missing_docs)]
 #[derive(Debug, Clone)]
 pub struct CommunityFileFolderRecord {
     pub id: String,
@@ -5480,6 +5583,7 @@ pub struct CommunityFileFolderRecord {
 }
 
 /// A community emoji record
+#[allow(missing_docs)]
 #[derive(Debug, Clone)]
 pub struct CommunityEmojiRecord {
     pub id: String,
@@ -5492,6 +5596,7 @@ pub struct CommunityEmojiRecord {
 }
 
 /// A community sticker record
+#[allow(missing_docs)]
 #[derive(Debug, Clone)]
 pub struct CommunityStickerRecord {
     pub id: String,
@@ -5506,6 +5611,7 @@ pub struct CommunityStickerRecord {
 }
 
 /// A sticker pack record
+#[allow(missing_docs)]
 #[derive(Debug, Clone)]
 pub struct CommunityStickerPackRecord {
     pub id: String,
@@ -5518,6 +5624,7 @@ pub struct CommunityStickerPackRecord {
 }
 
 /// A community webhook record
+#[allow(missing_docs)]
 #[derive(Debug, Clone)]
 pub struct CommunityWebhookRecord {
     pub id: String,
@@ -5530,6 +5637,7 @@ pub struct CommunityWebhookRecord {
 }
 
 /// A channel key record (E2EE)
+#[allow(missing_docs)]
 #[derive(Debug, Clone)]
 pub struct ChannelKeyRecord {
     pub channel_id: String,
@@ -5539,6 +5647,7 @@ pub struct ChannelKeyRecord {
 }
 
 /// A community deleted message record
+#[allow(missing_docs)]
 #[derive(Debug, Clone)]
 pub struct CommunityDeletedMessageRecord {
     pub message_id: String,
@@ -5547,6 +5656,7 @@ pub struct CommunityDeletedMessageRecord {
 }
 
 /// A community timeout record
+#[allow(missing_docs)]
 #[derive(Debug, Clone)]
 pub struct CommunityTimeoutRecord {
     pub id: String,
@@ -5560,6 +5670,7 @@ pub struct CommunityTimeoutRecord {
 }
 
 /// A community thread follower record
+#[allow(missing_docs)]
 #[derive(Debug, Clone)]
 pub struct CommunityThreadFollowerRecord {
     pub thread_id: String,
@@ -5568,6 +5679,7 @@ pub struct CommunityThreadFollowerRecord {
 }
 
 /// A community member status record
+#[allow(missing_docs)]
 #[derive(Debug, Clone)]
 pub struct CommunityMemberStatusRecord {
     pub community_id: String,
@@ -5579,6 +5691,7 @@ pub struct CommunityMemberStatusRecord {
 }
 
 /// A community notification setting record
+#[allow(missing_docs)]
 #[derive(Debug, Clone)]
 pub struct CommunityNotificationSettingRecord {
     pub id: String,
@@ -5594,6 +5707,7 @@ pub struct CommunityNotificationSettingRecord {
 }
 
 /// A file chunk record (local chunk storage for P2P transfer)
+#[allow(missing_docs)]
 #[derive(Debug, Clone)]
 pub struct FileChunkRecord {
     pub chunk_id: String,
@@ -5605,6 +5719,7 @@ pub struct FileChunkRecord {
 }
 
 /// A file manifest record (describes how a file was chunked)
+#[allow(missing_docs)]
 #[derive(Debug, Clone)]
 pub struct FileManifestRecord {
     pub file_id: String,
@@ -5620,6 +5735,7 @@ pub struct FileManifestRecord {
 }
 
 /// A DM shared file record
+#[allow(missing_docs)]
 #[derive(Debug, Clone)]
 pub struct DmSharedFileRecord {
     pub id: String,
@@ -5639,6 +5755,7 @@ pub struct DmSharedFileRecord {
 }
 
 /// A DM shared folder record
+#[allow(missing_docs)]
 #[derive(Debug, Clone)]
 pub struct DmSharedFolderRecord {
     pub id: String,
@@ -5650,6 +5767,7 @@ pub struct DmSharedFolderRecord {
 }
 
 /// A transfer session record (P2P file transfer state for resume support)
+#[allow(missing_docs)]
 #[derive(Debug, Clone)]
 pub struct TransferSessionRecord {
     pub transfer_id: String,
@@ -5670,6 +5788,7 @@ pub struct TransferSessionRecord {
 }
 
 /// A community seat record (ghost member placeholder from platform import)
+#[allow(missing_docs)]
 #[derive(Debug, Clone)]
 pub struct CommunitySeatRecord {
     pub id: String,

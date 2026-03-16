@@ -803,3 +803,60 @@ pub fn messaging_update_status(args: &str) -> DResult {
 
     ok_success()
 }
+
+// ── Group Read Receipts ─────────────────────────────────────────────────────
+
+/// Mark a group as read up to a specific message (watermark upsert)
+pub fn group_mark_read(args: &str) -> DResult {
+    let data = json_parse(args)?;
+    let group_id = require_str(&data, "group_id")?;
+    let member_did = require_str(&data, "member_did")?;
+    let last_read_message_id = require_str(&data, "last_read_message_id")?;
+    let last_read_timestamp = data["last_read_timestamp"]
+        .as_i64()
+        .ok_or_else(|| err(2, "last_read_timestamp required"))?;
+    let read_at = crate::time::now_timestamp();
+    let state = get_state().map_err(|e| err(100, e))?;
+    let state = state.read();
+    let db = state
+        .database
+        .as_ref()
+        .ok_or_else(|| err(400, "Database not initialized"))?;
+    db.update_group_read_receipt(
+        group_id,
+        member_did,
+        last_read_message_id,
+        last_read_timestamp,
+        read_at,
+    )
+    .map_err(|e| err(e.code(), e))?;
+    ok_success()
+}
+
+/// Get all read receipts (watermarks) for a group
+pub fn group_read_receipts(args: &str) -> DResult {
+    let data = json_parse(args)?;
+    let group_id = require_str(&data, "group_id")?;
+    let state = get_state().map_err(|e| err(100, e))?;
+    let state = state.read();
+    let db = state
+        .database
+        .as_ref()
+        .ok_or_else(|| err(400, "Database not initialized"))?;
+    let receipts = db
+        .get_group_read_receipts(group_id)
+        .map_err(|e| err(e.code(), e))?;
+    let arr: Vec<serde_json::Value> = receipts
+        .iter()
+        .map(|r| {
+            serde_json::json!({
+                "group_id": r.group_id,
+                "member_did": r.member_did,
+                "last_read_message_id": r.last_read_message_id,
+                "last_read_timestamp": r.last_read_timestamp,
+                "read_at": r.read_at,
+            })
+        })
+        .collect();
+    Ok(serde_json::to_string(&arr).unwrap_or_default())
+}

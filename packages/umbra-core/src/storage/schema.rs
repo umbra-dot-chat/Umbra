@@ -53,7 +53,7 @@
 //! ```
 
 /// Current schema version
-pub const SCHEMA_VERSION: i32 = 18;
+pub const SCHEMA_VERSION: i32 = 19;
 
 /// SQL to create all tables
 pub const CREATE_TABLES: &str = r#"
@@ -216,6 +216,16 @@ CREATE TABLE IF NOT EXISTS group_invites (
 );
 CREATE INDEX IF NOT EXISTS idx_group_invites_status ON group_invites(status);
 CREATE INDEX IF NOT EXISTS idx_group_invites_group ON group_invites(group_id);
+
+-- Group read receipts (watermark per member)
+CREATE TABLE IF NOT EXISTS group_read_receipts (
+    group_id TEXT NOT NULL,
+    member_did TEXT NOT NULL,
+    last_read_message_id TEXT NOT NULL,
+    last_read_timestamp INTEGER NOT NULL,
+    read_at INTEGER NOT NULL,
+    PRIMARY KEY (group_id, member_did)
+);
 
 -- Friend requests table
 -- Stores pending friend requests (both sent and received)
@@ -1723,6 +1733,7 @@ UPDATE schema_version SET version = 17;
 /// Creates a content-synced FTS5 virtual table that mirrors `content_plaintext`
 /// from `community_messages`. Triggers keep the FTS index in sync on
 /// insert, update, and delete.
+#[cfg(not(target_arch = "wasm32"))]
 pub const MIGRATE_V17_TO_V18: &str = r#"
 CREATE VIRTUAL TABLE IF NOT EXISTS community_messages_fts USING fts5(
     content_plaintext,
@@ -1767,9 +1778,25 @@ END;
 UPDATE schema_version SET version = 18;
 "#;
 
+/// Migration v18 → v19: Add group read receipts table.
+#[cfg(not(target_arch = "wasm32"))]
+pub const MIGRATE_V18_TO_V19: &str = r#"
+CREATE TABLE IF NOT EXISTS group_read_receipts (
+    group_id TEXT NOT NULL,
+    member_did TEXT NOT NULL,
+    last_read_message_id TEXT NOT NULL,
+    last_read_timestamp INTEGER NOT NULL,
+    read_at INTEGER NOT NULL,
+    PRIMARY KEY (group_id, member_did)
+);
+
+UPDATE schema_version SET version = 19;
+"#;
+
 /// SQL to drop all tables (for testing/reset)
 #[allow(dead_code)]
 pub const DROP_TABLES: &str = r#"
+DROP TABLE IF EXISTS group_read_receipts;
 DROP TABLE IF EXISTS notifications;
 DROP TABLE IF EXISTS sticker_placements;
 DROP TABLE IF EXISTS community_sticker_packs;

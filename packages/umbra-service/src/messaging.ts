@@ -643,6 +643,51 @@ export async function updateMessageStatus(messageId: string, status: 'sent' | 'd
 }
 
 /**
+ * Mark a group as read up to a specific message (local watermark upsert).
+ *
+ * @param groupId - Group ID
+ * @param memberDid - The member's DID
+ * @param lastReadMessageId - ID of the last read message
+ * @param lastReadTimestamp - Timestamp of the last read message
+ */
+export function groupMarkRead(
+  groupId: string,
+  memberDid: string,
+  lastReadMessageId: string,
+  lastReadTimestamp: number,
+): void {
+  wasm().umbra_wasm_group_mark_read(
+    JSON.stringify({
+      group_id: groupId,
+      member_did: memberDid,
+      last_read_message_id: lastReadMessageId,
+      last_read_timestamp: lastReadTimestamp,
+    }),
+  );
+}
+
+/**
+ * Get all read receipt watermarks for a group.
+ *
+ * @param groupId - Group ID
+ * @returns Array of watermark records for each group member
+ */
+export function getGroupReadReceipts(
+  groupId: string,
+): Array<{
+  group_id: string;
+  member_did: string;
+  last_read_message_id: string;
+  last_read_timestamp: number;
+  read_at: number;
+}> {
+  const result = wasm().umbra_wasm_group_read_receipts(
+    JSON.stringify({ group_id: groupId }),
+  );
+  return typeof result === 'string' ? JSON.parse(result) : result;
+}
+
+/**
  * Send a delivery receipt to the message sender via relay.
  *
  * Called when we receive a message (status: 'delivered') or when

@@ -322,6 +322,8 @@ pub fn dispatch(method: &str, args: &str) -> DResult {
         "groups_remove_member_with_rotation" => {
             dispatch_groups::groups_remove_member_with_rotation(args)
         }
+        "group_mark_read" => dispatch_messaging::group_mark_read(args),
+        "group_read_receipts" => dispatch_messaging::group_read_receipts(args),
 
         // ── Network ─────────────────────────────────────────────────
         "network_status" => dispatch_stubs::network_status(),

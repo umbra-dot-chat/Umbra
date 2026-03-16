@@ -302,6 +302,10 @@ export interface UmbraWasmModule {
   // Community — Read Receipts
   umbra_wasm_community_mark_read(json: string): string;
 
+  // Group — Read Receipts
+  umbra_wasm_group_mark_read(json: string): string;
+  umbra_wasm_group_read_receipts(json: string): string;
+
   // Community — Files (real WASM)
   umbra_wasm_community_upload_file(json: string): string;
   umbra_wasm_community_get_files(json: string): string;
@@ -1571,6 +1575,12 @@ function buildModule(wasmPkg: any): UmbraWasmModule {
     // Community — Read Receipts
     umbra_wasm_community_mark_read: (json: string) =>
       wasmPkg.umbra_wasm_community_mark_read(json),
+
+    // Group — Read Receipts
+    umbra_wasm_group_mark_read: (json: string) =>
+      wasmPkg.umbra_wasm_group_mark_read(json),
+    umbra_wasm_group_read_receipts: (json: string) =>
+      wasmPkg.umbra_wasm_group_read_receipts(json),
 
     // ── Community — Files (real WASM) ──────────────────────────────
     umbra_wasm_community_upload_file: (json: string) =>

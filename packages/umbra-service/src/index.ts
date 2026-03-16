@@ -70,7 +70,7 @@ export { ErrorCode, UmbraError } from './errors';
 export type {
   ChatMessagePayload, ChatMessageUpdatePayload, ConnectionInfo, Conversation, CreateIdentityResult, DiscoveryEvent, DiscoveryResult, Friend, FriendAcceptAckPayload, FriendEvent, FriendRequest, FriendRequestPayload,
   BlockedUser, FriendResponsePayload, Group, GroupEvent, GroupInvitePayload,
-  GroupInviteResponsePayload, GroupKeyRotationPayload, GroupMember, GroupMemberRemovedPayload, GroupMessagePayload, Identity, InitConfig, KeyRotationPayload, Message, MessageAttachment, MessageContent, MessageEvent, MessageReaction, MessageStatus, MessageStatusPayload, NetworkStatus, PendingGroupInvite, ProfileUpdate, PublicIdentity, PublicKeys, RelayAcceptResult, RelayEnvelope, RelayEvent, RelaySession, RelayStatus, ReplyTo, TypingIndicatorPayload,
+  GroupInviteResponsePayload, GroupKeyRotationPayload, GroupMember, GroupMemberRemovedPayload, GroupMessagePayload, GroupReadReceiptPayload, Identity, InitConfig, KeyRotationPayload, Message, MessageAttachment, MessageContent, MessageEvent, MessageReaction, MessageStatus, MessageStatusPayload, NetworkStatus, PendingGroupInvite, ProfileUpdate, PublicIdentity, PublicKeys, RelayAcceptResult, RelayEnvelope, RelayEvent, RelaySession, RelayStatus, ReplyTo, TypingIndicatorPayload,
   Community, CommunityCreateResult, CommunitySpace, CommunityCategory, CommunityChannel, CommunityMember, CommunityRole, CommunitySeat, CommunityMessage, CommunityInvite, CommunityEvent, CommunityEventPayload,
   CommunityFileRecord, CommunityFileFolderRecord,
   CommunityEmoji, CommunitySticker, StickerPack,
@@ -304,7 +304,7 @@ export { rotateEncryptionKey } from './identity';
 export { updateFriendEncryptionKey } from './friends';
 
 // Messaging helpers
-export { createDmConversation } from './messaging';
+export { createDmConversation, groupMarkRead, getGroupReadReceipts } from './messaging';
 
 // Base64 encoding helpers (UTF-8 safe)
 export { utf8ToBase64, base64ToUtf8 } from './helpers';

@@ -550,6 +550,27 @@ export class UmbraService {
     return messaging.sendDeliveryReceipt(messageId, conversationId, senderDid, status, relayWs);
   }
 
+  groupMarkRead(
+    groupId: string,
+    memberDid: string,
+    lastReadMessageId: string,
+    lastReadTimestamp: number,
+  ): void {
+    return messaging.groupMarkRead(groupId, memberDid, lastReadMessageId, lastReadTimestamp);
+  }
+
+  getGroupReadReceipts(
+    groupId: string,
+  ): Array<{
+    group_id: string;
+    member_did: string;
+    last_read_message_id: string;
+    last_read_timestamp: number;
+    read_at: number;
+  }> {
+    return messaging.getGroupReadReceipts(groupId);
+  }
+
   onMessageEvent(callback: (event: MessageEvent) => void): () => void {
     this._messageListeners.push(callback);
     _dbg()?.debug('messages', `onMessageEvent: subscribed (${this._messageListeners.length} total)`, undefined, SRC);

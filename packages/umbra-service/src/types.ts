@@ -500,6 +500,7 @@ export type RelayEnvelope =
   | { envelope: 'account_metadata'; version: 1; payload: AccountMetadataPayload }
   | { envelope: 'account_backup_manifest'; version: 1; payload: AccountBackupManifestPayload }
   | { envelope: 'account_backup_chunk'; version: 1; payload: AccountBackupChunkPayload }
+  | { envelope: 'group_read_receipt'; version: 1; payload: GroupReadReceiptPayload }
   | { envelope: 'presence_online'; version: 1; payload: { timestamp: number } }
   | { envelope: 'presence_ack'; version: 1; payload: { timestamp: number } };
 
@@ -755,6 +756,21 @@ export interface GroupMemberRemovedPayload {
   removedBy: string;
   /** Unix timestamp */
   timestamp: number;
+}
+
+/**
+ * Payload for group read receipt watermark updates.
+ * Sent when a member reads messages in a group chat.
+ */
+export interface GroupReadReceiptPayload {
+  /** Group ID */
+  groupId: string;
+  /** DID of the member who read the messages */
+  memberDid: string;
+  /** ID of the last read message */
+  lastReadMessageId: string;
+  /** Timestamp of the last read message */
+  lastReadTimestamp: number;
 }
 
 /**
