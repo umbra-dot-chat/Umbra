@@ -17,6 +17,7 @@ import type { WispPersona } from './personas.js';
 import { type ChatMessage, type WispLLMClient } from './llm-client.js';
 import { buildWispSystemPrompt, buildContextMessage } from './wisp-prompts.js';
 import { WispCallHandler } from './calls/call-handler.js';
+import type { BabbleLibrary } from './calls/babble-library.js';
 
 export interface WispFriend {
   did: string;
@@ -75,6 +76,17 @@ export class Wisp {
   get friendCount() { return this.friends.size; }
   get did() { return this.identity.did; }
   get name() { return this.persona.name; }
+
+  /** Expose relay client for voice handler wiring. */
+  get relayClient(): RelayClient { return this.relay; }
+
+  /** Expose identity for voice handler construction. */
+  get wispIdentity(): WispIdentity { return this.identity; }
+
+  /** Set the babble library for natural-sounding call audio. */
+  setBabbleLibrary(lib: BabbleLibrary): void {
+    this.callHandler.setBabbleLibrary(lib);
+  }
 
   async start(): Promise<void> {
     await this.relay.connect();
@@ -401,13 +413,19 @@ export class Wisp {
     inviterDid: string; inviterName: string;
     encryptedGroupKey: string; nonce: string;
     membersJson: string; timestamp: number;
+    inviterEncryptionKey?: string;
   }): void {
     try {
+      // Accept invites from ANY user (friend or not) as long as decryptable
       const inviter = this.friends.get(p.inviterDid);
-      if (!inviter) return; // Must be friends to accept group invites
+      const inviterKey = inviter?.encryptionKey ?? p.inviterEncryptionKey;
+      if (!inviterKey) {
+        console.warn(`[${this.persona.name}] Cannot decrypt group invite from ${p.inviterName} -- no encryption key`);
+        return;
+      }
       const groupKey = decryptGroupKey(
         p.encryptedGroupKey, p.nonce,
-        this.identity.encryptionPrivateKey, inviter.encryptionKey,
+        this.identity.encryptionPrivateKey, inviterKey,
         p.groupId,
       );
       const members = JSON.parse(p.membersJson) as { did: string; displayName: string }[];
@@ -415,20 +433,38 @@ export class Wisp {
         groupId: p.groupId, groupName: p.groupName,
         groupKey, members, conversationId: `group-${p.groupId}`,
       });
-      // Send acceptance
-      this.relay.sendEnvelope(p.inviterDid, {
-        envelope: 'group_invite_response', version: 1,
-        payload: {
-          inviteId: p.inviteId, groupId: p.groupId, accepted: true,
-          fromDid: this.identity.did,
-          fromDisplayName: this.persona.name,
-          timestamp: Date.now(),
-        },
-      });
+      // Send acceptance (both envelope types for compat with real app)
+      for (const env of ['group_invite_response', 'group_invite_accept'] as const) {
+        this.relay.sendEnvelope(p.inviterDid, {
+          envelope: env, version: 1,
+          payload: {
+            inviteId: p.inviteId, groupId: p.groupId, accepted: true,
+            fromDid: this.identity.did,
+            fromDisplayName: this.persona.name,
+            timestamp: Date.now(),
+          },
+        });
+      }
       this.persistState();
-      console.log(`[${this.persona.name}] Joined group "${p.groupName}"`);
+      console.log(`[${this.persona.name}] Joined group "${p.groupName}" (invited by ${p.inviterName})`);
+
+      // Send a brief introduction message after a staggered delay (2-5s)
+      const introDelay = 2000 + Math.random() * 3000;
+      setTimeout(() => {
+        void this.sendGroupIntroduction(p.groupId, p.groupName);
+      }, introDelay);
     } catch (err) {
       console.warn(`[${this.persona.name}] Failed to handle group invite:`, err);
+    }
+  }
+
+  private async sendGroupIntroduction(groupId: string, groupName: string): Promise<void> {
+    try {
+      const prompt = `You just joined a group chat called "${groupName}". Introduce yourself briefly in 1-2 sentences, staying in character.`;
+      const response = await this.generateResponse('System', prompt, `group-${groupId}`);
+      this.sendGroupMessage(groupId, response);
+    } catch (err) {
+      console.warn(`[${this.persona.name}] Failed to send group introduction:`, err);
     }
   }
 

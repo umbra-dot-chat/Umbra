@@ -5,6 +5,7 @@
  * a status summary for monitoring.
  */
 
+import { join } from 'node:path';
 import { Wisp, type WispGroup } from './wisp.js';
 import { WispLLMClient } from './llm-client.js';
 import { loadOrCreateWispIdentity } from './identity-store.js';
@@ -18,6 +19,8 @@ import { runScenario, getScenario, listScenarios } from './scenarios/index.js';
 import { startHealthServer } from './health-server.js';
 import { CommunityActivity, type CommunityInfo, type RecentMessage } from './community-activity.js';
 import { PresenceScheduler, type WispShift } from './presence-scheduler.js';
+import { VoiceBabbleHandler } from './calls/voice-babble.js';
+import { BabbleLibrary } from './calls/babble-library.js';
 import type { Server } from 'node:http';
 
 // Register all built-in scenarios (side-effect imports)
@@ -45,6 +48,8 @@ export class WispOrchestrator {
   private conversationLoop: ConversationLoop | null = null;
   private communityActivity: CommunityActivity | null = null;
   private presenceScheduler: PresenceScheduler | null = null;
+  private babbleLibrary: BabbleLibrary | null = null;
+  private voiceHandlers: Map<string, VoiceBabbleHandler> = new Map();
   private httpServer: Server | null = null;
   private _running = false;
 
@@ -63,6 +68,16 @@ export class WispOrchestrator {
       await this.spawnWisp(persona, allNames);
     }
     this._running = true;
+
+    // Initialize babble library for voice channel support
+    this.babbleLibrary = new BabbleLibrary(join(import.meta.dirname, '..', 'babble'));
+    await this.babbleLibrary.load();
+
+    // Wire babble library into each wisp's call handler for natural audio
+    for (const wisp of this.wisps.values()) {
+      wisp.setBabbleLibrary(this.babbleLibrary);
+    }
+
     this.conversationLoop = new ConversationLoop(() => this.getWisps());
     this.conversationLoop.start();
     this.httpServer = startHealthServer(this, this.config.httpPort);
@@ -75,6 +90,8 @@ export class WispOrchestrator {
     this.presenceScheduler = null;
     this.communityActivity?.stop();
     this.communityActivity = null;
+    for (const handler of this.voiceHandlers.values()) handler.leaveChannel();
+    this.voiceHandlers.clear();
     this.httpServer?.close();
     this.httpServer = null;
     for (const wisp of this.wisps.values()) wisp.stop();
@@ -92,6 +109,30 @@ export class WispOrchestrator {
     wisp.onGroupMessage = (senderDid, senderName, text, groupId) => {
       this.handleGroupResponse(wisp, senderDid, senderName, text, groupId);
     };
+
+    // Route relay call events to voice handlers
+    wisp.relayClient.onMessage((msg) => {
+      if (msg.type !== 'message') return;
+      try {
+        const envelope = JSON.parse(msg.payload);
+        const eventType = envelope.envelope ?? envelope.type;
+        if (
+          eventType === 'callRoomCreated' ||
+          eventType === 'callParticipantJoined' ||
+          eventType === 'callParticipantLeft' ||
+          eventType === 'callSignalForward'
+        ) {
+          const handler = this.voiceHandlers.get(persona.name);
+          handler?.handleCallEvent({ type: eventType, payload: envelope.payload ?? envelope });
+        }
+      } catch { /* ignore parse errors */ }
+    });
+
+    // Wire babble library if already loaded
+    if (this.babbleLibrary) {
+      wisp.setBabbleLibrary(this.babbleLibrary);
+    }
+
     await wisp.start();
     this.wisps.set(persona.name, wisp);
     return wisp;
@@ -99,7 +140,8 @@ export class WispOrchestrator {
 
   /**
    * Coordinate group responses: 1-2 random wisps reply to each group message.
-   * The wisp that received the event is excluded from responding if it was the sender.
+   * 10% chance no wisp responds (feels natural). Only the first wisp
+   * alphabetically coordinates to avoid duplicate responses.
    */
   private handleGroupResponse(
     receiver: Wisp, senderDid: string, senderName: string, text: string, groupId: string,
@@ -110,7 +152,31 @@ export class WispOrchestrator {
     allWisps.sort((a, b) => a.name.localeCompare(b.name));
     if (allWisps[0].name !== receiver.name) return; // Only first wisp coordinates
 
-    // Pick 1-2 random wisps (excluding sender) to respond
+    // 10% chance nobody responds (natural group behavior)
+    if (Math.random() < 0.1) return;
+
+    this.dispatchGroupResponders(senderDid, senderName, text, groupId, allWisps);
+  }
+
+  /**
+   * Trigger wisp group responses from an external source (e.g. Ghost bot).
+   * Picks 1-2 random wisps that have the group and are not the sender.
+   */
+  triggerGroupResponse(senderDid: string, senderName: string, text: string, groupId: string): void {
+    const allWisps = this.getWisps().filter(w => w.getGroup(groupId));
+    if (allWisps.length === 0) return;
+
+    // 10% chance nobody responds (natural group behavior)
+    if (Math.random() < 0.1) return;
+
+    this.dispatchGroupResponders(senderDid, senderName, text, groupId, allWisps);
+  }
+
+  /** Pick 1-2 random wisps (excluding sender) and schedule staggered responses. */
+  private dispatchGroupResponders(
+    senderDid: string, senderName: string, text: string,
+    groupId: string, allWisps: Wisp[],
+  ): void {
     const responders = allWisps.filter(w => w.did !== senderDid);
     if (responders.length === 0) return;
     const count = Math.random() < 0.5 ? 1 : Math.min(2, responders.length);
@@ -282,6 +348,76 @@ export class WispOrchestrator {
   /** Get presence scheduler status (shifts, online/offline lists). */
   getPresenceStatus(): { online: string[]; offline: string[]; shifts: WispShift[] } | null {
     return this.presenceScheduler?.getStatus() ?? null;
+  }
+
+  /** Join wisps to a voice channel. If no names given, pick 2-3 random wisps. */
+  async joinVoice(channelId: string, wispNames?: string[]): Promise<string[]> {
+    if (!this.babbleLibrary) throw new Error('Babble library not initialized');
+
+    let names: string[];
+    if (wispNames && wispNames.length > 0) {
+      names = wispNames.filter(n => this.wisps.has(n));
+    } else {
+      const all = this.getAllWispNames();
+      const count = 2 + Math.floor(Math.random() * 2); // 2-3
+      const shuffled = all.sort(() => Math.random() - 0.5);
+      names = shuffled.slice(0, Math.min(count, all.length));
+    }
+
+    const joined: string[] = [];
+    for (const name of names) {
+      const wisp = this.wisps.get(name);
+      if (!wisp) continue;
+
+      let handler = this.voiceHandlers.get(name);
+      if (!handler) {
+        handler = new VoiceBabbleHandler(
+          wisp.wispIdentity, wisp.relayClient, this.babbleLibrary, name,
+        );
+        this.voiceHandlers.set(name, handler);
+      }
+      await handler.joinChannel(channelId);
+      joined.push(name);
+    }
+
+    console.log(`[Orchestrator] ${joined.join(', ')} joined voice channel ${channelId}`);
+    return joined;
+  }
+
+  /** Remove wisps from voice channels. If no names given, remove all. */
+  leaveVoice(wispNames?: string[]): string[] {
+    const names = wispNames && wispNames.length > 0
+      ? wispNames
+      : Array.from(this.voiceHandlers.keys());
+
+    const left: string[] = [];
+    for (const name of names) {
+      const handler = this.voiceHandlers.get(name);
+      if (handler) {
+        handler.leaveChannel();
+        this.voiceHandlers.delete(name);
+        left.push(name);
+      }
+    }
+
+    console.log(`[Orchestrator] ${left.join(', ') || 'no wisps'} left voice`);
+    return left;
+  }
+
+  /** Get which wisps are currently in voice channels. */
+  getVoiceStatus(): { channels: { channelId: string; wisps: string[] }[] } {
+    const channelMap = new Map<string, string[]>();
+    for (const [name, handler] of this.voiceHandlers) {
+      if (!handler.inChannel) continue;
+      const chId = handler.currentChannelId ?? 'unknown';
+      if (!channelMap.has(chId)) channelMap.set(chId, []);
+      channelMap.get(chId)!.push(name);
+    }
+    return {
+      channels: Array.from(channelMap.entries()).map(
+        ([channelId, wisps]) => ({ channelId, wisps }),
+      ),
+    };
   }
 
   private getAllWispNames(): string[] {
