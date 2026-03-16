@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Download Umbra — Private Messaging</title>
+  <meta name="description" content="Download Umbra for macOS, Windows, Linux, Android, or use the web app. End-to-end encrypted P2P messaging.">
+  <link rel="icon" href="/favicon.ico">
+  <style>
+    :root {
+      --bg: #0a0b0f;
+      --surface: #12141a;
+      --elevated: #1a1d25;
+      --border: #2a2d38;
+      --text: #e8eaf0;
+      --muted: #8b8fa0;
+      --dim: #5a5e70;
+      --accent: #7c5bf5;
+      --accent-hover: #9175f7;
+      --accent-glow: rgba(124, 91, 245, 0.15);
+      --green: #3fb950;
+      --radius: 12px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { color: var(--accent-hover); }
+
+    .container { max-width: 960px; margin: 0 auto; padding: 0 24px; }
+
+    /* Hero */
+    .hero {
+      text-align: center;
+      padding: 80px 0 48px;
+    }
+    .hero-logo {
+      width: 80px; height: 80px; border-radius: 20px;
+      background: linear-gradient(135deg, var(--accent), #5b3fd4);
+      display: flex; align-items: center; justify-content: center;
+      margin: 0 auto 24px; font-size: 36px; color: white;
+      box-shadow: 0 8px 32px var(--accent-glow);
+    }
+    .hero h1 {
+      font-size: 40px; font-weight: 700; letter-spacing: -0.5px;
+      margin-bottom: 12px;
+    }
+    .hero p {
+      font-size: 18px; color: var(--muted); max-width: 480px; margin: 0 auto;
+    }
+    .version-badge {
+      display: inline-block; margin-top: 16px;
+      padding: 4px 14px; border-radius: 20px;
+      background: var(--elevated); border: 1px solid var(--border);
+      font-size: 13px; color: var(--muted);
+    }
+    .version-badge strong { color: var(--text); }
+
+    /* Recommended download */
+    .recommended {
+      text-align: center; padding: 0 0 48px;
+    }
+    .recommended-btn {
+      display: inline-flex; align-items: center; gap: 12px;
+      padding: 16px 32px; background: var(--accent);
+      color: white; border-radius: var(--radius);
+      font-size: 17px; font-weight: 600;
+      transition: all 0.2s;
+      box-shadow: 0 4px 24px var(--accent-glow);
+    }
+    .recommended-btn:hover {
+      background: var(--accent-hover); color: white;
+      transform: translateY(-1px);
+      box-shadow: 0 6px 32px rgba(124, 91, 245, 0.25);
+    }
+    .recommended-btn svg { width: 24px; height: 24px; }
+    .recommended-sub {
+      margin-top: 10px; font-size: 13px; color: var(--dim);
+    }
+
+    /* Platform grid */
+    .section-title {
+      font-size: 14px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 1.5px; color: var(--dim); margin-bottom: 20px;
+      padding-bottom: 12px; border-bottom: 1px solid var(--border);
+    }
+    .platforms { margin-bottom: 48px; }
+    .platform-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 12px;
+    }
+    .platform-card {
+      display: flex; align-items: center; gap: 16px;
+      padding: 20px; background: var(--surface);
+      border: 1px solid var(--border); border-radius: var(--radius);
+      transition: all 0.2s;
+    }
+    .platform-card:hover {
+      border-color: var(--accent); background: var(--elevated);
+      transform: translateY(-1px);
+    }
+    .platform-icon {
+      width: 48px; height: 48px; border-radius: 12px;
+      background: var(--elevated); display: flex;
+      align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .platform-icon svg { width: 24px; height: 24px; fill: var(--text); }
+    .platform-info { flex: 1; }
+    .platform-name { font-size: 15px; font-weight: 600; }
+    .platform-detail { font-size: 13px; color: var(--muted); }
+    .platform-size { font-size: 12px; color: var(--dim); }
+
+    /* Web callout */
+    .web-callout {
+      text-align: center; padding: 40px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); margin-bottom: 48px;
+    }
+    .web-callout h3 { font-size: 18px; margin-bottom: 8px; }
+    .web-callout p { color: var(--muted); margin-bottom: 16px; }
+    .web-btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 10px 24px; background: var(--elevated);
+      border: 1px solid var(--border); border-radius: 8px;
+      color: var(--text); font-size: 14px; font-weight: 500;
+      transition: all 0.2s;
+    }
+    .web-btn:hover { border-color: var(--accent); color: var(--accent); }
+
+    /* Footer */
+    .footer {
+      text-align: center; padding: 32px 0; border-top: 1px solid var(--border);
+      font-size: 13px; color: var(--dim);
+    }
+    .footer a { color: var(--muted); }
+    .footer-links { display: flex; gap: 24px; justify-content: center; margin-bottom: 12px; }
+
+    /* Loading state */
+    .loading { text-align: center; padding: 40px; color: var(--muted); }
+
+    @media (max-width: 640px) {
+      .hero { padding: 48px 0 32px; }
+      .hero h1 { font-size: 28px; }
+      .hero p { font-size: 16px; }
+      .platform-grid { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container" id="app">
+    <div class="loading">Loading download information...</div>
+  </div>
+
+  <script>
+    const GITHUB_REPO = 'InfamousVague/Umbra';
+    const GITHUB_API = `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`;
+
+    // Platform detection
+    function detectPlatform() {
+      const ua = navigator.userAgent.toLowerCase();
+      const platform = navigator.platform?.toLowerCase() || '';
+      if (ua.includes('mac') || platform.includes('mac')) {
+        // Check for Apple Silicon
+        try {
+          const canvas = document.createElement('canvas');
+          const gl = canvas.getContext('webgl');
+          const renderer = gl?.getParameter(gl.UNMASKED_RENDERER_WEBGL) || '';
+          if (renderer.includes('Apple')) return 'macos-arm';
+        } catch (e) {}
+        return 'macos-arm'; // Default to ARM for modern Macs
+      }
+      if (ua.includes('win')) return 'windows';
+      if (ua.includes('android')) return 'android';
+      if (ua.includes('linux')) return 'linux';
+      return 'web';
+    }
+
+    // Size formatting
+    function formatSize(bytes) {
+      if (bytes > 1e9) return (bytes / 1e9).toFixed(1) + ' GB';
+      if (bytes > 1e6) return (bytes / 1e6).toFixed(1) + ' MB';
+      if (bytes > 1e3) return (bytes / 1e3).toFixed(1) + ' KB';
+      return bytes + ' B';
+    }
+
+    // SVG icons
+    const icons = {
+      apple: `<svg viewBox="0 0 24 24"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11Z"/></svg>`,
+      windows: `<svg viewBox="0 0 24 24"><path d="M3 12V6.5l8-1.1V12H3m0 .5V18l8 1.1V12.5H3M11.5 4.85L22 3v9h-10.5V4.85M22 12.5V21l-10.5-1.5V12.5H22Z"/></svg>`,
+      linux: `<svg viewBox="0 0 24 24"><path d="M14.62 8.35c-.42-.62-.76-1.35-.76-2.35 0-1.38.52-2.68.89-3.21-.37-.06-.77-.09-1.18-.09-3.09 0-5.6 2.46-5.6 5.5 0 .97.27 1.88.72 2.67l.01.01c.28.47.65.93 1.07 1.38.76.83 1.2 1.53 1.32 2.07h4.84c.07-.53.22-1.15.66-1.82.38-.59.85-1.19 1.31-1.86.54-.79.97-1.63 1.11-2.69-1.02-.03-2.03-.31-2.84-.73a5.79 5.79 0 0 1-.55-.38c-.01 0-.01-.01-.01-.01a4.1 4.1 0 0 1-.99-.99M12 22a5.5 5.5 0 0 1-3.37-1.16c.71.1 1.4.16 2.06.16 1.35 0 2.55-.24 3.58-.67A5.49 5.49 0 0 1 12 22M18.89 14.97l-.01.01c-.2.18-.42.35-.64.52-.72.55-1.54 1.17-2.04 2.26-.1.22-.17.45-.23.68H8.06c-.06-.23-.14-.47-.25-.7-.52-1.12-1.38-1.76-2.12-2.31-.2-.14-.39-.29-.56-.43-.31-.27-.57-.55-.79-.84-.65-.84-1.04-1.93-1.04-3.16 0-3.59 2.97-6.5 6.63-6.5h.14c.47.01.91.07 1.33.18-.23.66-.37 1.39-.37 2.06 0 1.13.28 1.97.74 2.62.14.19.28.37.44.54l.01.01c.14.15.3.3.47.44l.01.01c.13.11.26.21.4.31.36.24.77.45 1.22.62 1 .37 2.22.57 3.57.57h.12c-.1.77-.42 1.47-.87 2.11l-.01.01c-.24.35-.5.68-.78 1Z"/></svg>`,
+      android: `<svg viewBox="0 0 24 24"><path d="M16.61 15.15c-.46 0-.84-.37-.84-.83s.38-.84.84-.84c.46 0 .83.38.83.84s-.37.83-.83.83m-9.22 0c-.46 0-.84-.37-.84-.83s.38-.84.84-.84c.46 0 .83.38.83.84s-.37.83-.83.83m9.5-5.85l1.67-2.89c.09-.17.03-.37-.13-.46-.17-.09-.37-.03-.46.13l-1.69 2.93A9.97 9.97 0 0 0 12 8a9.97 9.97 0 0 0-4.28 1.01L6.03 6.08c-.09-.17-.3-.22-.46-.13-.17.09-.22.3-.13.46l1.67 2.89C4.25 10.88 2.3 13.75 2 17.13h20c-.3-3.38-2.25-6.25-5.11-7.83"/></svg>`,
+      globe: `<svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2m-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93m6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39"/></svg>`,
+      download: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>`,
+    };
+
+    // Map assets to platforms
+    function categorize(assets) {
+      const platforms = {
+        'macos-arm': { name: 'macOS', detail: 'Apple Silicon (M1/M2/M3/M4)', icon: 'apple', asset: null },
+        'macos-intel': { name: 'macOS', detail: 'Intel', icon: 'apple', asset: null },
+        'windows': { name: 'Windows', detail: '64-bit (x86_64)', icon: 'windows', asset: null },
+        'linux-deb': { name: 'Linux', detail: 'Debian / Ubuntu (.deb)', icon: 'linux', asset: null },
+        'linux-appimage': { name: 'Linux', detail: 'AppImage (universal)', icon: 'linux', asset: null },
+        'android': { name: 'Android', detail: 'APK', icon: 'android', asset: null },
+      };
+
+      for (const a of assets) {
+        const n = a.name.toLowerCase();
+        if (n.endsWith('.dmg') && (n.includes('aarch64') || n.includes('arm'))) platforms['macos-arm'].asset = a;
+        else if (n.endsWith('.dmg') && (n.includes('x64') || n.includes('x86'))) platforms['macos-intel'].asset = a;
+        else if (n.endsWith('.msi') || (n.endsWith('.exe') && !n.includes('cli'))) platforms['windows'].asset = a;
+        else if (n.endsWith('.deb')) platforms['linux-deb'].asset = a;
+        else if (n.endsWith('.appimage') && !n.endsWith('.tar.gz')) platforms['linux-appimage'].asset = a;
+        else if (n.endsWith('.apk')) platforms['android'].asset = a;
+      }
+      return platforms;
+    }
+
+    // Get recommended platform key
+    function getRecommended(detected, platforms) {
+      if (detected === 'macos-arm' && platforms['macos-arm'].asset) return 'macos-arm';
+      if (detected === 'windows' && platforms['windows'].asset) return 'windows';
+      if (detected === 'linux' && platforms['linux-deb'].asset) return 'linux-deb';
+      if (detected === 'android' && platforms['android'].asset) return 'android';
+      return null;
+    }
+
+    async function init() {
+      const container = document.getElementById('app');
+      let release;
+
+      try {
+        const res = await fetch(GITHUB_API);
+        release = await res.json();
+      } catch (e) {
+        container.innerHTML = `
+          <div class="hero">
+            <div class="hero-logo">U</div>
+            <h1>Download Umbra</h1>
+            <p>Unable to fetch release information. Visit our <a href="https://github.com/${GITHUB_REPO}/releases">GitHub releases</a> page directly.</p>
+          </div>`;
+        return;
+      }
+
+      const version = release.tag_name?.replace('v', '') || '1.9.0';
+      const assets = release.assets || [];
+      const platforms = categorize(assets);
+      const detected = detectPlatform();
+      const recommended = getRecommended(detected, platforms);
+      const releaseDate = release.published_at
+        ? new Date(release.published_at).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })
+        : '';
+
+      let html = `
+        <div class="hero">
+          <div class="hero-logo">U</div>
+          <h1>Download Umbra</h1>
+          <p>End-to-end encrypted messaging.<br>Your keys. Your data. Your privacy.</p>
+          <div class="version-badge">
+            <strong>v${version}</strong>${releaseDate ? ' &middot; ' + releaseDate : ''}
+          </div>
+        </div>`;
+
+      // Recommended download button
+      if (recommended && platforms[recommended].asset) {
+        const p = platforms[recommended];
+        html += `
+          <div class="recommended">
+            <a href="${p.asset.browser_download_url}" class="recommended-btn">
+              ${icons[p.icon]}
+              Download for ${p.name}
+            </a>
+            <div class="recommended-sub">
+              ${p.detail} &middot; ${formatSize(p.asset.size)}
+            </div>
+          </div>`;
+      }
+
+      // All platforms
+      const available = Object.entries(platforms).filter(([, p]) => p.asset);
+      if (available.length > 0) {
+        html += `
+          <div class="platforms">
+            <div class="section-title">All Platforms</div>
+            <div class="platform-grid">`;
+
+        for (const [key, p] of available) {
+          html += `
+              <a href="${p.asset.browser_download_url}" class="platform-card">
+                <div class="platform-icon">${icons[p.icon]}</div>
+                <div class="platform-info">
+                  <div class="platform-name">${p.name}</div>
+                  <div class="platform-detail">${p.detail}</div>
+                  <div class="platform-size">${p.asset.name} &middot; ${formatSize(p.asset.size)}</div>
+                </div>
+              </a>`;
+        }
+
+        html += `
+            </div>
+          </div>`;
+      }
+
+      // Web app callout
+      html += `
+        <div class="web-callout">
+          <h3>Use Umbra in your browser</h3>
+          <p>No download required. Works on any modern browser with WebAssembly.</p>
+          <a href="https://umbra.chat" class="web-btn">
+            ${icons.globe}
+            Open Web App
+          </a>
+        </div>`;
+
+      // Footer
+      html += `
+        <div class="footer">
+          <div class="footer-links">
+            <a href="https://github.com/${GITHUB_REPO}">GitHub</a>
+            <a href="https://github.com/${GITHUB_REPO}/releases">All Releases</a>
+            <a href="https://umbra.chat">Web App</a>
+          </div>
+          <div>Umbra &mdash; Where "private" actually means private.</div>
+        </div>`;
+
+      container.innerHTML = html;
+    }
+
+    init();
+  </script>
+</body>
+</html>

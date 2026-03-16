@@ -1,3 +1,5 @@
 *
 !.gitignore
 !plugins.json
+!download/
+!download/**
