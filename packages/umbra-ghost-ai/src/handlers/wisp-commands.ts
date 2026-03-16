@@ -145,7 +145,7 @@ export async function detectAndExecuteWispCommand(
         }
 
         case 'community-join':
-          return { detected: true, action, response: 'To join a community, use: /swarm community join <invite-code>' };
+          return { detected: true, action, response: 'Community join requires syncing community data from the app. Use the community sync feature in Umbra settings to push community info to Ghost.' };
         case 'community-leave':
           return { detected: true, action, response: 'To leave a community, use: /swarm community leave <community-id>' };
         case 'community-status':
@@ -302,22 +302,11 @@ async function handleCommunitySubcommand(
 
   switch (sub) {
     case 'join': {
-      const inviteCode = tokens[1];
-      if (!inviteCode) {
-        return {
-          detected: true, action: 'community-join',
-          response: 'Usage: /swarm community join <invite-code>',
-        };
-      }
-      log.info(`Community join requested with invite code: ${inviteCode}`);
-      await fetch(`${WISP_API_URL}/wisps/community/join`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ inviteCode, userDid }),
-      });
+      // Community join requires full CommunityInfo (synced from the app), not an invite code.
+      // The /wisps/community/join endpoint expects { info: CommunityInfo } with channels, members, etc.
       return {
         detected: true, action: 'community-join',
-        response: `All wisps are joining the community with invite code "${inviteCode}". They should appear in the member list shortly.`,
+        response: 'Community join requires syncing community data from the app. Use the community sync feature in Umbra settings to push community info to Ghost, which will register the community for wisp activity.',
       };
     }
 

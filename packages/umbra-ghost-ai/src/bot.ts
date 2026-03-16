@@ -22,6 +22,7 @@ import { handleMessage, type IncomingMessage } from './handlers/message.js';
 import { checkReminders } from './handlers/reminder.js';
 import { CallHandler } from './handlers/call.js';
 import { MediaManager } from './media/manager.js';
+import { CommunityBridge } from './community-bridge.js';
 
 const BOT_NAMES: Record<string, string> = {
   en: 'Ghost',
@@ -43,6 +44,7 @@ export class GhostBot {
   private httpServer: ReturnType<typeof createServer> | null = null;
   private running = false;
   private wispOrchestrator: any = null;
+  private communityBridge: CommunityBridge | null = null;
 
   constructor(config: GhostConfig) {
     this.config = config;
@@ -136,6 +138,14 @@ export class GhostBot {
     // 11. Start wisp swarm (if enabled)
     if (this.config.wispsEnabled) {
       await this.startWisps();
+
+      // Wire community bridge — routes community events from relay to wisps
+      if (this.wispOrchestrator) {
+        this.communityBridge = new CommunityBridge(this.log);
+
+        // Enable presence scheduling so wisps rotate on/off in shifts
+        this.wispOrchestrator.enablePresenceScheduling();
+      }
     }
 
     this.running = true;
@@ -159,6 +169,10 @@ export class GhostBot {
     this.store?.close();
     this.knowledgeDb?.close();
     this.httpServer?.close();
+    if (this.communityBridge) {
+      this.communityBridge.removeAllListeners();
+      this.communityBridge = null;
+    }
     if (this.wispOrchestrator) {
       await this.wispOrchestrator.stop();
       this.wispOrchestrator = null;
@@ -175,10 +189,17 @@ export class GhostBot {
 
   private handleRelayMessage(msg: ServerMessage): void {
     if (msg.type === 'message') {
+      // Route community events to the bridge before normal envelope handling
+      if (this.communityBridge) {
+        this.communityBridge.handleRelayMessage(msg.from_did, msg.payload);
+      }
       this.handleIncomingEnvelope(msg.from_did, msg.payload);
     } else if (msg.type === 'offline_messages') {
       this.log.info(`Processing ${msg.messages.length} offline message(s)`);
       for (const m of msg.messages) {
+        if (this.communityBridge) {
+          this.communityBridge.handleRelayMessage(m.from_did, m.payload);
+        }
         this.handleIncomingEnvelope(m.from_did, m.payload);
       }
     }
@@ -408,7 +429,20 @@ export class GhostBot {
       });
 
       this.log.info(`Group "${group.groupName}" from ${payload.senderName}: "${plaintext.slice(0, 80)}${plaintext.length > 80 ? '...' : ''}"`);
-      // Ghost is a silent observer in groups — no auto-reply
+
+      // Forward to wisp orchestrator so wisps can respond to real users
+      if (this.wispOrchestrator && payload.senderDid !== this.identity.did) {
+        const wisps = this.wispOrchestrator.getWisps();
+        const isFromWisp = wisps.some((w: any) => w.did === payload.senderDid);
+        if (!isFromWisp) {
+          this.wispOrchestrator.triggerGroupResponse(
+            payload.senderDid,
+            payload.senderName || 'Unknown',
+            plaintext,
+            payload.groupId,
+          );
+        }
+      }
     } catch (err) {
       this.log.warn(`Failed to decrypt group message in "${group.groupName}":`, err);
     }
