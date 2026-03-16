@@ -589,6 +589,14 @@ deploy_ghost() {
         "'$PROJECT_ROOT/packages/umbra-wisps/package.json'" \
         "'$SSH_USER@$GHOST_HOST:$ghost_path/wisps/package.json'"
 
+    # Sync babble audio clips for voice channel playback
+    log_info "Uploading babble audio clips..."
+    eval "$ghost_ssh_cmd -o ServerAliveInterval=30 $SSH_USER@$GHOST_HOST 'mkdir -p $ghost_path/wisps/babble'"
+    eval rsync -avz --delete \
+        -e "'$ghost_rsync_ssh -o ServerAliveInterval=30 -o ServerAliveCountMax=5'" \
+        "'$PROJECT_ROOT/packages/umbra-wisps/babble/'" \
+        "'$SSH_USER@$GHOST_HOST:$ghost_path/wisps/babble/'"
+
     # Install dependencies on server
     log_info "Installing dependencies on server..."
     eval "$ghost_ssh_cmd -o ServerAliveInterval=30 $SSH_USER@$GHOST_HOST 'cd $ghost_path && npm install --production 2>&1 | tail -5'"
@@ -598,7 +606,7 @@ deploy_ghost() {
     eval "$ghost_ssh_cmd -o ServerAliveInterval=30 $SSH_USER@$GHOST_HOST 'mkdir -p /etc/systemd/system/$ghost_service.service.d && cat > /etc/systemd/system/$ghost_service.service.d/wisps.conf << EOC
 [Service]
 Environment=WISPS_ENABLED=true
-Environment=WISP_COUNT=4
+Environment=WISP_COUNT=12
 Environment=WISP_MODEL=llama3.2:1b
 EOC
 systemctl daemon-reload'"
