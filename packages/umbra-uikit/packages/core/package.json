@@ -7,91 +7,91 @@
   "description": "Framework-agnostic core for the Wisp design system — tokens, themes, styles, logic, and types",
   "type": "module",
   "main": "./dist/index.js",
-  "module": "./dist/index.mjs",
+  "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "import": "./dist/index.mjs",
+      "import": "./dist/index.js",
       "require": "./dist/index.js",
       "types": "./dist/index.d.ts"
     },
     "./tokens": {
-      "import": "./dist/tokens/index.mjs",
+      "import": "./dist/tokens/index.js",
       "require": "./dist/tokens/index.js",
       "types": "./dist/tokens/index.d.ts"
     },
     "./theme": {
-      "import": "./dist/theme/index.mjs",
+      "import": "./dist/theme/index.js",
       "require": "./dist/theme/index.js",
       "types": "./dist/theme/index.d.ts"
     },
     "./variants": {
-      "import": "./dist/variants/index.mjs",
+      "import": "./dist/variants/index.js",
       "require": "./dist/variants/index.js",
       "types": "./dist/variants/index.d.ts"
     },
     "./styles": {
-      "import": "./dist/styles/index.mjs",
+      "import": "./dist/styles/index.js",
       "require": "./dist/styles/index.js",
       "types": "./dist/styles/index.d.ts"
     },
     "./logic": {
-      "import": "./dist/logic/index.mjs",
+      "import": "./dist/logic/index.js",
       "require": "./dist/logic/index.js",
       "types": "./dist/logic/index.d.ts"
     },
     "./types": {
-      "import": "./dist/types/index.mjs",
+      "import": "./dist/types/index.js",
       "require": "./dist/types/index.js",
       "types": "./dist/types/index.d.ts"
     },
     "./utils": {
-      "import": "./dist/utils/index.mjs",
+      "import": "./dist/utils/index.js",
       "require": "./dist/utils/index.js",
       "types": "./dist/utils/index.d.ts"
     },
     "./animation": {
-      "import": "./dist/animation/index.mjs",
+      "import": "./dist/animation/index.js",
       "require": "./dist/animation/index.js",
       "types": "./dist/animation/index.d.ts"
     },
     "./tokens/*": {
-      "import": "./dist/tokens/*.mjs",
+      "import": "./dist/tokens/*.js",
       "require": "./dist/tokens/*.js",
       "types": "./dist/tokens/*.d.ts"
     },
     "./theme/*": {
-      "import": "./dist/theme/*.mjs",
+      "import": "./dist/theme/*.js",
       "require": "./dist/theme/*.js",
       "types": "./dist/theme/*.d.ts"
     },
     "./styles/*": {
-      "import": "./dist/styles/*.mjs",
+      "import": "./dist/styles/*.js",
       "require": "./dist/styles/*.js",
       "types": "./dist/styles/*.d.ts"
     },
     "./types/*": {
-      "import": "./dist/types/*.mjs",
+      "import": "./dist/types/*.js",
       "require": "./dist/types/*.js",
       "types": "./dist/types/*.d.ts"
     },
     "./logic/*": {
-      "import": "./dist/logic/*.mjs",
+      "import": "./dist/logic/*.js",
       "require": "./dist/logic/*.js",
       "types": "./dist/logic/*.d.ts"
     },
     "./utils/*": {
-      "import": "./dist/utils/*.mjs",
+      "import": "./dist/utils/*.js",
       "require": "./dist/utils/*.js",
       "types": "./dist/utils/*.d.ts"
     },
     "./variants/*": {
-      "import": "./dist/variants/*.mjs",
+      "import": "./dist/variants/*.js",
       "require": "./dist/variants/*.js",
       "types": "./dist/variants/*.d.ts"
     },
     "./animation/*": {
-      "import": "./dist/animation/*.mjs",
+      "import": "./dist/animation/*.js",
       "require": "./dist/animation/*.js",
       "types": "./dist/animation/*.d.ts"
     }
