@@ -97,7 +97,7 @@ export interface SoundThemeMeta {
 }
 
 export const SOUND_THEMES: SoundThemeMeta[] = [
-  { id: 'umbra', name: 'Umbra', description: 'Warm organic tones — AI-crafted for Umbra', type: 'audio' },
+  { id: 'umbra', name: 'Umbra', description: 'Warm organic tones crafted for Umbra', type: 'audio' },
   { id: 'minimal', name: 'Minimal', description: 'Subtle, barely-there ticks and blips', type: 'synth' },
   { id: 'playful', name: 'Playful', description: 'Cheerful tones and musical arpeggios', type: 'synth' },
   { id: 'warm', name: 'Warm', description: 'Soft, rounded tones with gentle tails', type: 'synth' },

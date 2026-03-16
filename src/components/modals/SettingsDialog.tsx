@@ -1973,7 +1973,7 @@ function SoundsSection() {
   } = useSound();
 
   const themeOptions = useMemo(
-    () => SOUND_THEMES.map((t) => ({ value: t.id, label: `${t.name}${t.type === 'audio' ? ' (Pack)' : ''}` })),
+    () => SOUND_THEMES.map((t) => ({ value: t.id, label: t.name })),
     [],
   );
 
