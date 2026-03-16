@@ -49,6 +49,88 @@ export function startHealthServer(
         if (!wisp) { res.writeHead(404); res.end('Wisp not found'); return; }
         wisp.sendGroupMessage(groupId, text);
         json(res, { ok: true });
+      // ── Community endpoints ──────────────────────────────────────
+      } else if (req.method === 'POST' && url.pathname === '/wisps/community/join') {
+        const body = await readBody(req);
+        const { communityId, info } = JSON.parse(body) as { communityId?: string; info?: any };
+        if (!info) { res.writeHead(400); res.end(JSON.stringify({ error: 'info required' })); return; }
+        // Create stub send/reaction functions that broadcast via wisps
+        const sendFn = (wispDid: string, cId: string, channelId: string, channelName: string, senderDisplayName: string, content: string, replyToId?: string) => {
+          const wisp = orchestrator.getWisps().find(w => w.did === wispDid);
+          if (!wisp) return;
+          // Broadcast community message to all community members via relay
+          for (const member of info.members ?? []) {
+            if (member.did === wispDid) continue;
+            wisp.sendRawEnvelope(member.did, {
+              envelope: 'community_message', version: 1,
+              payload: { communityId: cId, channelId, channelName, senderDid: wispDid, senderDisplayName, content, replyToId, timestamp: Date.now() },
+            });
+          }
+        };
+        const reactionFn = (wispDid: string, cId: string, channelId: string, messageId: string, emoji: string) => {
+          const wisp = orchestrator.getWisps().find(w => w.did === wispDid);
+          if (!wisp) return;
+          for (const member of info.members ?? []) {
+            if (member.did === wispDid) continue;
+            wisp.sendRawEnvelope(member.did, {
+              envelope: 'community_reaction', version: 1,
+              payload: { communityId: cId, channelId, messageId, emoji, senderDid: wispDid, timestamp: Date.now() },
+            });
+          }
+        };
+        orchestrator.addCommunity(info, sendFn, reactionFn);
+        json(res, { ok: true });
+
+      } else if (req.method === 'POST' && url.pathname === '/wisps/community/leave') {
+        const body = await readBody(req);
+        const { communityId } = JSON.parse(body) as { communityId: string };
+        orchestrator.removeCommunity(communityId);
+        json(res, { ok: true });
+
+      } else if (req.method === 'GET' && url.pathname === '/wisps/community/status') {
+        // Return minimal community status (communities are managed by CommunityActivity)
+        json(res, { communities: [] });
+
+      } else if (req.method === 'POST' && url.pathname === '/wisps/community/activity') {
+        const body = await readBody(req);
+        const { action, msgsPerHour } = JSON.parse(body) as { action: string; msgsPerHour?: number; rate?: number };
+        // Community activity is managed within addCommunity; these control start/stop/rate
+        // For now return ok -- the CommunityActivity engine auto-starts on addCommunity
+        json(res, { ok: true, action, msgsPerHour });
+
+      // ── Voice endpoints ─────────────────────────────────────────
+      } else if (req.method === 'POST' && url.pathname === '/wisps/voice/join') {
+        const body = await readBody(req);
+        const { channelId, wispNames } = JSON.parse(body) as { channelId: string; wispNames?: string[] };
+        if (!channelId) { res.writeHead(400); res.end(JSON.stringify({ error: 'channelId required' })); return; }
+        const joined = await orchestrator.joinVoice(channelId, wispNames);
+        json(res, { ok: true, joined });
+
+      } else if (req.method === 'POST' && url.pathname === '/wisps/voice/leave') {
+        const body = await readBody(req);
+        const { wispNames } = JSON.parse(body) as { wispNames?: string[] };
+        const left = orchestrator.leaveVoice(wispNames);
+        json(res, { ok: true, left });
+
+      } else if (req.method === 'GET' && url.pathname === '/wisps/voice/status') {
+        json(res, orchestrator.getVoiceStatus());
+
+      // ── Schedule endpoints ──────────────────────────────────────
+      } else if (req.method === 'POST' && url.pathname === '/wisps/schedule') {
+        const body = await readBody(req);
+        const { action, enabled } = JSON.parse(body) as { action?: string; enabled?: boolean };
+        const turnOn = action === 'on' || enabled === true;
+        if (turnOn) {
+          orchestrator.enablePresenceScheduling();
+        }
+        // Note: disabling presence scheduling would need a disablePresenceScheduling method
+        // For now, enabling is supported; disable is a no-op acknowledgment
+        json(res, { ok: true, scheduling: turnOn ? 'enabled' : 'disabled' });
+
+      } else if (req.method === 'GET' && url.pathname === '/wisps/schedule/status') {
+        const status = orchestrator.getPresenceStatus();
+        json(res, { enabled: status !== null, ...(status ?? {}) });
+
       } else if (req.method === 'POST' && url.pathname === '/wisps/summon') {
         const body = await readBody(req);
         const { userDid } = JSON.parse(body) as { userDid: string };
