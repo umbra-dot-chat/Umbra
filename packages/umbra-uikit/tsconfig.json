@@ -15,13 +15,12 @@
     "declarationMap": true,
     "sourceMap": true,
     "outDir": "dist",
-    "rootDir": "src",
     "baseUrl": ".",
     "noEmit": true,
     "paths": {
-      "@wisp/*": ["src/*"]
+      "@wisp/*": ["packages/core/src/*"]
     }
   },
-  "include": ["src"],
+  "include": ["packages/core/src"],
   "exclude": ["node_modules", "dist", "**/*.test.tsx", "**/*.test.ts", "**/*.stories.tsx"]
 }

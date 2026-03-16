@@ -9,7 +9,10 @@
     "skipLibCheck": true,
     "outDir": "dist",
     "declaration": false,
-    "rootDir": "src"
+    "baseUrl": ".",
+    "paths": {
+      "@umbra/plugin-sdk": ["../umbra-plugin-sdk/src/index"]
+    }
   },
   "include": ["src/**/*"]
 }
