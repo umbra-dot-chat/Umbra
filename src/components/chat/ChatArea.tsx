@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Platform, ScrollView, View, Animated as RNAnimated } from 'react-native';
 import { TEST_IDS } from '@/constants/test-ids';
 import {
-  Avatar, Box, Button, ChatBubble, Text, TypingIndicator, NewMessageDivider, useTheme,
+  Avatar, Box, Button, ChatBubble, Text, TypingIndicator, NewMessageDivider, StatusIcon, useTheme,
 } from '@coexist/wisp-react-native';
 import { SmileIcon, ReplyIcon, ThreadIcon, MoreIcon, PhoneIcon, VideoIcon } from '@/components/ui';
 import { InlineEventCard } from '@/components/ui/InlineEventCard';
@@ -791,7 +791,7 @@ export function ChatArea({
                   isOutgoing && isGroupChat && firstMsg.status === 'read' ? (
                     <ReadReceiptPopup readers={groupReaders} totalParticipants={groupReaders.length} themeColors={themeColors} />
                   ) : !isOutgoing && groupIdx === lastIncomingGroupIdx ? (
-                    <Text size="xs" style={{ color: themeColors.text.muted, marginTop: 2 }}>{t('seen')}</Text>
+                    <StatusIcon status="read" color={themeColors.text.muted} readColor={themeColors.accent.primary} />
                   ) : undefined
                 }
               >
@@ -823,7 +823,7 @@ export function ChatArea({
                 isOutgoing && isGroupChat && firstMsg.status === 'read' ? (
                   <ReadReceiptPopup readers={groupReaders} totalParticipants={groupReaders.length} themeColors={themeColors} />
                 ) : !isOutgoing && groupIdx === lastIncomingGroupIdx ? (
-                  <Text size="xs" style={{ color: themeColors.text.muted, marginTop: 2 }}>{t('seen')}</Text>
+                  <StatusIcon status="read" color={themeColors.text.muted} readColor={themeColors.accent.primary} />
                 ) : undefined
               }
             >

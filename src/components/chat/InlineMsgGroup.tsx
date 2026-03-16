@@ -115,20 +115,13 @@ export const InlineMsgGroup = React.memo(function InlineMsgGroup({
               readColor={themeColors.accent.primary}
             />
           )}
-          {status === 'read' && (
-            <Text size="xs" style={{ color: themeColors.accent.primary }}>
-              Read
-            </Text>
-          )}
+          {readReceipts}
         </Box>
 
         {/* Message content */}
         <Box style={{ gap: 2 }}>
           {children}
         </Box>
-
-        {/* Read receipts */}
-        {readReceipts}
       </Box>
     </Box>
   );
