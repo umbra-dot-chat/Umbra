@@ -266,7 +266,6 @@ export const SUBCATEGORIES: Partial<Record<SettingsSection, SubNavItem[]>> = {
   account: [
     { id: 'profile', label: 'Profile' },
     { id: 'identity', label: 'Identity' },
-    { id: 'sharing', label: 'Sharing' },
     { id: 'sync', label: 'Sync' },
     { id: 'danger', label: 'Danger Zone' },
   ],
@@ -1188,135 +1187,109 @@ function AccountSection() {
 
       {/* ── Profile subsection ─────────────────────────────────────────── */}
       <Box nativeID="sub-profile" style={{ gap: 16 }}>
-        <SettingRow label={t('profileBanner')} description={t('profileBannerDesc')} vertical>
+        <Card variant="elevated" padding="none" radius="lg" style={{ overflow: 'hidden' }}>
+          {/* Banner area */}
           <Pressable onPress={handleBannerPick}>
-            <Box
-              style={{
-                width: '100%',
-                height: 120,
-                borderRadius: 12,
-                backgroundColor: tc.background.surface,
-                alignItems: 'center',
-                justifyContent: 'center',
-                overflow: 'hidden',
-                borderWidth: 2,
-                borderColor: tc.border.subtle,
-                borderStyle: 'dashed',
-              }}
-            >
+            <Box style={{ width: '100%', height: 140, backgroundColor: tc.background.sunken, position: 'relative' }}>
               {bannerPreview ? (
-                <Image
-                  source={{ uri: bannerPreview }}
-                  style={{ width: '100%', height: 120, borderRadius: 10 }}
-                  resizeMode="cover"
-                />
+                <Image source={{ uri: bannerPreview }} style={{ width: '100%', height: 140 }} resizeMode="cover" />
               ) : (
-                <Text style={{ color: tc.text.muted, fontSize: 13 }}>
-                  {t('profileBannerUpload')}
-                </Text>
+                <Box style={{ flex: 1, alignItems: 'center', justifyContent: 'center', borderWidth: 2, borderColor: tc.border.subtle, borderStyle: 'dashed', margin: 0 }}>
+                  <Text style={{ color: tc.text.muted, fontSize: 13 }}>{t('profileBannerUpload')}</Text>
+                </Box>
+              )}
+              {/* Hover overlay with change/remove buttons */}
+              {bannerPreview && (
+                <Box style={{ position: 'absolute', bottom: 8, right: 8, flexDirection: 'row', gap: 6 }}>
+                  <Pressable onPress={handleBannerPick} style={{ backgroundColor: 'rgba(0,0,0,0.6)', paddingVertical: 4, paddingHorizontal: 10, borderRadius: 6 }}>
+                    <Text style={{ color: tc.text.inverse, fontSize: 11, fontWeight: '600' }}>{t('profileChangeBanner')}</Text>
+                  </Pressable>
+                  <Pressable onPress={() => { setBannerPreview(null); setPendingBanner(null); setBannerRemoved(true); }} style={{ backgroundColor: 'rgba(0,0,0,0.6)', paddingVertical: 4, paddingHorizontal: 10, borderRadius: 6 }}>
+                    <Text style={{ color: tc.text.inverse, fontSize: 11, fontWeight: '600' }}>{t('profileRemoveBanner')}</Text>
+                  </Pressable>
+                </Box>
               )}
             </Box>
           </Pressable>
-          {bannerPreview && (
-            <HStack gap="sm" style={{ marginTop: 4 }}>
-              <Button variant="tertiary" size="sm" onPress={handleBannerPick}>
-                {t('profileChangeBanner')}
-              </Button>
-              <Button
-                variant="tertiary"
-                size="sm"
-                onPress={() => {
-                  setBannerPreview(null);
-                  setPendingBanner(null);
-                  setBannerRemoved(true);
-                }}
-              >
-                {t('profileRemoveBanner')}
-              </Button>
-            </HStack>
-          )}
           {bannerError && (
-            <HStack gap="xs" style={{ alignItems: 'center', marginTop: 4 }}>
+            <HStack gap="xs" style={{ alignItems: 'center', paddingHorizontal: 20, paddingTop: 8 }}>
               <AlertTriangleIcon size={14} color={tc.status.danger} />
               <Text style={{ color: tc.status.danger, fontSize: 12 }}>{bannerError}</Text>
             </HStack>
           )}
-        </SettingRow>
 
-        <SettingRow label={t('profileAvatar')} description={t('profileAvatarDesc')} vertical>
-          <HStack gap="md" style={{ alignItems: 'center' }}>
+          {/* Avatar + Name row overlapping banner */}
+          <Box style={{ flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 20, marginTop: -48, gap: 16 }}>
             <Pressable onPress={handleAvatarPick}>
-              <Box
-                style={{
-                  width: 64,
-                  height: 64,
-                  borderRadius: 32,
-                  backgroundColor: tc.background.surface,
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  overflow: 'hidden',
-                  borderWidth: 2,
-                  borderColor: tc.border.subtle,
-                }}
-              >
+              <Box style={{
+                width: 96, height: 96, borderRadius: 48,
+                borderWidth: 4, borderColor: tc.background.canvas,
+                backgroundColor: tc.background.surface,
+                alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
+              }}>
                 {avatarPreview ? (
-                  <Image
-                    source={{ uri: avatarPreview }}
-                    style={{ width: 64, height: 64, borderRadius: 32 }}
-                  />
+                  <Image source={{ uri: avatarPreview }} style={{ width: 88, height: 88, borderRadius: 44 }} />
                 ) : (
-                  <UserIcon size={28} color={tc.text.muted} />
+                  <UserIcon size={36} color={tc.text.muted} />
                 )}
               </Box>
             </Pressable>
-            <Button variant="tertiary" size="sm" onPress={handleAvatarPick}>
-              {t('profileUploadPhoto')}
-            </Button>
-          </HStack>
+            <Box style={{ flex: 1, paddingBottom: 8 }}>
+              <Input
+                value={displayName}
+                onChangeText={setDisplayName}
+                placeholder={t('profileDisplayNamePlaceholder')}
+                size="md"
+                fullWidth
+                testID={TEST_IDS.SETTINGS.DISPLAY_NAME_INPUT}
+                gradientBorder
+              />
+              <Text style={{ fontSize: 11, color: tc.text.muted, marginTop: 4 }}>
+                {t('identityMemberSince', { date: memberSince })}
+              </Text>
+            </Box>
+          </Box>
           {avatarError && (
-            <HStack gap="xs" style={{ alignItems: 'center', marginTop: 4 }}>
+            <HStack gap="xs" style={{ alignItems: 'center', paddingHorizontal: 20, marginTop: 4 }}>
               <AlertTriangleIcon size={14} color={tc.status.danger} />
               <Text style={{ color: tc.status.danger, fontSize: 12 }}>{avatarError}</Text>
             </HStack>
           )}
-        </SettingRow>
 
-        <SettingRow label={t('profileDisplayName')} description={t('profileDisplayNameDesc')} vertical>
-          <Input
-            value={displayName}
-            onChangeText={setDisplayName}
-            placeholder={t('profileDisplayNamePlaceholder')}
-            icon={UserInputIcon}
-            size="md"
-            fullWidth
-            testID={TEST_IDS.SETTINGS.DISPLAY_NAME_INPUT}
-            gradientBorder
-          />
-        </SettingRow>
+          {/* Status + Custom Status row */}
+          <Box style={{ paddingHorizontal: 20, paddingTop: 16, paddingBottom: 20, gap: 12 }}>
+            <HStack gap="md" style={{ alignItems: 'flex-end' }}>
+              <Box style={{ flex: 1 }}>
+                <Text style={{ fontSize: 12, fontWeight: '500', color: tc.text.secondary, marginBottom: 4 }}>{t('profileStatus')}</Text>
+                <Select
+                  options={STATUS_OPTIONS}
+                  value={status}
+                  onChange={setStatus}
+                  placeholder={t('profileSelectStatus')}
+                  size="md"
+                  fullWidth
+                />
+              </Box>
+              <Box style={{ flexShrink: 0 }}>
+                {(customStatusText || customStatusEmoji) && (
+                  <MemberStatusDisplay text={customStatusText} emoji={customStatusEmoji} size="sm" />
+                )}
+                <Button variant="secondary" size="sm" onPress={() => setStatusPickerOpen(true)}>
+                  {customStatusText ? t('profileEditStatus') : t('profileSetStatus')}
+                </Button>
+              </Box>
+            </HStack>
 
-        <SettingRow label={t('profileStatus')} description={t('profileStatusDesc')} vertical>
-          <Select
-            options={STATUS_OPTIONS}
-            value={status}
-            onChange={setStatus}
-            placeholder={t('profileSelectStatus')}
-            size="md"
-            fullWidth
-          />
-        </SettingRow>
-
-        <SettingRow label={t('profileCustomStatus')} description={t('profileCustomStatusDesc')} vertical>
-          {(customStatusText || customStatusEmoji) && (
-            <MemberStatusDisplay
-              text={customStatusText}
-              emoji={customStatusEmoji}
-              size="sm"
-            />
-          )}
-          <Button variant="secondary" size="sm" onPress={() => setStatusPickerOpen(true)}>
-            {customStatusText ? t('profileEditStatus') : t('profileSetStatus')}
-          </Button>
-        </SettingRow>
+            {(saving || saved) && (
+              <HStack gap="xs" style={{ justifyContent: 'flex-end', alignItems: 'center' }}>
+                {saved ? <CheckIcon size={14} color={tc.status.success} /> : null}
+                <Text style={{ color: saved ? tc.status.success : tc.text.muted, fontSize: 12 }}>
+                  {saving ? t('saving') : t('saved')}
+                </Text>
+              </HStack>
+            )}
+          </Box>
+        </Card>
 
         <MemberStatusPicker
           open={statusPickerOpen}
@@ -1325,266 +1298,122 @@ function AccountSection() {
           onClear={handleStatusClear}
           currentStatus={{ text: customStatusText, emoji: customStatusEmoji }}
         />
-
-        {(saving || saved) && (
-          <HStack gap="xs" style={{ justifyContent: 'flex-end', alignItems: 'center' }}>
-            {saved ? <CheckIcon size={14} color={tc.status.success} /> : null}
-            <Text style={{ color: saved ? tc.status.success : tc.text.muted, fontSize: 12 }}>
-              {saving ? t('saving') : t('saved')}
-            </Text>
-          </HStack>
-        )}
       </Box>
 
       {/* ── Identity subsection ────────────────────────────────────────── */}
-      <Box nativeID="sub-identity">
-          {/* Identity info card */}
-          <Card variant="outlined" padding="lg" style={{ width: '100%' }}>
-            <Box style={{ gap: 12 }}>
-              <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
-                <Box
-                  style={{
-                    width: 48,
-                    height: 48,
-                    borderRadius: 24,
-                    backgroundColor: tc.accent.primary,
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    overflow: 'hidden',
-                  }}
-                >
-                  {identity.avatar ? (
-                    <Image
-                      source={{ uri: identity.avatar }}
-                      style={{ width: 48, height: 48 }}
-                    />
-                  ) : (
-                    <Text style={{ fontSize: 20, fontWeight: '700', color: tc.text.onAccent }}>
-                      {identity.displayName.charAt(0).toUpperCase()}
-                    </Text>
-                  )}
-                </Box>
-                <Box style={{ flex: 1 }}>
-                  <Text style={{ fontSize: 18, fontWeight: '700', color: tc.text.primary }}>
-                    {identity.displayName}
-                  </Text>
-                  <Text style={{ fontSize: 12, color: tc.text.muted, marginTop: 2 }}>
-                    {t('identityMemberSince', { date: memberSince })}
-                  </Text>
-                </Box>
-              </Box>
+      <Box nativeID="sub-identity" style={{ gap: 16 }}>
+        <SubsectionHeader title={t('subIdentity')} description={t('subIdentityDesc')} />
 
-              <Separator spacing="sm" />
-
-              <Box>
-                <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                  <Text style={{ fontSize: 11, fontWeight: '600', color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
-                    {t('identityDecentralizedId')}
-                  </Text>
-                  <HelpIndicator
-                    id="settings-did"
-                    title={t('identityDidTitle')}
-                    priority={40}
-                    size={14}
-                  >
-                    <HelpText>
-                      {t('identityDidHelp')}
-                    </HelpText>
-                    <HelpHighlight icon={<KeyIcon size={22} color={tc.accent.primary} />}>
-                      {t('identityDidHighlight')}
-                    </HelpHighlight>
-                    <HelpListItem>{t('identityShareHelp')}</HelpListItem>
-                    <HelpListItem>{t('identityNeverChanges')}</HelpListItem>
-                  </HelpIndicator>
-                </Box>
-                <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                  <Text
-                    testID={TEST_IDS.SETTINGS.DID_DISPLAY}
-                    accessibilityValue={{ text: identity.did }}
-                    style={{
-                      fontSize: 12,
-                      color: tc.text.secondary,
-                      fontFamily: 'monospace',
-                      flex: 1,
-                    }}
-                    numberOfLines={1}
-                  >
-                    {truncatedDid}
-                  </Text>
-                  <Pressable
-                    onPress={handleCopyDid}
-                    style={{
-                      flexDirection: 'row',
-                      alignItems: 'center',
-                      gap: 4,
-                      paddingVertical: 4,
-                      paddingHorizontal: 8,
-                      borderRadius: 6,
-                      backgroundColor: didCopied ? tc.status.successSurface : tc.background.sunken,
-                    }}
-                  >
-                    <CopyIcon size={14} color={didCopied ? tc.status.success : tc.text.secondary} />
-                    <Text style={{ fontSize: 11, color: didCopied ? tc.status.success : tc.text.secondary, fontWeight: '500' }}>
-                      {didCopied ? 'Copied' : 'Copy'}
-                    </Text>
-                  </Pressable>
-                </Box>
-              </Box>
-            </Box>
-          </Card>
-
-          {/* Account Recovery Details PDF */}
-          <Pressable
-            onPress={() => setShowIdentityCard(true)}
-            testID={TEST_IDS.SETTINGS.IDENTITY_CARD}
-            style={{
-              flexDirection: 'row',
-              alignItems: 'center',
-              gap: 10,
-              marginTop: 12,
-              paddingVertical: 10,
-              paddingHorizontal: 14,
-              borderRadius: 10,
-              backgroundColor: isDark ? '#18181B' : tc.background.sunken,
-              borderWidth: 1,
-              borderColor: isDark ? '#27272A' : tc.border.subtle,
-            }}
-          >
-            <FileTextIcon size={18} color={tc.text.secondary} />
-            <Box style={{ flex: 1 }}>
-              <Text style={{ fontSize: 13, fontWeight: '600', color: tc.text.primary }}>
-                Account Recovery Details
-              </Text>
-              <Text style={{ fontSize: 11, color: tc.text.secondary }}>
-                Download a printable PDF with your DID, QR code, and recovery phrase
-              </Text>
-            </Box>
-            <DownloadIcon size={16} color={tc.text.muted} />
-          </Pressable>
-          <IdentityCardDialog
-            open={showIdentityCard}
-            onClose={() => setShowIdentityCard(false)}
-          />
-
-          {/* Linked Accounts */}
-          <Box style={{ marginTop: 20 }}>
-            <Box style={{ marginBottom: 12 }}>
-              <Text style={{ fontSize: 15, fontWeight: '600', color: tc.text.primary }}>
-                Linked Accounts
-              </Text>
-              <Text style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
-                Connect accounts from other platforms.
-              </Text>
-            </Box>
-            <LinkedAccountsPanel did={identity?.did ?? null} />
-          </Box>
-      </Box>
-
-      <Box nativeID="sub-sharing">
-          {/* QR Code sharing */}
+        {/* DID Card */}
+        <Card variant="outlined" padding="lg">
           <Box style={{ gap: 12 }}>
             <Box>
-              <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-                <Text style={{ fontSize: 15, fontWeight: '600', color: tc.text.primary }}>
-                  {t('sharingShareIdentity')}
+              <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                <Text style={{ fontSize: 11, fontWeight: '600', color: tc.text.muted, textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                  {t('identityDecentralizedId')}
                 </Text>
-                <HelpIndicator
-                  id="settings-qr"
-                  title={t('sharingQrTitle')}
-                  priority={45}
-                  size={14}
-                >
-                  <HelpText>
-                    {t('sharingQrHelp')}
-                  </HelpText>
-                  <HelpListItem>{t('sharingQrContains')}</HelpListItem>
-                  <HelpListItem>{t('sharingQrSafe')}</HelpListItem>
-                  <HelpListItem>{t('sharingQrScan')}</HelpListItem>
+                <HelpIndicator id="settings-did" title={t('identityDidTitle')} priority={40} size={14}>
+                  <HelpText>{t('identityDidHelp')}</HelpText>
+                  <HelpHighlight icon={<KeyIcon size={22} color={tc.accent.primary} />}>{t('identityDidHighlight')}</HelpHighlight>
+                  <HelpListItem>{t('identityShareHelp')}</HelpListItem>
+                  <HelpListItem>{t('identityNeverChanges')}</HelpListItem>
                 </HelpIndicator>
               </Box>
-              <Text style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
-                {t('sharingScanDesc')}
-              </Text>
+              <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                <Text testID={TEST_IDS.SETTINGS.DID_DISPLAY} accessibilityValue={{ text: identity.did }}
+                  style={{ fontSize: 12, color: tc.text.secondary, fontFamily: 'monospace', flex: 1 }} numberOfLines={1}>
+                  {truncatedDid}
+                </Text>
+                <Pressable onPress={handleCopyDid} style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 4, paddingHorizontal: 8, borderRadius: 6, backgroundColor: didCopied ? tc.status.successSurface : tc.background.sunken }}>
+                  <CopyIcon size={14} color={didCopied ? tc.status.success : tc.text.secondary} />
+                  <Text style={{ fontSize: 11, color: didCopied ? tc.status.success : tc.text.secondary, fontWeight: '500' }}>
+                    {didCopied ? 'Copied' : 'Copy'}
+                  </Text>
+                </Pressable>
+              </Box>
             </Box>
 
-            <Card variant="outlined" padding="lg" style={{ alignItems: 'center' }}>
-              <QRCode
-                value={identity.did}
-                size="md"
-                dotStyle="rounded"
-                eyeFrameStyle="rounded"
-                eyePupilStyle="rounded"
-                darkColor={tc.text.primary}
-                lightColor="transparent"
-                eyeColor={tc.accent.primary}
-              />
-              <Text style={{ fontSize: 11, color: tc.text.muted, marginTop: 12, textAlign: 'center' }}>
-                {identity.displayName}
-              </Text>
-            </Card>
+            <Separator spacing="sm" />
+
+            {/* Account Recovery PDF */}
+            <Pressable onPress={() => setShowIdentityCard(true)} testID={TEST_IDS.SETTINGS.IDENTITY_CARD}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8 }}>
+              <FileTextIcon size={18} color={tc.text.secondary} />
+              <Box style={{ flex: 1 }}>
+                <Text style={{ fontSize: 13, fontWeight: '600', color: tc.text.primary }}>Account Recovery Details</Text>
+                <Text style={{ fontSize: 11, color: tc.text.secondary }}>Download a printable PDF with your DID, QR code, and recovery phrase</Text>
+              </Box>
+              <DownloadIcon size={16} color={tc.text.muted} />
+            </Pressable>
           </Box>
+        </Card>
+        <IdentityCardDialog open={showIdentityCard} onClose={() => setShowIdentityCard(false)} />
+
+        {/* Linked Accounts */}
+        <SubsectionHeader title={t('subLinkedAccounts')} description={t('subLinkedAccountsDesc')} />
+        <LinkedAccountsPanel did={identity?.did ?? null} />
+
+        {/* QR Code Sharing (folded in from former sub-sharing) */}
+        <Box style={{ gap: 12, marginTop: 8 }}>
+          <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+            <Text style={{ fontSize: 15, fontWeight: '600', color: tc.text.primary }}>{t('sharingShareIdentity')}</Text>
+            <HelpIndicator id="settings-qr" title={t('sharingQrTitle')} priority={45} size={14}>
+              <HelpText>{t('sharingQrHelp')}</HelpText>
+              <HelpListItem>{t('sharingQrContains')}</HelpListItem>
+              <HelpListItem>{t('sharingQrSafe')}</HelpListItem>
+              <HelpListItem>{t('sharingQrScan')}</HelpListItem>
+            </HelpIndicator>
+          </Box>
+          <Text style={{ fontSize: 12, color: tc.text.secondary }}>{t('sharingScanDesc')}</Text>
+          <Card variant="outlined" padding="lg" style={{ alignItems: 'center' }}>
+            <QRCode value={identity.did} size="md" dotStyle="rounded" eyeFrameStyle="rounded" eyePupilStyle="rounded" darkColor={tc.text.primary} lightColor="transparent" eyeColor={tc.accent.primary} />
+            <Text style={{ fontSize: 11, color: tc.text.muted, marginTop: 12, textAlign: 'center' }}>{identity.displayName}</Text>
+          </Card>
+        </Box>
       </Box>
 
       <Box nativeID="sub-sync">
         <AccountSyncSubsection />
       </Box>
 
-      <Box nativeID="sub-danger">
-      {/* Danger zone */}
-      <Box style={{ gap: 12 }}>
+      <Box nativeID="sub-danger" style={{ gap: 12 }}>
+        {/* Custom danger header (not using SubsectionHeader due to color) */}
         <Box>
           <Box style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-            <Text style={{ fontSize: 15, fontWeight: '600', color: tc.status.danger }}>
-              {t('dangerZone')}
-            </Text>
-            <HelpIndicator
-              id="settings-danger"
-              title={t('dangerLogoutHelpTitle')}
-              icon="!"
-              priority={50}
-              size={14}
-            >
-              <HelpText>
-                {t('dangerLogoutHelp')}
-              </HelpText>
-              <HelpHighlight icon={<AlertTriangleIcon size={22} color={tc.status.danger} />} color={tc.status.danger}>
-                {t('dangerLogoutHighlight')}
-              </HelpHighlight>
+            <Text style={{ fontSize: 15, fontWeight: '600', color: tc.status.danger }}>{t('dangerZone')}</Text>
+            <HelpIndicator id="settings-danger" title={t('dangerLogoutHelpTitle')} icon="!" priority={50} size={14}>
+              <HelpText>{t('dangerLogoutHelp')}</HelpText>
+              <HelpHighlight icon={<AlertTriangleIcon size={22} color={tc.status.danger} />} color={tc.status.danger}>{t('dangerLogoutHighlight')}</HelpHighlight>
             </HelpIndicator>
           </Box>
-          <Text style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>
-            {t('dangerLogoutDesc')}
-          </Text>
+          <Text style={{ fontSize: 12, color: tc.text.secondary, marginTop: 2 }}>{t('dangerLogoutDesc')}</Text>
         </Box>
 
-        <Button
-          variant="secondary"
-          onPress={() => setShowRotateKeyConfirm(true)}
-          iconLeft={<KeyIcon size={16} color={tc.status.danger} />}
-          style={{ borderColor: tc.status.dangerBorder, backgroundColor: tc.status.dangerSurface }}
-          testID={TEST_IDS.SETTINGS.ROTATE_KEY_BUTTON}
-          accessibilityActions={[{ name: 'activate', label: t('dangerRotateKey') }]}
-          onAccessibilityAction={(e: any) => { if (e.nativeEvent.actionName === 'activate') setShowRotateKeyConfirm(true); }}
-        >
-          <Text style={{ color: tc.status.danger, fontWeight: '600', fontSize: 14 }}>
-            {t('dangerRotateKey')}
-          </Text>
-        </Button>
+        <Card variant="outlined" padding="md" style={{ borderColor: tc.status.dangerBorder, gap: 8 }}>
+          <Button
+            variant="secondary"
+            onPress={() => setShowRotateKeyConfirm(true)}
+            iconLeft={<KeyIcon size={16} color={tc.status.danger} />}
+            style={{ borderColor: tc.status.dangerBorder, backgroundColor: tc.status.dangerSurface }}
+            testID={TEST_IDS.SETTINGS.ROTATE_KEY_BUTTON}
+            accessibilityActions={[{ name: 'activate', label: t('dangerRotateKey') }]}
+            onAccessibilityAction={(e: any) => { if (e.nativeEvent.actionName === 'activate') setShowRotateKeyConfirm(true); }}
+          >
+            <Text style={{ color: tc.status.danger, fontWeight: '600', fontSize: 14 }}>{t('dangerRotateKey')}</Text>
+          </Button>
 
-        <Button
-          variant="secondary"
-          onPress={() => setShowLogoutConfirm(true)}
-          iconLeft={<LogOutIcon size={16} color={tc.status.danger} />}
-          style={{ borderColor: tc.status.dangerBorder, backgroundColor: tc.status.dangerSurface }}
-          testID={TEST_IDS.SETTINGS.LOGOUT_BUTTON}
-          accessibilityActions={[{ name: 'activate', label: t('dangerLogOut') }]}
-          onAccessibilityAction={(e: any) => { if (e.nativeEvent.actionName === 'activate') setShowLogoutConfirm(true); }}
-        >
-          <Text style={{ color: tc.status.danger, fontWeight: '600', fontSize: 14 }}>
-            {t('dangerLogOut')}
-          </Text>
-        </Button>
-      </Box>
+          <Button
+            variant="secondary"
+            onPress={() => setShowLogoutConfirm(true)}
+            iconLeft={<LogOutIcon size={16} color={tc.status.danger} />}
+            style={{ borderColor: tc.status.dangerBorder, backgroundColor: tc.status.dangerSurface }}
+            testID={TEST_IDS.SETTINGS.LOGOUT_BUTTON}
+            accessibilityActions={[{ name: 'activate', label: t('dangerLogOut') }]}
+            onAccessibilityAction={(e: any) => { if (e.nativeEvent.actionName === 'activate') setShowLogoutConfirm(true); }}
+          >
+            <Text style={{ color: tc.status.danger, fontWeight: '600', fontSize: 14 }}>{t('dangerLogOut')}</Text>
+          </Button>
+        </Card>
 
       {/* Key rotation confirmation dialog */}
       <Dialog
