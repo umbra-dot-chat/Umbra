@@ -16,6 +16,7 @@ import { randomBytes } from '@noble/ciphers/webcrypto';
 import { bytesToHex } from '@noble/curves/abstract/utils';
 import { runScenario, getScenario, listScenarios } from './scenarios/index.js';
 import { startHealthServer } from './health-server.js';
+import { CommunityActivity, type CommunityInfo, type RecentMessage } from './community-activity.js';
 import type { Server } from 'node:http';
 
 // Register all built-in scenarios (side-effect imports)
@@ -23,6 +24,7 @@ import './scenarios/dm-conversation.js';
 import './scenarios/group-chat.js';
 import './scenarios/friend-storm.js';
 import './scenarios/debate.js';
+import './scenarios/community-chat.js';
 
 const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
 
@@ -40,6 +42,7 @@ export class WispOrchestrator {
   private llm: WispLLMClient;
   private config: OrchestratorConfig;
   private conversationLoop: ConversationLoop | null = null;
+  private communityActivity: CommunityActivity | null = null;
   private httpServer: Server | null = null;
   private _running = false;
 
@@ -66,6 +69,8 @@ export class WispOrchestrator {
 
   async stop(): Promise<void> {
     this.conversationLoop?.stop();
+    this.communityActivity?.stop();
+    this.communityActivity = null;
     this.httpServer?.close();
     this.httpServer = null;
     for (const wisp of this.wisps.values()) wisp.stop();
@@ -214,6 +219,39 @@ export class WispOrchestrator {
     await sleep(2000); // Wait for invite processing
     console.log(`[Orchestrator] Group "${name}" created (${groupId.slice(0, 12)}...)`);
     return groupId;
+  }
+
+  /** Register a community for wisp activity */
+  addCommunity(
+    info: CommunityInfo,
+    sendFn: (wispDid: string, communityId: string, channelId: string, channelName: string, senderDisplayName: string, content: string, replyToId?: string) => void,
+    reactionFn: (wispDid: string, communityId: string, channelId: string, messageId: string, emoji: string) => void,
+  ): void {
+    if (!this.communityActivity) {
+      this.communityActivity = new CommunityActivity(
+        () => this.getWisps(),
+        async (wisp, channelName, replyContext) => {
+          const prompt = replyContext
+            ? `You're chatting in the #${channelName} channel of a community. Someone said: "${replyContext}". Reply in character in 1-2 sentences.`
+            : `You're chatting in the #${channelName} channel of a community. Say something interesting and in character in 1-2 sentences.`;
+          return wisp.generateResponse('Community', prompt, `community-${channelName}`);
+        },
+        sendFn,
+        reactionFn,
+      );
+      this.communityActivity.start();
+    }
+    this.communityActivity.addCommunity(info);
+  }
+
+  /** Remove a community from wisp activity */
+  removeCommunity(communityId: string): void {
+    this.communityActivity?.removeCommunity(communityId);
+  }
+
+  /** Track a community message for reply/reaction context */
+  trackCommunityMessage(communityId: string, msg: RecentMessage): void {
+    this.communityActivity?.trackMessage(communityId, msg);
   }
 
   /** Run a named scenario. */
