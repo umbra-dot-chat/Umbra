@@ -35,7 +35,6 @@ export const CATEGORY_LABELS: Record<SoundCategory, string> = {
 
 export type SoundName =
   // Message
-  | 'message_send'
   | 'message_receive'
   | 'message_delete'
   | 'mention'
@@ -49,8 +48,6 @@ export type SoundName =
   | 'call_unmute'
   // Navigation
   | 'tab_switch'
-  | 'dialog_open'
-  | 'dialog_close'
   // Social
   | 'friend_request'
   | 'friend_accept'
@@ -62,19 +59,19 @@ export type SoundName =
   | 'success';
 
 export const ALL_SOUND_NAMES: SoundName[] = [
-  'message_send', 'message_receive', 'message_delete', 'mention',
+  'message_receive', 'message_delete', 'mention',
   'call_join', 'call_leave', 'call_ringing', 'user_join_voice', 'user_leave_voice', 'call_mute', 'call_unmute',
-  'tab_switch', 'dialog_open', 'dialog_close',
+  'tab_switch',
   'friend_request', 'friend_accept', 'notification',
   'toggle_on', 'toggle_off', 'error', 'success',
 ];
 
 /** Map each sound to its category. */
 export const SOUND_CATEGORY_MAP: Record<SoundName, SoundCategory> = {
-  message_send: 'message', message_receive: 'message', message_delete: 'message', mention: 'message',
+  message_receive: 'message', message_delete: 'message', mention: 'message',
   call_join: 'call', call_leave: 'call', call_ringing: 'call', user_join_voice: 'call',
   user_leave_voice: 'call', call_mute: 'call', call_unmute: 'call',
-  tab_switch: 'navigation', dialog_open: 'navigation', dialog_close: 'navigation',
+  tab_switch: 'navigation',
   friend_request: 'social', friend_accept: 'social', notification: 'social',
   toggle_on: 'system', toggle_off: 'system', error: 'system', success: 'system',
 };
@@ -89,7 +86,8 @@ export type SoundThemeId =
   | 'warm'
   | 'futuristic'
   | 'aurora'
-  | 'mechanical';
+  | 'mechanical'
+  | 'umbra';
 
 export interface SoundThemeMeta {
   id: SoundThemeId;
@@ -99,6 +97,7 @@ export interface SoundThemeMeta {
 }
 
 export const SOUND_THEMES: SoundThemeMeta[] = [
+  { id: 'umbra', name: 'Umbra', description: 'Warm organic tones — AI-crafted for Umbra', type: 'audio' },
   { id: 'minimal', name: 'Minimal', description: 'Subtle, barely-there ticks and blips', type: 'synth' },
   { id: 'playful', name: 'Playful', description: 'Cheerful tones and musical arpeggios', type: 'synth' },
   { id: 'warm', name: 'Warm', description: 'Soft, rounded tones with gentle tails', type: 'synth' },
@@ -244,7 +243,6 @@ function noiseBurst(
 // ─────────────────────────────────────────────────────────────────────────────
 
 const MINIMAL: Record<SoundName, SynthRecipe> = {
-  message_send:     (c, g) => toneSeq(c, g, [N.E5], 40, { vol: 0.1 }),
   message_receive:  (c, g) => toneSeq(c, g, [N.C5], 40, { vol: 0.08 }),
   message_delete:   (c, g) => noiseBurst(c, g, 25, { highPass: 400, lowPass: 1500, vol: 0.06 }),
   mention:          (c, g) => toneSeq(c, g, [N.G5, N.B5], 35, { vol: 0.1 }),
@@ -256,8 +254,6 @@ const MINIMAL: Record<SoundName, SynthRecipe> = {
   call_mute:        (c, g) => noiseBurst(c, g, 15, { highPass: 1000, lowPass: 3000, vol: 0.06 }),
   call_unmute:      (c, g) => noiseBurst(c, g, 15, { highPass: 2500, lowPass: 6000, vol: 0.06 }),
   tab_switch:       (c, g) => noiseBurst(c, g, 10, { highPass: 2000, lowPass: 5000, vol: 0.04 }),
-  dialog_open:      (c, g) => sweep(c, g, 300, 600, 60, { vol: 0.06 }),
-  dialog_close:     (c, g) => sweep(c, g, 600, 300, 60, { vol: 0.05 }),
   friend_request:   (c, g) => toneSeq(c, g, [N.C5, N.E5], 40, { vol: 0.1 }),
   friend_accept:    (c, g) => toneSeq(c, g, [N.C5, N.G5], 40, { vol: 0.1 }),
   notification:     (c, g) => toneSeq(c, g, [N.A5], 60, { vol: 0.08 }),
@@ -272,7 +268,6 @@ const MINIMAL: Record<SoundName, SynthRecipe> = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const PLAYFUL: Record<SoundName, SynthRecipe> = {
-  message_send:     (c, g) => toneSeq(c, g, [N.C5, N.E5], 80, { vol: 0.2 }),
   message_receive:  (c, g) => toneSeq(c, g, [N.E5, N.C5], 80, { vol: 0.18 }),
   message_delete:   (c, g) => toneSeq(c, g, [N.A3], 100, { vol: 0.15 }),
   mention:          (c, g) => toneSeq(c, g, [N.G5, N.B5, N.D6], 60, { vol: 0.22 }),
@@ -284,8 +279,6 @@ const PLAYFUL: Record<SoundName, SynthRecipe> = {
   call_mute:        (c, g) => noiseBurst(c, g, 30, { highPass: 800, lowPass: 2000, vol: 0.12 }),
   call_unmute:      (c, g) => noiseBurst(c, g, 30, { highPass: 2000, lowPass: 6000, vol: 0.12 }),
   tab_switch:       (c, g) => noiseBurst(c, g, 20, { highPass: 1000, lowPass: 4000, vol: 0.08 }),
-  dialog_open:      (c, g) => sweep(c, g, 200, 800, 120, { vol: 0.12 }),
-  dialog_close:     (c, g) => sweep(c, g, 800, 200, 120, { vol: 0.1 }),
   friend_request:   (c, g) => toneSeq(c, g, [N.C5, N.G5], 100, { vol: 0.2 }),
   friend_accept:    (c, g) => toneSeq(c, g, [N.C5, N.E5, N.G5], 80, { vol: 0.22 }),
   notification:     (c, g) => chord(c, g, [N.A5, N.A5 * 2], 150, { vol: 0.2 }),
@@ -300,7 +293,6 @@ const PLAYFUL: Record<SoundName, SynthRecipe> = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const WARM: Record<SoundName, SynthRecipe> = {
-  message_send:     (c, g) => toneSeq(c, g, [N.C4, N.E4], 120, { vol: 0.15, type: 'sine' }),
   message_receive:  (c, g) => toneSeq(c, g, [N.E4, N.C4], 120, { vol: 0.13 }),
   message_delete:   (c, g) => toneSeq(c, g, [N.G3], 150, { vol: 0.1 }),
   mention:          (c, g) => toneSeq(c, g, [N.G4, N.B4, N.D5], 100, { vol: 0.15 }),
@@ -312,8 +304,6 @@ const WARM: Record<SoundName, SynthRecipe> = {
   call_mute:        (c, g) => noiseBurst(c, g, 40, { highPass: 500, lowPass: 1500, vol: 0.08 }),
   call_unmute:      (c, g) => noiseBurst(c, g, 40, { highPass: 1000, lowPass: 3000, vol: 0.08 }),
   tab_switch:       (c, g) => noiseBurst(c, g, 30, { highPass: 800, lowPass: 2000, vol: 0.05 }),
-  dialog_open:      (c, g) => sweep(c, g, 200, 500, 180, { vol: 0.08 }),
-  dialog_close:     (c, g) => sweep(c, g, 500, 200, 180, { vol: 0.07 }),
   friend_request:   (c, g) => toneSeq(c, g, [N.C4, N.G4], 120, { vol: 0.13 }),
   friend_accept:    (c, g) => toneSeq(c, g, [N.C4, N.E4, N.G4], 100, { vol: 0.15 }),
   notification:     (c, g) => chord(c, g, [N.A4, N.A5], 200, { vol: 0.13 }),
@@ -328,7 +318,6 @@ const WARM: Record<SoundName, SynthRecipe> = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const FUTURISTIC: Record<SoundName, SynthRecipe> = {
-  message_send:     (c, g) => sweep(c, g, 400, 1200, 60, { type: 'square', vol: 0.12 }),
   message_receive:  (c, g) => sweep(c, g, 1200, 400, 60, { type: 'square', vol: 0.1 }),
   message_delete:   (c, g) => sweep(c, g, 600, 100, 80, { type: 'sawtooth', vol: 0.08 }),
   mention:          (c, g) => toneSeq(c, g, [N.A5, N.E6, N.A5], 40, { type: 'square', vol: 0.15 }),
@@ -340,8 +329,6 @@ const FUTURISTIC: Record<SoundName, SynthRecipe> = {
   call_mute:        (c, g) => noiseBurst(c, g, 20, { highPass: 2000, lowPass: 8000, vol: 0.1 }),
   call_unmute:      (c, g) => noiseBurst(c, g, 20, { highPass: 4000, lowPass: 12000, vol: 0.1 }),
   tab_switch:       (c, g) => noiseBurst(c, g, 15, { highPass: 3000, lowPass: 8000, vol: 0.06 }),
-  dialog_open:      (c, g) => sweep(c, g, 100, 2000, 100, { type: 'sawtooth', vol: 0.08 }),
-  dialog_close:     (c, g) => sweep(c, g, 2000, 100, 100, { type: 'sawtooth', vol: 0.07 }),
   friend_request:   (c, g) => toneSeq(c, g, [N.C5, N.G5], 50, { type: 'square', vol: 0.12 }),
   friend_accept:    (c, g) => toneSeq(c, g, [N.C5, N.E5, N.G5], 40, { type: 'square', vol: 0.14 }),
   notification:     (c, g) => sweep(c, g, 500, 1500, 100, { type: 'triangle', vol: 0.12 }),
@@ -375,6 +362,7 @@ function audioPackUrls(packId: string): Record<SoundName, string> {
 }
 
 const AUDIO_PACKS: Record<string, Record<SoundName, string>> = {
+  umbra: audioPackUrls('umbra'),
   aurora: audioPackUrls('aurora'),
   mechanical: audioPackUrls('mechanical'),
 };
@@ -402,7 +390,7 @@ export class SoundEngine {
     social: true,
     system: false,
   };
-  private _activeTheme: SoundThemeId = 'playful';
+  private _activeTheme: SoundThemeId = 'umbra';
 
   /** Cache of decoded audio buffers for audio packs. */
   private audioBufferCache = new Map<string, AudioBuffer>();
@@ -625,9 +613,9 @@ export class SoundEngine {
 
   static getSampleSound(category: SoundCategory): SoundName {
     const samples: Record<SoundCategory, SoundName> = {
-      message: 'message_send',
+      message: 'message_receive',
       call: 'call_join',
-      navigation: 'dialog_open',
+      navigation: 'tab_switch',
       social: 'notification',
       system: 'success',
     };

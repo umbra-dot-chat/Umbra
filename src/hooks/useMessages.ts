@@ -546,7 +546,6 @@ export function useMessages(conversationId: string | null, groupId?: string | nu
         if (message.status === 'sending') {
           pushPendingRelayAck(message.id);
         }
-        playSound('message_send');
         // The event listener will add it to the messages list
         return message;
       } catch (err) {
@@ -554,7 +553,7 @@ export function useMessages(conversationId: string | null, groupId?: string | nu
         return null;
       }
     },
-    [service, conversationId, groupId, getRelayWs, playSound]
+    [service, conversationId, groupId, getRelayWs]
   );
 
   const sendFileMessage = useCallback(
@@ -569,8 +568,6 @@ export function useMessages(conversationId: string | null, groupId?: string | nu
         if (message.status === 'sending') {
           pushPendingRelayAck(message.id);
         }
-        playSound('message_send');
-
         // Register in dm_shared_files so it appears in the Shared Files panel
         if (myDid) {
           try {
@@ -602,7 +599,7 @@ export function useMessages(conversationId: string | null, groupId?: string | nu
         return null;
       }
     },
-    [service, conversationId, groupId, getRelayWs, playSound, myDid]
+    [service, conversationId, groupId, getRelayWs, myDid]
   );
 
   // Mark conversation as read + coalesce relay read-receipt sends.

@@ -26,6 +26,18 @@
       "runtimeExecutable": "npx",
       "runtimeArgs": ["serve", "-l", "3333", "--no-clipboard", "-s", "/Users/mattmattmattmatt/Development/Umbra/.claude/worktrees/flamboyant-liskov"],
       "port": 3333
+    },
+    {
+      "name": "sound-workbench",
+      "runtimeExecutable": "/Users/mattmattmattmatt/Development/Umbra/scripts/sound-workbench/start.sh",
+      "runtimeArgs": [],
+      "port": 3456
+    },
+    {
+      "name": "sound-picker",
+      "runtimeExecutable": "/Users/mattmattmattmatt/Development/sounds/picker/start.sh",
+      "runtimeArgs": [],
+      "port": 3457
     }
   ]
 }

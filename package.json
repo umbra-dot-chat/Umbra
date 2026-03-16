@@ -45,6 +45,7 @@
     "test:e2e:friends": "npx playwright test --config=__tests__/e2e/playwright.config.ts __tests__/e2e/friends/",
     "build:cli": "cd packages/umbra-cli && cargo build --release",
     "cli": "cd packages/umbra-cli && cargo run",
+    "sound-workbench": "cd scripts/sound-workbench && npm install && node server.js",
     "deploy": "./scripts/deploy.sh",
     "deploy:frontend": "./scripts/deploy.sh frontend",
     "deploy:relay": "./scripts/deploy.sh relay",

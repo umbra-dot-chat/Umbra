@@ -81,7 +81,7 @@ jest.mock('@/contexts/SoundContext', () => ({
     setCategoryVolume: jest.fn(),
     categoryEnabled: {},
     setCategoryEnabled: jest.fn(),
-    activeTheme: 'playful',
+    activeTheme: 'umbra',
     setActiveTheme: jest.fn(),
     preferencesLoaded: true,
   }),
@@ -215,7 +215,7 @@ describe('sendFileMessage', () => {
     );
   });
 
-  it('T4.24.13 — sendFileMessage plays message_send sound', async () => {
+  it('T4.24.13 — sendFileMessage does not play a sound', async () => {
     const { result } = renderHook(() => useMessages(CONV_ID));
     await waitFor(() => expect(mockService.getMessages).toHaveBeenCalled());
 
@@ -223,7 +223,7 @@ describe('sendFileMessage', () => {
       await result.current.sendFileMessage(makeFilePayload());
     });
 
-    expect(mockPlaySound).toHaveBeenCalledWith('message_send');
+    expect(mockPlaySound).not.toHaveBeenCalled();
   });
 
   it('T4.24.14 — sendFileMessage returns null when conversationId is null', async () => {

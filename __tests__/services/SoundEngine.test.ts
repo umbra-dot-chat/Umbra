@@ -108,7 +108,7 @@ describe('SoundEngine', () => {
       const engine = new SoundEngine();
       expect(engine.getMasterVolume()).toBe(0.8);
       expect(engine.isMuted()).toBe(false);
-      expect(engine.getActiveTheme()).toBe('playful');
+      expect(engine.getActiveTheme()).toBe('umbra');
     });
 
     it('has all categories defined with enabled/disabled defaults', () => {
@@ -245,7 +245,7 @@ describe('SoundEngine', () => {
     });
 
     it('plays a sound when enabled (creates AudioContext and gain nodes)', () => {
-      engine.playSound('message_send');
+      engine.playSound('message_receive');
       // AudioContext should have been constructed
       expect((global as any).AudioContext).toHaveBeenCalled();
       // A per-sound gain should have been created (at minimum master + sound gain)
@@ -254,21 +254,21 @@ describe('SoundEngine', () => {
 
     it('skips playback when muted', () => {
       engine.setMuted(true);
-      engine.playSound('message_send');
+      engine.playSound('message_receive');
       // AudioContext should NOT have been created since we bail early
       expect((global as any).AudioContext).not.toHaveBeenCalled();
     });
 
     it('skips playback when category is disabled', () => {
       engine.setCategoryEnabled('message', false);
-      engine.playSound('message_send');
+      engine.playSound('message_receive');
       // message_send is in 'message' category — should not create AudioContext
       expect((global as any).AudioContext).not.toHaveBeenCalled();
     });
 
     it('skips playback when category volume is 0', () => {
       engine.setCategoryVolume('message', 0);
-      engine.playSound('message_send');
+      engine.playSound('message_receive');
       // Should bail before creating any oscillators or buffer sources
       // AudioContext is created in ensureContext before the volume check,
       // but no sound-specific gain should be created beyond the master gain.
@@ -314,7 +314,7 @@ describe('SoundEngine', () => {
     });
 
     it('getCategory returns the correct category for a sound', () => {
-      expect(SoundEngine.getCategory('message_send')).toBe('message');
+      expect(SoundEngine.getCategory('message_delete')).toBe('message');
       expect(SoundEngine.getCategory('call_join')).toBe('call');
       expect(SoundEngine.getCategory('tab_switch')).toBe('navigation');
       expect(SoundEngine.getCategory('friend_request')).toBe('social');

@@ -7,8 +7,8 @@
  *     via WASM KV store (`__umbra_system__` namespace)
  *   • Provides `playSound()` and volume/mute/theme controls to children
  *
- * Sounds are **on by default** at 80% master volume with the "playful"
- * synth theme.
+ * Sounds are **on by default** at 80% master volume with the "umbra"
+ * audio pack theme.
  */
 
 import React, {
@@ -84,7 +84,7 @@ const KEY_THEME = 'sound_theme';
 
 const DEFAULT_MASTER_VOLUME = 0.8;
 const DEFAULT_MUTED = false;
-const DEFAULT_THEME: SoundThemeId = 'playful';
+const DEFAULT_THEME: SoundThemeId = 'umbra';
 
 function defaultCategoryVolumes(): Record<SoundCategory, number> {
   return { message: 1.0, call: 1.0, navigation: 1.0, social: 1.0, system: 1.0 };
@@ -313,7 +313,7 @@ export function SoundProvider({ children }: { children: React.ReactNode }) {
       markSyncDirty('preferences');
 
       // Pre-load audio pack files if switching to an audio theme
-      if (id === 'aurora' || id === 'mechanical') {
+      if (id === 'umbra' || id === 'aurora' || id === 'mechanical') {
         engineRef.current.preloadAudioPack(id);
       }
     },

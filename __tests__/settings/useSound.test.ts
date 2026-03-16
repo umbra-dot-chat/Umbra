@@ -123,7 +123,7 @@ describe('T11.7.1-3 -- Default State', () => {
       expect(result.current.preferencesLoaded).toBe(true);
     });
 
-    expect(result.current.activeTheme).toBe('playful');
+    expect(result.current.activeTheme).toBe('umbra');
   });
 });
 
@@ -624,10 +624,10 @@ describe('T11.7.30-31 -- playSound', () => {
     });
 
     act(() => {
-      result.current.playSound('message_send');
+      result.current.playSound('message_receive');
     });
 
-    expect(mockEngine.playSound).toHaveBeenCalledWith('message_send');
+    expect(mockEngine.playSound).toHaveBeenCalledWith('message_receive');
   });
 
   it('T11.7.31 -- playSound works for multiple sound names', async () => {

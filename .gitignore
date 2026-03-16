@@ -82,3 +82,8 @@ modules/expo-umbra-core/android/src/main/jniLibs/
 packages/umbra-relay/releases/
 .claude/worktrees/
 .mcp.json
+
+# Sound Workbench
+scripts/sound-workbench/.env
+scripts/sound-workbench/working/
+scripts/sound-workbench/node_modules/

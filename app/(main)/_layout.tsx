@@ -647,9 +647,9 @@ function MainLayoutInner() {
   // Shared shell props for sidebars (ChatSidebar, SettingsNavSidebar)
   const sidebarShellProps = {
     showNotificationsPanel: notificationsPanelOpen,
-    onCloseNotificationsPanel: () => { playSound('dialog_close'); setNotificationsPanelOpen(false); },
+    onCloseNotificationsPanel: () => { setNotificationsPanelOpen(false); },
     showAccountPanel: accountSwitcherOpen,
-    onCloseAccountPanel: () => { playSound('dialog_close'); setAccountSwitcherOpen(false); },
+    onCloseAccountPanel: () => { setAccountSwitcherOpen(false); },
     accountPanelProps: {
       accounts,
       activeAccountDid: identity?.did ?? null,
@@ -738,16 +738,15 @@ function MainLayoutInner() {
                   communities={communities}
                   activeCommunityId={activeCommunityId}
                   onCommunityPress={handleCommunityPress}
-                  onCreateCommunity={() => { playSound('dialog_open'); setCreateCommunityOptionsOpen(true); }}
+                  onCreateCommunity={() => { setCreateCommunityOptionsOpen(true); }}
                   onMarketplacePress={handleMarketplacePress}
                   isMarketplaceActive={isMarketplaceActive}
-                  onGuidePress={() => { playSound('dialog_open'); setGuideOpen(true); }}
+                  onGuidePress={() => { setGuideOpen(true); }}
                   onOpenSettings={handleSettingsPress}
                   userAvatar={identity?.avatar}
                   userDisplayName={identity?.displayName}
                   onAvatarPress={() => {
                     if (!accountSwitcherOpen) setNotificationsPanelOpen(false);
-                    playSound(accountSwitcherOpen ? 'dialog_close' : 'dialog_open');
                     setAccountSwitcherOpen(v => !v);
                   }}
                   loading={coreLoading || communitiesLoading}
@@ -755,7 +754,6 @@ function MainLayoutInner() {
                   notificationCount={totalUnread}
                   onNotificationsPress={() => {
                     if (!notificationsPanelOpen) setAccountSwitcherOpen(false);
-                    playSound(notificationsPanelOpen ? 'dialog_close' : 'dialog_open');
                     setNotificationsPanelOpen(v => !v);
                   }}
                   isNotificationsPanelOpen={notificationsPanelOpen}
@@ -780,8 +778,8 @@ function MainLayoutInner() {
                           router.push('/');
                         }
                       }}
-                      onNewDm={() => { playSound('dialog_open'); setNewDmOpen(true); }}
-                      onCreateGroup={() => { playSound('dialog_open'); setCreateGroupOpen(true); }}
+                      onNewDm={() => { setNewDmOpen(true); }}
+                      onCreateGroup={() => { setCreateGroupOpen(true); }}
                       pendingInvites={pendingInvites}
                       onAcceptInvite={handleAcceptInvite}
                       onDeclineInvite={handleDeclineInvite}
@@ -838,16 +836,15 @@ function MainLayoutInner() {
                 communities={communities}
                 activeCommunityId={activeCommunityId}
                 onCommunityPress={handleCommunityPress}
-                onCreateCommunity={() => { playSound('dialog_open'); setCreateCommunityOptionsOpen(true); }}
+                onCreateCommunity={() => { setCreateCommunityOptionsOpen(true); }}
                 onMarketplacePress={handleMarketplacePress}
                   isMarketplaceActive={isMarketplaceActive}
-                onGuidePress={() => { playSound('dialog_open'); setGuideOpen(true); }}
+                onGuidePress={() => { setGuideOpen(true); }}
                 onOpenSettings={handleSettingsPress}
                 userAvatar={identity?.avatar}
                 userDisplayName={identity?.displayName}
                 onAvatarPress={() => {
                   if (!accountSwitcherOpen) setNotificationsPanelOpen(false);
-                  playSound(accountSwitcherOpen ? 'dialog_close' : 'dialog_open');
                   setAccountSwitcherOpen(v => !v);
                 }}
                 loading={coreLoading || communitiesLoading}
@@ -855,7 +852,6 @@ function MainLayoutInner() {
                 notificationCount={totalUnread}
                 onNotificationsPress={() => {
                   if (!notificationsPanelOpen) setAccountSwitcherOpen(false);
-                  playSound(notificationsPanelOpen ? 'dialog_close' : 'dialog_open');
                   setNotificationsPanelOpen(v => !v);
                 }}
                 isNotificationsPanelOpen={notificationsPanelOpen}
@@ -880,8 +876,8 @@ function MainLayoutInner() {
                         router.push('/');
                       }
                     }}
-                    onNewDm={() => { playSound('dialog_open'); setNewDmOpen(true); }}
-                    onCreateGroup={() => { playSound('dialog_open'); setCreateGroupOpen(true); }}
+                    onNewDm={() => { setNewDmOpen(true); }}
+                    onCreateGroup={() => { setCreateGroupOpen(true); }}
                     pendingInvites={pendingInvites}
                     onAcceptInvite={handleAcceptInvite}
                     onDeclineInvite={handleDeclineInvite}
@@ -915,7 +911,7 @@ function MainLayoutInner() {
 
       <SettingsDialog
         open={settingsOpen}
-        onClose={() => { playSound('dialog_close'); closeSettings(); }}
+        onClose={() => { closeSettings(); }}
         initialSection={settingsInitialSection}
         onOpenMarketplace={() => {
           closeSettings();
@@ -926,24 +922,24 @@ function MainLayoutInner() {
 
       <GuideDialog
         open={guideOpen}
-        onClose={() => { playSound('dialog_close'); setGuideOpen(false); }}
+        onClose={() => { setGuideOpen(false); }}
       />
 
       <CreateGroupDialog
         open={createGroupOpen}
-        onClose={() => { playSound('dialog_close'); setCreateGroupOpen(false); }}
+        onClose={() => { setCreateGroupOpen(false); }}
         onCreated={handleGroupCreated}
       />
 
       <NewDmDialog
         open={newDmOpen}
-        onClose={() => { playSound('dialog_close'); setNewDmOpen(false); }}
+        onClose={() => { setNewDmOpen(false); }}
         onSelectFriend={handleDmFriendSelected}
       />
 
       <CommunityCreateOptionsDialog
         open={createCommunityOptionsOpen}
-        onClose={() => { playSound('dialog_close'); setCreateCommunityOptionsOpen(false); }}
+        onClose={() => { setCreateCommunityOptionsOpen(false); }}
         onSelectScratch={handleSelectScratch}
         onSelectDiscord={handleSelectDiscord}
         onSelectJoin={handleSelectJoin}
@@ -959,12 +955,12 @@ function MainLayoutInner() {
 
       <JoinCommunityModal
         open={joinCommunityOpen}
-        onClose={() => { playSound('dialog_close'); setJoinCommunityOpen(false); }}
+        onClose={() => { setJoinCommunityOpen(false); }}
       />
 
       <DiscordImportDialog
         open={discordImportOpen}
-        onClose={() => { playSound('dialog_close'); setDiscordImportOpen(false); }}
+        onClose={() => { setDiscordImportOpen(false); }}
         onImportComplete={handleDiscordImportComplete}
         onCreateCommunity={handleDiscordCreateCommunity}
       />

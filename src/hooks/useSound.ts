@@ -3,7 +3,7 @@
  *
  * Usage:
  *   const { playSound } = useSound();
- *   playSound('message_send');
+ *   playSound('message_receive');
  */
 
 export { useSound } from '@/contexts/SoundContext';
