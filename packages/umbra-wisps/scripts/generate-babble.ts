@@ -22,13 +22,13 @@ import { join } from 'path';
 
 const BABBLE_DIR = join(import.meta.dirname, '..', 'babble');
 const GHOST_AI_BABBLE_DIR = join(import.meta.dirname, '..', '..', 'umbra-ghost-ai', 'babble');
-const CLIPS_PER_WISP = 75; // Target clips per wisp
+const CLIPS_PER_WISP = 15; // Target clips per wisp
 
 /** Distribution: 40% short, 40% medium, 20% long */
 const DISTRIBUTION = {
-  short: Math.round(CLIPS_PER_WISP * 0.4),   // 30
-  medium: Math.round(CLIPS_PER_WISP * 0.4),   // 30
-  long: CLIPS_PER_WISP - Math.round(CLIPS_PER_WISP * 0.4) * 2, // 15
+  short: Math.round(CLIPS_PER_WISP * 0.4),   // 6
+  medium: Math.round(CLIPS_PER_WISP * 0.4),   // 6
+  long: CLIPS_PER_WISP - Math.round(CLIPS_PER_WISP * 0.4) * 2, // 3
 };
 
 /** Syllable count ranges per duration category */
@@ -45,18 +45,18 @@ const SYLLABLE_RANGES: Record<string, [number, number]> = {
  * Browse voices at: https://elevenlabs.io/voice-library
  */
 const WISP_VOICES: Record<string, string> = {
-  Nyx: '',       // e.g. 'pNInz6obpgDQGcFmaJgB'
-  Flicker: '',
-  Bramble: '',
-  Pixel: '',
-  Rook: '',
-  Mote: '',
-  Cinder: '',
-  Whisper: '',
-  Drift: '',
-  Jinx: '',
-  Echo: '',
-  Volt: '',
+  Nyx: 'pFZP5JQG7iQjIQuC4Bku',       // Lily — Velvety Actress (mysterious, elegant)
+  Flicker: 'cgSgspJ2msm6clMCkdW9',    // Jessica — Playful, Bright (energetic, mischievous)
+  Bramble: 'nPczCjzI2devNBz1zQrb',    // Brian — Deep, Resonant (gruff, grounding)
+  Pixel: 'SAz9YHcvj6GT2YYXdXww',      // River — Relaxed, Neutral (dreamy, gentle)
+  Rook: 'onwK4e9ZLuTAKqWW03F9',       // Daniel — Steady Broadcaster (analytical, measured)
+  Mote: 'FGY2WhTYpPnrIDTdsKH5',       // Laura — Enthusiast, Quirky (gentle, hesitant)
+  Cinder: 'SOYHLrjzK2X1ezoPC6cr',     // Harry — Fierce Warrior (bold, medieval)
+  Whisper: 'Xb7hH8MSUJpSbSDYk0k2',    // Alice — Clear, Engaging (calm, thoughtful)
+  Drift: 'CwhRBWXzGAHq8TQ4Fs17',      // Roger — Laid-Back, Casual (surfer chill)
+  Jinx: 'TX3LPaxmHKxFdv7VOQHJ',      // Liam — Energetic, Social Media (peppy, upbeat)
+  Echo: 'XrExE9yKIg1WjnnlVkGX',       // Matilda — Knowledgable (articulate, musical)
+  Volt: 'IKne3meq5aSn9XLyUdCD',       // Charlie — Deep, Confident (enthusiastic, dynamic)
 };
 
 /** Rate limit: ms between API calls */

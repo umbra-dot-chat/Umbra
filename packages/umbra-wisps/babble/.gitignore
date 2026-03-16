@@ -1,4 +1,1 @@
-# Generated babble audio files (large, not committed)
-# Run: ELEVENLABS_API_KEY=... npx tsx packages/umbra-wisps/scripts/generate-babble.ts
-*.mp3
-!.gitignore
+# Keep babble audio files in the repo for all developers
