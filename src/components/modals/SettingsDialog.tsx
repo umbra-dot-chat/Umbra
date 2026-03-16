@@ -1218,12 +1218,12 @@ function AccountSection() {
             </HStack>
           )}
 
-          {/* Avatar + Name row overlapping banner */}
-          <Box style={{ flexDirection: 'row', alignItems: 'flex-end', paddingHorizontal: 20, marginTop: -48, gap: 16 }}>
+          {/* Avatar overlapping banner */}
+          <Box style={{ paddingHorizontal: 20, marginTop: -48 }}>
             <Pressable onPress={handleAvatarPick}>
               <Box style={{
                 width: 96, height: 96, borderRadius: 48,
-                borderWidth: 4, borderColor: tc.background.canvas,
+                borderWidth: 4, borderColor: tc.background.surface,
                 backgroundColor: tc.background.surface,
                 alignItems: 'center', justifyContent: 'center', overflow: 'hidden',
               }}>
@@ -1234,7 +1234,18 @@ function AccountSection() {
                 )}
               </Box>
             </Pressable>
-            <Box style={{ flex: 1, paddingBottom: 8 }}>
+          </Box>
+          {avatarError && (
+            <HStack gap="xs" style={{ alignItems: 'center', paddingHorizontal: 20, marginTop: 4 }}>
+              <AlertTriangleIcon size={14} color={tc.status.danger} />
+              <Text style={{ color: tc.status.danger, fontSize: 12 }}>{avatarError}</Text>
+            </HStack>
+          )}
+
+          {/* Profile fields */}
+          <Box style={{ paddingHorizontal: 20, paddingTop: 12, paddingBottom: 20, gap: 16 }}>
+            {/* Display name */}
+            <Box style={{ gap: 4 }}>
               <Input
                 value={displayName}
                 onChangeText={setDisplayName}
@@ -1244,41 +1255,41 @@ function AccountSection() {
                 testID={TEST_IDS.SETTINGS.DISPLAY_NAME_INPUT}
                 gradientBorder
               />
-              <Text style={{ fontSize: 11, color: tc.text.muted, marginTop: 4 }}>
+              <Text style={{ fontSize: 11, color: tc.text.muted }}>
                 {t('identityMemberSince', { date: memberSince })}
               </Text>
             </Box>
-          </Box>
-          {avatarError && (
-            <HStack gap="xs" style={{ alignItems: 'center', paddingHorizontal: 20, marginTop: 4 }}>
-              <AlertTriangleIcon size={14} color={tc.status.danger} />
-              <Text style={{ color: tc.status.danger, fontSize: 12 }}>{avatarError}</Text>
-            </HStack>
-          )}
 
-          {/* Status + Custom Status row */}
-          <Box style={{ paddingHorizontal: 20, paddingTop: 16, paddingBottom: 20, gap: 12 }}>
-            <HStack gap="md" style={{ alignItems: 'flex-end' }}>
-              <Box style={{ flex: 1 }}>
-                <Text style={{ fontSize: 12, fontWeight: '500', color: tc.text.secondary, marginBottom: 4 }}>{t('profileStatus')}</Text>
-                <Select
-                  options={STATUS_OPTIONS}
-                  value={status}
-                  onChange={setStatus}
-                  placeholder={t('profileSelectStatus')}
-                  size="md"
-                  fullWidth
-                />
-              </Box>
-              <Box style={{ flexShrink: 0 }}>
-                {(customStatusText || customStatusEmoji) && (
+            {/* Status */}
+            <Box style={{ gap: 4 }}>
+              <Text style={{ fontSize: 12, fontWeight: '500', color: tc.text.secondary }}>{t('profileStatus')}</Text>
+              <Select
+                options={STATUS_OPTIONS}
+                value={status}
+                onChange={setStatus}
+                placeholder={t('profileSelectStatus')}
+                size="md"
+                fullWidth
+              />
+            </Box>
+
+            {/* Custom Status */}
+            <Box style={{ gap: 8 }}>
+              <Text style={{ fontSize: 12, fontWeight: '500', color: tc.text.secondary }}>{t('profileCustomStatus')}</Text>
+              {(customStatusText || customStatusEmoji) ? (
+                <HStack gap="sm" style={{ alignItems: 'center' }}>
                   <MemberStatusDisplay text={customStatusText} emoji={customStatusEmoji} size="sm" />
-                )}
+                  <Box style={{ flex: 1 }} />
+                  <Button variant="tertiary" size="sm" onPress={() => setStatusPickerOpen(true)}>
+                    {t('profileEditStatus')}
+                  </Button>
+                </HStack>
+              ) : (
                 <Button variant="secondary" size="sm" onPress={() => setStatusPickerOpen(true)}>
-                  {customStatusText ? t('profileEditStatus') : t('profileSetStatus')}
+                  {t('profileSetStatus')}
                 </Button>
-              </Box>
-            </HStack>
+              )}
+            </Box>
 
             {(saving || saved) && (
               <HStack gap="xs" style={{ justifyContent: 'flex-end', alignItems: 'center' }}>
