@@ -192,7 +192,7 @@ export class SearchIndexService {
       senderDid: msg.senderDid,
       text,
       timestamp: msg.timestamp,
-      hasFile: msg.content.type === 'file' || msg.content.type === 'shared_folder',
+      hasFile: msg.content?.type === 'file' || msg.content?.type === 'shared_folder',
       hasReaction: (msg.reactions?.length ?? 0) > 0,
       isPinned: false, // Updated separately via events
       hasLink: URL_REGEX.test(text),
@@ -347,6 +347,7 @@ export class SearchIndexService {
 
 /** Extract searchable text from a message. */
 function extractText(msg: Message): string {
+  if (!msg.content) return '';
   switch (msg.content.type) {
     case 'text':
       return msg.content.text;

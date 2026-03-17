@@ -193,7 +193,7 @@ export function UnifiedSearchProvider({ children }: { children: React.ReactNode 
 
     const unsubscribe = service.onMessageEvent((event: any) => {
       if (event.type === 'messageReceived' || event.type === 'messageSent') {
-        if (event.message) {
+        if (event.message?.content) {
           indexServiceRef.current.indexMessage(event.message);
         }
       }

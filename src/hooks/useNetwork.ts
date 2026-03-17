@@ -715,9 +715,20 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
               // silently overwrites, so we track seen IDs to detect updates.
               const isUpdate = _trackMessageId(chatPayload.messageId);
 
-              // Store/overwrite in WASM DB (INSERT OR REPLACE)
+              // Store in WASM DB. For streaming updates, use updateIncomingMessageContent
+              // which does NOT emit a WASM-side messageReceived event (avoiding duplicate
+              // events and TypeError in listeners expecting msg.content).
               try {
-                await service.storeIncomingMessage(chatPayload);
+                if (isUpdate) {
+                  await service.updateIncomingMessageContent(
+                    chatPayload.messageId,
+                    chatPayload.contentEncrypted,
+                    chatPayload.nonce,
+                    chatPayload.timestamp,
+                  );
+                } else {
+                  await service.storeIncomingMessage(chatPayload);
+                }
               } catch (storeErr) {
                 if (__DEV__) dbg.warn('network', 'storeIncomingMessage failed', { error: String(storeErr) }, SRC);
               }
