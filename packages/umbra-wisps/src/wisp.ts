@@ -56,6 +56,9 @@ export class Wisp {
   /** Callback invoked on group messages from non-wisps (for group response). */
   onGroupMessage?: (senderDid: string, senderName: string, text: string, groupId: string) => void;
 
+  /** Callback invoked when a group call invite is received for a group this wisp belongs to. */
+  onGroupCallInvite?: (groupId: string, roomId: string, callId: string, callType: 'voice' | 'video') => void;
+
   constructor(
     identity: WispIdentity, persona: WispPersona,
     relayUrl: string, llm: WispLLMClient, allPersonaNames: string[],
@@ -312,6 +315,9 @@ export class Wisp {
         case 'group_message':
           this.handleGroupMessage(envelope.payload);
           break;
+        case 'group_call_invite':
+          this.handleGroupCallInvite(envelope.payload);
+          break;
         case 'call_offer':
           void this.callHandler.handleOffer(envelope.payload);
           break;
@@ -495,6 +501,22 @@ export class Wisp {
     } catch (err) {
       console.warn(`[${this.persona.name}] Failed to respond in group:`, err);
     }
+  }
+
+  // -- Group Call Invite --
+
+  private handleGroupCallInvite(p: {
+    callId: string; roomId: string; groupId: string;
+    callType: 'voice' | 'video'; senderDid: string;
+    senderDisplayName: string; conversationId: string;
+  }): void {
+    const group = this.groups.get(p.groupId);
+    if (!group) {
+      console.log(`[${this.persona.name}] Ignoring group call invite -- not a member of group ${p.groupId.slice(0, 12)}...`);
+      return;
+    }
+    console.log(`[${this.persona.name}] Group call invite from ${p.senderDisplayName} in "${group.groupName}"`);
+    this.onGroupCallInvite?.(p.groupId, p.roomId, p.callId, p.callType as 'voice' | 'video');
   }
 
   // -- State Persistence --

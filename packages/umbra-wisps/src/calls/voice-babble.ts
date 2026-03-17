@@ -136,6 +136,35 @@ export class VoiceBabbleHandler extends EventEmitter {
     console.log(`[${this.wispName}] Requesting voice channel ${channelId}`);
   }
 
+  /**
+   * Join an existing call room by roomId (e.g. from a group_call_invite).
+   * Skips create_call_room and directly sends join_call_room.
+   */
+  async joinRoom(roomId: string, channelId?: string): Promise<void> {
+    if (this.active) {
+      this.leaveChannel();
+    }
+
+    const wrtc = loadWrtc();
+    if (!wrtc) {
+      console.error(`[${this.wispName}] wrtc not available, cannot join room`);
+      return;
+    }
+
+    this.roomId = roomId;
+    this.channelId = channelId ?? roomId;
+    this.active = true;
+
+    this.relay.send({
+      type: 'join_call_room',
+      room_id: roomId,
+    });
+
+    this.initAudioFeed();
+    console.log(`[${this.wispName}] Joined existing room ${roomId}`);
+    this.emit('joined', roomId);
+  }
+
   /** Leave the current voice channel. */
   leaveChannel(): void {
     if (!this.active) return;

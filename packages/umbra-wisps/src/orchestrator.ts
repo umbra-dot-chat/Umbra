@@ -109,6 +109,9 @@ export class WispOrchestrator {
     wisp.onGroupMessage = (senderDid, senderName, text, groupId) => {
       this.handleGroupResponse(wisp, senderDid, senderName, text, groupId);
     };
+    wisp.onGroupCallInvite = (groupId, roomId, callId, callType) => {
+      void this.handleGroupCallInvite(wisp, groupId, roomId, callId, callType);
+    };
 
     // Route relay call events to voice handlers
     wisp.relayClient.onMessage((msg) => {
@@ -160,6 +163,48 @@ export class WispOrchestrator {
     if (Math.random() < 0.1) return;
 
     this.dispatchGroupResponders(senderDid, senderName, text, groupId, allWisps);
+  }
+
+  /**
+   * Handle a group call invite for a wisp. Creates/reuses a VoiceBabbleHandler
+   * and joins the existing room by roomId. Only voice calls are supported.
+   */
+  private async handleGroupCallInvite(
+    wisp: Wisp, groupId: string, roomId: string,
+    callId: string, callType: 'voice' | 'video',
+  ): Promise<void> {
+    if (!this.babbleLibrary) {
+      console.warn(`[Orchestrator] Babble library not ready, ${wisp.name} cannot join group call`);
+      return;
+    }
+
+    // Only support voice for now (wisps have no video pipeline)
+    if (callType !== 'voice') {
+      console.log(`[Orchestrator] ${wisp.name} skipping ${callType} group call (voice only)`);
+      return;
+    }
+
+    // Avoid duplicate joins -- if handler already in this room, skip
+    const existing = this.voiceHandlers.get(wisp.name);
+    if (existing?.inChannel && existing.currentChannelId === groupId) {
+      console.log(`[Orchestrator] ${wisp.name} already in voice for group ${groupId.slice(0, 12)}...`);
+      return;
+    }
+
+    let handler = this.voiceHandlers.get(wisp.name);
+    if (!handler) {
+      handler = new VoiceBabbleHandler(
+        wisp.wispIdentity, wisp.relayClient, this.babbleLibrary, wisp.name,
+      );
+      this.voiceHandlers.set(wisp.name, handler);
+    }
+
+    // Stagger join by 1-3s so wisps don't all connect at the exact same instant
+    const delay = 1000 + Math.random() * 2000;
+    await sleep(delay);
+
+    await handler.joinRoom(roomId, groupId);
+    console.log(`[Orchestrator] ${wisp.name} joined group call in "${groupId.slice(0, 12)}..." (room ${roomId.slice(0, 12)}...)`);
   }
 
   /**
