@@ -656,17 +656,11 @@ fn handle_join_call_room(state: &RelayState, joiner_did: &str, room_id: &str) {
                 );
             }
 
-            // Notify the joiner about all existing participants so they
-            // can establish peer connections (WebRTC mesh topology).
-            for participant_did in &existing_participants {
-                state.send_to_client(
-                    joiner_did,
-                    ServerMessage::CallParticipantJoined {
-                        room_id: room_id.to_string(),
-                        did: participant_did.clone(),
-                    },
-                );
-            }
+            // NOTE: Do NOT notify the joiner about existing participants here.
+            // Existing participants create offers to the joiner (above notification).
+            // If we also told the joiner about existing participants, both sides
+            // would create offers simultaneously (WebRTC "glare"), breaking the
+            // handshake. The joiner just waits for incoming offers.
 
             // Send ack to the joiner
             state.send_to_client(
