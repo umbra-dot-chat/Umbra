@@ -573,13 +573,13 @@ export default function ChatPage() {
       getMembers(groupId).then((members) => {
         const memberDids = members.map(m => m.memberDid);
         const memberNames: Record<string, string> = {};
-        for (const m of members) memberNames[m.memberDid] = m.displayName || m.memberDid.slice(0, 16);
+        for (const m of members) memberNames[m.memberDid] = m.displayName || friendNames[m.memberDid] || m.memberDid.slice(0, 16);
         startGroupCall(resolvedConversationId, groupId, memberDids, memberNames, 'voice');
       }).catch(() => {});
     } else if (friendDid && friendDisplayName) {
       startCall(resolvedConversationId, friendDid, friendDisplayName, 'voice');
     }
-  }, [resolvedConversationId, friendDid, friendDisplayName, startCall, startGroupCall, setActiveId, activeConversation, getMembers]);
+  }, [resolvedConversationId, friendDid, friendDisplayName, startCall, startGroupCall, setActiveId, activeConversation, getMembers, friendNames]);
 
   const handleVideoCall = useCallback(() => {
     if (!resolvedConversationId) return;
@@ -589,13 +589,13 @@ export default function ChatPage() {
       getMembers(groupId).then((members) => {
         const memberDids = members.map(m => m.memberDid);
         const memberNames: Record<string, string> = {};
-        for (const m of members) memberNames[m.memberDid] = m.displayName || m.memberDid.slice(0, 16);
+        for (const m of members) memberNames[m.memberDid] = m.displayName || friendNames[m.memberDid] || m.memberDid.slice(0, 16);
         startGroupCall(resolvedConversationId, groupId, memberDids, memberNames, 'video');
       }).catch(() => {});
     } else if (friendDid && friendDisplayName) {
       startCall(resolvedConversationId, friendDid, friendDisplayName, 'video');
     }
-  }, [resolvedConversationId, friendDid, friendDisplayName, startCall, startGroupCall, setActiveId, activeConversation, getMembers]);
+  }, [resolvedConversationId, friendDid, friendDisplayName, startCall, startGroupCall, setActiveId, activeConversation, getMembers, friendNames]);
 
   // No conversations yet — show welcome
   if (!convsLoading && !hasConversations) {
