@@ -73,7 +73,8 @@ export async function detectAndExecuteWispCommand(
             action,
             response:
               'The wisps are on their way! You should receive friend requests ' +
-              'from Nyx, Flicker, Bramble, and Pixel shortly. They\'re a quirky ' +
+              'from all 12 wisps shortly — Nyx, Flicker, Bramble, Pixel, Rook, Mote, ' +
+              'Cinder, Whisper, Drift, Jinx, Echo, and Volt. They\'re a quirky ' +
               'bunch — give them a moment to settle in.',
           };
         }
