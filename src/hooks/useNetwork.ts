@@ -520,6 +520,26 @@ let _msgQueuePromise: Promise<void> = Promise.resolve();
 /** Yield to the event loop for a minimum duration, giving V8 idle time to GC. */
 const _gcYield = (ms: number = 16) => new Promise<void>(r => setTimeout(r, ms));
 
+// ── Streaming dedup ──────────────────────────────────────────────────
+// Ghost sends multiple chat_message envelopes with the same messageId
+// (accumulated text at each chunk). The WASM INSERT OR REPLACE silently
+// overwrites, so we track seen IDs here to detect streaming updates.
+const _seenMessageIds = new Set<string>();
+const SEEN_IDS_MAX = 500;
+function _trackMessageId(id: string): boolean {
+  if (_seenMessageIds.has(id)) return true; // already seen → streaming update
+  _seenMessageIds.add(id);
+  // Prune to avoid unbounded growth
+  if (_seenMessageIds.size > SEEN_IDS_MAX) {
+    const iter = _seenMessageIds.values();
+    for (let i = 0; i < 100; i++) iter.next();
+    // Delete oldest 100
+    const arr = Array.from(_seenMessageIds);
+    for (let i = 0; i < 100; i++) _seenMessageIds.delete(arr[i]);
+  }
+  return false; // new message
+}
+
 // ── Deferred offline message queue ──────────────────────────────────
 // Offline messages (1400+) each require WASM calls that grow the V8
 // cage (WASM linear memory never shrinks). Processing them all during
@@ -690,14 +710,16 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
               // friend acceptance relay was missed or conversation wasn't created yet)
               try { await service.createDmConversation(chatPayload.senderDid); } catch { /* friend may not exist yet */ }
 
-              // Try to store the message. If it already exists (streaming duplicate),
-              // treat this as a content update instead of a new message.
-              let isUpdate = false;
+              // Detect streaming updates: Ghost sends multiple chat_message envelopes
+              // with the same messageId (accumulated text). INSERT OR REPLACE in WASM
+              // silently overwrites, so we track seen IDs to detect updates.
+              const isUpdate = _trackMessageId(chatPayload.messageId);
+
+              // Store/overwrite in WASM DB (INSERT OR REPLACE)
               try {
                 await service.storeIncomingMessage(chatPayload);
               } catch (storeErr) {
-                // Message already exists — this is a streaming update with the same messageId
-                isUpdate = true;
+                if (__DEV__) dbg.warn('network', 'storeIncomingMessage failed', { error: String(storeErr) }, SRC);
               }
 
               const decryptedText = await service.decryptIncomingMessage(chatPayload);
@@ -710,13 +732,6 @@ async function _handleRelayMessage(ws: WebSocket, event: MessageEvent): Promise<
                   messageId: chatPayload.messageId,
                   newText: decryptedText,
                 });
-                // Persist the updated content
-                service.updateIncomingMessageContent(
-                  chatPayload.messageId,
-                  chatPayload.contentEncrypted,
-                  chatPayload.nonce,
-                  chatPayload.timestamp,
-                ).catch((err: any) => { console.error('[STREAM] persist failed:', err); });
               } else if (chatPayload.threadId) {
                 service.dispatchMessageEvent({ type: 'threadReplyReceived', message: { id: chatPayload.messageId, conversationId: chatPayload.conversationId, senderDid: chatPayload.senderDid, content: { type: 'text', text: decryptedText }, timestamp: chatPayload.timestamp, read: false, delivered: true, status: 'delivered', threadId: chatPayload.threadId }, parentId: chatPayload.threadId });
               } else {
