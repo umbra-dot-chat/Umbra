@@ -32,6 +32,7 @@ import type { EncryptedCallPayload } from '@/types/call';
 import { useUmbra } from '@/contexts/UmbraContext';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSound } from '@/contexts/SoundContext';
+import { getOnlineRelayDids } from '@/hooks/useNetwork';
 import { VoiceStreamBridge } from '@/services/VoiceStreamBridge';
 import { encryptSignal, decryptSignal, isSignalEncryptionAvailable } from '@/services/callCrypto';
 import { useDeveloperSettings } from '@/hooks/useDeveloperSettings';
@@ -162,6 +163,9 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
   const groupCallManagerRef = useRef<GroupCallManager | null>(null);
   // Pending group ID while waiting for callRoomCreated response
   const pendingGroupIdRef = useRef<string | null>(null);
+  // Hidden <audio> elements for group call remote peer audio playback (web only)
+  const groupAudioElementsRef = useRef<Map<string, HTMLAudioElement>>(new Map());
+  // (friendsRef removed — call invites now use getOnlineRelayDids() instead of WASM friend DIDs)
 
   // Keep activeCallRef in sync with state for use in event handler closures
   useEffect(() => {
@@ -198,6 +202,15 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     setScreenShareStream(null);
     setRemoteScreenShareStream(null);
     VoiceStreamBridge.clear();
+    // Clean up group call audio elements
+    if (groupAudioElementsRef.current) {
+      for (const [, el] of groupAudioElementsRef.current) {
+        el.pause();
+        el.srcObject = null;
+        el.remove();
+      }
+      groupAudioElementsRef.current.clear();
+    }
     try {
       sessionStorage.removeItem('umbra_active_call');
     } catch { /* not available */ }
@@ -944,6 +957,81 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     };
   }, [activeCall?.localStream, activeCall?.status]);
 
+  // Play remote audio for group call participants via hidden <audio> elements.
+  // In 1:1 calls, remoteStream is piped through AudioContext above.
+  // In group calls, each participant has their own stream that needs playback.
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    if (!activeCall?.isGroupCall || activeCall?.status !== 'connected') {
+      // Cleanup all audio elements
+      for (const [, el] of groupAudioElementsRef.current) {
+        el.pause();
+        el.srcObject = null;
+        el.remove();
+      }
+      groupAudioElementsRef.current.clear();
+      return;
+    }
+
+    const participants = activeCall.participants;
+    if (!participants) return;
+
+    const currentDids = new Set<string>();
+
+    for (const [did, participant] of participants) {
+      if (did === myDid) continue; // Skip self
+      currentDids.add(did);
+
+      const stream = participant.stream;
+      if (!stream) continue;
+
+      // Check if we already have an audio element for this peer with this stream
+      const existing = groupAudioElementsRef.current.get(did);
+      if (existing && existing.srcObject === stream) continue;
+
+      // Create or update audio element
+      if (existing) {
+        existing.pause();
+        existing.srcObject = null;
+        existing.remove();
+      }
+
+      const audio = document.createElement('audio');
+      audio.autoplay = true;
+      audio.srcObject = stream;
+      // Attach to DOM (hidden) so browser will play it
+      audio.style.display = 'none';
+      document.body.appendChild(audio);
+      audio.play().catch(() => {
+        if (__DEV__) dbg.warn('call', 'Failed to autoplay group audio', { did: did.slice(0, 20) }, SRC);
+      });
+      groupAudioElementsRef.current.set(did, audio);
+      if (__DEV__) dbg.info('call', 'Created audio element for group peer', { did: did.slice(0, 20) }, SRC);
+    }
+
+    // Remove audio elements for peers that left
+    for (const [did, el] of groupAudioElementsRef.current) {
+      if (!currentDids.has(did)) {
+        el.pause();
+        el.srcObject = null;
+        el.remove();
+        groupAudioElementsRef.current.delete(did);
+      }
+    }
+  }, [activeCall?.isGroupCall, activeCall?.status, activeCall?.participants, myDid]);
+
+  // Cleanup group audio elements on unmount
+  useEffect(() => {
+    return () => {
+      for (const [, el] of groupAudioElementsRef.current) {
+        el.pause();
+        el.srcObject = null;
+        el.remove();
+      }
+      groupAudioElementsRef.current.clear();
+    };
+  }, []);
+
   // ── Stats Collection ──────────────────────────────────────────────────────
 
   useEffect(() => {
@@ -1302,15 +1390,19 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
 
         case 'callRoomCreated': {
           const { roomId: createdRoomId, groupId } = event.payload;
+          if (__DEV__) dbg.info('call', 'callRoomCreated received', { roomId: createdRoomId, groupId, pendingGroupId: pendingGroupIdRef.current }, SRC);
           if (groupId !== pendingGroupIdRef.current) break;
 
           pendingGroupIdRef.current = null;
           setActiveCall((prev) => prev ? { ...prev, roomId: createdRoomId, status: 'connecting' } : prev);
           service.joinCallRoom(createdRoomId);
 
-          // Send group_call_invite to all members
+          // Send group_call_invite to all ONLINE relay DIDs (unencrypted).
+          // WASM getFriends()/getMembers() return encryption-derived DIDs that
+          // don't match the relay-registered DIDs peers actually connect with.
+          // _onlineDids (from incoming from_did fields) are the correct relay DIDs.
           const call = activeCallRef.current;
-          if (call?.isGroupCall && call.participants) {
+          if (call?.isGroupCall) {
             const invitePayload: GroupCallInvitePayload = {
               callId: call.callId,
               roomId: createdRoomId,
@@ -1320,9 +1412,20 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
               senderDisplayName: myName,
               conversationId: call.conversationId,
             };
-            for (const [did] of call.participants) {
-              if (did !== myDid) {
-                sendSignal(did, JSON.stringify(invitePayload), 'group_call_invite');
+            const onlineDids = getOnlineRelayDids();
+            if (__DEV__) dbg.info('call', 'Sending group_call_invite to online relay DIDs', { roomId: createdRoomId, groupId, onlineCount: onlineDids.size }, SRC);
+            for (const relayDid of onlineDids) {
+              if (relayDid !== myDid) {
+                const relayMessage = JSON.stringify({
+                  type: 'send',
+                  to_did: relayDid,
+                  payload: JSON.stringify({
+                    envelope: 'group_call_invite',
+                    version: 1,
+                    payload: invitePayload,
+                  }),
+                });
+                service.sendCallSignal(relayDid, relayMessage);
               }
             }
           }
@@ -1331,6 +1434,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
 
         case 'callParticipantJoined': {
           const { did } = event.payload;
+          if (__DEV__) dbg.info('call', 'callParticipantJoined', { did: did?.slice(0, 20), isSelf: did === myDid, isGroupCall: currentCall?.isGroupCall, hasRoomId: !!currentCall?.roomId }, SRC);
           if (did === myDid) break;
           if (!currentCall?.isGroupCall) break;
 
@@ -1348,13 +1452,15 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
           });
           clearRingTimeout();
 
-          // Create WebRTC offer for the new peer
+          // Always create offer to new peer — we are the existing participant
+          // and the relay only notifies existing members about new joiners.
           gcm.createOfferForPeer(did, currentCall.callType === 'video').then((offerSdp) => {
             if (currentCall.roomId) {
               service.sendCallRoomSignal(currentCall.roomId, did, JSON.stringify({
                 type: 'offer',
                 sdp: offerSdp,
               }));
+              if (__DEV__) dbg.info('call', 'Sent WebRTC offer to peer', { did: did?.slice(0, 20) }, SRC);
             }
           }).catch((err) => {
             if (__DEV__) dbg.warn('call', 'Failed to create offer for peer', err, SRC);
@@ -1622,6 +1728,9 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       groupId,
     };
     setActiveCall(call);
+    // Set ref immediately so callRoomCreated handler can read participants
+    // (the useEffect that syncs activeCallRef won't fire before the relay responds)
+    activeCallRef.current = call;
 
     // Create relay call room (groupId links the room to the group)
     service?.createCallRoom(groupId);

@@ -251,6 +251,16 @@ export function markDidOnline(did: string): void {
   _markDidOnline(did);
 }
 
+/**
+ * Get all relay DIDs currently known to be online.
+ * These are the real relay-registered DIDs (from incoming `from_did` fields),
+ * NOT the WASM-internal encryption-derived DIDs from getFriends()/getMembers().
+ * Use these for sending unencrypted messages (e.g. call invites) to peers.
+ */
+export function getOnlineRelayDids(): Set<string> {
+  return new Set(_onlineDids);
+}
+
 // Module-level relay state + subscriber list so ALL useNetwork() instances
 // stay in sync. Without this, only the instance that called connectRelay
 // sees the WebSocket open — other instances' relayConnected stays false.

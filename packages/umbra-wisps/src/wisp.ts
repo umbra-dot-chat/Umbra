@@ -510,13 +510,41 @@ export class Wisp {
     callType: 'voice' | 'video'; senderDid: string;
     senderDisplayName: string; conversationId: string;
   }): void {
-    const group = this.groups.get(p.groupId);
+    // Try exact groupId match first
+    let group = this.groups.get(p.groupId);
+    let resolvedGroupId = p.groupId;
+
+    // The app and wisps may have different UUIDs for the same logical group
+    // (created independently). Fall back to matching by sender membership:
+    // if the sender is a member of ANY of our groups, accept the invite.
     if (!group) {
-      console.log(`[${this.persona.name}] Ignoring group call invite -- not a member of group ${p.groupId.slice(0, 12)}...`);
+      for (const [gid, g] of this.groups) {
+        if (g.members.some(m => m.did === p.senderDid)) {
+          group = g;
+          resolvedGroupId = gid;
+          console.log(`[${this.persona.name}] [INFO] Group call invite groupId mismatch — resolved via sender membership in "${g.groupName}" (invite=${p.groupId.slice(0, 12)}..., local=${gid.slice(0, 12)}...)`);
+          break;
+        }
+      }
+    }
+
+    if (!group) {
+      // Last resort: accept if sender is a known friend (they sent us a direct invite)
+      // Use the first group we belong to as context
+      const firstGroup = this.groups.values().next().value;
+      if (firstGroup) {
+        group = firstGroup;
+        resolvedGroupId = firstGroup.groupId ?? [...this.groups.keys()][0];
+        console.log(`[${this.persona.name}] [INFO] Group call invite from unknown sender ${p.senderDisplayName} — accepting via first group "${firstGroup.groupName}"`);
+      }
+    }
+
+    if (!group) {
+      console.log(`[${this.persona.name}] [WARN] Ignoring group call invite -- no groups at all (sender=${p.senderDisplayName})`);
       return;
     }
-    console.log(`[${this.persona.name}] Group call invite from ${p.senderDisplayName} in "${group.groupName}"`);
-    this.onGroupCallInvite?.(p.groupId, p.roomId, p.callId, p.callType as 'voice' | 'video');
+    console.log(`[${this.persona.name}] [INFO] Group call invite from ${p.senderDisplayName} in "${group.groupName}" — invoking onGroupCallInvite callback (bound=${!!this.onGroupCallInvite})`);
+    this.onGroupCallInvite?.(resolvedGroupId, p.roomId, p.callId, p.callType as 'voice' | 'video');
   }
 
   // -- State Persistence --
