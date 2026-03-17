@@ -34,7 +34,7 @@ export function IncomingCallOverlay() {
     >
       <CallNotification
         variant="incoming"
-        callerName={activeCall.remoteDisplayName}
+        callerName={activeCall.isGroupCall ? `Group call from ${activeCall.remoteDisplayName}` : activeCall.remoteDisplayName}
         callType={activeCall.callType}
         onAccept={() => acceptCall()}
         onDecline={() => endCall('declined')}

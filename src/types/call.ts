@@ -169,6 +169,12 @@ export interface ActiveCall {
   participants: Map<string, CallParticipant>;
   /** Whether local video tile is shown */
   selfViewVisible: boolean;
+  /** Whether this is a group call (mesh topology via GroupCallManager) */
+  isGroupCall?: boolean;
+  /** Group ID (for group DM calls) */
+  groupId?: string;
+  /** Relay room ID (for group calls) */
+  roomId?: string;
 }
 
 // ─── Call Signaling Envelopes ────────────────────────────────────────────────
@@ -251,6 +257,18 @@ export interface CallSignalForwardPayload {
   payload: string;
 }
 
+// ─── Group DM Call Invite ────────────────────────────────────────────────────
+
+export interface GroupCallInvitePayload {
+  callId: string;
+  roomId: string;
+  groupId: string;
+  callType: CallType;
+  senderDid: string;
+  senderDisplayName: string;
+  conversationId: string;
+}
+
 // ─── Renegotiation Payloads (screen sharing) ─────────────────────────────────
 
 export interface CallReofferPayload {
@@ -278,7 +296,8 @@ export type CallEvent =
   | { type: 'callRoomCreated'; payload: CallRoomCreatedPayload }
   | { type: 'callParticipantJoined'; payload: CallParticipantJoinedPayload }
   | { type: 'callParticipantLeft'; payload: CallParticipantLeftPayload }
-  | { type: 'callSignalForward'; payload: CallSignalForwardPayload };
+  | { type: 'callSignalForward'; payload: CallSignalForwardPayload }
+  | { type: 'groupCallInvite'; payload: GroupCallInvitePayload };
 
 // ─── ICE Server Configuration ────────────────────────────────────────────────
 

@@ -257,7 +257,7 @@ export default function ChatPage() {
   }, [searchPanelRequested, clearSearchPanelRequest, rightPanel, togglePanel]);
   const { showProfile } = useProfilePopoverContext();
   const {
-    activeCall, startCall, acceptCall, toggleMute, toggleDeafen, toggleCamera, endCall,
+    activeCall, startCall, startGroupCall, acceptCall, toggleMute, toggleDeafen, toggleCamera, endCall,
     videoQuality, audioQuality, setVideoQuality, setAudioQuality,
     switchCamera, callStats, ghostMetadata,
     isScreenSharing, startScreenShare, stopScreenShare, screenShareStream,
@@ -566,18 +566,36 @@ export default function ChatPage() {
   const friendDisplayName = friendDid ? (friendNames[friendDid] || friendDid.slice(0, 16)) : null;
 
   const handleVoiceCall = useCallback(() => {
-    if (resolvedConversationId && friendDid && friendDisplayName) {
-      setActiveId(resolvedConversationId);
+    if (!resolvedConversationId) return;
+    setActiveId(resolvedConversationId);
+    if (activeConversation?.type === 'group' && activeConversation.groupId) {
+      const groupId = activeConversation.groupId;
+      getMembers(groupId).then((members) => {
+        const memberDids = members.map(m => m.memberDid);
+        const memberNames: Record<string, string> = {};
+        for (const m of members) memberNames[m.memberDid] = m.displayName || m.memberDid.slice(0, 16);
+        startGroupCall(resolvedConversationId, groupId, memberDids, memberNames, 'voice');
+      }).catch(() => {});
+    } else if (friendDid && friendDisplayName) {
       startCall(resolvedConversationId, friendDid, friendDisplayName, 'voice');
     }
-  }, [resolvedConversationId, friendDid, friendDisplayName, startCall, setActiveId]);
+  }, [resolvedConversationId, friendDid, friendDisplayName, startCall, startGroupCall, setActiveId, activeConversation, getMembers]);
 
   const handleVideoCall = useCallback(() => {
-    if (resolvedConversationId && friendDid && friendDisplayName) {
-      setActiveId(resolvedConversationId);
+    if (!resolvedConversationId) return;
+    setActiveId(resolvedConversationId);
+    if (activeConversation?.type === 'group' && activeConversation.groupId) {
+      const groupId = activeConversation.groupId;
+      getMembers(groupId).then((members) => {
+        const memberDids = members.map(m => m.memberDid);
+        const memberNames: Record<string, string> = {};
+        for (const m of members) memberNames[m.memberDid] = m.displayName || m.memberDid.slice(0, 16);
+        startGroupCall(resolvedConversationId, groupId, memberDids, memberNames, 'video');
+      }).catch(() => {});
+    } else if (friendDid && friendDisplayName) {
       startCall(resolvedConversationId, friendDid, friendDisplayName, 'video');
     }
-  }, [resolvedConversationId, friendDid, friendDisplayName, startCall, setActiveId]);
+  }, [resolvedConversationId, friendDid, friendDisplayName, startCall, startGroupCall, setActiveId, activeConversation, getMembers]);
 
   // No conversations yet — show welcome
   if (!convsLoading && !hasConversations) {

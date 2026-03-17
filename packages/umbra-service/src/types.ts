@@ -495,6 +495,7 @@ export type RelayEnvelope =
   | { envelope: 'call_state'; version: 1; payload: any }
   | { envelope: 'call_reoffer'; version: 1; payload: any }
   | { envelope: 'call_reanswer'; version: 1; payload: any }
+  | { envelope: 'group_call_invite'; version: 1; payload: any }
   | { envelope: 'community_event'; version: 1; payload: CommunityEventPayload }
   | { envelope: 'dm_file_event'; version: 1; payload: DmFileEventPayload }
   | { envelope: 'account_metadata'; version: 1; payload: AccountMetadataPayload }

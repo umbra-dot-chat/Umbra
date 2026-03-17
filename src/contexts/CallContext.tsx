@@ -460,10 +460,41 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
   const acceptCall = useCallback(async () => {
     if (!activeCall || activeCall.status !== 'incoming') return;
 
+    clearRingTimeout();
+
+    // Group call: create GroupCallManager, get media, join the relay room
+    if (activeCall.isGroupCall && activeCall.roomId) {
+      const isVideo = activeCall.callType === 'video';
+      const gcManager = new GroupCallManager();
+      groupCallManagerRef.current = gcManager;
+
+      try {
+        await gcManager.getUserMedia(isVideo);
+      } catch (err) {
+        if (__DEV__) dbg.error('call', 'Failed to get user media for group call accept', err, SRC);
+        groupCallManagerRef.current = null;
+        cleanup();
+        return;
+      }
+
+      const localStream = gcManager.getLocalStream();
+      VoiceStreamBridge.setLocalStream(localStream);
+      VoiceStreamBridge.setActive(true);
+
+      setActiveCall((prev) => {
+        if (!prev) return prev;
+        const updatedParticipants = new Map(prev.participants);
+        const self = updatedParticipants.get(myDid);
+        if (self) updatedParticipants.set(myDid, { ...self, stream: localStream });
+        return { ...prev, status: 'connecting', localStream, participants: updatedParticipants };
+      });
+
+      service?.joinCallRoom(activeCall.roomId);
+      return;
+    }
+
     const manager = callManagerRef.current;
     if (!manager) return;
-
-    clearRingTimeout();
 
     try {
       setActiveCall((prev) => prev ? { ...prev, status: 'connecting' } : prev);
@@ -506,7 +537,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       if (__DEV__) dbg.error('call', 'Failed to accept call', err, SRC);
       cleanup();
     }
-  }, [activeCall, myDid, sendSignal, clearRingTimeout, cleanup]);
+  }, [activeCall, myDid, sendSignal, clearRingTimeout, cleanup, makeParticipant, service]);
 
   // ── End Call ─────────────────────────────────────────────────────────────
 
