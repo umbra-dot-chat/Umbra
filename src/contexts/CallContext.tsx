@@ -996,17 +996,40 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
         existing.remove();
       }
 
+      if (__DEV__) {
+        const audioTracks = stream.getAudioTracks();
+        dbg.info('call', 'Creating audio element for group peer', {
+          did: did.slice(0, 20),
+          audioTracks: audioTracks.length,
+          trackStates: audioTracks.map(t => `${t.kind}:${t.readyState}:enabled=${t.enabled}`),
+          streamActive: stream.active,
+        }, SRC);
+      }
+
       const audio = document.createElement('audio');
       audio.autoplay = true;
       audio.srcObject = stream;
       // Attach to DOM (hidden) so browser will play it
       audio.style.display = 'none';
       document.body.appendChild(audio);
-      audio.play().catch(() => {
-        if (__DEV__) dbg.warn('call', 'Failed to autoplay group audio', { did: did.slice(0, 20) }, SRC);
+      // Try to play; if autoplay policy blocks it, pipe through AudioContext
+      // (which was already resumed during the user-gesture call start).
+      audio.play().then(() => {
+        if (__DEV__) dbg.info('call', 'Audio element playing for group peer', { did: did.slice(0, 20) }, SRC);
+      }).catch(() => {
+        if (__DEV__) dbg.warn('call', 'Autoplay blocked, piping through AudioContext', { did: did.slice(0, 20) }, SRC);
+        try {
+          const ctx = audioCtxRef.current || new AudioContext();
+          if (!audioCtxRef.current) audioCtxRef.current = ctx;
+          if (ctx.state === 'suspended') ctx.resume();
+          const source = ctx.createMediaStreamSource(stream);
+          source.connect(ctx.destination);
+          if (__DEV__) dbg.info('call', 'AudioContext fallback playing for group peer', { did: did.slice(0, 20), ctxState: ctx.state }, SRC);
+        } catch (e) {
+          if (__DEV__) dbg.warn('call', 'AudioContext fallback failed', { did: did.slice(0, 20), err: String(e) }, SRC);
+        }
       });
       groupAudioElementsRef.current.set(did, audio);
-      if (__DEV__) dbg.info('call', 'Created audio element for group peer', { did: did.slice(0, 20) }, SRC);
     }
 
     // Remove audio elements for peers that left
@@ -1395,7 +1418,11 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
 
           pendingGroupIdRef.current = null;
           setActiveCall((prev) => prev ? { ...prev, roomId: createdRoomId, status: 'connecting' } : prev);
-          service.joinCallRoom(createdRoomId);
+          // NOTE: Do NOT call service.joinCallRoom() here — the creator is
+          // already added as a participant by create_call_room on the relay.
+          // Calling joinCallRoom causes a duplicate-join that notifies wisps
+          // who joined in the meantime, triggering WebRTC "glare" (both sides
+          // create offers simultaneously, breaking the handshake).
 
           // Send group_call_invite to all ONLINE relay DIDs (unencrypted).
           // WASM getFriends()/getMembers() return encryption-derived DIDs that
@@ -1412,20 +1439,40 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
               senderDisplayName: myName,
               conversationId: call.conversationId,
             };
+            // Collect target DIDs: online relay DIDs + group member DIDs (fallback).
+            // Online relay DIDs come from incoming `from_did` fields — always correct.
+            // Group member DIDs may be encryption-derived (wrong for WASM users) but
+            // work for wisps since they use the same key everywhere.
             const onlineDids = getOnlineRelayDids();
-            if (__DEV__) dbg.info('call', 'Sending group_call_invite to online relay DIDs', { roomId: createdRoomId, groupId, onlineCount: onlineDids.size }, SRC);
-            for (const relayDid of onlineDids) {
-              if (relayDid !== myDid) {
+            const targetDids = new Set(onlineDids);
+            // Also include group member DIDs from the participants map as fallback
+            if (call.participants) {
+              for (const did of call.participants.keys()) {
+                if (did !== myDid) targetDids.add(did);
+              }
+            }
+            if (__DEV__) dbg.info('call', 'Sending group_call_invite', {
+              roomId: createdRoomId, groupId,
+              onlineCount: onlineDids.size,
+              totalTargets: targetDids.size,
+              targets: [...targetDids].map(d => d.slice(0, 20)),
+            }, SRC);
+            if (targetDids.size === 0) {
+              dbg.warn('call', 'NO target DIDs found! Group call invites will not be sent.', undefined, SRC);
+            }
+            const payloadStr = JSON.stringify({
+              envelope: 'group_call_invite',
+              version: 1,
+              payload: invitePayload,
+            });
+            for (const targetDid of targetDids) {
+              if (targetDid !== myDid) {
                 const relayMessage = JSON.stringify({
                   type: 'send',
-                  to_did: relayDid,
-                  payload: JSON.stringify({
-                    envelope: 'group_call_invite',
-                    version: 1,
-                    payload: invitePayload,
-                  }),
+                  to_did: targetDid,
+                  payload: payloadStr,
                 });
-                service.sendCallSignal(relayDid, relayMessage);
+                service.sendCallSignal(targetDid, relayMessage);
               }
             }
           }
@@ -1486,6 +1533,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
 
         case 'callSignalForward': {
           const { fromDid, payload } = event.payload;
+          if (__DEV__) dbg.info('call', 'callSignalForward received', { fromDid: fromDid?.slice(0, 20), isGroupCall: currentCall?.isGroupCall, hasGcm: !!groupCallManagerRef.current }, SRC);
           if (!currentCall?.isGroupCall) break;
 
           const gcm = groupCallManagerRef.current;
@@ -1493,6 +1541,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
 
           try {
             const signal = JSON.parse(payload);
+            if (__DEV__) dbg.info('call', 'Group call signal', { fromDid: fromDid?.slice(0, 20), signalType: signal.type }, SRC);
 
             // Forward plugin signals to VoiceStreamBridge
             if (signal.type === 'plugin-signal') {
@@ -1501,17 +1550,20 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
             }
 
             if (signal.type === 'offer') {
+              if (__DEV__) dbg.info('call', 'Accepting group offer from peer', { fromDid: fromDid?.slice(0, 20) }, SRC);
               gcm.acceptOfferFromPeer(fromDid, signal.sdp, currentCall.callType === 'video').then((answerSdp) => {
                 if (currentCall.roomId) {
                   service.sendCallRoomSignal(currentCall.roomId, fromDid, JSON.stringify({
                     type: 'answer',
                     sdp: answerSdp,
                   }));
+                  if (__DEV__) dbg.info('call', 'Sent answer to group peer', { fromDid: fromDid?.slice(0, 20) }, SRC);
                 }
               }).catch((err) => {
                 if (__DEV__) dbg.warn('call', 'Failed to accept group offer', err, SRC);
               });
             } else if (signal.type === 'answer') {
+              if (__DEV__) dbg.info('call', 'Completing handshake with group peer', { fromDid: fromDid?.slice(0, 20) }, SRC);
               gcm.completeHandshakeForPeer(fromDid, signal.sdp).catch((err) => {
                 if (__DEV__) dbg.warn('call', 'Failed to complete group handshake', err, SRC);
               });
@@ -1653,7 +1705,10 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     };
 
     manager.onConnectionStateChange = (did, state) => {
-      if (__DEV__) dbg.info('call', 'Group peer connection state changed', { did, state }, SRC);
+      if (__DEV__) dbg.info('call', 'Group peer connection state changed', { did: did.slice(0, 20), state }, SRC);
+      if (state === 'failed') {
+        dbg.error('call', 'Group peer connection FAILED — ICE connectivity issue', { did: did.slice(0, 20) }, SRC);
+      }
     };
   }, [service, makeParticipant]);
 
@@ -1675,6 +1730,16 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     callType: CallType,
   ) => {
     if (activeCall) return;
+
+    // Resume/create AudioContext during user gesture so remote audio can play
+    // later without hitting browser autoplay restrictions.
+    if (Platform.OS === 'web') {
+      try {
+        const ctx = audioCtxRef.current || new AudioContext();
+        if (!audioCtxRef.current) audioCtxRef.current = ctx;
+        if (ctx.state === 'suspended') ctx.resume();
+      } catch { /* ok — will retry when streams arrive */ }
+    }
 
     const callId = `gcall-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const isVideo = callType === 'video';

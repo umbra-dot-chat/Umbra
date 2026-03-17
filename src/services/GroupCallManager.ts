@@ -212,13 +212,22 @@ export class GroupCallManager {
     };
 
     pc.ontrack = (event) => {
-      if (event.streams[0]) {
-        const peer = this.peers.get(did);
-        if (peer) {
-          peer.remoteStream = event.streams[0];
-        }
-        this.onRemoteStream?.(did, event.streams[0]);
+      // Use the associated stream if available, otherwise create one from the track.
+      // @roamhq/wrtc (Node.js WebRTC) may not always associate tracks with streams,
+      // so falling back to a new MediaStream ensures remote audio is still captured.
+      const stream = event.streams[0] ?? new MediaStream([event.track]);
+      if (__DEV__) dbg.info('call', 'ontrack fired for group peer', {
+        did: did.slice(0, 20),
+        hasStreams: event.streams.length > 0,
+        trackKind: event.track.kind,
+        trackEnabled: event.track.enabled,
+        trackReadyState: event.track.readyState,
+      }, SRC);
+      const peer = this.peers.get(did);
+      if (peer) {
+        peer.remoteStream = stream;
       }
+      this.onRemoteStream?.(did, stream);
     };
 
     pc.onconnectionstatechange = () => {
