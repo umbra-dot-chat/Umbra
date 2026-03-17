@@ -87,6 +87,7 @@ export class VoiceBabbleHandler extends EventEmitter {
   // Drift-compensating timer state
   private feedStartTime: bigint = BigInt(0);
   private feedTickCount = 0;
+  private firstBabbleAfterJoin = true;
 
   constructor(
     private identity: WispIdentity,
@@ -126,6 +127,12 @@ export class VoiceBabbleHandler extends EventEmitter {
 
     this.channelId = channelId;
     this.active = true;
+    this.firstBabbleAfterJoin = true;
+
+    // Ensure babble clips are loaded before starting audio feed
+    if (!this.babbleLibrary.hasClips(this.wispName)) {
+      await this.babbleLibrary.load();
+    }
 
     // Request room creation (relay will respond with callRoomCreated)
     this.relay.send({
@@ -151,9 +158,15 @@ export class VoiceBabbleHandler extends EventEmitter {
       return;
     }
 
+    // Ensure babble clips are loaded before starting audio feed
+    if (!this.babbleLibrary.hasClips(this.wispName)) {
+      await this.babbleLibrary.load();
+    }
+
     this.roomId = roomId;
     this.channelId = channelId ?? roomId;
     this.active = true;
+    this.firstBabbleAfterJoin = true;
 
     this.relay.send({
       type: 'join_call_room',
@@ -484,7 +497,11 @@ export class VoiceBabbleHandler extends EventEmitter {
     });
   }
 
-  /** Schedule the next babble clip after a natural pause (3-15s). */
+  /**
+   * Schedule the next babble clip after a natural pause.
+   * First clip after joining uses a short delay (0.5-2s) so the wisp
+   * starts speaking quickly. Subsequent clips use 3-15s pauses.
+   */
   private scheduleNextBabble(): void {
     if (this.babbleTimeout) {
       clearTimeout(this.babbleTimeout);
@@ -492,7 +509,14 @@ export class VoiceBabbleHandler extends EventEmitter {
     }
     if (!this.active) return;
 
-    const pause = 3000 + Math.random() * 12000;
+    let pause: number;
+    if (this.firstBabbleAfterJoin) {
+      pause = 500 + Math.random() * 1500; // 0.5-2s for first clip
+      this.firstBabbleAfterJoin = false;
+    } else {
+      pause = 3000 + Math.random() * 12000; // 3-15s between clips
+    }
+
     this.babbleTimeout = setTimeout(() => {
       void this.playNextClip();
     }, pause);

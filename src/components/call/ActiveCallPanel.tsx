@@ -253,17 +253,19 @@ export function ActiveCallPanel({
       </Box>
 
       {/* Controls bar — always visible, below the video area */}
-      <CallControlsOverlay
-        isMuted={activeCall.isMuted}
-        isDeafened={activeCall.isDeafened}
-        isCameraOff={activeCall.isCameraOff}
-        isScreenSharing={isScreenSharing}
-        onToggleMute={onToggleMute}
-        onToggleDeafen={onToggleDeafen}
-        onToggleCamera={onToggleCamera}
-        onToggleScreenShare={onToggleScreenShare}
-        onEndCall={onEndCall}
-      />
+      <Box style={{ position: 'relative', zIndex: 20 }}>
+        <CallControlsOverlay
+          isMuted={activeCall.isMuted}
+          isDeafened={activeCall.isDeafened}
+          isCameraOff={activeCall.isCameraOff}
+          isScreenSharing={isScreenSharing}
+          onToggleMute={onToggleMute}
+          onToggleDeafen={onToggleDeafen}
+          onToggleCamera={onToggleCamera}
+          onToggleScreenShare={onToggleScreenShare}
+          onEndCall={onEndCall}
+        />
+      </Box>
 
       {/* Plugin overlay slot */}
       <SlotRenderer

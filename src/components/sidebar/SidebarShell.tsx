@@ -368,7 +368,7 @@ export function SidebarShell({
         ) : children}
 
         {/* Active call footer panel -- pushed to the bottom via margin-top:auto */}
-        {activeCall && activeCall.status === 'connected' && activeCall.conversationId !== activeConversationId && onReturnToCall && onToggleMute && onToggleDeafen && onToggleCamera && onEndCall && (
+        {activeCall && activeCall.status === 'connected' && (activeCall.isGroupCall || activeCall.conversationId !== activeConversationId) && onReturnToCall && onToggleMute && onToggleDeafen && onToggleCamera && onEndCall && (
           <Box style={{ marginTop: 'auto' as any, marginHorizontal: -4 }}>
             <SidebarCallPanel
               activeCall={activeCall}
