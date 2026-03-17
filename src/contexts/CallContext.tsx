@@ -579,7 +579,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     };
     const displayStatus = statusMap[meta.reason] ?? 'missed';
     const eventText = `[call:${meta.callType}:${displayStatus}:${durationSec}]`;
-    if (service) {
+    if (service && !activeCall?.isGroupCall) {
       const relayWs = service.getRelayWs();
       service.sendMessage(meta.conversationId, eventText, relayWs)
         .then((msg) => service.dispatchMessageEvent({ type: 'messageSent', message: msg }))
@@ -590,7 +590,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
   // ── Toggle Mute ──────────────────────────────────────────────────────────
 
   const toggleMute = useCallback(() => {
-    const manager = callManagerRef.current;
+    const manager = groupCallManagerRef.current ?? callManagerRef.current;
     if (!manager) return;
 
     const isMuted = manager.toggleMute();
@@ -619,7 +619,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
   // ── Toggle Deafen ───────────────────────────────────────────────────────
 
   const toggleDeafen = useCallback(() => {
-    const manager = callManagerRef.current;
+    const manager = groupCallManagerRef.current ?? callManagerRef.current;
     if (!manager) return;
 
     setActiveCall((prev) => {
@@ -665,7 +665,7 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
   // ── Toggle Camera ────────────────────────────────────────────────────────
 
   const toggleCamera = useCallback(() => {
-    const manager = callManagerRef.current;
+    const manager = groupCallManagerRef.current ?? callManagerRef.current;
     if (!manager) return;
 
     const isCameraOff = manager.toggleCamera();
