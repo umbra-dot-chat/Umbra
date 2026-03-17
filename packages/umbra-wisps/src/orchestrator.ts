@@ -146,6 +146,10 @@ export class WispOrchestrator {
   private handleGroupResponse(
     receiver: Wisp, senderDid: string, senderName: string, text: string, groupId: string,
   ): void {
+    // Never respond to messages from other wisps — prevents infinite feedback loops
+    const isFromWisp = this.getWisps().some(w => w.did === senderDid);
+    if (isFromWisp) return;
+
     // Only let ONE wisp handle the coordination (first alphabetically that has the group)
     const allWisps = this.getWisps().filter(w => w.getGroup(groupId));
     if (allWisps.length === 0) return;
@@ -182,6 +186,8 @@ export class WispOrchestrator {
     const count = Math.random() < 0.5 ? 1 : Math.min(2, responders.length);
     const shuffled = responders.sort(() => Math.random() - 0.5);
     const chosen = shuffled.slice(0, count);
+
+    console.log(`[Orchestrator] ${senderName} said "${text.slice(0, 40)}..." → ${chosen.map(w => w.name).join(', ')} will respond`);
 
     for (let i = 0; i < chosen.length; i++) {
       const delay = 2000 + Math.random() * 4000 + i * 3000; // Stagger responses

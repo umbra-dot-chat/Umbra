@@ -479,7 +479,6 @@ export class Wisp {
         p.ciphertext, p.nonce, group.groupKey,
         p.groupId, p.senderDid, p.timestamp,
       );
-      console.log(`[${this.persona.name}] Group "${group.groupName}" from ${p.senderName}: ${plaintext.slice(0, 50)}...`);
       this.appendHistory(group.conversationId, 'user', `${p.senderName}: ${plaintext}`);
       // Notify orchestrator for group response coordination
       this.onGroupMessage?.(p.senderDid, p.senderName, plaintext, p.groupId);
