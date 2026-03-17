@@ -303,7 +303,7 @@ export class VoiceBabbleHandler extends EventEmitter {
       type: 'call_signal',
       room_id: this.roomId,
       to_did: peerDid,
-      payload: { type: 'offer', sdp: offer.sdp },
+      payload: JSON.stringify({ type: 'offer', sdp: offer.sdp }),
     });
 
     console.log(`[${this.wispName}] Sent offer to ${peerDid.slice(0, 20)}...`);
@@ -329,7 +329,7 @@ export class VoiceBabbleHandler extends EventEmitter {
       type: 'call_signal',
       room_id: this.roomId,
       to_did: fromDid,
-      payload: { type: 'answer', sdp: answer.sdp },
+      payload: JSON.stringify({ type: 'answer', sdp: answer.sdp }),
     });
   }
 
@@ -386,10 +386,10 @@ export class VoiceBabbleHandler extends EventEmitter {
         type: 'call_signal',
         room_id: this.roomId,
         to_did: peerDid,
-        payload: {
+        payload: JSON.stringify({
           type: 'ice-candidate',
           candidate: ev.candidate,
-        },
+        }),
       });
     };
 

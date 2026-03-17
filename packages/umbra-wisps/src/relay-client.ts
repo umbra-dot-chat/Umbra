@@ -16,7 +16,11 @@ export type ServerMessage =
   | { type: 'ack'; id: string }
   | { type: 'pong' }
   | { type: 'offline_messages'; messages: { from_did: string; payload: string; timestamp: number }[] }
-  | { type: 'error'; message: string };
+  | { type: 'error'; message: string }
+  | { type: 'call_room_created'; room_id: string; group_id: string }
+  | { type: 'call_participant_joined'; room_id: string; did: string }
+  | { type: 'call_participant_left'; room_id: string; did: string }
+  | { type: 'call_signal_forward'; room_id: string; from_did: string; payload: string };
 
 export type MessageHandler = (msg: ServerMessage) => void;
 

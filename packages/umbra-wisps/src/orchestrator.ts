@@ -113,22 +113,31 @@ export class WispOrchestrator {
       void this.handleGroupCallInvite(wisp, groupId, roomId, callId, callType);
     };
 
-    // Route relay call events to voice handlers
+    // Route relay call room events to voice handlers.
+    // These arrive as top-level relay message types (call_room_created, etc.),
+    // NOT nested inside a 'message' envelope.
     wisp.relayClient.onMessage((msg) => {
-      if (msg.type !== 'message') return;
-      try {
-        const envelope = JSON.parse(msg.payload);
-        const eventType = envelope.envelope ?? envelope.type;
-        if (
-          eventType === 'callRoomCreated' ||
-          eventType === 'callParticipantJoined' ||
-          eventType === 'callParticipantLeft' ||
-          eventType === 'callSignalForward'
-        ) {
-          const handler = this.voiceHandlers.get(persona.name);
-          handler?.handleCallEvent({ type: eventType, payload: envelope.payload ?? envelope });
+      const handler = this.voiceHandlers.get(persona.name);
+      if (!handler) return;
+
+      switch (msg.type) {
+        case 'call_room_created':
+          handler.handleCallEvent({ type: 'callRoomCreated', payload: { roomId: msg.room_id, groupId: msg.group_id } });
+          break;
+        case 'call_participant_joined':
+          handler.handleCallEvent({ type: 'callParticipantJoined', payload: { room_id: msg.room_id, did: msg.did } });
+          break;
+        case 'call_participant_left':
+          handler.handleCallEvent({ type: 'callParticipantLeft', payload: { room_id: msg.room_id, did: msg.did } });
+          break;
+        case 'call_signal_forward': {
+          // The relay sends payload as a string; VoiceBabbleHandler expects a `signal` object.
+          const rawPayload = msg.payload;
+          const signal = typeof rawPayload === 'string' ? JSON.parse(rawPayload) : rawPayload;
+          handler.handleCallEvent({ type: 'callSignalForward', payload: { room_id: msg.room_id, from_did: msg.from_did, signal } });
+          break;
         }
-      } catch { /* ignore parse errors */ }
+      }
     });
 
     // Wire babble library if already loaded
