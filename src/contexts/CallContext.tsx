@@ -8,6 +8,7 @@
 import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { AppState, Platform, type AppStateStatus } from 'react-native';
 import { CallManager } from '@/services/CallManager';
+import { GroupCallManager } from '@/services/GroupCallManager';
 import type {
   ActiveCall,
   AudioQuality,
@@ -22,6 +23,7 @@ import type {
   CallStatus,
   CallType,
   CallEndReason,
+  GroupCallInvitePayload,
   OpusConfig,
   VideoQuality,
 } from '@/types/call';
@@ -106,6 +108,10 @@ interface CallContextValue {
   toggleSelfView: () => void;
   /** Remote peer's screen share stream, if they are sharing */
   remoteScreenShareStream: MediaStream | null;
+  /** Start an outgoing group call */
+  startGroupCall: (conversationId: string, groupId: string, memberDids: string[], memberNames: Record<string, string>, callType: CallType) => Promise<void>;
+  /** Join an existing group call (from incoming invite) */
+  joinGroupCall: (payload: GroupCallInvitePayload) => Promise<void>;
 }
 
 const CallContext = createContext<CallContextValue | null>(null);
@@ -152,6 +158,10 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
   const pendingCallIdRef = useRef<string | null>(null);
   // Timer to auto-end a call stuck in 'disconnected' / 'reconnecting' state
   const disconnectedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Group call mesh manager (separate from 1:1 CallManager)
+  const groupCallManagerRef = useRef<GroupCallManager | null>(null);
+  // Pending group ID while waiting for callRoomCreated response
+  const pendingGroupIdRef = useRef<string | null>(null);
 
   // Keep activeCallRef in sync with state for use in event handler closures
   useEffect(() => {
@@ -177,6 +187,11 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       callManagerRef.current.close();
       callManagerRef.current = null;
     }
+    if (groupCallManagerRef.current) {
+      groupCallManagerRef.current.close();
+      groupCallManagerRef.current = null;
+    }
+    pendingGroupIdRef.current = null;
     pendingCallIdRef.current = null;
     setActiveCall(null);
     setIsScreenSharing(false);
@@ -507,12 +522,19 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
       reason,
     };
 
-    const endPayload: CallEndPayload = {
-      callId: activeCall.callId,
-      senderDid: myDid,
-      reason,
-    };
-    sendSignal(activeCall.remoteDid, JSON.stringify(endPayload), 'call_end');
+    if (activeCall.isGroupCall) {
+      // Group call: leave the relay room instead of sending 1:1 call_end
+      if (activeCall.roomId && service) {
+        service.leaveCallRoom(activeCall.roomId);
+      }
+    } else {
+      const endPayload: CallEndPayload = {
+        callId: activeCall.callId,
+        senderDid: myDid,
+        reason,
+      };
+      sendSignal(activeCall.remoteDid, JSON.stringify(endPayload), 'call_end');
+    }
     playSound('call_leave');
     cleanup();
 
@@ -1244,6 +1266,172 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
           }
           break;
         }
+
+        // ── Group Call Relay Room Events ──────────────────────────────────
+
+        case 'callRoomCreated': {
+          const { roomId: createdRoomId, groupId } = event.payload;
+          if (groupId !== pendingGroupIdRef.current) break;
+
+          pendingGroupIdRef.current = null;
+          setActiveCall((prev) => prev ? { ...prev, roomId: createdRoomId, status: 'connecting' } : prev);
+          service.joinCallRoom(createdRoomId);
+
+          // Send group_call_invite to all members
+          const call = activeCallRef.current;
+          if (call?.isGroupCall && call.participants) {
+            const invitePayload: GroupCallInvitePayload = {
+              callId: call.callId,
+              roomId: createdRoomId,
+              groupId: groupId,
+              callType: call.callType,
+              senderDid: myDid,
+              senderDisplayName: myName,
+              conversationId: call.conversationId,
+            };
+            for (const [did] of call.participants) {
+              if (did !== myDid) {
+                sendSignal(did, JSON.stringify(invitePayload), 'group_call_invite');
+              }
+            }
+          }
+          break;
+        }
+
+        case 'callParticipantJoined': {
+          const { did } = event.payload;
+          if (did === myDid) break;
+          if (!currentCall?.isGroupCall) break;
+
+          const gcm = groupCallManagerRef.current;
+          if (!gcm || !currentCall.roomId) break;
+
+          // Add participant to active call
+          setActiveCall((prev) => {
+            if (!prev) return prev;
+            const updatedParticipants = new Map(prev.participants);
+            if (!updatedParticipants.has(did)) {
+              updatedParticipants.set(did, makeParticipant(did, did.slice(0, 16), null, true));
+            }
+            return { ...prev, status: 'connected', connectedAt: prev.connectedAt ?? Date.now(), participants: updatedParticipants };
+          });
+          clearRingTimeout();
+
+          // Create WebRTC offer for the new peer
+          gcm.createOfferForPeer(did, currentCall.callType === 'video').then((offerSdp) => {
+            if (currentCall.roomId) {
+              service.sendCallRoomSignal(currentCall.roomId, did, JSON.stringify({
+                type: 'offer',
+                sdp: offerSdp,
+              }));
+            }
+          }).catch((err) => {
+            if (__DEV__) dbg.warn('call', 'Failed to create offer for peer', err, SRC);
+          });
+          break;
+        }
+
+        case 'callParticipantLeft': {
+          const { did } = event.payload;
+          if (!currentCall?.isGroupCall) break;
+
+          groupCallManagerRef.current?.removePeer(did);
+          VoiceStreamBridge.removePeerStream(did);
+
+          setActiveCall((prev) => {
+            if (!prev) return prev;
+            const updatedParticipants = new Map(prev.participants);
+            updatedParticipants.delete(did);
+            return { ...prev, participants: updatedParticipants };
+          });
+          break;
+        }
+
+        case 'callSignalForward': {
+          const { fromDid, payload } = event.payload;
+          if (!currentCall?.isGroupCall) break;
+
+          const gcm = groupCallManagerRef.current;
+          if (!gcm) break;
+
+          try {
+            const signal = JSON.parse(payload);
+
+            // Forward plugin signals to VoiceStreamBridge
+            if (signal.type === 'plugin-signal') {
+              VoiceStreamBridge.emitSignal(signal.payload);
+              break;
+            }
+
+            if (signal.type === 'offer') {
+              gcm.acceptOfferFromPeer(fromDid, signal.sdp, currentCall.callType === 'video').then((answerSdp) => {
+                if (currentCall.roomId) {
+                  service.sendCallRoomSignal(currentCall.roomId, fromDid, JSON.stringify({
+                    type: 'answer',
+                    sdp: answerSdp,
+                  }));
+                }
+              }).catch((err) => {
+                if (__DEV__) dbg.warn('call', 'Failed to accept group offer', err, SRC);
+              });
+            } else if (signal.type === 'answer') {
+              gcm.completeHandshakeForPeer(fromDid, signal.sdp).catch((err) => {
+                if (__DEV__) dbg.warn('call', 'Failed to complete group handshake', err, SRC);
+              });
+            } else if (signal.type === 'ice-candidate') {
+              gcm.addIceCandidateForPeer(fromDid, signal.candidate).catch((err) => {
+                if (__DEV__) dbg.warn('call', 'Failed to add group ICE candidate', err, SRC);
+              });
+            }
+          } catch (err) {
+            if (__DEV__) dbg.warn('call', 'Failed to parse group signal', err, SRC);
+          }
+          break;
+        }
+
+        case 'groupCallInvite': {
+          const { payload } = event;
+          // If we're already in a call, ignore the invite
+          if (currentCall) break;
+
+          if (__DEV__) dbg.debug('call', 'Incoming group call invite', { callId: payload.callId, groupId: payload.groupId, senderDid: payload.senderDid }, SRC);
+
+          pendingCallIdRef.current = payload.callId;
+
+          const incomingParticipants = new Map<string, CallParticipant>();
+          incomingParticipants.set(myDid, makeParticipant(myDid, myName, null, payload.callType === 'voice'));
+          incomingParticipants.set(payload.senderDid, makeParticipant(payload.senderDid, payload.senderDisplayName, null, true));
+
+          const incomingCall: ActiveCall = {
+            callId: payload.callId,
+            conversationId: payload.conversationId,
+            callType: payload.callType,
+            direction: 'incoming',
+            status: 'incoming',
+            remoteDid: payload.senderDid,
+            remoteDisplayName: payload.senderDisplayName,
+            startedAt: Date.now(),
+            connectedAt: null,
+            localStream: null,
+            remoteStream: null,
+            isMuted: false,
+            isDeafened: false,
+            isCameraOff: payload.callType === 'voice',
+            participants: incomingParticipants,
+            selfViewVisible: true,
+            isGroupCall: true,
+            groupId: payload.groupId,
+            roomId: payload.roomId,
+          };
+
+          setActiveCall(incomingCall);
+
+          // Auto-end after ring timeout
+          ringTimeoutRef.current = setTimeout(() => {
+            cleanup();
+          }, RING_TIMEOUT_MS);
+          break;
+        }
       }
     });
 
@@ -1292,6 +1480,178 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     const sub = AppState.addEventListener('change', handleAppStateChange);
     return () => sub.remove();
   }, [endCallFromRef]);
+
+  // ── Group Call Manager Callbacks ─────────────────────────────────────────
+
+  const setupGroupManagerCallbacks = useCallback((manager: GroupCallManager, currentRoomId: string) => {
+    manager.onIceCandidate = (toDid, candidate) => {
+      service?.sendCallRoomSignal(currentRoomId, toDid, JSON.stringify({
+        type: 'ice-candidate',
+        candidate,
+      }));
+    };
+
+    manager.onRemoteStream = (did, stream) => {
+      if (__DEV__) dbg.info('call', 'Group remote stream received', { did }, SRC);
+      manager.setupPeerAudioAnalysis(did, stream);
+      VoiceStreamBridge.setPeerStream(did, stream);
+
+      // Update participant stream in active call
+      setActiveCall((prev) => {
+        if (!prev) return prev;
+        const updatedParticipants = new Map(prev.participants);
+        const existing = updatedParticipants.get(did);
+        if (existing) {
+          updatedParticipants.set(did, { ...existing, stream });
+        } else {
+          updatedParticipants.set(did, makeParticipant(did, did.slice(0, 16), stream, true));
+        }
+        return { ...prev, participants: updatedParticipants };
+      });
+    };
+
+    manager.onRemoteStreamRemoved = (did) => {
+      if (__DEV__) dbg.info('call', 'Group remote stream removed', { did }, SRC);
+      VoiceStreamBridge.removePeerStream(did);
+    };
+
+    manager.onConnectionStateChange = (did, state) => {
+      if (__DEV__) dbg.info('call', 'Group peer connection state changed', { did, state }, SRC);
+    };
+  }, [service, makeParticipant]);
+
+  // Wire up group manager callbacks when activeCall gets a roomId
+  useEffect(() => {
+    const call = activeCall;
+    if (call?.isGroupCall && call.roomId && groupCallManagerRef.current) {
+      setupGroupManagerCallbacks(groupCallManagerRef.current, call.roomId);
+    }
+  }, [activeCall?.roomId, activeCall?.isGroupCall, setupGroupManagerCallbacks]);
+
+  // ── Start Group Call ───────────────────────────────────────────────────
+
+  const startGroupCall = useCallback(async (
+    conversationId: string,
+    groupId: string,
+    memberDids: string[],
+    memberNames: Record<string, string>,
+    callType: CallType,
+  ) => {
+    if (activeCall) return;
+
+    const callId = `gcall-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const isVideo = callType === 'video';
+    const manager = new GroupCallManager();
+    groupCallManagerRef.current = manager;
+    pendingGroupIdRef.current = groupId;
+
+    try {
+      await manager.getUserMedia(isVideo);
+    } catch (err) {
+      if (__DEV__) dbg.error('call', 'Failed to get user media for group call', err, SRC);
+      groupCallManagerRef.current = null;
+      pendingGroupIdRef.current = null;
+      return;
+    }
+
+    const localStream = manager.getLocalStream();
+
+    // Set up VoiceStreamBridge
+    VoiceStreamBridge.setLocalStream(localStream);
+    VoiceStreamBridge.setActive(true);
+
+    // Build participants map
+    const participants = new Map<string, CallParticipant>();
+    participants.set(myDid, makeParticipant(myDid, myName, localStream, !isVideo));
+    for (const did of memberDids) {
+      if (did !== myDid) {
+        participants.set(did, makeParticipant(did, memberNames[did] || did.slice(0, 16), null, true));
+      }
+    }
+
+    // Set active call
+    const call: ActiveCall = {
+      callId,
+      conversationId,
+      callType,
+      direction: 'outgoing',
+      status: 'connecting',
+      remoteDid: memberDids[0] || '',
+      remoteDisplayName: memberNames[memberDids[0]] || 'Group',
+      startedAt: Date.now(),
+      connectedAt: null,
+      localStream,
+      remoteStream: null,
+      isMuted: false,
+      isDeafened: false,
+      isCameraOff: !isVideo,
+      participants,
+      selfViewVisible: true,
+      isGroupCall: true,
+      groupId,
+    };
+    setActiveCall(call);
+
+    // Create relay call room (groupId links the room to the group)
+    service?.createCallRoom(groupId);
+
+    // Ring timeout (45s -- if no one joins)
+    ringTimeoutRef.current = setTimeout(() => {
+      endCallFromRef('timeout');
+    }, RING_TIMEOUT_MS);
+  }, [activeCall, myDid, myName, makeParticipant, service, endCallFromRef]);
+
+  // ── Join Group Call (from incoming invite) ─────────────────────────────
+
+  const joinGroupCall = useCallback(async (payload: GroupCallInvitePayload) => {
+    if (activeCall) return;
+
+    const isVideo = payload.callType === 'video';
+    const manager = new GroupCallManager();
+    groupCallManagerRef.current = manager;
+
+    try {
+      await manager.getUserMedia(isVideo);
+    } catch (err) {
+      if (__DEV__) dbg.error('call', 'Failed to get user media for group call join', err, SRC);
+      groupCallManagerRef.current = null;
+      return;
+    }
+
+    const localStream = manager.getLocalStream();
+
+    VoiceStreamBridge.setLocalStream(localStream);
+    VoiceStreamBridge.setActive(true);
+
+    const participants = new Map<string, CallParticipant>();
+    participants.set(myDid, makeParticipant(myDid, myName, localStream, !isVideo));
+
+    const call: ActiveCall = {
+      callId: payload.callId,
+      conversationId: payload.conversationId,
+      callType: payload.callType,
+      direction: 'incoming',
+      status: 'connecting',
+      remoteDid: payload.senderDid,
+      remoteDisplayName: payload.senderDisplayName,
+      startedAt: Date.now(),
+      connectedAt: null,
+      localStream,
+      remoteStream: null,
+      isMuted: false,
+      isDeafened: false,
+      isCameraOff: !isVideo,
+      participants,
+      selfViewVisible: true,
+      isGroupCall: true,
+      groupId: payload.groupId,
+      roomId: payload.roomId,
+    };
+    setActiveCall(call);
+
+    // Join the existing relay room directly
+    service?.joinCallRoom(payload.roomId);
+  }, [activeCall, myDid, myName, makeParticipant, service]);
 
   // ── Sound on call connect / incoming ring ────────────────────────────────
 
@@ -1352,6 +1712,8 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     selfViewVisible,
     toggleSelfView,
     remoteScreenShareStream,
+    startGroupCall,
+    joinGroupCall,
   };
 
   return (
