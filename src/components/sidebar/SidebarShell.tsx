@@ -367,9 +367,18 @@ export function SidebarShell({
           <SidebarSearchResults />
         ) : children}
 
-        {/* Active call footer panel -- pushed to the bottom via margin-top:auto */}
+        {/* Active call footer panel -- pinned to the bottom of sidebar */}
         {activeCall && activeCall.status === 'connected' && (activeCall.isGroupCall || activeCall.conversationId !== activeConversationId) && onReturnToCall && onToggleMute && onToggleDeafen && onToggleCamera && onEndCall && (
-          <Box style={{ marginTop: 'auto' as any, marginHorizontal: -4 }}>
+          <Box style={{
+            marginTop: 'auto' as any,
+            marginHorizontal: -4,
+            ...(Platform.OS === 'web' ? {
+              position: 'sticky' as any,
+              bottom: 0,
+              zIndex: 20,
+              backgroundColor: theme.colors.background.raised,
+            } : {}),
+          }}>
             <SidebarCallPanel
               activeCall={activeCall}
               onReturnToCall={onReturnToCall}

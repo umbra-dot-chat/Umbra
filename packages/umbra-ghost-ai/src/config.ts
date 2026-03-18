@@ -119,7 +119,7 @@ export function loadConfig(opts: Record<string, string | undefined>): GhostConfi
     maxVideoFps: parseInt(process.env.MAX_VIDEO_FPS || '24', 10),
 
     // Wisp swarm defaults
-    wispsEnabled: (opts.wisps || process.env.WISPS_ENABLED || 'false') === 'true',
+    wispsEnabled: opts.wisps === 'true' || process.env.WISPS_ENABLED === 'true',
     wispCount: parseInt(opts.wispCount || process.env.WISP_COUNT || '12', 10),
     wispModel: opts.wispModel || process.env.WISP_MODEL || 'llama3.2:1b',
     wispDataDir: opts.wispDataDir || process.env.WISP_DATA_DIR || './wisp-data',

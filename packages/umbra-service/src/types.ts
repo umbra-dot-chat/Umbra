@@ -1406,8 +1406,8 @@ export type CommunityEvent =
   | { type: 'communityRoleDeleted'; roleId: string }
   | { type: 'inviteCreated'; communityId: string; inviteId: string }
   | { type: 'inviteDeleted'; communityId: string; inviteId: string }
-  | { type: 'voiceChannelJoined'; communityId: string; channelId: string; memberDid: string }
-  | { type: 'voiceChannelLeft'; communityId: string; channelId: string; memberDid: string }
+  | { type: 'voiceChannelJoined'; communityId: string; channelId: string; memberDid: string; roomId?: string }
+  | { type: 'voiceChannelLeft'; communityId: string; channelId: string; memberDid: string; roomId?: string }
   // File channel events
   | { type: 'fileUploaded'; channelId: string; fileId: string; senderDid: string }
   | { type: 'fileDeleted'; channelId: string; fileId: string }

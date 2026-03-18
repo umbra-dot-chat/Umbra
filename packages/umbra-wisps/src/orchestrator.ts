@@ -66,12 +66,26 @@ export class WispOrchestrator {
     const allNames = personas.map(p => p.name);
     for (const persona of personas) {
       await this.spawnWisp(persona, allNames);
+      // Stagger connections by 500ms to avoid relay flood
+      await sleep(500);
     }
     this._running = true;
+
+    // Pre-load WebRTC module (must be async in ESM)
+    try {
+      const mod = await (import('@roamhq/wrtc' as string) as Promise<any>);
+      const wrtcMod = mod.default || mod;
+      // Store on globalThis so voice-babble loadWrtc() can find it
+      (globalThis as any).__wrtcModule = wrtcMod;
+      console.log(`[Orchestrator] WebRTC module: loaded ✓ (RTCPeerConnection=${typeof wrtcMod?.RTCPeerConnection})`);
+    } catch (err) {
+      console.error(`[Orchestrator] WebRTC module: FAILED —`, (err as Error).message);
+    }
 
     // Initialize babble library for voice channel support
     this.babbleLibrary = new BabbleLibrary(join(import.meta.dirname, '..', 'babble'));
     await this.babbleLibrary.load();
+    console.log(`[Orchestrator] Babble library: ${Object.keys(this.babbleLibrary.getStats()).length} wisps loaded`);
 
     // Wire babble library into each wisp's call handler for natural audio
     for (const wisp of this.wisps.values()) {
@@ -110,7 +124,8 @@ export class WispOrchestrator {
       this.handleGroupResponse(wisp, senderDid, senderName, text, groupId);
     };
     wisp.onGroupCallInvite = (groupId, roomId, callId, callType) => {
-      void this.handleGroupCallInvite(wisp, groupId, roomId, callId, callType);
+      this.handleGroupCallInvite(wisp, groupId, roomId, callId, callType)
+        .catch(err => console.error(`[Orchestrator] ${wisp.name} call invite error:`, err));
     };
 
     // Route relay call room events to voice handlers.
@@ -118,25 +133,28 @@ export class WispOrchestrator {
     // NOT nested inside a 'message' envelope.
     wisp.relayClient.onMessage((msg) => {
       const handler = this.voiceHandlers.get(persona.name);
-      if (!handler) return;
 
       switch (msg.type) {
         case 'call_room_created':
-          handler.handleCallEvent({ type: 'callRoomCreated', payload: { roomId: msg.room_id, groupId: msg.group_id } });
+          if (handler) handler.handleCallEvent({ type: 'callRoomCreated', payload: { roomId: msg.room_id, groupId: msg.group_id } });
           break;
         case 'call_participant_joined':
-          handler.handleCallEvent({ type: 'callParticipantJoined', payload: { room_id: msg.room_id, did: msg.did } });
+          console.log(`[${persona.name}] participant joined room ${msg.room_id?.slice(0, 8)}`);
+          if (handler) handler.handleCallEvent({ type: 'callParticipantJoined', payload: { room_id: msg.room_id, did: msg.did } });
           break;
         case 'call_participant_left':
-          handler.handleCallEvent({ type: 'callParticipantLeft', payload: { room_id: msg.room_id, did: msg.did } });
+          if (handler) handler.handleCallEvent({ type: 'callParticipantLeft', payload: { room_id: msg.room_id, did: msg.did } });
           break;
         case 'call_signal_forward': {
-          // The relay sends payload as a string; VoiceBabbleHandler expects a `signal` object.
+          if (!handler) break;
           const rawPayload = msg.payload;
           const signal = typeof rawPayload === 'string' ? JSON.parse(rawPayload) : rawPayload;
           handler.handleCallEvent({ type: 'callSignalForward', payload: { room_id: msg.room_id, from_did: msg.from_did, signal } });
           break;
         }
+        case 'error':
+          console.warn(`[${persona.name}] [RELAY] error:`, JSON.stringify(msg).slice(0, 200));
+          break;
       }
     });
 
@@ -174,29 +192,35 @@ export class WispOrchestrator {
     this.dispatchGroupResponders(senderDid, senderName, text, groupId, allWisps);
   }
 
+  /** Max wisps that can be in voice channels simultaneously */
+  private static MAX_VOICE_PARTICIPANTS = 3;
+
   /**
    * Handle a group call invite for a wisp. Creates/reuses a VoiceBabbleHandler
    * and joins the existing room by roomId. Only voice calls are supported.
+   * Caps concurrent voice participants to MAX_VOICE_PARTICIPANTS.
    */
   private async handleGroupCallInvite(
     wisp: Wisp, groupId: string, roomId: string,
     callId: string, callType: 'voice' | 'video',
   ): Promise<void> {
+    console.log(`[Orchestrator] ${wisp.name} handleGroupCallInvite — room=${roomId.slice(0, 8)} type=${callType} babble=${!!this.babbleLibrary}`);
     if (!this.babbleLibrary) {
       console.warn(`[Orchestrator] Babble library not ready, ${wisp.name} cannot join group call`);
       return;
     }
 
     // Only support voice for now (wisps have no video pipeline)
-    if (callType !== 'voice') {
-      console.log(`[Orchestrator] ${wisp.name} skipping ${callType} group call (voice only)`);
-      return;
-    }
+    if (callType !== 'voice') return;
 
     // Avoid duplicate joins -- if handler already in this room, skip
     const existing = this.voiceHandlers.get(wisp.name);
-    if (existing?.inChannel && existing.currentChannelId === groupId) {
-      console.log(`[Orchestrator] ${wisp.name} already in voice for group ${groupId.slice(0, 12)}...`);
+    if (existing?.inChannel && existing.currentChannelId === groupId) return;
+
+    // Cap concurrent voice participants — count active voice handlers
+    const activeVoice = Array.from(this.voiceHandlers.values()).filter(h => h.inChannel).length;
+    if (activeVoice >= WispOrchestrator.MAX_VOICE_PARTICIPANTS) {
+      console.log(`[Orchestrator] ${wisp.name} skipping voice — ${activeVoice}/${WispOrchestrator.MAX_VOICE_PARTICIPANTS} slots full`);
       return;
     }
 

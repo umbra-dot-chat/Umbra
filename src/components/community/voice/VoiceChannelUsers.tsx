@@ -27,6 +27,8 @@ export interface VoiceChannelUsersProps {
   myDisplayName?: string;
   /** Set of DIDs currently speaking (audio above threshold). */
   speakingDids?: Set<string>;
+  /** Maximum visible participants before showing "+N more" (default 5). */
+  maxVisible?: number;
 }
 
 /** Animated sound bars — replaces static AudioWaveIcon when speaking. */
@@ -90,6 +92,7 @@ export function VoiceChannelUsers({
   myDid,
   myDisplayName,
   speakingDids,
+  maxVisible = 5,
 }: VoiceChannelUsersProps) {
   if (__DEV__) dbg.trackRender('VoiceChannelUsers');
   const { theme } = useTheme();
@@ -117,9 +120,13 @@ export function VoiceChannelUsers({
 
   const speakingColor = themeColors.status.success;
 
+  // Limit visible participants and compute overflow count
+  const overflow = sorted.length > maxVisible ? sorted.length - maxVisible : 0;
+  const visibleParticipants = overflow > 0 ? sorted.slice(0, maxVisible) : sorted;
+
   return (
     <Box style={{ paddingLeft: 36, paddingRight: 8, paddingBottom: 2 }}>
-      {sorted.map((did) => {
+      {visibleParticipants.map((did) => {
         const isMe = did === myDid;
         const member = memberMap.get(did);
         const name = isMe
@@ -179,6 +186,24 @@ export function VoiceChannelUsers({
           </Box>
         );
       })}
+      {overflow > 0 && (
+        <Box
+          style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 8,
+            paddingVertical: 3,
+            paddingLeft: 4,
+          }}
+        >
+          <Text
+            size="xs"
+            style={{ color: themeColors.text.muted }}
+          >
+            +{overflow} more
+          </Text>
+        </Box>
+      )}
     </Box>
   );
 }

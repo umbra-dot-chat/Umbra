@@ -227,6 +227,7 @@ export class GhostBot {
         break;
 
       case 'chat_message':
+      case 'encrypted_message':
         this.handleChatMessageEnvelope(payload, fromDid);
         break;
 

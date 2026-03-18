@@ -628,9 +628,25 @@ fn handle_resolve_invite(state: &RelayState, requester_did: &str, code: &str) {
 
 // ── Call Room Handlers ────────────────────────────────────────────────────────
 
-/// Create a new call room for group calling.
+/// Create (or join) a call room for group calling.
+/// Idempotent by group_id: if a room already exists for the group, the creator
+/// is added as a participant and existing members are notified.
 fn handle_create_call_room(state: &RelayState, creator_did: &str, group_id: &str) {
-    let room_id = state.create_call_room(group_id, creator_did);
+    let (room_id, existing_participants) = state.create_call_room(group_id, creator_did);
+
+    // If we joined an existing room, notify current participants about the new joiner
+    // (mirrors the notification logic in handle_join_call_room).
+    for participant_did in &existing_participants {
+        if participant_did != creator_did {
+            state.send_to_client(
+                participant_did,
+                ServerMessage::CallParticipantJoined {
+                    room_id: room_id.to_string(),
+                    did: creator_did.to_string(),
+                },
+            );
+        }
+    }
 
     state.send_to_client(
         creator_did,

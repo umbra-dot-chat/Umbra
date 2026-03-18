@@ -524,9 +524,40 @@ impl RelayState {
 
     // ── Call Room Management ──────────────────────────────────────────────
 
-    /// Create a new call room for group calling.
-    /// Returns the room ID.
-    pub fn create_call_room(&self, group_id: &str, creator_did: &str) -> String {
+    /// Create or join a call room for a given group_id (idempotent by group).
+    /// Returns `(room_id, existing_participants_before_join)`.
+    /// If a room already exists for this group_id, the caller is added as a
+    /// participant (if not already present) and the pre-existing participant
+    /// list is returned. For a brand-new room the vec is empty.
+    pub fn create_call_room(&self, group_id: &str, creator_did: &str) -> (String, Vec<String>) {
+        // Check if a room already exists for this group_id
+        for mut entry in self.call_rooms.iter_mut() {
+            if entry.group_id == group_id {
+                let room_id = entry.room_id.clone();
+                let existing: Vec<String> = entry.participants.clone();
+
+                if !entry.participants.contains(&creator_did.to_string()) {
+                    entry.participants.push(creator_did.to_string());
+                    tracing::info!(
+                        room_id = room_id.as_str(),
+                        group_id = group_id,
+                        joiner = creator_did,
+                        "Joined existing call room via create (idempotent)"
+                    );
+                } else {
+                    tracing::info!(
+                        room_id = room_id.as_str(),
+                        group_id = group_id,
+                        did = creator_did,
+                        "Already in call room, returning existing"
+                    );
+                }
+
+                return (room_id, existing);
+            }
+        }
+
+        // No existing room — create a new one
         let room_id = Uuid::new_v4().to_string();
 
         let room = CallRoom {
@@ -545,7 +576,7 @@ impl RelayState {
             "Created call room"
         );
         self.call_rooms.insert(room_id.clone(), room);
-        room_id
+        (room_id, vec![])
     }
 
     /// Join an existing call room. Returns the list of existing participants

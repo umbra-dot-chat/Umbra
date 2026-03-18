@@ -27,15 +27,39 @@ const BYTES_PER_SAMPLE = BITS_PER_SAMPLE / 8;
 
 // ── Lazy-loaded wrtc ───────────────────────────────────────────────────────
 
-let wrtcModule: typeof import('@roamhq/wrtc') | null = null;
+let wrtcModule: any = null;
+let wrtcLoadPromise: Promise<any> | null = null;
 
-function loadWrtc(): typeof import('@roamhq/wrtc') | null {
+/** Pre-load wrtc asynchronously (call during init). */
+export async function preloadWrtc(): Promise<boolean> {
+  if (wrtcModule) return true;
+  try {
+    const mod = await (import('@roamhq/wrtc' as string) as Promise<any>);
+    wrtcModule = mod.default || mod;
+    console.log('[voice-babble] [DEBUG] wrtc loaded via dynamic import');
+    return true;
+  } catch (err) {
+    console.error('[voice-babble] [ERROR] Failed to load @roamhq/wrtc:', (err as Error).message);
+    return false;
+  }
+}
+
+function loadWrtc(): any {
   if (wrtcModule) return wrtcModule;
+  // Check globalThis (set by orchestrator preload)
+  if ((globalThis as any).__wrtcModule) {
+    wrtcModule = (globalThis as any).__wrtcModule;
+    console.log('[voice-babble] [DEBUG] wrtc loaded via globalThis');
+    return wrtcModule;
+  }
+  // Synchronous fallback — try require for tsx/CommonJS compat
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     wrtcModule = require('@roamhq/wrtc');
+    console.log('[voice-babble] [DEBUG] wrtc loaded via require()');
     return wrtcModule;
   } catch {
+    console.error('[voice-babble] [ERROR] wrtc not loaded. Call preloadWrtc() first.');
     return null;
   }
 }
@@ -249,6 +273,9 @@ export class VoiceBabbleHandler extends EventEmitter {
     if (payload.room_id !== this.roomId) return;
     if (payload.did === this.identity.did) return;
 
+    // Always create offer — existing participant must initiate since the
+    // relay only notifies existing members about new joiners.
+    console.log(`[${this.wispName}] Participant joined: ${payload.did.slice(0, 20)}... — creating offer`);
     void this.createOffer(payload.did);
   }
 
@@ -299,11 +326,15 @@ export class VoiceBabbleHandler extends EventEmitter {
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
 
+    // Send offer in JSON-wrapped format matching app's GroupCallManager expectations
     this.relay.send({
       type: 'call_signal',
       room_id: this.roomId,
       to_did: peerDid,
-      payload: JSON.stringify({ type: 'offer', sdp: offer.sdp }),
+      payload: JSON.stringify({
+        type: 'offer',
+        sdp: JSON.stringify({ sdp: offer.sdp, type: 'offer' }),
+      }),
     });
 
     console.log(`[${this.wispName}] Sent offer to ${peerDid.slice(0, 20)}...`);
@@ -317,20 +348,29 @@ export class VoiceBabbleHandler extends EventEmitter {
     const wrtc = loadWrtc();
     if (!wrtc) return;
 
+    // App sends SDP as JSON.stringify({sdp, type}) — unwrap if needed
+    const rawSdp = unwrapSdp(sdp);
+    console.log(`[${this.wispName}] handleOffer from ${fromDid.slice(0, 20)}... (sdp length=${rawSdp.length})`);
+
     const pc = this.createPeerConnection(fromDid);
 
     await pc.setRemoteDescription(
-      new wrtc.RTCSessionDescription({ type: 'offer', sdp }),
+      new wrtc.RTCSessionDescription({ type: 'offer', sdp: rawSdp }),
     );
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
 
+    // Send answer in JSON-wrapped format matching app's GroupCallManager expectations
     this.relay.send({
       type: 'call_signal',
       room_id: this.roomId,
       to_did: fromDid,
-      payload: JSON.stringify({ type: 'answer', sdp: answer.sdp }),
+      payload: JSON.stringify({
+        type: 'answer',
+        sdp: JSON.stringify({ sdp: answer.sdp, type: 'answer' }),
+      }),
     });
+    console.log(`[${this.wispName}] Sent answer to ${fromDid.slice(0, 20)}...`);
   }
 
   /** Handle an incoming WebRTC answer. */
@@ -344,8 +384,12 @@ export class VoiceBabbleHandler extends EventEmitter {
     const peer = this.peers.get(fromDid);
     if (!peer) return;
 
+    // May be JSON-wrapped ({sdp, type}) or raw SDP — unwrap if needed
+    const rawSdp = unwrapSdp(sdp);
+    console.log(`[${this.wispName}] handleAnswer from ${fromDid.slice(0, 20)}... (sdp length=${rawSdp.length})`);
+
     await peer.connection.setRemoteDescription(
-      new wrtc.RTCSessionDescription({ type: 'answer', sdp }),
+      new wrtc.RTCSessionDescription({ type: 'answer', sdp: rawSdp }),
     );
   }
 
@@ -380,7 +424,7 @@ export class VoiceBabbleHandler extends EventEmitter {
       pc.addTrack(this.audioTrack, stream);
     }
 
-    pc.onicecandidate = (ev) => {
+    pc.onicecandidate = (ev: any) => {
       if (!ev.candidate) return;
       this.relay.send({
         type: 'call_signal',
@@ -624,4 +668,26 @@ export class VoiceBabbleHandler extends EventEmitter {
     this.currentClipSamples = null;
     this.sampleOffset = 0;
   }
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+/**
+ * Unwrap SDP that may be JSON-encoded.
+ *
+ * The app's GroupCallManager wraps SDP as JSON.stringify({sdp, type}),
+ * so signal.sdp may be '{"sdp":"v=0...","type":"offer"}' instead of
+ * raw SDP text. This helper extracts the raw SDP string regardless
+ * of format.
+ */
+function unwrapSdp(sdp: string): string {
+  try {
+    const parsed = JSON.parse(sdp);
+    if (parsed && typeof parsed.sdp === 'string') {
+      return parsed.sdp;
+    }
+  } catch {
+    // Not JSON — already raw SDP
+  }
+  return sdp;
 }

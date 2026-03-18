@@ -289,13 +289,16 @@ export class Wisp {
 
   private handleRelayMessage(msg: ServerMessage): void {
     if (msg.type === 'message') {
-      this.handleIncomingEnvelope(msg.payload, msg.from_did);
+      this.handleIncomingEnvelope(msg.payload, msg.from_did, false);
     } else if (msg.type === 'offline_messages') {
-      for (const m of msg.messages) this.handleIncomingEnvelope(m.payload, m.from_did);
+      // Process offline messages but skip LLM responses — they're stale.
+      // Only process friend requests/responses and group invites.
+      console.log(`[${this.persona.name}] Processing ${msg.messages.length} offline messages (no LLM responses)`);
+      for (const m of msg.messages) this.handleIncomingEnvelope(m.payload, m.from_did, true);
     }
   }
 
-  private handleIncomingEnvelope(payloadStr: string, fromDid?: string): void {
+  private handleIncomingEnvelope(payloadStr: string, fromDid?: string, isOffline = false): void {
     try {
       const envelope = JSON.parse(payloadStr);
       switch (envelope.envelope) {
@@ -307,33 +310,35 @@ export class Wisp {
           break;
         case 'chat_message':
         case 'encrypted_message':
-          void this.handleEncryptedMessage(envelope.payload);
+          // Skip LLM responses for offline/stale messages
+          if (!isOffline) void this.handleEncryptedMessage(envelope.payload);
           break;
         case 'group_invite':
           this.handleGroupInvite(envelope.payload);
           break;
         case 'group_message':
-          this.handleGroupMessage(envelope.payload);
+          // Skip LLM responses for offline/stale group messages
+          if (!isOffline) this.handleGroupMessage(envelope.payload);
           break;
         case 'group_call_invite':
-          this.handleGroupCallInvite(envelope.payload);
+          if (!isOffline) this.handleGroupCallInvite(envelope.payload);
           break;
         case 'call_offer':
-          void this.callHandler.handleOffer(envelope.payload);
+          if (!isOffline) void this.callHandler.handleOffer(envelope.payload);
           break;
         case 'call_answer':
-          break; // Wisps don't initiate calls yet
+          break;
         case 'call_ice_candidate':
-          this.callHandler.handleIceCandidate(envelope.payload);
+          if (!isOffline) this.callHandler.handleIceCandidate(envelope.payload);
           break;
         case 'call_end':
-          this.callHandler.handleEnd(envelope.payload);
+          if (!isOffline) this.callHandler.handleEnd(envelope.payload);
           break;
         case 'presence_online':
           if (fromDid) this.sendPresenceAck(fromDid);
           break;
         case 'presence_ack':
-          break; // No action needed, client already marks sender online
+          break;
       }
     } catch { /* ignore parse errors */ }
   }
@@ -395,6 +400,9 @@ export class Wisp {
       );
       console.log(`[${this.persona.name}] From ${friend.displayName}: ${plaintext.slice(0, 50)}...`);
       this.onUserMessage?.(senderDid, messageId, payload.conversationId);
+      // Only auto-respond to real users, not other wisps (conversation loop handles wisp-to-wisp)
+      const isWisp = this.allPersonaNames.includes(friend.displayName);
+      if (isWisp) return;
       // Generate LLM response after natural delay (1-3s)
       const delay = 1000 + Math.random() * 2000;
       setTimeout(async () => {

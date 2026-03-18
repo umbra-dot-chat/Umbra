@@ -31,11 +31,27 @@ export interface ActiveWispCall {
   videoInterval: ReturnType<typeof setInterval> | null;
 }
 
-// Lazy-loaded wrtc module (CommonJS)
-let wrtcModule: typeof import('@roamhq/wrtc') | null = null;
+// Lazy-loaded wrtc module — shared with voice-babble.ts
+let wrtcModule: any = null;
 
-function loadWrtc(): typeof import('@roamhq/wrtc') | null {
+async function loadWrtcAsync(): Promise<any> {
   if (wrtcModule) return wrtcModule;
+  try {
+    const mod = await (import('@roamhq/wrtc' as string) as Promise<any>);
+    wrtcModule = mod.default || mod;
+    return wrtcModule;
+  } catch {
+    return null;
+  }
+}
+
+function loadWrtc(): any {
+  if (wrtcModule) return wrtcModule;
+  // Check globalThis (set by orchestrator preload)
+  if ((globalThis as any).__wrtcModule) {
+    wrtcModule = (globalThis as any).__wrtcModule;
+    return wrtcModule;
+  }
   try {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     wrtcModule = require('@roamhq/wrtc');
@@ -143,7 +159,7 @@ export class WispCallHandler {
       peer.addTrack(stream.getVideoTracks()[0], stream);
     }
 
-    peer.onicecandidate = (ev) => {
+    peer.onicecandidate = (ev: any) => {
       if (!ev.candidate) return;
       this.relay.sendEnvelope(payload.senderDid, {
         envelope: 'call_ice_candidate', version: 1,

@@ -206,23 +206,30 @@ export async function handleMessage(
   let responseText: string;
 
   if (llm.chatStream) {
-    // Streaming mode: send EVERY chunk as a regular chat_message with the
-    // same messageId. The client handles dedup — first one creates the
-    // message, subsequent ones update it in-place via messageContentUpdated.
+    // Streaming mode: send first chunk as chat_message (creates the message),
+    // subsequent chunks as chat_message_update (updates content in-place).
     const messageId = uuid();
     let lastSentText = '';
+    let chunkCount = 0;
 
     responseText = await llm.chatStream(messages, (accumulated: string) => {
       if (accumulated !== lastSentText) {
-        sendEncryptedMessage(messageId, accumulated, identity, relay, friend);
+        chunkCount++;
+        if (chunkCount === 1) {
+          // First chunk: create the message via chat_message envelope
+          sendEncryptedMessage(messageId, accumulated, identity, relay, friend);
+        } else {
+          // Subsequent chunks: update via chat_message_update envelope
+          sendEncryptedUpdate(messageId, accumulated, identity, relay, friend);
+        }
         lastSentText = accumulated;
-        log.debug(`[STREAM] chunk sent (${accumulated.length} chars)`);
+        log.debug(`[STREAM] chunk #${chunkCount} sent (${accumulated.length} chars)`);
       }
     });
 
-    // Ensure the final complete response is sent
+    // Ensure the final complete response is sent as an update
     if (responseText && responseText !== lastSentText) {
-      sendEncryptedMessage(messageId, responseText, identity, relay, friend);
+      sendEncryptedUpdate(messageId, responseText, identity, relay, friend);
     }
 
     // Parse and strip tutor score from the final response

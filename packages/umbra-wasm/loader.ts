@@ -1580,7 +1580,9 @@ function buildModule(wasmPkg: any): UmbraWasmModule {
     umbra_wasm_group_mark_read: (json: string) =>
       wasmPkg.umbra_wasm_group_mark_read(json),
     umbra_wasm_group_read_receipts: (json: string) =>
-      wasmPkg.umbra_wasm_group_read_receipts(json),
+      typeof wasmPkg.umbra_wasm_group_read_receipts === 'function'
+        ? wasmPkg.umbra_wasm_group_read_receipts(json)
+        : JSON.stringify([]),
 
     // ── Community — Files (real WASM) ──────────────────────────────
     umbra_wasm_community_upload_file: (json: string) =>

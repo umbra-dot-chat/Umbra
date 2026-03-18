@@ -351,7 +351,7 @@ const SYNTH_THEMES: Record<string, Record<SoundName, SynthRecipe>> = {
 // We ship two CC0 packs: "aurora" (ethereal) and "mechanical" (tactile).
 // ─────────────────────────────────────────────────────────────────────────────
 
-const AUDIO_PACK_BASE = '/assets/sounds';
+const AUDIO_PACK_BASE = '/sounds';
 
 function audioPackUrls(packId: string): Record<SoundName, string> {
   const map: Record<string, string> = {};

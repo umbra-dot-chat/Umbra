@@ -32,6 +32,7 @@ yarn-error.*
 
 # local env files
 .env*.local
+.env
 
 # Deployment credentials (NEVER COMMIT)
 .deploy-credentials

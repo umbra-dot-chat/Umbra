@@ -1439,18 +1439,12 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
               senderDisplayName: myName,
               conversationId: call.conversationId,
             };
-            // Collect target DIDs: online relay DIDs + group member DIDs (fallback).
-            // Online relay DIDs come from incoming `from_did` fields — always correct.
-            // Group member DIDs may be encryption-derived (wrong for WASM users) but
-            // work for wisps since they use the same key everywhere.
+            // Use online relay DIDs only — these come from incoming `from_did` fields
+            // and are always the correct relay-registered DIDs. Do NOT include
+            // encryption-derived member DIDs from getMembers() as they may differ
+            // from relay DIDs, causing duplicate participants and failed signaling.
             const onlineDids = getOnlineRelayDids();
             const targetDids = new Set(onlineDids);
-            // Also include group member DIDs from the participants map as fallback
-            if (call.participants) {
-              for (const did of call.participants.keys()) {
-                if (did !== myDid) targetDids.add(did);
-              }
-            }
             if (__DEV__) dbg.info('call', 'Sending group_call_invite', {
               roomId: createdRoomId, groupId,
               onlineCount: onlineDids.size,
@@ -1762,14 +1756,13 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
     VoiceStreamBridge.setLocalStream(localStream);
     VoiceStreamBridge.setActive(true);
 
-    // Build participants map
+    // Build participants map — only add self initially.
+    // Other participants will be added via callParticipantJoined relay events
+    // with their correct relay DIDs. Pre-populating with memberDids causes
+    // duplicates because getMembers() returns encryption-derived DIDs that
+    // differ from the relay-registered DIDs peers actually connect with.
     const participants = new Map<string, CallParticipant>();
     participants.set(myDid, makeParticipant(myDid, myName, localStream, !isVideo));
-    for (const did of memberDids) {
-      if (did !== myDid) {
-        participants.set(did, makeParticipant(did, memberNames[did] || did.slice(0, 16), null, true));
-      }
-    }
 
     // Set active call
     const call: ActiveCall = {
@@ -1877,6 +1870,12 @@ export function CallProvider({ children }: { children: React.ReactNode }) {
           .catch((err) => { if (__DEV__) dbg.warn('call', 'Failed to send call-started event', err, SRC); });
       }
     } else if (status === 'incoming' && prevStatus !== 'incoming') {
+      playSound('call_ringing');
+    } else if (
+      (status === 'outgoing' && prevStatus !== 'outgoing') ||
+      (status === 'connecting' && prevStatus !== 'connecting')
+    ) {
+      // Play ringing sound for outgoing calls (1:1 and group)
       playSound('call_ringing');
     }
   }, [activeCall?.status, activeCall, service, playSound]);

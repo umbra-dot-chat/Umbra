@@ -85,6 +85,9 @@ export function VoiceChannelProvider({ children }: { children: React.ReactNode }
   // Voice participants map for sidebar display (channelId → DIDs)
   const [voiceParticipants, setVoiceParticipants] = useState<Map<string, Set<string>>>(new Map());
 
+  // Voice room IDs map (channelId → roomId) — tracks active relay rooms per channel
+  const [voiceRoomIds, setVoiceRoomIds] = useState<Map<string, string>>(new Map());
+
   // Speaking detection
   const [speakingDids, setSpeakingDids] = useState<Set<string>>(new Set());
   const speakingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -125,7 +128,39 @@ export function VoiceChannelProvider({ children }: { children: React.ReactNode }
           const { roomId: createdRoomId, groupId } = event.payload;
           if (groupId === pendingChannelIdRef.current) {
             setRoomId(createdRoomId);
-            service.joinCallRoom(createdRoomId);
+            // NOTE: Do NOT call service.joinCallRoom() here — the relay's
+            // idempotent create_call_room already added us as a participant.
+            // Calling joinCallRoom would cause duplicate CallParticipantJoined
+            // notifications, triggering WebRTC glare with existing participants.
+
+            // Store roomId for this channel so late-joiners can reuse it
+            setVoiceRoomIds((prev) => {
+              const next = new Map(prev);
+              next.set(groupId, createdRoomId);
+              return next;
+            });
+
+            // Broadcast join event NOW that roomId is available
+            const channelId = groupId;
+            const communityId = activeCommunityId;
+            if (communityId) {
+              const relayWs = service.getRelayWs();
+              service.broadcastCommunityEvent(
+                communityId,
+                { type: 'voiceChannelJoined', communityId, channelId, memberDid: myDid, roomId: createdRoomId },
+                myDid,
+                relayWs,
+              ).catch((err) => { if (__DEV__) dbg.warn('call', 'Failed to broadcast join', err, SRC); });
+
+              service.dispatchCommunityEvent({
+                type: 'voiceChannelJoined',
+                communityId,
+                channelId,
+                memberDid: myDid,
+                roomId: createdRoomId,
+              });
+            }
+
             pendingChannelIdRef.current = null;
           }
           break;
@@ -136,7 +171,7 @@ export function VoiceChannelProvider({ children }: { children: React.ReactNode }
           if (did === myDid) break; // Skip self
           setParticipants((prev) => (prev.includes(did) ? prev : [...prev, did]));
 
-          // Set up WebRTC connection with the new peer
+          // Set up WebRTC connection — always create offer as existing participant
           const manager = groupCallManagerRef.current;
           if (manager && roomId) {
             manager.createOfferForPeer(did, false).then((offerSdp) => {
@@ -217,6 +252,14 @@ export function VoiceChannelProvider({ children }: { children: React.ReactNode }
           next.set(event.channelId, channelSet);
           return next;
         });
+        // Store the roomId so late-joiners can use it
+        if (event.roomId) {
+          setVoiceRoomIds((prev) => {
+            const next = new Map(prev);
+            next.set(event.channelId, event.roomId!);
+            return next;
+          });
+        }
         // Play sound when someone else joins (not self — self plays in joinVoiceChannel)
         if (event.memberDid !== myDid) {
           playSound('user_join_voice');
@@ -232,6 +275,18 @@ export function VoiceChannelProvider({ children }: { children: React.ReactNode }
             }
           }
           return next;
+        });
+        // If last participant left, remove the roomId mapping
+        setVoiceParticipants((current) => {
+          const channelSet = current.get(event.channelId);
+          if (!channelSet || channelSet.size === 0) {
+            setVoiceRoomIds((prev) => {
+              const next = new Map(prev);
+              next.delete(event.channelId);
+              return next;
+            });
+          }
+          return current; // No change to voiceParticipants itself
         });
         // Play sound when someone else leaves (not self — self plays in leaveVoiceChannel)
         if (event.memberDid !== myDid) {
@@ -373,9 +428,41 @@ export function VoiceChannelProvider({ children }: { children: React.ReactNode }
       }
     });
 
-    // Create call room on relay (uses channelId as group_id)
-    // The `callRoomCreated` event handler will store the roomId and join
-    service.createCallRoom(channelId);
+    // Check if there's already a known roomId for this channel (someone else is in it)
+    const existingRoomId = voiceRoomIds.get(channelId);
+    if (existingRoomId) {
+      // Join existing room directly instead of creating a new one
+      setRoomId(existingRoomId);
+      service.joinCallRoom(existingRoomId);
+
+      // Store in voiceRoomIds (may already be there, but ensures consistency)
+      setVoiceRoomIds((prev) => {
+        const next = new Map(prev);
+        next.set(channelId, existingRoomId);
+        return next;
+      });
+
+      // Broadcast join event immediately since we already have roomId
+      const relayWs = service.getRelayWs();
+      service.broadcastCommunityEvent(
+        communityId,
+        { type: 'voiceChannelJoined', communityId, channelId, memberDid: myDid, roomId: existingRoomId },
+        myDid,
+        relayWs,
+      ).catch((err) => { if (__DEV__) dbg.warn('call', 'Failed to broadcast join', err, SRC); });
+
+      service.dispatchCommunityEvent({
+        type: 'voiceChannelJoined',
+        communityId,
+        channelId,
+        memberDid: myDid,
+        roomId: existingRoomId,
+      });
+    } else {
+      // Create call room on relay (uses channelId as group_id)
+      // The `callRoomCreated` event handler will store the roomId, join, and broadcast
+      service.createCallRoom(channelId);
+    }
 
     setIsConnecting(false);
     setIsMuted(false);
@@ -393,25 +480,8 @@ export function VoiceChannelProvider({ children }: { children: React.ReactNode }
       return next;
     });
 
-    // Broadcast join event to other community members
-    const relayWs = service.getRelayWs();
-    service.broadcastCommunityEvent(
-      communityId,
-      { type: 'voiceChannelJoined', communityId, channelId, memberDid: myDid },
-      myDid,
-      relayWs,
-    ).catch((err) => { if (__DEV__) dbg.warn('call', 'Failed to broadcast join', err, SRC); });
-
-    // Also dispatch locally for this client's UI
-    service.dispatchCommunityEvent({
-      type: 'voiceChannelJoined',
-      communityId,
-      channelId,
-      memberDid: myDid,
-    });
-
     playSound('call_join');
-  }, [service, myDid, activeChannelId, startSpeakingDetection, playSound]);
+  }, [service, myDid, activeChannelId, startSpeakingDetection, playSound, voiceRoomIds]);
 
   // ── Leave voice channel (internal, no dependency on leaveVoiceChannel) ─────
 
@@ -451,12 +521,12 @@ export function VoiceChannelProvider({ children }: { children: React.ReactNode }
       });
     }
 
-    // Broadcast leave event
+    // Broadcast leave event (include roomId so other clients can track room lifecycle)
     if (currentCommunityId && currentChannelId) {
       const relayWs = service.getRelayWs();
       service.broadcastCommunityEvent(
         currentCommunityId,
-        { type: 'voiceChannelLeft', communityId: currentCommunityId, channelId: currentChannelId, memberDid: myDid },
+        { type: 'voiceChannelLeft', communityId: currentCommunityId, channelId: currentChannelId, memberDid: myDid, roomId: currentRoomId ?? undefined },
         myDid,
         relayWs,
       ).catch((err) => { if (__DEV__) dbg.warn('call', 'Failed to broadcast leave', err, SRC); });
@@ -466,6 +536,7 @@ export function VoiceChannelProvider({ children }: { children: React.ReactNode }
         communityId: currentCommunityId,
         channelId: currentChannelId,
         memberDid: myDid,
+        roomId: currentRoomId ?? undefined,
       });
     }
 

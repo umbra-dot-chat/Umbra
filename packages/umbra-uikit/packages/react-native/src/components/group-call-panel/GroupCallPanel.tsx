@@ -214,12 +214,41 @@ export const GroupCallPanel = forwardRef<View, GroupCallPanelProps>(
       return layout;
     }, [layout, participants, screenShareDid, callType]);
 
-    // Visible participants (capped)
+    // Sort participants: local user → speaking → video on → screen sharing → alphabetical
+    const sortedParticipants = useMemo(() => {
+      const sorted = [...participants].sort((a, b) => {
+        // 1. Local user always first
+        const aLocal = a.did === localDid ? 1 : 0;
+        const bLocal = b.did === localDid ? 1 : 0;
+        if (aLocal !== bLocal) return bLocal - aLocal;
+
+        // 2. Currently speaking
+        const aSpeaking = a.isSpeaking ? 1 : 0;
+        const bSpeaking = b.isSpeaking ? 1 : 0;
+        if (aSpeaking !== bSpeaking) return bSpeaking - aSpeaking;
+
+        // 3. Video on (camera not off AND has a stream)
+        const aVideo = (!a.isCameraOff && a.stream) ? 1 : 0;
+        const bVideo = (!b.isCameraOff && b.stream) ? 1 : 0;
+        if (aVideo !== bVideo) return bVideo - aVideo;
+
+        // 4. Screen sharing
+        const aScreen = a.isScreenSharing ? 1 : 0;
+        const bScreen = b.isScreenSharing ? 1 : 0;
+        if (aScreen !== bScreen) return bScreen - aScreen;
+
+        // 5. Alphabetical by displayName
+        return (a.displayName || '').localeCompare(b.displayName || '');
+      });
+      return sorted;
+    }, [participants, localDid]);
+
+    // Visible participants (capped, from sorted list)
     const visibleParticipants = useMemo(
-      () => participants.slice(0, maxVisible),
-      [participants, maxVisible],
+      () => sortedParticipants.slice(0, maxVisible),
+      [sortedParticipants, maxVisible],
     );
-    const overflowCount = participants.length - maxVisible;
+    const overflowCount = sortedParticipants.length - maxVisible;
 
     // ─── Handle participant tap ─────────────────────────────────────────
     const handleParticipantTap = useCallback(

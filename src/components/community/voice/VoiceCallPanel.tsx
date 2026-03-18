@@ -59,18 +59,27 @@ export function VoiceCallPanel({
   }, [members]);
 
   // Get all participant DIDs in this voice channel
+  // Sorted: local user → speaking → alphabetical (no video/screen share in voice channels)
   const channelParticipantDids = useMemo(() => {
     if (!activeChannelId) return [];
     const dids = voiceParticipants.get(activeChannelId);
     if (!dids) return [myDid];
     return Array.from(dids).sort((a, b) => {
+      // 1. Local user always first
       if (a === myDid) return -1;
       if (b === myDid) return 1;
+
+      // 2. Currently speaking
+      const aSpeaking = speakingDids.has(a) ? 1 : 0;
+      const bSpeaking = speakingDids.has(b) ? 1 : 0;
+      if (aSpeaking !== bSpeaking) return bSpeaking - aSpeaking;
+
+      // 3. Alphabetical by display name
       const nameA = memberMap.get(a)?.name ?? a;
       const nameB = memberMap.get(b)?.name ?? b;
       return nameA.localeCompare(nameB);
     });
-  }, [activeChannelId, voiceParticipants, myDid, memberMap]);
+  }, [activeChannelId, voiceParticipants, myDid, memberMap, speakingDids]);
 
   // Map voice channel participants to GroupCallParticipant[]
   const groupCallParticipants = useMemo<GroupCallParticipant[]>(() => {
