@@ -1,1 +1,0 @@
-const RN = globalThis.ReactNative; export default RN; export const { View, Text, Pressable, ScrollView, Platform, StyleSheet, Animated, Dimensions } = RN;

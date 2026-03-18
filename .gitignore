@@ -1,68 +1,13 @@
-# Learn more https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files
-
-# dependencies
+# Dependencies
 node_modules/
-
-# Expo
-.expo/
-dist/
-web-build/
-expo-env.d.ts
-
-# Native
-.kotlin/
-*.orig.*
-*.jks
-*.p8
-*.p12
-*.key
-*.mobileprovision
-
-# Metro
-.metro-health-check*
-
-# debug
-npm-debug.*
-yarn-debug.*
-yarn-error.*
 
 # macOS
 .DS_Store
-*.pem
 
-# local env files
+# Environment
 .env*.local
 .env
-
-# Deployment credentials (NEVER COMMIT)
 .deploy-credentials
-
-# typescript
-*.tsbuildinfo
-
-# generated native folders
-/ios
-/android
-
-# Rust build artifacts
-target/
-**/target/
-Cargo.lock
-!packages/umbra-relay/Cargo.lock
-
-# WASM build output (generated)
-packages/umbra-wasm/pkg/
-packages/umbra-core/pkg/
-public/umbra_core*
-
-# Coverage
-coverage/
-
-# Testing artifacts
-/test-results/
-__tests__/**/test-results/
-playwright-report/
-__tests__/e2e-ios/artifacts/
 
 # IDE
 .idea/
@@ -70,21 +15,17 @@ __tests__/e2e-ios/artifacts/
 *.swp
 *.swo
 
-# Tauri
-src-tauri/target/
-*.dmg
-packages/umbra-relay/.env
-.wisp/
+# Build artifacts
+dist/
+target/
+**/target/
+*.tsbuildinfo
+coverage/
 
-# Compiled native binaries (rebuilt locally via build scripts)
-# NOTE: UmbraCore.xcframework is committed for EAS cloud builds.
-# Rebuild with: npm run build:mobile:ios
-modules/expo-umbra-core/android/src/main/jniLibs/
-packages/umbra-relay/releases/
+# Rust
+Cargo.lock
+!packages/umbra-relay/Cargo.lock
+
+# Claude Code
 .claude/worktrees/
 .mcp.json
-
-# Sound Workbench
-scripts/sound-workbench/.env
-scripts/sound-workbench/working/
-scripts/sound-workbench/node_modules/

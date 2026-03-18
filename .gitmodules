@@ -1,0 +1,51 @@
+[submodule "packages/umbra-app"]
+	path = packages/umbra-app
+	url = https://github.com/umbra-dot-chat/umbra-app.git
+[submodule "packages/umbra-cli"]
+	path = packages/umbra-cli
+	url = https://github.com/umbra-dot-chat/umbra-cli.git
+[submodule "packages/umbra-plugin-template"]
+	path = packages/umbra-plugin-template
+	url = https://github.com/umbra-dot-chat/umbra-plugin-template.git
+[submodule "packages/umbra-service"]
+	path = packages/umbra-service
+	url = https://github.com/umbra-dot-chat/umbra-service.git
+[submodule "packages/umbra-test-bot"]
+	path = packages/umbra-test-bot
+	url = https://github.com/umbra-dot-chat/umbra-test-bot.git
+[submodule "packages/umbra-testing"]
+	path = packages/umbra-testing
+	url = https://github.com/umbra-dot-chat/umbra-testing.git
+[submodule "packages/umbra-trace-macro"]
+	path = packages/umbra-trace-macro
+	url = https://github.com/umbra-dot-chat/umbra-trace-macro.git
+[submodule "packages/umbra-bridge-bot"]
+	path = packages/umbra-bridge-bot
+	url = https://github.com/umbra-dot-chat/umbra-bridge-bot.git
+[submodule "packages/umbra-core"]
+	path = packages/umbra-core
+	url = https://github.com/umbra-dot-chat/umbra-core.git
+[submodule "packages/umbra-debug"]
+	path = packages/umbra-debug
+	url = https://github.com/umbra-dot-chat/umbra-debug.git
+[submodule "packages/umbra-ghost-ai"]
+	path = packages/umbra-ghost-ai
+	url = https://github.com/umbra-dot-chat/umbra-ghost-ai.git
+[submodule "packages/umbra-plugin-runtime"]
+	path = packages/umbra-plugin-runtime
+	url = https://github.com/umbra-dot-chat/umbra-plugin-runtime.git
+[submodule "packages/umbra-plugin-sdk"]
+	path = packages/umbra-plugin-sdk
+	url = https://github.com/umbra-dot-chat/umbra-plugin-sdk.git
+[submodule "packages/umbra-relay"]
+	path = packages/umbra-relay
+	url = https://github.com/umbra-dot-chat/umbra-relay.git
+[submodule "packages/umbra-wasm"]
+	path = packages/umbra-wasm
+	url = https://github.com/umbra-dot-chat/umbra-wasm.git
+[submodule "packages/umbra-wisps"]
+	path = packages/umbra-wisps
+	url = https://github.com/umbra-dot-chat/umbra-wisps.git
+[submodule "packages/umbra-uikit"]
+	path = packages/umbra-uikit
+	url = https://github.com/umbra-dot-chat/umbra-uikit.git
